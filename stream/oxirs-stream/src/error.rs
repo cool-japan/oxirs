@@ -124,6 +124,18 @@ pub enum StreamError {
 
     #[error("Other error: {0}")]
     Other(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    #[error("I/O error: {0}")]
+    Io(String),
+
+    #[error("Resource exhausted: {0}")]
+    ResourceExhausted(String),
 }
 
 impl From<std::io::Error> for StreamError {

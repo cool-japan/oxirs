@@ -1,11 +1,97 @@
-//! Performance profiling support for TTL parsing using scirs2-core
+//! Performance profiling support for TTL parsing
 //!
 //! This module provides profiling capabilities to track and analyze performance
-//! of RDF parsing operations using scirs2-core's profiling infrastructure.
+//! of RDF parsing operations. It helps identify bottlenecks and optimize parsing.
+//!
+//! # Features
+//!
+//! - **Throughput Metrics**: Measure triples/second and MB/second
+//! - **Duration Tracking**: Track total parsing time
+//! - **Resource Counting**: Count triples, tokens, and bytes processed
+//! - **Human-Readable Reports**: Generate formatted statistics
+//!
+//! # Example: Basic Profiling
+//!
+//! ```rust
+//! use oxirs_ttl::profiling::ParsingStats;
+//!
+//! let mut stats = ParsingStats::new();
+//! stats.start();
+//!
+//! // ... perform parsing ...
+//! stats.triple_count = 1000;
+//! stats.bytes_processed = 50_000;
+//!
+//! stats.stop();
+//!
+//! println!("Throughput: {:.0} triples/s", stats.triples_per_second());
+//! println!("Speed: {:.2} MB/s", stats.mb_per_second());
+//! ```
+//!
+//! # Example: Profiling with TtlProfiler
+//!
+//! ```rust
+//! use oxirs_ttl::TtlProfiler;
+//! use oxirs_ttl::turtle::TurtleParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let data = r#"
+//! @prefix ex: <http://example.org/> .
+//! ex:s ex:p "o" .
+//! "#;
+//!
+//! let mut profiler = TtlProfiler::new();
+//! profiler.start();
+//!
+//! let parser = TurtleParser::new();
+//! for result in parser.for_reader(Cursor::new(data)) {
+//!     let _triple = result?;
+//!     profiler.record_triple();
+//! }
+//!
+//! profiler.stop();
+//! println!("{}", profiler.report());
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! # Example: Complete Report
+//!
+//! ```rust
+//! use oxirs_ttl::profiling::ParsingStats;
+//! use std::time::Duration;
+//!
+//! let mut stats = ParsingStats::new();
+//! stats.triple_count = 100_000;
+//! stats.bytes_processed = 5_000_000;
+//! stats.total_duration = Duration::from_secs(2);
+//!
+//! // Generate detailed report
+//! let report = stats.report();
+//! println!("{}", report);
+//! ```
 
 use std::time::{Duration, Instant};
 
 /// Profiling statistics for parsing operations
+///
+/// Tracks performance metrics including duration, throughput, and resource usage.
+///
+/// # Example
+///
+/// ```rust
+/// use oxirs_ttl::profiling::ParsingStats;
+///
+/// let mut stats = ParsingStats::new();
+/// stats.start();
+/// // ... parsing work ...
+/// stats.triple_count = 1000;
+/// stats.stop();
+///
+/// println!("Parsed {} triples in {:.2}s",
+///          stats.triple_count,
+///          stats.total_duration.as_secs_f64());
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct ParsingStats {
     /// Total parsing time

@@ -519,6 +519,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(debug_assertions, ignore = "Model initialization slow in debug builds")]
     fn test_vision_language_graph_model_creation() {
         let config = VisionLanguageGraphConfig::default();
         let model = VisionLanguageGraphModel::new(config);
@@ -569,6 +570,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(debug_assertions, ignore = "Embedding tests require release builds")]
     async fn test_unified_embedding_generation() {
         let config = VisionLanguageGraphConfig::default();
         let mut model = VisionLanguageGraphModel::new(config);
@@ -621,6 +623,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(debug_assertions, ignore = "Embedding tests require release builds")]
     fn test_few_shot_adaptation() {
         let config = VisionLanguageGraphConfig::default();
         let mut model = VisionLanguageGraphModel::new(config);
@@ -685,6 +688,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(debug_assertions, ignore = "Embedding tests require release builds")]
     async fn test_vision_language_graph_encoding() {
         let config = VisionLanguageGraphConfig::default();
         let expected_dim = config.language_config.language_dim;

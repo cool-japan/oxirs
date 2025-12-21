@@ -2,6 +2,7 @@
 
 use crate::error::{Result, TdbError};
 use crate::storage::{Page, PageId, PageType, PAGE_USABLE_SIZE};
+use bincode::{Decode, Encode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -11,7 +12,7 @@ use std::fmt::Debug;
 pub const ORDER: usize = 64;
 
 /// B+Tree node type
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub enum BTreeNode<K, V>
 where
     K: Ord + Clone + Debug,
@@ -24,7 +25,7 @@ where
 }
 
 /// Internal node containing keys and child page IDs
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct InternalNode<K>
 where
     K: Ord + Clone + Debug,
@@ -36,7 +37,7 @@ where
 }
 
 /// Leaf node containing key-value pairs
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct LeafNode<K, V>
 where
     K: Ord + Clone + Debug,
@@ -50,8 +51,8 @@ where
 
 impl<K, V> BTreeNode<K, V>
 where
-    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug,
-    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug,
+    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
+    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
 {
     /// Create a new empty leaf node
     pub fn new_leaf() -> Self {
@@ -104,7 +105,8 @@ where
 
     /// Serialize node to page
     pub fn serialize_to_page(&self, page: &mut Page) -> Result<()> {
-        let data = bincode::serialize(self).map_err(|e| TdbError::Serialization(e.to_string()))?;
+        let data = bincode::encode_to_vec(self, bincode::config::standard())
+            .map_err(|e| TdbError::Serialization(e.to_string()))?;
 
         if data.len() > PAGE_USABLE_SIZE {
             return Err(TdbError::NodeTooLarge {
@@ -120,7 +122,9 @@ where
     /// Deserialize node from page
     pub fn deserialize_from_page(page: &Page) -> Result<Self> {
         let data = page.read_at(0, PAGE_USABLE_SIZE)?;
-        bincode::deserialize(data).map_err(|e| TdbError::Deserialization(e.to_string()))
+        bincode::decode_from_slice(data, bincode::config::standard())
+            .map(|(node, _)| node)
+            .map_err(|e| TdbError::Deserialization(e.to_string()))
     }
 }
 

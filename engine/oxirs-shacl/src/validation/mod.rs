@@ -5,9 +5,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use oxirs_core::model::{Term, Triple};
+use oxirs_core::model::{BlankNode, Literal, NamedNode, Object, Subject, Term, Triple};
 
-use crate::{ConstraintComponentId, PropertyPath, Severity, ShapeId};
+use crate::{ConstraintComponentId, PropertyPath, Severity, ShapeId, SHACL_NS};
 
 // Re-export submodules
 #[cfg(feature = "async")]
@@ -15,6 +15,8 @@ pub mod async_engine;
 pub mod batch;
 pub mod cache;
 pub mod constraint_validators;
+#[cfg(feature = "async")]
+pub mod distributed;
 pub mod engine;
 pub mod error_recovery;
 pub mod ml_integration;
@@ -36,6 +38,12 @@ pub use async_engine::{
 pub use batch::*;
 pub use cache::*;
 pub use constraint_validators::*;
+#[cfg(feature = "async")]
+pub use distributed::{
+    ConsistencyLevel, DistributedError, DistributedStats, DistributedValidationConfig,
+    DistributedValidator, DistributedValidatorBuilder, LoadBalancingStrategy, PartitionResult,
+    ValidationPartition, WorkerInfo,
+};
 pub use engine::ValidationEngine;
 pub use error_recovery::*;
 pub use ml_integration::*;
@@ -247,9 +255,144 @@ impl ValidationViolation {
     }
 
     /// Get the violation as an RDF graph representation
+    ///
+    /// Serializes this validation violation as RDF triples according to the SHACL specification.
+    /// Each violation is represented as a sh:ValidationResult with properties describing
+    /// the violation details.
     pub fn to_rdf(&self) -> Vec<Triple> {
-        // TODO: Implement RDF serialization
-        vec![]
+        self.to_rdf_with_subject(None)
+    }
+
+    /// Internal method to serialize violation with a specific subject or generate a blank node
+    fn to_rdf_with_subject(&self, subject: Option<Subject>) -> Vec<Triple> {
+        let mut triples = Vec::new();
+
+        // Create or use provided subject for the validation result
+        let result_subject = subject.unwrap_or_else(|| {
+            Subject::BlankNode(BlankNode::new_unchecked(format!(
+                "result_{}",
+                uuid::Uuid::new_v4()
+            )))
+        });
+
+        // Add rdf:type sh:ValidationResult
+        let rdf_type = NamedNode::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        let validation_result = NamedNode::new_unchecked(format!("{}ValidationResult", SHACL_NS));
+        triples.push(Triple::new(
+            result_subject.clone(),
+            rdf_type,
+            validation_result,
+        ));
+
+        // Add sh:focusNode
+        let focus_node_pred = NamedNode::new_unchecked(format!("{}focusNode", SHACL_NS));
+        triples.push(Triple::new(
+            result_subject.clone(),
+            focus_node_pred,
+            self.focus_node.clone(),
+        ));
+
+        // Add sh:resultPath if present
+        if let Some(ref path) = self.result_path {
+            let result_path_pred = NamedNode::new_unchecked(format!("{}resultPath", SHACL_NS));
+            // For simple single-predicate paths, serialize as the predicate IRI
+            // For complex paths, we would need to serialize the path structure
+            match path {
+                PropertyPath::Predicate(node) => {
+                    triples.push(Triple::new(
+                        result_subject.clone(),
+                        result_path_pred,
+                        node.clone(),
+                    ));
+                }
+                // Complex paths would require more sophisticated serialization
+                // For now, we skip complex paths in RDF serialization
+                _ => {
+                    tracing::debug!("Skipping complex property path in RDF serialization");
+                }
+            }
+        }
+
+        // Add sh:value if present
+        if let Some(ref value) = self.value {
+            let value_pred = NamedNode::new_unchecked(format!("{}value", SHACL_NS));
+            triples.push(Triple::new(
+                result_subject.clone(),
+                value_pred,
+                value.clone(),
+            ));
+        }
+
+        // Add sh:sourceShape
+        let source_shape_pred = NamedNode::new_unchecked(format!("{}sourceShape", SHACL_NS));
+        if let Ok(shape_node) = NamedNode::new(self.source_shape.as_str()) {
+            triples.push(Triple::new(
+                result_subject.clone(),
+                source_shape_pred,
+                shape_node,
+            ));
+        }
+
+        // Add sh:sourceConstraintComponent
+        let source_component_pred =
+            NamedNode::new_unchecked(format!("{}sourceConstraintComponent", SHACL_NS));
+        if let Ok(component_node) = NamedNode::new(self.source_constraint_component.as_str()) {
+            triples.push(Triple::new(
+                result_subject.clone(),
+                source_component_pred,
+                component_node,
+            ));
+        }
+
+        // Add sh:resultSeverity
+        let severity_pred = NamedNode::new_unchecked(format!("{}resultSeverity", SHACL_NS));
+        let severity_iri = match self.result_severity {
+            Severity::Violation => format!("{}Violation", SHACL_NS),
+            Severity::Warning => format!("{}Warning", SHACL_NS),
+            Severity::Info => format!("{}Info", SHACL_NS),
+        };
+        triples.push(Triple::new(
+            result_subject.clone(),
+            severity_pred,
+            NamedNode::new_unchecked(severity_iri),
+        ));
+
+        // Add sh:resultMessage if present
+        if let Some(ref message) = self.result_message {
+            let message_pred = NamedNode::new_unchecked(format!("{}resultMessage", SHACL_NS));
+            triples.push(Triple::new(
+                result_subject.clone(),
+                message_pred,
+                Literal::new(message),
+            ));
+        }
+
+        // Add details as sh:detail properties
+        let detail_pred = NamedNode::new_unchecked(format!("{}detail", SHACL_NS));
+        for (key, value) in &self.details {
+            let detail_message = format!("{}: {}", key, value);
+            triples.push(Triple::new(
+                result_subject.clone(),
+                detail_pred.clone(),
+                Literal::new(detail_message),
+            ));
+        }
+
+        // Add nested results as sh:detail with separate ValidationResult resources
+        for nested in &self.nested_results {
+            let nested_result_subject = Subject::BlankNode(BlankNode::new_unchecked(format!(
+                "nested_result_{}",
+                uuid::Uuid::new_v4()
+            )));
+            triples.push(Triple::new(
+                result_subject.clone(),
+                detail_pred.clone(),
+                Object::from(nested_result_subject.clone()),
+            ));
+            triples.extend(nested.to_rdf_with_subject(Some(nested_result_subject)));
+        }
+
+        triples
     }
 }
 

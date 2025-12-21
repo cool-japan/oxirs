@@ -28,7 +28,7 @@ pub struct QueryHints {
 }
 
 /// Type of index to use for a query
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IndexType {
     /// Subject-Predicate-Object index (best for S-first patterns)
     SPO,

@@ -1,7 +1,7 @@
 //! SPARQL 1.1 Query Algebra representation
 //!
 //! Based on the W3C SPARQL 1.1 Query specification:
-//! https://www.w3.org/TR/sparql11-query/#sparqlQuery
+//! <https://www.w3.org/TR/sparql11-query/#sparqlQuery>
 
 use crate::model::*;
 use serde::{Deserialize, Serialize};

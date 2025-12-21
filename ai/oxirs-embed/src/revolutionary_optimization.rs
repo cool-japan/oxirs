@@ -6,16 +6,13 @@
 
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1, ArrayView2};
-use scirs2_core::error::CoreError;
-use scirs2_core::gpu::{GpuContext, GpuBuffer, GpuKernel};
+use scirs2_core::gpu::GpuContext;
 use scirs2_core::memory::BufferPool;
-use scirs2_core::metrics::{Counter, Timer}; // MetricRegistry not in beta.3
-// use scirs2_core::ml_pipeline::{MLPipeline, ModelPredictor, FeatureTransformer}; // Not in beta.3
-use scirs2_core::parallel_ops::{par_chunks, par_join};
+use scirs2_core::metrics::{Counter, Timer};
 use scirs2_core::profiling::Profiler;
-use scirs2_core::quantum_optimization::{QuantumOptimizer, QuantumStrategy};
-use scirs2_core::random::{Random, Rng};
-// use scirs2_core::simd_ops::{simd_dot_product, simd_matrix_multiply}; // Not in beta.3
+use scirs2_core::quantum_optimization::QuantumOptimizer;
+use scirs2_core::random::Random;
+use scirs2_core::simd_ops::simd_dot_f32_ultra;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -188,11 +185,12 @@ impl Default for PerformanceTargets {
 pub struct RevolutionaryEmbeddingOptimizer {
     config: RevolutionaryOptimizationConfig,
     quantum_optimizer: Option<QuantumOptimizer>,
-    ml_pipeline: MLPipeline,
     buffer_pool: Arc<BufferPool<u8>>,
     gpu_context: Option<GpuContext>,
     profiler: Profiler,
-    metrics: MetricRegistry,
+    // Note: Individual metrics instead of MetricRegistry (pending API stabilization)
+    embedding_counter: Counter,
+    optimization_timer: Timer,
     performance_predictor: Arc<Mutex<EmbeddingPerformancePredictor>>,
     streaming_processor: Arc<RwLock<StreamingEmbeddingProcessor>>,
     memory_manager: Arc<RwLock<AdvancedEmbeddingMemoryManager>>,
@@ -205,28 +203,27 @@ impl RevolutionaryEmbeddingOptimizer {
     pub async fn new(config: RevolutionaryOptimizationConfig) -> Result<Self> {
         // Initialize quantum optimizer if enabled
         let quantum_optimizer = if config.enable_quantum_enhancement {
-            let quantum_strategy = QuantumStrategy::new(
-                config.quantum_strategy.superposition_states,
-                config.quantum_strategy.quantum_iterations,
-            );
-            Some(QuantumOptimizer::new(quantum_strategy)?)
+            // Note: QuantumOptimizer API in scirs2-core doesn't use QuantumStrategy::new()
+            // Using default configuration for now
+            match QuantumOptimizer::new() {
+                Ok(opt) => Some(opt),
+                Err(e) => {
+                    tracing::warn!("Failed to initialize QuantumOptimizer: {}, quantum optimization disabled", e);
+                    None
+                }
+            }
         } else {
             None
         };
 
-        // Initialize ML pipeline for AI-powered optimization
-        let ml_pipeline = MLPipeline::new()
-            .with_feature_transformer(FeatureTransformer::new()?)
-            .with_model_predictor(ModelPredictor::new()?);
-
         // Initialize buffer pool
-        let buffer_pool = Arc::new(BufferPool::new(
-            config.memory_config.buffer_pool_size_mb * 1024 * 1024,
-        )?);
+        // Note: BufferPool API uses new() instead of with_capacity()
+        let buffer_pool = Arc::new(BufferPool::<u8>::new());
 
         // Initialize GPU context if enabled
         let gpu_context = if config.enable_gpu_optimization {
-            match GpuContext::new() {
+            use scirs2_core::gpu::GpuBackend;
+            match GpuContext::new(GpuBackend::default()) {
                 Ok(ctx) => Some(ctx),
                 Err(e) => {
                     tracing::warn!("Failed to initialize GPU context: {}, falling back to CPU", e);
@@ -239,7 +236,10 @@ impl RevolutionaryEmbeddingOptimizer {
 
         // Initialize profiler and metrics
         let profiler = Profiler::new();
-        let metrics = MetricRegistry::new();
+        // Note: Using individual metric types instead of MetricRegistry
+        // which is pending API stabilization in scirs2-core
+        let embedding_counter = Counter::new("embeddings_optimized");
+        let optimization_timer = Timer::new("optimization_duration");
 
         // Initialize performance predictor
         let performance_predictor = Arc::new(Mutex::new(
@@ -269,11 +269,11 @@ impl RevolutionaryEmbeddingOptimizer {
         Ok(Self {
             config,
             quantum_optimizer,
-            ml_pipeline,
             buffer_pool,
             gpu_context,
             profiler,
-            metrics,
+            embedding_counter,
+            optimization_timer,
             performance_predictor,
             streaming_processor,
             memory_manager,
@@ -289,7 +289,7 @@ impl RevolutionaryEmbeddingOptimizer {
         entities: &[String],
     ) -> Result<EmbeddingOptimizationResult> {
         let start_time = Instant::now();
-        let timer = self.metrics.timer("embedding_optimization");
+        let timer = Timer::new("embedding_optimization");
 
         // Stage 1: AI-powered performance prediction
         let performance_prediction = {
@@ -368,49 +368,130 @@ impl RevolutionaryEmbeddingOptimizer {
 
     /// Apply quantum optimization to embeddings
     async fn apply_quantum_optimization(&self, embeddings: &mut Array2<f32>) -> Result<()> {
-        if let Some(ref quantum_optimizer) = self.quantum_optimizer {
-            let timer = self.metrics.timer("quantum_optimization");
+        if let Some(ref _quantum_optimizer) = self.quantum_optimizer {
+            let timer = Timer::new("quantum_optimization");
+            let start = Instant::now();
 
             // Convert embeddings to quantum state representation
             let quantum_states = self.convert_to_quantum_states(embeddings.view()).await?;
 
-            // Apply quantum annealing for optimization
-            let optimized_states = quantum_optimizer
-                .optimize_quantum_states(&quantum_states)
-                .await?;
+            // Apply quantum-inspired optimization
+            // Note: Using custom quantum optimization logic instead of scirs2-core's QuantumOptimizer
+            // which has a different API signature. This uses quantum-inspired algorithms
+            // for embedding optimization.
+            let optimized_states = self.optimize_quantum_states_custom(&quantum_states).await?;
 
             // Convert back to classical embeddings
             self.convert_from_quantum_states(&optimized_states, embeddings)
                 .await?;
 
-            timer.record("quantum_optimization", Instant::now().elapsed());
+            timer.record("quantum_optimization", start.elapsed());
         }
+        Ok(())
+    }
+
+    /// Custom quantum-inspired optimization for embedding states
+    async fn optimize_quantum_states_custom(
+        &self,
+        quantum_states: &[QuantumEmbeddingState],
+    ) -> Result<Vec<QuantumEmbeddingState>> {
+        // Implement quantum-inspired optimization using simulated annealing
+        // and quantum tunneling concepts
+        let mut optimized_states = Vec::with_capacity(quantum_states.len());
+
+        for state in quantum_states {
+            // Apply quantum-inspired energy minimization
+            let mut optimized_state = state.clone();
+
+            // Iteratively optimize the quantum state energy
+            for _ in 0..self.config.quantum_strategy.quantum_iterations {
+                // Simulate quantum annealing with temperature cooling
+                let energy_delta = self.compute_energy_delta(&optimized_state).await?;
+
+                if energy_delta.abs() < self.config.quantum_strategy.energy_threshold {
+                    break;
+                }
+
+                // Update state amplitudes to minimize energy
+                self.update_quantum_state_energy(&mut optimized_state, energy_delta).await?;
+            }
+
+            optimized_states.push(optimized_state);
+        }
+
+        Ok(optimized_states)
+    }
+
+    /// Compute energy delta for quantum state optimization
+    async fn compute_energy_delta(&self, state: &QuantumEmbeddingState) -> Result<f64> {
+        // Simplified energy computation based on quantum mechanics principles
+        let amplitude_energy: f64 = state.amplitudes.iter()
+            .map(|a| a * a)
+            .sum();
+
+        let phase_energy: f64 = state.phases.iter()
+            .map(|p| p.cos())
+            .sum();
+
+        let entanglement_energy: f64 = state.entanglement.iter()
+            .map(|e| e * e)
+            .sum();
+
+        Ok(amplitude_energy + phase_energy + entanglement_energy - state.energy)
+    }
+
+    /// Update quantum state to minimize energy
+    async fn update_quantum_state_energy(
+        &self,
+        state: &mut QuantumEmbeddingState,
+        energy_delta: f64,
+    ) -> Result<()> {
+        // Apply gradient descent-like update to quantum state
+        let learning_rate = 0.01;
+        let adjustment = -learning_rate * energy_delta;
+
+        // Update amplitudes
+        state.amplitudes.mapv_inplace(|a| a + adjustment);
+
+        // Normalize amplitudes to maintain quantum state properties
+        let norm: f64 = state.amplitudes.iter().map(|a| a * a).sum::<f64>().sqrt();
+        if norm > 0.0 {
+            state.amplitudes.mapv_inplace(|a| a / norm);
+        }
+
+        // Update energy
+        state.energy += energy_delta;
+
         Ok(())
     }
 
     /// Apply SIMD vectorized optimization
     async fn apply_simd_optimization(&self, embeddings: &mut Array2<f32>) -> Result<()> {
-        let timer = self.metrics.timer("simd_optimization");
+        use rayon::prelude::*;
 
-        // Apply SIMD-optimized normalization
-        par_chunks(embeddings.as_slice_mut().unwrap(), 8, |chunk| {
-            // Use SIMD operations for vectorized computation
-            if chunk.len() >= 8 {
-                // Apply SIMD-optimized operations on 8-element chunks
-                for i in (0..chunk.len()).step_by(8) {
-                    let end = std::cmp::min(i + 8, chunk.len());
-                    let slice = &mut chunk[i..end];
-                    // Normalize using SIMD operations
-                    let sum_squares: f32 = slice.iter().map(|x| x * x).sum();
-                    let norm = sum_squares.sqrt();
-                    if norm > 0.0 {
-                        for val in slice {
-                            *val /= norm;
+        let timer = Timer::new("simd_optimization");
+
+        // Apply SIMD-optimized normalization using rayon parallel iteration
+        if let Some(slice_mut) = embeddings.as_slice_mut() {
+            slice_mut.par_chunks_mut(8).for_each(|chunk| {
+                // Use SIMD operations for vectorized computation
+                if chunk.len() >= 8 {
+                    // Apply SIMD-optimized operations on 8-element chunks
+                    for i in (0..chunk.len()).step_by(8) {
+                        let end = std::cmp::min(i + 8, chunk.len());
+                        let slice = &mut chunk[i..end];
+                        // Normalize using SIMD operations
+                        let sum_squares: f32 = slice.iter().map(|x| x * x).sum();
+                        let norm = sum_squares.sqrt();
+                        if norm > 0.0 {
+                            for val in slice {
+                                *val /= norm;
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
 
         timer.record("simd_optimization", Instant::now().elapsed());
         Ok(())
@@ -422,17 +503,22 @@ impl RevolutionaryEmbeddingOptimizer {
         embeddings: &mut Array2<f32>,
         gpu_context: &GpuContext,
     ) -> Result<()> {
-        let timer = self.metrics.timer("gpu_optimization");
+        let timer = Timer::new("gpu_optimization");
 
-        // Transfer embeddings to GPU
-        let gpu_buffer = GpuBuffer::from_slice(gpu_context, embeddings.as_slice().unwrap())?;
+        // Transfer embeddings to GPU using create_buffer_from_slice
+        if let Some(embeddings_slice) = embeddings.as_slice() {
+            let gpu_buffer = gpu_context.create_buffer_from_slice(embeddings_slice);
 
-        // Apply GPU-optimized normalization kernel
-        let kernel = GpuKernel::load(gpu_context, "embedding_normalization")?;
-        kernel.execute(&[gpu_buffer.as_arg()])?;
-
-        // Transfer results back to CPU
-        gpu_buffer.read_into(embeddings.as_slice_mut().unwrap())?;
+            // In a real implementation, we would:
+            // 1. Compile/load a GPU kernel for embedding normalization
+            // 2. Execute the kernel on the GPU buffer
+            // 3. Copy results back to CPU
+            // For now, we'll just copy the data back as-is (placeholder)
+            if let Some(slice_mut) = embeddings.as_slice_mut() {
+                let result = gpu_buffer.to_vec();
+                slice_mut.copy_from_slice(&result);
+            }
+        }
 
         timer.record("gpu_optimization", Instant::now().elapsed());
         Ok(())
@@ -507,9 +593,11 @@ impl RevolutionaryEmbeddingOptimizer {
 
     /// Calculate memory efficiency
     fn calculate_memory_efficiency(&self, embedding_count: usize) -> f64 {
-        let memory_usage = self.buffer_pool.memory_usage() as f64 / (1024.0 * 1024.0); // Convert to MB
+        // Placeholder: BufferPool API doesn't expose memory_usage in current version
+        // In a real implementation, we would track memory usage separately
+        let estimated_memory_mb = (embedding_count * std::mem::size_of::<f32>()) as f64 / (1024.0 * 1024.0);
         if embedding_count > 0 {
-            memory_usage / (embedding_count as f64 / 1_000_000.0) // MB per million embeddings
+            estimated_memory_mb / (embedding_count as f64 / 1_000_000.0) // MB per million embeddings
         } else {
             0.0
         }
@@ -532,7 +620,11 @@ impl RevolutionaryEmbeddingOptimizer {
 
     /// Get performance metrics
     pub async fn get_performance_metrics(&self) -> HashMap<String, f64> {
-        self.metrics.get_all_metrics().await
+        // Note: MetricRegistry API pending in scirs2-core
+        // Returning simple metrics for now
+        let mut metrics = HashMap::new();
+        metrics.insert("embeddings_optimized".to_string(), self.embedding_counter.value() as f64);
+        metrics
     }
 
     /// Optimize similarity computation with revolutionary techniques
@@ -542,7 +634,7 @@ impl RevolutionaryEmbeddingOptimizer {
         candidate_embeddings: ArrayView2<'_, f32>,
     ) -> Result<SimilarityOptimizationResult> {
         let start_time = Instant::now();
-        let timer = self.metrics.timer("similarity_optimization");
+        let timer = Timer::new("similarity_optimization");
 
         // Apply quantum-enhanced similarity computation if enabled
         let similarities = if self.config.quantum_strategy.enable_quantum_similarity {
@@ -605,10 +697,10 @@ impl RevolutionaryEmbeddingOptimizer {
 
         // Use SIMD operations for parallel dot product computation
         for (i, candidate_embedding) in candidate_embeddings.outer_iter().enumerate() {
-            similarities[i] = simd_dot_product(
-                query_embedding.as_slice().unwrap(),
-                candidate_embedding.as_slice().unwrap(),
-            )? as f64;
+            similarities[i] = simd_dot_f32_ultra(
+                &query_embedding,
+                &candidate_embedding,
+            ) as f64;
         }
 
         Ok(similarities)
@@ -668,7 +760,8 @@ pub struct QuantumEmbeddingState {
 
 /// Embedding performance predictor using ML
 pub struct EmbeddingPerformancePredictor {
-    ml_pipeline: MLPipeline,
+    // Note: ML pipeline removed pending scirs2-core API stabilization
+    // Using heuristic-based prediction for now
     performance_targets: PerformanceTargets,
     historical_data: Vec<PerformanceDataPoint>,
 }
@@ -676,7 +769,6 @@ pub struct EmbeddingPerformancePredictor {
 impl EmbeddingPerformancePredictor {
     async fn new(performance_targets: PerformanceTargets) -> Result<Self> {
         Ok(Self {
-            ml_pipeline: MLPipeline::new(),
             performance_targets,
             historical_data: Vec::new(),
         })
@@ -687,23 +779,9 @@ impl EmbeddingPerformancePredictor {
         embedding_shape: &[usize],
         entity_count: usize,
     ) -> Result<PerformancePrediction> {
-        // Extract features for ML prediction
-        let features = self.extract_features(embedding_shape, entity_count);
-
-        // Use ML pipeline to predict performance
-        let predicted_time_us = if !self.historical_data.is_empty() {
-            // Use trained model
-            self.ml_pipeline
-                .predict(&features)
-                .await?
-                .first()
-                .copied()
-                .unwrap_or(self.performance_targets.target_embedding_time_us as f64)
-                as u64
-        } else {
-            // Use heuristic-based prediction
-            self.heuristic_prediction(embedding_shape, entity_count)
-        };
+        // Use heuristic-based prediction
+        // Note: ML-based prediction will be enabled once scirs2-core ml_pipeline API is stable
+        let predicted_time_us = self.heuristic_prediction(embedding_shape, entity_count);
 
         Ok(PerformancePrediction {
             predicted_time_us,
@@ -774,9 +852,10 @@ pub struct StreamingEmbeddingProcessor {
 
 impl StreamingEmbeddingProcessor {
     async fn new(config: StreamingOptimizationConfig) -> Result<Self> {
+        let buffer_size = config.buffer_size;
         Ok(Self {
             config,
-            embedding_buffer: Vec::with_capacity(config.buffer_size),
+            embedding_buffer: Vec::with_capacity(buffer_size),
             update_notify: Arc::new(Notify::new()),
             last_update: Instant::now(),
         })
@@ -839,14 +918,14 @@ impl AdvancedEmbeddingMemoryManager {
 
 /// Embedding coordination AI
 pub struct EmbeddingCoordinationAI {
-    strategy_predictor: MLPipeline,
+    // Note: ML pipeline removed pending scirs2-core API stabilization
+    // Using rule-based strategy selection for now
     performance_history: Vec<OptimizationPerformance>,
 }
 
 impl EmbeddingCoordinationAI {
     async fn new() -> Result<Self> {
         Ok(Self {
-            strategy_predictor: MLPipeline::new(),
             performance_history: Vec::new(),
         })
     }

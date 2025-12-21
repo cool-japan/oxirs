@@ -3,7 +3,7 @@
 //! N3 is a superset of Turtle that adds support for variables, rules, and formulae.
 //! This implementation focuses on the Turtle-compatible subset for now.
 //!
-//! W3C Specification: https://w3c.github.io/N3/spec/
+//! W3C Specification: <https://w3c.github.io/N3/spec/>
 
 use super::error::FormatError;
 use crate::model::{

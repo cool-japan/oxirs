@@ -292,7 +292,7 @@ pub async fn remove_tuple(
 ///
 /// Query parameters:
 /// - subject: Filter by subject (e.g., "user:alice")
-/// - object: Filter by object (e.g., "graph:http://example.org/g1")
+/// - object: Filter by object (e.g., "graph:`http://example.org/g1`")
 /// - relation: Filter by relation (e.g., "can_read")
 ///
 /// Examples:

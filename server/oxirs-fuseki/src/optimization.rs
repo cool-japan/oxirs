@@ -685,6 +685,26 @@ impl QueryOptimizer {
 
         stats
     }
+
+    /// Get all cached query plans
+    pub async fn get_cached_plans(&self) -> Vec<OptimizedQueryPlan> {
+        let plan_cache = self.plan_cache.read().await;
+        plan_cache.values().cloned().collect()
+    }
+
+    /// Clear the optimization plan cache
+    pub async fn clear_plan_cache(&self) -> usize {
+        let mut plan_cache = self.plan_cache.write().await;
+        let count = plan_cache.len();
+        plan_cache.clear();
+        info!("Cleared {} cached query plans", count);
+        count
+    }
+
+    /// Get detailed database statistics
+    pub async fn get_database_statistics(&self) -> DatabaseStatistics {
+        self.statistics.read().await.clone()
+    }
 }
 
 impl Default for DatabaseStatistics {

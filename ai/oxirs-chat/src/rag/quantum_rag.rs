@@ -455,7 +455,7 @@ impl QuantumDecoherenceSimulator {
         state.amplitude *= decoherence_factor;
 
         // Add environmental noise to phase
-        // Using fastrand for random number generation
+        // Using fastrand for simple random number generation
         let phase_noise = (fastrand::f64() * 2.0 - 1.0) * self.noise_level * time_factor;
         state.phase += phase_noise;
 
@@ -545,7 +545,7 @@ impl QuantumAnnealingOptimizer {
                 (-energy_diff / temperature).exp()
             };
 
-            // Using fastrand for random number generation
+            // Using fastrand for simple random number generation
             if fastrand::f64() < acceptance_probability {
                 current_params = neighbor_params;
                 if neighbor_energy < best_energy {
@@ -591,7 +591,7 @@ impl QuantumAnnealingOptimizer {
         &self,
         current: &QuantumRetrievalParams,
     ) -> Result<QuantumRetrievalParams> {
-        // Using fastrand for random number generation
+        // Using fastrand for simple random number generation
         let perturbation = 0.1;
 
         Ok(QuantumRetrievalParams {

@@ -164,7 +164,10 @@ impl<W: Write> StreamingSerializer<W> {
             StarTerm::NamedNode(node) => Ok(format!("<{}>", node.iri)),
             StarTerm::BlankNode(node) => Ok(format!("_:{}", node.id)),
             StarTerm::Literal(literal) => {
-                let mut result = format!("\"{}\"", StarSerializer::escape_literal(&literal.value));
+                let mut result = format!(
+                    "\"{}\"",
+                    StarSerializer::escape_literal_static(&literal.value)
+                );
                 if let Some(ref lang) = literal.language {
                     result.push_str(&format!("@{lang}"));
                 } else if let Some(ref datatype) = literal.datatype {
@@ -188,7 +191,10 @@ impl<W: Write> StreamingSerializer<W> {
             StarTerm::NamedNode(node) => Ok(self.context.compress_iri(&node.iri)),
             StarTerm::BlankNode(node) => Ok(format!("_:{}", node.id)),
             StarTerm::Literal(literal) => {
-                let mut result = format!("\"{}\"", StarSerializer::escape_literal(&literal.value));
+                let mut result = format!(
+                    "\"{}\"",
+                    StarSerializer::escape_literal_static(&literal.value)
+                );
                 if let Some(ref lang) = literal.language {
                     result.push_str(&format!("@{lang}"));
                 } else if let Some(ref datatype) = literal.datatype {

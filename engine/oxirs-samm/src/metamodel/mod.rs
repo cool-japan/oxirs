@@ -10,7 +10,7 @@ mod operation;
 mod property;
 
 pub use aspect::Aspect;
-pub use characteristic::{Characteristic, CharacteristicKind, Constraint};
+pub use characteristic::{BoundDefinition, Characteristic, CharacteristicKind, Constraint};
 pub use entity::{ComplexType, Entity};
 pub use extension::{
     Extension, ExtensionElement, ExtensionRegistry, PropertyDefinition, ValidationRule,

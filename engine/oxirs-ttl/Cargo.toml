@@ -17,6 +17,7 @@ memchr = "2.7"
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 futures = { workspace = true }
+lazy_static = "1.5"
 
 # Optional async support
 tokio = { version = "1.47", features = ["io-util", "fs"], optional = true }
@@ -26,15 +27,16 @@ async-trait = { version = "0.1", optional = true }
 rayon = { version = "1.10", optional = true }
 
 [features]
-default = []
+default = ["rdf-12"]  # Enable RDF 1.2 by default (quoted triples, directional language tags)
 async-tokio = ["tokio", "async-trait"]
 parallel = ["rayon"]
 rdf-12 = ["oxirs-core/rdf-12"]  # RDF 1.2 features (quoted triples, directional language tags)
 
 [dev-dependencies]
 tokio-test = "0.4"
-criterion = "0.5"
+criterion = "0.8"
 proptest = "1.7"
+tempfile = "3.23"
 
 [package.metadata.docs.rs]
 all-features = true

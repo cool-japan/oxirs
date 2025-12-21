@@ -1,6 +1,6 @@
 # OxiRS Core - Performance Optimization Guide
 
-*Version: v0.1.0-beta.1+ | Last Updated: November 2, 2025*
+*Version: v0.1.0-beta.2 | Last Updated: December 21, 2025*
 
 ## Table of Contents
 
@@ -37,7 +37,7 @@ This guide shows you how to leverage these features for maximum performance.
 ✅ **Enable all performance features:**
 \`\`\`toml
 [dependencies]
-oxirs-core = { version = "0.1.0-beta.1", features = ["parallel", "simd"] }
+oxirs-core = { version = "0.1.0-beta.2", features = ["parallel", "simd"] }
 \`\`\`
 
 ✅ **Use zero-copy operations for large datasets:**

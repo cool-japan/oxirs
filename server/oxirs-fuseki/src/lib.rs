@@ -1,9 +1,9 @@
 //! # OxiRS Fuseki - SPARQL HTTP Server
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-fuseki/badge.svg)](https://docs.rs/oxirs-fuseki)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SPARQL 1.1/1.2 HTTP protocol server with Apache Fuseki compatibility.
@@ -43,6 +43,7 @@
 
 use std::net::SocketAddr;
 
+pub mod adaptive_execution; // Adaptive query execution with full SciRS2 integration (v0.1.0 Final)
 pub mod admin_ui; // Admin UI enhancements (Beta.2/RC.1)
 pub mod aggregation;
 pub mod analytics;
@@ -54,6 +55,8 @@ pub mod bind_values_enhanced;
 pub mod clustering;
 pub mod concurrent; // Advanced concurrent request handling
 pub mod config;
+#[cfg(feature = "hot-reload")]
+pub mod config_reload; // Configuration hot-reload support
 pub mod connection_pool; // Connection pooling optimization
 pub mod consciousness;
 pub mod dataset_management; // Enhanced dataset management API
@@ -62,6 +65,7 @@ pub mod disaster_recovery; // Disaster recovery and failover
 pub mod error;
 pub mod federated_query_optimizer;
 pub mod federation;
+pub mod gpu_kg_embeddings; // GPU-accelerated knowledge graph embeddings (v0.1.0 Final - SciRS2 GPU/Tensor)
 pub mod graph_analytics;
 pub mod graphql_integration; // GraphQL API integration (Beta.2/RC.1)
 pub mod handlers;
@@ -71,6 +75,7 @@ pub mod k8s_operator; // Kubernetes operator for managing Fuseki instances
 pub mod memory_pool; // Memory pooling and optimization
 pub mod metrics;
 pub mod middleware;
+pub mod middleware_integration; // Integrated middleware for production features (RC.1)
 pub mod optimization;
 pub mod performance;
 pub mod performance_profiler; // Performance profiling tools (Beta.2/RC.1)
@@ -82,8 +87,11 @@ pub mod recovery; // Automatic recovery mechanisms
 pub mod rest_api_v2; // REST API v2 with OpenAPI (Beta.2/RC.1)
 pub mod security_audit; // Security auditing and vulnerability scanning
 pub mod server;
+pub mod simd_triple_matcher; // SIMD-accelerated triple pattern matching (v0.1.0 Final - SciRS2 SIMD)
+pub mod sparql_simd_integration; // SPARQL-SIMD integration for high-performance queries (v0.1.0 Final - Session 20)
 pub mod store;
 pub mod store_ext; // Extension trait for Store convenience methods
+pub mod store_health; // Store health monitoring and metrics (v0.1.0 Final)
 pub mod store_impl;
 pub mod streaming;
 pub mod streaming_results; // Memory-efficient result streaming
@@ -94,8 +102,9 @@ pub mod vector_search;
 pub mod websocket;
 
 // v0.1.0 Final - Additional Production Features
-pub mod edge_caching;
-pub mod load_balancing; // Advanced load balancing strategies // Edge caching integration framework
+pub mod cdn_static; // CDN support for static assets
+pub mod edge_caching; // Edge caching integration framework
+pub mod load_balancing; // Advanced load balancing strategies
 
 use store::Store;
 

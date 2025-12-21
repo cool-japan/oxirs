@@ -11,7 +11,7 @@
 //!
 //! ## References
 //! - Barbieri et al. "C-SPARQL: a Continuous Query Language for RDF Data Streams"
-//! - https://streamreasoning.org/
+//! - <https://streamreasoning.org/>
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
@@ -104,7 +104,7 @@ pub struct QueryComponents {
     pub limit: Option<usize>,
 }
 
-/// Stream declaration (FROM STREAM <uri>)
+/// Stream declaration (FROM STREAM `<uri>`)
 #[derive(Debug, Clone)]
 pub struct StreamDeclaration {
     /// Stream URI

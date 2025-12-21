@@ -1,7 +1,7 @@
 # OxiRS Deployment Guide
 
-**Version**: 0.1.0-beta.1
-**Date**: October 12, 2025
+**Version**: 0.1.0-beta.2
+**Date**: December 21, 2025
 **Status**: Production Deployment Ready
 
 ## 🚀 Quick Start
@@ -22,7 +22,7 @@
 
 ```bash
 # Download latest release
-curl -LO https://github.com/cool-japan/oxirs/releases/download/v0.1.0-beta.1/oxirs-x86_64-linux.tar.gz
+curl -LO https://github.com/cool-japan/oxirs/releases/download/v0.1.0-beta.2/oxirs-x86_64-linux.tar.gz
 
 # Extract
 tar xzf oxirs-x86_64-linux.tar.gz
@@ -59,16 +59,16 @@ cargo install --path server/oxirs-fuseki
 
 ```bash
 # Pull latest image
-docker pull ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.1
+docker pull ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.2
 
 # Run with default configuration
-docker run -p 3030:3030 ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.1
+docker run -p 3030:3030 ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.2
 
 # Run with custom configuration
 docker run -p 3030:3030 \
   -v $(pwd)/oxirs.toml:/etc/oxirs/oxirs.toml:ro \
   -v oxirs-data:/var/lib/oxirs \
-  ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.1
+  ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.2
 ```
 
 ### Method 4: Kubernetes (Cloud)
@@ -142,7 +142,7 @@ version: '3.8'
 
 services:
   oxirs-fuseki:
-    image: ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.1
+    image: ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.2
     container_name: oxirs-fuseki
     ports:
       - "3030:3030"
@@ -330,7 +330,7 @@ spec:
     spec:
       containers:
       - name: oxirs-fuseki
-        image: ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.1
+        image: ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-beta.2
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
@@ -952,4 +952,4 @@ journalctl -u oxirs-fuseki -f
 ---
 
 *Deployment Guide - October 12, 2025*
-*Production-ready deployment for v0.1.0-beta.1*
+*Production-ready deployment for v0.1.0-beta.2*

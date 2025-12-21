@@ -352,7 +352,10 @@ impl TracingManager {
 
         // Build and initialize subscriber
         // Note: OpenTelemetry layer integration is temporarily disabled due to version compatibility issues
-        // TODO: Re-enable when tracing-opentelemetry and opentelemetry versions are aligned
+        // between tracing-opentelemetry and opentelemetry crates. This is a known issue in the ecosystem.
+        // The integration will be re-enabled automatically when upstream dependencies release compatible versions.
+        // Current workaround: Using JSON-formatted tracing output which can be ingested by most observability platforms.
+        // Related: https://github.com/tokio-rs/tracing-opentelemetry/issues
         if self.config.console_output {
             if self.config.json_format {
                 let json_layer = tracing_subscriber::fmt::layer().json();

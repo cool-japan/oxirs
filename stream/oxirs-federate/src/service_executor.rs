@@ -11,7 +11,7 @@ use reqwest::{
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Semaphore;
+use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, error, instrument, warn};
 
 use crate::{
@@ -30,6 +30,8 @@ pub struct ServiceExecutor {
     config: ServiceExecutorConfig,
     cache: Arc<FederationCache>,
     semaphore: Arc<Semaphore>,
+    /// Execution statistics per service
+    execution_stats: Arc<RwLock<HashMap<String, ServiceExecutionStats>>>,
 }
 
 impl ServiceExecutor {
@@ -50,6 +52,7 @@ impl ServiceExecutor {
             config,
             cache,
             semaphore,
+            execution_stats: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -69,6 +72,7 @@ impl ServiceExecutor {
             config,
             cache,
             semaphore,
+            execution_stats: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -85,12 +89,19 @@ impl ServiceExecutor {
             service_id, query
         );
 
+        // Record execution start
+        self.record_execution_start(service_id).await;
+
         // Generate cache key
         let cache_key = format!("service:{service_id}:query:{query}");
 
         // Check cache first
         if let Some(cached) = self.cache.get_service_result(&cache_key).await {
             debug!("Cache hit for service query: {}", service_id);
+            let result_count = cached.results.bindings.len();
+            // Record cached hit (assume minimal time for cache lookup)
+            self.record_execution_success(service_id, Duration::from_millis(1), result_count, true)
+                .await;
             return Ok(cached);
         }
 
@@ -98,20 +109,40 @@ impl ServiceExecutor {
 
         // Build the complete query with bindings if provided
         let final_query = if let Some(bindings) = bindings {
-            self.inject_bindings(query, bindings)?
+            match self.inject_bindings(query, bindings) {
+                Ok(q) => q,
+                Err(e) => {
+                    let error_msg = format!("Failed to inject bindings: {}", e);
+                    self.record_execution_failure(service_id, error_msg.clone())
+                        .await;
+                    return Err(e);
+                }
+            }
         } else {
             query.to_string()
         };
 
         // Execute with retry logic and timeout
-        let result = self.execute_with_retry(service_id, &final_query).await?;
+        let result = match self.execute_with_retry(service_id, &final_query).await {
+            Ok(r) => r,
+            Err(e) => {
+                let error_msg = format!("Query execution failed: {}", e);
+                self.record_execution_failure(service_id, error_msg).await;
+                return Err(e);
+            }
+        };
 
         let execution_time = start_time.elapsed();
+        let result_count = result.results.bindings.len();
+
         debug!(
             "Service query completed in {:?} with {} results",
-            execution_time,
-            result.results.bindings.len()
+            execution_time, result_count
         );
+
+        // Record successful execution
+        self.record_execution_success(service_id, execution_time, result_count, false)
+            .await;
 
         // Cache successful results
         if !result.results.bindings.is_empty() {
@@ -393,6 +424,133 @@ impl ServiceExecutor {
             head: SparqlHead { vars },
             results: SparqlResultsData { bindings },
         })
+    }
+
+    // ========== Service Detail Retrieval API ==========
+
+    /// Get execution statistics for a specific service
+    pub async fn get_service_stats(&self, service_id: &str) -> Option<ServiceExecutionStats> {
+        let stats = self.execution_stats.read().await;
+        stats.get(service_id).cloned()
+    }
+
+    /// Get execution statistics for all services
+    pub async fn get_all_service_stats(&self) -> HashMap<String, ServiceExecutionStats> {
+        let stats = self.execution_stats.read().await;
+        stats.clone()
+    }
+
+    /// Get a summary of current execution state
+    pub async fn get_execution_summary(&self) -> ExecutionSummary {
+        let stats = self.execution_stats.read().await;
+
+        let mut summary = ExecutionSummary {
+            total_services: stats.len(),
+            total_queries_executed: 0,
+            total_successful_queries: 0,
+            total_failed_queries: 0,
+            total_cached_results: 0,
+            total_active_queries: 0,
+            avg_success_rate: 0.0,
+            avg_cache_hit_rate: 0.0,
+            slowest_service: None,
+            fastest_service: None,
+            most_active_service: None,
+        };
+
+        let mut max_avg_time = Duration::ZERO;
+        let mut min_avg_time = Duration::MAX;
+        let mut max_active_queries = 0u64;
+
+        for (service_id, service_stats) in stats.iter() {
+            summary.total_queries_executed += service_stats.total_queries;
+            summary.total_successful_queries += service_stats.successful_queries;
+            summary.total_failed_queries += service_stats.failed_queries;
+            summary.total_cached_results += service_stats.cached_results;
+            summary.total_active_queries += service_stats.active_queries;
+
+            // Track slowest service
+            if service_stats.avg_execution_time > max_avg_time && service_stats.total_queries > 0 {
+                max_avg_time = service_stats.avg_execution_time;
+                summary.slowest_service = Some(service_id.clone());
+            }
+
+            // Track fastest service
+            if service_stats.avg_execution_time < min_avg_time && service_stats.total_queries > 0 {
+                min_avg_time = service_stats.avg_execution_time;
+                summary.fastest_service = Some(service_id.clone());
+            }
+
+            // Track most active service
+            if service_stats.active_queries > max_active_queries {
+                max_active_queries = service_stats.active_queries;
+                summary.most_active_service = Some(service_id.clone());
+            }
+        }
+
+        // Calculate averages
+        if !stats.is_empty() {
+            let success_rates: Vec<f64> = stats.values().map(|s| s.success_rate()).collect();
+            summary.avg_success_rate =
+                success_rates.iter().sum::<f64>() / success_rates.len() as f64;
+
+            let cache_rates: Vec<f64> = stats.values().map(|s| s.cache_hit_rate()).collect();
+            summary.avg_cache_hit_rate = cache_rates.iter().sum::<f64>() / cache_rates.len() as f64;
+        }
+
+        summary
+    }
+
+    /// Reset statistics for a specific service
+    pub async fn reset_service_stats(&self, service_id: &str) {
+        let mut stats = self.execution_stats.write().await;
+        if stats.contains_key(service_id) {
+            stats.insert(
+                service_id.to_string(),
+                ServiceExecutionStats::new(service_id.to_string()),
+            );
+        }
+    }
+
+    /// Reset statistics for all services
+    pub async fn reset_all_stats(&self) {
+        let mut stats = self.execution_stats.write().await;
+        stats.clear();
+    }
+
+    /// Record execution start for a service (internal tracking)
+    async fn record_execution_start(&self, service_id: &str) {
+        let mut stats = self.execution_stats.write().await;
+        let service_stats = stats
+            .entry(service_id.to_string())
+            .or_insert_with(|| ServiceExecutionStats::new(service_id.to_string()));
+        service_stats.increment_active();
+    }
+
+    /// Record execution success for a service (internal tracking)
+    async fn record_execution_success(
+        &self,
+        service_id: &str,
+        execution_time: Duration,
+        result_count: usize,
+        cached: bool,
+    ) {
+        let mut stats = self.execution_stats.write().await;
+        let service_stats = stats
+            .entry(service_id.to_string())
+            .or_insert_with(|| ServiceExecutionStats::new(service_id.to_string()));
+        service_stats.decrement_active();
+        service_stats.record_success(execution_time, result_count, cached);
+    }
+
+    /// Record execution failure for a service (internal tracking)
+    async fn record_execution_failure(&self, service_id: &str, error_msg: String) {
+        let mut stats = self.execution_stats.write().await;
+        let service_stats = stats
+            .entry(service_id.to_string())
+            .or_insert_with(|| ServiceExecutionStats::new(service_id.to_string()));
+        service_stats.decrement_active();
+        service_stats.record_failure(error_msg);
     }
 }
 
@@ -1200,4 +1358,136 @@ pub struct ServiceExecutionResult {
     pub result_count: usize,
     pub results: SparqlResults,
     pub cached: bool,
+}
+
+/// Summary of execution across all services
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExecutionSummary {
+    /// Total number of registered services
+    pub total_services: usize,
+    /// Total queries executed across all services
+    pub total_queries_executed: u64,
+    /// Total successful queries
+    pub total_successful_queries: u64,
+    /// Total failed queries
+    pub total_failed_queries: u64,
+    /// Total cached results
+    pub total_cached_results: u64,
+    /// Total currently active queries
+    pub total_active_queries: u64,
+    /// Average success rate across services
+    pub avg_success_rate: f64,
+    /// Average cache hit rate across services
+    pub avg_cache_hit_rate: f64,
+    /// Service with slowest average response time
+    pub slowest_service: Option<String>,
+    /// Service with fastest average response time
+    pub fastest_service: Option<String>,
+    /// Service with most active queries
+    pub most_active_service: Option<String>,
+}
+
+/// Detailed execution statistics for a service
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ServiceExecutionStats {
+    /// Service identifier
+    pub service_id: String,
+    /// Total number of queries executed
+    pub total_queries: u64,
+    /// Number of successful queries
+    pub successful_queries: u64,
+    /// Number of failed queries
+    pub failed_queries: u64,
+    /// Number of cached results
+    pub cached_results: u64,
+    /// Total execution time across all queries
+    pub total_execution_time: Duration,
+    /// Minimum execution time observed
+    pub min_execution_time: Duration,
+    /// Maximum execution time observed
+    pub max_execution_time: Duration,
+    /// Average execution time
+    pub avg_execution_time: Duration,
+    /// Total result count across all queries
+    pub total_result_count: usize,
+    /// Last execution timestamp (not serialized)
+    #[serde(skip)]
+    pub last_execution: Option<Instant>,
+    /// Last error message (if any)
+    pub last_error: Option<String>,
+    /// Current active query count
+    pub active_queries: u64,
+}
+
+impl ServiceExecutionStats {
+    /// Create new empty stats for a service
+    pub fn new(service_id: String) -> Self {
+        Self {
+            service_id,
+            total_queries: 0,
+            successful_queries: 0,
+            failed_queries: 0,
+            cached_results: 0,
+            total_execution_time: Duration::ZERO,
+            min_execution_time: Duration::MAX,
+            max_execution_time: Duration::ZERO,
+            avg_execution_time: Duration::ZERO,
+            total_result_count: 0,
+            last_execution: None,
+            last_error: None,
+            active_queries: 0,
+        }
+    }
+
+    /// Record a successful query execution
+    pub fn record_success(&mut self, execution_time: Duration, result_count: usize, cached: bool) {
+        self.total_queries += 1;
+        self.successful_queries += 1;
+        if cached {
+            self.cached_results += 1;
+        }
+
+        self.total_execution_time += execution_time;
+        self.min_execution_time = self.min_execution_time.min(execution_time);
+        self.max_execution_time = self.max_execution_time.max(execution_time);
+        self.avg_execution_time = self.total_execution_time / self.total_queries as u32;
+        self.total_result_count += result_count;
+        self.last_execution = Some(Instant::now());
+    }
+
+    /// Record a failed query execution
+    pub fn record_failure(&mut self, error_msg: String) {
+        self.total_queries += 1;
+        self.failed_queries += 1;
+        self.last_error = Some(error_msg);
+        self.last_execution = Some(Instant::now());
+    }
+
+    /// Increment active query counter
+    pub fn increment_active(&mut self) {
+        self.active_queries += 1;
+    }
+
+    /// Decrement active query counter
+    pub fn decrement_active(&mut self) {
+        self.active_queries = self.active_queries.saturating_sub(1);
+    }
+
+    /// Get success rate (0.0 - 1.0)
+    pub fn success_rate(&self) -> f64 {
+        if self.total_queries == 0 {
+            1.0
+        } else {
+            self.successful_queries as f64 / self.total_queries as f64
+        }
+    }
+
+    /// Get cache hit rate (0.0 - 1.0)
+    pub fn cache_hit_rate(&self) -> f64 {
+        if self.successful_queries == 0 {
+            0.0
+        } else {
+            self.cached_results as f64 / self.successful_queries as f64
+        }
+    }
 }

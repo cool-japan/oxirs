@@ -409,12 +409,27 @@ impl CountingBloomFilter {
             .filter(|c| c.load(Ordering::Relaxed) > 0)
             .count();
 
+        let element_count = self.element_count.load(Ordering::Relaxed);
+
+        // Calculate estimated FPR: (1 - e^(-kn/m))^k
+        // where k = num_hash_functions, n = element_count, m = num_counters
+        let estimated_fpr = if element_count > 0 {
+            let k = self.num_hash_functions as f64;
+            let n = element_count as f64;
+            let m = self.num_counters as f64;
+            let exponent = -k * n / m;
+            let base = 1.0 - exponent.exp();
+            base.powf(k)
+        } else {
+            0.0
+        };
+
         BloomFilterStats {
             num_bits: self.num_counters, // Use counters instead of bits
             num_hash_functions: self.num_hash_functions,
-            element_count: self.element_count.load(Ordering::Relaxed),
+            element_count,
             fill_rate: non_zero_counters as f64 / total_counters as f64,
-            estimated_fpr: 0.0, // TODO: Calculate for counting filter
+            estimated_fpr,
             configured_fpr: self.config.false_positive_rate,
         }
     }

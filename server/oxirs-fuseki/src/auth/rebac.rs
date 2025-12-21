@@ -47,7 +47,7 @@ pub struct RelationshipTuple {
     /// Relation/predicate (e.g., "owner", "can_read", "member")
     pub relation: String,
 
-    /// Object/resource (e.g., "dataset:public", "graph:http://example.org/g1")
+    /// Object/resource (e.g., "dataset:public", "graph:`http://example.org/g1`")
     pub object: String,
 
     /// Optional condition (e.g., time window, IP address)
@@ -103,6 +103,11 @@ impl RelationshipTuple {
 
     /// Check if this tuple's condition is satisfied
     pub fn is_condition_satisfied(&self) -> bool {
+        self.is_condition_satisfied_with_context(None)
+    }
+
+    /// Check if this tuple's condition is satisfied with request context
+    pub fn is_condition_satisfied_with_context(&self, context: Option<&RequestContext>) -> bool {
         match &self.condition {
             None => true,
             Some(RelationshipCondition::TimeWindow {
@@ -115,16 +120,80 @@ impl RelationshipTuple {
                 after_start && before_end
             }
             Some(RelationshipCondition::IpAddress { allowed_ips }) => {
-                // TODO: Get actual client IP from request context
-                // For now, always allow
-                !allowed_ips.is_empty()
+                // Check actual client IP from request context
+                if let Some(ctx) = context {
+                    if let Some(client_ip) = &ctx.client_ip {
+                        // Check if client IP matches any allowed IPs
+                        // Support CIDR notation and exact matches
+                        return allowed_ips
+                            .iter()
+                            .any(|allowed| Self::ip_matches(client_ip, allowed));
+                    }
+                }
+                // If no context or no client IP, deny access
+                false
             }
             Some(RelationshipCondition::Attribute { key, value }) => {
-                // TODO: Check attributes from request context
-                // For now, always allow
-                !key.is_empty() && !value.is_empty()
+                // Check attributes from request context
+                if let Some(ctx) = context {
+                    if let Some(attr_value) = ctx.attributes.get(key) {
+                        return attr_value == value;
+                    }
+                }
+                // If no context or attribute not found, deny access
+                false
             }
         }
+    }
+
+    /// Check if an IP address matches an allowed pattern
+    /// Supports exact matches and basic CIDR notation
+    fn ip_matches(client_ip: &str, allowed_pattern: &str) -> bool {
+        // Exact match
+        if client_ip == allowed_pattern {
+            return true;
+        }
+
+        // Basic CIDR support (e.g., "192.168.1.0/24")
+        if allowed_pattern.contains('/') {
+            // Simple prefix matching for demonstration
+            // In production, use a proper CIDR library like `ipnetwork`
+            let prefix = allowed_pattern.split('/').next().unwrap_or("");
+            let prefix_parts: Vec<&str> = prefix.split('.').collect();
+            let client_parts: Vec<&str> = client_ip.split('.').collect();
+
+            if prefix_parts.len() >= 3 && client_parts.len() >= 3 {
+                // Match first 3 octets for /24
+                return prefix_parts[0..3] == client_parts[0..3];
+            }
+        }
+
+        false
+    }
+}
+
+/// Authorization check request context
+#[derive(Debug, Clone, Default)]
+pub struct RequestContext {
+    /// Client IP address (for IP-based conditions)
+    pub client_ip: Option<String>,
+    /// Custom attributes (for attribute-based conditions)
+    pub attributes: HashMap<String, String>,
+}
+
+impl RequestContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_client_ip(mut self, ip: impl Into<String>) -> Self {
+        self.client_ip = Some(ip.into());
+        self
+    }
+
+    pub fn with_attribute(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.attributes.insert(key.into(), value.into());
+        self
     }
 }
 
@@ -134,6 +203,8 @@ pub struct CheckRequest {
     pub subject: String,
     pub relation: String,
     pub object: String,
+    /// Request context for condition evaluation
+    pub context: Option<RequestContext>,
 }
 
 impl CheckRequest {
@@ -146,7 +217,13 @@ impl CheckRequest {
             subject: subject.into(),
             relation: relation.into(),
             object: object.into(),
+            context: None,
         }
+    }
+
+    pub fn with_context(mut self, context: RequestContext) -> Self {
+        self.context = Some(context);
+        self
     }
 }
 
@@ -238,17 +315,91 @@ impl RelationshipGraph {
     }
 
     /// Check if there's a path from subject to object via the given relation
+    /// Uses breadth-first search (BFS) for transitive relationship traversal
     fn has_path(&self, subject: &str, relation: &str, object: &str) -> bool {
-        // Direct check
+        use std::collections::{HashSet, VecDeque};
+
+        // Direct check first (optimization)
         if let Some(objects) = self.edges.get(&(subject.to_string(), relation.to_string())) {
             if objects.contains(&object.to_string()) {
                 return true;
             }
         }
 
-        // TODO: Implement transitive relationship traversal
-        // For now, only direct relationships are checked
+        // Transitive relationship traversal using BFS
+        // Example: user:alice → member → org:engineering → owner → dataset:data
+        // This allows checking if alice can access dataset:data through organizational hierarchy
+
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
+
+        // Start from the subject
+        queue.push_back(subject.to_string());
+        visited.insert(subject.to_string());
+
+        while let Some(current) = queue.pop_front() {
+            // Check all outgoing edges with the given relation
+            if let Some(targets) = self.edges.get(&(current.clone(), relation.to_string())) {
+                for target in targets {
+                    // Found the target object
+                    if target == object {
+                        return true;
+                    }
+
+                    // Add to queue if not visited (avoid cycles)
+                    if !visited.contains(target) {
+                        visited.insert(target.clone());
+                        queue.push_back(target.clone());
+                    }
+                }
+            }
+
+            // Also check for hierarchical relations (e.g., member → owner)
+            // This allows permission inheritance through organizational structures
+            if let Some(inherited_targets) = self.get_inherited_objects(&current, relation) {
+                for target in inherited_targets {
+                    if target == object {
+                        return true;
+                    }
+
+                    if !visited.contains(&target) {
+                        visited.insert(target.clone());
+                        queue.push_back(target);
+                    }
+                }
+            }
+        }
+
         false
+    }
+
+    /// Get inherited objects through permission hierarchy
+    /// For example: "member" may inherit "owner" permissions
+    fn get_inherited_objects(&self, subject: &str, relation: &str) -> Option<Vec<String>> {
+        // Define permission hierarchy
+        let hierarchy = match relation {
+            "owner" => vec!["owner"],
+            "editor" => vec!["editor", "owner"], // editors inherit owner permissions
+            "viewer" => vec!["viewer", "editor", "owner"], // viewers inherit all
+            "member" => vec!["member", "owner"], // members inherit owner permissions
+            _ => vec![relation],                 // Default: no inheritance
+        };
+
+        let mut inherited = Vec::new();
+        for inherited_relation in hierarchy {
+            if let Some(objects) = self
+                .edges
+                .get(&(subject.to_string(), inherited_relation.to_string()))
+            {
+                inherited.extend(objects.clone());
+            }
+        }
+
+        if inherited.is_empty() {
+            None
+        } else {
+            Some(inherited)
+        }
     }
 }
 
@@ -292,13 +443,13 @@ impl RebacEvaluator for InMemoryRebacManager {
             )));
         }
 
-        // Check conditions
+        // Check conditions with request context
         let tuples_by_subject = self.tuples_by_subject.read().await;
         if let Some(tuples) = tuples_by_subject.get(&request.subject) {
             for tuple in tuples {
                 if tuple.relation == request.relation
                     && tuple.object == request.object
-                    && !tuple.is_condition_satisfied()
+                    && !tuple.is_condition_satisfied_with_context(request.context.as_ref())
                 {
                     return Ok(CheckResponse::deny("Condition not satisfied"));
                 }
@@ -383,6 +534,51 @@ impl RebacEvaluator for InMemoryRebacManager {
         let tuples_by_object = self.tuples_by_object.read().await;
         Ok(tuples_by_object.get(object).cloned().unwrap_or_default())
     }
+
+    /// Optimized batch check implementation
+    /// Acquires locks once and processes all requests in a single pass
+    async fn batch_check(&self, requests: &[CheckRequest]) -> Result<Vec<CheckResponse>> {
+        // Acquire read locks once for entire batch
+        let graph = self.graph.read().await;
+        let tuples_by_subject = self.tuples_by_subject.read().await;
+
+        let mut results = Vec::with_capacity(requests.len());
+
+        for request in requests {
+            // Check if relationship exists in graph (uses transitive traversal)
+            let has_relation = graph.has_path(&request.subject, &request.relation, &request.object);
+
+            if !has_relation {
+                results.push(CheckResponse::deny(format!(
+                    "{} does not have {} on {}",
+                    request.subject, request.relation, request.object
+                )));
+                continue;
+            }
+
+            // Check conditions for this specific relationship with context
+            let mut condition_satisfied = true;
+            if let Some(tuples) = tuples_by_subject.get(&request.subject) {
+                for tuple in tuples {
+                    if tuple.relation == request.relation
+                        && tuple.object == request.object
+                        && !tuple.is_condition_satisfied_with_context(request.context.as_ref())
+                    {
+                        condition_satisfied = false;
+                        break;
+                    }
+                }
+            }
+
+            if condition_satisfied {
+                results.push(CheckResponse::allow());
+            } else {
+                results.push(CheckResponse::deny("Condition not satisfied"));
+            }
+        }
+
+        Ok(results)
+    }
 }
 
 /// Implement RebacEvaluator for `Arc<T>` to allow tests to use Arc-wrapped managers
@@ -406,6 +602,10 @@ impl<T: RebacEvaluator> RebacEvaluator for Arc<T> {
 
     async fn list_object_tuples(&self, object: &str) -> Result<Vec<RelationshipTuple>> {
         (**self).list_object_tuples(object).await
+    }
+
+    async fn batch_check(&self, requests: &[CheckRequest]) -> Result<Vec<CheckResponse>> {
+        (**self).batch_check(requests).await
     }
 }
 

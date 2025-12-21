@@ -1,6 +1,6 @@
 //! Production-ready HTTP server implementation with comprehensive middleware
-
 use crate::{
+    adaptive_execution::{AdaptiveExecutionConfig, AdaptiveExecutionEngine},
     auth::AuthService,
     batch_execution::{BatchConfig, BatchExecutor},
     concurrent::{ConcurrencyConfig, ConcurrencyManager},
@@ -19,9 +19,10 @@ use crate::{
     tls::TlsManager,
     websocket::{SubscriptionManager, WebSocketConfig},
 };
-
 // RC.1 modules - optional imports
 use crate::backup::{BackupConfig, BackupManager};
+#[cfg(feature = "hot-reload")]
+use crate::config_reload::ConfigReloadManager;
 use crate::ddos_protection::{DDoSProtectionConfig, DDoSProtectionManager};
 use crate::disaster_recovery::{DisasterRecoveryConfig, DisasterRecoveryManager};
 use crate::edge_caching::{EdgeCacheConfig, EdgeCacheManager};
@@ -37,26 +38,23 @@ use axum::{
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Json, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
+#[cfg(feature = "rate-limit")]
+use governor::{Quota, RateLimiter};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+#[cfg(feature = "rate-limit")]
+use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::signal;
+#[cfg(feature = "hot-reload")]
+use tokio::sync::watch;
 use tower_http::request_id::{MakeRequestId, RequestId};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-
-#[cfg(feature = "rate-limit")]
-use governor::{Quota, RateLimiter};
-#[cfg(feature = "rate-limit")]
-use std::num::NonZeroU32;
-
-#[cfg(feature = "hot-reload")]
-use tokio::sync::watch;
-
 /// HTTP server runtime with comprehensive middleware and services
 pub struct Runtime {
     addr: SocketAddr,
@@ -88,14 +86,17 @@ pub struct Runtime {
     certificate_rotation: Option<Arc<CertificateRotation>>,
     http2_manager: Option<Arc<Http2Manager>>,
     http3_manager: Option<Arc<Http3Manager>>,
+    // v0.1.0 Final - Advanced Features
+    adaptive_execution_engine: Option<Arc<AdaptiveExecutionEngine>>,
     // ReBAC (Relationship-Based Access Control)
     rebac_manager: Option<Arc<dyn crate::auth::rebac::RebacEvaluator>>,
     #[cfg(feature = "rate-limit")]
     rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
     #[cfg(feature = "hot-reload")]
     config_watcher: Option<watch::Receiver<ServerConfig>>,
+    #[cfg(feature = "hot-reload")]
+    config_reload_manager: Option<Arc<parking_lot::Mutex<ConfigReloadManager>>>,
 }
-
 impl Runtime {
     /// Create a new runtime instance
     pub fn new(addr: SocketAddr, store: Store, config: ServerConfig) -> Self {
@@ -129,49 +130,61 @@ impl Runtime {
             certificate_rotation: None,
             http2_manager: None,
             http3_manager: None,
+            // v0.1.0 Final modules
+            adaptive_execution_engine: None,
             rebac_manager: None,
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
             #[cfg(feature = "hot-reload")]
             config_watcher: None,
+            #[cfg(feature = "hot-reload")]
+            config_reload_manager: None,
         }
     }
-
     /// Initialize services based on configuration
     pub async fn initialize_services(&mut self) -> FusekiResult<()> {
         info!("Initializing server services...");
-
         // Initialize authentication service
         if self.config.security.auth_required {
             info!("Initializing authentication service");
             let auth_service = AuthService::new(self.config.security.clone()).await?;
             self.auth_service = Some(auth_service);
         }
-
         // Initialize ReBAC manager for relationship-based access control
         info!("Initializing ReBAC manager");
         let rebac_manager = Arc::new(crate::auth::rebac::InMemoryRebacManager::new());
         self.rebac_manager = Some(rebac_manager as Arc<dyn crate::auth::rebac::RebacEvaluator>);
-
         // Initialize metrics service
         if self.config.monitoring.metrics.enabled {
             info!("Initializing metrics service");
             let metrics_service = MetricsService::new(self.config.monitoring.clone())?;
             self.metrics_service = Some(Arc::new(metrics_service));
         }
-
         // Initialize performance service
         info!("Initializing performance optimization service");
         let performance_service = PerformanceService::new(self.config.performance.clone())?;
         self.performance_service = Some(Arc::new(performance_service));
-
         // Initialize query optimizer
         if self.config.performance.query_optimization.enabled {
             info!("Initializing advanced query optimizer");
             let query_optimizer = QueryOptimizer::new(self.config.performance.clone())?;
             self.query_optimizer = Some(Arc::new(query_optimizer));
         }
-
+        // Initialize adaptive execution engine (v0.1.0 Final)
+        info!("Initializing adaptive execution engine with SciRS2 integration");
+        let adaptive_config = AdaptiveExecutionConfig {
+            enable_adaptive_learning: true,
+            min_sample_size: 10,
+            confidence_level: 0.95,
+            enable_cost_model_tuning: true,
+            enable_ml_prediction: true,
+            ga_population_size: 50,
+            ga_max_generations: 100,
+            enable_parallel_evaluation: true,
+            parallel_workers: num_cpus::get(),
+        };
+        let adaptive_engine = AdaptiveExecutionEngine::new(adaptive_config)?;
+        self.adaptive_execution_engine = Some(Arc::new(adaptive_engine));
         // Initialize subscription manager for WebSocket support
         info!("Initializing WebSocket subscription manager");
         let ws_config = WebSocketConfig::default();
@@ -184,31 +197,33 @@ impl Runtime {
             }
         };
         let subscription_manager = SubscriptionManager::new(store, metrics, ws_config);
-
         // Start the subscription manager
         let manager_clone = subscription_manager.clone();
         tokio::spawn(async move {
             manager_clone.start().await;
         });
-
         self.subscription_manager = Some(Arc::new(subscription_manager));
-
         // Initialize federation manager
         info!("Initializing federation manager");
-        let federation_config = FederationConfig::default(); // TODO: Load from server config
+        let federation_config = self
+            .config
+            .federation
+            .clone()
+            .unwrap_or_else(FederationConfig::default);
         let federation_manager = FederationManager::new(federation_config);
         federation_manager.start().await?;
         self.federation_manager = Some(Arc::new(federation_manager));
-
         // Initialize streaming manager
         info!("Initializing streaming manager");
-        let streaming_config = StreamingConfig::default(); // TODO: Load from server config
+        let streaming_config = self
+            .config
+            .streaming
+            .clone()
+            .unwrap_or_else(StreamingConfig::default);
         let streaming_manager = StreamingManager::new(streaming_config);
         streaming_manager.initialize().await?;
         self.streaming_manager = Some(Arc::new(streaming_manager));
-
         // ========== Beta.2 Performance & Scalability Features ==========
-
         // Initialize memory manager (used by other Beta.2 components)
         info!("Initializing Beta.2 Memory Manager");
         let memory_config = MemoryPoolConfig {
@@ -226,7 +241,6 @@ impl Runtime {
         };
         let memory_manager = MemoryManager::new(memory_config)?;
         self.memory_manager = Some(memory_manager.clone());
-
         // Initialize concurrency manager for advanced request handling
         info!("Initializing Beta.2 Concurrency Manager");
         let concurrency_config = ConcurrencyConfig {
@@ -243,7 +257,6 @@ impl Runtime {
         };
         let concurrency_manager = ConcurrencyManager::new(concurrency_config);
         self.concurrency_manager = Some(concurrency_manager.clone());
-
         // Initialize batch executor for query batching
         info!("Initializing Beta.2 Batch Executor");
         let batch_config = BatchConfig {
@@ -256,9 +269,8 @@ impl Runtime {
             analyze_dependencies: true,
             max_parallel_queries: 20,
         };
-        let batch_executor = BatchExecutor::new(batch_config);
+        let batch_executor = BatchExecutor::new(batch_config, Arc::new(self.store.clone()));
         self.batch_executor = Some(batch_executor.clone());
-
         // Initialize stream manager for efficient result streaming
         info!("Initializing Beta.2 Stream Manager");
         let stream_config = StreamConfig {
@@ -272,7 +284,6 @@ impl Runtime {
         };
         let stream_manager = StreamManager::new(stream_config, Some(memory_manager.clone()));
         self.stream_manager = Some(stream_manager);
-
         // Initialize dataset manager
         info!("Initializing Beta.2 Dataset Manager");
         let dataset_config = DatasetConfig {
@@ -285,12 +296,9 @@ impl Runtime {
         };
         let dataset_manager = DatasetManager::new(dataset_config).await?;
         self.dataset_manager = Some(dataset_manager);
-
         info!("Beta.2 Performance & Scalability modules initialized successfully");
         // ========== End Beta.2 Features ==========
-
         // ========== RC.1 Production & Advanced Features ==========
-
         // Initialize security auditor
         info!("Initializing RC.1 Security Auditor");
         let audit_config = SecurityAuditConfig {
@@ -303,7 +311,6 @@ impl Runtime {
         };
         let security_auditor = SecurityAuditManager::new(audit_config);
         self.security_auditor = Some(Arc::new(security_auditor));
-
         // Initialize DDoS protector
         info!("Initializing RC.1 DDoS Protector");
         let ddos_config = DDoSProtectionConfig {
@@ -318,13 +325,11 @@ impl Runtime {
         };
         let ddos_protector = DDoSProtectionManager::new(ddos_config);
         self.ddos_protector = Some(Arc::new(ddos_protector));
-
         // Initialize load balancer
         info!("Initializing RC.1 Load Balancer");
         let load_balancer_config = LoadBalancerConfig::default();
         let load_balancer = LoadBalancer::new(load_balancer_config);
         self.load_balancer = Some(Arc::new(load_balancer));
-
         // Initialize edge cache manager
         info!("Initializing RC.1 Edge Cache Manager");
         let edge_cache_config = EdgeCacheConfig::default();
@@ -376,8 +381,8 @@ impl Runtime {
         let recovery_manager = RecoveryManager::new(store_arc.clone(), recovery_config);
         self.recovery_manager = Some(Arc::new(recovery_manager));
 
-        // Initialize disaster recovery manager
-        info!("Initializing RC.1 Disaster Recovery Manager");
+        // Initialize disaster recovery manager with health monitoring
+        info!("Initializing RC.1 Disaster Recovery Manager with Health Monitoring");
         let disaster_recovery_config = DisasterRecoveryConfig {
             enabled: true,
             rpo_minutes: 60,
@@ -388,12 +393,13 @@ impl Runtime {
             enable_recovery_testing: false,
             recovery_test_interval_days: 30,
         };
-        let disaster_recovery = DisasterRecoveryManager::new(
+        let disaster_recovery = DisasterRecoveryManager::with_health_monitoring(
             store_arc.clone(),
             backup_manager.clone(),
             disaster_recovery_config,
         );
         self.disaster_recovery = Some(Arc::new(disaster_recovery));
+        info!("Disaster Recovery Manager initialized with comprehensive health monitoring");
 
         // Initialize TLS rotation manager (if TLS is configured)
         // Note: TLS rotation requires TlsManager initialization, which is complex
@@ -404,26 +410,47 @@ impl Runtime {
             self.certificate_rotation = None;
         }
 
-        // Initialize HTTP/2 manager
+        // Initialize HTTP/2 manager from configuration
         info!("Initializing RC.1 HTTP/2 Manager");
         let http_protocol_config = HttpProtocolConfig {
-            http2_enabled: true,
-            http3_enabled: false, // HTTP/3 requires additional setup
-            http2_initial_connection_window_size: 1024 * 1024,
-            http2_initial_stream_window_size: 512 * 1024,
-            http2_max_concurrent_streams: 100,
-            http2_max_frame_size: 16384,
-            http2_keep_alive_interval: Duration::from_secs(60),
-            http2_keep_alive_timeout: Duration::from_secs(20),
-            enable_server_push: false,
-            enable_header_compression: true,
+            http2_enabled: self.config.http_protocol.http2_enabled,
+            http3_enabled: self.config.http_protocol.http3_enabled,
+            http2_initial_connection_window_size: self
+                .config
+                .http_protocol
+                .http2_initial_connection_window_size,
+            http2_initial_stream_window_size: self
+                .config
+                .http_protocol
+                .http2_initial_stream_window_size,
+            http2_max_concurrent_streams: self.config.http_protocol.http2_max_concurrent_streams,
+            http2_max_frame_size: self.config.http_protocol.http2_max_frame_size,
+            http2_keep_alive_interval: Duration::from_secs(
+                self.config.http_protocol.http2_keep_alive_interval_secs,
+            ),
+            http2_keep_alive_timeout: Duration::from_secs(
+                self.config.http_protocol.http2_keep_alive_timeout_secs,
+            ),
+            enable_server_push: self.config.http_protocol.enable_server_push,
+            enable_header_compression: self.config.http_protocol.enable_header_compression,
         };
-        let http2_manager = Http2Manager::new(http_protocol_config.clone());
+
+        let mut http2_manager = Http2Manager::new(http_protocol_config.clone());
+
+        // Optimize for SPARQL if enabled
+        if self.config.http_protocol.sparql_optimized {
+            http2_manager.optimize_for_sparql();
+        }
+
         self.http2_manager = Some(Arc::new(http2_manager));
+        info!(
+            "HTTP/2 enabled: {}, SPARQL optimized: {}",
+            http_protocol_config.http2_enabled, self.config.http_protocol.sparql_optimized
+        );
 
         // Initialize HTTP/3 manager (if enabled)
         if http_protocol_config.http3_enabled {
-            info!("Initializing RC.1 HTTP/3 Manager");
+            info!("Initializing RC.1 HTTP/3 Manager (experimental)");
             let http3_manager = Http3Manager::new(http_protocol_config.clone());
             self.http3_manager = Some(Arc::new(http3_manager));
         }
@@ -450,9 +477,34 @@ impl Runtime {
         // Initialize configuration hot-reload watcher
         #[cfg(feature = "hot-reload")]
         {
-            // TODO: Implement hot-reload configuration
-            // For now, hot-reload is available but not automatically enabled
-            info!("Hot-reload feature is available");
+            if let Some(config_file) = &self.config.server.config_file {
+                info!(
+                    "Initializing configuration hot-reload manager for {:?}",
+                    config_file
+                );
+
+                // Create shared config wrapped in RwLock for hot-reload
+                let shared_config = Arc::new(tokio::sync::RwLock::new(self.config.clone()));
+
+                // Create config reload manager
+                match ConfigReloadManager::new(config_file.clone(), shared_config.clone()) {
+                    Ok(mut manager) => {
+                        // Start watching for file changes
+                        if let Err(e) = manager.start_watching() {
+                            warn!("Failed to start config file watching: {}", e);
+                        } else {
+                            info!("Configuration hot-reload is now active");
+                            self.config_reload_manager =
+                                Some(Arc::new(parking_lot::Mutex::new(manager)));
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to initialize config reload manager: {}", e);
+                    }
+                }
+            } else {
+                info!("Hot-reload feature is available but no config file path specified");
+            }
         }
 
         info!("Server services initialized successfully");
@@ -497,6 +549,8 @@ impl Runtime {
             certificate_rotation: self.certificate_rotation.clone(),
             http2_manager: self.http2_manager.clone(),
             http3_manager: self.http3_manager.clone(),
+            // v0.1.0 Final - Advanced Features
+            adaptive_execution_engine: self.adaptive_execution_engine.clone(),
             // ReBAC (Relationship-Based Access Control)
             rebac_manager: self.rebac_manager.clone(),
             // Stores and managers
@@ -655,6 +709,81 @@ impl Runtime {
                 post(handlers::performance::profiler_reset_handler),
             );
 
+        // RC.1 Load Balancing Management endpoints
+        app = app
+            .route(
+                "/$/load-balancer/status",
+                get(handlers::production::load_balancer_status),
+            )
+            .route(
+                "/$/load-balancer/backends",
+                get(handlers::production::list_backends).post(handlers::production::add_backend),
+            )
+            .route(
+                "/$/load-balancer/backends/:id",
+                axum::routing::delete(handlers::production::remove_backend),
+            )
+            .route(
+                "/$/load-balancer/select",
+                post(handlers::production::select_backend),
+            );
+
+        // RC.1 Edge Caching Management endpoints
+        app = app
+            .route(
+                "/$/edge-cache/status",
+                get(handlers::production::edge_cache_status),
+            )
+            .route(
+                "/$/edge-cache/purge",
+                post(handlers::production::purge_cache),
+            )
+            .route(
+                "/$/edge-cache/headers",
+                post(handlers::production::get_cache_headers),
+            );
+
+        // RC.1 CDN Static Asset Support
+        app = app
+            .route("/$/cdn/config", get(handlers::production::cdn_config))
+            .route(
+                "/static/*path",
+                get(handlers::production::serve_static_asset),
+            );
+
+        // RC.1 Security Audit endpoints
+        app = app
+            .route(
+                "/$/security/audit/status",
+                get(handlers::production::security_audit_status),
+            )
+            .route(
+                "/$/security/audit/scan",
+                post(handlers::production::trigger_security_scan),
+            );
+
+        // RC.1 DDoS Protection endpoints
+        app = app
+            .route(
+                "/$/security/ddos/status",
+                get(handlers::production::ddos_status),
+            )
+            .route(
+                "/$/security/ddos/manage-ip",
+                post(handlers::production::manage_ip),
+            );
+
+        // RC.1 Disaster Recovery endpoints
+        app = app
+            .route(
+                "/$/recovery/status",
+                get(handlers::production::disaster_recovery_status),
+            )
+            .route(
+                "/$/recovery/create-point",
+                post(handlers::production::create_recovery_point),
+            );
+
         // API Key Management endpoints
         app = app
             .route(
@@ -701,22 +830,44 @@ impl Runtime {
             );
 
         // Server management routes
-        app = app.route("/$/ping", get(ping_handler));
-        // TODO: Fix these handler signatures
-        // .route("/$/server", get(handlers::admin::server_info))
-        // .route("/$/stats", get(handlers::admin::server_stats))
-        // .route("/$/compact/:name", post(handlers::admin::compact_dataset))
-        // .route("/$/backup/:name", post(handlers::admin::backup_dataset));
+        app = app
+            .route("/$/ping", get(ping_handler))
+            .route("/$/server", get(handlers::admin::server_info))
+            .route("/$/stats", get(handlers::admin::server_stats))
+            .route("/$/compact/:name", post(handlers::admin::compact_dataset))
+            .route("/$/backup/:name", post(handlers::admin::backup_dataset))
+            // Fuseki-compatible backup listing and config reload
+            .route("/$/backups-list", get(handlers::list_backups))
+            .route("/$/reload", post(handlers::reload_config));
 
-        // TODO: Re-enable authentication routes after fixing handler signatures
+        // Validation service routes (Fuseki-compatible)
+        app = app
+            .route(
+                "/$/validate/query",
+                get(handlers::validate_query_get).post(handlers::validate_query),
+            )
+            .route(
+                "/$/validate/update",
+                get(handlers::validate_update_get).post(handlers::validate_update),
+            )
+            .route(
+                "/$/validate/iri",
+                get(handlers::validate_iri_get).post(handlers::validate_iri),
+            )
+            .route("/$/validate/data", post(handlers::validate_data))
+            .route(
+                "/$/validate/langtag",
+                get(handlers::validate_langtag_get).post(handlers::validate_langtag),
+            );
+
         // Authentication routes (if enabled)
-        // if self.config.security.auth_required {
-        //     app = app
-        //         .route("/$/login", post(handlers::auth::login_handler))
-        //         .route("/$/logout", post(handlers::auth::logout_handler))
-        //         .route("/$/user", get(handlers::auth::user_info_handler))
-        //         .route("/$/users", get(handlers::auth::list_users_handler));
-        // }
+        if self.config.security.auth_required {
+            app = app
+                .route("/$/login", post(handlers::auth::login_handler))
+                .route("/$/logout", post(handlers::auth::logout_handler))
+                .route("/$/user", get(handlers::auth::user_info_handler))
+                .route("/$/users", get(handlers::auth::list_users_handler));
+        }
 
         // OAuth2/OIDC authentication routes (if OAuth2 is configured)
         if self.config.security.oauth.is_some() {
@@ -751,15 +902,15 @@ impl Runtime {
                 );
         }
 
-        // TODO: Re-enable LDAP and SAML routes after fixing handler signatures
         // LDAP/Active Directory authentication routes (if LDAP is configured)
-        // if self.config.security.ldap.is_some() {
-        //     app = app
-        //         .route("/auth/ldap/login", post(handlers::ldap::ldap_login))
-        //         .route("/auth/ldap/test", get(handlers::ldap::test_ldap_connection))
-        //         .route("/auth/ldap/groups", get(handlers::ldap::get_ldap_groups))
-        //         .route("/auth/ldap/config", get(handlers::ldap::get_ldap_config));
-        // }
+        #[cfg(feature = "ldap")]
+        if self.config.security.ldap.is_some() {
+            app = app
+                .route("/auth/ldap/login", post(handlers::ldap_login))
+                .route("/auth/ldap/test", get(handlers::test_ldap_connection))
+                .route("/auth/ldap/groups", get(handlers::get_ldap_groups))
+                .route("/auth/ldap/config", get(handlers::get_ldap_config));
+        }
 
         // SAML 2.0 authentication routes (if SAML is configured)
         // #[cfg(feature = "saml")]
@@ -781,26 +932,24 @@ impl Runtime {
         //         );
         // }
 
-        // Multi-Factor Authentication routes (disabled - MFA not yet implemented)
-        // TODO: Add MFA support to SecurityConfig
-        // if self.config.security.mfa.enabled {
-        //     app = app
-        //         .route("/auth/mfa/enroll", post(handlers::mfa::enroll_mfa))
-        //         .route(
-        //             "/auth/mfa/challenge/:type",
-        //             post(handlers::mfa::create_mfa_challenge),
-        //         )
-        //         .route("/auth/mfa/verify", post(handlers::mfa::verify_mfa))
-        //         .route("/auth/mfa/status", get(handlers::mfa::get_mfa_status))
-        //         .route(
-        //             "/auth/mfa/disable/:type",
-        //             delete(handlers::mfa::disable_mfa),
-        //         )
-        //         .route(
-        //             "/auth/mfa/backup-codes",
-        //             post(handlers::mfa::regenerate_backup_codes),
-        //         );
-        // }
+        // Multi-Factor Authentication routes
+        if let Some(mfa_config) = &self.config.security.mfa {
+            if mfa_config.enabled {
+                app = app
+                    .route("/auth/mfa/enroll", post(handlers::enroll_mfa))
+                    .route(
+                        "/auth/mfa/challenge/:type",
+                        post(handlers::create_mfa_challenge),
+                    )
+                    .route("/auth/mfa/verify", post(handlers::verify_mfa))
+                    .route("/auth/mfa/status", get(handlers::get_mfa_status))
+                    .route("/auth/mfa/disable/:type", delete(handlers::disable_mfa))
+                    .route(
+                        "/auth/mfa/backup-codes",
+                        post(handlers::regenerate_backup_codes),
+                    );
+            }
+        }
 
         // Health check routes
         app = app
@@ -808,34 +957,68 @@ impl Runtime {
             .route("/health/live", get(crate::health::liveness_handler))
             .route("/health/ready", get(crate::health::readiness_handler));
 
-        // Metrics routes (if enabled)
-        // if state.metrics_service.is_some() {
-        //     app = app
-        //         .route("/metrics", get(metrics_handler))
-        //         .route("/metrics/summary", get(metrics_summary_handler));
-        // }
+        // Metrics routes (Prometheus export)
+        if state.metrics_service.is_some() {
+            app = app.route("/metrics", get(handlers::production::metrics_handler));
+        }
 
-        // Performance monitoring routes (if enabled)
-        // if let Some(_performance_service) = &state.performance_service {
-        //     app = app
-        //         .route("/$/performance", get(performance_info_handler))
-        //         .route("/$/performance/cache", get(cache_stats_handler))
-        //         .route(
-        //             "/$/performance/cache",
-        //             axum::routing::delete(clear_cache_handler),
-        //         );
-        // }
+        // Beta.2 Performance monitoring routes
+        app = app
+            .route(
+                "/$/performance",
+                get(handlers::performance::get_performance_stats),
+            )
+            .route(
+                "/$/performance/memory",
+                get(handlers::performance::get_memory_stats),
+            )
+            .route(
+                "/$/performance/concurrency",
+                get(handlers::performance::get_concurrency_stats),
+            )
+            .route("/$/performance/gc", post(handlers::performance::trigger_gc))
+            .route(
+                "/$/performance/health",
+                get(handlers::performance::beta2_health_check),
+            );
 
-        // Query optimization routes (if enabled)
-        // if let Some(_query_optimizer) = &state.query_optimizer {
-        //     app = app
-        //         .route("/$/optimization", get(optimization_stats_handler))
-        //         .route("/$/optimization/plans", get(optimization_plans_handler))
-        //         .route(
-        //             "/$/optimization/stats",
-        //             get(optimization_detailed_stats_handler),
-        //         );
-        // }
+        // RC.1 Performance profiler routes
+        if state.performance_profiler.is_some() {
+            app = app
+                .route(
+                    "/$/profiler/report",
+                    get(handlers::performance::profiler_report_handler),
+                )
+                .route(
+                    "/$/profiler/query-stats",
+                    get(handlers::performance::profiler_query_stats_handler),
+                )
+                .route(
+                    "/$/profiler/reset",
+                    post(handlers::performance::profiler_reset_handler),
+                );
+        }
+
+        // Query optimization routes
+        if state.query_optimizer.is_some() {
+            app = app
+                .route(
+                    "/$/optimization/stats",
+                    get(handlers::performance::optimization_stats_handler),
+                )
+                .route(
+                    "/$/optimization/plans",
+                    get(handlers::performance::optimization_plans_handler),
+                )
+                .route(
+                    "/$/optimization/cache",
+                    delete(handlers::performance::clear_optimization_cache_handler),
+                )
+                .route(
+                    "/$/optimization/database",
+                    get(handlers::performance::database_statistics_handler),
+                );
+        }
 
         // WebSocket routes for live query subscriptions
         app = app
@@ -857,9 +1040,8 @@ impl Runtime {
             );
 
         // REST API v2 (RC.1) - OpenAPI documented RESTful endpoints
-        // Note: REST API v2 handlers are defined in rest_api_v2.rs but need router registration
-        // TODO: Implement REST API v2 router registration method
-        // app = crate::rest_api_v2::register_routes(app);
+        // REST API v2 routes
+        app = crate::rest_api_v2::register_routes(app);
 
         // Admin UI route (if enabled)
         #[cfg(feature = "admin-ui")]
@@ -941,10 +1123,13 @@ impl Runtime {
         }
 
         // Layer 3: Security audit (RC.1) - log security events
-        if let Some(_security_auditor) = &state.security_auditor {
-            // TODO: Implement security audit middleware when audit_request/audit_response methods are available
-            // For now, security auditing is available but middleware integration is pending
-            info!("Security audit module initialized (middleware integration pending)");
+        if let Some(security_auditor) = &state.security_auditor {
+            let auditor = security_auditor.clone();
+            app = app.layer(axum::middleware::from_fn(move |req, next| {
+                let auditor = auditor.clone();
+                crate::middleware::security_audit_middleware(auditor, req, next)
+            }));
+            info!("Security audit middleware enabled");
         }
 
         // Layer 4: Security headers for all requests
@@ -979,9 +1164,10 @@ impl Runtime {
         app = app.layer(TraceLayer::new_for_http());
 
         // Layer 10: Timeout middleware
-        app = app.layer(TimeoutLayer::new(Duration::from_secs(
-            self.config.server.request_timeout_secs,
-        )));
+        app = app.layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(self.config.server.request_timeout_secs),
+        ));
 
         // Layer 11: CORS configuration if enabled
         if self.config.server.cors {
@@ -1148,6 +1334,8 @@ pub struct AppState {
     pub certificate_rotation: Option<Arc<CertificateRotation>>,
     pub http2_manager: Option<Arc<Http2Manager>>,
     pub http3_manager: Option<Arc<Http3Manager>>,
+    // v0.1.0 Final - Advanced Features
+    pub adaptive_execution_engine: Option<Arc<AdaptiveExecutionEngine>>,
     // ReBAC (Relationship-Based Access Control)
     pub rebac_manager: Option<Arc<dyn crate::auth::rebac::RebacEvaluator>>,
     // Stores and managers
@@ -1180,7 +1368,7 @@ type MakeRequestUuid = RequestIdGenerator;
 
 /// Comprehensive error handling middleware
 async fn error_handling_middleware(
-    State(_state): State<AppState>,
+    State(_state): State<Arc<AppState>>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -1197,7 +1385,11 @@ async fn error_handling_middleware(
 }
 
 /// Authentication middleware
-async fn auth_middleware(State(state): State<AppState>, request: Request, next: Next) -> Response {
+async fn auth_middleware(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Response {
     // Skip authentication for health endpoints
     let path = request.uri().path();
     if path.starts_with("/health") || path == "/$/ping" {
@@ -1232,7 +1424,7 @@ async fn auth_middleware(State(state): State<AppState>, request: Request, next: 
 
 /// Metrics collection middleware
 async fn metrics_middleware(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -1294,7 +1486,7 @@ fn extract_client_identifier(request: &Request) -> String {
 }
 
 /// Enhanced health check with comprehensive status
-pub async fn health_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
+pub async fn health_handler(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     if let Some(metrics_service) = &state.metrics_service {
         let health_status = metrics_service.get_health_status().await;
         Json(serde_json::to_value(health_status).unwrap_or_default())
@@ -1444,7 +1636,7 @@ pub async fn liveness_handler() -> StatusCode {
 }
 
 /// Kubernetes readiness probe with store check
-pub async fn readiness_handler(State(state): State<AppState>) -> StatusCode {
+pub async fn readiness_handler(State(state): State<Arc<AppState>>) -> StatusCode {
     // Check if store is ready
     match state.store.is_ready() {
         true => StatusCode::OK,
@@ -1465,7 +1657,7 @@ pub use readiness_handler as readiness_check;
 
 /// Server information handler
 pub async fn server_info_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Json<HashMap<String, serde_json::Value>> {
     let mut info = HashMap::new();
     info.insert("name".to_string(), serde_json::json!("OxiRS Fuseki"));
@@ -1503,7 +1695,7 @@ pub async fn server_info_handler(
 
 /// Performance information handler
 pub async fn performance_info_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(performance_service) = &state.performance_service {
         let metrics = performance_service.get_metrics().await;
@@ -1528,7 +1720,7 @@ pub async fn performance_info_handler(
 
 /// Cache statistics handler
 pub async fn cache_stats_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<HashMap<String, serde_json::Value>>, FusekiError> {
     if let Some(performance_service) = &state.performance_service {
         let stats = performance_service.get_cache_stats().await;
@@ -1542,7 +1734,7 @@ pub async fn cache_stats_handler(
 
 /// Clear cache handler
 pub async fn clear_cache_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(performance_service) = &state.performance_service {
         performance_service.clear_caches().await;
@@ -1561,7 +1753,7 @@ pub async fn clear_cache_handler(
 
 /// Query optimization statistics handler
 pub async fn optimization_stats_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(query_optimizer) = &state.query_optimizer {
         let stats = query_optimizer.get_optimization_stats().await;
@@ -1589,7 +1781,7 @@ pub async fn optimization_stats_handler(
 
 /// Optimization plans handler
 pub async fn optimization_plans_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(_query_optimizer) = &state.query_optimizer {
         // Return sample optimization plan information
@@ -1615,7 +1807,7 @@ pub async fn optimization_plans_handler(
 
 /// Detailed optimization statistics handler
 pub async fn optimization_detailed_stats_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(query_optimizer) = &state.query_optimizer {
         let optimization_stats = query_optimizer.get_optimization_stats().await;
@@ -1652,7 +1844,7 @@ pub async fn optimization_detailed_stats_handler(
 }
 
 /// Metrics endpoint handler
-async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn metrics_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     if let Some(metrics_service) = &state.metrics_service {
         #[cfg(feature = "metrics")]
         {
@@ -1687,7 +1879,7 @@ async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 /// Metrics summary handler
-async fn metrics_summary_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn metrics_summary_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     if let Some(metrics_service) = &state.metrics_service {
         let summary = metrics_service.get_summary().await;
         axum::Json(summary).into_response()
@@ -1781,6 +1973,7 @@ mod tests {
             certificate_rotation: None,
             http2_manager: None,
             http3_manager: None,
+            adaptive_execution_engine: None,
             rebac_manager: None,
             // Stores and managers
             prefix_store: Arc::new(handlers::PrefixStore::new()),
@@ -1797,11 +1990,11 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
 
         // Test readiness
-        let status = readiness_handler(State(state.clone())).await;
+        let status = readiness_handler(State(Arc::new(state.clone()))).await;
         assert_eq!(status, StatusCode::OK);
 
         // Test health
-        let health_response = health_handler(State(state)).await;
+        let health_response = health_handler(State(Arc::new(state))).await;
         assert!(health_response.0.get("status").is_some());
     }
 }

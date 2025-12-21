@@ -13,6 +13,9 @@ rust-version.workspace = true
 
 [dependencies]
 scirs2-core = { workspace = true }
+# SCIRS2 POLICY: Full use of SciRS2 ecosystem for advanced analytics
+scirs2-graph = { workspace = true }  # Graph algorithms (betweenness, closeness, etc.)
+# scirs2-linalg, scirs2-optimize will be added when needed
 oxirs-core.workspace = true
 oxirs-arq.workspace = true
 oxirs-fuseki.workspace = true
@@ -30,8 +33,8 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 reqwest.workspace = true  # HTTP client for triplestore migrations
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
-uuid = "1.18"       # UUID generation
-sysinfo = "0.30"    # System information
+uuid = "1.19"       # UUID generation
+sysinfo = { workspace = true }    # System information
 tempfile = "3.23"    # Temporary file handling
 
 # Enhanced CLI features
@@ -60,8 +63,10 @@ flate2 = "1.1"      # Gzip compression/decompression
 hostname = "0.4"    # System hostname for test reports
 md5 = "0.8"         # MD5 hashing for checkpoint filenames
 hex = "0.4"         # Hex encoding for checksums
-rust_xlsxwriter = "0.66"  # Excel XLSX file generation
+rust_xlsxwriter = "0.79"  # Excel XLSX file generation
 inferno = "0.11"    # Flame graph generation for profiling
+printpdf = "0.8"    # PDF generation for reports
+handlebars = "5.1"  # Template engine for custom output formats
 
 [dev-dependencies]
 criterion.workspace = true

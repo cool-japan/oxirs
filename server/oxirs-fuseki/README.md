@@ -1,10 +1,10 @@
 # OxiRS Fuseki
 
-[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility**
 
-**Status**: Beta Release (v0.1.0-beta.1) - Released November 16, 2025
+**Status**: Beta Release (v0.1.0-beta.2) - Released December 21, 2025
 
 ✨ **Beta Software**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-oxirs-fuseki = "0.1.0-beta.1"
+oxirs-fuseki = "0.1.0-beta.2"
 ```
 
 ### As a Binary
@@ -551,7 +551,7 @@ at your option.
 
 ## Status
 
-� **Beta Release (v0.1.0-beta.1)** - November 16, 2025
+� **Beta Release (v0.1.0-beta.2)** - November 16, 2025
 
 Current alpha features:
 - ✅ SPARQL query/update endpoints backed by persisted N-Quads datasets

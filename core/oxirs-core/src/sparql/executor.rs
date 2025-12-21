@@ -2,12 +2,43 @@
 //!
 //! This module provides the core query execution logic for SPARQL queries.
 //! It delegates to parser, pattern, filter, expression, aggregate, and modifier modules.
+//!
+//! ## Performance Monitoring
+//!
+//! The executor integrates SciRS2-core metrics for comprehensive query performance tracking:
+//! - Query execution time (per query type: SELECT, ASK, CONSTRUCT, DESCRIBE)
+//! - Pattern matching operations
+//! - Result set sizes
+//! - Query complexity metrics
 
 use super::*;
 use crate::model::*;
 use crate::rdf_store::{OxirsQueryResults, StorageBackend, VariableBinding};
 use crate::{OxirsError, Result};
+use scirs2_core::metrics::{Counter, Histogram, Timer};
 use std::collections::HashMap;
+use std::sync::Arc;
+
+/// Executor performance statistics
+#[derive(Debug, Clone)]
+pub struct ExecutorStats {
+    /// Total number of queries executed
+    pub total_queries: u64,
+    /// Number of SELECT queries
+    pub select_queries: u64,
+    /// Number of ASK queries
+    pub ask_queries: u64,
+    /// Number of CONSTRUCT queries
+    pub construct_queries: u64,
+    /// Number of DESCRIBE queries
+    pub describe_queries: u64,
+    /// Total pattern matching operations
+    pub pattern_matches: u64,
+    /// Average execution time in seconds
+    pub avg_execution_time_secs: f64,
+    /// Total number of observations
+    pub total_observations: u64,
+}
 
 /// VALUES clause for inline data (SPARQL-specific)
 #[derive(Debug, Clone)]
@@ -16,15 +47,77 @@ struct ValuesClause {
     rows: Vec<Vec<String>>, // Each row contains values for the variables
 }
 
-/// SPARQL query executor
+/// SPARQL query executor with integrated performance monitoring
+///
+/// This executor tracks query performance metrics using SciRS2-core:
+/// - Query execution time broken down by query type
+/// - Pattern matching statistics
+/// - Result set size distribution
+/// - Query complexity indicators
 pub struct QueryExecutor<'a> {
     backend: &'a StorageBackend,
+    /// Query execution timer
+    query_timer: Arc<Timer>,
+    /// SELECT query counter
+    select_counter: Arc<Counter>,
+    /// ASK query counter
+    ask_counter: Arc<Counter>,
+    /// CONSTRUCT query counter
+    construct_counter: Arc<Counter>,
+    /// DESCRIBE query counter
+    describe_counter: Arc<Counter>,
+    /// Pattern matching counter
+    pattern_counter: Arc<Counter>,
+    /// Result set size histogram
+    result_size_histogram: Arc<Histogram>,
 }
 
 impl<'a> QueryExecutor<'a> {
-    /// Create a new query executor for the given storage backend
+    /// Create a new query executor for the given storage backend with performance monitoring
+    ///
+    /// The executor automatically tracks:
+    /// - Query execution times
+    /// - Query type distribution
+    /// - Pattern matching operations
+    /// - Result set sizes
     pub fn new(backend: &'a StorageBackend) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            query_timer: Arc::new(Timer::new("query_execution_time".to_string())),
+            select_counter: Arc::new(Counter::new("select_queries".to_string())),
+            ask_counter: Arc::new(Counter::new("ask_queries".to_string())),
+            construct_counter: Arc::new(Counter::new("construct_queries".to_string())),
+            describe_counter: Arc::new(Counter::new("describe_queries".to_string())),
+            pattern_counter: Arc::new(Counter::new("pattern_matches".to_string())),
+            result_size_histogram: Arc::new(Histogram::new("result_set_size".to_string())),
+        }
+    }
+
+    /// Get query execution statistics
+    ///
+    /// Returns the current metrics including:
+    /// - Total queries executed by type
+    /// - Average execution time
+    /// - Pattern matching statistics
+    /// - Result set size distribution
+    pub fn get_stats(&self) -> ExecutorStats {
+        let select = self.select_counter.get();
+        let ask = self.ask_counter.get();
+        let construct = self.construct_counter.get();
+        let describe = self.describe_counter.get();
+
+        let timer_stats = self.query_timer.get_stats();
+
+        ExecutorStats {
+            total_queries: select + ask + construct + describe,
+            select_queries: select,
+            ask_queries: ask,
+            construct_queries: construct,
+            describe_queries: describe,
+            pattern_matches: self.pattern_counter.get(),
+            avg_execution_time_secs: timer_stats.mean,
+            total_observations: timer_stats.count,
+        }
     }
 
     /// Execute a SPARQL query
@@ -33,6 +126,9 @@ impl<'a> QueryExecutor<'a> {
     }
 
     pub fn query(&self, sparql: &str) -> Result<OxirsQueryResults> {
+        // Start timing the query execution
+        let start = std::time::Instant::now();
+
         // Basic SPARQL query processor for common patterns
         let sparql = sparql.trim();
 
@@ -45,19 +141,36 @@ impl<'a> QueryExecutor<'a> {
             sparql
         };
 
-        if query_to_execute.to_uppercase().contains("SELECT") {
+        // Execute query and track metrics
+        let result = if query_to_execute.to_uppercase().contains("SELECT") {
+            self.select_counter.inc();
             self.execute_select_query(query_to_execute)
         } else if query_to_execute.to_uppercase().starts_with("ASK") {
+            self.ask_counter.inc();
             self.execute_ask_query(query_to_execute)
         } else if query_to_execute.to_uppercase().starts_with("CONSTRUCT") {
+            self.construct_counter.inc();
             self.execute_construct_query(query_to_execute)
         } else if query_to_execute.to_uppercase().starts_with("DESCRIBE") {
+            self.describe_counter.inc();
             self.execute_describe_query(query_to_execute)
         } else {
-            Err(OxirsError::Query(format!(
+            return Err(OxirsError::Query(format!(
                 "Unsupported SPARQL query type: {sparql}"
-            )))
+            )));
+        };
+
+        // Record execution time
+        let duration = start.elapsed();
+        self.query_timer.observe(duration);
+
+        // Track result set size if available
+        if let Ok(ref query_result) = result {
+            self.result_size_histogram
+                .observe(query_result.len() as f64);
         }
+
+        result
     }
 
     /// Execute a SELECT query
@@ -77,6 +190,12 @@ impl<'a> QueryExecutor<'a> {
             }
 
             let pattern_groups = self.extract_pattern_groups(sparql)?;
+
+            // Track pattern matching operations
+            let total_patterns: usize = pattern_groups.iter().map(|g| g.patterns.len()).sum();
+            for _ in 0..total_patterns {
+                self.pattern_counter.inc();
+            }
 
             // Extract all patterns for variable detection
             let all_patterns: Vec<&SimpleTriplePattern> =

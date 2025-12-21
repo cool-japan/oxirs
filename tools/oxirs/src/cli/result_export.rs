@@ -17,6 +17,7 @@ pub enum ExportFormat {
     Csv,
     Json,
     Html,
+    Xlsx,
 }
 
 impl ExportFormat {
@@ -26,6 +27,7 @@ impl ExportFormat {
             ExportFormat::Csv => "csv",
             ExportFormat::Json => "json",
             ExportFormat::Html => "html",
+            ExportFormat::Xlsx => "xlsx",
         }
     }
 
@@ -35,6 +37,9 @@ impl ExportFormat {
             ExportFormat::Csv => "text/csv",
             ExportFormat::Json => "application/json",
             ExportFormat::Html => "text/html",
+            ExportFormat::Xlsx => {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
         }
     }
 
@@ -44,6 +49,7 @@ impl ExportFormat {
             "csv" => Some(ExportFormat::Csv),
             "json" => Some(ExportFormat::Json),
             "html" => Some(ExportFormat::Html),
+            "xlsx" | "excel" => Some(ExportFormat::Xlsx),
             _ => None,
         }
     }
@@ -65,6 +71,7 @@ impl std::fmt::Display for ExportFormat {
                 ExportFormat::Csv => "CSV",
                 ExportFormat::Json => "JSON",
                 ExportFormat::Html => "HTML",
+                ExportFormat::Xlsx => "Excel (XLSX)",
             }
         )
     }
@@ -83,6 +90,10 @@ pub struct ExportConfig {
     pub include_css: bool,
     /// Custom page title (HTML only)
     pub html_title: Option<String>,
+    /// Excel worksheet name (XLSX only)
+    pub xlsx_sheet_name: Option<String>,
+    /// Auto-fit columns in Excel (XLSX only)
+    pub xlsx_autofit: bool,
 }
 
 impl Default for ExportConfig {
@@ -93,6 +104,8 @@ impl Default for ExportConfig {
             pretty_json: true,
             include_css: true,
             html_title: None,
+            xlsx_sheet_name: None,
+            xlsx_autofit: true,
         }
     }
 }
@@ -139,6 +152,26 @@ impl ExportConfig {
         self.html_title = Some(title);
         self
     }
+
+    /// Create configuration for Excel export
+    pub fn xlsx() -> Self {
+        Self {
+            format: ExportFormat::Xlsx,
+            ..Default::default()
+        }
+    }
+
+    /// Set Excel worksheet name
+    pub fn with_xlsx_sheet_name(mut self, name: String) -> Self {
+        self.xlsx_sheet_name = Some(name);
+        self
+    }
+
+    /// Set whether to auto-fit Excel columns
+    pub fn with_xlsx_autofit(mut self, autofit: bool) -> Self {
+        self.xlsx_autofit = autofit;
+        self
+    }
 }
 
 /// Result exporter
@@ -164,6 +197,11 @@ impl ResultExporter {
 
     /// Export results to a file
     pub fn export_to_file(&self, results: &QueryResults, path: &Path) -> CliResult<()> {
+        // XLSX format requires special handling (can't write to a generic writer)
+        if self.config.format == ExportFormat::Xlsx {
+            return self.export_xlsx(results, path);
+        }
+
         let mut file = File::create(path)?;
         self.export_to_writer(results, &mut file)
     }
@@ -178,6 +216,7 @@ impl ResultExporter {
             ExportFormat::Csv => self.export_csv(results, writer),
             ExportFormat::Json => self.export_json(results, writer),
             ExportFormat::Html => self.export_html(results, writer),
+            ExportFormat::Xlsx => Err("XLSX format requires export_to_file() method".into()),
         }
     }
 
@@ -478,6 +517,103 @@ impl ResultExporter {
         Ok(())
     }
 
+    /// Export results to Excel (XLSX) format
+    fn export_xlsx(&self, results: &QueryResults, path: &Path) -> CliResult<()> {
+        use rust_xlsxwriter::{Format, Workbook};
+
+        // Create a new workbook
+        let mut workbook = Workbook::new();
+
+        // Determine sheet name
+        let sheet_name = self
+            .config
+            .xlsx_sheet_name
+            .as_deref()
+            .unwrap_or("Query Results");
+
+        // Add a worksheet
+        let worksheet = workbook.add_worksheet().set_name(sheet_name)?;
+
+        // Create header format (bold, blue background)
+        let header_format = Format::new()
+            .set_bold()
+            .set_background_color(rust_xlsxwriter::Color::RGB(0x0070C0))
+            .set_font_color(rust_xlsxwriter::Color::White)
+            .set_border(rust_xlsxwriter::FormatBorder::Thin);
+
+        // Create data format with borders
+        let data_format = Format::new().set_border(rust_xlsxwriter::FormatBorder::Thin);
+
+        // Write headers
+        for (col, var) in results.variables.iter().enumerate() {
+            worksheet.write_string_with_format(0, col as u16, var, &header_format)?;
+        }
+
+        // Write data rows
+        for (row_idx, binding) in results.bindings.iter().enumerate() {
+            let excel_row = (row_idx + 1) as u32; // +1 because row 0 is headers
+
+            for (col_idx, value_opt) in binding.values.iter().enumerate() {
+                let excel_col = col_idx as u16;
+
+                if let Some(term) = value_opt {
+                    let value_str = Self::format_term_for_excel(term);
+                    worksheet.write_string_with_format(
+                        excel_row,
+                        excel_col,
+                        &value_str,
+                        &data_format,
+                    )?;
+                } else {
+                    // Write empty cell with border
+                    worksheet.write_string_with_format(excel_row, excel_col, "", &data_format)?;
+                }
+            }
+        }
+
+        // Auto-fit columns if requested
+        if self.config.xlsx_autofit {
+            // Auto-fit all columns
+            worksheet.autofit();
+        }
+
+        // Save the workbook
+        workbook.save(path)?;
+
+        Ok(())
+    }
+
+    /// Format an RDF term for Excel export
+    fn format_term_for_excel(term: &RdfTerm) -> String {
+        match term {
+            RdfTerm::Uri { value } => value.clone(),
+            RdfTerm::Literal {
+                value,
+                lang,
+                datatype,
+            } => {
+                if let Some(lang_tag) = lang {
+                    format!("\"{}\"@{}", value, lang_tag)
+                } else if let Some(dt) = datatype {
+                    // For common datatypes, just show the value
+                    if dt.ends_with("#string")
+                        || dt.ends_with("#integer")
+                        || dt.ends_with("#decimal")
+                        || dt.ends_with("#double")
+                        || dt.ends_with("#boolean")
+                    {
+                        value.clone()
+                    } else {
+                        format!("\"{}\"^^<{}>", value, dt)
+                    }
+                } else {
+                    format!("\"{}\"", value)
+                }
+            }
+            RdfTerm::Bnode { value } => format!("_:{}", value),
+        }
+    }
+
     /// Escape a string for CSV format
     fn escape_csv(s: &str) -> String {
         s.replace('\"', "\"\"")
@@ -560,6 +696,8 @@ mod tests {
     #[test]
     fn test_export_format_parsing() {
         assert_eq!(ExportFormat::parse("csv"), Some(ExportFormat::Csv));
+        assert_eq!(ExportFormat::parse("xlsx"), Some(ExportFormat::Xlsx));
+        assert_eq!(ExportFormat::parse("excel"), Some(ExportFormat::Xlsx));
         assert_eq!(ExportFormat::parse("json"), Some(ExportFormat::Json));
         assert_eq!(ExportFormat::parse("html"), Some(ExportFormat::Html));
         assert_eq!(ExportFormat::parse("CSV"), Some(ExportFormat::Csv));
@@ -684,5 +822,83 @@ mod tests {
         let html_exporter = ResultExporter::new(ExportFormat::Html);
         let html_output = html_exporter.export_to_string(&results).unwrap();
         assert!(html_output.contains("Total Results:"));
+    }
+
+    #[test]
+    fn test_xlsx_export() {
+        use std::env;
+
+        let results = create_test_results();
+        let xlsx_exporter = ResultExporter::with_config(ExportConfig::xlsx());
+
+        // Create a temporary file
+        let temp_dir = env::temp_dir();
+        let temp_file = temp_dir.join("test_export.xlsx");
+
+        // Export to XLSX
+        let export_result = xlsx_exporter.export_to_file(&results, &temp_file);
+        assert!(
+            export_result.is_ok(),
+            "Excel export failed: {:?}",
+            export_result.err()
+        );
+
+        // Verify file was created
+        assert!(temp_file.exists(), "XLSX file was not created");
+
+        // Verify file has content (XLSX files should be at least a few KB)
+        let metadata = std::fs::metadata(&temp_file).unwrap();
+        assert!(
+            metadata.len() > 1000,
+            "XLSX file is too small: {} bytes",
+            metadata.len()
+        );
+
+        // Clean up
+        std::fs::remove_file(&temp_file).ok();
+    }
+
+    #[test]
+    fn test_xlsx_format_term() {
+        let uri_term = RdfTerm::Uri {
+            value: "http://example.org/test".to_string(),
+        };
+        assert_eq!(
+            ResultExporter::format_term_for_excel(&uri_term),
+            "http://example.org/test"
+        );
+
+        let literal_term = RdfTerm::Literal {
+            value: "Hello".to_string(),
+            lang: Some("en".to_string()),
+            datatype: None,
+        };
+        assert_eq!(
+            ResultExporter::format_term_for_excel(&literal_term),
+            "\"Hello\"@en"
+        );
+
+        let bnode_term = RdfTerm::Bnode {
+            value: "b1".to_string(),
+        };
+        assert_eq!(ResultExporter::format_term_for_excel(&bnode_term), "_:b1");
+    }
+
+    #[test]
+    fn test_xlsx_custom_sheet_name() {
+        use std::env;
+
+        let results = create_test_results();
+        let config = ExportConfig::xlsx().with_xlsx_sheet_name("My Results".to_string());
+        let xlsx_exporter = ResultExporter::with_config(config);
+
+        let temp_dir = env::temp_dir();
+        let temp_file = temp_dir.join("test_custom_sheet.xlsx");
+
+        let result = xlsx_exporter.export_to_file(&results, &temp_file);
+        assert!(result.is_ok(), "Excel export with custom sheet name failed");
+
+        assert!(temp_file.exists());
+        std::fs::remove_file(&temp_file).ok();
     }
 }

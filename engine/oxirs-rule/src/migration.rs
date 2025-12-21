@@ -357,21 +357,33 @@ impl MigrationTool {
 
         for (line_num, captures) in rule_regex.captures_iter(source).enumerate() {
             let rule_name = captures.get(1).unwrap().as_str();
-            let _when_clause = captures.get(2).unwrap().as_str();
-            let _then_clause = captures.get(3).unwrap().as_str();
+            let when_clause = captures.get(2).unwrap().as_str();
+            let then_clause = captures.get(3).unwrap().as_str();
 
-            warnings.push(MigrationWarning {
-                message: format!(
-                    "Drools rule '{}' partially migrated - complex DRL features may not be supported",
-                    rule_name
-                ),
-                line: Some(line_num + 1),
-                severity: WarningSeverity::Info,
-            });
-
-            // Create simplified rule
-            match self.parse_drools_rule(rule_name) {
-                Ok(rule) => rules.push(rule),
+            // Create enhanced rule
+            match self.parse_drools_rule(rule_name, when_clause, then_clause) {
+                Ok(rule) => {
+                    if !rule.body.is_empty() || !rule.head.is_empty() {
+                        rules.push(rule);
+                        warnings.push(MigrationWarning {
+                            message: format!(
+                                "Drools rule '{}' migrated - complex DRL features (Java code, salience, etc.) not supported",
+                                rule_name
+                            ),
+                            line: Some(line_num + 1),
+                            severity: WarningSeverity::Info,
+                        });
+                    } else {
+                        warnings.push(MigrationWarning {
+                            message: format!(
+                                "Drools rule '{}' skipped - no parseable patterns found",
+                                rule_name
+                            ),
+                            line: Some(line_num + 1),
+                            severity: WarningSeverity::Warning,
+                        });
+                    }
+                }
                 Err(e) => {
                     warnings.push(MigrationWarning {
                         message: format!("Failed to parse Drools rule '{}': {}", rule_name, e),
@@ -387,15 +399,171 @@ impl MigrationTool {
     }
 
     /// Parse Drools rule
-    fn parse_drools_rule(&self, name: &str) -> Result<Rule> {
-        // Simplified parsing - real Drools is much more complex
-        warn!("Drools migration is simplified - complex features not supported");
+    fn parse_drools_rule(&self, name: &str, when_clause: &str, then_clause: &str) -> Result<Rule> {
+        // Parse when clause (conditions/patterns)
+        let body = self.parse_drools_when_clause(when_clause)?;
+
+        // Parse then clause (actions/assertions)
+        let head = self.parse_drools_then_clause(then_clause)?;
+
+        if body.is_empty() && head.is_empty() {
+            warn!(
+                "Drools rule '{}' has no parseable conditions or actions",
+                name
+            );
+        }
 
         Ok(Rule {
             name: name.to_string(),
-            body: vec![], // TODO: Parse when clause
-            head: vec![], // TODO: Parse then clause
+            body,
+            head,
         })
+    }
+
+    /// Parse Drools when clause
+    fn parse_drools_when_clause(&self, when_clause: &str) -> Result<Vec<RuleAtom>> {
+        let mut atoms = Vec::new();
+
+        // Pattern: ClassName(field == value, field2 == value2)
+        let pattern_regex =
+            Regex::new(r"(\w+)\s*\((.*?)\)").context("Failed to compile Drools pattern regex")?;
+
+        for captures in pattern_regex.captures_iter(when_clause) {
+            let class_name = captures.get(1).unwrap().as_str();
+            let conditions = captures.get(2).unwrap().as_str();
+
+            // Parse conditions
+            for condition in conditions.split(',') {
+                let condition = condition.trim();
+                if condition.is_empty() {
+                    continue;
+                }
+
+                // Pattern: field == value or field : value
+                if let Some((field, value)) = self.parse_drools_condition(condition) {
+                    // Create triple: ?instance field value
+                    atoms.push(RuleAtom::Triple {
+                        subject: Term::Variable(format!("{}Instance", class_name)),
+                        predicate: Term::Constant(field),
+                        object: self.parse_drools_value(&value),
+                    });
+                }
+            }
+
+            // Add type triple: ?instance rdf:type ClassName
+            atoms.push(RuleAtom::Triple {
+                subject: Term::Variable(format!("{}Instance", class_name)),
+                predicate: Term::Constant("rdf:type".to_string()),
+                object: Term::Constant(class_name.to_string()),
+            });
+        }
+
+        Ok(atoms)
+    }
+
+    /// Parse Drools then clause
+    fn parse_drools_then_clause(&self, then_clause: &str) -> Result<Vec<RuleAtom>> {
+        let mut atoms = Vec::new();
+
+        // Pattern: insert(new ClassName(field: value))
+        let insert_regex = Regex::new(r"insert\s*\(\s*new\s+(\w+)\s*\((.*?)\)\s*\)")
+            .context("Failed to compile Drools insert regex")?;
+
+        for captures in insert_regex.captures_iter(then_clause) {
+            let class_name = captures.get(1).unwrap().as_str();
+            let params = captures.get(2).unwrap().as_str();
+
+            // Add type assertion
+            atoms.push(RuleAtom::Triple {
+                subject: Term::Variable(format!("new{}", class_name)),
+                predicate: Term::Constant("rdf:type".to_string()),
+                object: Term::Constant(class_name.to_string()),
+            });
+
+            // Parse parameters
+            for param in params.split(',') {
+                let param = param.trim();
+                if let Some((field, value)) = self.parse_drools_condition(param) {
+                    atoms.push(RuleAtom::Triple {
+                        subject: Term::Variable(format!("new{}", class_name)),
+                        predicate: Term::Constant(field),
+                        object: self.parse_drools_value(&value),
+                    });
+                }
+            }
+        }
+
+        // Pattern: modify(variable) { setField(value) }
+        let modify_regex = Regex::new(r"modify\s*\(\s*(\w+)\s*\)\s*\{([^}]+)\}")
+            .context("Failed to compile Drools modify regex")?;
+
+        // Parse setter calls: setField(value) - compile regex outside loop
+        let setter_regex =
+            Regex::new(r"set(\w+)\s*\(([^)]+)\)").context("Failed to compile setter regex")?;
+
+        for captures in modify_regex.captures_iter(then_clause) {
+            let var_name = captures.get(1).unwrap().as_str();
+            let modifications = captures.get(2).unwrap().as_str();
+
+            for setter_captures in setter_regex.captures_iter(modifications) {
+                let field_name = setter_captures.get(1).unwrap().as_str();
+                let value = setter_captures.get(2).unwrap().as_str().trim();
+
+                atoms.push(RuleAtom::Triple {
+                    subject: Term::Variable(var_name.to_string()),
+                    predicate: Term::Constant(field_name.to_string()),
+                    object: self.parse_drools_value(value),
+                });
+            }
+        }
+
+        Ok(atoms)
+    }
+
+    /// Parse Drools condition (field == value or field : value)
+    fn parse_drools_condition(&self, condition: &str) -> Option<(String, String)> {
+        // Try == operator
+        if let Some(eq_pos) = condition.find("==") {
+            let field = condition[..eq_pos].trim().to_string();
+            let value = condition[eq_pos + 2..].trim().to_string();
+            return Some((field, value));
+        }
+
+        // Try : operator
+        if let Some(colon_pos) = condition.find(':') {
+            let field = condition[..colon_pos].trim().to_string();
+            let value = condition[colon_pos + 1..].trim().to_string();
+            return Some((field, value));
+        }
+
+        None
+    }
+
+    /// Parse Drools value (string literal, number, or variable)
+    fn parse_drools_value(&self, value: &str) -> Term {
+        let value = value.trim();
+
+        // String literal
+        if (value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\''))
+        {
+            return Term::Literal(value[1..value.len() - 1].to_string());
+        }
+
+        // Variable (starts with $)
+        if let Some(var_name) = value.strip_prefix('$') {
+            return Term::Variable(var_name.to_string());
+        }
+
+        // Number or identifier
+        if value
+            .chars()
+            .all(|c| c.is_numeric() || c == '.' || c == '-')
+        {
+            Term::Literal(value.to_string())
+        } else {
+            Term::Constant(value.to_string())
+        }
     }
 
     /// Migrate from CLIPS format
@@ -412,11 +580,32 @@ impl MigrationTool {
 
         for (line_num, captures) in rule_regex.captures_iter(source).enumerate() {
             let rule_name = captures.get(1).unwrap().as_str();
-            let _pattern_clause = captures.get(2).unwrap().as_str();
-            let _action_clause = captures.get(3).unwrap().as_str();
+            let pattern_clause = captures.get(2).unwrap().as_str();
+            let action_clause = captures.get(3).unwrap().as_str();
 
-            match self.parse_clips_rule(rule_name) {
-                Ok(rule) => rules.push(rule),
+            match self.parse_clips_rule(rule_name, pattern_clause, action_clause) {
+                Ok(rule) => {
+                    if !rule.body.is_empty() || !rule.head.is_empty() {
+                        rules.push(rule);
+                        warnings.push(MigrationWarning {
+                            message: format!(
+                                "CLIPS rule '{}' migrated - procedural attachments and advanced features not supported",
+                                rule_name
+                            ),
+                            line: Some(line_num + 1),
+                            severity: WarningSeverity::Info,
+                        });
+                    } else {
+                        warnings.push(MigrationWarning {
+                            message: format!(
+                                "CLIPS rule '{}' skipped - no parseable patterns found",
+                                rule_name
+                            ),
+                            line: Some(line_num + 1),
+                            severity: WarningSeverity::Warning,
+                        });
+                    }
+                }
                 Err(e) => {
                     warnings.push(MigrationWarning {
                         message: format!("Failed to parse CLIPS rule '{}': {}", rule_name, e),
@@ -432,15 +621,158 @@ impl MigrationTool {
     }
 
     /// Parse CLIPS rule
-    fn parse_clips_rule(&self, name: &str) -> Result<Rule> {
-        // Simplified parsing
-        warn!("CLIPS migration is simplified - complex features not supported");
+    fn parse_clips_rule(
+        &self,
+        name: &str,
+        pattern_clause: &str,
+        action_clause: &str,
+    ) -> Result<Rule> {
+        // Parse pattern clause (LHS)
+        let body = self.parse_clips_patterns(pattern_clause)?;
+
+        // Parse action clause (RHS)
+        let head = self.parse_clips_actions(action_clause)?;
+
+        if body.is_empty() && head.is_empty() {
+            warn!("CLIPS rule '{}' has no parseable patterns or actions", name);
+        }
 
         Ok(Rule {
             name: name.to_string(),
-            body: vec![], // TODO: Parse pattern
-            head: vec![], // TODO: Parse action
+            body,
+            head,
         })
+    }
+
+    /// Parse CLIPS patterns
+    fn parse_clips_patterns(&self, patterns: &str) -> Result<Vec<RuleAtom>> {
+        let mut atoms = Vec::new();
+
+        // Pattern: (template-name (slot-name value))
+        let pattern_regex = Regex::new(r"\((\w+)(?:\s+\(([^)]+)\))*\)")
+            .context("Failed to compile CLIPS pattern regex")?;
+
+        for captures in pattern_regex.captures_iter(patterns) {
+            let template_name = captures.get(1).unwrap().as_str();
+
+            // Skip control patterns
+            if template_name == "test"
+                || template_name == "not"
+                || template_name == "and"
+                || template_name == "or"
+            {
+                continue;
+            }
+
+            // Create type fact
+            atoms.push(RuleAtom::Triple {
+                subject: Term::Variable(format!("{}Instance", template_name)),
+                predicate: Term::Constant("rdf:type".to_string()),
+                object: Term::Constant(template_name.to_string()),
+            });
+
+            // Parse slot patterns if present
+            if let Some(slots) = captures.get(2) {
+                let slot_text = slots.as_str();
+                // Pattern: (slot value) or slot value
+                let slot_parts: Vec<&str> = slot_text.split_whitespace().collect();
+
+                if slot_parts.len() >= 2 {
+                    let slot_name = slot_parts[0];
+                    let slot_value = slot_parts[1];
+
+                    atoms.push(RuleAtom::Triple {
+                        subject: Term::Variable(format!("{}Instance", template_name)),
+                        predicate: Term::Constant(slot_name.to_string()),
+                        object: self.parse_clips_value(slot_value),
+                    });
+                }
+            }
+        }
+
+        Ok(atoms)
+    }
+
+    /// Parse CLIPS actions
+    fn parse_clips_actions(&self, actions: &str) -> Result<Vec<RuleAtom>> {
+        let mut atoms = Vec::new();
+
+        // Pattern: (assert (template-name (slot value)))
+        let assert_regex = Regex::new(r"\(assert\s+\((\w+)(?:\s+\(([^)]+)\))*\)\)")
+            .context("Failed to compile CLIPS assert regex")?;
+
+        for captures in assert_regex.captures_iter(actions) {
+            let template_name = captures.get(1).unwrap().as_str();
+
+            // Create type assertion
+            atoms.push(RuleAtom::Triple {
+                subject: Term::Variable(format!("new{}", template_name)),
+                predicate: Term::Constant("rdf:type".to_string()),
+                object: Term::Constant(template_name.to_string()),
+            });
+
+            // Parse slot values if present
+            if let Some(slots) = captures.get(2) {
+                let slot_text = slots.as_str();
+                let slot_parts: Vec<&str> = slot_text.split_whitespace().collect();
+
+                if slot_parts.len() >= 2 {
+                    let slot_name = slot_parts[0];
+                    let slot_value = slot_parts[1];
+
+                    atoms.push(RuleAtom::Triple {
+                        subject: Term::Variable(format!("new{}", template_name)),
+                        predicate: Term::Constant(slot_name.to_string()),
+                        object: self.parse_clips_value(slot_value),
+                    });
+                }
+            }
+        }
+
+        // Pattern: (modify ?fact (slot value))
+        let modify_regex = Regex::new(r"\(modify\s+\?(\w+)\s+\((\w+)\s+([^)]+)\)\)")
+            .context("Failed to compile CLIPS modify regex")?;
+
+        for captures in modify_regex.captures_iter(actions) {
+            let var_name = captures.get(1).unwrap().as_str();
+            let slot_name = captures.get(2).unwrap().as_str();
+            let slot_value = captures.get(3).unwrap().as_str();
+
+            atoms.push(RuleAtom::Triple {
+                subject: Term::Variable(var_name.to_string()),
+                predicate: Term::Constant(slot_name.to_string()),
+                object: self.parse_clips_value(slot_value),
+            });
+        }
+
+        Ok(atoms)
+    }
+
+    /// Parse CLIPS value (variable, string, or literal)
+    fn parse_clips_value(&self, value: &str) -> Term {
+        let value = value.trim();
+
+        // Variable (starts with ?)
+        if let Some(var_name) = value.strip_prefix('?') {
+            return Term::Variable(var_name.to_string());
+        }
+
+        // String literal
+        if (value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\''))
+        {
+            return Term::Literal(value[1..value.len() - 1].to_string());
+        }
+
+        // Symbol or number
+        if value
+            .chars()
+            .all(|c| c.is_numeric() || c == '.' || c == '-')
+        {
+            Term::Literal(value.to_string())
+        } else {
+            Term::Constant(value.to_string())
+        }
     }
 
     /// Expand namespace prefix
@@ -626,43 +958,276 @@ mod tests {
     }
 
     #[test]
-    fn test_drools_migration_placeholder() {
+    fn test_drools_simple_rule() {
         let mut tool = MigrationTool::new();
 
         let drools_rules = r#"
-rule "test"
+rule "adult-rule"
 when
-    Person(age > 18)
+    Person(age == 25)
 then
-    // action
+    insert(new Adult(status: "verified"))
 end
 "#;
 
         let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
 
-        // Currently returns empty due to simplified implementation
-        // This test verifies the migration runs without error
-        assert!(result
-            .warnings
-            .iter()
-            .any(|w| w.severity == WarningSeverity::Info));
+        assert_eq!(result.rules.len(), 1);
+        assert_eq!(result.rules[0].name, "adult-rule");
+        assert!(!result.rules[0].body.is_empty());
+        assert!(!result.rules[0].head.is_empty());
     }
 
     #[test]
-    fn test_clips_migration_placeholder() {
+    fn test_drools_with_insert() {
+        let mut tool = MigrationTool::new();
+
+        let drools_rules = r#"
+rule "create-employee"
+when
+    Person(name == "John")
+then
+    insert(new Employee(name: "John", role: "Developer"))
+end
+"#;
+
+        let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
+
+        assert_eq!(result.rules.len(), 1);
+        let rule = &result.rules[0];
+
+        // Should have head atoms for type and properties
+        assert!(rule.head.iter().any(|atom| {
+            matches!(atom, RuleAtom::Triple {
+                predicate: Term::Constant(p),
+                object: Term::Constant(o), ..
+            } if p == "rdf:type" && o == "Employee")
+        }));
+    }
+
+    #[test]
+    fn test_drools_with_modify() {
+        let mut tool = MigrationTool::new();
+
+        let drools_rules = r#"
+rule "update-status"
+when
+    Person(name == "Alice")
+then
+    modify(person) { setStatus("active") }
+end
+"#;
+
+        let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
+
+        assert_eq!(result.rules.len(), 1);
+        let rule = &result.rules[0];
+
+        // Should have head atoms for modifications
+        assert!(rule.head.iter().any(|atom| {
+            matches!(atom, RuleAtom::Triple {
+                predicate: Term::Constant(p), ..
+            } if p == "Status")
+        }));
+    }
+
+    #[test]
+    fn test_drools_value_parsing() {
+        let tool = MigrationTool::new();
+
+        // Test string literal
+        let value1 = tool.parse_drools_value("\"hello\"");
+        assert!(matches!(value1, Term::Literal(v) if v == "hello"));
+
+        // Test variable
+        let value2 = tool.parse_drools_value("$var");
+        assert!(matches!(value2, Term::Variable(v) if v == "var"));
+
+        // Test number
+        let value3 = tool.parse_drools_value("42");
+        assert!(matches!(value3, Term::Literal(v) if v == "42"));
+
+        // Test identifier
+        let value4 = tool.parse_drools_value("active");
+        assert!(matches!(value4, Term::Constant(v) if v == "active"));
+    }
+
+    #[test]
+    fn test_drools_condition_parsing() {
+        let tool = MigrationTool::new();
+
+        // Test == operator
+        let (field, value) = tool.parse_drools_condition("age == 18").unwrap();
+        assert_eq!(field, "age");
+        assert_eq!(value, "18");
+
+        // Test : operator
+        let (field2, value2) = tool.parse_drools_condition("status : active").unwrap();
+        assert_eq!(field2, "status");
+        assert_eq!(value2, "active");
+    }
+
+    #[test]
+    fn test_clips_simple_rule() {
         let mut tool = MigrationTool::new();
 
         let clips_rules = r#"
-(defrule test-rule
-    (person (name ?n) (age ?a&:(> ?a 18)))
-=>
-    (assert (adult ?n)))
+(defrule adult-check (person (age 25)) => (assert (adult (verified yes))))
 "#;
 
         let result = tool.migrate(clips_rules, SourceFormat::Clips).unwrap();
 
-        // Currently simplified implementation
-        // Test verifies migration runs without panic
+        assert_eq!(result.rules.len(), 1);
+        assert_eq!(result.rules[0].name, "adult-check");
+    }
+
+    #[test]
+    fn test_clips_with_assert() {
+        let mut tool = MigrationTool::new();
+
+        let clips_rules = r#"
+(defrule make-employee (person (name John)) => (assert (employee (name John))))
+"#;
+
+        let result = tool.migrate(clips_rules, SourceFormat::Clips).unwrap();
+
+        // Rule should be created
+        assert_eq!(result.rules.len(), 1);
+        assert_eq!(result.rules[0].name, "make-employee");
+
+        // Migration should complete successfully
         assert!(result.source_format == SourceFormat::Clips);
+    }
+
+    #[test]
+    fn test_clips_with_modify() {
+        let mut tool = MigrationTool::new();
+
+        let clips_rules = r#"
+(defrule update-status (person) => (modify ?person (status active)))
+"#;
+
+        let result = tool.migrate(clips_rules, SourceFormat::Clips).unwrap();
+
+        // Rule should be created
+        assert_eq!(result.rules.len(), 1);
+        assert_eq!(result.rules[0].name, "update-status");
+
+        // Migration should complete successfully
+        assert!(result.source_format == SourceFormat::Clips);
+    }
+
+    #[test]
+    fn test_clips_value_parsing() {
+        let tool = MigrationTool::new();
+
+        // Test variable
+        let value1 = tool.parse_clips_value("?x");
+        assert!(matches!(value1, Term::Variable(v) if v == "x"));
+
+        // Test string literal
+        let value2 = tool.parse_clips_value("\"hello\"");
+        assert!(matches!(value2, Term::Literal(v) if v == "hello"));
+
+        // Test number
+        let value3 = tool.parse_clips_value("42");
+        assert!(matches!(value3, Term::Literal(v) if v == "42"));
+
+        // Test symbol
+        let value4 = tool.parse_clips_value("active");
+        assert!(matches!(value4, Term::Constant(v) if v == "active"));
+    }
+
+    #[test]
+    fn test_drools_multiple_conditions() {
+        let mut tool = MigrationTool::new();
+
+        let drools_rules = r#"
+rule "complex-rule"
+when
+    Person(age == 25, status == "active")
+then
+    insert(new Adult(verified: true))
+end
+"#;
+
+        let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
+
+        assert_eq!(result.rules.len(), 1);
+        let rule = &result.rules[0];
+
+        // Should have multiple body atoms for multiple conditions
+        assert!(rule.body.len() >= 2);
+    }
+
+    #[test]
+    fn test_migration_warnings_severity() {
+        let result = MigrationResult {
+            rules: vec![],
+            warnings: vec![
+                MigrationWarning {
+                    message: "Info".to_string(),
+                    line: Some(1),
+                    severity: WarningSeverity::Info,
+                },
+                MigrationWarning {
+                    message: "Warning".to_string(),
+                    line: Some(2),
+                    severity: WarningSeverity::Warning,
+                },
+                MigrationWarning {
+                    message: "Error".to_string(),
+                    line: Some(3),
+                    severity: WarningSeverity::Error,
+                },
+            ],
+            source_format: SourceFormat::Jena,
+            original_count: 3,
+            migrated_count: 0,
+        };
+
+        let report = result.generate_report();
+
+        assert!(report.contains("[INFO]"));
+        assert!(report.contains("[WARN]"));
+        assert!(report.contains("[ERROR]"));
+    }
+
+    #[test]
+    fn test_empty_drools_rule() {
+        let mut tool = MigrationTool::new();
+
+        let drools_rules = r#"
+rule "empty"
+when
+then
+end
+"#;
+
+        let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
+
+        // Empty rules should either be skipped (0 rules) or have no body/head
+        // Migration should complete without error
+        assert!(result.source_format == SourceFormat::Drools);
+        if !result.rules.is_empty() {
+            // If rule was created, it should be empty
+            assert!(result.rules[0].body.is_empty() && result.rules[0].head.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_clips_pattern_filtering() {
+        let tool = MigrationTool::new();
+
+        // Control patterns should be skipped
+        let patterns = "(test (> ?x 5)) (person (age ?x))";
+        let atoms = tool.parse_clips_patterns(patterns).unwrap();
+
+        // Should only include person pattern, not test
+        assert!(atoms.iter().any(|atom| {
+            matches!(atom, RuleAtom::Triple {
+                object: Term::Constant(o), ..
+            } if o == "person")
+        }));
     }
 }

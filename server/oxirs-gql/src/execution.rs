@@ -6,6 +6,7 @@
 use crate::ast::{
     Document, Field, OperationDefinition, OperationType, Selection, SelectionSet, Value,
 };
+use crate::request_deduplication::RequestDeduplicator;
 use crate::types::{GraphQLType, Schema};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -191,6 +192,7 @@ impl SourceLocation {
 pub struct QueryExecutor {
     schema: Arc<RwLock<Schema>>,
     resolvers: HashMap<String, Arc<dyn FieldResolver>>,
+    deduplicator: Arc<RequestDeduplicator>,
 }
 
 impl QueryExecutor {
@@ -198,6 +200,7 @@ impl QueryExecutor {
         Self {
             schema: Arc::new(RwLock::new(schema)),
             resolvers: HashMap::new(),
+            deduplicator: Arc::new(RequestDeduplicator::new()),
         }
     }
 
@@ -206,6 +209,25 @@ impl QueryExecutor {
     }
 
     pub async fn execute(
+        &self,
+        document: &Document,
+        context: &ExecutionContext,
+    ) -> Result<ExecutionResult> {
+        // Generate a unique key for deduplication
+        // In a real implementation, we should probably hash the document and variables
+        // For now, we'll use a simple combination of operation name and variables
+        let op_name = context.operation_name.clone().unwrap_or_default();
+        let vars_str = format!("{:?}", context.variables);
+        let deduplication_key = format!("{}:{}", op_name, vars_str);
+
+        self.deduplicator
+            .deduplicate(deduplication_key, || async move {
+                self.execute_internal(document, context).await
+            })
+            .await
+    }
+
+    async fn execute_internal(
         &self,
         document: &Document,
         context: &ExecutionContext,

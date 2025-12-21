@@ -1,6 +1,7 @@
 //! Session management and chat functionality
 
 use crate::messages::Message;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -8,7 +9,7 @@ use std::{
 };
 
 /// Session configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct ChatConfig {
     pub max_context_tokens: usize,
     pub sliding_window_size: usize,
@@ -38,7 +39,7 @@ impl Default for ChatConfig {
 }
 
 /// Session state enumeration
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub enum SessionState {
     Active,
     Idle,
@@ -325,7 +326,7 @@ impl PartialEq<&str> for TransitionType {
 }
 
 /// Session performance metrics
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct SessionMetrics {
     pub total_messages: usize,
     pub user_messages: usize,
@@ -341,6 +342,7 @@ pub struct SessionMetrics {
     pub warning_count: usize,
     pub cache_hits: usize,
     pub cache_misses: usize,
+    #[bincode(with_serde)]
     pub last_updated: chrono::DateTime<chrono::Utc>,
 }
 

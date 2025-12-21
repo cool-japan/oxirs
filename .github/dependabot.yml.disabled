@@ -1,0 +1,82 @@
+version: 2
+updates:
+  # Enable version updates for Cargo
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "cargo"
+      include: "scope"
+    reviewers:
+      - "@maintainers"
+    assignees:
+      - "@maintainers"
+    
+  # Individual workspace members
+  - package-ecosystem: "cargo"
+    directory: "/core/oxirs-core"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "oxirs-core"
+      
+  - package-ecosystem: "cargo"
+    directory: "/ai/oxirs-shacl-ai"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "oxirs-shacl-ai"
+      
+  - package-ecosystem: "cargo"
+    directory: "/ai/oxirs-chat"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "oxirs-chat"
+      
+  - package-ecosystem: "cargo"
+    directory: "/ai/oxirs-embed"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "oxirs-embed"
+      
+  - package-ecosystem: "cargo"
+    directory: "/engine/oxirs-arq"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "oxirs-arq"
+      
+  - package-ecosystem: "cargo"
+    directory: "/engine/oxirs-shacl"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "oxirs-shacl"
+      
+  - package-ecosystem: "cargo"
+    directory: "/server/oxirs-fuseki"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "oxirs-fuseki"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"

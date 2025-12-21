@@ -1,10 +1,10 @@
 //! # OxiRS Vector Search
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-vec/badge.svg)](https://docs.rs/oxirs-vec)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
-//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
+//! **Status**: Beta Release (v0.1.0-beta.2) - **Production-Ready with Complete Documentation**
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing and 100 KB of documentation.
 //!
 //! Vector index abstractions for semantic similarity and AI-augmented SPARQL querying.
 //!
@@ -68,13 +68,17 @@ pub mod automl_optimization;
 pub mod benchmarking;
 pub mod cache_friendly_index;
 pub mod clustering;
+pub mod compaction;
 pub mod compression;
 #[cfg(feature = "content-processing")]
 pub mod content_processing;
+pub mod crash_recovery;
 pub mod cross_language_alignment;
 pub mod cross_modal_embeddings;
+pub mod diskann;
 pub mod distance_metrics;
 pub mod distributed_vector_search;
+pub mod dynamic_index_selector;
 pub mod embedding_pipeline;
 pub mod embeddings;
 pub mod enhanced_performance_monitoring;
@@ -87,42 +91,56 @@ pub mod federated_search;
 pub mod filtered_search;
 pub mod gnn_embeddings;
 pub mod gpu;
+pub mod gpu_benchmarks;
 pub mod graph_aware_search;
 pub mod graph_indices;
 pub mod hierarchical_similarity;
 pub mod hnsw;
 pub mod huggingface;
+pub mod hybrid_fusion;
+pub mod hybrid_search;
 pub mod index;
 pub mod ivf;
 pub mod joint_embedding_spaces;
 pub mod kg_embeddings;
+pub mod learned_index;
 pub mod lsh;
 pub mod mmap_advanced;
 pub mod mmap_index;
+pub mod multi_modal_search;
+pub mod multi_tenancy;
+pub mod nsg;
 pub mod opq;
 pub mod oxirs_arq_integration;
 pub mod performance_insights;
 pub mod persistence;
+pub mod personalized_search;
 pub mod pq;
 pub mod pytorch;
 pub mod quantum_search;
+pub mod query_planning;
+pub mod query_rewriter;
 pub mod random_utils;
 pub mod rdf_content_enhancement;
 pub mod rdf_integration;
 pub mod real_time_analytics;
 pub mod real_time_embedding_pipeline;
 pub mod real_time_updates;
+pub mod reranking;
 pub mod result_fusion;
 pub mod similarity;
 pub mod sparql_integration;
 pub mod sparql_service_endpoint;
 pub mod sparse;
+pub mod sq;
 pub mod storage_optimizations;
 pub mod store_integration;
 pub mod structured_vectors;
 pub mod tensorflow;
+pub mod tiering;
 pub mod tree_indices;
 pub mod validation;
+pub mod wal;
 pub mod word2vec;
 
 // Python bindings module
@@ -176,6 +194,10 @@ pub use benchmarking::{
     ScalabilityMetrics as BenchmarkScalabilityMetrics, SystemInfo,
 };
 pub use cache_friendly_index::{CacheFriendlyVectorIndex, IndexConfig as CacheFriendlyIndexConfig};
+pub use compaction::{
+    CompactionConfig, CompactionManager, CompactionMetrics, CompactionResult, CompactionState,
+    CompactionStatistics, CompactionStrategy,
+};
 pub use compression::{create_compressor, CompressionMethod, VectorCompressor};
 #[cfg(feature = "content-processing")]
 pub use content_processing::{
@@ -183,16 +205,24 @@ pub use content_processing::{
     ContentProcessor, DocumentFormat, DocumentStructure, ExtractedContent, ExtractedImage,
     ExtractedLink, ExtractedTable, FormatHandler, Heading, ProcessingStats, TocEntry,
 };
+pub use crash_recovery::{CrashRecoveryManager, RecoveryConfig, RecoveryPolicy, RecoveryStats};
 pub use cross_modal_embeddings::{
     AttentionMechanism, AudioData, AudioEncoder, CrossModalConfig, CrossModalEncoder, FusionLayer,
     FusionStrategy, GraphData, GraphEncoder, ImageData, ImageEncoder, Modality, ModalityData,
     MultiModalContent, TextEncoder, VideoData, VideoEncoder,
+};
+pub use diskann::{
+    DiskAnnBuildStats, DiskAnnBuilder, DiskAnnConfig, DiskAnnError, DiskAnnIndex, DiskAnnResult,
+    DiskStorage, IndexMetadata as DiskAnnIndexMetadata, MemoryMappedStorage, NodeId,
+    PruningStrategy, SearchMode as DiskAnnSearchMode, SearchStats as DiskAnnSearchStats,
+    StorageBackend, VamanaGraph, VamanaNode, VectorId as DiskAnnVectorId,
 };
 pub use distributed_vector_search::{
     ConsistencyLevel, DistributedClusterStats, DistributedNodeConfig, DistributedQuery,
     DistributedSearchResponse, DistributedVectorSearch, LoadBalancingAlgorithm, NodeHealthStatus,
     PartitioningStrategy, QueryExecutionStrategy,
 };
+pub use dynamic_index_selector::{DynamicIndexSelector, IndexSelectorConfig};
 pub use embedding_pipeline::{
     DimensionalityReduction, EmbeddingPipeline, NormalizationConfig, PostprocessingPipeline,
     PreprocessingPipeline, TokenizerConfig, VectorNormalization,
@@ -225,6 +255,9 @@ pub use gpu::{
     create_performance_accelerator, is_gpu_available, GpuAccelerator, GpuBuffer, GpuConfig,
     GpuDevice, GpuExecutionConfig,
 };
+pub use gpu_benchmarks::{
+    BenchmarkResult as GpuBenchmarkResult, GpuBenchmarkConfig, GpuBenchmarkSuite,
+};
 pub use graph_indices::{
     DelaunayGraph, GraphIndex, GraphIndexConfig, GraphType, NSWGraph, ONNGGraph, PANNGGraph,
     RNGGraph,
@@ -235,6 +268,15 @@ pub use hierarchical_similarity::{
     SimilarityExplanation, SimilarityTaskType,
 };
 pub use hnsw::{HnswConfig, HnswIndex};
+pub use hybrid_fusion::{
+    FusedResult, HybridFusion, HybridFusionConfig, HybridFusionStatistics, HybridFusionStrategy,
+    NormalizationMethod,
+};
+pub use hybrid_search::{
+    Bm25Scorer, DocumentScore, HybridQuery, HybridResult, HybridSearchConfig, HybridSearchManager,
+    KeywordAlgorithm, KeywordMatch, KeywordSearcher, QueryExpander, RankFusion, RankFusionStrategy,
+    SearchMode, SearchWeights, TfidfScorer,
+};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use ivf::{IvfConfig, IvfIndex, IvfStats, QuantizationStrategy};
 pub use joint_embedding_spaces::{
@@ -249,6 +291,14 @@ pub use kg_embeddings::{
 };
 pub use lsh::{LshConfig, LshFamily, LshIndex, LshStats};
 pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
+pub use multi_tenancy::{
+    AccessControl, AccessPolicy, BillingEngine, BillingMetrics, BillingPeriod, IsolationLevel,
+    IsolationStrategy, MultiTenancyError, MultiTenancyResult, MultiTenantManager, NamespaceManager,
+    Permission, PricingModel, QuotaEnforcer, QuotaLimits, QuotaUsage, RateLimiter, ResourceQuota,
+    ResourceType, Role, Tenant, TenantConfig, TenantContext, TenantId, TenantManagerConfig,
+    TenantMetadata, TenantOperation, TenantStatistics, TenantStatus, UsageRecord,
+};
+pub use nsg::{DistanceMetric as NsgDistanceMetric, NsgConfig, NsgIndex, NsgStats};
 pub use performance_insights::{
     AlertingSystem, OptimizationRecommendations, PerformanceInsightsAnalyzer,
     PerformanceTrends as InsightsPerformanceTrends, QueryComplexity,
@@ -262,6 +312,13 @@ pub use pytorch::{
 pub use quantum_search::{
     QuantumSearchConfig, QuantumSearchResult, QuantumSearchStatistics, QuantumState,
     QuantumVectorSearch,
+};
+pub use query_planning::{
+    CostModel, IndexStatistics, QueryCharacteristics, QueryPlan, QueryPlanner, QueryStrategy,
+    VectorQueryType,
+};
+pub use query_rewriter::{
+    QueryRewriter, QueryRewriterConfig, QueryVectorStatistics, RewriteRule, RewrittenQuery,
 };
 pub use rdf_content_enhancement::{
     ComponentWeights, MultiLanguageProcessor, PathConstraint, PathDirection, PropertyAggregator,
@@ -289,6 +346,13 @@ pub use real_time_updates::{
     BatchProcessor, RealTimeConfig, RealTimeVectorSearch, RealTimeVectorUpdater, UpdateBatch,
     UpdateOperation, UpdatePriority, UpdateStats,
 };
+pub use reranking::{
+    CrossEncoder, CrossEncoderBackend, CrossEncoderModel, CrossEncoderReranker, DiversityReranker,
+    DiversityStrategy, FusionStrategy as RerankingFusionStrategy, ModelBackend, ModelConfig,
+    RerankingCache, RerankingCacheConfig, RerankingConfig, RerankingError, RerankingMode,
+    RerankingOutput, RerankingStats, Result as RerankingResult, ScoreFusion, ScoreFusionConfig,
+    ScoredCandidate,
+};
 pub use result_fusion::{
     FusedResults, FusionAlgorithm, FusionConfig, FusionQualityMetrics, FusionStats,
     ResultFusionEngine, ScoreNormalizationStrategy, SourceResults, VectorSearchResult,
@@ -306,6 +370,7 @@ pub use sparql_service_endpoint::{
     QueryScope, ReturnType, ServiceCapability, ServiceEndpointManager, ServiceType,
 };
 pub use sparse::{COOMatrix, CSRMatrix, SparseVector};
+pub use sq::{QuantizationMode, QuantizationParams, SqConfig, SqIndex, SqStats};
 pub use storage_optimizations::{
     CompressionType, MmapVectorFile, StorageConfig, StorageUtils, VectorBlock, VectorFileHeader,
     VectorReader, VectorWriter,
@@ -319,9 +384,14 @@ pub use tensorflow::{
     SessionConfig, TensorDataType, TensorFlowConfig, TensorFlowDevice, TensorFlowEmbedder,
     TensorFlowModelInfo, TensorFlowModelServer, TensorSpec,
 };
+pub use tiering::{
+    IndexMetadata, StorageTier, TierMetrics, TierStatistics, TierTransitionReason, TieringConfig,
+    TieringManager, TieringPolicy,
+};
 pub use tree_indices::{
     BallTree, CoverTree, KdTree, RandomProjectionTree, TreeIndex, TreeIndexConfig, TreeType, VpTree,
 };
+pub use wal::{WalConfig, WalEntry, WalManager};
 pub use word2vec::{
     AggregationMethod, OovStrategy, Word2VecConfig, Word2VecEmbeddingGenerator, Word2VecFormat,
 };
@@ -848,7 +918,12 @@ impl Default for MemoryVectorIndex {
 
 impl VectorIndex for MemoryVectorIndex {
     fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
-        self.vectors.push((uri, vector));
+        // Check if vector already exists and update it
+        if let Some(pos) = self.vectors.iter().position(|(id, _)| id == &uri) {
+            self.vectors[pos] = (uri, vector);
+        } else {
+            self.vectors.push((uri, vector));
+        }
         Ok(())
     }
 
@@ -893,6 +968,24 @@ impl VectorIndex for MemoryVectorIndex {
 
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
         self.vectors.iter().find(|(u, _)| u == uri).map(|(_, v)| v)
+    }
+
+    fn update_vector(&mut self, id: VectorId, vector: Vector) -> Result<()> {
+        if let Some(pos) = self.vectors.iter().position(|(uri, _)| uri == &id) {
+            self.vectors[pos] = (id, vector);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Vector with id '{}' not found", id))
+        }
+    }
+
+    fn remove_vector(&mut self, id: VectorId) -> Result<()> {
+        if let Some(pos) = self.vectors.iter().position(|(uri, _)| uri == &id) {
+            self.vectors.remove(pos);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Vector with id '{}' not found", id))
+        }
     }
 }
 

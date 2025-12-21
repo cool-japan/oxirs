@@ -24,7 +24,7 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 regex = "1.12"
-uuid = { version = "1.18", features = ["v4", "serde"] }
+uuid = { version = "1.19", features = ["v4", "serde"] }
 indexmap = { version = "2.11", features = ["serde"] }
 petgraph = "0.8"
 rayon = { workspace = true, optional = true }
@@ -41,8 +41,10 @@ num_cpus.workspace = true
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 serde_yaml = "0.9"
 semver = { version = "1.0", features = ["serde"] }
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wasmi = "0.40"  # Lightweight WASM interpreter for custom validators
+tower-lsp = { version = "0.20", optional = true }  # LSP server implementation (includes lsp-types)
+tower = { version = "0.5", optional = true }  # Service abstraction for LSP
 
 [dev-dependencies]
 criterion.workspace = true
@@ -58,6 +60,19 @@ path = "src/bin/w3c_test_runner.rs"
 name = "shacl_validator"
 path = "src/bin/shacl_validator.rs"
 
+[[bin]]
+name = "constraint_tester"
+path = "src/bin/constraint_tester.rs"
+
+[[bin]]
+name = "shape_analyzer"
+path = "src/bin/shape_analyzer.rs"
+
+[[bin]]
+name = "shacl_lsp"
+path = "src/bin/shacl_lsp.rs"
+required-features = ["lsp"]
+
 [features]
 default = ["core", "async", "parallel"]
 core = []
@@ -65,4 +80,22 @@ sparql = []
 serde = []
 async = ["tokio", "futures", "futures-util", "tokio-stream"]
 parallel = ["rayon"]
+lsp = ["tower-lsp", "tower", "async", "tokio/full"]
+
+[[bench]]
+name = "validation_benchmarks"
+harness = false
+
+[[example]]
+name = "basic_validation"
+path = "examples/basic_validation.rs"
+
+[[example]]
+name = "advanced_shapes"
+path = "examples/advanced_shapes.rs"
+
+[[example]]
+name = "parallel_validation"
+path = "examples/parallel_validation.rs"
+required-features = ["parallel"]
 

@@ -1,9 +1,9 @@
 //! # OxiRS Chat
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-chat/badge.svg)](https://docs.rs/oxirs-chat)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 #![allow(dead_code)]
@@ -176,26 +176,35 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 // Core modules
+// pub mod advanced_observability; // FUTURE: Advanced observability with audit trails (requires scirs2-core beta.4+)
 pub mod analytics;
 pub mod cache;
 pub mod chat;
 pub mod chat_session;
+pub mod collaboration; // NEW: Real-time collaboration with shared sessions
+pub mod collaboration_server; // NEW: Server endpoints for collaboration
 pub mod context;
 pub mod custom_prompts; // NEW: Custom prompts system for users
 pub mod custom_tools; // NEW: Custom tools framework for extensibility
+pub mod dashboard; // NEW: Analytics dashboard backend
+pub mod dashboard_server; // NEW: Dashboard API endpoints
 pub mod enterprise_integration;
 pub mod error;
 pub mod explanation;
 pub mod exploration_guidance; // NEW: Data exploration guidance
 pub mod external_services;
+// pub mod gpu_embedding_cache; // FUTURE: GPU-accelerated embedding cache (requires scirs2-core beta.4+)
 pub mod graph_exploration;
 pub mod health_monitoring;
+pub mod i18n; // NEW: Internationalization and multi-language support
+pub mod knowledge_bases; // NEW: Wikipedia, PubMed, and external knowledge base connectors
 pub mod llm;
 pub mod message_analytics;
 pub mod messages;
 pub mod nl2sparql;
 pub mod nlp; // Natural Language Processing (NEW: intent, sentiment, entities, coreference)
 pub mod performance;
+// pub mod performance_profiler; // FUTURE: Advanced performance profiling (requires scirs2-core beta.4+)
 pub mod persistence;
 pub mod query_refinement; // NEW: Query refinement system
 pub mod rag;
@@ -212,6 +221,7 @@ pub mod suggestions; // Query suggestions (NEW)
 pub mod types;
 pub mod utils; // Utility modules for stats, NLP, and ranking
 pub mod visualization; // NEW: Result visualization helpers
+pub mod voice; // NEW: Voice interface with STT/TTS
 pub mod webhooks; // Webhook support (NEW)
 pub mod workflow;
 
@@ -239,6 +249,26 @@ pub type ChatManager = llm::manager::EnhancedLLMManager;
 // Re-export LLM types including circuit breaker
 pub use llm::{
     CircuitBreakerConfig, CircuitBreakerState, CircuitBreakerStats, LLMConfig, LLMResponse,
+};
+
+// Re-export collaboration types
+pub use collaboration::{
+    AccessControl, CollaborationConfig, CollaborationManager, CollaborationStats,
+    CollaborationUpdate, CursorPosition, Participant, ParticipantRole, ParticipantStatus,
+    SharedSession, TextRange,
+};
+
+// Re-export voice interface types
+pub use voice::{
+    AudioFormat, SpeechToTextProvider, SttProviderType, SttResult, SttStreamResult,
+    TextToSpeechProvider, TtsProviderType, TtsResult, VoiceConfig, VoiceInterface, WordTimestamp,
+};
+
+// Re-export dashboard types
+pub use dashboard::{
+    ActivityDataPoint, DashboardAnalytics, DashboardConfig, DashboardOverview, ExportFormat,
+    HealthAnalytics, HealthDataPoint, QueryAnalytics, QueryRecord, QueryType, SystemHealthMetrics,
+    TimeRange, UserActivity, UserActivityTracker, UserAnalytics,
 };
 
 // Re-export revolutionary chat optimization types

@@ -1,11 +1,12 @@
 //! Analytics module for conversation analysis
 
+use bincode::{Decode, Encode};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Conversation analytics with comprehensive metrics
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
 pub struct ConversationAnalytics {
     // Core progression metrics
     pub complexity_progression: Vec<ComplexityMetrics>,
@@ -16,7 +17,9 @@ pub struct ConversationAnalytics {
 
     // Additional fields for persistence.rs
     pub session_id: String,
+    #[bincode(with_serde)]
     pub start_time: DateTime<Utc>,
+    #[bincode(with_serde)]
     pub end_time: DateTime<Utc>,
     pub message_count: usize,
     pub user_message_count: usize,
@@ -30,11 +33,12 @@ pub struct ConversationAnalytics {
     pub intent_distribution: HashMap<String, usize>,
     pub patterns_detected: Vec<String>,
     pub anomalies: Vec<String>,
+    #[bincode(with_serde)]
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Complexity metrics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct ComplexityMetrics {
     pub turn_number: usize,
     pub message_complexity: f32,
@@ -48,7 +52,7 @@ pub struct ComplexityMetrics {
 }
 
 /// Confidence metrics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct ConfidenceMetrics {
     pub turn_number: usize,
     pub confidence_score: f32,
@@ -59,7 +63,7 @@ pub struct ConfidenceMetrics {
 }
 
 /// Conversation quality with detailed scoring
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
 pub struct ConversationQuality {
     pub overall_score: f32,
     pub overall_quality: f32,
@@ -78,7 +82,7 @@ pub struct ConversationQuality {
 }
 
 /// Satisfaction metrics
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
 pub struct SatisfactionMetrics {
     pub overall_satisfaction: f32,
     pub response_quality: f32,
@@ -89,7 +93,7 @@ pub struct SatisfactionMetrics {
 }
 
 /// Implicit satisfaction signals
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
 pub struct ImplicitSatisfactionSignals {
     pub positive_acknowledgments: usize,
     pub clarification_requests: usize,
@@ -101,7 +105,7 @@ pub struct ImplicitSatisfactionSignals {
 }
 
 /// Emotion score
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct EmotionScore {
     pub emotion: String,
     pub emotion_type: String,
@@ -110,7 +114,7 @@ pub struct EmotionScore {
 }
 
 /// Intent type with Hash for HashMap usage
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 pub enum IntentType {
     Question,
     Command,

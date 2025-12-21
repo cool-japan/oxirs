@@ -34,7 +34,7 @@
 
 use crate::error::{GeoSparqlError, Result};
 use crate::geometry::Geometry;
-use geo::{Centroid, EuclideanDistance};
+use geo::Centroid;
 use geo_types::Point;
 use scirs2_core::gpu::GpuBackend;
 use scirs2_core::ndarray_ext::Array2;
@@ -123,10 +123,11 @@ impl GpuGeometryContext {
         let n = points.len();
 
         // Compute pairwise distances
+        use geo::{Distance, Euclidean};
         let mut distances = Array2::zeros((n, n));
         for i in 0..n {
             for j in i..n {
-                let dist = points[i].euclidean_distance(&points[j]) as f32;
+                let dist = Euclidean::distance(points[i], points[j]) as f32;
                 distances[[i, j]] = dist;
                 distances[[j, i]] = dist;
             }
@@ -237,11 +238,12 @@ impl GpuGeometryContext {
 
         let m = query_points.len();
         let n = target_points.len();
+        use geo::{Distance, Euclidean};
         let mut distances = Array2::zeros((m, n));
 
         for i in 0..m {
             for j in 0..n {
-                distances[[i, j]] = query_points[i].euclidean_distance(&target_points[j]) as f32;
+                distances[[i, j]] = Euclidean::distance(query_points[i], target_points[j]) as f32;
             }
         }
 

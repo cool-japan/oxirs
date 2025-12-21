@@ -37,6 +37,7 @@ use crate::error::{GeoSparqlError, Result};
 use crate::geometry::Geometry;
 use parking_lot::RwLock;
 use rstar::{PointDistance, RTree, RTreeObject, AABB};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// A spatial index entry containing a geometry and an associated ID
@@ -159,6 +160,8 @@ impl PointDistance for SpatialEntry {
 pub struct SpatialIndex {
     /// The R-tree
     tree: Arc<RwLock<RTree<SpatialEntry>>>,
+    /// ID to entry mapping for O(1) removal
+    id_map: Arc<RwLock<HashMap<u64, SpatialEntry>>>,
     /// Next available ID
     next_id: Arc<RwLock<u64>>,
 }
@@ -168,6 +171,7 @@ impl SpatialIndex {
     pub fn new() -> Self {
         Self {
             tree: Arc::new(RwLock::new(RTree::new())),
+            id_map: Arc::new(RwLock::new(HashMap::new())),
             next_id: Arc::new(RwLock::new(0)),
         }
     }
@@ -196,15 +200,19 @@ impl SpatialIndex {
     pub fn bulk_load(geometries: Vec<Geometry>) -> Result<Self> {
         let count = geometries.len();
         let mut entries = Vec::with_capacity(count);
+        let mut id_map = HashMap::with_capacity(count);
 
         for (id, geometry) in geometries.into_iter().enumerate() {
-            entries.push(SpatialEntry::new(id as u64, geometry)?);
+            let entry = SpatialEntry::new(id as u64, geometry)?;
+            id_map.insert(id as u64, entry.clone());
+            entries.push(entry);
         }
 
         let tree = RTree::bulk_load(entries);
 
         Ok(Self {
             tree: Arc::new(RwLock::new(tree)),
+            id_map: Arc::new(RwLock::new(id_map)),
             next_id: Arc::new(RwLock::new(count as u64)),
         })
     }
@@ -217,6 +225,7 @@ impl SpatialIndex {
         drop(next_id);
 
         let entry = SpatialEntry::new(id, geometry)?;
+        self.id_map.write().insert(id, entry.clone());
         self.tree.write().insert(entry);
 
         Ok(id)
@@ -250,10 +259,12 @@ impl SpatialIndex {
 
         let mut ids = Vec::with_capacity(geometries.len());
         let mut tree = self.tree.write();
+        let mut id_map = self.id_map.write();
 
         for (i, geometry) in geometries.into_iter().enumerate() {
             let id = start_id + i as u64;
             let entry = SpatialEntry::new(id, geometry)?;
+            id_map.insert(id, entry.clone());
             tree.insert(entry);
             ids.push(id);
         }
@@ -262,23 +273,20 @@ impl SpatialIndex {
     }
 
     /// Remove a geometry from the index by ID
+    ///
+    /// Optimized with O(1) ID lookup instead of O(n) tree iteration.
     pub fn remove(&self, id: u64) -> Result<bool> {
+        // O(1) lookup in id_map instead of O(n) tree iteration
+        let mut id_map = self.id_map.write();
+        let entry = match id_map.remove(&id) {
+            Some(e) => e,
+            None => return Ok(false),
+        };
+        drop(id_map);
+
+        // Remove from R-tree
         let mut tree = self.tree.write();
-
-        // Find the entry with the given ID
-        let to_remove: Vec<_> = tree
-            .iter()
-            .filter(|entry| entry.id == id)
-            .cloned()
-            .collect();
-
-        if to_remove.is_empty() {
-            return Ok(false);
-        }
-
-        for entry in to_remove {
-            tree.remove(&entry);
-        }
+        tree.remove(&entry);
 
         Ok(true)
     }
@@ -437,10 +445,10 @@ impl SpatialIndex {
 
     /// Calculate distance from a point to a geometry
     fn point_distance(point: &geo_types::Point<f64>, geometry: &Geometry) -> f64 {
-        use geo::EuclideanDistance;
+        use crate::functions::geometric_operations::geometry_euclidean_distance;
 
         let point_geom = geo_types::Geometry::Point(*point);
-        point_geom.euclidean_distance(&geometry.geom)
+        geometry_euclidean_distance(&point_geom, &geometry.geom)
     }
 
     /// Get the number of entries in the index
@@ -456,6 +464,7 @@ impl SpatialIndex {
     /// Clear all entries from the index
     pub fn clear(&self) {
         *self.tree.write() = RTree::new();
+        self.id_map.write().clear();
         *self.next_id.write() = 0;
     }
 }

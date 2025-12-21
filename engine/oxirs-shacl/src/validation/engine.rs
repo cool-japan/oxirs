@@ -183,6 +183,41 @@ impl<'a> ValidationEngine<'a> {
         self.inheritance_cache.clear();
     }
 
+    /// Get the number of shapes in the engine
+    ///
+    /// Returns the total count of shapes that this engine is configured to validate against.
+    pub fn shape_count(&self) -> usize {
+        self.shapes.len()
+    }
+
+    /// Get a reference to all shapes
+    ///
+    /// Returns a reference to the IndexMap containing all shapes indexed by ShapeId.
+    pub fn get_shapes(&self) -> &IndexMap<ShapeId, Shape> {
+        self.shapes
+    }
+
+    /// Get a specific shape by ID
+    ///
+    /// Returns a reference to the shape with the given ID, or None if no such shape exists.
+    pub fn get_shape(&self, shape_id: &ShapeId) -> Option<&Shape> {
+        self.shapes.get(shape_id)
+    }
+
+    /// Get all shape IDs
+    ///
+    /// Returns an iterator over all shape IDs in the engine.
+    pub fn shape_ids(&self) -> impl Iterator<Item = &ShapeId> {
+        self.shapes.keys()
+    }
+
+    /// Check if a shape with the given ID exists
+    ///
+    /// Returns true if the engine contains a shape with the given ID.
+    pub fn has_shape(&self, shape_id: &ShapeId) -> bool {
+        self.shapes.contains_key(shape_id)
+    }
+
     /// Validate that the shapes graph is well-formed according to SHACL specification
     ///
     /// This method validates the shapes themselves before they are used to validate data.
@@ -442,13 +477,10 @@ impl<'a> ValidationEngine<'a> {
         shape: &Shape,
         graph_name: Option<&str>,
     ) -> Result<ValidationReport> {
-        eprintln!(
-            "DEBUG validate_shape: validating shape {} (type: {:?})",
+        tracing::trace!(
+            "validating shape {} (type: {:?}) with {} targets",
             shape.id.as_str(),
-            shape.shape_type
-        );
-        eprintln!(
-            "DEBUG validate_shape: shape has {} targets",
+            shape.shape_type,
             shape.targets.len()
         );
         let mut report = ValidationReport::new();
@@ -476,21 +508,18 @@ impl<'a> ValidationEngine<'a> {
         } else {
             // Validate against explicit targets
             for target in &shape.targets {
-                eprintln!("DEBUG validate_shape: processing target {target:?}");
+                tracing::trace!("processing target {target:?}");
                 let target_nodes = self
                     .target_selector
                     .select_targets(store, target, graph_name)?;
-                eprintln!(
-                    "DEBUG validate_shape: found {} target nodes",
-                    target_nodes.len()
-                );
+                tracing::trace!("found {} target nodes", target_nodes.len());
 
                 for (i, node) in target_nodes.iter().enumerate() {
-                    eprintln!("DEBUG validate_shape: validating target node[{i}] = {node:?}");
+                    tracing::trace!("validating target node[{i}] = {node:?}");
                     let node_result =
                         self.validate_node_against_shape(store, shape, node, graph_name)?;
-                    eprintln!(
-                        "DEBUG validate_shape: node[{}] result: conforms={}, violations={}",
+                    tracing::trace!(
+                        "node[{}] result: conforms={}, violations={}",
                         i,
                         node_result.conforms(),
                         node_result.violation_count()
@@ -595,7 +624,7 @@ impl<'a> ValidationEngine<'a> {
                 component_id.as_str(),
                 shape.id.as_str()
             );
-            eprintln!("DEBUG validate_constraints: constraint = {constraint:?}");
+            tracing::trace!("validate_constraints: constraint = {constraint:?}");
             eprintln!(
                 "DEBUG validate_constraints: focus_node = {focus_node:?}, values = {values:?}"
             );
@@ -607,7 +636,7 @@ impl<'a> ValidationEngine<'a> {
 
             let constraint_result =
                 self.validate_constraint(store, constraint, &context, path, graph_name)?;
-            eprintln!("DEBUG validate_constraints: constraint result = {constraint_result:?}");
+            tracing::trace!("validate_constraints: constraint result = {constraint_result:?}");
 
             match constraint_result {
                 ConstraintEvaluationResult::Satisfied => {

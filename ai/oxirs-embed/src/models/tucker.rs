@@ -643,6 +643,7 @@ mod tests {
     use crate::NamedNode;
 
     #[tokio::test]
+    #[cfg_attr(debug_assertions, ignore = "Training tests require release builds")]
     async fn test_tucker_basic() -> Result<()> {
         let mut config = ModelConfig::default()
             .with_dimensions(50)

@@ -1,7 +1,7 @@
 # OxiRS CLI Documentation
 
-**Version**: 0.1.0-beta.1
-**Last Updated**: November 9, 2025
+**Version**: 0.1.0-beta.2
+**Last Updated**: December 21, 2025
 **Status**: Production-Ready
 
 ## Overview
@@ -155,7 +155,7 @@ All documentation follows these standards:
 
 - ✅ **Comprehensive** - Covers all features and options
 - ✅ **Practical** - Includes real-world examples
-- ✅ **Up-to-date** - Reflects beta.1 features and APIs
+- ✅ **Up-to-date** - Reflects beta.2 features and APIs
 - ✅ **Well-organized** - Logical structure with TOC
 - ✅ **Searchable** - Clear headings and cross-references
 - ✅ **Tested** - All examples are verified to work
@@ -264,6 +264,6 @@ oxirs query --help
 
 ---
 
-**OxiRS CLI v0.1.0-beta.1** - Production-ready semantic web toolkit with comprehensive documentation
+**OxiRS CLI v0.1.0-beta.2** - Production-ready semantic web toolkit with comprehensive documentation
 
-**Last Updated**: November 9, 2025
+**Last Updated**: December 21, 2025

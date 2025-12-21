@@ -1,7 +1,7 @@
 //! RDF/XML Format Parser and Serializer
 //!
 //! Extracted and adapted from OxiGraph oxrdfxml with OxiRS enhancements.
-//! Based on W3C RDF/XML specification: https://www.w3.org/TR/rdf-syntax-grammar/
+//! Based on W3C RDF/XML specification: <https://www.w3.org/TR/rdf-syntax-grammar/>
 
 #![allow(dead_code)]
 

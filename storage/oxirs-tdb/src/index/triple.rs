@@ -1,6 +1,7 @@
 //! RDF Triple representation with encoded NodeIds
 
 use crate::dictionary::NodeId;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -8,7 +9,7 @@ use std::fmt;
 ///
 /// Represents an RDF statement (subject, predicate, object) where
 /// each component is encoded as a NodeId for efficient storage.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 pub struct Triple {
     /// Subject node ID
     pub subject: NodeId,
@@ -51,7 +52,9 @@ impl fmt::Display for Triple {
 }
 
 /// SPO composite key for B+Tree indexing
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct SpoKey(pub NodeId, pub NodeId, pub NodeId);
 
 impl From<Triple> for SpoKey {
@@ -62,7 +65,9 @@ impl From<Triple> for SpoKey {
 }
 
 /// POS composite key for B+Tree indexing
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct PosKey(pub NodeId, pub NodeId, pub NodeId);
 
 impl From<Triple> for PosKey {
@@ -73,7 +78,9 @@ impl From<Triple> for PosKey {
 }
 
 /// OSP composite key for B+Tree indexing
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct OspKey(pub NodeId, pub NodeId, pub NodeId);
 
 impl From<Triple> for OspKey {
@@ -84,7 +91,9 @@ impl From<Triple> for OspKey {
 }
 
 /// Empty value type for index (we only need the key)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct EmptyValue;
 
 #[cfg(test)]
@@ -160,8 +169,11 @@ mod tests {
     fn test_triple_serialization() {
         let triple = Triple::new(NodeId::new(1), NodeId::new(2), NodeId::new(3));
 
-        let serialized = bincode::serialize(&triple).unwrap();
-        let deserialized: Triple = bincode::deserialize(&serialized).unwrap();
+        let serialized = bincode::encode_to_vec(&triple, bincode::config::standard()).unwrap();
+        let deserialized: Triple =
+            bincode::decode_from_slice(&serialized, bincode::config::standard())
+                .unwrap()
+                .0;
 
         assert_eq!(triple, deserialized);
     }

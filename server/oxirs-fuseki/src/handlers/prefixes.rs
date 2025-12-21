@@ -281,7 +281,7 @@ pub async fn get_prefix(
 /// Add new prefix
 ///
 /// POST /$/prefixes
-/// Body: { "prefix": "ex", "uri": "http://example.org/" }
+/// Body: `{ "prefix": "ex", "uri": "http://example.org/" }`
 pub async fn add_prefix(
     State(store): State<Arc<PrefixStore>>,
     Json(req): Json<PrefixRequest>,
@@ -313,7 +313,7 @@ pub async fn add_prefix(
 /// Update prefix
 ///
 /// PUT /$/prefixes/{prefix}
-/// Body: { "uri": "http://example.org/new/" }
+/// Body: `{ "uri": "http://example.org/new/" }`
 pub async fn update_prefix(
     Path(prefix): Path<String>,
     State(store): State<Arc<PrefixStore>>,

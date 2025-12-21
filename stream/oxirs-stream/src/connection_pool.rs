@@ -141,7 +141,7 @@ pub trait PooledConnection: Send + Sync + 'static {
     fn clone_connection(&self) -> Box<dyn PooledConnection>;
 }
 
-/// Implement PooledConnection for Box<dyn PooledConnection> to enable trait object usage
+/// Implement PooledConnection for `Box<dyn PooledConnection>` to enable trait object usage
 #[async_trait::async_trait]
 impl PooledConnection for Box<dyn PooledConnection> {
     async fn is_healthy(&self) -> bool {

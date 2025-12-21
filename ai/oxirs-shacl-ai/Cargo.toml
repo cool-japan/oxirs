@@ -33,11 +33,10 @@ tracing.workspace = true
 chrono = "0.4.42"
 tokio.workspace = true
 num_cpus = "1.17"
-# ndarray and rand now provided by scirs2-core
-rand_distr = "0.5"
+# ndarray and rand now provided by scirs2-core (SciRS2 compliance)
 regex = "1.12"
 indexmap = "2.11"
-uuid = { version = "1.18", features = ["v4", "serde"] }
+uuid = { version = "1.19", features = ["v4", "serde"] }
 threadpool = "1.8"
 sysinfo = "0.30"
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
@@ -54,6 +53,7 @@ libm = "0.2"  # For erf function
 
 [dev-dependencies]
 criterion.workspace = true
+tracing-subscriber.workspace = true
 
 [features]
 default = []

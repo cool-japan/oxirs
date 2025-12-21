@@ -599,6 +599,10 @@ pub struct ExecutionStep {
     pub step_id: String,
     pub step_type: StepType,
     pub service_id: Option<String>,
+    /// Service endpoint URL (populated from ServiceRegistry during planning)
+    pub service_url: Option<String>,
+    /// Authentication configuration for the service
+    pub auth_config: Option<crate::service_registry::AuthConfig>,
     pub query_fragment: String,
     pub dependencies: Vec<String>,
     pub estimated_cost: f64,

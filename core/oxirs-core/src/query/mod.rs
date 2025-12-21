@@ -1,5 +1,6 @@
-//! SPARQL query processing module
+//! SPARQL query processing module with full SciRS2 integration
 
+pub mod advanced_statistics;
 pub mod algebra;
 pub mod binding_optimizer;
 pub mod cost_based_optimizer;
@@ -8,14 +9,18 @@ pub mod exec;
 pub mod functions;
 pub mod gpu;
 pub mod jit;
+pub mod ml_optimizer;
 pub mod optimizer;
 pub mod parser;
 pub mod pattern_optimizer;
 pub mod pattern_unification;
 pub mod plan;
 pub mod plan_cache;
+pub mod profiled_plan_builder;
 pub mod property_paths;
+pub mod query_plan_visualizer;
 pub mod query_profiler;
+pub mod result_cache;
 pub mod sparql_algebra;
 pub mod sparql_query;
 pub mod statistics;
@@ -34,6 +39,9 @@ pub use sparql_query::*;
 // Re-export execution plan types
 pub use plan::ExecutionPlan;
 
+// Re-export advanced statistics types
+pub use advanced_statistics::{AdvancedStatistics, AdvancedStatisticsCollector, PatternExecution};
+
 // Re-export algebra types (without Query to avoid conflict)
 // Use explicit aliases to avoid conflicts
 pub use algebra::{
@@ -47,6 +55,10 @@ pub use cost_based_optimizer::{
 pub use distributed::{DistributedConfig, DistributedQueryEngine, FederatedEndpoint};
 pub use gpu::{GpuBackend, GpuQueryExecutor};
 pub use jit::{JitCompiler, JitConfig};
+pub use ml_optimizer::{
+    MLOptimizationResult, MLOptimizerConfig, MLQueryOptimizer, PatternFeatures, PerformanceMetrics,
+    TrainingStats,
+};
 pub use optimizer::{AIQueryOptimizer, MultiQueryOptimizer};
 pub use parser::*;
 pub use pattern_optimizer::{IndexType, OptimizedPatternPlan, PatternExecutor, PatternOptimizer};
@@ -55,10 +67,18 @@ pub use pattern_unification::{
     UnifiedTriplePattern,
 };
 pub use plan_cache::{CacheConfig, CacheStatistics, CachedPlan, QueryPlanCache, SerializablePlan};
+pub use profiled_plan_builder::{
+    CacheEffectiveness, ExecutionComparison, ImprovementLevel, PerformanceAnalysis,
+    PerformanceGrade, ProfiledPlanBuilder, ProfilingReport,
+};
+pub use query_plan_visualizer::{
+    HintSeverity, OptimizationHint, QueryPlanNode, QueryPlanSummary, QueryPlanVisualizer,
+};
 pub use query_profiler::{
     ProfiledQuery, ProfilerConfig, ProfilingStatistics, QueryProfiler, QueryProfilingSession,
     QueryStatistics,
 };
+pub use result_cache::{CacheConfig as ResultCacheConfig, CacheStats, QueryResultCache};
 pub use statistics::{
     GraphStatistics, PredicateStatistics, QueryExecutionStats, SelectivityInfo, StatisticsSummary,
 };

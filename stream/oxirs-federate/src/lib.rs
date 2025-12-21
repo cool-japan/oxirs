@@ -1,9 +1,9 @@
 //! # OxiRS Federation - Federated Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-federate/badge.svg)](https://docs.rs/oxirs-federate)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Federated query processing capabilities for SPARQL and GraphQL with service discovery,
@@ -39,7 +39,7 @@ use crate::executor::types::{QuotedTripleValue, RdfTerm};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 // PlannerConfig will be imported via planner module re-exports
 
 // Import types needed for the main struct
@@ -67,7 +67,9 @@ pub mod advanced_consensus;
 pub mod advanced_enterprise_features;
 pub mod advanced_ml_optimizer;
 pub mod advanced_query_optimizer;
+pub mod advanced_security_hardening;
 pub mod advanced_semantic_features;
+pub mod advanced_visualization;
 pub mod anomaly_detection;
 pub mod auth;
 pub mod auto_discovery;
@@ -83,6 +85,7 @@ pub mod distributed_ml_trainer;
 pub mod distributed_tracing;
 pub mod distributed_transactions;
 pub mod executor;
+pub mod external_ml_integration;
 pub mod gpu_accelerated_query;
 pub mod graph_algorithms;
 pub mod graphql;
@@ -105,7 +108,9 @@ pub mod performance_benchmarks;
 pub mod planner;
 pub mod privacy;
 pub mod production_hardening;
+pub mod profiling_metrics;
 pub mod query_decomposition;
+pub mod query_plan_explainer;
 pub mod request_batcher;
 pub mod result_streaming;
 pub mod schema_alignment;
@@ -170,6 +175,28 @@ pub use advanced_enterprise_features::{
     MultiTenancyManager, PrivacyPreservingFederation, QuantumResistantSecurity, ResourceQuota,
     ResourceUsage, Tenant,
 };
+// Advanced Security Hardening (v0.2.0 Phase 3)
+pub use advanced_security_hardening::{
+    AdvancedRateLimiter, AdvancedSecurityHardening, AuditConfig, AuditEvent, AuditEventType,
+    AuthMethod, AuthSession, AuthenticationManager, ComplianceChecker, ComplianceFramework,
+    ComplianceStatus, EncryptionConfig, EncryptionKey, EncryptionManager, IdsConfig, IdsResult,
+    IntrusionDetectionSystem, MtlsCertificate, OAuth2Provider, OidcProvider, RateLimitConfig,
+    SecurityAlert, SecurityCheckResult, SecurityConfig, SecurityContext, ThreatCategory,
+    ThreatSeverity, ThreatSignature, TrustScore, UserInfo, Vulnerability, VulnerabilityScanResult,
+    VulnerabilityScanner, VulnerabilitySeverity, ZeroTrustConfig, ZeroTrustController,
+};
+// Advanced Visualization & Dashboarding (v0.2.0 Phase 3)
+pub use advanced_visualization::{
+    AdvancedVisualization, AggregationType, Alert, AlertGrouping, AlertSeverity, AlertTimeline,
+    AlertVisualizer, ChartData, ChartGenerator, ChartSeries, ChartTheme, ColorScale, CustomTheme,
+    Dashboard, DashboardLayout, DataSource, EdgeType, ExportFormat, HeatmapCell, HeatmapData,
+    LayoutAlgorithm, MetricAggregation, MetricsCollector, NodeStatus, NodeType, PieChartData,
+    PieSlice, PositionedNode, TimeSeries, TopologyEdge, TopologyNode, TopologyVisualization,
+    TopologyVisualizer, VisualizationConfig, VisualizationType, Widget, WidgetConfig,
+    WidgetPosition, WidgetSize, WidgetType,
+};
+// Re-export DataPoint from advanced_visualization as VizDataPoint to avoid conflict
+pub use advanced_visualization::DataPoint as VizDataPoint;
 // v0.2.0 Performance & Scalability Features
 pub use anomaly_detection::{
     AnomalyAlert, AnomalyDetector, AnomalyDetectorConfig, DataPoint, Severity, Trend, TrendAnalysis,
@@ -196,6 +223,14 @@ pub use distributed_transactions::{
     TransactionConfig, TransactionProtocol, TransactionResult, TransactionState,
 };
 pub use executor::ExecutionStatus; // ExecutionMetrics not exported from executor
+                                   // External ML Frameworks Integration (v0.2.0 Phase 3)
+pub use external_ml_integration::{
+    ConversionResult, DataType, ExternalMLIntegration, FrameworkAdapter, FrameworkCapabilities,
+    HuggingFaceAdapter, InferenceBackend, InferenceEngine, MLFramework, MLIntegrationConfig,
+    MLModel, MLTaskType, MockModel, ModelConverter, ModelFormat, ModelMetadata, ModelRegistry,
+    ModelVersion, ONNXAdapter, OptimizationConfig, OptimizationResult, PerformanceMetrics,
+    PyTorchAdapter, RegisteredModel, TensorFlowAdapter, TensorSpec,
+};
 pub use gpu_accelerated_query::{
     FilterCondition, FilterOperator, GpuAccelerationConfig, GpuBackendType, GpuJoinProcessor,
     GpuProcessingResult, GpuProcessingStats, GpuQueryProcessor, QueryBatch,
@@ -210,8 +245,10 @@ pub use jit_query_compiler::{
 };
 pub use ml_model_serving::{
     ABTestConfig, ABTestResults, MLModelServing, ModelMetrics, ModelServingConfig, ModelStatus,
-    ModelType, ModelVersion, QueryTransformerModel, TransformerConfig,
+    ModelType, QueryTransformerModel, TransformerConfig,
 };
+// Re-export ModelVersion from ml_model_serving as MLModelVersion to avoid conflict
+pub use ml_model_serving::ModelVersion as MLModelVersion;
 pub use simd_optimized_joins::{JoinAlgorithm, JoinStatistics, SimdJoinConfig, SimdJoinProcessor};
 // Import from graphql module - minimal types to avoid conflicts
 // pub use graphql::GraphQLFederation;
@@ -253,29 +290,32 @@ pub use planner::{
     ServiceQuery, StepType, TriplePattern, UnifiedSchema,
 };
 pub use privacy::*;
-// TODO: Re-enable after fixing module exports
-// pub use query_decomposition::advanced_pattern_analysis::{
-//     AdvancedPatternAnalyzer, ComplexityAssessment, OptimizationOpportunity, PatternAnalysisResult,
-//     ServiceRecommendation,
-// };
-// pub use query_decomposition::QueryDecomposer;
-// pub use request_batcher::RequestBatcher;
-// pub use result_streaming::ResultStreamer;
-// pub use semantic_enhancer::SemanticEnhancer;
+// Re-enabled query decomposition exports
+pub use query_decomposition::advanced_pattern_analysis::{
+    AdvancedPatternAnalyzer, ComplexityAssessment, OptimizationOpportunity, PatternAnalysisResult,
+    ServiceRecommendation,
+};
+pub use query_decomposition::types::QueryDecomposer;
+pub use query_plan_explainer::{
+    ExplainFormat, OptimizationSuggestion, PlanExplanation, QueryPlanExplainer, StepExplanation,
+    SuggestionCategory, SuggestionSeverity,
+};
+pub use request_batcher::RequestBatcher;
+pub use result_streaming::ResultStreamingManager;
+pub use semantic_enhancer::SemanticEnhancer;
 // Export main service types (from service.rs)
 pub use service::{
     AuthCredentials, FederatedService, ServiceAuthConfig, ServiceCapability, ServicePerformance,
     ServiceType,
 };
-// TODO: Re-enable after fixing module exports
-// pub use service_client::ServiceClient;
-// pub use service_executor::ServiceExecutionEngine;
-// pub use service_optimizer::ServiceOptimizer;
+// Re-enabled service implementation exports
+pub use service_client::ServiceClient;
+pub use service_executor::ServiceExecutor;
+pub use service_optimizer::ServiceOptimizer;
 // Export specific types from service_registry (non-conflicting types only)
-// pub use service_registry::{
-//     GraphQLService, HealthStatus as ServiceHealthStatus, RegistryConfig, ServiceCapabilities,
-//     SparqlEndpoint,
-// };
+pub use service_registry::{
+    GraphQLService, HealthStatus as ServiceHealthStatus, ServiceCapabilities, SparqlEndpoint,
+};
 // pub use source_selection::SourceSelector;
 // pub use streaming::StreamProcessor;
 // pub use streaming_optimizer::StreamOptimizer;
@@ -835,13 +875,15 @@ impl FederationEngine {
         let assessor = CapabilityAssessor::new();
         let assessment = assessor.assess_service(&service).await?;
 
-        // TODO: Update service with enhanced capabilities
-        // Need to implement proper API in ServiceRegistry to update service capabilities
-        // For now, just return the assessment without updating the registry
+        // Update service with detected capabilities
+        let registry = self.service_registry.read().await;
+        registry.update_service_capabilities(service_id, &assessment.detected_capabilities)?;
+        drop(registry);
 
         info!(
-            "Capability assessment completed for service: {}",
-            service_id
+            "Capability assessment completed for service: {} - Updated with {} detected capabilities",
+            service_id,
+            assessment.detected_capabilities.len()
         );
         Ok(assessment)
     }

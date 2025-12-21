@@ -180,6 +180,7 @@ impl SerializationMetrics {
 }
 
 /// High-performance message serializer with compression and schema versioning
+#[derive(Debug)]
 pub struct MessageSerializer {
     config: SerializationConfig,
     metrics: SerializationMetrics,

@@ -197,7 +197,7 @@ pub struct SchemaAlignment {
 }
 
 /// Types of schema alignments
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum AlignmentType {
     /// Exact match
     Exact,
@@ -717,12 +717,19 @@ impl SemanticEnhancer {
                         .determine_alignment_type(source_element, target_element, similarity)
                         .await;
 
+                    // Generate transformation function based on alignment type
+                    let transformation = self.generate_transformation_function(
+                        source_element,
+                        target_element,
+                        alignment_type,
+                    );
+
                     alignments.push(SchemaAlignment {
                         source_element: source_element.clone(),
                         target_element: target_element.clone(),
                         alignment_type,
                         confidence: similarity,
-                        transformation: None, // TODO: Generate transformation functions
+                        transformation,
                         semantic_similarity: similarity,
                     });
                 }
@@ -950,6 +957,67 @@ impl SemanticEnhancer {
             AlignmentType::Equivalent
         } else {
             AlignmentType::Similar
+        }
+    }
+
+    /// Generate transformation function for schema mapping
+    ///
+    /// Creates a transformation function (in SPARQL or similar syntax) to convert
+    /// data from source schema element to target schema element based on alignment type.
+    ///
+    /// # Arguments
+    /// * `source` - Source schema element
+    /// * `target` - Target schema element
+    /// * `alignment_type` - Type of alignment between schemas
+    ///
+    /// # Returns
+    /// Optional transformation function as a string (SPARQL CONSTRUCT or similar)
+    fn generate_transformation_function(
+        &self,
+        source: &str,
+        target: &str,
+        alignment_type: AlignmentType,
+    ) -> Option<String> {
+        match alignment_type {
+            AlignmentType::Exact => {
+                // Direct mapping - no transformation needed
+                Some(format!("BIND({} AS {})", source, target))
+            }
+            AlignmentType::Equivalent => {
+                // Equivalent concepts - direct mapping with comment
+                Some(format!(
+                    "# Equivalent mapping\nBIND({} AS {})",
+                    source, target
+                ))
+            }
+            AlignmentType::Subclass => {
+                // Subclass relationship - include type assertion
+                Some(format!(
+                    "# Subclass mapping\nCONSTRUCT {{\n  ?s a <{}> .\n  ?s <{}> ?value .\n}} WHERE {{\n  ?s <{}> ?value .\n}}",
+                    target, target, source
+                ))
+            }
+            AlignmentType::Superclass => {
+                // Superclass relationship - generalize
+                Some(format!(
+                    "# Superclass mapping\nCONSTRUCT {{\n  ?s a <{}> .\n  ?s <{}> ?value .\n}} WHERE {{\n  ?s <{}> ?value .\n}}",
+                    target, target, source
+                ))
+            }
+            AlignmentType::Related => {
+                // Related concepts - keep both with relation
+                Some(format!(
+                    "# Related mapping\nCONSTRUCT {{\n  ?s <{}> ?source_val .\n  ?s <{}> ?target_val .\n  ?source_val owl:sameAs ?target_val .\n}} WHERE {{\n  ?s <{}> ?source_val .\n  BIND(?source_val AS ?target_val)\n}}",
+                    source, target, source
+                ))
+            }
+            AlignmentType::Similar => {
+                // Similar concepts - fuzzy mapping with confidence annotation
+                Some(format!(
+                    "# Similar mapping (requires review)\n# Confidence: variable\nBIND({} AS {}) # Manual verification recommended",
+                    source, target
+                ))
+            }
         }
     }
 

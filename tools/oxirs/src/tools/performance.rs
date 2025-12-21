@@ -178,7 +178,7 @@ impl PerformanceMonitor {
 
                     // Collect current metrics
                     let current_metrics = PerformanceMetrics {
-                        cpu_usage: sys.global_cpu_info().cpu_usage(),
+                        cpu_usage: sys.global_cpu_usage(),
                         memory_usage: sys.used_memory(),
                         memory_total: sys.total_memory(),
                         disk_io_read: Self::calculate_total_disk_read(&sys),

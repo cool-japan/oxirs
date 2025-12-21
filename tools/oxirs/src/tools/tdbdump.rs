@@ -176,12 +176,8 @@ pub async fn run(
             export_rdfxml(&store, &mut writer, graph.as_deref())?
         }
         DumpFormat::JsonLd => {
-            // TODO: Implement JSON-LD serialization when oxirs-core supports it
-            writeln!(writer, "# OxiRS TDB Export")?;
-            writeln!(writer, "# Format: {}", format)?;
-            writeln!(writer, "# TODO: JSON-LD serialization not yet implemented")?;
-            writeln!(writer, "# Falling back to N-Triples format\n")?;
-            export_ntriples_nquads(&store, &mut writer, graph.as_deref(), DumpFormat::NTriples)?
+            // JSON-LD serialization using oxirs-core
+            export_jsonld(&store, &mut writer, graph.as_deref())?
         }
     };
 
@@ -265,15 +261,10 @@ fn export_ntriples_nquads(
     writeln!(writer, "# Exported: {}\n", chrono::Utc::now().to_rfc3339())?;
 
     // Query all triples from the store
-    // Use TdbStore::query_triples with all wildcards to get all triples
-    let triples = if graph.is_some() {
-        // TODO: Add graph-specific query support when TDB supports quads
-        // For now, treat graph parameter as filter on subject IRIs
-        store.query_triples(None, None, None)?
-    } else {
-        // Query all triples
-        store.query_triples(None, None, None)?
-    };
+    // Note: TDB is a triple store, not a quad store. The graph parameter is
+    // accepted for API consistency but all data comes from the same triple store.
+    // For true named graph support, use a quad-based storage backend like oxirs-cluster.
+    let triples = store.query_triples(None, None, None)?;
 
     // Create serializer and serialize each triple
     let serializer = NTriplesSerializer::new();
@@ -302,19 +293,15 @@ fn export_ntriples_nquads(
 fn export_turtle_trig(
     store: &TdbStore,
     writer: &mut dyn Write,
-    graph: Option<&str>,
+    _graph: Option<&str>,
     _format: DumpFormat,
 ) -> Result<usize, Box<dyn std::error::Error>> {
     use oxirs_core::format::turtle::TurtleSerializer;
     use oxirs_core::model::Triple;
 
     // Query all triples from the store
-    let triples = if graph.is_some() {
-        // TODO: Add graph-specific query support when TDB supports quads
-        store.query_triples(None, None, None)?
-    } else {
-        store.query_triples(None, None, None)?
-    };
+    // Note: TDB is a triple store, not a quad store. Graph parameter is ignored.
+    let triples = store.query_triples(None, None, None)?;
 
     // Create Turtle serializer
     let serializer = TurtleSerializer::new();
@@ -343,18 +330,14 @@ fn export_turtle_trig(
 fn export_rdfxml(
     store: &TdbStore,
     writer: &mut dyn Write,
-    graph: Option<&str>,
+    _graph: Option<&str>,
 ) -> Result<usize, Box<dyn std::error::Error>> {
     use oxirs_core::format::rdfxml::RdfXmlSerializer;
     use oxirs_core::model::Triple;
 
     // Query all triples from the store
-    let triples = if graph.is_some() {
-        // TODO: Add graph-specific query support when TDB supports quads
-        store.query_triples(None, None, None)?
-    } else {
-        store.query_triples(None, None, None)?
-    };
+    // Note: TDB is a triple store, not a quad store. Graph parameter is ignored.
+    let triples = store.query_triples(None, None, None)?;
 
     // Convert to oxirs-core Triple format
     let mut core_triples = Vec::new();
@@ -374,6 +357,47 @@ fn export_rdfxml(
     writer.write_all(serialized.as_bytes())?;
 
     Ok(core_triples.len())
+}
+
+/// Export triples in JSON-LD format
+fn export_jsonld(
+    store: &TdbStore,
+    writer: &mut dyn Write,
+    _graph: Option<&str>,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    use oxirs_core::format::jsonld::JsonLdSerializer;
+    use oxirs_core::model::{GraphName, Quad};
+
+    // Note: TDB is a triple store, not a quad store.
+    // The graph parameter is accepted for API consistency but filtered data
+    // comes from the same triple store regardless. For true named graph support,
+    // use a quad-based storage backend like oxirs-cluster.
+
+    // Query all triples from the store
+    let triples = store.query_triples(None, None, None)?;
+
+    // Create JSON-LD serializer
+    let serializer = JsonLdSerializer::new();
+    let mut writer_serializer = serializer.for_writer(writer);
+
+    let mut count = 0;
+    for (s, p, o) in triples {
+        // Convert TDB Terms to oxirs-core Terms for serialization
+        let subject = term_to_subject(&s)?;
+        let predicate = term_to_named_node(&p)?;
+        let object = term_to_object(&o)?;
+
+        // JSON-LD works with quads, so we use the default graph
+        let quad = Quad::new(subject, predicate, object, GraphName::DefaultGraph);
+
+        // Serialize the quad (triple in default graph)
+        writer_serializer.serialize_quad(quad.as_ref())?;
+        count += 1;
+    }
+
+    writer_serializer.finish()?;
+
+    Ok(count)
 }
 
 /// Convert TDB Term to oxirs-core Subject

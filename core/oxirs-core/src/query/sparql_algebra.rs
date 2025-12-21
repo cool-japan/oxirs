@@ -2,7 +2,7 @@
 //!
 //! Extracted and adapted from OxiGraph spargebra with OxiRS enhancements.
 //! Based on W3C SPARQL 1.1 Query specification:
-//! https://www.w3.org/TR/sparql11-query/#sparqlQuery
+//! <https://www.w3.org/TR/sparql11-query/#sparqlQuery>
 
 use crate::model::*;
 use std::fmt;

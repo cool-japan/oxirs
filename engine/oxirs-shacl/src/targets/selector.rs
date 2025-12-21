@@ -395,7 +395,7 @@ impl TargetSelector {
         use oxirs_core::model::NamedNode;
         use oxirs_core::{Object, Predicate, Subject};
 
-        eprintln!("DEBUG execute_target_selection: processing target {target:?}");
+        tracing::trace!("execute_target_selection: processing target {target:?}");
 
         match target {
             Target::Class(class_iri) => {
@@ -441,13 +441,13 @@ impl TargetSelector {
                     class_iri.as_str()
                 );
                 for (i, node) in target_nodes.iter().enumerate() {
-                    eprintln!("DEBUG execute_target_selection: instance[{i}] = {node:?}");
+                    tracing::trace!("execute_target_selection: instance[{i}] = {node:?}");
                 }
 
                 Ok(target_nodes)
             }
             Target::Node(node) => {
-                eprintln!("DEBUG execute_target_selection: specific node target: {node:?}");
+                tracing::trace!("execute_target_selection: specific node target: {node:?}");
                 // For specific nodes, just return the node itself
                 Ok(vec![node.clone()])
             }
@@ -533,7 +533,7 @@ impl TargetSelector {
                 self.execute_target_selection(store, &Target::Class(class_iri.clone()), graph_name)
             }
             Target::Sparql(_sparql_target) => {
-                eprintln!("DEBUG execute_target_selection: executing SPARQL target query");
+                tracing::trace!("execute_target_selection: executing SPARQL target query");
                 // For SPARQL targets, we need to execute the query against the store
                 // This is a placeholder - actual SPARQL execution would be needed
                 Ok(Vec::new())
@@ -580,7 +580,7 @@ impl TargetSelector {
                 Ok(result_nodes.into_iter().collect())
             }
             Target::Difference(difference_target) => {
-                eprintln!("DEBUG execute_target_selection: executing difference target");
+                tracing::trace!("execute_target_selection: executing difference target");
                 let primary_nodes: HashSet<Term> = self
                     .execute_target_selection(store, &difference_target.primary_target, graph_name)?
                     .into_iter()
@@ -600,7 +600,7 @@ impl TargetSelector {
                     .collect())
             }
             Target::Conditional(conditional_target) => {
-                eprintln!("DEBUG execute_target_selection: executing conditional target");
+                tracing::trace!("execute_target_selection: executing conditional target");
 
                 // First get nodes from base target
                 let base_nodes: HashSet<Term> = self
@@ -624,7 +624,7 @@ impl TargetSelector {
                 Ok(filtered_nodes)
             }
             Target::Hierarchical(hierarchical_target) => {
-                eprintln!("DEBUG execute_target_selection: executing hierarchical target");
+                tracing::trace!("execute_target_selection: executing hierarchical target");
 
                 // Get root nodes from root target
                 let root_nodes: HashSet<Term> = self
@@ -645,7 +645,7 @@ impl TargetSelector {
                 Ok(hierarchical_nodes)
             }
             Target::PathBased(path_target) => {
-                eprintln!("DEBUG execute_target_selection: executing path-based target");
+                tracing::trace!("execute_target_selection: executing path-based target");
 
                 // Get starting nodes from start target
                 let start_nodes: HashSet<Term> = self

@@ -273,7 +273,7 @@ impl QualifiedValueShapeConstraint {
 
         if values.is_empty() {
             // No values to validate
-            eprintln!("DEBUG QualifiedValueShape: No values to validate");
+            tracing::trace!("QualifiedValueShape: No values to validate");
             if let Some(min_count) = self.qualified_min_count {
                 if min_count > 0 {
                     eprintln!(
@@ -305,7 +305,7 @@ impl QualifiedValueShapeConstraint {
                 "DEBUG QualifiedValueShape: Checking min_count={min_count}, conforming_count={conforming_count}"
             );
             if conforming_count < min_count {
-                eprintln!("DEBUG QualifiedValueShape: VIOLATION - conforming_count < min_count");
+                tracing::trace!("QualifiedValueShape: VIOLATION - conforming_count < min_count");
                 return Ok(ConstraintEvaluationResult::violated(
                     None,
                     Some(format!(
@@ -322,7 +322,7 @@ impl QualifiedValueShapeConstraint {
                 "DEBUG QualifiedValueShape: Checking max_count={max_count}, conforming_count={conforming_count}"
             );
             if conforming_count > max_count {
-                eprintln!("DEBUG QualifiedValueShape: VIOLATION - conforming_count > max_count");
+                tracing::trace!("QualifiedValueShape: VIOLATION - conforming_count > max_count");
                 return Ok(ConstraintEvaluationResult::violated(
                     None,
                     Some(format!(
@@ -333,7 +333,7 @@ impl QualifiedValueShapeConstraint {
             }
         }
 
-        eprintln!("DEBUG QualifiedValueShape: SATISFIED");
+        tracing::trace!("QualifiedValueShape: SATISFIED");
         Ok(ConstraintEvaluationResult::satisfied())
     }
 
@@ -352,15 +352,15 @@ impl QualifiedValueShapeConstraint {
 
         // For each value, check if it conforms to the qualified shape
         for (i, value) in values.iter().enumerate() {
-            eprintln!("DEBUG count_conforming_values: checking value[{i}] = {value:?}");
+            tracing::trace!("count_conforming_values: checking value[{i}] = {value:?}");
             let conforms = self.value_conforms_to_shape(value, store, context)?;
-            eprintln!("DEBUG count_conforming_values: value[{i}] conforms = {conforms}");
+            tracing::trace!("count_conforming_values: value[{i}] conforms = {conforms}");
             if conforms {
                 conforming_count += 1;
             }
         }
 
-        eprintln!("DEBUG count_conforming_values: total conforming_count = {conforming_count}");
+        tracing::trace!("count_conforming_values: total conforming_count = {conforming_count}");
         Ok(conforming_count)
     }
 
@@ -405,12 +405,16 @@ impl QualifiedValueShapeConstraint {
                     Ok(report) => {
                         // Check if validation passed (no violations)
                         let conforms = report.conforms();
-                        eprintln!("DEBUG value_conforms_to_shape: validation report conforms={}, violations={}", conforms, report.violation_count());
+                        tracing::trace!(
+                            "value_conforms_to_shape: validation report conforms={}, violations={}",
+                            conforms,
+                            report.violation_count()
+                        );
                         Ok(conforms)
                     }
                     Err(e) => {
                         // If validation failed due to error, consider it non-conforming
-                        eprintln!("DEBUG value_conforms_to_shape: validation error: {e}");
+                        tracing::trace!("value_conforms_to_shape: validation error: {e}");
                         Ok(false)
                     }
                 }
@@ -426,7 +430,7 @@ impl QualifiedValueShapeConstraint {
                 )))
             }
         } else {
-            eprintln!("DEBUG value_conforms_to_shape: no shapes_registry, using fallback");
+            tracing::trace!("value_conforms_to_shape: no shapes_registry, using fallback");
             // Fallback to basic type checking for backward compatibility
             // This handles the case where full shape context is not available
             self.basic_type_conformance_check(value, store)

@@ -24,7 +24,9 @@ pub use binary::{decode_term, encode_term, QuadEncoding, WRITTEN_TERM_MAX_SIZE};
 pub use encoding::{EncodedQuad, EncodedTerm, EncodedTriple, SmallString, StrHash};
 pub use indexed_graph::{IndexStats, IndexType, IndexedGraph, MemoryUsage};
 pub use mmap_index::{IndexEntry, MmapIndex};
-pub use mmap_store::{MmapStore, StoreStats};
+pub use mmap_store::{
+    AccessStats, BackupConfig, BackupMetadata, MmapStore, PerformanceStats, StoreStats,
+};
 pub use term_interner::{InternerStats, TermInterner};
 
 /// Re-export commonly used types

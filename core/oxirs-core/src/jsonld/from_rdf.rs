@@ -1,14 +1,7 @@
 #[cfg(feature = "async")]
 use json_event_parser::TokioAsyncWriterJsonSerializer;
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
-// TODO: Phase 3 - Replace with native OxiRS types
-// use oxiri::{Iri, IriParseError};
-// #[cfg(feature = "rdf-12")]
-// use oxrdf::BaseDirection;
-// use oxrdf::vocab::xsd;
-// use oxrdf::{
-//     GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
-// };
+// Native OxiRS types (Phase 3 migration completed)
 use crate::model::node::NamedOrBlankNodeRef;
 use crate::model::quad::GraphNameRef;
 use crate::model::triple::{ObjectRef, PredicateRef, SubjectRef};
@@ -458,14 +451,16 @@ impl InnerJsonLdWriter {
 
         // We open a predicate key
         if self.current_predicate.is_none() {
-            output.push(JsonEvent::ObjectKey(
-                // TODO: use @type
-                match quad.predicate() {
-                    PredicateRef::NamedNode(n) => n.as_str(),
-                    PredicateRef::Variable(v) => v.as_str(),
+            let predicate_str = match quad.predicate() {
+                PredicateRef::NamedNode(n) => {
+                    // Apply prefix compaction if available
+                    // Note: @type shorthand requires special object serialization (plain IRIs)
+                    // which is not yet implemented, so we use full IRI with prefix compaction
+                    self.compact_iri(n.as_str())
                 }
-                .into(), // TODO: prefixes including @vocab
-            ));
+                PredicateRef::Variable(v) => Cow::Borrowed(v.as_str()),
+            };
+            output.push(JsonEvent::ObjectKey(predicate_str));
             output.push(JsonEvent::StartArray);
             self.current_predicate = Some(match quad.predicate() {
                 PredicateRef::NamedNode(n) => n.to_owned(),
@@ -605,6 +600,22 @@ impl InnerJsonLdWriter {
             NamedOrBlankNodeRef::NamedNode(iri) => iri.as_str().into(),
             NamedOrBlankNodeRef::BlankNode(bnode) => bnode.to_string().into(),
         }
+    }
+
+    /// Compact an IRI using registered prefixes
+    ///
+    /// This applies JSON-LD prefix compaction to transform full IRIs into
+    /// compact prefix:localname form when a matching prefix is registered.
+    fn compact_iri<'a>(&self, iri: &'a str) -> Cow<'a, str> {
+        // Try to find a matching prefix for compaction
+        for (prefix, namespace) in &self.prefixes {
+            if let Some(local_name) = iri.strip_prefix(namespace.as_str()) {
+                // Found a matching prefix - return compact form
+                return Cow::Owned(format!("{prefix}:{local_name}"));
+            }
+        }
+        // No matching prefix found - return original IRI
+        Cow::Borrowed(iri)
     }
 
     fn finish(&mut self, output: &mut Vec<JsonEvent<'static>>) {

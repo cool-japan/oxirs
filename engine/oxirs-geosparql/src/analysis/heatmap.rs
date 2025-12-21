@@ -163,7 +163,7 @@ impl HeatmapConfig {
 /// Heatmap result
 #[derive(Debug, Clone)]
 pub struct Heatmap {
-    /// Density values as 2D grid [y][x]
+    /// Density values as 2D grid `[y][x]`
     pub grid: Array2<f64>,
     /// Bounding box of the heatmap
     pub bounds: Rect<f64>,

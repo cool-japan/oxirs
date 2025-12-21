@@ -4,8 +4,10 @@
 //! semantic parsing, query optimization, and comprehensive validation.
 
 pub mod context_aware;
+pub mod semantic_understanding; // NEW: Semantic query understanding with NLP integration
 pub mod types; // NEW: Context-aware query generation
 
+pub use semantic_understanding::*;
 pub use types::*;
 
 use anyhow::{anyhow, Result};

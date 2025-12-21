@@ -473,7 +473,7 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let escaped = StarSerializer::escape_literal(input);
+            let escaped = StarSerializer::escape_literal_static(input);
             assert_eq!(escaped, expected);
         }
     }

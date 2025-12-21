@@ -1,9 +1,11 @@
 //! HTTP request handlers for SPARQL protocol and server management
 
+pub mod adaptive_execution_admin; // Adaptive execution monitoring endpoints (v0.1.0 Final)
 pub mod admin;
 pub mod api_keys;
 pub mod auth;
 pub mod dataset_stats; // Dataset Statistics
+pub mod gpu_embeddings_admin; // GPU knowledge graph embeddings management (v0.1.0 Final - Session 20)
 pub mod graph;
 pub mod gsp; // Graph Store Protocol (W3C SPARQL 1.1)
 pub mod ldap;
@@ -12,19 +14,22 @@ pub mod oauth2;
 pub mod patch; // RDF Patch
 pub mod performance; // Beta.2 Performance Monitoring
 pub mod prefixes; // Prefix Management
+pub mod production; // RC.1 Production Management (load balancing, edge caching, CDN)
 pub mod rebac; // ReBAC (Relationship-Based Access Control) API
 pub mod request_log; // Request Logging
 #[cfg(feature = "saml")]
 pub mod saml;
 pub mod shacl; // SHACL Validation
+pub mod simd_admin; // SIMD triple matcher management (v0.1.0 Final - Session 20)
 pub mod sparql;
 pub mod sparql_refactored;
 pub mod tasks; // Async Task Management
 pub mod upload; // RDF Bulk Upload
+pub mod validation; // Validation Services (Query, Update, IRI, Data, Language Tag)
 pub mod websocket;
 
 // Re-export commonly used handlers
-pub use admin::ui_handler;
+pub use admin::{list_backups, reload_config, ui_handler};
 pub use api_keys::{
     create_api_key, get_api_key, get_api_key_usage, list_api_keys, revoke_api_key, update_api_key,
     validate_api_key_auth,
@@ -61,4 +66,8 @@ pub use tasks::{
     cancel_task, create_task, delete_task, get_task, get_task_statistics, list_tasks, TaskManager,
 };
 pub use upload::{handle_multipart_upload_server, handle_upload_server};
+pub use validation::{
+    validate_data, validate_iri, validate_iri_get, validate_langtag, validate_langtag_get,
+    validate_query, validate_query_get, validate_update, validate_update_get,
+};
 pub use websocket::{websocket_handler, SubscriptionManager};

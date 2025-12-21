@@ -1456,3 +1456,427 @@ pub struct EvaluationContext {
     /// Query execution options
     pub options: HashMap<String, String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_literal_creation_simple() {
+        let lit = Literal {
+            value: "test".to_string(),
+            language: None,
+            datatype: None,
+        };
+
+        assert_eq!(lit.value, "test");
+        assert!(lit.language.is_none());
+        assert!(lit.datatype.is_none());
+        assert_eq!(lit.to_string(), "\"test\"");
+    }
+
+    #[test]
+    fn test_literal_with_language() {
+        let lit = Literal::with_language("bonjour".to_string(), "fr".to_string());
+
+        assert_eq!(lit.value, "bonjour");
+        assert_eq!(lit.language.as_deref(), Some("fr"));
+        assert!(lit.datatype.is_none());
+        assert_eq!(lit.to_string(), "\"bonjour\"@fr");
+    }
+
+    #[test]
+    fn test_literal_with_datatype() {
+        let datatype = NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap();
+        let lit = Literal {
+            value: "42".to_string(),
+            language: None,
+            datatype: Some(datatype.clone()),
+        };
+
+        assert_eq!(lit.value, "42");
+        assert!(lit.language.is_none());
+        assert_eq!(lit.datatype, Some(datatype));
+    }
+
+    #[test]
+    fn test_literal_conversion_to_core() {
+        let lit = Literal::with_language("hello".to_string(), "en".to_string());
+        let core_lit: CoreLiteral = lit.into();
+
+        assert_eq!(core_lit.value(), "hello");
+        assert_eq!(core_lit.language(), Some("en"));
+    }
+
+    #[test]
+    fn test_literal_conversion_from_core() {
+        let core_lit = CoreLiteral::new_language_tagged_literal("hola", "es".to_string()).unwrap();
+        let lit: Literal = core_lit.into();
+
+        assert_eq!(lit.value, "hola");
+        assert_eq!(lit.language.as_deref(), Some("es"));
+    }
+
+    #[test]
+    fn test_term_variable() {
+        let var = Variable::new("x").unwrap();
+        let term = Term::Variable(var.clone());
+
+        // Variable Display includes the "?" prefix
+        assert!(term.to_string().contains("x"));
+        if let Term::Variable(v) = term {
+            assert_eq!(v.name(), "x");
+        } else {
+            panic!("Expected Variable term");
+        }
+    }
+
+    #[test]
+    fn test_term_iri() {
+        let iri = NamedNode::new("http://example.org/resource").unwrap();
+        let term = Term::Iri(iri.clone());
+
+        assert!(term.to_string().contains("example.org"));
+        if let Term::Iri(i) = term {
+            assert_eq!(i, iri);
+        } else {
+            panic!("Expected IRI term");
+        }
+    }
+
+    #[test]
+    fn test_term_literal() {
+        let lit = Literal {
+            value: "test value".to_string(),
+            language: None,
+            datatype: None,
+        };
+        let term = Term::Literal(lit.clone());
+
+        assert_eq!(term.to_string(), "\"test value\"");
+        if let Term::Literal(l) = term {
+            assert_eq!(l.value, "test value");
+        } else {
+            panic!("Expected Literal term");
+        }
+    }
+
+    #[test]
+    fn test_term_blank_node() {
+        let term = Term::BlankNode("b0".to_string());
+
+        assert_eq!(term.to_string(), "_:b0");
+        if let Term::BlankNode(id) = term {
+            assert_eq!(id, "b0");
+        } else {
+            panic!("Expected BlankNode term");
+        }
+    }
+
+    #[test]
+    fn test_term_ordering() {
+        let var = Term::Variable(Variable::new("x").unwrap());
+        let iri = Term::Iri(NamedNode::new("http://example.org/a").unwrap());
+        let lit = Term::Literal(Literal {
+            value: "a".to_string(),
+            language: None,
+            datatype: None,
+        });
+        let blank = Term::BlankNode("b0".to_string());
+
+        // Test that terms can be compared (used in sorting, hash maps, etc.)
+        assert!(var != iri); // Terms are comparable
+        assert!(lit != blank);
+    }
+
+    #[test]
+    fn test_triple_pattern_creation() {
+        let subject = Term::Variable(Variable::new("s").unwrap());
+        let predicate = Term::Iri(NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap());
+        let object = Term::Literal(Literal {
+            value: "Alice".to_string(),
+            language: None,
+            datatype: None,
+        });
+
+        let triple = TriplePattern {
+            subject,
+            predicate,
+            object,
+        };
+
+        assert!(matches!(triple.subject, Term::Variable(_)));
+        assert!(matches!(triple.predicate, Term::Iri(_)));
+        assert!(matches!(triple.object, Term::Literal(_)));
+    }
+
+    #[test]
+    fn test_binding_creation() {
+        let var = Variable::new("x").unwrap();
+        let value = Term::Literal(Literal {
+            value: "42".to_string(),
+            language: None,
+            datatype: None,
+        });
+
+        let mut binding: Binding = HashMap::new();
+        binding.insert(var.clone(), value.clone());
+
+        assert_eq!(binding.len(), 1);
+        assert_eq!(binding.get(&var), Some(&value));
+    }
+
+    #[test]
+    fn test_solution_creation() {
+        let var1 = Variable::new("x").unwrap();
+        let var2 = Variable::new("y").unwrap();
+
+        let mut binding1 = HashMap::new();
+        binding1.insert(
+            var1.clone(),
+            Term::Literal(Literal {
+                value: "1".to_string(),
+                language: None,
+                datatype: None,
+            }),
+        );
+
+        let mut binding2 = HashMap::new();
+        binding2.insert(
+            var2.clone(),
+            Term::Literal(Literal {
+                value: "2".to_string(),
+                language: None,
+                datatype: None,
+            }),
+        );
+
+        let solution: Solution = vec![binding1, binding2];
+
+        assert_eq!(solution.len(), 2);
+        assert!(solution[0].contains_key(&var1));
+        assert!(solution[1].contains_key(&var2));
+    }
+
+    #[test]
+    fn test_algebra_bgp() {
+        let patterns = vec![TriplePattern {
+            subject: Term::Variable(Variable::new("s").unwrap()),
+            predicate: Term::Iri(
+                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
+            ),
+            object: Term::Iri(NamedNode::new("http://xmlns.com/foaf/0.1/Person").unwrap()),
+        }];
+
+        let bgp = Algebra::Bgp(patterns.clone());
+
+        if let Algebra::Bgp(p) = bgp {
+            assert_eq!(p.len(), 1);
+            assert!(matches!(p[0].subject, Term::Variable(_)));
+        } else {
+            panic!("Expected BGP algebra");
+        }
+    }
+
+    #[test]
+    fn test_algebra_join() {
+        let left = Box::new(Algebra::Bgp(vec![]));
+        let right = Box::new(Algebra::Bgp(vec![]));
+
+        let join = Algebra::Join { left, right };
+
+        if let Algebra::Join { .. } = join {
+            // Successfully created join
+        } else {
+            panic!("Expected Join algebra");
+        }
+    }
+
+    #[test]
+    fn test_algebra_filter() {
+        let pattern = Box::new(Algebra::Bgp(vec![]));
+
+        let var = Variable::new("x").unwrap();
+        let filter_expr = Expression::Variable(var);
+
+        let filter = Algebra::Filter {
+            pattern,
+            condition: filter_expr,
+        };
+
+        if let Algebra::Filter { condition, .. } = filter {
+            assert!(matches!(condition, Expression::Variable(_)));
+        } else {
+            panic!("Expected Filter algebra");
+        }
+    }
+
+    #[test]
+    fn test_algebra_union() {
+        let left = Box::new(Algebra::Bgp(vec![]));
+        let right = Box::new(Algebra::Bgp(vec![]));
+
+        let union = Algebra::Union { left, right };
+
+        if let Algebra::Union { .. } = union {
+            // Successfully created union
+        } else {
+            panic!("Expected Union algebra");
+        }
+    }
+
+    #[test]
+    fn test_algebra_left_join() {
+        let left = Box::new(Algebra::Bgp(vec![]));
+        let right = Box::new(Algebra::Bgp(vec![]));
+
+        let left_join = Algebra::LeftJoin {
+            left,
+            right,
+            filter: None,
+        };
+
+        if let Algebra::LeftJoin { filter, .. } = left_join {
+            assert!(filter.is_none());
+        } else {
+            panic!("Expected LeftJoin algebra");
+        }
+    }
+
+    #[test]
+    fn test_property_path_sequence() {
+        let path1 = PropertyPath::Iri(NamedNode::new("http://example.org/p1").unwrap());
+        let path2 = PropertyPath::Iri(NamedNode::new("http://example.org/p2").unwrap());
+
+        let seq = PropertyPath::Sequence(Box::new(path1), Box::new(path2));
+
+        if let PropertyPath::Sequence(left, right) = seq {
+            assert!(matches!(*left, PropertyPath::Iri(_)));
+            assert!(matches!(*right, PropertyPath::Iri(_)));
+        } else {
+            panic!("Expected Sequence property path");
+        }
+    }
+
+    #[test]
+    fn test_property_path_alternative() {
+        let path1 = PropertyPath::Iri(NamedNode::new("http://example.org/p1").unwrap());
+        let path2 = PropertyPath::Iri(NamedNode::new("http://example.org/p2").unwrap());
+
+        let alt = PropertyPath::Alternative(Box::new(path1), Box::new(path2));
+
+        if let PropertyPath::Alternative(left, right) = alt {
+            assert!(matches!(*left, PropertyPath::Iri(_)));
+            assert!(matches!(*right, PropertyPath::Iri(_)));
+        } else {
+            panic!("Expected Alternative property path");
+        }
+    }
+
+    #[test]
+    fn test_property_path_zero_or_more() {
+        let path = PropertyPath::Iri(NamedNode::new("http://example.org/p").unwrap());
+        let star = PropertyPath::ZeroOrMore(Box::new(path));
+
+        if let PropertyPath::ZeroOrMore(inner) = star {
+            assert!(matches!(*inner, PropertyPath::Iri(_)));
+        } else {
+            panic!("Expected ZeroOrMore property path");
+        }
+    }
+
+    #[test]
+    fn test_filter_selectivity_estimation() {
+        let var = Variable::new("x").unwrap();
+
+        // Equal operator - very selective
+        let equal_expr = Expression::Binary {
+            op: BinaryOperator::Equal,
+            left: Box::new(Expression::Variable(var.clone())),
+            right: Box::new(Expression::Literal(Literal {
+                value: "42".to_string(),
+                language: None,
+                datatype: None,
+            })),
+        };
+        let selectivity = estimate_filter_selectivity(&equal_expr);
+        assert_eq!(selectivity, 0.01);
+
+        // Not equal - not selective
+        let not_equal_expr = Expression::Binary {
+            op: BinaryOperator::NotEqual,
+            left: Box::new(Expression::Variable(var.clone())),
+            right: Box::new(Expression::Literal(Literal {
+                value: "42".to_string(),
+                language: None,
+                datatype: None,
+            })),
+        };
+        let selectivity = estimate_filter_selectivity(&not_equal_expr);
+        assert_eq!(selectivity, 0.99);
+
+        // Range comparison
+        let less_expr = Expression::Binary {
+            op: BinaryOperator::Less,
+            left: Box::new(Expression::Variable(var)),
+            right: Box::new(Expression::Literal(Literal {
+                value: "100".to_string(),
+                language: None,
+                datatype: None,
+            })),
+        };
+        let selectivity = estimate_filter_selectivity(&less_expr);
+        assert_eq!(selectivity, 0.33);
+    }
+
+    #[test]
+    fn test_evaluation_context_default() {
+        let ctx = EvaluationContext::default();
+
+        assert!(ctx.bindings.is_empty());
+        assert!(ctx.dataset.is_none());
+        assert!(ctx.options.is_empty());
+    }
+
+    #[test]
+    fn test_evaluation_context_with_bindings() {
+        let mut ctx = EvaluationContext::default();
+        let var = Variable::new("x").unwrap();
+        let value = Term::Literal(Literal {
+            value: "test".to_string(),
+            language: None,
+            datatype: None,
+        });
+
+        ctx.bindings.insert(var.clone(), value.clone());
+
+        assert_eq!(ctx.bindings.len(), 1);
+        assert_eq!(ctx.bindings.get(&var), Some(&value));
+    }
+
+    #[test]
+    fn test_order_condition() {
+        let var = Variable::new("x").unwrap();
+        let order = OrderCondition {
+            expr: Expression::Variable(var),
+            ascending: true,
+        };
+
+        assert!(order.ascending);
+        assert!(matches!(order.expr, Expression::Variable(_)));
+    }
+
+    #[test]
+    fn test_group_condition() {
+        let var = Variable::new("x").unwrap();
+        let alias = Variable::new("y").unwrap();
+        let group = GroupCondition {
+            expr: Expression::Variable(var),
+            alias: Some(alias.clone()),
+        };
+
+        assert!(group.alias.is_some());
+        assert_eq!(group.alias.unwrap().name(), "y");
+        assert!(matches!(group.expr, Expression::Variable(_)));
+    }
+}

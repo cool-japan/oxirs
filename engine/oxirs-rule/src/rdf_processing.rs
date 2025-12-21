@@ -304,11 +304,236 @@ impl RdfProcessor {
     }
 
     /// Process JSON-LD format
+    ///
+    /// Implements basic JSON-LD processing with support for:
+    /// - @context namespace mappings
+    /// - Simple triple extraction from flat JSON-LD
+    /// - @id, @type, and basic properties
+    ///
+    /// Note: This is a simplified implementation for common cases.
+    /// Complex JSON-LD features (arrays, nested objects, @graph) may require
+    /// a full JSON-LD processor library when available.
     async fn process_jsonld(&mut self, data: &[u8], stats: &mut ProcessingStats) -> Result<()> {
-        // TODO: Implement JSON-LD processing when oxirs-core supports it
-        // For now, we'll just parse as JSON and error
-        let _json: serde_json::Value = serde_json::from_slice(data)?;
-        return Err(anyhow!("JSON-LD processing not yet implemented"));
+        use serde_json::Value;
+
+        let json: Value = serde_json::from_slice(data)?;
+
+        // Extract @context for namespace mappings
+        let context = if let Some(ctx) = json.get("@context") {
+            self.extract_context(ctx)?
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        // Process the JSON-LD object(s)
+        match &json {
+            Value::Object(obj) => {
+                self.process_jsonld_object(obj, &context, stats)?;
+            }
+            Value::Array(arr) => {
+                for item in arr {
+                    if let Value::Object(obj) = item {
+                        self.process_jsonld_object(obj, &context, stats)?;
+                    }
+                }
+            }
+            _ => return Err(anyhow!("Invalid JSON-LD: expected object or array")),
+        }
+
+        Ok(())
+    }
+
+    /// Extract namespace context from @context
+    fn extract_context(&self, ctx: &serde_json::Value) -> Result<std::collections::HashMap<String, String>> {
+        use serde_json::Value;
+
+        let mut context = std::collections::HashMap::new();
+
+        match ctx {
+            Value::String(url) => {
+                // Remote context (not fetched for now)
+                tracing::debug!("Skipping remote context: {}", url);
+            }
+            Value::Object(obj) => {
+                for (key, value) in obj {
+                    if let Value::String(iri) = value {
+                        context.insert(key.clone(), iri.clone());
+                    }
+                }
+            }
+            Value::Array(arr) => {
+                // Multiple contexts - process each
+                for item in arr {
+                    if let Value::Object(obj) = item {
+                        for (key, value) in obj {
+                            if let Value::String(iri) = value {
+                                context.insert(key.clone(), iri.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Ok(context)
+    }
+
+    /// Process a single JSON-LD object into triples
+    fn process_jsonld_object(
+        &mut self,
+        obj: &serde_json::Map<String, serde_json::Value>,
+        context: &std::collections::HashMap<String, String>,
+        stats: &mut ProcessingStats,
+    ) -> Result<()> {
+        use serde_json::Value;
+
+        // Skip context and graph meta-properties
+        if obj.len() == 1 && (obj.contains_key("@context") || obj.contains_key("@graph")) {
+            return Ok(());
+        }
+
+        // Extract subject
+        let subject = if let Some(Value::String(id)) = obj.get("@id") {
+            self.expand_term(id, context)
+        } else {
+            // Generate blank node ID
+            format!("_:b{}", stats.processed_triples)
+        };
+
+        // Process @type
+        if let Some(type_value) = obj.get("@type") {
+            match type_value {
+                Value::String(type_str) => {
+                    let type_iri = self.expand_term(type_str, context);
+                    self.add_triple_from_jsonld(&subject, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", &type_iri, stats)?;
+                }
+                Value::Array(types) => {
+                    for t in types {
+                        if let Value::String(type_str) = t {
+                            let type_iri = self.expand_term(type_str, context);
+                            self.add_triple_from_jsonld(&subject, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", &type_iri, stats)?;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Process properties
+        for (key, value) in obj {
+            // Skip JSON-LD keywords
+            if key.starts_with('@') {
+                continue;
+            }
+
+            let predicate = self.expand_term(key, context);
+
+            match value {
+                Value::String(s) => {
+                    // Check if it's an IRI or literal
+                    let object = if s.starts_with("http://") || s.starts_with("https://") {
+                        s.clone()
+                    } else {
+                        format!("\"{}\"", s)
+                    };
+                    self.add_triple_from_jsonld(&subject, &predicate, &object, stats)?;
+                }
+                Value::Number(n) => {
+                    self.add_triple_from_jsonld(&subject, &predicate, &format!("\"{}\"", n), stats)?;
+                }
+                Value::Bool(b) => {
+                    self.add_triple_from_jsonld(&subject, &predicate, &format!("\"{}\"", b), stats)?;
+                }
+                Value::Object(nested) => {
+                    // Handle nested object (simplified - assume it has @id)
+                    if let Some(Value::String(nested_id)) = nested.get("@id") {
+                        let nested_iri = self.expand_term(nested_id, context);
+                        self.add_triple_from_jsonld(&subject, &predicate, &nested_iri, stats)?;
+                    }
+                }
+                Value::Array(arr) => {
+                    // Handle multiple values
+                    for item in arr {
+                        if let Value::String(s) = item {
+                            let object = if s.starts_with("http://") || s.starts_with("https://") {
+                                s.clone()
+                            } else {
+                                format!("\"{}\"", s)
+                            };
+                            self.add_triple_from_jsonld(&subject, &predicate, &object, stats)?;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Expand a term using the context
+    fn expand_term(&self, term: &str, context: &std::collections::HashMap<String, String>) -> String {
+        // Check if already a full IRI
+        if term.starts_with("http://") || term.starts_with("https://") {
+            return term.to_string();
+        }
+
+        // Check for prefix
+        if let Some((prefix, local)) = term.split_once(':') {
+            if let Some(base) = context.get(prefix) {
+                return format!("{}{}", base, local);
+            }
+        }
+
+        // Check for direct mapping in context
+        if let Some(iri) = context.get(term) {
+            return iri.clone();
+        }
+
+        // Return as-is if no expansion found
+        term.to_string()
+    }
+
+    /// Add a triple from JSON-LD data
+    fn add_triple_from_jsonld(
+        &mut self,
+        subject: &str,
+        predicate: &str,
+        object: &str,
+        stats: &mut ProcessingStats,
+    ) -> Result<()> {
+        use oxirs_core::model::{NamedNode, Subject, Predicate, Object, Literal, Triple, Quad};
+
+        // Parse subject
+        let subj = if subject.starts_with("_:") {
+            Subject::BlankNode(oxirs_core::BlankNode::new(&subject[2..])?)
+        } else {
+            Subject::NamedNode(NamedNode::new(subject)?)
+        };
+
+        // Parse predicate
+        let pred = Predicate::NamedNode(NamedNode::new(predicate)?);
+
+        // Parse object
+        let obj = if object.starts_with('"') {
+            Object::Literal(Literal::new(object.trim_matches('"')))
+        } else if object.starts_with("_:") {
+            Object::BlankNode(oxirs_core::BlankNode::new(&object[2..])?)
+        } else {
+            Object::NamedNode(NamedNode::new(object)?)
+        };
+
+        // Create triple and add to store
+        let triple = Triple::new(subj, pred, obj);
+        let quad = Quad::from(triple);
+        self.store.insert(&quad)?;
+
+        if self.config.collect_stats {
+            stats.triples_processed += 1;
+        }
+
+        Ok(())
     }
 
     /// Process line-based formats in streaming mode

@@ -21,7 +21,7 @@ tracing.workspace = true
 tracing-subscriber = "0.3"
 
 # SciRS2 dependencies for high-performance RDF-star processing (SCIRS2 POLICY)
-scirs2-core = { workspace = true, features = ["simd", "parallel", "memory_efficient", "profiling", "benchmarking", "random"] }
+scirs2-core = { workspace = true, features = ["simd", "parallel", "memory_efficient", "profiling", "benchmarking", "random", "jit"] }
 scirs2-graph.workspace = true  # For RDF graph algorithms
 scirs2-stats.workspace = true   # For statistical analysis
 scirs2-metrics.workspace = true # For performance metrics
@@ -64,6 +64,18 @@ harness = false
 
 [[bench]]
 name = "adaptive_benchmarks"
+harness = false
+
+[[bench]]
+name = "refactoring_benchmarks"
+harness = false
+
+[[bench]]
+name = "v0_3_0_benchmarks"
+harness = false
+
+[[bench]]
+name = "embedding_benchmarks"
 harness = false
 
 [features]

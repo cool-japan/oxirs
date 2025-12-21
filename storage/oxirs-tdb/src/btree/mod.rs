@@ -8,6 +8,7 @@ pub mod node;
 
 use crate::error::{Result, TdbError};
 use crate::storage::{BufferPool, PageGuard, PageId, PageType};
+use bincode::{Decode, Encode};
 use iterator::BTreeIterator;
 use node::{BTreeNode, InternalNode, LeafNode, ORDER};
 use serde::{Deserialize, Serialize};
@@ -17,8 +18,8 @@ use std::sync::Arc;
 /// B+Tree for disk-based key-value storage
 pub struct BTree<K, V>
 where
-    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug,
-    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug,
+    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
+    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
 {
     buffer_pool: Arc<BufferPool>,
     root_page: Option<PageId>,
@@ -27,8 +28,8 @@ where
 
 impl<K, V> BTree<K, V>
 where
-    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug,
-    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug,
+    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
+    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
 {
     /// Create a new B+Tree
     pub fn new(buffer_pool: Arc<BufferPool>) -> Self {

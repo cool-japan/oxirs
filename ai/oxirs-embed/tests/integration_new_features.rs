@@ -817,6 +817,7 @@ async fn test_hole_embedding_quality() {
 
 #[cfg(feature = "conve")]
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Training tests require release builds")]
 async fn test_conve_basic_training() {
     let config = ConvEConfig {
         base: ModelConfig {
@@ -886,6 +887,7 @@ async fn test_conve_basic_training() {
 
 #[cfg(feature = "conve")]
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Training tests require release builds")]
 async fn test_conve_link_prediction() {
     let config = ConvEConfig {
         base: ModelConfig {
@@ -923,6 +925,7 @@ async fn test_conve_link_prediction() {
 
 #[cfg(feature = "conve")]
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Training tests require release builds")]
 async fn test_conve_with_different_configurations() {
     // Test with smaller dimensions and filters
     let config = ConvEConfig {
@@ -953,6 +956,7 @@ async fn test_conve_with_different_configurations() {
 
 #[cfg(feature = "conve")]
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Training tests require release builds")]
 async fn test_conve_embedding_dimensions() {
     let config = ConvEConfig {
         base: ModelConfig {

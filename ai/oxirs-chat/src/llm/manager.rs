@@ -3,6 +3,7 @@
 //! Contains the main LLM manager and enhanced manager with rate limiting and monitoring.
 
 use anyhow::{anyhow, Result};
+use bincode::{Decode, Encode};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex as TokioMutex;
 use tracing::{debug, error, info, warn};
@@ -76,12 +77,15 @@ pub struct RestoreReport {
 }
 
 /// A chat session with locking capabilities
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Encode, Decode)]
 pub struct Session {
     pub id: String,
+    #[bincode(with_serde)]
     pub messages: Vec<crate::messages::Message>,
     #[serde(with = "systemtime_serde")]
+    #[bincode(with_serde)]
     pub created_at: std::time::SystemTime,
+    #[bincode(with_serde)]
     pub last_activity: chrono::DateTime<chrono::Utc>,
 }
 
@@ -738,8 +742,9 @@ impl EnhancedLLMManager {
         file.read_to_end(&mut contents).await?;
 
         // Deserialize the session
-        let session: Session = bincode::deserialize(&contents)
-            .map_err(|e| anyhow!("Failed to deserialize session: {}", e))?;
+        let session: Session = bincode::decode_from_slice(&contents, bincode::config::standard())
+            .map_err(|e| anyhow!("Failed to deserialize session: {}", e))?
+            .0;
 
         // Add to active sessions
         let locked_session = Arc::new(TokioMutex::new(session));
@@ -788,7 +793,7 @@ impl EnhancedLLMManager {
         use tokio::io::AsyncWriteExt;
 
         // Serialize the session
-        let serialized = bincode::serialize(session)
+        let serialized = bincode::encode_to_vec(session, bincode::config::standard())
             .map_err(|e| anyhow!("Failed to serialize session: {}", e))?;
 
         // Write to temporary file first, then rename for atomic operation

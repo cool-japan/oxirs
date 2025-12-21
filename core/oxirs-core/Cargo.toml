@@ -64,7 +64,7 @@ siphasher = "1.0"  # For optimized term encoding
 chrono = { version = "0.4", features = ["serde"] }
 # rand replaced with scirs2-core random generation
 fastrand = "2.3"
-uuid = { version = "1.18", features = ["v4", "serde"] }
+uuid = { version = "1.19", features = ["v4", "serde"] }
 urlencoding = "2.1"
 
 # Storage engine dependencies
@@ -90,7 +90,7 @@ hex = "0.4"
 bimap = "0.6"
 
 # Zero-copy serialization
-bytes = "1.10"
+bytes = { workspace = true }
 
 # SciRS2 scientific computing dependencies (replaces direct ndarray/rand usage)
 scirs2-core = { workspace = true, features = ["memory_management", "memory_efficient", "parallel"] }
@@ -116,7 +116,7 @@ tokio = { workspace = true, features = ["test-util", "rt", "io-util", "macros"] 
 tempfile = "3.23"
 
 [features]
-default = ["serde", "parallel"]
+default = ["serde", "parallel", "rdf-12", "rdf-star", "sparql-12"]
 serde = []
 async = []
 async-tokio = ["async"]
@@ -147,5 +147,9 @@ harness = false
 
 [[bench]]
 name = "parallel_batch_bench"
+harness = false
+
+[[bench]]
+name = "query_visualization_bench"
 harness = false
 

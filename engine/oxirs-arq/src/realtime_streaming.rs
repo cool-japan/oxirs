@@ -589,7 +589,7 @@ impl StreamingSparqlProcessor {
         let signal_metrics = Self::calculate_signal_metrics(triples, config).await?;
 
         let execution_time = start_time.elapsed();
-        metrics.query_execution_time.record(execution_time);
+        metrics.query_execution_time.observe(execution_time);
 
         let now = SystemTime::now();
         Ok(WindowedResult {
@@ -791,9 +791,9 @@ impl StreamingSparqlProcessor {
     /// Get comprehensive streaming statistics
     pub fn get_statistics(&self) -> StreamingStatistics {
         StreamingStatistics {
-            triples_received: self.metrics.triples_received.value(),
-            triples_processed: self.metrics.triples_processed.value(),
-            triples_dropped: self.metrics.triples_dropped.value(),
+            triples_received: self.metrics.triples_received.get(),
+            triples_processed: self.metrics.triples_processed.get(),
+            triples_dropped: self.metrics.triples_dropped.get(),
             active_queries: self.active_windows.read().map(|w| w.len()).unwrap_or(0),
             avg_processing_latency: self.metrics.processing_latency.mean(),
             avg_query_execution_time: self.metrics.query_execution_time.mean(),
@@ -936,12 +936,12 @@ struct StreamingMetrics {
 impl StreamingMetrics {
     fn new() -> Self {
         Self {
-            triples_received: Counter::new("triples_received"),
-            triples_processed: Counter::new("triples_processed"),
-            triples_dropped: Counter::new("triples_dropped"),
-            processing_latency: Histogram::new("processing_latency"),
-            query_execution_time: Timer::new("query_execution_time"),
-            signal_quality: Histogram::new("signal_quality"),
+            triples_received: Counter::new("triples_received".to_string()),
+            triples_processed: Counter::new("triples_processed".to_string()),
+            triples_dropped: Counter::new("triples_dropped".to_string()),
+            processing_latency: Histogram::new("processing_latency".to_string()),
+            query_execution_time: Timer::new("query_execution_time".to_string()),
+            signal_quality: Histogram::new("signal_quality".to_string()),
         }
     }
 }

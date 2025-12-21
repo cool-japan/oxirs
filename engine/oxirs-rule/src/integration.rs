@@ -7,6 +7,7 @@ use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
 use oxirs_core::model::{GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Triple};
 use oxirs_core::{OxirsError, RdfStore};
+use std::collections::HashMap;
 use tracing::{debug, info};
 
 /// Integration bridge for connecting oxirs-rule with oxirs-core
@@ -15,6 +16,8 @@ pub struct RuleIntegration {
     pub rule_engine: RuleEngine,
     /// Core RDF store
     pub store: RdfStore,
+    /// Namespace prefix mappings for IRI expansion/compression
+    namespace_prefixes: HashMap<String, String>,
 }
 
 impl Default for RuleIntegration {
@@ -26,17 +29,57 @@ impl Default for RuleIntegration {
 impl RuleIntegration {
     /// Create a new rule integration with an empty store
     pub fn new() -> Self {
+        let mut prefixes = HashMap::new();
+        // Initialize with common W3C namespaces
+        prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        prefixes.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
+
         Self {
             rule_engine: RuleEngine::new(),
             store: oxirs_core::RdfStore::new().unwrap(),
+            namespace_prefixes: prefixes,
         }
     }
 
     /// Create integration with an existing store
     pub fn with_store(store: RdfStore) -> Self {
+        let mut prefixes = HashMap::new();
+        // Initialize with common W3C namespaces
+        prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        prefixes.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
+
         Self {
             rule_engine: RuleEngine::new(),
             store,
+            namespace_prefixes: prefixes,
         }
     }
 
@@ -567,14 +610,22 @@ impl RuleIntegration {
     /// Enhanced namespace management for better IRI handling
     pub fn add_namespace_prefix(&mut self, prefix: &str, namespace_iri: &str) -> Result<()> {
         // Store namespace mappings for efficient rule processing
-        // This enhances the integration with better IRI handling as mentioned in TODO
         info!(
             "Adding namespace prefix '{}' -> '{}'",
             prefix, namespace_iri
         );
 
-        // TODO: In full implementation, this would be stored and used for
-        // efficient IRI expansion/compression during rule processing
+        // Store the prefix mapping
+        self.namespace_prefixes
+            .insert(prefix.to_string(), namespace_iri.to_string());
+
+        debug!(
+            "Namespace prefix '{}' mapped to '{}' (total prefixes: {})",
+            prefix,
+            namespace_iri,
+            self.namespace_prefixes.len()
+        );
+
         Ok(())
     }
 
@@ -584,43 +635,189 @@ impl RuleIntegration {
             let prefix = &prefixed_iri[..colon_pos];
             let local_name = &prefixed_iri[colon_pos + 1..];
 
-            // In a full implementation, this would look up the prefix in stored mappings
-            // For now, return common namespace expansions
-            let expanded = match prefix {
-                "rdf" => format!("http://www.w3.org/1999/02/22-rdf-syntax-ns#{local_name}"),
-                "rdfs" => format!("http://www.w3.org/2000/01/rdf-schema#{local_name}"),
-                "owl" => format!("http://www.w3.org/2002/07/owl#{local_name}"),
-                "xsd" => format!("http://www.w3.org/2001/XMLSchema#{local_name}"),
-                _ => prefixed_iri.to_string(), // Return as-is if prefix not recognized
-            };
-
-            Ok(expanded)
+            // Look up the prefix in stored mappings
+            if let Some(namespace) = self.namespace_prefixes.get(prefix) {
+                let expanded = format!("{}{}", namespace, local_name);
+                debug!("Expanded '{}' to '{}'", prefixed_iri, expanded);
+                Ok(expanded)
+            } else {
+                // Return as-is if prefix not recognized
+                debug!("Unknown prefix '{}', returning prefixed IRI as-is", prefix);
+                Ok(prefixed_iri.to_string())
+            }
         } else {
             Ok(prefixed_iri.to_string())
         }
     }
 
+    /// Compress full IRI to prefixed form using namespace mappings
+    pub fn compress_to_prefixed_iri(&self, full_iri: &str) -> String {
+        // Try to find a matching namespace prefix
+        for (prefix, namespace) in &self.namespace_prefixes {
+            if full_iri.starts_with(namespace) {
+                let local_name = &full_iri[namespace.len()..];
+                let compressed = format!("{}:{}", prefix, local_name);
+                debug!("Compressed '{}' to '{}'", full_iri, compressed);
+                return compressed;
+            }
+        }
+
+        // Return as-is if no matching prefix found
+        debug!("No matching prefix for '{}', returning as-is", full_iri);
+        full_iri.to_string()
+    }
+
+    /// Get all registered namespace prefixes
+    pub fn get_namespace_prefixes(&self) -> &HashMap<String, String> {
+        &self.namespace_prefixes
+    }
+
+    /// Remove a namespace prefix
+    pub fn remove_namespace_prefix(&mut self, prefix: &str) -> Option<String> {
+        self.namespace_prefixes.remove(prefix)
+    }
+
     /// Validate RDF data before rule processing
+    ///
+    /// Performs comprehensive validation including:
+    /// - Store size checks
+    /// - Rule engine state validation
+    /// - Basic integrity checks
     pub fn validate_rdf_data(&self) -> Result<ValidationReport> {
         let quad_count = self.store.len()?;
         let mut warnings = Vec::new();
-        let errors = Vec::new();
+        let mut errors = Vec::new();
 
-        // Basic validation checks
+        // 1. Check if store is empty
         if quad_count == 0 {
             warnings.push("Store is empty - no data to validate".to_string());
+        } else {
+            debug!("Validating {} quads in store", quad_count);
         }
 
-        // TODO: Add more comprehensive validation
-        // - Check for malformed IRIs
-        // - Validate literal datatypes
-        // - Check for circular references
+        // 2. Check rule engine state
+        let facts = self.rule_engine.get_facts();
+        if facts.is_empty() && quad_count > 0 {
+            warnings.push(
+                "Store contains data but rule engine has no facts - consider calling apply_rules()"
+                    .to_string(),
+            );
+        }
+
+        // 3. Validate that fact count is reasonable compared to quad count
+        if facts.len() > quad_count * 10 {
+            warnings.push(format!(
+                "Rule engine has {} facts but store has only {} quads - possible rule explosion",
+                facts.len(),
+                quad_count
+            ));
+        }
+
+        // 4. Check for very large datasets that might cause performance issues
+        if quad_count > 1_000_000 {
+            warnings.push(format!(
+                "Large dataset ({} quads) - consider chunked processing for better performance",
+                quad_count
+            ));
+        }
+
+        // 5. Validate IRI format in  facts (lightweight check)
+        let mut malformed_iris = 0;
+        for fact in &facts {
+            if let Some(iri) = self.extract_iri_from_fact(fact) {
+                if !self.is_valid_iri(&iri) {
+                    malformed_iris += 1;
+                    if malformed_iris <= 5 {
+                        // Only report first 5
+                        errors.push(format!("Malformed IRI in fact: {}", iri));
+                    }
+                }
+            }
+        }
+
+        if malformed_iris > 5 {
+            errors.push(format!(
+                "Found {} additional malformed IRIs (showing first 5)",
+                malformed_iris - 5
+            ));
+        }
 
         Ok(ValidationReport {
             total_triples: quad_count,
             warnings,
             errors,
         })
+    }
+
+    /// Extract IRI from a fact for validation (helper)
+    fn extract_iri_from_fact(&self, fact: &RuleAtom) -> Option<String> {
+        match fact {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
+                // Check subject
+                if let Term::Constant(s) = subject {
+                    if s.contains("://") {
+                        return Some(s.clone());
+                    }
+                }
+                // Check predicate
+                if let Term::Constant(p) = predicate {
+                    if p.contains("://") {
+                        return Some(p.clone());
+                    }
+                }
+                // Check object
+                if let Term::Constant(o) = object {
+                    if o.contains("://") {
+                        return Some(o.clone());
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if an IRI is well-formed
+    fn is_valid_iri(&self, iri: &str) -> bool {
+        // Basic IRI validation
+        // 1. Must not be empty
+        if iri.is_empty() {
+            return false;
+        }
+
+        // 2. Must contain a colon (scheme separator)
+        if !iri.contains(':') {
+            return false;
+        }
+
+        // 3. Common schemes should be lowercase
+        let common_schemes = ["http", "https", "urn", "file", "ftp"];
+        for scheme in &common_schemes {
+            if iri.starts_with(&format!("{}:", scheme.to_uppercase())) {
+                return false; // Scheme should be lowercase
+            }
+        }
+
+        // 4. Must not contain illegal characters
+        let illegal_chars = [' ', '<', '>', '{', '}', '|', '\\', '^', '`'];
+        if iri.chars().any(|c| illegal_chars.contains(&c)) {
+            return false;
+        }
+
+        // 5. Fragment identifier validation (if present)
+        if let Some(fragment_pos) = iri.rfind('#') {
+            let fragment = &iri[fragment_pos + 1..];
+            // Fragment should not be empty if # is present
+            if fragment.is_empty() {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Batch process multiple triples with optimized rule application
@@ -1271,11 +1468,48 @@ mod tests {
         let expanded = integration.expand_prefixed_iri("owl:Class").unwrap();
         assert_eq!(expanded, "http://www.w3.org/2002/07/owl#Class");
 
+        let expanded = integration.expand_prefixed_iri("ex:Person").unwrap();
+        assert_eq!(expanded, "http://example.org/Person");
+
         // Test non-prefixed IRI
         let unchanged = integration
             .expand_prefixed_iri("http://example.org/full")
             .unwrap();
         assert_eq!(unchanged, "http://example.org/full");
+
+        // Test IRI compression
+        let compressed =
+            integration.compress_to_prefixed_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        assert_eq!(compressed, "rdf:type");
+
+        let compressed =
+            integration.compress_to_prefixed_iri("http://www.w3.org/2000/01/rdf-schema#Class");
+        assert_eq!(compressed, "rdfs:Class");
+
+        let compressed = integration.compress_to_prefixed_iri("http://example.org/Person");
+        assert_eq!(compressed, "ex:Person");
+
+        // Test non-matching IRI (should return as-is)
+        let unchanged = integration.compress_to_prefixed_iri("http://unknown.org/resource");
+        assert_eq!(unchanged, "http://unknown.org/resource");
+
+        // Test get all prefixes
+        let prefixes = integration.get_namespace_prefixes();
+        assert!(prefixes.contains_key("rdf"));
+        assert!(prefixes.contains_key("rdfs"));
+        assert!(prefixes.contains_key("owl"));
+        assert!(prefixes.contains_key("xsd"));
+        assert!(prefixes.contains_key("ex"));
+        assert_eq!(prefixes.len(), 5);
+
+        // Test remove prefix
+        let removed = integration.remove_namespace_prefix("ex");
+        assert_eq!(removed, Some("http://example.org/".to_string()));
+        assert_eq!(integration.get_namespace_prefixes().len(), 4);
+
+        // Try to remove non-existent prefix
+        let not_found = integration.remove_namespace_prefix("nonexistent");
+        assert_eq!(not_found, None);
     }
 
     #[test]

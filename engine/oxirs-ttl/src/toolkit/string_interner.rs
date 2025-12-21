@@ -32,7 +32,7 @@ use std::sync::Arc;
 /// ```
 #[derive(Debug, Clone)]
 pub struct StringInterner {
-    /// Map from string content to interned Arc<String>
+    /// Map from string content to interned `Arc<String>`
     map: HashMap<InternedString, Arc<String>>,
     /// Statistics for monitoring performance
     stats: InternerStats,

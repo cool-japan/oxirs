@@ -1,9 +1,11 @@
 //! Query Refinement System
 //!
 //! Helps users refine and improve their queries through interactive suggestions.
+//! Enhanced with multi-turn conversation support and context awareness.
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tracing::{debug, info};
 
 /// Query refinement suggestion
@@ -92,24 +94,95 @@ impl Default for RefinementConfig {
     }
 }
 
-/// Query refiner
+/// Query refiner with multi-turn conversation support
 pub struct QueryRefiner {
     config: RefinementConfig,
+    /// Conversation history for context-aware refinement
+    conversation_history: Vec<ConversationTurn>,
+    /// Learned patterns from user interactions
+    learned_patterns: HashMap<String, Vec<String>>,
+}
+
+/// Conversation turn for context tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversationTurn {
+    pub query: String,
+    pub refined_query: Option<String>,
+    pub intent: Option<String>,
+    pub entities: Vec<String>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 impl QueryRefiner {
-    /// Create a new query refiner
+    /// Create a new query refiner with multi-turn support
     pub fn new(config: RefinementConfig) -> Self {
-        info!("Initialized query refiner");
-        Self { config }
+        info!("Initialized context-aware query refiner with multi-turn conversation support");
+        Self {
+            config,
+            conversation_history: Vec::new(),
+            learned_patterns: HashMap::new(),
+        }
     }
 
-    /// Analyze a query and suggest refinements
+    /// Add a conversation turn for context
+    pub fn add_turn(
+        &mut self,
+        query: String,
+        refined_query: Option<String>,
+        intent: Option<String>,
+        entities: Vec<String>,
+    ) {
+        self.conversation_history.push(ConversationTurn {
+            query,
+            refined_query,
+            intent,
+            entities,
+            timestamp: chrono::Utc::now(),
+        });
+
+        // Keep only last 10 turns
+        if self.conversation_history.len() > 10 {
+            self.conversation_history.remove(0);
+        }
+    }
+
+    /// Get context from conversation history
+    fn get_context(&self) -> HashMap<String, String> {
+        let mut context = HashMap::new();
+
+        // Get recent entities
+        let recent_entities: Vec<String> = self
+            .conversation_history
+            .iter()
+            .rev()
+            .take(3)
+            .flat_map(|turn| turn.entities.clone())
+            .collect();
+
+        if !recent_entities.is_empty() {
+            context.insert("recent_entities".to_string(), recent_entities.join(", "));
+        }
+
+        // Get recent intent
+        if let Some(recent_turn) = self.conversation_history.last() {
+            if let Some(ref intent) = recent_turn.intent {
+                context.insert("recent_intent".to_string(), intent.clone());
+            }
+        }
+
+        context
+    }
+
+    /// Analyze a query and suggest refinements with context awareness
     pub fn refine(&self, query: &str) -> Result<Vec<RefinementSuggestion>> {
         debug!("Analyzing query for refinements: {}", query);
 
+        let context = self.get_context();
         let analysis = self.analyze_query(query)?;
         let mut suggestions = Vec::new();
+
+        // Context-aware suggestions
+        suggestions.extend(self.suggest_context_aware_refinements(query, &context)?);
 
         // Performance suggestions
         if self.config.suggest_performance {
@@ -384,11 +457,95 @@ impl QueryRefiner {
             current_query: initial_query.to_string(),
             applied_suggestions: Vec::new(),
             iteration: 0,
+            context: self.get_context(),
         }
+    }
+
+    /// Suggest context-aware refinements based on conversation history
+    fn suggest_context_aware_refinements(
+        &self,
+        query: &str,
+        context: &HashMap<String, String>,
+    ) -> Result<Vec<RefinementSuggestion>> {
+        let mut suggestions = Vec::new();
+
+        // If there are recent entities, suggest incorporating them
+        if let Some(recent_entities) = context.get("recent_entities") {
+            if !query
+                .to_lowercase()
+                .contains(&recent_entities.to_lowercase())
+            {
+                suggestions.push(RefinementSuggestion {
+                    suggestion_type: RefinementType::AddConstraints,
+                    original: query.to_string(),
+                    suggested: format!("{} related to {}", query, recent_entities),
+                    reason: format!("Building on previous context about {}", recent_entities),
+                    confidence: 0.75,
+                    example: Some(format!(
+                        "Continue from previous query about {}",
+                        recent_entities
+                    )),
+                });
+            }
+        }
+
+        // Suggest follow-up queries based on previous turns
+        if self.conversation_history.len() >= 2 {
+            let prev_queries: Vec<String> = self
+                .conversation_history
+                .iter()
+                .rev()
+                .take(3)
+                .map(|t| t.query.clone())
+                .collect();
+
+            if prev_queries
+                .iter()
+                .all(|q| q.to_lowercase().contains("count"))
+                && !query.to_lowercase().contains("count")
+            {
+                suggestions.push(RefinementSuggestion {
+                    suggestion_type: RefinementType::AddAggregation,
+                    original: query.to_string(),
+                    suggested: format!("count {}", query),
+                    reason: "You've been asking for counts - continue the pattern?".to_string(),
+                    confidence: 0.65,
+                    example: Some("SELECT (COUNT(?x) as ?count) WHERE ...".to_string()),
+                });
+            }
+        }
+
+        Ok(suggestions)
+    }
+
+    /// Learn from user feedback on refinements
+    pub fn learn_from_feedback(&mut self, original: String, refined: String, accepted: bool) {
+        if accepted {
+            self.learned_patterns
+                .entry(original.clone())
+                .or_default()
+                .push(refined.clone());
+
+            debug!(
+                "Learned new refinement pattern: {} -> {}",
+                original, refined
+            );
+        }
+    }
+
+    /// Get conversation history
+    pub fn get_history(&self) -> &[ConversationTurn] {
+        &self.conversation_history
+    }
+
+    /// Clear conversation history
+    pub fn clear_history(&mut self) {
+        self.conversation_history.clear();
+        info!("Cleared conversation history");
     }
 }
 
-/// Interactive refinement session
+/// Interactive refinement session with context tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefinementSession {
     /// Original query
@@ -399,6 +556,8 @@ pub struct RefinementSession {
     pub applied_suggestions: Vec<RefinementSuggestion>,
     /// Iteration count
     pub iteration: usize,
+    /// Conversation context
+    pub context: HashMap<String, String>,
 }
 
 impl RefinementSession {

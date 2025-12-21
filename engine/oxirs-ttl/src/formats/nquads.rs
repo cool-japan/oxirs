@@ -1,4 +1,149 @@
-//! N-Quads format parser and serializer (stub implementation)
+//! N-Quads format parser and serializer
+//!
+//! N-Quads is a line-based RDF serialization format that extends N-Triples
+//! with support for named graphs. Each line contains one quad (subject, predicate,
+//! object, graph) in a simple, unabbreviated format.
+//!
+//! # Format Overview
+//!
+//! - **Quad Structure**: `<subject> <predicate> <object> <graph> .`
+//! - **Triple Structure** (default graph): `<subject> <predicate> <object> .`
+//! - **Comments**: Lines starting with `#` are ignored
+//! - **IRIs**: Enclosed in angle brackets `<http://example.org/>`
+//! - **Literals**: Enclosed in quotes `"value"`
+//! - **Blank Nodes**: Prefixed with `_:` like `_:b1`
+//!
+//! # Examples
+//!
+//! ## Basic N-Quads Parsing
+//!
+//! ```rust
+//! use oxirs_ttl::nquads::NQuadsParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let nquads_data = r#"
+//! <http://example.org/alice> <http://example.org/name> "Alice" .
+//! <http://example.org/bob> <http://example.org/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+//! "#;
+//!
+//! let parser = NQuadsParser::new();
+//! let quads = parser.parse(Cursor::new(nquads_data))?;
+//! assert_eq!(quads.len(), 2);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Parsing Named Graphs
+//!
+//! ```rust
+//! use oxirs_ttl::nquads::NQuadsParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let nquads_data = "\
+//! <http://example.org/alice> <http://example.org/knows> <http://example.org/bob> .\n\
+//! <http://example.org/alice> <http://example.org/age> \"30\"^^<http://www.w3.org/2001/XMLSchema#integer> <http://example.org/graph1> .\n\
+//! <http://example.org/bob> <http://example.org/name> \"Bob\" <http://example.org/graph2> .\n";
+//!
+//! let parser = NQuadsParser::new();
+//! let quads = parser.parse(Cursor::new(nquads_data))?;
+//! assert_eq!(quads.len(), 3);
+//!
+//! // First quad is in default graph
+//! assert!(quads[0].graph_name().is_default_graph());
+//!
+//! // Other quads are in named graphs
+//! assert!(!quads[1].graph_name().is_default_graph());
+//! assert!(!quads[2].graph_name().is_default_graph());
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Iterator-Based Parsing
+//!
+//! ```rust
+//! use oxirs_ttl::nquads::NQuadsParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let nquads_data = r#"
+//! <http://example.org/s1> <http://example.org/p1> "value1" .
+//! <http://example.org/s2> <http://example.org/p2> "value2" .
+//! <http://example.org/s3> <http://example.org/p3> "value3" .
+//! "#;
+//!
+//! let parser = NQuadsParser::new();
+//! let mut count = 0;
+//!
+//! for result in parser.for_reader(Cursor::new(nquads_data)) {
+//!     let quad = result?;
+//!     println!("Quad: {} {} {}",
+//!         quad.subject(), quad.predicate(), quad.object());
+//!     count += 1;
+//! }
+//!
+//! assert_eq!(count, 3);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Serialization
+//!
+//! ```rust
+//! use oxirs_ttl::nquads::NQuadsSerializer;
+//! use oxirs_ttl::Serializer;
+//! use oxirs_core::model::{NamedNode, Quad, GraphName};
+//!
+//! let serializer = NQuadsSerializer::new();
+//! let quad = Quad::new(
+//!     NamedNode::new("http://example.org/subject")?,
+//!     NamedNode::new("http://example.org/predicate")?,
+//!     NamedNode::new("http://example.org/object")?,
+//!     GraphName::NamedNode(NamedNode::new("http://example.org/graph1")?)
+//! );
+//!
+//! let mut output = Vec::new();
+//! serializer.serialize(&vec![quad], &mut output)?;
+//!
+//! let nquads_string = String::from_utf8(output)?;
+//! println!("{}", nquads_string);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Language Tags and Datatypes
+//!
+//! ```rust
+//! use oxirs_ttl::nquads::NQuadsParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let nquads_data = "\
+//! <http://example.org/doc> <http://example.org/title> \"Hello\"@en .\n\
+//! <http://example.org/alice> <http://example.org/age> \"30\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n\
+//! <http://example.org/flag> <http://example.org/active> \"true\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n";
+//!
+//! let parser = NQuadsParser::new();
+//! let quads = parser.parse(Cursor::new(nquads_data))?;
+//! assert_eq!(quads.len(), 3);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Blank Nodes
+//!
+//! ```rust
+//! use oxirs_ttl::nquads::NQuadsParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let nquads_data = r#"
+//! _:alice <http://example.org/name> "Alice" .
+//! _:alice <http://example.org/knows> _:bob .
+//! _:bob <http://example.org/name> "Bob" .
+//! "#;
+//!
+//! let parser = NQuadsParser::new();
+//! let quads = parser.parse(Cursor::new(nquads_data))?;
+//! assert_eq!(quads.len(), 3);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 use crate::error::{TextPosition, TurtleParseError, TurtleResult, TurtleSyntaxError};
 use crate::toolkit::{Parser, Serializer};
@@ -7,7 +152,25 @@ use oxirs_core::model::{
 };
 use std::io::{BufRead, BufReader, Read, Write};
 
-/// N-Quads parser
+/// N-Quads parser for parsing RDF quads from N-Quads format
+///
+/// N-Quads is a line-oriented RDF format that extends N-Triples with support
+/// for named graphs. Each line contains exactly one quad (subject, predicate,
+/// object, graph) or triple (when graph is omitted, using default graph).
+///
+/// # Examples
+///
+/// ```rust
+/// use oxirs_ttl::nquads::NQuadsParser;
+/// use oxirs_ttl::Parser;
+/// use std::io::Cursor;
+///
+/// let nquads = "<http://example.org/s> <http://example.org/p> \"o\" <http://example.org/g> .";
+/// let parser = NQuadsParser::new();
+/// let quads = parser.parse(Cursor::new(nquads))?;
+/// assert_eq!(quads.len(), 1);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct NQuadsParser;
 
@@ -413,7 +576,56 @@ impl Parser<Quad> for NQuadsParser {
     }
 }
 
-/// N-Quads serializer
+/// N-Quads serializer for writing RDF quads in N-Quads format
+///
+/// Serializes RDF quads into the N-Quads format, which is a line-oriented
+/// format where each line represents one quad (subject, predicate, object, graph).
+///
+/// # Examples
+///
+/// ## Basic Serialization
+///
+/// ```rust
+/// use oxirs_ttl::nquads::NQuadsSerializer;
+/// use oxirs_ttl::Serializer;
+/// use oxirs_core::model::{NamedNode, Quad, GraphName};
+///
+/// let serializer = NQuadsSerializer::new();
+/// let quad = Quad::new(
+///     NamedNode::new("http://example.org/subject")?,
+///     NamedNode::new("http://example.org/predicate")?,
+///     NamedNode::new("http://example.org/object")?,
+///     GraphName::DefaultGraph
+/// );
+///
+/// let mut output = Vec::new();
+/// serializer.serialize(&vec![quad], &mut output)?;
+/// let nquads_string = String::from_utf8(output)?;
+/// assert!(nquads_string.contains("<http://example.org/subject>"));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// ## Serializing with Named Graphs
+///
+/// ```rust
+/// use oxirs_ttl::nquads::NQuadsSerializer;
+/// use oxirs_ttl::Serializer;
+/// use oxirs_core::model::{NamedNode, Quad, GraphName, Literal};
+///
+/// let serializer = NQuadsSerializer::new();
+/// let quad = Quad::new(
+///     NamedNode::new("http://example.org/alice")?,
+///     NamedNode::new("http://example.org/age")?,
+///     Literal::new("30"),
+///     GraphName::NamedNode(NamedNode::new("http://example.org/peopleGraph")?)
+/// );
+///
+/// let mut output = Vec::new();
+/// serializer.serialize_item(&quad, &mut output)?;
+/// let nquads_string = String::from_utf8(output)?;
+/// assert!(nquads_string.contains("<http://example.org/peopleGraph>"));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone)]
 pub struct NQuadsSerializer;
 

@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     {
         use std::env;
         use std::fs::File;
-        use std::io::{BufReader, BufWriter};
+        use std::io::BufReader;
 
         let temp_dir = env::temp_dir();
 
@@ -34,9 +34,10 @@ fn main() -> Result<()> {
         println!("   WKT: {}", point.to_wkt());
 
         let point_path = temp_dir.join("point.fgb");
-        let file = File::create(&point_path)?;
-        let writer = BufWriter::new(file);
-        Geometry::to_flatgeobuf(std::slice::from_ref(&point), writer)?;
+        oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
+            std::slice::from_ref(&point),
+            point_path.to_str().unwrap(),
+        )?;
         println!("   ✓ Written to: {}", point_path.display());
 
         let file = File::open(&point_path)?;
@@ -56,7 +57,10 @@ fn main() -> Result<()> {
         println!("   WKT: {}", route.to_wkt());
 
         let route_path = temp_dir.join("route.fgb");
-        Geometry::to_flatgeobuf(std::slice::from_ref(&route), File::create(&route_path)?)?;
+        oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
+            std::slice::from_ref(&route),
+            route_path.to_str().unwrap(),
+        )?;
         println!("   ✓ Written to: {}", route_path.display());
 
         let geometries = Geometry::from_flatgeobuf(BufReader::new(File::open(&route_path)?))?;
@@ -77,7 +81,10 @@ fn main() -> Result<()> {
         println!("   WKT: {}", polygon.to_wkt());
 
         let poly_path = temp_dir.join("polygon.fgb");
-        Geometry::to_flatgeobuf(std::slice::from_ref(&polygon), File::create(&poly_path)?)?;
+        oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
+            std::slice::from_ref(&polygon),
+            poly_path.to_str().unwrap(),
+        )?;
         println!("   ✓ Written to: {}", poly_path.display());
 
         let geometries = Geometry::from_flatgeobuf(BufReader::new(File::open(&poly_path)?))?;
@@ -94,7 +101,10 @@ fn main() -> Result<()> {
         println!("   WKT: {}", multipoint.to_wkt());
 
         let mp_path = temp_dir.join("multipoint.fgb");
-        Geometry::to_flatgeobuf(std::slice::from_ref(&multipoint), File::create(&mp_path)?)?;
+        oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
+            std::slice::from_ref(&multipoint),
+            mp_path.to_str().unwrap(),
+        )?;
         println!("   ✓ Written to: {}", mp_path.display());
 
         let geometries = Geometry::from_flatgeobuf(BufReader::new(File::open(&mp_path)?))?;
@@ -110,7 +120,10 @@ fn main() -> Result<()> {
         println!("   Writing {} points...", points.len());
 
         let batch_path = temp_dir.join("batch.fgb");
-        Geometry::to_flatgeobuf(&points, File::create(&batch_path)?)?;
+        oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
+            &points,
+            batch_path.to_str().unwrap(),
+        )?;
         println!("   ✓ Written to: {}", batch_path.display());
 
         let geometries = Geometry::from_flatgeobuf(BufReader::new(File::open(&batch_path)?))?;
@@ -125,7 +138,10 @@ fn main() -> Result<()> {
 
         // FlatGeobuf binary size
         let fgb_path = temp_dir.join("test.fgb");
-        Geometry::to_flatgeobuf(std::slice::from_ref(&test_geom), File::create(&fgb_path)?)?;
+        oxirs_geosparql::geometry::flatgeobuf_parser::write_flatgeobuf_to_file(
+            std::slice::from_ref(&test_geom),
+            fgb_path.to_str().unwrap(),
+        )?;
         let fgb_size = std::fs::metadata(&fgb_path)?.len();
         println!("   FlatGeobuf (.fgb) size: {} bytes", fgb_size);
 

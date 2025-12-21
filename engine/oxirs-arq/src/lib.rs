@@ -1,9 +1,9 @@
 //! # OxiRS ARQ - SPARQL Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-arq/badge.svg)](https://docs.rs/oxirs-arq)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Advanced SPARQL 1.1/1.2 query engine with optimization, federation support, and custom functions.
@@ -58,6 +58,7 @@ pub mod executor;
 pub mod expression;
 pub mod extensions;
 pub mod federation; // Enhanced federated query execution (v0.1.0)
+pub mod gpu_accelerated_ops; // GPU-accelerated SPARQL operations (Beta.2+)
 pub mod graphql_translator; // GraphQL to SPARQL translation (v0.1.0)
 pub mod integrated_query_planner;
 pub mod interactive_query_builder; // Interactive SPARQL query builder (v0.1.0)
@@ -94,16 +95,33 @@ pub mod values_support;
 pub mod vector_query_optimizer;
 pub mod websocket_streaming; // WebSocket streaming for SPARQL results (v0.1.0)
 
+// Beta.2+ Advanced modules
+pub mod adaptive_index_advisor; // Adaptive index recommendations (Beta.2+)
+pub mod cost_model_calibration; // Cost model calibration for adaptive learning (Beta.2+)
+pub mod query_batch_executor;
+pub mod query_execution_history; // Query execution history tracking (Beta.2+)
+pub mod query_fingerprinting; // Advanced query fingerprinting for caching and analysis (Beta.2+)
+pub mod query_hints; // Query hints system for optimizer guidance (Beta.2+)
+pub mod query_optimization_advisor; // Automatic query optimization suggestions (Beta.2+)
+pub mod query_pagination; // Query result pagination for large datasets (Beta.2+)
+pub mod query_plan_diff; // Query plan comparison and diff utilities (Beta.2+++)
+pub mod query_plan_export;
+pub mod query_regression_testing;
+pub mod query_result_cache; // Query result caching with fingerprint keys (Beta.2++++)
+pub mod query_templates; // SPARQL query template system (Beta.2+++) // Query regression testing framework (Beta.2+) // Query plan export to various formats (Beta.2+) // Smart batch query executor with parallel execution (Beta.2+++++++) NEW!
+
 // RDF-star / SPARQL-star integration
 #[cfg(feature = "star")]
 pub mod star_integration;
 
 // Advanced modules
 pub mod advanced_optimizer;
-// Temporarily disabled - require scirs2-core beta.4 APIs
+// Temporarily disabled - require scirs2-core API migration (248/316 errors fixed as of Dec 9, 2025)
+// Progress: Counter/Timer API updated (.inc(), .get(), String parameters), 68 errors resolved
+// Remaining: Clone/Debug trait issues, missing methods, async Send/Sync fixes needed
+// TODO: Complete API migration in future release when scirs2-core stabilizes further
 // pub mod advanced_statistics;
 // pub mod ai_shape_learning;
-// pub mod beta3_capabilities_demo;
 // pub mod distributed_consensus;
 // pub mod memory_management;
 // pub mod quantum_optimization;
@@ -211,10 +229,21 @@ pub use distributed_consensus::{
 };
 */
 
+pub use adaptive_index_advisor::{
+    AccessPattern, AdvisorConfig, AdvisorStatistics, AnalysisSummary, IndexAdvisor,
+    IndexAnalysisReport, IndexConfiguration, IndexRecommendation, IndexType, IndexUsageStats,
+    PatternComponent, QueryPattern, RecommendationPriority,
+};
+pub use cost_model_calibration::{
+    CalibrationConfig, CalibrationExport, CalibrationReport, CalibratorStatistics,
+    CostModelCalibrator, CostModelParameters, ExecutionSample, OperationCalibrationExport,
+    OperationCalibrationStats, OperationSummary, OperationType,
+};
 pub use federation::{
     EndpointCapabilities, EndpointCriteria, EndpointDiscovery, EndpointHealth, FederatedSubquery,
     FederationConfig, FederationExecutor, FederationStats, LoadBalancingStrategy,
 };
+pub use gpu_accelerated_ops::{DeviceSelection, GpuConfig, GpuOperationStats, GpuQueryEngine};
 pub use interactive_query_builder::{
     helpers as query_helpers, InteractiveQueryBuilder, PatternBuilder, QueryType,
 };
@@ -223,9 +252,78 @@ pub use materialization::{
     MaterializationStrategy, MaterializedResults, ResultIterator, VariableStats,
 };
 pub use production::{
-    ErrorSeverity, GlobalStatistics, HealthStatus, QueryCircuitBreaker, QueryEngineHealth,
-    QueryErrorContext, QueryResourceQuota, QueryStatistics, SparqlPerformanceMonitor,
+    // Core production types
+    AuditEventType,
+    // Beta.2 enhancements
+    BaselineTrackerConfig,
+    CostEstimatorConfig,
+    CostEstimatorStatistics,
+    CostRecommendation,
+    ErrorSeverity,
+    GlobalStatistics,
+    HealthStatus,
+    MemoryStats,
+    PerformanceBaselineTracker,
+    PerformanceTrend,
+    PrioritizedQuery,
+    PrioritySchedulerConfig,
+    PrioritySchedulerStats,
+    QueryAuditEvent,
+    QueryAuditTrail,
+    QueryCancellationToken,
+    QueryCircuitBreaker,
+    QueryCostEstimate,
+    QueryCostEstimator,
+    QueryEngineHealth,
+    QueryErrorContext,
+    QueryFeatures,
+    QueryMemoryTracker,
+    QueryPriority,
+    QueryPriorityScheduler,
+    QueryRateLimiter,
+    QueryResourceQuota,
+    QuerySession,
+    QuerySessionManager,
+    QueryStatistics,
+    QueryTimeoutManager,
+    QueryTimeoutState,
+    RegressionReport,
+    RegressionSeverity,
+    SparqlPerformanceMonitor,
     SparqlProductionError,
+    TimeoutAction,
+    TimeoutCheckResult,
+};
+pub use query_execution_history::{
+    ExecutionMetrics, ExecutionRecord, ExecutionStatus, FormDistribution, HistoryAnalysis,
+    HistoryConfig, HistoryStatistics, PeriodStatistics, QueryExecutionHistory, QueryFormType,
+    QueryGroupStats, SlowQueryEntry,
+};
+pub use query_fingerprinting::{
+    FingerprintConfig, FingerprintingStatistics, HashAlgorithm, ParameterSlot, ParameterType,
+    QueryFeatures as FingerprintQueryFeatures, QueryFingerprint, QueryFingerprinter,
+    QueryForm as FingerprintQueryForm,
+};
+pub use query_hints::{
+    CacheHint, CardinalityHint, FilterHint, FilterPushdownDirective, HintApplicationResult,
+    HintParser, HintParserStats, HintValidationWarning, HintValidator, IndexDirective, IndexHint,
+    JoinAlgorithmHint, JoinBuildSide, JoinHint, JoinOrderHint, JoinOrderStrategy,
+    MaterializationHint, MaterializationStrategy as HintMaterializationStrategy, MemoryHint,
+    ParallelismHint, QueryHints, QueryHintsBuilder, WarningSeverity,
+};
+pub use query_plan_export::{
+    CostEstimate, ExecutionStats as PlanExecutionStats, ExportConfig, ExportError, ExportFormat,
+    ExporterStats, OperatorType, PlanNode, QueryPlanExporter,
+};
+pub use query_regression_testing::{
+    ExecutionResult as RegressionExecutionResult, ExecutionStatistics as RegressionExecutionStats,
+    GoldenQuery, QueryRegressionAnalysis, RegressionConfig,
+    RegressionReport as QueryRegressionReport, RegressionStatus, RegressionTestSuite,
+    RegressionTestSuiteBuilder, ReportComparison, ReportSummary, SuiteExport, SuiteStatistics,
+};
+pub use query_result_cache::{
+    CacheConfig as ResultCacheConfig, CacheStatistics as ResultCacheStatistics, QueryResultCache,
+    QueryResultCacheBuilder,
 };
 pub use simd_query_ops::{
     ComparisonOp, JoinStats, SimdAggregations, SimdConfig, SimdFilterEvaluator, SimdHashJoin,

@@ -435,11 +435,19 @@ impl BftNetworkService {
 
         info!("Initiating view change to view {}", new_view);
 
+        // Collect prepared messages from consensus
+        let prepared_messages = self.consensus.collect_prepared_messages()?;
+
+        info!(
+            "Collected {} prepared messages for view change",
+            prepared_messages.len()
+        );
+
         // Create view change message
         let view_change = BftMessage::ViewChange {
             new_view,
             node_id: self.node_id.clone(),
-            prepared_messages: vec![], // TODO: Collect prepared messages
+            prepared_messages,
             signature: vec![],
         };
 

@@ -1,8 +1,8 @@
 //! # OxiRS SAMM - Semantic Aspect Meta Model Implementation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Beta.1 Release (v0.1.0-beta.1)
+//! **Status**: Beta.1 Release (v0.1.0-beta.2)
 //! ✅ All public APIs documented. API stability guarantees in place.
 //!
 //! This crate provides a Rust implementation of the Semantic Aspect Meta Model (SAMM),
@@ -176,10 +176,14 @@
 #![allow(unused_variables)]
 
 pub mod aas_parser;
+pub mod analytics;
 pub mod cache;
+pub mod cloud_storage;
 pub mod comparison;
+pub mod documentation;
 pub mod error;
 pub mod generators;
+pub mod graph_analytics;
 pub mod metamodel;
 pub mod migration;
 pub mod package;
@@ -187,6 +191,7 @@ pub mod parser;
 pub mod performance;
 pub mod production;
 pub mod query;
+pub mod query_cache;
 pub mod serializer;
 pub mod simd_ops;
 pub mod templates;
@@ -195,9 +200,30 @@ pub mod utils;
 pub mod validator;
 
 // Re-exports for convenience
+pub use analytics::{
+    Anomaly, AnomalyType, BenchmarkComparison, BenchmarkLevel, BestPracticeCheck,
+    BestPracticeReport, CheckCategory, ComplexityAssessment, ComplexityLevel, ConfidenceLevel,
+    CorrelationDirection, CorrelationInsight, CorrelationStrength, DependencyMetrics,
+    DistributionAnalysis, DistributionFit, DistributionParameters, DistributionStats,
+    DistributionType, ModelAnalytics, PropertyCorrelationMatrix, QualityTest, Recommendation,
+    RecommendationType, Severity, StatisticalAnomaly, StatisticalMetrics,
+};
+pub use cache::{
+    AspectCache, CacheStatistics, CharacteristicCache, EntityCache, LruModelCache, OperationCache,
+    PropertyCache, TtlCache, TtlCacheStatistics,
+};
+pub use cloud_storage::{
+    BatchResult, CacheStats, CloudModelStorage, CloudStorageBackend, MemoryBackend, ModelInfo,
+    ObjectMetadata,
+};
 pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, PropertyChange};
+pub use documentation::{DocumentationFormat, DocumentationGenerator, DocumentationStyle};
 pub use error::{ErrorCategory, Result, SammError, SourceLocation};
 pub use generators::{GeneratedFile, MultiFileGenerator, MultiFileOptions, OutputLayout};
+pub use graph_analytics::{
+    CentralityMetrics, ChangeMagnitude, ColorScheme, Community, Cycle, CycleBreakSuggestion,
+    GraphComparison, GraphMetrics, ImpactAnalysis, ModelGraph, RiskLevel, VisualizationStyle,
+};
 pub use metamodel::{Aspect, Characteristic, Entity, Operation, Property};
 pub use migration::{MigrationOptions, MigrationResult, ModelMigrator, SammVersion};
 pub use parser::{ErrorRecoveryStrategy, RecoveryAction, RecoveryContext, StreamingParser};
@@ -207,7 +233,14 @@ pub use production::{
     ProductionConfig,
 };
 pub use query::{ComplexityMetrics, Dependency, ModelQuery};
+pub use query_cache::{CacheStatistics as QueryCacheStatistics, CachedModelQuery};
+pub use serializer::{
+    serialize_aspect_to_file, serialize_aspect_to_jsonld_file, serialize_aspect_to_jsonld_string,
+    serialize_aspect_to_rdfxml_file, serialize_aspect_to_rdfxml_string, serialize_aspect_to_string,
+    JsonLdSerializer, RdfXmlSerializer, TurtleSerializer,
+};
 pub use templates::{
+    scaffolding::{ModelTemplate, TemplateBuilder, TemplateRegistry},
     PostRenderHook, PreRenderHook, TemplateContext, TemplateEngine, ValidationHook,
 };
 pub use transformation::{ModelTransformation, TransformationRule};

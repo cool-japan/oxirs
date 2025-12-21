@@ -376,11 +376,52 @@ impl CrossClusterFederation {
             query_futures.push(query_future);
         }
 
-        // Collect results
-        let results = futures::future::try_join_all(query_futures).await?;
+        // Collect results and track successes/failures
+        let mut successful_results = Vec::new();
+        let mut failed_count = 0;
+        let total_queries = query_futures.len();
+
+        // Try to collect all results, but continue on failure
+        for future in query_futures {
+            match future.await {
+                Ok(result) => successful_results.push(result),
+                Err(e) => {
+                    warn!("Cluster query failed: {}", e);
+                    failed_count += 1;
+                }
+            }
+        }
+
+        // If all queries failed, return error
+        if successful_results.is_empty() {
+            return Err(anyhow!(
+                "All federated queries failed ({} failures)",
+                failed_count
+            ));
+        }
+
+        // Calculate metrics before integrating results
+        let success_count = successful_results.len();
+        let partial_results = failed_count > 0 || success_count < total_queries;
+
+        // Calculate result confidence based on multiple factors:
+        // 1. Success rate (70% weight)
+        // 2. Result consistency (20% weight)
+        // 3. Completeness (10% weight)
+        let success_rate = success_count as f64 / total_queries as f64;
+        let consistency_score = self.calculate_result_consistency(&successful_results);
+        let completeness_score = if partial_results { 0.8 } else { 1.0 };
 
         // Integrate results
-        let integrated_result = self.integrate_federated_results(results).await?;
+        let integrated_result = self.integrate_federated_results(successful_results).await?;
+
+        let result_confidence =
+            (success_rate * 0.7) + (consistency_score * 0.2) + (completeness_score * 0.1);
+
+        debug!(
+            "Federation confidence: {:.2} (success_rate={:.2}, consistency={:.2}, completeness={:.2})",
+            result_confidence, success_rate, consistency_score, completeness_score
+        );
 
         // Cache the result
         let cached_result = CachedFederatedResult {
@@ -388,8 +429,8 @@ impl CrossClusterFederation {
             metadata: FederationResultMetadata {
                 total_execution_time: start_time.elapsed(),
                 clusters_queried: clusters_to_query.len() as u32,
-                partial_results: false, // TODO: Implement partial result detection
-                result_confidence: 0.95, // TODO: Implement confidence calculation
+                partial_results,
+                result_confidence,
             },
             cached_at: Instant::now(),
             ttl: Duration::from_secs(300), // 5 minutes default TTL
@@ -566,6 +607,61 @@ impl CrossClusterFederation {
     ) -> Result<Vec<HashMap<String, String>>> {
         // Simple integration - in a real implementation this would be more sophisticated
         Ok(results)
+    }
+
+    /// Calculate consistency score for federated results
+    /// Returns a value between 0.0 and 1.0 indicating result consistency
+    fn calculate_result_consistency(&self, results: &[HashMap<String, String>]) -> f64 {
+        if results.is_empty() {
+            return 0.0;
+        }
+
+        if results.len() == 1 {
+            // Single result is always consistent
+            return 1.0;
+        }
+
+        // Calculate consistency based on result overlap
+        // For each key in results, check how many results have the same value
+        let mut total_keys = 0;
+        let mut consistent_keys = 0;
+
+        // Collect all unique keys
+        let mut all_keys = std::collections::HashSet::new();
+        for result in results {
+            for key in result.keys() {
+                all_keys.insert(key.clone());
+            }
+        }
+
+        for key in all_keys {
+            total_keys += 1;
+
+            // Count unique values for this key across results
+            let mut value_counts: HashMap<String, usize> = HashMap::new();
+            let mut present_count = 0;
+
+            for result in results {
+                if let Some(value) = result.get(&key) {
+                    *value_counts.entry(value.clone()).or_insert(0) += 1;
+                    present_count += 1;
+                }
+            }
+
+            // If the key appears in most results with the same value, consider it consistent
+            if let Some((&_, &max_count)) = value_counts.iter().max_by_key(|(_, &count)| count) {
+                if max_count >= results.len() / 2 && present_count >= results.len() / 2 {
+                    consistent_keys += 1;
+                }
+            }
+        }
+
+        if total_keys == 0 {
+            return 1.0; // No keys means trivially consistent
+        }
+
+        // Return ratio of consistent keys to total keys
+        consistent_keys as f64 / total_keys as f64
     }
 
     async fn check_cluster_health(

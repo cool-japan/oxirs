@@ -24,7 +24,7 @@ oxirs-shacl.workspace = true
 # HTTP server framework
 tokio = { version = "1.47", features = ["full"] }
 tokio-util = "0.7"
-hyper = { version = "1.7", features = ["full"] }
+hyper = { version = "1.8", features = ["full"] }
 axum = { version = "0.7", features = ["ws", "multipart"] }
 axum-extra = { version = "0.9", features = ["typed-header"] }
 tower = { version = "0.5", features = ["timeout", "load-shed", "buffer"] }
@@ -62,7 +62,7 @@ opentelemetry-otlp = { workspace = true }
 opentelemetry_sdk = { workspace = true, features = ["trace"] }
 
 # Authentication and security
-uuid = { version = "1.18", features = ["v4", "serde"] }
+uuid = { version = "1.19", features = ["v4", "serde"] }
 argon2 = "0.5"
 jsonwebtoken = { version = "9.2", optional = true }
 bcrypt = { version = "0.17", optional = true }
@@ -95,7 +95,7 @@ parking_lot = "0.12"
 # Streaming
 rdkafka = { version = "0.37", optional = true }
 async-nats = { version = "0.45", optional = true }
-bytes = "1.10"
+bytes = { workspace = true }
 brotli = "8.0"
 num_cpus = "1.17"
 
@@ -109,7 +109,7 @@ validator = { version = "0.19", features = ["derive"] }
 regex = "1.12"
 
 # Serialization and encoding
-bincode = "1.3"
+bincode = "2.0"
 hex = "0.4"
 
 # Additional dependencies for MFA and authentication
@@ -125,6 +125,9 @@ reqwest = { version = "0.12", features = ["json"] }
 percent-encoding = "2.3"
 url = { version = "2.5", features = ["serde"] }
 
+# HTTP date handling for static assets
+httpdate = "1.0"
+
 # SAML security (optional)
 # xmlsec has compatibility issues with newer OpenSSL - disabled for now
 # samael = { version = "0.0.19", optional = true, default-features = false }
@@ -135,6 +138,11 @@ ldap3 = { version = "0.12", optional = true }
 # System utilities
 libc = "0.2"
 sysinfo = "0.33"
+
+# Kubernetes operator support (optional)
+kube = { version = "0.96", default-features = false, features = ["client", "rustls-tls", "runtime", "derive"], optional = true }
+k8s-openapi = { version = "0.23", default-features = false, features = ["v1_31"], optional = true }
+schemars = { version = "0.8", optional = true }
 
 # Async utilities
 futures = "0.3"
@@ -158,6 +166,12 @@ x509-parser = "0.18"
 der-parser = "10.0"
 ring = "0.17"
 
+# ACME/Let's Encrypt certificate automation (optional)
+instant-acme = { version = "0.8", optional = true }
+
+# Certificate generation for self-signed certs (optional)
+rcgen = { version = "0.14", optional = true }
+
 # File watching for hot reload
 notify = { version = "6.1", optional = true }
 
@@ -171,13 +185,13 @@ dotenv = "0.15"
 criterion = { version = "0.5", features = ["html_reports"] }
 tokio-test = "0.4"
 axum-test = "14.10"
-http = "1.3"
+http = { workspace = true }
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
 tempfile = "3.23"
 rstest = "0.26"
 proptest = "1.7"
-insta = "1.43"
+insta = "1.45"
 serial_test = "3.2"
 wiremock = "0.6"
 
@@ -197,6 +211,9 @@ saml = []  # SAML authentication support (implementation in progress)
 # saml = [] # Disabled until xmlsec compatibility issues are resolved
 development = ["admin-ui", "tracing"]
 production = ["metrics", "auth", "rate-limit", "tls", "ldap"]
+k8s = ["kube", "k8s-openapi", "schemars"]  # Kubernetes operator support
+acme = ["instant-acme", "rcgen"]  # ACME/Let's Encrypt certificate automation
+memory_management = []  # SciRS2-Core advanced memory leak detection
 
 [[bin]]
 name = "oxirs-fuseki"

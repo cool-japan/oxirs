@@ -585,7 +585,7 @@ impl RdfTerm for Variable {
 /// - [`BlankNode`]: An anonymous node (e.g., `_:b1`)
 /// - [`Literal`]: A literal value with optional datatype and language tag
 /// - [`Variable`]: A query variable (e.g., `?x`)
-/// - [`QuotedTriple`]: A quoted triple for RDF-star support
+/// - `QuotedTriple`: A quoted triple for RDF-star support
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]

@@ -2,7 +2,7 @@
 //!
 //! Extracted and adapted from OxiGraph spargebra with OxiRS enhancements.
 //! Based on W3C SPARQL 1.1 Query specification:
-//! https://www.w3.org/TR/sparql11-query/
+//! <https://www.w3.org/TR/sparql11-query/>
 
 use super::sparql_algebra::{GraphPattern, TriplePattern};
 use crate::model::{NamedNode, Variable};

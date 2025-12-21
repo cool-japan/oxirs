@@ -1,7 +1,7 @@
 # OxiRS CLI Command Reference Manual
 
-**Version**: 0.1.0-beta.1
-**Last Updated**: November 9, 2025
+**Version**: 0.1.0-beta.2
+**Last Updated**: November 23, 2025
 **Status**: Production-Ready
 
 ## Table of Contents
@@ -14,6 +14,7 @@
 - [SAMM & Industry 4.0](#samm--industry-40)
 - [Utility Commands](#utility-commands)
 - [Advanced Features](#advanced-features)
+- [Developer Tools](#developer-tools)
 
 ---
 
@@ -969,6 +970,82 @@ oxirs cache warmup query1.sparql query2.sparql
 
 ---
 
+## Developer Tools
+
+### `oxirs docs`
+
+Generate comprehensive CLI documentation.
+
+**Usage:**
+```bash
+oxirs docs [OPTIONS]
+```
+
+**Options:**
+- `-f, --format <FORMAT>` - Output format: `markdown` (default), `html`, `man`, `text`
+- `-o, --output <FILE>` - Output file path (stdout if not specified)
+- `--command <COMMAND>` - Generate documentation for specific command
+
+**Examples:**
+```bash
+# Generate Markdown documentation to file
+oxirs docs --format markdown --output CLI_REFERENCE.md
+
+# Generate HTML documentation
+oxirs docs --format html --output docs.html
+
+# Generate man page
+oxirs docs --format man --output oxirs.1
+
+# Output to stdout
+oxirs docs --format markdown
+```
+
+**Features:**
+- Auto-discovers all commands and subcommands
+- Includes arguments, options, examples for each command
+- Multiple output formats for different use cases
+- Command-specific documentation generation
+
+---
+
+### `oxirs tutorial`
+
+Interactive tutorial mode for learning OxiRS.
+
+**Usage:**
+```bash
+oxirs tutorial [OPTIONS]
+```
+
+**Options:**
+- `-l, --lesson <LESSON>` - Start at specific lesson
+
+**Examples:**
+```bash
+# Start interactive tutorial
+oxirs tutorial
+
+# Start with specific lesson (future enhancement)
+oxirs tutorial --lesson "Basic SPARQL"
+```
+
+**Tutorial Topics:**
+1. **Getting Started** - OxiRS basics, initialization, configuration
+2. **Basic SPARQL** - First queries, data import, SELECT statements
+3. **SPARQL Filters** - Advanced filtering techniques
+4. **Output Formats** - Working with JSON, CSV, PDF exports
+
+**Features:**
+- Interactive menu navigation
+- Step-by-step instructions with examples
+- Hint system for each tutorial step
+- Progress tracking and completion status
+- Color-coded UI with emoji indicators
+- Difficulty levels: Beginner, Intermediate, Advanced
+
+---
+
 ## Global Options
 
 All commands support these global options:
@@ -1025,4 +1102,4 @@ oxirs serve --config /etc/oxirs/production.toml
 
 ---
 
-**OxiRS CLI v0.1.0-beta.1** - Production-ready command-line interface for semantic web operations
+**OxiRS CLI v0.1.0-beta.2** - Production-ready command-line interface for semantic web operations with 452 tests passing (100%)

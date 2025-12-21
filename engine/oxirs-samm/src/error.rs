@@ -139,6 +139,14 @@ pub enum SammError {
     #[error("Network error: {0}")]
     Network(String),
 
+    /// Graph operation error
+    #[error("Graph error: {0}")]
+    GraphError(String),
+
+    /// Cloud storage error
+    #[error("Cloud storage error: {0}")]
+    CloudError(String),
+
     /// Generic error
     #[error("SAMM error: {0}")]
     Other(String),
@@ -277,6 +285,8 @@ impl SammError {
             SammError::Rdf(_) => ErrorCategory::Rdf,
             SammError::Unsupported(_) => ErrorCategory::Unsupported,
             SammError::Generation(_) => ErrorCategory::Generation,
+            SammError::GraphError(_) => ErrorCategory::Other,
+            SammError::CloudError(_) => ErrorCategory::Network,
             SammError::Other(_) => ErrorCategory::Other,
         }
     }
@@ -285,7 +295,10 @@ impl SammError {
     pub fn is_recoverable(&self) -> bool {
         matches!(
             self,
-            SammError::Network(_) | SammError::ResolutionError(_) | SammError::Io(_)
+            SammError::Network(_)
+                | SammError::ResolutionError(_)
+                | SammError::Io(_)
+                | SammError::CloudError(_)
         )
     }
 
@@ -321,8 +334,17 @@ impl SammError {
             SammError::Io(_) => {
                 "File access error. Please check the file path and permissions.".to_string()
             }
+            SammError::CloudError(_) => {
+                "Cloud storage error. Please check your credentials and network connection."
+                    .to_string()
+            }
             _ => self.to_string(),
         }
+    }
+
+    /// Create a cloud storage error
+    pub fn cloud_error(msg: impl Into<String>) -> Self {
+        SammError::CloudError(msg.into())
     }
 }
 

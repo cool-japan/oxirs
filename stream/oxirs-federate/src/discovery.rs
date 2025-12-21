@@ -9,7 +9,7 @@ use reqwest::{
     Client,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
@@ -416,14 +416,88 @@ impl ServiceDiscovery {
     /// Extract GraphQL service metadata from introspection
     async fn extract_graphql_metadata(
         &self,
-        _endpoint: &str,
+        endpoint: &str,
         introspection: &Option<GraphQLIntrospection>,
     ) -> Result<ServiceMetadata> {
         let mut metadata = ServiceMetadata::default();
 
         if let Some(intro) = introspection {
-            metadata.description = intro.schema.query_type.description.clone();
-            // TODO: Extract more metadata from schema
+            // Extract query type description as primary description
+            let mut description_parts = Vec::new();
+            if let Some(desc) = &intro.schema.query_type.description {
+                description_parts.push(desc.clone());
+            }
+
+            // Add mutation information to description
+            if let Some(mutation) = &intro.schema.mutation_type {
+                let mut mut_desc = format!("Supports mutations via type: {}", mutation.name);
+                if let Some(desc) = &mutation.description {
+                    mut_desc.push_str(&format!(" ({})", desc));
+                }
+                description_parts.push(mut_desc);
+            }
+
+            // Add subscription information to description
+            if let Some(subscription) = &intro.schema.subscription_type {
+                let sub_desc = format!("Supports subscriptions via type: {}", subscription.name);
+                if let Some(desc) = &subscription.description {
+                    description_parts.push(format!("{} ({})", sub_desc, desc));
+                } else {
+                    description_parts.push(sub_desc);
+                }
+            }
+
+            metadata.description = Some(description_parts.join(". "));
+
+            // Extract type statistics and add as tags
+            let total_types = intro.schema.types.len();
+            metadata.tags.push(format!("total_types:{}", total_types));
+
+            // Count types by kind
+            let mut type_counts: HashMap<String, usize> = HashMap::new();
+            for type_info in &intro.schema.types {
+                *type_counts.entry(type_info.kind.clone()).or_insert(0) += 1;
+            }
+
+            for (kind, count) in type_counts {
+                metadata
+                    .tags
+                    .push(format!("{}:{}", kind.to_lowercase(), count));
+            }
+
+            // Add capability tags based on schema features
+            metadata.tags.push("graphql".to_string());
+            if intro.schema.mutation_type.is_some() {
+                metadata.tags.push("mutations".to_string());
+            }
+            if intro.schema.subscription_type.is_some() {
+                metadata.tags.push("subscriptions".to_string());
+            }
+
+            // Check for federation directives in types
+            let has_federation = intro.schema.types.iter().any(|t| {
+                t.name == "Entity"
+                    || t.name == "_Entity"
+                    || t.name == "_Service"
+                    || t.name.starts_with("_")
+            });
+            if has_federation {
+                metadata.tags.push("federation".to_string());
+            }
+
+            // Set schema URL if available
+            metadata.schema_url = Some(format!("{}?introspection=true", endpoint));
+
+            // Extract version if present in schema types
+            if let Some(version_type) = intro.schema.types.iter().find(|t| {
+                t.name.to_lowercase().contains("version")
+                    || t.name == "APIVersion"
+                    || t.name == "SchemaVersion"
+            }) {
+                if let Some(desc) = &version_type.description {
+                    metadata.version = Some(desc.clone());
+                }
+            }
         }
 
         Ok(metadata)

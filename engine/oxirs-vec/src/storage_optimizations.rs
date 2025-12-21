@@ -8,13 +8,23 @@
 
 use crate::Vector;
 use anyhow::{anyhow, Result};
+use bincode::config::Configuration;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
+/// Returns a bincode configuration with fixed-int encoding.
+/// This ensures header sizes are consistent regardless of the values stored.
+fn bincode_config(
+) -> Configuration<bincode::config::LittleEndian, bincode::config::Fixint, bincode::config::NoLimit>
+{
+    bincode::config::standard().with_fixed_int_encoding()
+}
+
 /// Compression methods for vector storage
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub enum CompressionType {
     /// No compression
     None,
@@ -31,7 +41,7 @@ pub enum CompressionType {
 }
 
 /// Binary storage format configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct StorageConfig {
     /// Compression type to use
     pub compression: CompressionType,
@@ -64,7 +74,7 @@ impl Default for StorageConfig {
 }
 
 /// Binary file header for vector storage
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct VectorFileHeader {
     /// Magic number for file format identification
     pub magic: [u8; 8],
@@ -176,7 +186,8 @@ impl VectorWriter {
         };
 
         // Write a placeholder header first to reserve space
-        let placeholder_header_bytes = bincode::serialize(&header)?;
+        let placeholder_header_bytes = bincode::encode_to_vec(&header, bincode_config())
+            .map_err(|e| anyhow!("Failed to serialize placeholder header: {}", e))?;
         let _header_size = (4 + placeholder_header_bytes.len()) as u64;
 
         // Write placeholder header size and header
@@ -345,7 +356,9 @@ impl VectorWriter {
             block_size: self.config.block_size,
             ..Default::default()
         };
-        let placeholder_header_bytes = bincode::serialize(&placeholder_header)?;
+        let placeholder_header_bytes =
+            bincode::encode_to_vec(&placeholder_header, bincode_config())
+                .map_err(|e| anyhow!("Failed to serialize placeholder header: {}", e))?;
         self.header.data_offset = 4 + placeholder_header_bytes.len() as u64;
         self.header.calculate_checksum();
 
@@ -355,7 +368,8 @@ impl VectorWriter {
         // Seek to beginning and write header
         self.writer.get_mut().seek(SeekFrom::Start(0))?;
 
-        let header_bytes = bincode::serialize(&self.header)?;
+        let header_bytes = bincode::encode_to_vec(&self.header, bincode_config())
+            .map_err(|e| anyhow!("Failed to serialize header: {}", e))?;
 
         // Write header size first, then header data
         let header_size = header_bytes.len() as u32;
@@ -412,7 +426,9 @@ impl VectorReader {
         let mut header_data = vec![0u8; header_size];
         reader.read_exact(&mut header_data)?;
 
-        let header: VectorFileHeader = bincode::deserialize(&header_data)?;
+        let (header, _): (VectorFileHeader, _) =
+            bincode::decode_from_slice(&header_data, bincode_config())
+                .map_err(|e| anyhow!("Failed to deserialize header: {}", e))?;
 
         // Verify magic number
         if &header.magic != b"OXIRSVEC" {
@@ -501,9 +517,18 @@ impl MmapVectorFile {
         let file = File::open(path)?;
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
 
-        // Read header from memory map
-        let header_bytes = &mmap[0..std::mem::size_of::<VectorFileHeader>()];
-        let header: VectorFileHeader = bincode::deserialize(header_bytes)?;
+        // Read header size (first 4 bytes) and then header from memory map
+        if mmap.len() < 4 {
+            return Err(anyhow!("File too small to contain header"));
+        }
+        let header_size = u32::from_le_bytes([mmap[0], mmap[1], mmap[2], mmap[3]]) as usize;
+        if mmap.len() < 4 + header_size {
+            return Err(anyhow!("File too small to contain full header"));
+        }
+        let header_bytes = &mmap[4..4 + header_size];
+        let (header, _): (VectorFileHeader, _) =
+            bincode::decode_from_slice(header_bytes, bincode_config())
+                .map_err(|e| anyhow!("Failed to deserialize header: {}", e))?;
 
         // Verify header
         if &header.magic != b"OXIRSVEC" {

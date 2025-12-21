@@ -22,8 +22,8 @@ pub fn sf_equals(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 
     let result = match (&geom1.geom, &geom2.geom) {
         (geo_types::Geometry::Point(p1), geo_types::Geometry::Point(p2)) => {
-            use geo::EuclideanDistance;
-            p1.euclidean_distance(p2) < 1e-10
+            use geo::{Distance, Euclidean};
+            Euclidean::distance(*p1, *p2) < 1e-10
         }
         (geo_types::Geometry::LineString(ls1), geo_types::Geometry::LineString(ls2)) => {
             ls1.0 == ls2.0

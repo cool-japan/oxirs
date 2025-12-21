@@ -1,0 +1,191 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Create GitHub release
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changelog generation
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Extract changelog for this version
+          VERSION="${{ steps.get_version.outputs.version }}"
+          CHANGELOG=$(git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release v${{ steps.get_version.outputs.version }}
+          body: |
+            # OxiRS GeoSPARQL v${{ steps.get_version.outputs.version }}
+
+            ## Changes
+            ${{ steps.changelog.outputs.changelog }}
+
+            ## Installation
+
+            Add to your `Cargo.toml`:
+            ```toml
+            [dependencies]
+            oxirs-geosparql = "${{ steps.get_version.outputs.version }}"
+            ```
+
+            ## Documentation
+
+            - [API Documentation](https://docs.rs/oxirs-geosparql/${{ steps.get_version.outputs.version }})
+            - [Performance Tuning Guide](./PERFORMANCE_TUNING.md)
+            - [Cookbook](./COOKBOOK.md)
+
+            ## Checksums
+
+            See assets below for platform-specific binaries and checksums.
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.version, '-') }}
+
+  # Publish to crates.io
+  publish-crate:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: create-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      - name: Publish oxirs-geosparql
+        run: cargo publish --package oxirs-geosparql --token ${{ secrets.CARGO_TOKEN }}
+        continue-on-error: true  # May already be published
+
+  # Build and upload release binaries
+  build-binaries:
+    name: Build Release Binaries
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: oxirs-geosparql-linux-x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: oxirs-geosparql-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: oxirs-geosparql-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: oxirs-geosparql-windows-x86_64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Install dependencies (Linux)
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      # Install dependencies (macOS)
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install proj geos
+
+      - name: Build release binary
+        run: cargo build --release --package oxirs-geosparql --target ${{ matrix.target }}
+
+      - name: Create archive
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            7z a ${{ matrix.artifact_name }}.zip target/${{ matrix.target }}/release/oxirs-geosparql.exe
+          else
+            tar czf ${{ matrix.artifact_name }}.tar.gz -C target/${{ matrix.target }}/release oxirs-geosparql
+          fi
+
+      - name: Generate checksum
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            certutil -hashfile ${{ matrix.artifact_name }}.zip SHA256 > ${{ matrix.artifact_name }}.zip.sha256
+          else
+            shasum -a 256 ${{ matrix.artifact_name }}.tar.gz > ${{ matrix.artifact_name }}.tar.gz.sha256
+          fi
+
+      - name: Upload binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ matrix.artifact_name }}.${{ runner.os == 'Windows' && 'zip' || 'tar.gz' }}
+          asset_name: ${{ matrix.artifact_name }}.${{ runner.os == 'Windows' && 'zip' || 'tar.gz' }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ matrix.artifact_name }}.${{ runner.os == 'Windows' && 'zip' || 'tar.gz' }}.sha256
+          asset_name: ${{ matrix.artifact_name }}.${{ runner.os == 'Windows' && 'zip' || 'tar.gz' }}.sha256
+          asset_content_type: text/plain
+
+  # Update docs.rs
+  update-docs:
+    name: Update docs.rs
+    needs: [create-release, publish-crate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger docs.rs rebuild
+        run: |
+          # docs.rs automatically rebuilds on new crate version
+          echo "Documentation will be automatically built at https://docs.rs/oxirs-geosparql"
+
+  # Announce release
+  announce:
+    name: Announce Release
+    needs: [create-release, publish-crate, build-binaries]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Announce on GitHub Discussions
+        run: |
+          echo "Release v${{ needs.create-release.outputs.version }} published successfully!"
+          echo "- crates.io: https://crates.io/crates/oxirs-geosparql"
+          echo "- docs.rs: https://docs.rs/oxirs-geosparql/${{ needs.create-release.outputs.version }}"

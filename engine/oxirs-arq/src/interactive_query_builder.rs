@@ -678,7 +678,7 @@ pub mod helpers {
             .object_var(o)
     }
 
-    /// Create a pattern: ?s <predicate> ?o
+    /// Create a pattern: `?s <predicate> ?o`
     pub fn triple_with_iri_predicate(s: &str, p: &str, o: &str) -> Result<PatternBuilder> {
         PatternBuilder::new()
             .subject_var(s)?
@@ -686,7 +686,7 @@ pub mod helpers {
             .object_var(o)
     }
 
-    /// Create a pattern: <subject> <predicate> ?o
+    /// Create a pattern: `<subject> <predicate> ?o`
     pub fn triple_with_iri_subject_predicate(s: &str, p: &str, o: &str) -> Result<PatternBuilder> {
         PatternBuilder::new()
             .subject_iri(s)?

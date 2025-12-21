@@ -15,6 +15,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info, instrument, warn};
 
@@ -67,11 +68,12 @@ pub struct UserSummary {
 }
 
 /// Login handler
-#[instrument(skip(_state, request))]
+#[instrument(skip(state, request))]
 pub async fn login_handler(
-    State(_state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Response, FusekiError> {
+    let _state = state;
     let start_time = Instant::now();
 
     // Check if authentication is enabled
@@ -215,11 +217,12 @@ pub async fn login_handler(
 }
 
 /// Logout handler
-#[instrument(skip(_state, headers))]
+#[instrument(skip(state, headers))]
 pub async fn logout_handler(
-    State(_state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Response, FusekiError> {
+    let _state = state;
     let auth_service = _state
         .auth_service
         .as_ref()
@@ -260,7 +263,7 @@ pub async fn logout_handler(
 /// Get current user information
 #[instrument(skip(_state))]
 pub async fn user_info_handler(
-    State(_state): State<AppState>,
+    State(_state): State<Arc<AppState>>,
 ) -> Result<Json<UserInfoResponse>, FusekiError> {
     // For now, return a placeholder response since auth extraction isn't fully implemented
     let response = UserInfoResponse {
@@ -279,7 +282,7 @@ pub async fn user_info_handler(
 /// List all users (admin only)
 #[instrument(skip(_state))]
 pub async fn list_users_handler(
-    State(_state): State<AppState>,
+    State(_state): State<Arc<AppState>>,
 ) -> Result<Json<UsersListResponse>, FusekiError> {
     // For now, return a placeholder response since auth extraction isn't fully implemented
     let users = vec![UserSummary {
@@ -297,12 +300,13 @@ pub async fn list_users_handler(
 }
 
 /// Register new user (admin only)
-#[instrument(skip(_state, auth_user, request))]
+#[instrument(skip(state, auth_user, request))]
 pub async fn register_user_handler(
-    State(_state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(request): Json<RegisterUserRequest>,
 ) -> Result<Json<UserInfoResponse>, FusekiError> {
+    let _state = state;
     let admin_user = auth_user.0;
 
     // Check admin permissions
@@ -372,12 +376,13 @@ pub async fn register_user_handler(
 }
 
 /// Change user password
-#[instrument(skip(_state, auth_user, request))]
+#[instrument(skip(state, auth_user, request))]
 pub async fn change_password_handler(
-    State(_state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     Json(request): Json<ChangePasswordRequest>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
+    let _state = state;
     let user = auth_user.0;
 
     let auth_service = _state
@@ -417,12 +422,13 @@ pub async fn change_password_handler(
 }
 
 /// Delete user (admin only)
-#[instrument(skip(_state, auth_user, username))]
+#[instrument(skip(state, auth_user, username))]
 pub async fn delete_user_handler(
-    State(_state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
     axum::extract::Path(username): axum::extract::Path<String>,
 ) -> Result<StatusCode, FusekiError> {
+    let _state = state;
     let admin_user = auth_user.0;
 
     // Check admin permissions

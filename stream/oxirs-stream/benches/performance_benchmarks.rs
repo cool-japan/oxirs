@@ -242,12 +242,251 @@ fn bench_stream_processing_pipeline(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark zero-copy operations performance
+fn bench_zero_copy_operations(c: &mut Criterion) {
+    use bytes::{Bytes, BytesMut};
+    use oxirs_stream::{SharedRefBuffer, ZeroCopyBuffer};
+
+    let mut group = c.benchmark_group("zero_copy_operations");
+
+    // Benchmark buffer creation from BytesMut
+    group.bench_function("buffer_creation_1kb", |b| {
+        b.iter(|| {
+            let data = BytesMut::from(&[0u8; 1024][..]);
+            let buffer = ZeroCopyBuffer::from_bytes_mut(black_box(data));
+            black_box(buffer)
+        });
+    });
+
+    group.bench_function("buffer_creation_64kb", |b| {
+        b.iter(|| {
+            let data = BytesMut::from(&[0u8; 65536][..]);
+            let buffer = ZeroCopyBuffer::from_bytes_mut(black_box(data));
+            black_box(buffer)
+        });
+    });
+
+    // Benchmark buffer sharing (zero-copy)
+    group.bench_function("buffer_share_1kb", |b| {
+        let data = Bytes::from_static(&[0u8; 1024]);
+        let buffer = SharedRefBuffer::new(data);
+
+        b.iter(|| {
+            let cloned = buffer.clone();
+            black_box(cloned)
+        });
+    });
+
+    // Benchmark buffer slicing
+    group.bench_function("buffer_slice_operations", |b| {
+        let data = BytesMut::from(&[0u8; 1024][..]);
+        let buffer = ZeroCopyBuffer::from_bytes_mut(data);
+
+        b.iter(|| {
+            let slice = buffer.slice(black_box(0)..black_box(512));
+            black_box(slice)
+        });
+    });
+
+    group.finish();
+}
+
+/// Benchmark SIMD batch processing performance
+fn bench_simd_batch_processing(c: &mut Criterion) {
+    use oxirs_stream::{SimdBatchProcessor, SimdOperation};
+
+    let mut group = c.benchmark_group("simd_batch_processing");
+
+    // Benchmark SIMD batch processing
+    for size in [100, 1000, 10_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        group.bench_with_input(BenchmarkId::new("simd_sum", size), size, |b, &count| {
+            let data: Vec<u8> = (0..count).map(|i| (i % 256) as u8).collect();
+
+            b.iter(|| {
+                let processor = SimdBatchProcessor::new(1024);
+                let result = processor.process_batch(black_box(&data), SimdOperation::Sum);
+                black_box(result)
+            });
+        });
+    }
+
+    // Benchmark XOR operation
+    group.bench_function("simd_xor_1000", |b| {
+        let data: Vec<u8> = (0..1000).map(|i| (i % 256) as u8).collect();
+        let processor = SimdBatchProcessor::new(1024);
+
+        b.iter(|| {
+            let result = processor.process_batch(black_box(&data), SimdOperation::XorMask(0xFF));
+            black_box(result)
+        });
+    });
+
+    group.finish();
+}
+
+/// Benchmark serialization performance for different formats
+fn bench_serialization_formats(c: &mut Criterion) {
+    let mut group = c.benchmark_group("serialization_formats");
+
+    let event = create_benchmark_event(1);
+
+    // Benchmark JSON serialization
+    group.bench_function("json_serialize", |b| {
+        b.iter(|| {
+            let result = serde_json::to_vec(black_box(&event)).unwrap();
+            black_box(result)
+        });
+    });
+
+    // Benchmark MessagePack serialization
+    group.bench_function("messagepack_serialize", |b| {
+        b.iter(|| {
+            let result = rmp_serde::to_vec(black_box(&event)).unwrap();
+            black_box(result)
+        });
+    });
+
+    // Benchmark CBOR serialization
+    group.bench_function("cbor_serialize", |b| {
+        b.iter(|| {
+            let result = serde_cbor::to_vec(black_box(&event)).unwrap();
+            black_box(result)
+        });
+    });
+
+    group.finish();
+}
+
+/// Benchmark pattern matching performance
+fn bench_pattern_matching(c: &mut Criterion) {
+    use oxirs_stream::processing::pattern::PatternMatcher;
+
+    let mut group = c.benchmark_group("pattern_matching");
+
+    group.bench_function("simple_event_processing_10", |b| {
+        b.iter(|| {
+            let events: Vec<_> = (0..10).map(create_benchmark_event).collect();
+            let mut matcher = PatternMatcher::new(1000);
+
+            for event in &events {
+                let _ = matcher.process_event(black_box(event.clone()));
+            }
+        });
+    });
+
+    group.bench_function("complex_event_processing_100", |b| {
+        b.iter(|| {
+            let events: Vec<_> = (0..100).map(create_benchmark_event).collect();
+            let mut matcher = PatternMatcher::new(1000);
+
+            for event in &events {
+                let _ = matcher.process_event(black_box(event.clone()));
+            }
+        });
+    });
+
+    group.finish();
+}
+
+/// Benchmark backpressure handling performance
+fn bench_backpressure_handling(c: &mut Criterion) {
+    use oxirs_stream::backpressure::{
+        BackpressureConfig, BackpressureController, BackpressureStrategy,
+    };
+
+    let rt = Runtime::new().unwrap();
+    let mut group = c.benchmark_group("backpressure_handling");
+
+    for (name, strategy) in [
+        ("drop_oldest", BackpressureStrategy::DropOldest),
+        ("drop_newest", BackpressureStrategy::DropNewest),
+        ("block", BackpressureStrategy::Block),
+    ]
+    .iter()
+    {
+        group.bench_with_input(
+            BenchmarkId::new("backpressure", name),
+            strategy,
+            |b, strat| {
+                b.iter(|| {
+                    rt.block_on(async {
+                        let config = BackpressureConfig {
+                            strategy: strat.clone(),
+                            max_buffer_size: 1000,
+                            ..Default::default()
+                        };
+
+                        let controller = BackpressureController::new(config);
+
+                        // Simulate high load
+                        for i in 0..100 {
+                            let event = create_benchmark_event(i);
+                            let _ = controller.offer(black_box(event)).await;
+                        }
+                    })
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark compression performance
+fn bench_compression_formats(c: &mut Criterion) {
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+
+    let mut group = c.benchmark_group("compression_formats");
+
+    // Create test data
+    let data = vec![0u8; 10240]; // 10KB of zeros (highly compressible)
+
+    // Benchmark Gzip compression
+    group.bench_function("gzip_compress_10kb", |b| {
+        b.iter(|| {
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+            encoder.write_all(black_box(&data)).unwrap();
+            let result = encoder.finish().unwrap();
+            black_box(result)
+        });
+    });
+
+    // Benchmark LZ4 compression
+    group.bench_function("lz4_compress_10kb", |b| {
+        b.iter(|| {
+            let result = lz4_flex::compress_prepend_size(black_box(&data));
+            black_box(result)
+        });
+    });
+
+    // Benchmark Snappy compression
+    group.bench_function("snappy_compress_10kb", |b| {
+        let mut encoder = snap::raw::Encoder::new();
+        b.iter(|| {
+            let result = encoder.compress_vec(black_box(&data)).unwrap();
+            black_box(result)
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_memory_backend_throughput,
     bench_event_processing_latency,
     bench_delta_processing_throughput,
     bench_rdf_patch_processing,
-    bench_stream_processing_pipeline
+    bench_stream_processing_pipeline,
+    bench_zero_copy_operations,
+    bench_simd_batch_processing,
+    bench_serialization_formats,
+    bench_pattern_matching,
+    bench_backpressure_handling,
+    bench_compression_formats
 );
 criterion_main!(benches);

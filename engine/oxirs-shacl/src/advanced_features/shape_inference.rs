@@ -220,21 +220,27 @@ impl ShapeInferenceEngine {
         Ok(Vec::new())
     }
 
-    /// Sample instances (simplified sampling for alpha version)
+    /// Sample instances using SciRS2 random sampling
     fn sample_instances(&mut self, instances: &[Term]) -> Vec<Term> {
         if instances.len() <= self.config.sample_size {
             return instances.to_vec();
         }
 
-        // Simple deterministic sampling for alpha version
-        // TODO: Use SciRS2 random sampling in future version
-        let step = instances.len() / self.config.sample_size;
-        instances
-            .iter()
-            .step_by(step.max(1))
-            .take(self.config.sample_size)
-            .cloned()
-            .collect()
+        // Use SciRS2 for efficient random sampling
+        use scirs2_core::random::Random;
+
+        let mut rng = Random::seed(42); // Deterministic for reproducibility
+        let mut sampled = Vec::with_capacity(self.config.sample_size);
+        let mut indices: Vec<usize> = (0..instances.len()).collect();
+
+        // Fisher-Yates shuffle for uniform random sampling
+        for i in 0..self.config.sample_size.min(instances.len()) {
+            let j = i + rng.gen_range(0..(indices.len() - i));
+            indices.swap(i, j);
+            sampled.push(instances[indices[i]].clone());
+        }
+
+        sampled
     }
 
     /// Statistical inference using SciRS2-stats

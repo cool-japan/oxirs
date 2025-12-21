@@ -443,7 +443,10 @@ fn test_rapid_validation_cycles() {
         shapes.insert(property_shape_id, property_shape);
     }
 
-    let config = ValidationConfig::default();
+    let config = ValidationConfig {
+        parallel: true, // Enable parallel validation for better performance
+        ..ValidationConfig::default()
+    };
     let mut engine = ValidationEngine::new(&shapes, config);
 
     let store = ConcreteStore::new().unwrap();
@@ -459,7 +462,8 @@ fn test_rapid_validation_cycles() {
     }
     let duration = start_time.elapsed();
 
-    // Should handle rapid cycles for real-time validation (increased timeout for realistic expectations)
+    // Should handle rapid cycles for real-time validation
+    // Timeout increased to 15s to account for system load variability and CI environments
     assert!(
         duration < Duration::from_secs(15),
         "Rapid validation cycles took too long: {:?} (avg: {:?} per validation)",

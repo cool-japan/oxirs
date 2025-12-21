@@ -138,8 +138,8 @@ impl WebSocketSession {
     }
 
     /// Stream results for a query
-    /// Note: Solution is Vec<Binding>, where Binding is HashMap<Variable, Term>
-    /// For streaming, we expect bindings (individual solutions), not Solution (Vec<Binding>)
+    /// Note: Solution is `Vec<Binding>`, where `Binding` is `HashMap<Variable, Term>`
+    /// For streaming, we expect bindings (individual solutions), not Solution (`Vec<Binding>`)
     pub async fn stream_results(
         &self,
         query_id: &str,

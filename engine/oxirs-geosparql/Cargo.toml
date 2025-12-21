@@ -21,7 +21,7 @@ scirs2-graph = { workspace = true }
 scirs2-stats = { workspace = true }
 
 # Geometry and spatial libraries
-geo = "0.28"
+geo = "0.29"
 geo-types = "0.7"
 wkt = "0.14"
 quick-xml = { version = "0.38", optional = true }
@@ -102,6 +102,14 @@ harness = false
 [[bench]]
 name = "performance_comparison"
 harness = false
+
+[[bench]]
+name = "benchmark_tracking"
+harness = false
+
+[[bin]]
+name = "compare_benchmarks"
+path = "src/bin/compare_benchmarks.rs"
 
 # Examples with feature requirements
 [[example]]

@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 /// Core data structures and functionality shared by all embedding models
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BaseModel {
     /// Model configuration
     pub config: ModelConfig,

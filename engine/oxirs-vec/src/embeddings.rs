@@ -110,7 +110,7 @@ pub struct OpenAIConfig {
     pub api_key: String,
     /// Model to use (e.g., "text-embedding-ada-002", "text-embedding-3-small")
     pub model: String,
-    /// Base URL for API calls (default: https://api.openai.com/v1)
+    /// Base URL for API calls (default: `https://api.openai.com/v1`)
     pub base_url: String,
     /// Request timeout in seconds
     pub timeout_seconds: u64,

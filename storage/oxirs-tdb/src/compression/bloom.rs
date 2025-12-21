@@ -1,4 +1,5 @@
 use crate::error::Result;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
@@ -6,7 +7,7 @@ use std::hash::{Hash, Hasher};
 ///
 /// Provides probabilistic membership testing with configurable
 /// false positive rate and no false negatives.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct BloomFilter {
     /// Bit array
     bits: Vec<bool>,
@@ -56,6 +57,16 @@ impl BloomFilter {
             }
         }
         true
+    }
+
+    /// Insert a byte slice
+    pub fn insert_bytes(&mut self, bytes: &[u8]) {
+        self.insert(&bytes)
+    }
+
+    /// Check if a byte slice might exist
+    pub fn contains_bytes(&self, bytes: &[u8]) -> bool {
+        self.contains(&bytes)
     }
 
     /// Clear the filter
@@ -270,8 +281,11 @@ mod tests {
         let mut filter = BloomFilter::new(1000, 0.01);
         filter.insert(&"test");
 
-        let serialized = bincode::serialize(&filter).unwrap();
-        let deserialized: BloomFilter = bincode::deserialize(&serialized).unwrap();
+        let serialized = bincode::encode_to_vec(&filter, bincode::config::standard()).unwrap();
+        let deserialized: BloomFilter =
+            bincode::decode_from_slice(&serialized, bincode::config::standard())
+                .unwrap()
+                .0;
 
         assert!(deserialized.contains(&"test"));
         assert_eq!(filter.len(), deserialized.len());

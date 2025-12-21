@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 pub type Binding = HashMap<String, Term>;
 
 /// SPARQL Results JSON format (W3C standard)
-/// See: https://www.w3.org/TR/sparql11-results-json/
+/// See: <https://www.w3.org/TR/sparql11-results-json/>
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparqlResults {
     pub head: ResultsHead,

@@ -12,6 +12,7 @@ use oxirs_fuseki::{
     concurrent::{ConcurrencyConfig, ConcurrencyManager, Priority, QueryRequest},
     dataset_management::{DatasetConfig, DatasetManager, DatasetMetadata},
     memory_pool::{MemoryManager, MemoryPoolConfig},
+    store::Store,
     streaming_results::{Compression, ResultFormat, StreamConfig, StreamManager},
 };
 use std::collections::HashMap;
@@ -19,6 +20,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
 use uuid::Uuid;
+
+/// Helper function to create a test Store
+fn create_test_store() -> Arc<Store> {
+    Arc::new(Store::new().expect("Failed to create test store"))
+}
 
 /// Test concurrent request handling with work-stealing scheduler
 #[tokio::test]
@@ -225,7 +231,8 @@ async fn test_batch_execution() {
         max_parallel_queries: 10,
     };
 
-    let executor = BatchExecutor::new(config);
+    let store = create_test_store();
+    let executor = BatchExecutor::new(config, store);
 
     // Submit multiple queries
     let mut handles = Vec::new();
@@ -478,7 +485,8 @@ async fn benchmark_beta2_throughput() {
 
     let concurrency_manager = ConcurrencyManager::new(concurrency_config);
     let memory_manager = MemoryManager::new(memory_config).unwrap();
-    let batch_executor = BatchExecutor::new(batch_config);
+    let store = create_test_store();
+    let batch_executor = BatchExecutor::new(batch_config, store);
 
     let start = Instant::now();
     let total_requests = 1000;

@@ -6,6 +6,8 @@
 pub mod pattern_detection;
 pub mod performance_monitor;
 pub mod real_time_metrics;
+pub mod shape_quality_metrics;
+pub mod statistical_validation;
 pub mod validation_analytics;
 
 pub use pattern_detection::*;
@@ -14,6 +16,19 @@ pub use performance_monitor::{
     TrendDirection as PerformanceTrendDirection,
 };
 pub use real_time_metrics::*;
+pub use shape_quality_metrics::{
+    BestPracticeSeverity, BestPracticeViolation, ComplexityMetrics, CoverageMetrics,
+    MaintainabilityMetrics, PerformanceMetrics as QualityPerformanceMetrics, QualityAnalysisConfig,
+    QualityCategory, QualityRecommendation, RecommendationPriority, ScalabilityRating,
+    SecurityMetrics, SecurityVulnerability, ShapeComparison, ShapeQualityAnalyzer,
+    ShapeQualityReport, VulnerabilitySeverity,
+};
+pub use statistical_validation::{
+    Anomaly, AnomalyDetection, AnomalySeverity, CorrelationAnalysis, DistributionAnalysis,
+    ShapeCorrelation, ShapeStatistics, ShapeTrend, StatisticalAnalysisConfig,
+    StatisticalAnalysisResult, StatisticalValidationAnalyzer, TrendAnalysis,
+    TrendDirection as StatisticalTrendDirection, ValidationSnapshot,
+};
 pub use validation_analytics::{
     TrendDirection as ValidationTrendDirection, ValidationAnalytics, ValidationSummary,
 };

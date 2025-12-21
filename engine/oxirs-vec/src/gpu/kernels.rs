@@ -20,15 +20,54 @@ impl KernelManager {
 
     fn initialize_kernels(&mut self) {
         let kernels = vec![
+            // Similarity metrics
             (
                 "cosine_similarity".to_string(),
                 self.get_cosine_similarity_kernel(),
             ),
+            ("dot_product".to_string(), self.get_dot_product_kernel()),
+            (
+                "pearson_correlation".to_string(),
+                self.get_pearson_correlation_kernel(),
+            ),
+            (
+                "jaccard_similarity".to_string(),
+                self.get_jaccard_similarity_kernel(),
+            ),
+            (
+                "dice_coefficient".to_string(),
+                self.get_dice_coefficient_kernel(),
+            ),
+            (
+                "angular_similarity".to_string(),
+                self.get_angular_similarity_kernel(),
+            ),
+            // Distance metrics
             (
                 "euclidean_distance".to_string(),
                 self.get_euclidean_distance_kernel(),
             ),
-            ("dot_product".to_string(), self.get_dot_product_kernel()),
+            (
+                "manhattan_distance".to_string(),
+                self.get_manhattan_distance_kernel(),
+            ),
+            (
+                "minkowski_distance".to_string(),
+                self.get_minkowski_distance_kernel(),
+            ),
+            (
+                "hamming_distance".to_string(),
+                self.get_hamming_distance_kernel(),
+            ),
+            (
+                "canberra_distance".to_string(),
+                self.get_canberra_distance_kernel(),
+            ),
+            (
+                "chebyshev_distance".to_string(),
+                self.get_chebyshev_distance_kernel(),
+            ),
+            // Utility kernels
             (
                 "vector_addition".to_string(),
                 self.get_vector_addition_kernel(),
@@ -41,6 +80,20 @@ impl KernelManager {
             (
                 "batch_distance_computation".to_string(),
                 self.get_batch_distance_kernel(),
+            ),
+            // Mixed-precision kernels (FP16/BF16)
+            (
+                "cosine_similarity_fp16".to_string(),
+                self.get_cosine_similarity_fp16_kernel(),
+            ),
+            (
+                "euclidean_distance_fp16".to_string(),
+                self.get_euclidean_distance_fp16_kernel(),
+            ),
+            // Tensor Core kernels
+            (
+                "matmul_tensor_core".to_string(),
+                self.get_matmul_tensor_core_kernel(),
             ),
         ];
 
@@ -345,6 +398,472 @@ impl KernelManager {
             }
 
             distances[i * batch_size_b + j] = distance;
+        }
+        "#
+        .to_string()
+    }
+
+    // Additional distance metric kernels
+
+    fn get_manhattan_distance_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void manhattan_distance_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            float sum_abs_diff = 0.0f;
+            const float* q_vec = queries + query_idx * dim;
+            const float* db_vec = database + db_idx * dim;
+
+            for (int i = 0; i < dim; i++) {
+                sum_abs_diff += fabsf(q_vec[i] - db_vec[i]);
+            }
+
+            results[query_idx * db_count + db_idx] = sum_abs_diff;
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_minkowski_distance_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void minkowski_distance_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim,
+            const float p
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            float sum_pow_diff = 0.0f;
+            const float* q_vec = queries + query_idx * dim;
+            const float* db_vec = database + db_idx * dim;
+
+            for (int i = 0; i < dim; i++) {
+                float diff = fabsf(q_vec[i] - db_vec[i]);
+                sum_pow_diff += powf(diff, p);
+            }
+
+            results[query_idx * db_count + db_idx] = powf(sum_pow_diff, 1.0f / p);
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_pearson_correlation_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void pearson_correlation_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            const float* q_vec = queries + query_idx * dim;
+            const float* db_vec = database + db_idx * dim;
+
+            // Calculate means
+            float mean_q = 0.0f, mean_db = 0.0f;
+            for (int i = 0; i < dim; i++) {
+                mean_q += q_vec[i];
+                mean_db += db_vec[i];
+            }
+            mean_q /= dim;
+            mean_db /= dim;
+
+            // Calculate correlation
+            float numerator = 0.0f, var_q = 0.0f, var_db = 0.0f;
+            for (int i = 0; i < dim; i++) {
+                float q_centered = q_vec[i] - mean_q;
+                float db_centered = db_vec[i] - mean_db;
+                numerator += q_centered * db_centered;
+                var_q += q_centered * q_centered;
+                var_db += db_centered * db_centered;
+            }
+
+            float denominator = sqrtf(var_q) * sqrtf(var_db);
+            float correlation = (denominator > 1e-8f) ? numerator / denominator : 0.0f;
+
+            results[query_idx * db_count + db_idx] = (correlation + 1.0f) / 2.0f;  // Normalize to [0, 1]
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_jaccard_similarity_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void jaccard_similarity_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            const float* q_vec = queries + query_idx * dim;
+            const float* db_vec = database + db_idx * dim;
+
+            float intersection = 0.0f, union_val = 0.0f;
+            for (int i = 0; i < dim; i++) {
+                float min_val = fminf(q_vec[i], db_vec[i]);
+                float max_val = fmaxf(q_vec[i], db_vec[i]);
+                intersection += min_val;
+                union_val += max_val;
+            }
+
+            float similarity = (union_val > 1e-8f) ? intersection / union_val : 0.0f;
+            results[query_idx * db_count + db_idx] = similarity;
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_dice_coefficient_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void dice_coefficient_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            const float* q_vec = queries + query_idx * dim;
+            const float* db_vec = database + db_idx * dim;
+
+            float intersection = 0.0f, sum_q = 0.0f, sum_db = 0.0f;
+            for (int i = 0; i < dim; i++) {
+                intersection += fminf(q_vec[i], db_vec[i]);
+                sum_q += q_vec[i];
+                sum_db += db_vec[i];
+            }
+
+            float denominator = sum_q + sum_db;
+            float dice = (denominator > 1e-8f) ? (2.0f * intersection) / denominator : 0.0f;
+            results[query_idx * db_count + db_idx] = dice;
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_hamming_distance_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void hamming_distance_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            const float* q_vec = queries + query_idx * dim;
+            const float* db_vec = database + db_idx * dim;
+
+            int hamming_dist = 0;
+            for (int i = 0; i < dim; i++) {
+                if (fabsf(q_vec[i] - db_vec[i]) > 1e-6f) {
+                    hamming_dist++;
+                }
+            }
+
+            results[query_idx * db_count + db_idx] = (float)hamming_dist / (float)dim;
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_canberra_distance_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void canberra_distance_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            const float* q_vec = queries + query_idx * dim;
+            const float* db_vec = database + db_idx * dim;
+
+            float distance = 0.0f;
+            for (int i = 0; i < dim; i++) {
+                float numerator = fabsf(q_vec[i] - db_vec[i]);
+                float denominator = fabsf(q_vec[i]) + fabsf(db_vec[i]);
+                if (denominator > 1e-8f) {
+                    distance += numerator / denominator;
+                }
+            }
+
+            results[query_idx * db_count + db_idx] = distance;
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_chebyshev_distance_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void chebyshev_distance_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            const float* q_vec = queries + query_idx * dim;
+            const float* db_vec = database + db_idx * dim;
+
+            float max_diff = 0.0f;
+            for (int i = 0; i < dim; i++) {
+                float diff = fabsf(q_vec[i] - db_vec[i]);
+                max_diff = fmaxf(max_diff, diff);
+            }
+
+            results[query_idx * db_count + db_idx] = max_diff;
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_angular_similarity_kernel(&self) -> String {
+        r#"
+        extern "C" __global__ void angular_similarity_kernel(
+            const float* __restrict__ queries,
+            const float* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            float dot = 0.0f, norm_q = 0.0f, norm_db = 0.0f;
+            const float* q_vec = queries + query_idx * dim;
+            const float* db_vec = database + db_idx * dim;
+
+            for (int i = 0; i < dim; i++) {
+                dot += q_vec[i] * db_vec[i];
+                norm_q += q_vec[i] * q_vec[i];
+                norm_db += db_vec[i] * db_vec[i];
+            }
+
+            float norm_product = sqrtf(norm_q) * sqrtf(norm_db);
+            float cosine = (norm_product > 1e-8f) ? dot / norm_product : 0.0f;
+            cosine = fminf(1.0f, fmaxf(-1.0f, cosine));  // Clamp to [-1, 1]
+
+            // Angular distance in radians, normalized to [0, 1]
+            float angular_dist = acosf(cosine) / 3.14159265359f;
+            float similarity = 1.0f - angular_dist;
+
+            results[query_idx * db_count + db_idx] = similarity;
+        }
+        "#
+        .to_string()
+    }
+
+    // Mixed-precision kernels (FP16)
+
+    fn get_cosine_similarity_fp16_kernel(&self) -> String {
+        r#"
+        #include <cuda_fp16.h>
+
+        extern "C" __global__ void cosine_similarity_fp16_kernel(
+            const half* __restrict__ queries,
+            const half* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            float dot = 0.0f, norm_q = 0.0f, norm_db = 0.0f;
+            const half* q_vec = queries + query_idx * dim;
+            const half* db_vec = database + db_idx * dim;
+
+            // Process in chunks of 2 for half2 vectorization
+            const int vec_dim = dim / 2;
+            const half2* q_vec2 = (const half2*)q_vec;
+            const half2* db_vec2 = (const half2*)db_vec;
+
+            for (int i = 0; i < vec_dim; i++) {
+                half2 q_vals = q_vec2[i];
+                half2 db_vals = db_vec2[i];
+
+                float2 q_f = __half22float2(q_vals);
+                float2 db_f = __half22float2(db_vals);
+
+                dot += q_f.x * db_f.x + q_f.y * db_f.y;
+                norm_q += q_f.x * q_f.x + q_f.y * q_f.y;
+                norm_db += db_f.x * db_f.x + db_f.y * db_f.y;
+            }
+
+            // Handle odd dimension
+            if (dim % 2 == 1) {
+                float q_last = __half2float(q_vec[dim - 1]);
+                float db_last = __half2float(db_vec[dim - 1]);
+                dot += q_last * db_last;
+                norm_q += q_last * q_last;
+                norm_db += db_last * db_last;
+            }
+
+            const float norm_product = sqrtf(norm_q) * sqrtf(norm_db);
+            const float similarity = (norm_product > 1e-8f) ? dot / norm_product : 0.0f;
+
+            results[query_idx * db_count + db_idx] = similarity;
+        }
+        "#
+        .to_string()
+    }
+
+    fn get_euclidean_distance_fp16_kernel(&self) -> String {
+        r#"
+        #include <cuda_fp16.h>
+
+        extern "C" __global__ void euclidean_distance_fp16_kernel(
+            const half* __restrict__ queries,
+            const half* __restrict__ database,
+            float* __restrict__ results,
+            const int query_count,
+            const int db_count,
+            const int dim
+        ) {
+            const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            const int query_idx = tid / db_count;
+            const int db_idx = tid % db_count;
+
+            if (query_idx >= query_count || db_idx >= db_count) return;
+
+            float sum_sq_diff = 0.0f;
+            const half* q_vec = queries + query_idx * dim;
+            const half* db_vec = database + db_idx * dim;
+
+            const int vec_dim = dim / 2;
+            const half2* q_vec2 = (const half2*)q_vec;
+            const half2* db_vec2 = (const half2*)db_vec;
+
+            for (int i = 0; i < vec_dim; i++) {
+                float2 q_f = __half22float2(q_vec2[i]);
+                float2 db_f = __half22float2(db_vec2[i]);
+
+                float diff_x = q_f.x - db_f.x;
+                float diff_y = q_f.y - db_f.y;
+                sum_sq_diff += diff_x * diff_x + diff_y * diff_y;
+            }
+
+            if (dim % 2 == 1) {
+                float diff = __half2float(q_vec[dim - 1]) - __half2float(db_vec[dim - 1]);
+                sum_sq_diff += diff * diff;
+            }
+
+            results[query_idx * db_count + db_idx] = sqrtf(sum_sq_diff);
+        }
+        "#
+        .to_string()
+    }
+
+    // Tensor Core kernel for matrix multiplication
+
+    fn get_matmul_tensor_core_kernel(&self) -> String {
+        r#"
+        #include <mma.h>
+        using namespace nvcuda;
+
+        extern "C" __global__ void matmul_tensor_core_kernel(
+            const half* __restrict__ a,
+            const half* __restrict__ b,
+            float* __restrict__ c,
+            const int m,
+            const int n,
+            const int k
+        ) {
+            // Warp and lane identifiers
+            const int warp_id = threadIdx.x / 32;
+            const int lane_id = threadIdx.x % 32;
+
+            // WMMA fragment declarations (16x16x16)
+            wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag;
+            wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::col_major> b_frag;
+            wmma::fragment<wmma::accumulator, 16, 16, 16, float> c_frag;
+
+            // Initialize accumulator
+            wmma::fill_fragment(c_frag, 0.0f);
+
+            // Tile indices
+            const int tile_m = blockIdx.y * 16;
+            const int tile_n = blockIdx.x * 16;
+
+            // Compute matrix multiplication using Tensor Cores
+            for (int i = 0; i < k; i += 16) {
+                wmma::load_matrix_sync(a_frag, a + tile_m * k + i, k);
+                wmma::load_matrix_sync(b_frag, b + i * n + tile_n, n);
+                wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+            }
+
+            // Store result
+            wmma::store_matrix_sync(c + tile_m * n + tile_n, c_frag, n, wmma::mem_row_major);
         }
         "#
         .to_string()

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Configuration for GPU operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct GpuConfig {
     pub device_id: i32,
     pub enable_mixed_precision: bool,
@@ -24,7 +24,9 @@ pub struct GpuConfig {
 }
 
 /// GPU optimization levels
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bincode::Encode, bincode::Decode,
+)]
 pub enum OptimizationLevel {
     Debug,       // Maximum debugging, minimal optimization
     Balanced,    // Good balance of performance and debugging
@@ -33,7 +35,9 @@ pub enum OptimizationLevel {
 }
 
 /// Precision modes for GPU computations
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Serialize, Deserialize, bincode::Encode, bincode::Decode,
+)]
 pub enum PrecisionMode {
     FP32,     // Single precision
     FP16,     // Half precision

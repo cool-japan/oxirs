@@ -557,6 +557,482 @@ impl TransferLearner {
     pub fn clear_history(&mut self) {
         self.transfer_history.clear();
     }
+
+    /// Perform feature-based transfer using structural similarity
+    pub fn transfer_feature_based(
+        &mut self,
+        source_rules: &[Rule],
+        target_examples: &[RuleAtom],
+        mapping: &DomainMapping,
+    ) -> Result<Vec<Rule>> {
+        info!(
+            "Performing feature-based transfer with {} source rules and {} target examples",
+            source_rules.len(),
+            target_examples.len()
+        );
+
+        let mut target_rules = Vec::new();
+
+        for rule in source_rules {
+            // Extract structural features from rule
+            let features = self.extract_rule_features(rule);
+
+            // Find matching target examples
+            let matching_examples = self.find_matching_examples(&features, target_examples);
+
+            if !matching_examples.is_empty() {
+                // Transfer rule with feature alignment
+                if let Ok(transferred) = self.transfer_direct(std::slice::from_ref(rule), mapping) {
+                    for mut t_rule in transferred {
+                        // Adapt rule based on matching examples
+                        t_rule.name = format!("{}_feature_based", t_rule.name);
+                        target_rules.push(t_rule);
+                    }
+                }
+            }
+        }
+
+        Ok(target_rules)
+    }
+
+    /// Extract structural features from a rule
+    fn extract_rule_features(&self, rule: &Rule) -> RuleFeatures {
+        let mut features = RuleFeatures {
+            num_body_atoms: rule.body.len(),
+            num_head_atoms: rule.head.len(),
+            num_variables: 0,
+            num_constants: 0,
+            predicates: Vec::new(),
+            variable_sharing: 0,
+        };
+
+        let mut body_vars = std::collections::HashSet::new();
+        let mut head_vars = std::collections::HashSet::new();
+
+        for atom in &rule.body {
+            self.extract_atom_features(atom, &mut features, &mut body_vars);
+        }
+
+        for atom in &rule.head {
+            self.extract_atom_features(atom, &mut features, &mut head_vars);
+        }
+
+        // Calculate variable sharing between body and head
+        features.variable_sharing = body_vars.intersection(&head_vars).count();
+
+        features
+    }
+
+    /// Extract features from an atom
+    fn extract_atom_features(
+        &self,
+        atom: &RuleAtom,
+        features: &mut RuleFeatures,
+        vars: &mut std::collections::HashSet<String>,
+    ) {
+        match atom {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
+                self.extract_term_features(subject, features, vars);
+                self.extract_term_features(predicate, features, vars);
+                self.extract_term_features(object, features, vars);
+
+                if let Term::Constant(p) = predicate {
+                    features.predicates.push(p.clone());
+                }
+            }
+            RuleAtom::Builtin { args, .. } => {
+                for arg in args {
+                    self.extract_term_features(arg, features, vars);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Extract features from a term
+    fn extract_term_features(
+        &self,
+        term: &Term,
+        features: &mut RuleFeatures,
+        vars: &mut std::collections::HashSet<String>,
+    ) {
+        match term {
+            Term::Variable(v) => {
+                if vars.insert(v.clone()) {
+                    features.num_variables += 1;
+                }
+            }
+            Term::Constant(_) => {
+                features.num_constants += 1;
+            }
+            _ => {}
+        }
+    }
+
+    /// Find examples that match the given features
+    fn find_matching_examples(
+        &self,
+        features: &RuleFeatures,
+        examples: &[RuleAtom],
+    ) -> Vec<RuleAtom> {
+        examples
+            .iter()
+            .filter(|example| {
+                // Check if example predicate matches any rule predicate
+                if let RuleAtom::Triple {
+                    predicate: Term::Constant(p),
+                    ..
+                } = example
+                {
+                    return features.predicates.iter().any(|fp| {
+                        // Simple similarity check
+                        fp.to_lowercase().contains(&p.to_lowercase())
+                            || p.to_lowercase().contains(&fp.to_lowercase())
+                    });
+                }
+                false
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Calculate domain similarity between source and target
+    pub fn calculate_domain_similarity(
+        &self,
+        source_facts: &[RuleAtom],
+        target_facts: &[RuleAtom],
+    ) -> DomainSimilarity {
+        // Extract predicates from both domains
+        let source_predicates = self.extract_predicates(source_facts);
+        let target_predicates = self.extract_predicates(target_facts);
+
+        // Calculate Jaccard similarity
+        let intersection = source_predicates.intersection(&target_predicates).count() as f64;
+        let union = source_predicates.union(&target_predicates).count() as f64;
+        let jaccard = if union > 0.0 {
+            intersection / union
+        } else {
+            0.0
+        };
+
+        // Calculate structural similarity based on predicate distribution
+        let structural = self.calculate_structural_similarity(source_facts, target_facts);
+
+        // Calculate concept overlap
+        let concept_overlap = intersection / source_predicates.len().max(1) as f64;
+
+        DomainSimilarity {
+            jaccard_similarity: jaccard,
+            structural_similarity: structural,
+            concept_overlap,
+            overall_score: (jaccard * 0.4) + (structural * 0.3) + (concept_overlap * 0.3),
+        }
+    }
+
+    /// Extract predicates from facts
+    fn extract_predicates(&self, facts: &[RuleAtom]) -> std::collections::HashSet<String> {
+        let mut predicates = std::collections::HashSet::new();
+
+        for fact in facts {
+            if let RuleAtom::Triple {
+                predicate: Term::Constant(p),
+                ..
+            } = fact
+            {
+                predicates.insert(p.clone());
+            }
+        }
+
+        predicates
+    }
+
+    /// Calculate structural similarity based on fact distributions
+    fn calculate_structural_similarity(
+        &self,
+        source_facts: &[RuleAtom],
+        target_facts: &[RuleAtom],
+    ) -> f64 {
+        if source_facts.is_empty() || target_facts.is_empty() {
+            return 0.0;
+        }
+
+        // Simple structural similarity based on fact count ratio
+        source_facts.len().min(target_facts.len()) as f64
+            / source_facts.len().max(target_facts.len()) as f64
+    }
+
+    /// Detect potential negative transfer
+    pub fn detect_negative_transfer(
+        &self,
+        source_rules: &[Rule],
+        target_facts: &[RuleAtom],
+        mapping: &DomainMapping,
+    ) -> NegativeTransferAnalysis {
+        let mut warnings = Vec::new();
+        let mut risk_score: f64 = 0.0;
+
+        for rule in source_rules {
+            // Check for unmapped predicates
+            let unmapped = self.find_unmapped_predicates(rule, mapping);
+            if !unmapped.is_empty() {
+                warnings.push(NegativeTransferWarning {
+                    rule_name: rule.name.clone(),
+                    warning_type: WarningType::UnmappedPredicates,
+                    severity: Severity::Medium,
+                    description: format!(
+                        "Rule has {} unmapped predicates: {:?}",
+                        unmapped.len(),
+                        unmapped
+                    ),
+                });
+                risk_score += 0.2;
+            }
+
+            // Check for domain mismatch
+            let confidence = self.calculate_transfer_confidence(rule, mapping);
+            if confidence < 0.5 {
+                warnings.push(NegativeTransferWarning {
+                    rule_name: rule.name.clone(),
+                    warning_type: WarningType::LowConfidence,
+                    severity: Severity::High,
+                    description: format!("Low transfer confidence: {:.2}", confidence),
+                });
+                risk_score += 0.3;
+            }
+
+            // Check for structural incompatibility
+            if rule.body.len() > 3 && target_facts.len() < 10 {
+                warnings.push(NegativeTransferWarning {
+                    rule_name: rule.name.clone(),
+                    warning_type: WarningType::StructuralMismatch,
+                    severity: Severity::Low,
+                    description: "Complex rule with limited target data".to_string(),
+                });
+                risk_score += 0.1;
+            }
+        }
+
+        NegativeTransferAnalysis {
+            warnings,
+            risk_score: risk_score.min(1.0),
+            recommendation: if risk_score > 0.5 {
+                TransferRecommendation::AvoidTransfer
+            } else if risk_score > 0.2 {
+                TransferRecommendation::ProceedWithCaution
+            } else {
+                TransferRecommendation::SafeToTransfer
+            },
+        }
+    }
+
+    /// Find unmapped predicates in a rule
+    fn find_unmapped_predicates(&self, rule: &Rule, mapping: &DomainMapping) -> Vec<String> {
+        let mut unmapped = Vec::new();
+
+        for atom in rule.body.iter().chain(rule.head.iter()) {
+            if let RuleAtom::Triple {
+                predicate: Term::Constant(p),
+                ..
+            } = atom
+            {
+                if mapping.map_relation(p).is_none() && mapping.map_concept(p).is_none() {
+                    unmapped.push(p.clone());
+                }
+            }
+        }
+
+        unmapped
+    }
+
+    /// Evaluate transfer quality after transfer
+    pub fn evaluate_transfer_quality(
+        &self,
+        transferred_rules: &[Rule],
+        target_facts: &[RuleAtom],
+        expected_outputs: &[RuleAtom],
+    ) -> TransferQualityMetrics {
+        // Calculate rule applicability
+        let applicable_rules = transferred_rules
+            .iter()
+            .filter(|rule| self.is_rule_applicable(rule, target_facts))
+            .count();
+
+        let applicability = if !transferred_rules.is_empty() {
+            applicable_rules as f64 / transferred_rules.len() as f64
+        } else {
+            0.0
+        };
+
+        // Calculate coverage (how many expected outputs could be derived)
+        let coverage = if !expected_outputs.is_empty() {
+            // Simplified coverage estimation
+            (applicable_rules.min(expected_outputs.len()) as f64) / expected_outputs.len() as f64
+        } else {
+            0.0
+        };
+
+        // Calculate precision estimate (rules that produce valid outputs)
+        let precision = if applicable_rules > 0 {
+            0.8 // Conservative estimate
+        } else {
+            0.0
+        };
+
+        TransferQualityMetrics {
+            applicability,
+            coverage,
+            precision,
+            f1_score: if precision + coverage > 0.0 {
+                2.0 * precision * coverage / (precision + coverage)
+            } else {
+                0.0
+            },
+            overall_quality: (applicability * 0.3) + (coverage * 0.4) + (precision * 0.3),
+        }
+    }
+
+    /// Check if a rule is applicable to the given facts
+    fn is_rule_applicable(&self, rule: &Rule, facts: &[RuleAtom]) -> bool {
+        if rule.body.is_empty() {
+            return true;
+        }
+
+        // Check if any fact matches any body atom pattern
+        for body_atom in &rule.body {
+            if let RuleAtom::Triple {
+                subject: _,
+                predicate: body_pred,
+                object: _,
+            } = body_atom
+            {
+                for fact in facts {
+                    if let RuleAtom::Triple {
+                        predicate: fact_pred,
+                        ..
+                    } = fact
+                    {
+                        // Match if both are constants with same value
+                        // or body predicate is a variable
+                        match (body_pred, fact_pred) {
+                            (Term::Constant(bp), Term::Constant(fp)) if bp == fp => return true,
+                            (Term::Variable(_), _) => return true,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+}
+
+/// Rule features for feature-based transfer
+#[derive(Debug, Clone)]
+pub struct RuleFeatures {
+    /// Number of atoms in rule body
+    pub num_body_atoms: usize,
+    /// Number of atoms in rule head
+    pub num_head_atoms: usize,
+    /// Number of unique variables
+    pub num_variables: usize,
+    /// Number of constants
+    pub num_constants: usize,
+    /// List of predicates used
+    pub predicates: Vec<String>,
+    /// Number of variables shared between body and head
+    pub variable_sharing: usize,
+}
+
+/// Domain similarity metrics
+#[derive(Debug, Clone)]
+pub struct DomainSimilarity {
+    /// Jaccard similarity of predicates
+    pub jaccard_similarity: f64,
+    /// Structural similarity
+    pub structural_similarity: f64,
+    /// Concept overlap ratio
+    pub concept_overlap: f64,
+    /// Overall similarity score
+    pub overall_score: f64,
+}
+
+/// Negative transfer analysis results
+#[derive(Debug, Clone)]
+pub struct NegativeTransferAnalysis {
+    /// Warnings about potential negative transfer
+    pub warnings: Vec<NegativeTransferWarning>,
+    /// Overall risk score (0-1)
+    pub risk_score: f64,
+    /// Transfer recommendation
+    pub recommendation: TransferRecommendation,
+}
+
+/// Warning about potential negative transfer
+#[derive(Debug, Clone)]
+pub struct NegativeTransferWarning {
+    /// Rule name
+    pub rule_name: String,
+    /// Warning type
+    pub warning_type: WarningType,
+    /// Severity
+    pub severity: Severity,
+    /// Description
+    pub description: String,
+}
+
+/// Warning type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WarningType {
+    /// Rule has unmapped predicates
+    UnmappedPredicates,
+    /// Low transfer confidence
+    LowConfidence,
+    /// Structural mismatch between domains
+    StructuralMismatch,
+    /// Insufficient target data
+    InsufficientData,
+}
+
+/// Severity level
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Severity {
+    /// Low severity
+    Low,
+    /// Medium severity
+    Medium,
+    /// High severity
+    High,
+}
+
+/// Transfer recommendation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransferRecommendation {
+    /// Safe to transfer
+    SafeToTransfer,
+    /// Proceed with caution
+    ProceedWithCaution,
+    /// Avoid transfer
+    AvoidTransfer,
+}
+
+/// Transfer quality metrics
+#[derive(Debug, Clone)]
+pub struct TransferQualityMetrics {
+    /// Rule applicability (percentage of rules that can be applied)
+    pub applicability: f64,
+    /// Coverage (percentage of expected outputs covered)
+    pub coverage: f64,
+    /// Precision (percentage of outputs that are correct)
+    pub precision: f64,
+    /// F1 score
+    pub f1_score: f64,
+    /// Overall quality score
+    pub overall_quality: f64,
 }
 
 #[cfg(test)]
@@ -758,5 +1234,243 @@ mod tests {
 
         learner.clear_history();
         assert_eq!(learner.get_transfer_history().len(), 0);
+    }
+
+    #[test]
+    fn test_feature_based_transfer() {
+        let mut learner = TransferLearner::new();
+        let mut mapping = DomainMapping::new();
+
+        mapping.add_concept_mapping("A", "B");
+
+        let source_rules = vec![Rule {
+            name: "rule1".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("hasProperty".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("result".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        }];
+
+        let target_examples = vec![RuleAtom::Triple {
+            subject: Term::Constant("entity1".to_string()),
+            predicate: Term::Constant("hasProperty".to_string()),
+            object: Term::Constant("value1".to_string()),
+        }];
+
+        let target_rules = learner
+            .transfer_feature_based(&source_rules, &target_examples, &mapping)
+            .unwrap();
+
+        assert!(!target_rules.is_empty());
+        assert!(target_rules[0].name.contains("feature_based"));
+    }
+
+    #[test]
+    fn test_domain_similarity() {
+        let learner = TransferLearner::new();
+
+        let source_facts = vec![
+            RuleAtom::Triple {
+                subject: Term::Constant("a".to_string()),
+                predicate: Term::Constant("p".to_string()),
+                object: Term::Constant("b".to_string()),
+            },
+            RuleAtom::Triple {
+                subject: Term::Constant("c".to_string()),
+                predicate: Term::Constant("q".to_string()),
+                object: Term::Constant("d".to_string()),
+            },
+        ];
+
+        let target_facts = vec![
+            RuleAtom::Triple {
+                subject: Term::Constant("x".to_string()),
+                predicate: Term::Constant("p".to_string()),
+                object: Term::Constant("y".to_string()),
+            },
+            RuleAtom::Triple {
+                subject: Term::Constant("z".to_string()),
+                predicate: Term::Constant("r".to_string()),
+                object: Term::Constant("w".to_string()),
+            },
+        ];
+
+        let similarity = learner.calculate_domain_similarity(&source_facts, &target_facts);
+
+        // Should have some overlap due to shared predicate 'p'
+        assert!(similarity.jaccard_similarity > 0.0);
+        assert!(similarity.overall_score > 0.0);
+        assert!(similarity.structural_similarity == 1.0); // Same number of facts
+    }
+
+    #[test]
+    fn test_negative_transfer_detection() {
+        let learner = TransferLearner::new();
+        let mapping = DomainMapping::new(); // Empty mapping
+
+        let source_rules = vec![Rule {
+            name: "risky_rule".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("unmapped_pred".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("another_unmapped".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        }];
+
+        let target_facts = vec![];
+
+        let analysis = learner.detect_negative_transfer(&source_rules, &target_facts, &mapping);
+
+        // Should detect unmapped predicates and low confidence
+        assert!(!analysis.warnings.is_empty());
+        assert!(analysis.risk_score > 0.0);
+    }
+
+    #[test]
+    fn test_transfer_quality_metrics() {
+        let learner = TransferLearner::new();
+
+        let transferred_rules = vec![Rule {
+            name: "rule1".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("p".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("q".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        }];
+
+        let target_facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("a".to_string()),
+            predicate: Term::Constant("p".to_string()),
+            object: Term::Constant("b".to_string()),
+        }];
+
+        let expected_outputs = vec![RuleAtom::Triple {
+            subject: Term::Constant("a".to_string()),
+            predicate: Term::Constant("q".to_string()),
+            object: Term::Constant("b".to_string()),
+        }];
+
+        let metrics =
+            learner.evaluate_transfer_quality(&transferred_rules, &target_facts, &expected_outputs);
+
+        assert!(metrics.applicability > 0.0);
+        assert!(metrics.overall_quality > 0.0);
+    }
+
+    #[test]
+    fn test_rule_features_extraction() {
+        let learner = TransferLearner::new();
+
+        let rule = Rule {
+            name: "test".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("p".to_string()),
+                    object: Term::Variable("Y".to_string()),
+                },
+                RuleAtom::Triple {
+                    subject: Term::Variable("Y".to_string()),
+                    predicate: Term::Constant("q".to_string()),
+                    object: Term::Variable("Z".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("r".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
+        };
+
+        let features = learner.extract_rule_features(&rule);
+
+        assert_eq!(features.num_body_atoms, 2);
+        assert_eq!(features.num_head_atoms, 1);
+        assert_eq!(features.predicates.len(), 3); // p, q, r
+        assert!(features.variable_sharing > 0); // X and Z shared
+    }
+
+    #[test]
+    fn test_transfer_recommendation_safe() {
+        let learner = TransferLearner::new();
+        let mut mapping = DomainMapping::new();
+
+        mapping.add_concept_mapping_with_confidence("A", "B", 1.0);
+        mapping.add_relation_mapping_with_confidence("p", "q", 1.0);
+
+        let source_rules = vec![Rule {
+            name: "safe_rule".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("p".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("p".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        }];
+
+        let target_facts = vec![
+            RuleAtom::Triple {
+                subject: Term::Constant("a".to_string()),
+                predicate: Term::Constant("q".to_string()),
+                object: Term::Constant("b".to_string()),
+            };
+            20
+        ];
+
+        let analysis = learner.detect_negative_transfer(&source_rules, &target_facts, &mapping);
+
+        // With high confidence mapping, should be safe
+        assert_eq!(
+            analysis.recommendation,
+            TransferRecommendation::SafeToTransfer
+        );
+    }
+
+    #[test]
+    fn test_empty_domains() {
+        let learner = TransferLearner::new();
+
+        let similarity = learner.calculate_domain_similarity(&[], &[]);
+
+        assert_eq!(similarity.jaccard_similarity, 0.0);
+        assert_eq!(similarity.structural_similarity, 0.0);
+    }
+
+    #[test]
+    fn test_identical_domains() {
+        let learner = TransferLearner::new();
+
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("a".to_string()),
+            predicate: Term::Constant("p".to_string()),
+            object: Term::Constant("b".to_string()),
+        }];
+
+        let similarity = learner.calculate_domain_similarity(&facts, &facts);
+
+        assert_eq!(similarity.jaccard_similarity, 1.0);
+        assert_eq!(similarity.structural_similarity, 1.0);
+        assert_eq!(similarity.concept_overlap, 1.0);
     }
 }

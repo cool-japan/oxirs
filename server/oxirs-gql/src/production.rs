@@ -33,7 +33,7 @@ use sha2::Sha256;
 /// Comprehensive CORS configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorsConfig {
-    /// Allowed origins (e.g., ["https://example.com", "http://localhost:3000"])
+    /// Allowed origins (e.g., ["<https://example.com>", "<http://localhost:3000>"])
     /// Use "*" for all origins (not recommended for production)
     pub allowed_origins: Vec<String>,
 

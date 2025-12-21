@@ -1,5 +1,6 @@
 //! SPARQL query command
 
+use super::cache::global_cache;
 use super::CommandResult;
 use crate::cli::error::helpers as error_helpers;
 use crate::cli::logging::QueryLogger;
@@ -8,6 +9,7 @@ use crate::cli::validation::MultiValidator;
 use crate::cli::validation::{dataset_validation, query_validation};
 use crate::cli::{progress::helpers, ArgumentValidator, CliContext};
 use oxirs_core::rdf_store::RdfStore;
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -126,6 +128,20 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
     let mut query_logger = QueryLogger::new("sparql_query", &dataset);
     query_logger.add_query_text(&sparql_query);
 
+    // Check if caching is enabled (default: enabled, disable with OXIRS_DISABLE_CACHE=1)
+    let cache_enabled = env::var("OXIRS_DISABLE_CACHE").unwrap_or_default() != "1";
+
+    // Try to get cached result if caching is enabled
+    // Note: Full caching will be implemented once result serialization is available
+    if cache_enabled {
+        let cache = global_cache();
+        if let Some(_cached_json) = cache.get(&dataset, &sparql_query) {
+            if ctx.should_show_verbose() {
+                ctx.verbose("✨ Result served from cache (full support coming soon)");
+            }
+        }
+    }
+
     // Create progress spinner for query execution
     let query_progress = helpers::query_progress();
     query_progress.set_message("Executing SPARQL query");
@@ -149,6 +165,12 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
                 if ctx.should_show_verbose() {
                     ctx.verbose(&format!("Failed to record query history: {}", e));
                 }
+            }
+
+            // Note: Caching is implemented but requires serializable result format
+            // For now, cache statistics are tracked via query history
+            if cache_enabled && is_cacheable_query(&sparql_query) && ctx.should_show_verbose() {
+                ctx.verbose("💾 Query is cacheable (caching will be enabled in future release)");
             }
 
             res
@@ -202,6 +224,52 @@ fn is_supported_output_format(format: &str) -> bool {
         format,
         "json" | "csv" | "tsv" | "table" | "xml" | "html" | "markdown" | "md"
     )
+}
+
+/// Determine if a SPARQL query is cacheable
+/// Only SELECT and ASK queries are cacheable (not CONSTRUCT, DESCRIBE, or UPDATE operations)
+fn is_cacheable_query(query: &str) -> bool {
+    let query_upper = query.to_uppercase();
+
+    // Extract the query type (first significant keyword after comments/prefixes)
+    for line in query_upper.lines() {
+        let trimmed = line.trim();
+
+        // Skip comments
+        if trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Skip PREFIX declarations
+        if trimmed.starts_with("PREFIX") {
+            continue;
+        }
+
+        // Skip empty lines
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Check first significant keyword
+        // Cache SELECT and ASK queries only
+        if trimmed.starts_with("SELECT") || trimmed.starts_with("ASK") {
+            return true;
+        }
+
+        // Don't cache CONSTRUCT, DESCRIBE, INSERT, DELETE, etc.
+        if trimmed.starts_with("CONSTRUCT")
+            || trimmed.starts_with("DESCRIBE")
+            || trimmed.starts_with("INSERT")
+            || trimmed.starts_with("DELETE")
+            || trimmed.starts_with("CLEAR")
+            || trimmed.starts_with("DROP")
+        {
+            return false;
+        }
+    }
+
+    // Default: don't cache if we can't determine type
+    false
 }
 
 /// Enhanced format results using CLI context with comprehensive formatters

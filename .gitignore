@@ -27,6 +27,12 @@ Cargo.lock
 *.swo
 *~
 
+# Jupyter
+**/.ipynb_checkpoints/
+
+# Claude Code
+.claude/
+
 # OS
 .DS_Store
 .DS_Store?
@@ -112,3 +118,7 @@ perf.data*
 ai/oxirs-embed/target/*
 # Rust specific
 *.rlib
+engine/oxirs-samm/vehicle*.dot
+
+# Test-generated files
+engine/oxirs-vec/metadata.json

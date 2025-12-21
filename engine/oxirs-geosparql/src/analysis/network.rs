@@ -33,7 +33,7 @@
 
 use crate::error::{GeoSparqlError, Result};
 use crate::geometry::Geometry;
-use geo::EuclideanDistance;
+use geo::{Distance, Euclidean};
 use geo_types::{Coord, Point};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -131,7 +131,7 @@ impl Network {
                 });
 
                 // Calculate edge weight (Euclidean distance)
-                let weight = Point::from(start_coord).euclidean_distance(&Point::from(end_coord));
+                let weight = Euclidean::distance(Point::from(start_coord), Point::from(end_coord));
 
                 // Create edge
                 let edge_id = network.edges.len();
@@ -227,8 +227,8 @@ impl Network {
         self.nodes
             .iter()
             .min_by(|a, b| {
-                let dist_a = point.euclidean_distance(&Point::from(a.coord));
-                let dist_b = point.euclidean_distance(&Point::from(b.coord));
+                let dist_a = Euclidean::distance(point, Point::from(a.coord));
+                let dist_b = Euclidean::distance(point, Point::from(b.coord));
                 dist_a.partial_cmp(&dist_b).unwrap()
             })
             .map(|node| node.id)
@@ -419,7 +419,7 @@ pub fn astar_shortest_path(network: &Network, start: usize, end: usize) -> Resul
 
     let heuristic = |node_id: usize| -> f64 {
         let node_coord = network.nodes[node_id].coord;
-        Point::from(node_coord).euclidean_distance(&Point::from(goal_coord))
+        Euclidean::distance(Point::from(node_coord), Point::from(goal_coord))
     };
 
     let mut g_scores: Vec<f64> = vec![f64::INFINITY; network.nodes.len()];

@@ -32,7 +32,7 @@ impl Default for VectorSearchParams {
         }
     }
 }
-use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use pyo3::{create_exception, wrap_pyfunction, Bound};
@@ -269,7 +269,7 @@ impl PyVectorStore {
 
         if let Some(vector) = store.get_vector(vector_id) {
             let vec_data = vector.as_f32();
-            let numpy_array = vec_data.into_pyarray(py);
+            let numpy_array = PyArray1::from_vec(py, vec_data.to_vec());
             Ok(Some(numpy_array.into()))
         } else {
             Ok(None)
@@ -642,7 +642,7 @@ impl PyRealTimeEmbeddingPipeline {
     fn get_embedding(&self, py: Python, _content_id: &str) -> PyResult<Option<PyObject>> {
         // Return a sample embedding for demonstration
         let sample_embedding = vec![0.1f32; 384];
-        let numpy_array = sample_embedding.into_pyarray(py);
+        let numpy_array = PyArray1::from_vec(py, sample_embedding);
         Ok(Some(numpy_array.into()))
     }
 
@@ -761,8 +761,6 @@ impl PyMLFrameworkIntegration {
         source_format: &str,
         target_format: &str,
     ) -> PyResult<PyObject> {
-        use scirs2_core::ndarray::Array2;
-
         let input_array = embeddings.as_array();
         println!(
             "Converting embeddings from {} to {} format",
@@ -771,9 +769,19 @@ impl PyMLFrameworkIntegration {
 
         // For demonstration, return the same embeddings
         let (rows, cols) = input_array.dim();
-        let output_array = Array2::from_shape_fn((rows, cols), |(i, j)| input_array[[i, j]]);
+        // Convert to Vec and use PyArray2::from_vec2
+        let mut data = Vec::with_capacity(rows);
+        for i in 0..rows {
+            let mut row = Vec::with_capacity(cols);
+            for j in 0..cols {
+                row.push(input_array[[i, j]]);
+            }
+            data.push(row);
+        }
 
-        Ok(output_array.into_pyarray(py).into())
+        Ok(PyArray2::from_vec2(py, &data)
+            .map_err(|e| EmbeddingError::new_err(format!("Array conversion error: {}", e)))?
+            .into())
     }
 }
 
@@ -1183,15 +1191,22 @@ impl PyAdvancedNeuralEmbeddings {
             embeddings.extend(embedding);
         }
 
-        use scirs2_core::ndarray::Array2;
-
         let rows = content.len();
         let cols = embedding_dim;
 
-        // Create 2D array
-        let array_2d = Array2::from_shape_fn((rows, cols), |(i, j)| embeddings[i * cols + j]);
+        // Convert to Vec2 for PyArray2
+        let mut data = Vec::with_capacity(rows);
+        for i in 0..rows {
+            let mut row = Vec::with_capacity(cols);
+            for j in 0..cols {
+                row.push(embeddings[i * cols + j]);
+            }
+            data.push(row);
+        }
 
-        Ok(array_2d.into_pyarray(py).into())
+        Ok(PyArray2::from_vec2(py, &data)
+            .map_err(|e| EmbeddingError::new_err(format!("Array conversion error: {}", e)))?
+            .into())
     }
 
     /// Fine-tune model on domain-specific data
@@ -1294,14 +1309,19 @@ impl PyAdvancedNeuralEmbeddings {
             embeddings.extend(embedding);
         }
 
-        use scirs2_core::ndarray::Array2;
+        // Convert to Vec2 for PyArray2
+        let mut data = Vec::with_capacity(total_items);
+        for i in 0..total_items {
+            let mut row = Vec::with_capacity(embedding_dim);
+            for j in 0..embedding_dim {
+                row.push(embeddings[i * embedding_dim + j]);
+            }
+            data.push(row);
+        }
 
-        // Create 2D array
-        let array_2d = Array2::from_shape_fn((total_items, embedding_dim), |(i, j)| {
-            embeddings[i * embedding_dim + j]
-        });
-
-        Ok(array_2d.into_pyarray(py).into())
+        Ok(PyArray2::from_vec2(py, &data)
+            .map_err(|e| EmbeddingError::new_err(format!("Array conversion error: {}", e)))?
+            .into())
     }
 }
 
@@ -1347,7 +1367,7 @@ fn normalize_vector(py: Python, vector: PyReadonlyArray1<f32>) -> PyResult<PyObj
     crate::similarity::normalize_vector(&mut v)
         .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
-    Ok(v.into_pyarray(py).into())
+    Ok(PyArray1::from_vec(py, v).into())
 }
 
 #[pyfunction]
@@ -1362,14 +1382,10 @@ fn batch_normalize(py: Python, vectors: PyReadonlyArray2<f32>) -> PyResult<PyObj
         normalized_vectors.push(v);
     }
 
-    use scirs2_core::ndarray::Array2;
-
-    // Convert back to 2D array
-    let rows = normalized_vectors.len();
-    let cols = normalized_vectors.first().map(|v| v.len()).unwrap_or(0);
-    let array_2d = Array2::from_shape_fn((rows, cols), |(i, j)| normalized_vectors[i][j]);
-
-    Ok(array_2d.into_pyarray(py).into())
+    // Convert to Vec2 for PyArray2
+    Ok(PyArray2::from_vec2(py, &normalized_vectors)
+        .map_err(|e| VectorSearchError::new_err(format!("Array conversion error: {}", e)))?
+        .into())
 }
 
 /// Module initialization
@@ -1426,6 +1442,6 @@ mod tests {
     fn test_python_bindings_compilation() {
         // This test ensures the Python bindings compile correctly
         // Actual Python integration tests should be in Python test files
-        assert!(true);
+        // Test passes if we reach here without compilation errors
     }
 }

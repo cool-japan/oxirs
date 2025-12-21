@@ -4,7 +4,7 @@
 //! for validation of SHACL specification compliance. It includes test manifest parsing,
 //! automated test execution, and detailed compliance reporting.
 //!
-//! The W3C SHACL test suite is available at: https://w3c.github.io/data-shapes/data-shapes-test-suite/
+//! The W3C SHACL test suite is available at: <https://w3c.github.io/data-shapes/data-shapes-test-suite/>
 
 #![allow(dead_code)]
 

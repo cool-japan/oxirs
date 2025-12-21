@@ -238,7 +238,7 @@ fn parse_multipolygon(
 /// * `geometry` - Geometry to serialize
 ///
 /// # Returns
-/// EWKB binary data as Vec<u8>
+/// EWKB binary data as `Vec<u8>`
 ///
 /// # Example
 /// ```ignore

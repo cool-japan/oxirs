@@ -4,7 +4,10 @@
 //! profiling operations, and benchmarking within the Oxirs CLI toolkit.
 
 use crate::{
-    cli::{error::CliError, output::OutputFormatter},
+    cli::{
+        error::{CliError, CliErrorKind},
+        output::OutputFormatter,
+    },
     config::Config,
     tools::performance::{MonitoringConfig, PerformanceMonitor, ProfilingResult},
 };
@@ -34,6 +37,12 @@ pub enum PerformanceCommand {
     Health(HealthCommand),
     /// Performance report generation
     Report(ReportCommand),
+    /// Optimize RDF dataset performance with SciRS2-powered analysis
+    Optimizer(OptimizerCommand),
+    /// Analyze SPARQL queries for best practices and optimization opportunities
+    Advisor(AdvisorCommand),
+    /// ML-powered query performance prediction with confidence intervals
+    Predictor(PredictorCommand),
 }
 
 /// Performance monitoring command
@@ -215,6 +224,75 @@ pub struct ReportCommand {
     pub template: Option<PathBuf>,
 }
 
+/// RDF dataset performance optimizer command
+#[derive(Debug, Args)]
+pub struct OptimizerCommand {
+    /// Dataset path to optimize
+    pub dataset: PathBuf,
+
+    /// Output format (text, json)
+    #[arg(short, long, default_value = "text")]
+    pub format: String,
+
+    /// Save optimization report
+    #[arg(short = 's', long)]
+    pub save: Option<PathBuf>,
+
+    /// Include detailed analysis
+    #[arg(short, long)]
+    pub detailed: bool,
+}
+
+/// SPARQL query advisor command
+#[derive(Debug, Args)]
+pub struct AdvisorCommand {
+    /// SPARQL query string or file path
+    pub query: String,
+
+    /// Query is a file path
+    #[arg(short, long)]
+    pub file: bool,
+
+    /// Output format (text, json)
+    #[arg(short = 'o', long, default_value = "text")]
+    pub format: String,
+
+    /// Generate verbose report with metrics
+    #[arg(short, long)]
+    pub verbose: bool,
+
+    /// Save analysis report
+    #[arg(short = 's', long)]
+    pub save: Option<PathBuf>,
+}
+
+/// ML-powered query performance predictor command
+#[derive(Debug, Args)]
+pub struct PredictorCommand {
+    /// SPARQL query string or file path
+    pub query: String,
+
+    /// Query is a file path
+    #[arg(short, long)]
+    pub file: bool,
+
+    /// Training data file (optional - JSON format with query-time pairs)
+    #[arg(short, long)]
+    pub train: Option<PathBuf>,
+
+    /// Output format (text, json)
+    #[arg(short = 'o', long, default_value = "text")]
+    pub format: String,
+
+    /// Save prediction report
+    #[arg(short = 's', long)]
+    pub save: Option<PathBuf>,
+
+    /// Show detailed feature analysis
+    #[arg(short, long)]
+    pub detailed: bool,
+}
+
 impl PerformanceCommand {
     /// Execute the performance command
     pub async fn execute(&self, config: &Config) -> Result<(), CliError> {
@@ -224,6 +302,9 @@ impl PerformanceCommand {
             PerformanceCommand::Compare(cmd) => cmd.execute(config).await,
             PerformanceCommand::Health(cmd) => cmd.execute(config).await,
             PerformanceCommand::Report(cmd) => cmd.execute(config).await,
+            PerformanceCommand::Optimizer(cmd) => cmd.execute(config).await,
+            PerformanceCommand::Advisor(cmd) => cmd.execute(config).await,
+            PerformanceCommand::Predictor(cmd) => cmd.execute(config).await,
         }
     }
 }
@@ -650,11 +731,200 @@ impl ReportCommand {
 
     async fn generate_pdf_report(
         &self,
-        _report: &crate::tools::performance::PerformanceReport,
+        report: &crate::tools::performance::PerformanceReport,
     ) -> Result<(), CliError> {
-        // PDF generation would require additional dependencies
-        warn!("PDF report generation not yet implemented");
-        Err(CliError::unimplemented("PDF report generation"))
+        use printpdf::*;
+
+        info!("Generating PDF performance report");
+
+        // Create PDF document
+        let mut doc = PdfDocument::new("OxiRS Performance Report");
+
+        // Build operations
+        let mut ops = vec![Op::SaveGraphicsState, Op::StartTextSection];
+
+        // Title
+        ops.push(Op::SetTextCursor {
+            pos: Point::new(Mm(20.0), Mm(270.0)),
+        });
+        ops.push(Op::SetFontSizeBuiltinFont {
+            size: Pt(24.0),
+            font: BuiltinFont::HelveticaBold,
+        });
+        ops.push(Op::SetLineHeight { lh: Pt(24.0) });
+        ops.push(Op::WriteTextBuiltinFont {
+            items: vec![TextItem::Text("OxiRS Performance Report".to_string())],
+            font: BuiltinFont::HelveticaBold,
+        });
+        ops.push(Op::AddLineBreak);
+        ops.push(Op::AddLineBreak);
+
+        // Timestamp
+        let timestamp = chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string();
+        ops.push(Op::SetFontSizeBuiltinFont {
+            size: Pt(10.0),
+            font: BuiltinFont::Helvetica,
+        });
+        ops.push(Op::SetLineHeight { lh: Pt(12.0) });
+        ops.push(Op::WriteTextBuiltinFont {
+            items: vec![TextItem::Text(format!("Generated: {}", timestamp))],
+            font: BuiltinFont::Helvetica,
+        });
+        ops.push(Op::AddLineBreak);
+        ops.push(Op::AddLineBreak);
+
+        // System Health Section
+        ops.push(Op::SetFontSizeBuiltinFont {
+            size: Pt(16.0),
+            font: BuiltinFont::HelveticaBold,
+        });
+        ops.push(Op::SetLineHeight { lh: Pt(18.0) });
+        ops.push(Op::WriteTextBuiltinFont {
+            items: vec![TextItem::Text("System Health".to_string())],
+            font: BuiltinFont::HelveticaBold,
+        });
+        ops.push(Op::AddLineBreak);
+
+        ops.push(Op::SetFontSizeBuiltinFont {
+            size: Pt(10.0),
+            font: BuiltinFont::Helvetica,
+        });
+        ops.push(Op::SetLineHeight { lh: Pt(12.0) });
+
+        let health_items = vec![
+            format!("Status: {:?}", report.system_health.status),
+            format!(
+                "CPU Usage: {:.1}%",
+                report.system_health.cpu_usage_percentage
+            ),
+            format!(
+                "Memory Usage: {:.1}%",
+                report.system_health.memory_usage_percentage
+            ),
+            format!(
+                "Disk Issues: {}",
+                if report.system_health.disk_space_issues {
+                    "Yes"
+                } else {
+                    "No"
+                }
+            ),
+        ];
+
+        for item in health_items {
+            ops.push(Op::WriteTextBuiltinFont {
+                items: vec![TextItem::Text(item)],
+                font: BuiltinFont::Helvetica,
+            });
+            ops.push(Op::AddLineBreak);
+        }
+        ops.push(Op::AddLineBreak);
+
+        // Performance Metrics Section
+        ops.push(Op::SetFontSizeBuiltinFont {
+            size: Pt(16.0),
+            font: BuiltinFont::HelveticaBold,
+        });
+        ops.push(Op::SetLineHeight { lh: Pt(18.0) });
+        ops.push(Op::WriteTextBuiltinFont {
+            items: vec![TextItem::Text("Performance Metrics".to_string())],
+            font: BuiltinFont::HelveticaBold,
+        });
+        ops.push(Op::AddLineBreak);
+
+        ops.push(Op::SetFontSizeBuiltinFont {
+            size: Pt(10.0),
+            font: BuiltinFont::Helvetica,
+        });
+        ops.push(Op::SetLineHeight { lh: Pt(12.0) });
+
+        let metrics = vec![
+            format!(
+                "Memory Used: {:.2} GB",
+                report.current_metrics.memory_usage as f64 / 1_000_000_000.0
+            ),
+            format!(
+                "Memory Total: {:.2} GB",
+                report.current_metrics.memory_total as f64 / 1_000_000_000.0
+            ),
+            format!("Active Sessions: {}", report.active_profiling_sessions),
+            format!(
+                "Performance Counters: {}",
+                report.performance_counters.len()
+            ),
+        ];
+
+        for item in metrics {
+            ops.push(Op::WriteTextBuiltinFont {
+                items: vec![TextItem::Text(item)],
+                font: BuiltinFont::Helvetica,
+            });
+            ops.push(Op::AddLineBreak);
+        }
+        ops.push(Op::AddLineBreak);
+
+        // Recommendations Section (limited to first 20 to avoid page overflow)
+        if !report.recommendations.is_empty() {
+            ops.push(Op::SetFontSizeBuiltinFont {
+                size: Pt(16.0),
+                font: BuiltinFont::HelveticaBold,
+            });
+            ops.push(Op::SetLineHeight { lh: Pt(18.0) });
+            ops.push(Op::WriteTextBuiltinFont {
+                items: vec![TextItem::Text("Recommendations".to_string())],
+                font: BuiltinFont::HelveticaBold,
+            });
+            ops.push(Op::AddLineBreak);
+
+            ops.push(Op::SetFontSizeBuiltinFont {
+                size: Pt(10.0),
+                font: BuiltinFont::Helvetica,
+            });
+            ops.push(Op::SetLineHeight { lh: Pt(12.0) });
+
+            for rec in report.recommendations.iter().take(20) {
+                let rec_text = if rec.len() > 80 {
+                    format!("• {}...", &rec[..77])
+                } else {
+                    format!("• {}", rec)
+                };
+
+                ops.push(Op::WriteTextBuiltinFont {
+                    items: vec![TextItem::Text(rec_text)],
+                    font: BuiltinFont::Helvetica,
+                });
+                ops.push(Op::AddLineBreak);
+            }
+        }
+
+        ops.push(Op::EndTextSection);
+        ops.push(Op::RestoreGraphicsState);
+
+        // Create page
+        let page = PdfPage::new(Mm(210.0), Mm(297.0), ops);
+
+        // Save PDF
+        let output_path = self
+            .output
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| PathBuf::from("performance_report.pdf"));
+
+        let pdf_bytes = doc
+            .with_pages(vec![page])
+            .save(&PdfSaveOptions::default(), &mut Vec::new());
+
+        std::fs::write(&output_path, pdf_bytes).map_err(|e| {
+            CliError::io_error(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to save PDF: {}", e),
+            ))
+        })?;
+
+        info!("PDF report saved to {}", output_path.display());
+        Ok(())
     }
 
     async fn generate_markdown_report(
@@ -840,6 +1110,98 @@ async fn generate_flamegraph(
     Ok(())
 }
 
+impl OptimizerCommand {
+    pub async fn execute(&self, _config: &Config) -> Result<(), CliError> {
+        info!("Analyzing dataset performance: {}", self.dataset.display());
+
+        // Call the performance optimizer
+        super::performance_optimizer::optimize_dataset_cmd(
+            self.dataset.to_string_lossy().to_string(),
+        )
+        .await
+        .map_err(|e| {
+            CliError::new(CliErrorKind::Other(format!(
+                "Dataset optimization failed: {}",
+                e
+            )))
+        })?;
+
+        if self.detailed {
+            info!("Detailed analysis complete. Check output for recommendations.");
+        }
+
+        Ok(())
+    }
+}
+
+impl AdvisorCommand {
+    pub async fn execute(&self, _config: &Config) -> Result<(), CliError> {
+        info!("Analyzing SPARQL query for best practices");
+
+        // Read query from file if specified
+        let query = if self.file {
+            tokio::fs::read_to_string(&self.query).await.map_err(|e| {
+                CliError::io_error(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Failed to read query file: {}", e),
+                ))
+            })?
+        } else {
+            self.query.clone()
+        };
+
+        // Call the query advisor
+        super::query_advisor::analyze_query_cmd(query, self.verbose)
+            .await
+            .map_err(|e| {
+                CliError::new(CliErrorKind::Other(format!("Query analysis failed: {}", e)))
+            })?;
+
+        if self.verbose {
+            info!("Detailed query analysis complete with metrics.");
+        }
+
+        Ok(())
+    }
+}
+
+impl PredictorCommand {
+    pub async fn execute(&self, _config: &Config) -> Result<(), CliError> {
+        info!("Predicting SPARQL query performance with ML");
+
+        // Read query from file if specified
+        let query = if self.file {
+            tokio::fs::read_to_string(&self.query).await.map_err(|e| {
+                CliError::io_error(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Failed to read query file: {}", e),
+                ))
+            })?
+        } else {
+            self.query.clone()
+        };
+
+        // Prepare training data path if provided
+        let train_data = self.train.as_ref().map(|p| p.to_string_lossy().to_string());
+
+        // Call the query predictor
+        super::query_predictor::predict_query_performance_cmd(query, train_data)
+            .await
+            .map_err(|e| {
+                CliError::new(CliErrorKind::Other(format!(
+                    "Performance prediction failed: {}",
+                    e
+                )))
+            })?;
+
+        if self.detailed {
+            info!("Detailed performance prediction complete with feature analysis.");
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -882,5 +1244,103 @@ mod tests {
         assert!(cmd.detailed);
         assert!(cmd.memory);
         assert!(cmd.flamegraph);
+    }
+
+    #[test]
+    fn test_optimizer_command_creation() {
+        let cmd = OptimizerCommand {
+            dataset: PathBuf::from("/tmp/test_dataset"),
+            format: "json".to_string(),
+            save: Some(PathBuf::from("/tmp/optimization_report.json")),
+            detailed: true,
+        };
+
+        assert_eq!(cmd.dataset, PathBuf::from("/tmp/test_dataset"));
+        assert_eq!(cmd.format, "json");
+        assert!(cmd.detailed);
+        assert!(cmd.save.is_some());
+    }
+
+    #[test]
+    fn test_advisor_command_creation() {
+        let cmd = AdvisorCommand {
+            query: "SELECT * WHERE { ?s ?p ?o }".to_string(),
+            file: false,
+            format: "text".to_string(),
+            verbose: true,
+            save: None,
+        };
+
+        assert_eq!(cmd.query, "SELECT * WHERE { ?s ?p ?o }");
+        assert!(!cmd.file);
+        assert!(cmd.verbose);
+        assert!(cmd.save.is_none());
+    }
+
+    #[test]
+    fn test_advisor_command_file_mode() {
+        let cmd = AdvisorCommand {
+            query: "/tmp/query.sparql".to_string(),
+            file: true,
+            format: "json".to_string(),
+            verbose: false,
+            save: Some(PathBuf::from("/tmp/analysis.json")),
+        };
+
+        assert_eq!(cmd.query, "/tmp/query.sparql");
+        assert!(cmd.file);
+        assert!(!cmd.verbose);
+        assert_eq!(cmd.save, Some(PathBuf::from("/tmp/analysis.json")));
+    }
+
+    #[test]
+    fn test_predictor_command_creation() {
+        let cmd = PredictorCommand {
+            query: "SELECT ?s WHERE { ?s ?p ?o } LIMIT 100".to_string(),
+            file: false,
+            train: None,
+            format: "text".to_string(),
+            save: None,
+            detailed: false,
+        };
+
+        assert_eq!(cmd.query, "SELECT ?s WHERE { ?s ?p ?o } LIMIT 100");
+        assert!(!cmd.file);
+        assert!(cmd.train.is_none());
+        assert!(!cmd.detailed);
+    }
+
+    #[test]
+    fn test_predictor_command_with_training_data() {
+        let cmd = PredictorCommand {
+            query: "SELECT * WHERE { ?s ?p ?o }".to_string(),
+            file: false,
+            train: Some(PathBuf::from("/tmp/training_data.json")),
+            format: "json".to_string(),
+            save: Some(PathBuf::from("/tmp/prediction.json")),
+            detailed: true,
+        };
+
+        assert!(cmd.train.is_some());
+        assert_eq!(cmd.train, Some(PathBuf::from("/tmp/training_data.json")));
+        assert!(cmd.detailed);
+        assert_eq!(cmd.format, "json");
+    }
+
+    #[test]
+    fn test_predictor_command_file_mode() {
+        let cmd = PredictorCommand {
+            query: "/tmp/complex_query.sparql".to_string(),
+            file: true,
+            train: Some(PathBuf::from("/tmp/historical_data.json")),
+            format: "text".to_string(),
+            save: Some(PathBuf::from("/tmp/perf_prediction.txt")),
+            detailed: true,
+        };
+
+        assert_eq!(cmd.query, "/tmp/complex_query.sparql");
+        assert!(cmd.file);
+        assert!(cmd.train.is_some());
+        assert!(cmd.detailed);
     }
 }

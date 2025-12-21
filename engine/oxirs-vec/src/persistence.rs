@@ -6,6 +6,7 @@
 use crate::hnsw::{HnswConfig, HnswIndex};
 use crate::Vector;
 use anyhow::{anyhow, Result};
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -18,7 +19,7 @@ const PERSISTENCE_VERSION: u32 = 1;
 const MAGIC_NUMBER: &[u8; 4] = b"OxVe";
 
 /// Compression algorithm for index persistence
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub enum CompressionAlgorithm {
     /// No compression (fastest, largest)
     None,
@@ -35,7 +36,7 @@ impl Default for CompressionAlgorithm {
 }
 
 /// Persistence configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct PersistenceConfig {
     /// Compression algorithm to use
     pub compression: CompressionAlgorithm,
@@ -62,7 +63,7 @@ impl Default for PersistenceConfig {
 }
 
 /// Serializable index header
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 struct IndexHeader {
     version: u32,
     compression: CompressionAlgorithm,
@@ -74,7 +75,7 @@ struct IndexHeader {
 }
 
 /// Serializable node data
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 struct SerializableNode {
     uri: String,
     vector_data: Vec<f32>,
@@ -128,7 +129,8 @@ impl PersistenceManager {
         };
 
         // Serialize header
-        let header_bytes = bincode::serialize(&header)?;
+        let header_bytes = bincode::encode_to_vec(&header, bincode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize header: {}", e))?;
         let header_len = header_bytes.len() as u32;
         writer.write_all(&header_len.to_le_bytes())?;
         writer.write_all(&header_bytes)?;
@@ -149,13 +151,15 @@ impl PersistenceManager {
         writer.write_all(&data)?;
 
         // Write URI mapping
-        let uri_mapping = bincode::serialize(&index.uri_to_id())?;
+        let uri_mapping = bincode::encode_to_vec(&index.uri_to_id(), bincode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize URI mapping: {}", e))?;
         let mapping_len = uri_mapping.len() as u32;
         writer.write_all(&mapping_len.to_le_bytes())?;
         writer.write_all(&uri_mapping)?;
 
         // Write entry point
-        let entry_point = bincode::serialize(&index.entry_point())?;
+        let entry_point = bincode::encode_to_vec(&index.entry_point(), bincode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize entry point: {}", e))?;
         writer.write_all(&entry_point)?;
 
         writer.flush()?;
@@ -191,7 +195,9 @@ impl PersistenceManager {
 
         let mut header_bytes = vec![0u8; header_len];
         reader.read_exact(&mut header_bytes)?;
-        let header: IndexHeader = bincode::deserialize(&header_bytes)?;
+        let (header, _): (IndexHeader, _) =
+            bincode::decode_from_slice(&header_bytes, bincode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize header: {}", e))?;
 
         // Verify version
         if header.version != PERSISTENCE_VERSION {
@@ -225,13 +231,16 @@ impl PersistenceManager {
 
         let mut mapping_bytes = vec![0u8; mapping_len];
         reader.read_exact(&mut mapping_bytes)?;
-        let uri_mapping: std::collections::HashMap<String, usize> =
-            bincode::deserialize(&mapping_bytes)?;
+        let (uri_mapping, _): (std::collections::HashMap<String, usize>, _) =
+            bincode::decode_from_slice(&mapping_bytes, bincode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize URI mapping: {}", e))?;
 
         // Read entry point
         let mut entry_point_bytes = Vec::new();
         reader.read_to_end(&mut entry_point_bytes)?;
-        let entry_point: Option<usize> = bincode::deserialize(&entry_point_bytes)?;
+        let (entry_point, _): (Option<usize>, _) =
+            bincode::decode_from_slice(&entry_point_bytes, bincode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize entry point: {}", e))?;
 
         // Reconstruct index
         let mut index = HnswIndex::new(header.config)?;
@@ -270,12 +279,17 @@ impl PersistenceManager {
             })
             .collect();
 
-        Ok(bincode::serialize(&serializable_nodes)?)
+        Ok(
+            bincode::encode_to_vec(&serializable_nodes, bincode::config::standard())
+                .map_err(|e| anyhow!("Failed to serialize nodes: {}", e))?,
+        )
     }
 
     /// Deserialize nodes from bytes
     fn deserialize_nodes(&self, data: &[u8], index: &mut HnswIndex) -> Result<()> {
-        let serializable_nodes: Vec<SerializableNode> = bincode::deserialize(data)?;
+        let (serializable_nodes, _): (Vec<SerializableNode>, _) =
+            bincode::decode_from_slice(data, bincode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize nodes: {}", e))?;
 
         for node_data in serializable_nodes {
             let vector = Vector::new(node_data.vector_data);

@@ -1,9 +1,9 @@
 //! # OxiRS Cluster
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-cluster/badge.svg)](https://docs.rs/oxirs-cluster)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Raft-backed distributed dataset for high availability and horizontal scaling.
@@ -78,6 +78,8 @@ pub mod alerting;
 pub mod auto_scaling;
 pub mod backup_restore;
 pub mod circuit_breaker;
+pub mod cloud_integration;
+pub mod cluster_metrics;
 pub mod conflict_resolution;
 pub mod consensus;
 pub mod crash_recovery;
@@ -92,13 +94,16 @@ pub mod enhanced_snapshotting;
 pub mod error;
 pub mod failover;
 pub mod federation;
+pub mod gpu_acceleration;
 pub mod health_monitor;
 pub mod health_monitoring;
 pub mod memory_optimization;
 pub mod merkle_tree;
+pub mod ml_optimization;
 pub mod mvcc;
 pub mod mvcc_storage;
 pub mod network;
+pub mod neural_architecture_search;
 pub mod node_lifecycle;
 pub mod node_status_tracker;
 pub mod operational_transformation;
@@ -115,6 +120,7 @@ pub mod read_replica;
 pub mod region_manager;
 pub mod replication;
 pub mod replication_lag_monitor;
+pub mod rl_consensus_optimizer;
 pub mod rolling_upgrade;
 pub mod visualization_dashboard;
 pub mod zero_downtime_migration;
@@ -749,13 +755,14 @@ impl ClusterNode {
             let availability_zone_id = region_manager.get_local_availability_zone().to_string();
             let regional_peers = region_manager.get_nodes_in_region(&region_id).await;
             let topology = region_manager.get_topology().await;
+            let monitoring_active = region_manager.is_monitoring_active().await;
 
             Some(RegionStatus {
                 region_id,
                 availability_zone_id,
                 regional_peer_count: regional_peers.len(),
                 total_regions: topology.regions.len(),
-                monitoring_active: true, // TODO: Check actual monitoring status
+                monitoring_active,
             })
         } else {
             None

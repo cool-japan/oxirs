@@ -142,13 +142,21 @@ pub async fn execute_step(
 
 /// Execute a SPARQL service query
 pub async fn execute_service_query(step: &ExecutionStep) -> Result<QueryResultData> {
-    let _service_id = step
+    let service_id = step
         .service_id
         .as_ref()
         .ok_or_else(|| anyhow!("Service ID required for service query"))?;
 
-    // TODO: Get service details from registry
-    let endpoint = "http://localhost:8080/sparql".to_string(); // Placeholder
+    // Get service endpoint from step (populated by planner from ServiceRegistry)
+    let endpoint = step
+        .service_url
+        .as_ref()
+        .ok_or_else(|| {
+            anyhow!(
+                "Service URL not available for service '{}'. Ensure the planner populates service_url from ServiceRegistry.",
+                service_id
+            )
+        })?;
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -160,9 +168,14 @@ pub async fn execute_service_query(step: &ExecutionStep) -> Result<QueryResultDa
         HeaderValue::from_static("application/sparql-results+json"),
     );
 
+    // Apply authentication if configured
+    if let Some(auth) = &step.auth_config {
+        apply_auth_headers(&mut headers, auth)?;
+    }
+
     let client = Client::new();
     let response = client
-        .post(&endpoint)
+        .post(endpoint.as_str())
         .headers(headers)
         .body(step.query_fragment.clone())
         .send()
@@ -187,13 +200,21 @@ pub async fn execute_service_query(step: &ExecutionStep) -> Result<QueryResultDa
 
 /// Execute a GraphQL query
 pub async fn execute_graphql_query(step: &ExecutionStep) -> Result<QueryResultData> {
-    let _service_id = step
+    let service_id = step
         .service_id
         .as_ref()
         .ok_or_else(|| anyhow!("Service ID required for GraphQL query"))?;
 
-    // TODO: Get service details from registry
-    let endpoint = "http://localhost:8080/graphql".to_string(); // Placeholder
+    // Get service endpoint from step (populated by planner from ServiceRegistry)
+    let endpoint = step
+        .service_url
+        .as_ref()
+        .ok_or_else(|| {
+            anyhow!(
+                "Service URL not available for service '{}'. Ensure the planner populates service_url from ServiceRegistry.",
+                service_id
+            )
+        })?;
 
     let graphql_request = GraphQLRequest {
         query: step.query_fragment.clone(),
@@ -204,9 +225,14 @@ pub async fn execute_graphql_query(step: &ExecutionStep) -> Result<QueryResultDa
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
+    // Apply authentication if configured
+    if let Some(auth) = &step.auth_config {
+        apply_auth_headers(&mut headers, auth)?;
+    }
+
     let client = Client::new();
     let response = client
-        .post(&endpoint)
+        .post(endpoint.as_str())
         .headers(headers)
         .json(&graphql_request)
         .send()
@@ -530,4 +556,61 @@ pub async fn execute_result_stitching(
 
     debug!("Successfully stitched {} results", input_data_list.len());
     Ok(stitched_result)
+}
+
+/// Apply authentication headers based on auth configuration
+fn apply_auth_headers(
+    headers: &mut HeaderMap,
+    auth: &crate::service_registry::AuthConfig,
+) -> Result<()> {
+    use crate::service_registry::AuthConfig;
+    use base64::Engine;
+    use reqwest::header::{HeaderName, AUTHORIZATION};
+
+    match auth {
+        AuthConfig::None => {}
+        AuthConfig::Basic { username, password } => {
+            let credentials = format!("{}:{}", username, password);
+            let encoded = base64::engine::general_purpose::STANDARD.encode(credentials.as_bytes());
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Basic {}", encoded))
+                    .map_err(|e| anyhow!("Invalid auth header: {}", e))?,
+            );
+        }
+        AuthConfig::Bearer { token } => {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {}", token))
+                    .map_err(|e| anyhow!("Invalid auth header: {}", e))?,
+            );
+        }
+        AuthConfig::ApiKey { key, header } => {
+            let header_name = HeaderName::from_bytes(header.as_bytes())
+                .map_err(|e| anyhow!("Invalid header name: {}", e))?;
+            headers.insert(
+                header_name,
+                HeaderValue::from_str(key).map_err(|e| anyhow!("Invalid API key: {}", e))?,
+            );
+        }
+        AuthConfig::OAuth2 { .. } => {
+            warn!("OAuth2 authentication requires token exchange, using placeholder");
+            // In production, this would initiate OAuth2 flow
+        }
+        AuthConfig::Custom {
+            headers: custom_headers,
+        } => {
+            for (key, value) in custom_headers {
+                let header_name = HeaderName::from_bytes(key.as_bytes())
+                    .map_err(|e| anyhow!("Invalid header name: {}", e))?;
+                headers.insert(
+                    header_name,
+                    HeaderValue::from_str(value)
+                        .map_err(|e| anyhow!("Invalid header value: {}", e))?,
+                );
+            }
+        }
+    }
+
+    Ok(())
 }

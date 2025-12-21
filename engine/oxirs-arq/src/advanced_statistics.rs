@@ -236,8 +236,8 @@ impl MLCardinalityEstimator {
             transformer,
             predictor,
             training_buffer: Arc::new(Mutex::new(Vec::new())),
-            accuracy_metric: Counter::new("ml_cardinality_accuracy"),
-            prediction_timer: Timer::new("ml_cardinality_prediction"),
+            accuracy_metric: Counter::new("ml_cardinality_accuracy".to_string()),
+            prediction_timer: Timer::new("ml_cardinality_prediction".to_string()),
         })
     }
 
@@ -428,9 +428,9 @@ impl AdvancedStatisticsCollector {
         };
 
         let mut metrics = HashMap::new();
-        metrics.insert("total_queries".to_string(), Counter::new("total_queries"));
-        metrics.insert("cache_hits".to_string(), Counter::new("cache_hits"));
-        metrics.insert("cache_misses".to_string(), Counter::new("cache_misses"));
+        metrics.insert("total_queries".to_string(), Counter::new("total_queries".to_string()));
+        metrics.insert("cache_hits".to_string(), Counter::new("cache_hits".to_string()));
+        metrics.insert("cache_misses".to_string(), Counter::new("cache_misses".to_string()));
 
         Ok(Self {
             config,
@@ -439,7 +439,7 @@ impl AdvancedStatisticsCollector {
             buffer_pool,
             metrics,
             last_update: Instant::now(),
-            memory_gauge: Gauge::new("statistics_memory_usage"),
+            memory_gauge: Gauge::new("statistics_memory_usage".to_string()),
         })
     }
 

@@ -4,13 +4,27 @@
 //! like IRIs, datatype URIs, and other RDF terms. String interning reduces
 //! memory usage and improves comparison performance by ensuring that equal
 //! strings are stored only once and can be compared by pointer equality.
+//!
+//! ## Performance Monitoring
+//!
+//! The interner integrates SciRS2-core metrics for comprehensive monitoring:
+//! - Cache hit/miss rates
+//! - Intern operation timing
+//! - Memory usage tracking
+//! - Deduplication effectiveness
 
+use scirs2_core::metrics::{Counter, Histogram, Timer};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock, Weak};
 
 /// A thread-safe string interner that deduplicates strings with ID mapping
-#[derive(Debug)]
+///
+/// Integrates SciRS2-core metrics for production-grade performance monitoring:
+/// - Automatic cache hit/miss tracking
+/// - Intern operation timing
+/// - Memory usage histograms
+/// - Deduplication effectiveness metrics
 pub struct StringInterner {
     /// Map from string content to weak references of interned strings
     strings: RwLock<HashMap<String, Weak<str>>>,
@@ -22,6 +36,12 @@ pub struct StringInterner {
     next_id: AtomicU32,
     /// Statistics for monitoring performance
     stats: RwLock<InternerStats>,
+    /// SciRS2 metrics
+    cache_hit_counter: Arc<Counter>,
+    cache_miss_counter: Arc<Counter>,
+    intern_timer: Arc<Timer>,
+    string_length_histogram: Arc<Histogram>,
+    memory_usage_histogram: Arc<Histogram>,
 }
 
 /// Atomic 32-bit unsigned integer type for thread-safe ID generation
@@ -47,6 +67,27 @@ pub struct MemoryUsage {
     pub compression_ratio: f64,
 }
 
+/// SciRS2 metrics for interner performance
+#[derive(Debug, Clone)]
+pub struct InternerMetrics {
+    /// Total cache hits
+    pub cache_hits: u64,
+    /// Total cache misses
+    pub cache_misses: u64,
+    /// Total intern requests
+    pub total_requests: u64,
+    /// Cache hit ratio (0.0 to 1.0)
+    pub hit_ratio: f64,
+    /// Average intern operation time in seconds
+    pub avg_intern_time_secs: f64,
+    /// Total timing observations recorded
+    pub total_intern_observations: u64,
+    /// Average string length
+    pub avg_string_length: f64,
+    /// Total memory tracked in bytes
+    pub total_memory_tracked_bytes: u64,
+}
+
 impl InternerStats {
     pub fn hit_ratio(&self) -> f64 {
         if self.total_requests == 0 {
@@ -58,18 +99,21 @@ impl InternerStats {
 }
 
 impl StringInterner {
-    /// Create a new string interner with ID mapping
+    /// Create a new string interner with ID mapping and SciRS2 metrics
+    ///
+    /// Automatically tracks:
+    /// - Cache hit/miss rates for intern operations
+    /// - Operation timing for performance analysis
+    /// - String length distribution
+    /// - Memory usage patterns
     pub fn new() -> Self {
-        StringInterner {
-            strings: RwLock::new(HashMap::new()),
-            string_to_id: RwLock::new(HashMap::new()),
-            id_to_string: RwLock::new(HashMap::new()),
-            next_id: AtomicU32::new(0),
-            stats: RwLock::new(InternerStats::default()),
-        }
+        Self::with_capacity(1024) // Default capacity for typical usage
     }
 
     /// Create a new string interner with specified capacity
+    ///
+    /// Pre-allocates HashMaps to the given capacity to reduce reallocation overhead.
+    /// Initializes all SciRS2 metrics for comprehensive monitoring.
     pub fn with_capacity(capacity: usize) -> Self {
         StringInterner {
             strings: RwLock::new(HashMap::with_capacity(capacity)),
@@ -77,17 +121,33 @@ impl StringInterner {
             id_to_string: RwLock::new(HashMap::with_capacity(capacity)),
             next_id: AtomicU32::new(0),
             stats: RwLock::new(InternerStats::default()),
+            cache_hit_counter: Arc::new(Counter::new("interner.cache_hits".to_string())),
+            cache_miss_counter: Arc::new(Counter::new("interner.cache_misses".to_string())),
+            intern_timer: Arc::new(Timer::new("interner.intern_time".to_string())),
+            string_length_histogram: Arc::new(Histogram::new("interner.string_length".to_string())),
+            memory_usage_histogram: Arc::new(Histogram::new("interner.memory_usage".to_string())),
         }
     }
 
-    /// Intern a string, returning an Arc<str> that can be cheaply cloned and compared
+    /// Intern a string, returning an `Arc<str>` that can be cheaply cloned and compared
+    ///
+    /// This operation is tracked with SciRS2 metrics:
+    /// - Cache hits/misses
+    /// - Operation timing
+    /// - String length distribution
     pub fn intern(&self, s: &str) -> Arc<str> {
+        let _guard = self.intern_timer.start();
+
+        // Track string length
+        self.string_length_histogram.observe(s.len() as f64);
+
         // Fast path: try to get existing string with read lock
         {
             let strings = self.strings.read().unwrap();
             if let Some(weak_ref) = strings.get(s) {
                 if let Some(arc_str) = weak_ref.upgrade() {
                     // Update stats
+                    self.cache_hit_counter.inc();
                     {
                         let mut stats = self.stats.write().unwrap();
                         stats.total_requests += 1;
@@ -105,6 +165,7 @@ impl StringInterner {
         if let Some(weak_ref) = strings.get(s) {
             if let Some(arc_str) = weak_ref.upgrade() {
                 // Update stats
+                self.cache_hit_counter.inc();
                 drop(strings); // Release write lock early
                 {
                     let mut stats = self.stats.write().unwrap();
@@ -121,6 +182,7 @@ impl StringInterner {
         strings.insert(s.to_string(), weak_ref);
 
         // Update stats
+        self.cache_miss_counter.inc();
         drop(strings); // Release write lock early
         {
             let mut stats = self.stats.write().unwrap();
@@ -133,7 +195,7 @@ impl StringInterner {
         arc_str
     }
 
-    /// Intern a string and return both the Arc<str> and its numeric ID
+    /// Intern a string and return both the `Arc<str>` and its numeric ID
     pub fn intern_with_id(&self, s: &str) -> (Arc<str>, u32) {
         // Fast path: check if we already have this string and its ID
         {
@@ -194,9 +256,14 @@ impl StringInterner {
     }
 
     /// Clean up expired weak references to save memory
-    pub fn cleanup(&self) {
+    ///
+    /// Returns the number of entries cleaned up
+    pub fn cleanup(&self) -> usize {
         let mut strings = self.strings.write().unwrap();
+        let before = strings.len();
         strings.retain(|_, weak_ref| weak_ref.strong_count() > 0);
+        let after = strings.len();
+        before - after
     }
 
     /// Get current statistics
@@ -223,7 +290,7 @@ impl StringInterner {
     }
 
     /// Batch intern multiple strings for improved performance
-    /// Returns a Vec of Arc<str> in the same order as input
+    /// Returns a Vec of `Arc<str>` in the same order as input
     pub fn intern_batch(&self, strings: &[&str]) -> Vec<Arc<str>> {
         let mut result = Vec::with_capacity(strings.len());
         let mut to_create = Vec::new();
@@ -301,21 +368,129 @@ impl StringInterner {
         }
     }
 
-    /// Optimize the interner by cleaning up and compacting data structures
-    pub fn optimize(&self) {
-        // Clean up expired weak references
-        self.cleanup();
+    /// Get comprehensive performance metrics from SciRS2
+    ///
+    /// Returns detailed statistics including:
+    /// - Cache hit/miss counts and ratios
+    /// - Operation timing statistics
+    /// - String length distribution
+    /// - Memory usage patterns
+    pub fn get_metrics(&self) -> InternerMetrics {
+        let cache_hits = self.cache_hit_counter.get();
+        let cache_misses = self.cache_miss_counter.get();
+        let total_requests = cache_hits + cache_misses;
+        let hit_ratio = if total_requests > 0 {
+            cache_hits as f64 / total_requests as f64
+        } else {
+            0.0
+        };
 
-        // TODO: In a real implementation, we might want to:
-        // - Rehash the HashMap with optimal capacity
-        // - Defragment string storage
-        // - Update statistics
+        let timer_stats = self.intern_timer.get_stats();
+        let string_length_stats = self.string_length_histogram.get_stats();
+        let memory_stats = self.memory_usage_histogram.get_stats();
+
+        InternerMetrics {
+            cache_hits,
+            cache_misses,
+            total_requests,
+            hit_ratio,
+            avg_intern_time_secs: timer_stats.mean,
+            total_intern_observations: timer_stats.count,
+            avg_string_length: string_length_stats.mean,
+            total_memory_tracked_bytes: memory_stats.sum as u64,
+        }
+    }
+
+    /// Optimize the interner by cleaning up and compacting data structures
+    ///
+    /// Performs comprehensive optimization:
+    /// - Cleans up expired weak references
+    /// - Rehashes HashMaps with optimal capacity
+    /// - Updates memory usage statistics
+    /// - Tracks optimization impact with SciRS2 metrics
+    pub fn optimize(&self) {
+        let start = std::time::Instant::now();
+
+        // Clean up expired weak references
+        let cleaned_count = self.cleanup();
+
+        // Get current sizes
+        let current_size = {
+            let strings = self.strings.read().unwrap();
+            strings.len()
+        };
+
+        // Rehash with optimal capacity (1.3x current size to reduce future reallocations)
+        let optimal_capacity = ((current_size as f64 * 1.3) as usize).max(1024);
+
+        {
+            let mut strings = self.strings.write().unwrap();
+            let mut string_to_id = self.string_to_id.write().unwrap();
+            let mut id_to_string = self.id_to_string.write().unwrap();
+
+            // Create new maps with optimal capacity
+            let mut new_strings = HashMap::with_capacity(optimal_capacity);
+            let mut new_string_to_id = HashMap::with_capacity(optimal_capacity);
+            let mut new_id_to_string = HashMap::with_capacity(optimal_capacity);
+
+            // Move data to new maps (rehashing in the process)
+            for (key, value) in strings.drain() {
+                new_strings.insert(key, value);
+            }
+            for (key, value) in string_to_id.drain() {
+                new_string_to_id.insert(key, value);
+            }
+            for (key, value) in id_to_string.drain() {
+                new_id_to_string.insert(key, value);
+            }
+
+            // Replace with optimized maps
+            *strings = new_strings;
+            *string_to_id = new_string_to_id;
+            *id_to_string = new_id_to_string;
+        }
+
+        // Calculate and track memory usage
+        let mem_usage = self.memory_usage();
+        self.memory_usage_histogram
+            .observe(mem_usage.estimated_memory_bytes as f64);
+
+        // Update stats
+        {
+            let mut stats = self.stats.write().unwrap();
+            stats.total_strings_stored = current_size;
+        }
+
+        let duration = start.elapsed();
+        tracing::debug!(
+            "Interner optimized: cleaned {} entries, rehashed to capacity {}, took {:?}",
+            cleaned_count,
+            optimal_capacity,
+            duration
+        );
     }
 }
 
 impl Default for StringInterner {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl std::fmt::Debug for StringInterner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StringInterner")
+            .field("strings_count", &self.strings.read().unwrap().len())
+            .field(
+                "id_mappings_count",
+                &self.string_to_id.read().unwrap().len(),
+            )
+            .field(
+                "next_id",
+                &self.next_id.load(std::sync::atomic::Ordering::Relaxed),
+            )
+            .field("stats", &self.stats.read().unwrap())
+            .finish()
     }
 }
 
@@ -374,12 +549,12 @@ impl InternedString {
         &self.inner
     }
 
-    /// Get the inner Arc<str> for zero-copy operations
+    /// Get the inner `Arc<str>` for zero-copy operations
     pub fn as_arc_str(&self) -> &Arc<str> {
         &self.inner
     }
 
-    /// Convert into the inner Arc<str>
+    /// Convert into the inner `Arc<str>`
     pub fn into_arc_str(self) -> Arc<str> {
         self.inner
     }

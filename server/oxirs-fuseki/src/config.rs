@@ -1,31 +1,27 @@
 //! Advanced server configuration management with validation and hot-reload
-
 use crate::error::{FusekiError, FusekiResult};
 use figment::{
     providers::{Env, Format, Toml, Yaml},
     Figment,
 };
+#[cfg(feature = "hot-reload")]
+use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
-use tracing::{info, warn};
-use validator::{Validate, ValidationError};
-
-#[cfg(feature = "hot-reload")]
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 #[cfg(feature = "hot-reload")]
 use std::sync::mpsc;
+use std::time::Duration;
 #[cfg(feature = "hot-reload")]
 use tokio::sync::watch;
-
+use tracing::{info, warn};
+use validator::{Validate, ValidationError};
 /// Main server configuration with validation
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ServerConfig {
     #[validate(nested)]
     pub server: ServerSettings,
-
     #[validate(nested)]
     pub datasets: HashMap<String, DatasetConfig>,
 
@@ -40,6 +36,20 @@ pub struct ServerConfig {
 
     #[validate(nested)]
     pub logging: LoggingConfig,
+
+    /// Federation configuration for distributed query execution
+    /// Note: Currently not serializable, uses defaults at runtime
+    #[serde(skip)]
+    pub federation: Option<crate::federation::FederationConfig>,
+
+    /// Streaming configuration for event processing
+    /// Note: Currently not serializable, uses defaults at runtime
+    #[serde(skip)]
+    pub streaming: Option<crate::streaming::StreamingConfig>,
+
+    /// HTTP protocol configuration (HTTP/2, HTTP/3)
+    #[validate(nested)]
+    pub http_protocol: HttpProtocolSettings,
 }
 
 /// Server-level settings with validation
@@ -64,6 +74,14 @@ pub struct ServerSettings {
     pub graceful_shutdown_timeout_secs: u64,
 
     pub tls: Option<TlsConfig>,
+
+    /// Directory for storing backups
+    #[serde(default)]
+    pub backup_directory: Option<PathBuf>,
+
+    /// Path to the configuration file (set at runtime)
+    #[serde(skip)]
+    pub config_file: Option<PathBuf>,
 }
 
 /// TLS configuration
@@ -78,6 +96,106 @@ pub struct TlsConfig {
     pub require_client_cert: bool,
 
     pub ca_cert_path: Option<PathBuf>,
+}
+
+/// HTTP protocol configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct HttpProtocolSettings {
+    /// Enable HTTP/2
+    #[serde(default = "default_true")]
+    pub http2_enabled: bool,
+
+    /// Enable HTTP/3 (QUIC) - experimental
+    #[serde(default)]
+    pub http3_enabled: bool,
+
+    /// HTTP/2 initial connection window size (bytes)
+    #[serde(default = "default_http2_connection_window")]
+    #[validate(range(min = 65535, max = 16777216))]
+    pub http2_initial_connection_window_size: u32,
+
+    /// HTTP/2 initial stream window size (bytes)
+    #[serde(default = "default_http2_stream_window")]
+    #[validate(range(min = 65535, max = 16777216))]
+    pub http2_initial_stream_window_size: u32,
+
+    /// HTTP/2 max concurrent streams
+    #[serde(default = "default_http2_max_streams")]
+    #[validate(range(min = 1, max = 1000))]
+    pub http2_max_concurrent_streams: u32,
+
+    /// HTTP/2 max frame size (bytes)
+    #[serde(default = "default_http2_frame_size")]
+    #[validate(range(min = 16384, max = 16777215))]
+    pub http2_max_frame_size: u32,
+
+    /// HTTP/2 keep alive interval (seconds)
+    #[serde(default = "default_http2_keepalive")]
+    #[validate(range(min = 1))]
+    pub http2_keep_alive_interval_secs: u64,
+
+    /// HTTP/2 keep alive timeout (seconds)
+    #[serde(default = "default_http2_keepalive_timeout")]
+    #[validate(range(min = 1))]
+    pub http2_keep_alive_timeout_secs: u64,
+
+    /// Enable server push for SPARQL results
+    #[serde(default)]
+    pub enable_server_push: bool,
+
+    /// Enable header compression (HPACK for HTTP/2, QPACK for HTTP/3)
+    #[serde(default = "default_true")]
+    pub enable_header_compression: bool,
+
+    /// Optimize for SPARQL workloads
+    #[serde(default = "default_true")]
+    pub sparql_optimized: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_http2_connection_window() -> u32 {
+    1024 * 1024 // 1MB
+}
+
+fn default_http2_stream_window() -> u32 {
+    256 * 1024 // 256KB
+}
+
+fn default_http2_max_streams() -> u32 {
+    100
+}
+
+fn default_http2_frame_size() -> u32 {
+    16384 // 16KB
+}
+
+fn default_http2_keepalive() -> u64 {
+    60 // seconds
+}
+
+fn default_http2_keepalive_timeout() -> u64 {
+    20 // seconds
+}
+
+impl Default for HttpProtocolSettings {
+    fn default() -> Self {
+        Self {
+            http2_enabled: true,
+            http3_enabled: false,
+            http2_initial_connection_window_size: default_http2_connection_window(),
+            http2_initial_stream_window_size: default_http2_stream_window(),
+            http2_max_concurrent_streams: default_http2_max_streams(),
+            http2_max_frame_size: default_http2_frame_size(),
+            http2_keep_alive_interval_secs: default_http2_keepalive(),
+            http2_keep_alive_timeout_secs: default_http2_keepalive_timeout(),
+            enable_server_push: false,
+            enable_header_compression: true,
+            sparql_optimized: true,
+        }
+    }
 }
 
 /// Dataset configuration with validation
@@ -209,6 +327,9 @@ pub struct SecurityConfig {
 
     #[validate(nested)]
     pub rebac: Option<RebacConfig>,
+
+    #[validate(nested)]
+    pub mfa: Option<MfaConfig>,
 }
 
 /// Authentication configuration
@@ -553,7 +674,7 @@ pub struct RelationshipTupleConfig {
     #[validate(length(min = 1))]
     pub relation: String,
 
-    /// Object/resource (e.g., "dataset:public", "graph:http://example.org/g1")
+    /// Object/resource (e.g., "dataset:public", "graph:`http://example.org/g1`")
     #[validate(length(min = 1))]
     pub object: String,
 
@@ -576,6 +697,175 @@ pub enum RelationshipConditionConfig {
 
     /// Custom attribute-based condition
     Attribute { key: String, value: String },
+}
+
+/// Multi-Factor Authentication (MFA) configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct MfaConfig {
+    /// Enable MFA globally
+    pub enabled: bool,
+
+    /// Require MFA for all users (if false, users can opt-in)
+    pub required: bool,
+
+    /// Available MFA methods
+    pub methods: MfaMethods,
+
+    /// TOTP configuration
+    #[validate(nested)]
+    pub totp: Option<TotpConfig>,
+
+    /// SMS configuration
+    #[validate(nested)]
+    pub sms: Option<SmsConfig>,
+
+    /// Email configuration
+    #[validate(nested)]
+    pub email: Option<EmailConfig>,
+
+    /// WebAuthn configuration
+    #[validate(nested)]
+    pub webauthn: Option<WebAuthnConfig>,
+
+    /// Backup codes configuration
+    pub backup_codes: BackupCodesConfig,
+
+    /// MFA session duration in seconds (how long after MFA verification before re-prompt)
+    #[validate(range(min = 300, max = 86400))] // 5 min to 24 hours
+    pub session_duration_secs: u64,
+
+    /// Storage path for MFA secrets
+    pub storage_path: PathBuf,
+}
+
+/// Available MFA methods
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MfaMethods {
+    pub totp: bool,
+    pub sms: bool,
+    pub email: bool,
+    pub webauthn: bool,
+}
+
+/// TOTP (Time-based One-Time Password) configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct TotpConfig {
+    /// Issuer name shown in authenticator apps
+    #[validate(length(min = 1))]
+    pub issuer: String,
+
+    /// Number of digits in TOTP code
+    #[validate(range(min = 6, max = 8))]
+    pub digits: u32,
+
+    /// Time step in seconds
+    #[validate(range(min = 15, max = 60))]
+    pub time_step_secs: u32,
+
+    /// Number of time steps to look back/forward for validation
+    #[validate(range(min = 0, max = 5))]
+    pub skew: u32,
+}
+
+/// SMS-based MFA configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SmsConfig {
+    /// SMS provider
+    pub provider: SmsProvider,
+
+    /// API key or credentials
+    pub api_key: String,
+
+    /// Sender phone number or ID
+    pub sender: String,
+
+    /// Code expiration in seconds
+    #[validate(range(min = 60, max = 600))]
+    pub code_expiration_secs: u64,
+}
+
+/// SMS providers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SmsProvider {
+    Twilio,
+    Aws,
+    Custom,
+}
+
+/// Email-based MFA configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct EmailConfig {
+    /// SMTP server
+    #[validate(length(min = 1))]
+    pub smtp_server: String,
+
+    /// SMTP port
+    #[validate(range(min = 1, max = 65535))]
+    pub smtp_port: u16,
+
+    /// Sender email address
+    #[validate(email)]
+    pub from_address: String,
+
+    /// SMTP username
+    pub smtp_username: Option<String>,
+
+    /// SMTP password
+    pub smtp_password: Option<String>,
+
+    /// Use TLS
+    pub use_tls: bool,
+
+    /// Code expiration in seconds
+    #[validate(range(min = 60, max = 600))]
+    pub code_expiration_secs: u64,
+}
+
+/// WebAuthn configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct WebAuthnConfig {
+    /// Relying Party ID (usually the domain)
+    #[validate(length(min = 1))]
+    pub rp_id: String,
+
+    /// Relying Party name
+    #[validate(length(min = 1))]
+    pub rp_name: String,
+
+    /// Origin URL
+    #[validate(url)]
+    pub origin: String,
+
+    /// Require resident keys
+    pub require_resident_key: bool,
+
+    /// User verification requirement
+    pub user_verification: UserVerificationRequirement,
+}
+
+/// User verification requirements for WebAuthn
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UserVerificationRequirement {
+    Required,
+    Preferred,
+    Discouraged,
+}
+
+/// Backup codes configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct BackupCodesConfig {
+    /// Enable backup codes
+    pub enabled: bool,
+
+    /// Number of backup codes to generate
+    #[validate(range(min = 5, max = 20))]
+    pub count: u32,
+
+    /// Length of each backup code
+    #[validate(range(min = 8, max = 16))]
+    pub length: u32,
 }
 
 /// JWT configuration
@@ -933,6 +1223,8 @@ impl Default for ServerConfig {
                 request_timeout_secs: 30,
                 graceful_shutdown_timeout_secs: 30,
                 tls: None,
+                backup_directory: None,
+                config_file: None,
             },
             datasets: HashMap::new(),
             security: SecurityConfig {
@@ -968,6 +1260,7 @@ impl Default for ServerConfig {
                 certificate: None,
                 saml: None,
                 rebac: None,
+                mfa: None,
             },
             monitoring: MonitoringConfig {
                 metrics: MetricsConfig {
@@ -1026,6 +1319,9 @@ impl Default for ServerConfig {
                 output: LogOutput::Stdout,
                 file_config: None,
             },
+            federation: None,
+            streaming: None,
+            http_protocol: HttpProtocolSettings::default(),
         }
     }
 }

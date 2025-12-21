@@ -1,12 +1,12 @@
 # OxiRS Quick Start Guide
 
-## Beta.1 Release - Production-Ready with API Stability
+## Beta.2 Release - Production-Ready with API Stability
 
 ### Installation
 
 ```bash
 # Install from crates.io
-cargo install oxirs --version 0.1.0-beta.1
+cargo install oxirs --version 0.1.0-beta.2
 
 # Or build from source
 git clone https://github.com/cool-japan/oxirs

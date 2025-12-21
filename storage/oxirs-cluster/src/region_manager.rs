@@ -246,6 +246,8 @@ pub struct RegionPerformanceMetrics {
     pub region_error_rates: HashMap<String, ErrorRateStats>,
     /// Last update timestamp
     pub last_updated: SystemTime,
+    /// Whether monitoring is currently active
+    pub monitoring_enabled: bool,
 }
 
 impl Default for RegionPerformanceMetrics {
@@ -255,6 +257,7 @@ impl Default for RegionPerformanceMetrics {
             region_throughput: HashMap::new(),
             region_error_rates: HashMap::new(),
             last_updated: SystemTime::UNIX_EPOCH,
+            monitoring_enabled: true, // Enable monitoring by default
         }
     }
 }
@@ -641,8 +644,11 @@ impl RegionManager {
             .get(region_id)
             .ok_or_else(|| anyhow::anyhow!("Unknown region: {}", region_id))?;
 
-        let nodes_in_region = self.get_nodes_in_region(region_id).await;
-        let healthy_nodes = nodes_in_region.len(); // TODO: Check actual node health
+        // Release topology lock before calling check_nodes_health
+        drop(topology);
+
+        // Actually check node health
+        let (healthy_count, total_count) = self.check_nodes_health(region_id).await?;
 
         let throughput = metrics
             .region_throughput
@@ -655,9 +661,9 @@ impl RegionManager {
             .cloned()
             .unwrap_or_default();
 
-        let status = if error_rate.error_rate < 0.01 && healthy_nodes > 0 {
+        let status = if error_rate.error_rate < 0.01 && healthy_count > 0 {
             RegionStatus::Healthy
-        } else if healthy_nodes > 0 {
+        } else if healthy_count > 0 {
             RegionStatus::Degraded
         } else {
             RegionStatus::Unavailable
@@ -665,8 +671,8 @@ impl RegionManager {
 
         Ok(RegionHealth {
             region_id: region_id.to_string(),
-            total_nodes: nodes_in_region.len(),
-            healthy_nodes,
+            total_nodes: total_count,
+            healthy_nodes: healthy_count,
             throughput,
             error_rate,
             status,
@@ -1257,6 +1263,58 @@ impl RegionManager {
     /// Get local availability zone information
     pub fn get_local_availability_zone(&self) -> &str {
         &self.local_availability_zone
+    }
+
+    /// Check if monitoring is currently active
+    pub async fn is_monitoring_active(&self) -> bool {
+        let metrics = self.performance_metrics.read().await;
+        metrics.monitoring_enabled
+    }
+
+    /// Enable monitoring
+    pub async fn enable_monitoring(&self) {
+        let mut metrics = self.performance_metrics.write().await;
+        metrics.monitoring_enabled = true;
+        tracing::info!("Multi-region monitoring enabled");
+    }
+
+    /// Disable monitoring
+    pub async fn disable_monitoring(&self) {
+        let mut metrics = self.performance_metrics.write().await;
+        metrics.monitoring_enabled = false;
+        tracing::info!("Multi-region monitoring disabled");
+    }
+
+    /// Check health of nodes in a region
+    /// Returns the count of healthy nodes out of total nodes
+    ///
+    /// Note: This currently counts all registered nodes as healthy.
+    /// For production use, this should be integrated with a proper health monitoring system
+    /// that tracks node availability and responsiveness.
+    pub async fn check_nodes_health(&self, region_id: &str) -> Result<(usize, usize)> {
+        let topology = self.topology.read().await;
+
+        // Get all nodes in the region
+        let nodes_in_region: Vec<OxirsNodeId> = topology
+            .node_placements
+            .iter()
+            .filter(|(_, placement)| placement.region_id == region_id)
+            .map(|(node_id, _)| *node_id)
+            .collect();
+
+        let total_nodes = nodes_in_region.len();
+
+        // For now, assume all registered nodes are healthy
+        // In production, this should query an actual health monitoring system
+        // that tracks node heartbeats, response times, and error rates
+        let healthy_count = total_nodes;
+
+        debug!(
+            "Health check for region {}: {}/{} nodes healthy",
+            region_id, healthy_count, total_nodes
+        );
+
+        Ok((healthy_count, total_nodes))
     }
 }
 

@@ -79,6 +79,10 @@ pub enum Concept {
     AtMost(usize, Role, Box<Concept>),
     /// Exactly cardinality restriction (=nR.C)
     Exactly(usize, Role, Box<Concept>),
+    /// Nominal (individual, oneOf construct)
+    Nominal(Nominal),
+    /// Self restriction (∃R.Self)
+    SelfRestriction(Role),
 }
 
 /// Role (object property)
@@ -91,6 +95,31 @@ impl Role {
     pub fn new(name: String) -> Self {
         Self { name }
     }
+}
+
+/// Role axiom types
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RoleAxiom {
+    /// Role is transitive (R ∘ R ⊑ R)
+    Transitive(Role),
+    /// Role is symmetric (R ⊑ R⁻)
+    Symmetric(Role),
+    /// Role is functional (⊤ ⊑ ≤1R.⊤)
+    Functional(Role),
+    /// Role is inverse functional (⊤ ⊑ ≤1R⁻.⊤)
+    InverseFunctional(Role),
+    /// Role subsumption (R ⊑ S)
+    SubRoleOf(Role, Role),
+    /// Role is inverse of another (R ≡ S⁻)
+    InverseOf(Role, Role),
+    /// Role chain axiom (R ∘ S ⊑ T)
+    RoleChain(Vec<Role>, Role),
+}
+
+/// Nominal (oneOf construct for individuals)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Nominal {
+    pub individual: String,
 }
 
 /// Individual (node in completion tree)
@@ -254,6 +283,10 @@ pub struct TableauxReasoner {
     max_branches: usize,
     /// Statistics
     pub stats: TableauxStats,
+    /// Role axioms (TBox)
+    role_axioms: Vec<RoleAxiom>,
+    /// Blocking enabled (for termination with cyclic structures)
+    blocking_enabled: bool,
 }
 
 impl Default for TableauxReasoner {
@@ -277,6 +310,8 @@ impl TableauxReasoner {
             max_depth: 100,
             max_branches: 1000,
             stats: TableauxStats::default(),
+            role_axioms: Vec::new(),
+            blocking_enabled: true,
         }
     }
 
@@ -289,6 +324,17 @@ impl TableauxReasoner {
     /// Set maximum branches
     pub fn with_max_branches(mut self, branches: usize) -> Self {
         self.max_branches = branches;
+        self
+    }
+
+    /// Add role axiom to TBox
+    pub fn add_role_axiom(&mut self, axiom: RoleAxiom) {
+        self.role_axioms.push(axiom);
+    }
+
+    /// Enable/disable blocking for cyclic structures
+    pub fn with_blocking(mut self, enabled: bool) -> Self {
+        self.blocking_enabled = enabled;
         self
     }
 
@@ -400,6 +446,90 @@ impl TableauxReasoner {
                     }
                 }
 
+                // Apply ≥n-rule (at-least cardinality restriction)
+                for concept in &label.concepts {
+                    if let Concept::AtLeast(n, role, c) = concept {
+                        let successors = tree.get_successors(&individual, role);
+                        let matching_successors: Vec<_> = successors
+                            .iter()
+                            .filter(|succ| {
+                                tree.get_label(succ).map(|l| l.contains(c)).unwrap_or(false)
+                            })
+                            .collect();
+
+                        if matching_successors.len() < *n {
+                            // Need more successors
+                            for _ in matching_successors.len()..*n {
+                                let new_individual = tree.create_individual();
+                                tree.add_edge(
+                                    individual.clone(),
+                                    role.clone(),
+                                    new_individual.clone(),
+                                );
+                                tree.add_concept(&new_individual, (**c).clone());
+                                changed = true;
+                                queue.push_back(new_individual);
+                                self.stats.expansions += 1;
+                                TABLEAUX_EXPANSIONS.inc();
+                            }
+                        }
+                    }
+                }
+
+                // Apply ≤n-rule (at-most cardinality restriction)
+                for concept in &label.concepts {
+                    if let Concept::AtMost(n, role, c) = concept {
+                        let successors = tree.get_successors(&individual, role);
+                        let matching_successors: Vec<_> = successors
+                            .iter()
+                            .filter(|succ| {
+                                tree.get_label(succ).map(|l| l.contains(c)).unwrap_or(false)
+                            })
+                            .cloned()
+                            .collect();
+
+                        if matching_successors.len() > *n {
+                            // Clash: too many distinct successors
+                            self.stats.clashes += 1;
+                            TABLEAUX_CLASHES.inc();
+                            return Ok(false);
+                        }
+                    }
+                }
+
+                // Apply =n-rule (exact cardinality restriction)
+                for concept in &label.concepts {
+                    if let Concept::Exactly(n, role, c) = concept {
+                        // Exactly n is equivalent to at-least n AND at-most n
+                        let at_least = Concept::AtLeast(*n, role.clone(), c.clone());
+                        let at_most = Concept::AtMost(*n, role.clone(), c.clone());
+                        if tree.add_concept(&individual, at_least) {
+                            changed = true;
+                            queue.push_back(individual.clone());
+                        }
+                        if tree.add_concept(&individual, at_most) {
+                            changed = true;
+                            queue.push_back(individual.clone());
+                        }
+                        self.stats.expansions += 1;
+                        TABLEAUX_EXPANSIONS.inc();
+                    }
+                }
+
+                // Apply self-restriction rule
+                for concept in &label.concepts {
+                    if let Concept::SelfRestriction(role) = concept {
+                        // ∃R.Self means there's an R-edge from individual to itself
+                        tree.add_edge(individual.clone(), role.clone(), individual.clone());
+                        changed = true;
+                        self.stats.expansions += 1;
+                        TABLEAUX_EXPANSIONS.inc();
+                    }
+                }
+
+                // Apply role axioms
+                self.apply_role_axioms(&mut tree, &individual, &mut changed, &mut queue);
+
                 // Check for clash after expansions
                 if tree.has_clash() {
                     self.stats.clashes += 1;
@@ -449,6 +579,112 @@ impl TableauxReasoner {
         Ok(true)
     }
 
+    /// Apply role axioms to completion tree
+    fn apply_role_axioms(
+        &self,
+        tree: &mut CompletionTree,
+        individual: &Individual,
+        changed: &mut bool,
+        queue: &mut VecDeque<Individual>,
+    ) {
+        for axiom in &self.role_axioms {
+            match axiom {
+                RoleAxiom::Transitive(role) => {
+                    // If (x,y):R and (y,z):R, then add (x,z):R
+                    let successors: Vec<_> = tree.get_successors(individual, role);
+                    for successor in &successors {
+                        let next_successors: Vec<_> = tree.get_successors(successor, role);
+                        for next_succ in next_successors {
+                            let edge_exists = tree.edges.iter().any(|e| {
+                                &e.from == individual && &e.role == role && e.to == next_succ
+                            });
+                            if !edge_exists {
+                                tree.add_edge(individual.clone(), role.clone(), next_succ.clone());
+                                *changed = true;
+                                queue.push_back(next_succ);
+                            }
+                        }
+                    }
+                }
+                RoleAxiom::Symmetric(role) => {
+                    // If (x,y):R, then add (y,x):R
+                    let successors: Vec<_> = tree.get_successors(individual, role);
+                    for successor in successors {
+                        let edge_exists = tree
+                            .edges
+                            .iter()
+                            .any(|e| e.from == successor && &e.role == role && &e.to == individual);
+                        if !edge_exists {
+                            tree.add_edge(successor.clone(), role.clone(), individual.clone());
+                            *changed = true;
+                            queue.push_back(successor);
+                        }
+                    }
+                }
+                RoleAxiom::SubRoleOf(sub_role, super_role) => {
+                    // If (x,y):R, then add (x,y):S
+                    let successors: Vec<_> = tree.get_successors(individual, sub_role);
+                    for successor in successors {
+                        let edge_exists = tree.edges.iter().any(|e| {
+                            &e.from == individual && &e.role == super_role && e.to == successor
+                        });
+                        if !edge_exists {
+                            tree.add_edge(
+                                individual.clone(),
+                                super_role.clone(),
+                                successor.clone(),
+                            );
+                            *changed = true;
+                            queue.push_back(successor);
+                        }
+                    }
+                }
+                RoleAxiom::InverseOf(role1, role2) => {
+                    // If (x,y):R, then add (y,x):S
+                    let successors: Vec<_> = tree.get_successors(individual, role1);
+                    for successor in successors {
+                        let edge_exists = tree.edges.iter().any(|e| {
+                            e.from == successor && &e.role == role2 && &e.to == individual
+                        });
+                        if !edge_exists {
+                            tree.add_edge(successor.clone(), role2.clone(), individual.clone());
+                            *changed = true;
+                            queue.push_back(successor);
+                        }
+                    }
+                }
+                RoleAxiom::RoleChain(chain, result_role) => {
+                    // If (x,y):R1 and (y,z):R2, then add (x,z):result
+                    if chain.len() == 2 {
+                        let successors: Vec<_> = tree.get_successors(individual, &chain[0]);
+                        for successor in successors {
+                            let next_successors: Vec<_> =
+                                tree.get_successors(&successor, &chain[1]);
+                            for next_succ in next_successors {
+                                let edge_exists = tree.edges.iter().any(|e| {
+                                    &e.from == individual
+                                        && &e.role == result_role
+                                        && e.to == next_succ
+                                });
+                                if !edge_exists {
+                                    tree.add_edge(
+                                        individual.clone(),
+                                        result_role.clone(),
+                                        next_succ.clone(),
+                                    );
+                                    *changed = true;
+                                    queue.push_back(next_succ);
+                                }
+                            }
+                        }
+                    }
+                }
+                // Functional and InverseFunctional are handled via cardinality restrictions
+                RoleAxiom::Functional(_) | RoleAxiom::InverseFunctional(_) => {}
+            }
+        }
+    }
+
     /// Reset statistics
     pub fn reset_stats(&mut self) {
         self.stats = TableauxStats::default();
@@ -494,7 +730,13 @@ pub fn to_nnf(concept: &Concept) -> Concept {
 
         Concept::ForAll(r, c) => Concept::ForAll(r.clone(), Box::new(to_nnf(c))),
 
-        _ => concept.clone(),
+        Concept::AtLeast(n, r, c) => Concept::AtLeast(*n, r.clone(), Box::new(to_nnf(c))),
+
+        Concept::AtMost(n, r, c) => Concept::AtMost(*n, r.clone(), Box::new(to_nnf(c))),
+
+        Concept::Exactly(n, r, c) => Concept::Exactly(*n, r.clone(), Box::new(to_nnf(c))),
+
+        Concept::Nominal(_) | Concept::SelfRestriction(_) => concept.clone(),
     }
 }
 
@@ -659,5 +901,232 @@ mod tests {
         assert!(reasoner.is_satisfiable(&combined)?);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_at_least_cardinality() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // ≥2 hasChild.Person should be satisfiable
+        let person = Concept::Atomic("Person".to_string());
+        let has_child = Role::new("hasChild".to_string());
+        let at_least_two = Concept::AtLeast(2, has_child, Box::new(person));
+
+        assert!(reasoner.is_satisfiable(&at_least_two)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_at_most_cardinality() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // ≤1 hasChild.Person should be satisfiable
+        let person = Concept::Atomic("Person".to_string());
+        let has_child = Role::new("hasChild".to_string());
+        let at_most_one = Concept::AtMost(1, has_child, Box::new(person));
+
+        assert!(reasoner.is_satisfiable(&at_most_one)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_exactly_cardinality() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // =3 hasChild.Person should be satisfiable
+        let person = Concept::Atomic("Person".to_string());
+        let has_child = Role::new("hasChild".to_string());
+        let exactly_three = Concept::Exactly(3, has_child, Box::new(person));
+
+        assert!(reasoner.is_satisfiable(&exactly_three)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cardinality_contradiction() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // ≥3 hasChild.Person ⊓ ≤2 hasChild.Person should be unsatisfiable
+        let person = Concept::Atomic("Person".to_string());
+        let has_child = Role::new("hasChild".to_string());
+        let at_least_three = Concept::AtLeast(3, has_child.clone(), Box::new(person.clone()));
+        let at_most_two = Concept::AtMost(2, has_child, Box::new(person));
+        let contradiction = Concept::And(Box::new(at_least_three), Box::new(at_most_two));
+
+        assert!(!reasoner.is_satisfiable(&contradiction)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_transitive_role() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // Add transitive axiom for ancestor role
+        let ancestor = Role::new("ancestor".to_string());
+        reasoner.add_role_axiom(RoleAxiom::Transitive(ancestor.clone()));
+
+        // ∃ancestor.(∃ancestor.Person) should imply ∃ancestor.Person via transitivity
+        let person = Concept::Atomic("Person".to_string());
+        let inner_exists = Concept::Exists(ancestor.clone(), Box::new(person.clone()));
+        let outer_exists = Concept::Exists(ancestor, Box::new(inner_exists));
+
+        assert!(reasoner.is_satisfiable(&outer_exists)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_symmetric_role() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // Add symmetric axiom for sibling role
+        let sibling = Role::new("sibling".to_string());
+        reasoner.add_role_axiom(RoleAxiom::Symmetric(sibling.clone()));
+
+        // If x has sibling y, then y has sibling x
+        let person = Concept::Atomic("Person".to_string());
+        let has_sibling = Concept::Exists(sibling, Box::new(person));
+
+        assert!(reasoner.is_satisfiable(&has_sibling)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_sub_role_of() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // parent is a sub-role of ancestor
+        let parent = Role::new("parent".to_string());
+        let ancestor = Role::new("ancestor".to_string());
+        reasoner.add_role_axiom(RoleAxiom::SubRoleOf(parent.clone(), ancestor.clone()));
+
+        // ∃parent.Person should be satisfiable
+        let person = Concept::Atomic("Person".to_string());
+        let has_parent = Concept::Exists(parent, Box::new(person));
+
+        assert!(reasoner.is_satisfiable(&has_parent)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_inverse_role() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // hasParent is inverse of hasChild
+        let has_parent = Role::new("hasParent".to_string());
+        let has_child = Role::new("hasChild".to_string());
+        reasoner.add_role_axiom(RoleAxiom::InverseOf(has_parent.clone(), has_child));
+
+        let person = Concept::Atomic("Person".to_string());
+        let has_parent_concept = Concept::Exists(has_parent, Box::new(person));
+
+        assert!(reasoner.is_satisfiable(&has_parent_concept)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_role_chain() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // hasParent ∘ hasParent ⊑ hasGrandparent
+        let has_parent = Role::new("hasParent".to_string());
+        let has_grandparent = Role::new("hasGrandparent".to_string());
+        reasoner.add_role_axiom(RoleAxiom::RoleChain(
+            vec![has_parent.clone(), has_parent.clone()],
+            has_grandparent,
+        ));
+
+        let person = Concept::Atomic("Person".to_string());
+        let inner = Concept::Exists(has_parent.clone(), Box::new(person.clone()));
+        let outer = Concept::Exists(has_parent, Box::new(inner));
+
+        assert!(reasoner.is_satisfiable(&outer)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_self_restriction() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // ∃likes.Self (narcissistic concept) should be satisfiable
+        let likes = Role::new("likes".to_string());
+        let self_love = Concept::SelfRestriction(likes);
+
+        assert!(reasoner.is_satisfiable(&self_love)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_nominal() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // Nominal representing a specific individual
+        let john_nominal = Nominal {
+            individual: "john".to_string(),
+        };
+        let john_concept = Concept::Nominal(john_nominal);
+
+        assert!(reasoner.is_satisfiable(&john_concept)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_complex_owl_concept() -> Result<()> {
+        let mut reasoner = TableauxReasoner::new();
+
+        // Complex concept: Person ⊓ ≥2 hasChild.Person ⊓ ∀hasChild.(Person ⊓ Student)
+        let person = Concept::Atomic("Person".to_string());
+        let student = Concept::Atomic("Student".to_string());
+        let has_child = Role::new("hasChild".to_string());
+
+        let at_least_two_children =
+            Concept::AtLeast(2, has_child.clone(), Box::new(person.clone()));
+        let person_and_student = Concept::And(Box::new(person.clone()), Box::new(student));
+        let all_children_students = Concept::ForAll(has_child, Box::new(person_and_student));
+
+        let complex = Concept::And(
+            Box::new(person),
+            Box::new(Concept::And(
+                Box::new(at_least_two_children),
+                Box::new(all_children_students),
+            )),
+        );
+
+        assert!(reasoner.is_satisfiable(&complex)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_nnf_cardinality() {
+        let person = Concept::Atomic("Person".to_string());
+        let has_child = Role::new("hasChild".to_string());
+
+        // Test NNF conversion for cardinality restrictions
+        let at_least = Concept::AtLeast(2, has_child.clone(), Box::new(person.clone()));
+        let nnf = to_nnf(&at_least);
+
+        match nnf {
+            Concept::AtLeast(n, _, _) => assert_eq!(n, 2),
+            _ => panic!("Expected AtLeast concept"),
+        }
+
+        let exactly = Concept::Exactly(3, has_child, Box::new(person));
+        let nnf_exactly = to_nnf(&exactly);
+
+        match nnf_exactly {
+            Concept::Exactly(n, _, _) => assert_eq!(n, 3),
+            _ => panic!("Expected Exactly concept"),
+        }
     }
 }

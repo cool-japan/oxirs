@@ -2,9 +2,13 @@
 
 mod concurrent_tests;
 mod memory_pool_tests;
-// mod batch_execution_tests;
-// mod streaming_results_tests;
-// mod dataset_management_tests;
+mod batch_execution_tests;
+mod streaming_results_tests;
+mod dataset_management_tests;
+
+// v0.1.0 Final - Advanced SciRS2 Integration Tests
+mod simd_triple_matcher_tests; // SIMD-accelerated triple pattern matching
+mod gpu_kg_embeddings_tests; // GPU-accelerated knowledge graph embeddings
 
 // Common test utilities
 pub mod common {

@@ -1,0 +1,33 @@
+# Codespell ignore list for oxirs-ttl
+# Technical terms and proper names that should not be flagged
+
+# RDF/Semantic Web terms
+rdf
+rdfs
+xsd
+owl
+foaf
+sparql
+trig
+ntriples
+nquads
+oxigraph
+jena
+fuseki
+
+# N3 specific terms
+forall
+forsome
+
+# Programming terms
+impl
+struct
+enum
+async
+mut
+crate
+
+# Proper names
+Turi
+Berners
+TimBL

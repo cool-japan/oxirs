@@ -3,7 +3,7 @@
 //! TriG extends Turtle with support for named graphs, allowing multiple RDF graphs
 //! to be serialized in a single document with graph-level organization.
 //!
-//! W3C Specification: https://www.w3.org/TR/trig/
+//! W3C Specification: <https://www.w3.org/TR/trig/>
 
 use super::error::FormatError;
 use crate::model::{

@@ -1,9 +1,9 @@
 //! # OxiRS SHACL-AI
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.
@@ -412,9 +412,16 @@ use oxirs_core::{model::Term, OxirsError, Store};
 
 use oxirs_shacl::{ShapeId, ValidationConfig, ValidationReport};
 
+// Internal modules for organizing core types
+pub mod config;
+pub mod data_types;
+
+// Feature modules
+pub mod ab_testing;
 pub mod advanced_features;
 pub mod advanced_neural;
 pub mod advanced_pattern_mining;
+pub mod advanced_scirs2_integration;
 pub mod advanced_validation_strategies;
 pub mod advanced_visualization;
 pub mod ai_orchestrator;
@@ -429,6 +436,7 @@ pub mod consciousness_guided_neuroplasticity;
 pub mod consciousness_validation;
 pub mod constraint_generation;
 pub mod cosmic_scale_processing;
+pub mod crosslingual_transfer;
 pub mod deployment;
 pub mod edge_deployment;
 pub mod error_handling;
@@ -443,6 +451,7 @@ pub mod forecasting_models;
 pub mod hyperparameter_optimization;
 pub mod insights;
 pub mod integration_testing;
+pub mod interactive_labeling;
 pub mod knowledge_distillation;
 // Temporarily disabled problematic modules for compilation
 pub mod automated_retraining;
@@ -463,6 +472,7 @@ pub mod neuromorphic_validation;
 pub mod omniscient_validation;
 pub mod optimization;
 pub mod optimization_engine;
+pub mod owl_to_shacl;
 pub mod patterns;
 pub mod performance_analytics;
 pub mod performance_benchmarking;
@@ -482,6 +492,8 @@ pub mod realtime_adaptive_query_optimizer;
 pub mod realtime_anomaly_streams;
 pub mod recommendation_systems;
 pub mod reinforcement_learning;
+pub mod scalability_testing;
+pub mod security_audit;
 pub mod self_adaptive_ai;
 pub mod shape;
 pub mod shape_management;
@@ -496,7 +508,15 @@ pub mod validation_performance;
 pub mod version_control;
 
 // Re-export key types for convenience with explicit imports to avoid ambiguity
-// Advanced Features (v0.1.0-beta.1 - NEW)
+// A/B Testing Framework (v0.1.0 Final - NEW)
+pub use ab_testing::{
+    ABTestConfig, ABTestFramework, Experiment as ABExperiment, ExperimentResults,
+    ExperimentStatus as ABExperimentStatus, MetricDefinition, MetricGoal, MetricSummary,
+    MetricType as ABMetricType, Recommendation, RecommendationAction, StatisticalTest,
+    StatisticalTestType, Variant,
+};
+
+// Advanced Features (v0.1.0-beta.2 - NEW)
 pub use advanced_features::{
     // Active Learning
     ActiveLearner,
@@ -553,6 +573,9 @@ pub use advanced_pattern_mining::{
     ItemRole, PatternItem, PatternItemType, PatternMiningStats, PatternType as MiningPatternType,
     SeasonalityComponent, SuggestedConstraint, TemporalPatternInfo,
     TrendDirection as MiningTrendDirection,
+};
+pub use advanced_scirs2_integration::{
+    AdvancedSciRS2Config, AdvancedSciRS2Engine, BenchmarkResults, CloudProviderType,
 };
 pub use advanced_validation_strategies::{
     AdvancedValidationConfig, AdvancedValidationResult, AdvancedValidationStrategyManager,
@@ -631,6 +654,11 @@ pub use integration_testing::{
     RecommendationPriority, RecommendationType, ResourceUtilization, ScalabilityMetrics,
     TestComplexityLevel, TestRecommendation, TestResult, TestStatus, TestSummary, TestType,
     ValidationTestResults,
+};
+pub use interactive_labeling::{
+    Annotation, AnnotationTask, Annotator, AnnotatorStats, InteractiveLabelingInterface,
+    LabelingConfig, PriorityStrategy, QualityMetrics as LabelingQualityMetrics,
+    RdfData as LabelingRdfData, TaskStatistics, TaskStatus,
 };
 pub use knowledge_distillation::{
     AggregationMethod, CompressionMetrics, DistillationConfig, DistillationPerformanceTracker,
@@ -812,6 +840,10 @@ pub use cosmic_scale_processing::{
     CosmicValidationResult, CosmicValidationScope, GalaxyId, IntergalacticCoordinates,
     StellarCoordinates, StellarNodeId,
 };
+pub use crosslingual_transfer::{
+    CrosslingualConfig, CrosslingualShapeTransfer, CrosslingualStats, Language, TranslatedShape,
+    TranslationQuality,
+};
 pub use experiment_tracking::{
     Experiment, ExperimentConfig, ExperimentMetrics, ExperimentRun, ExperimentStatus,
     ExperimentTracker, Metric, MetricType, Parameter, ParameterType,
@@ -900,6 +932,10 @@ pub use omniscient_validation::{
     OmniscientValidation, OmniscientValidationResult, PerfectReasoningEngine,
     TranscendentConsciousnessValidator, UniversalKnowledgeOmniscience,
 };
+pub use owl_to_shacl::{
+    GeneratedShape, OwlClass, OwlConstructType, OwlProperty, OwlPropertyCharacteristic,
+    OwlRestriction, OwlRestrictionType, OwlToShaclConfig, OwlToShaclTransfer, TransferStats,
+};
 pub use reality_synthesis::{
     CrossRealityValidator, DimensionalConstructor, MultiDimensionalCoordinator,
     PossibilityMaterializer, RealityCoherenceManager, RealityGenerationEngine,
@@ -912,6 +948,20 @@ pub use universal_knowledge_integration::{
     MathematicalKnowledgeIntegrator, PhilosophicalKnowledgeIntegrator, RealTimeKnowledgeUpdater,
     ScientificKnowledgeIntegrator, TechnicalKnowledgeIntegrator, UniversalKnowledgeConfig,
     UniversalKnowledgeIntegration, UniversalKnowledgeMetrics, UniversalOntologyMapper,
+};
+
+// Re-export configuration types
+pub use config::{
+    AiModelConfig, AiModelType, FeatureConfig, FeatureNormalization, GlobalAiConfig,
+    PerformanceThresholds, ShaclAiConfig, ShaclAiStatistics, TrainingConfig,
+};
+
+// Re-export data types
+pub use data_types::{
+    default_instant, DataInconsistency, DistributionAnalysis, ExecutionTimeTrend,
+    InconsistencyImpact, ModelTrainingResult, PerformanceData, PerformanceMetric, PerformanceTrend,
+    RdfData, ShapeAnalysis, ShapeData, ThroughputTrend, TrainingDataset, TrainingResult,
+    ValidationData, ViolationPattern,
 };
 
 /// Core error type for SHACL-AI operations
@@ -1015,128 +1065,6 @@ impl From<scirs2_core::ndarray_ext::ShapeError> for ShaclAiError {
     fn from(err: scirs2_core::ndarray_ext::ShapeError) -> Self {
         ShaclAiError::Shape(err.to_string())
     }
-}
-
-/// AI model types for different learning tasks
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AiModelType {
-    /// Pattern recognition for constraint discovery
-    PatternRecognition,
-
-    /// Classification for data quality assessment
-    QualityClassification,
-
-    /// Regression for performance prediction
-    PerformancePrediction,
-
-    /// Clustering for shape grouping
-    ShapeClustering,
-
-    /// Anomaly detection for data issues
-    AnomalyDetection,
-
-    /// Reinforcement learning for validation optimization
-    ValidationOptimization,
-}
-
-/// Machine learning model configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AiModelConfig {
-    /// Type of model
-    pub model_type: AiModelType,
-
-    /// Model parameters
-    pub parameters: HashMap<String, f64>,
-
-    /// Training configuration
-    pub training: TrainingConfig,
-
-    /// Feature engineering settings
-    pub features: FeatureConfig,
-
-    /// Model versioning
-    pub version: String,
-
-    /// Performance thresholds
-    pub thresholds: PerformanceThresholds,
-}
-
-/// Training configuration for AI models
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrainingConfig {
-    /// Training data split ratio
-    pub train_split: f64,
-
-    /// Validation data split ratio
-    pub validation_split: f64,
-
-    /// Maximum training epochs
-    pub max_epochs: usize,
-
-    /// Learning rate
-    pub learning_rate: f64,
-
-    /// Batch size for training
-    pub batch_size: usize,
-
-    /// Early stopping patience
-    pub patience: usize,
-
-    /// Model checkpointing interval
-    pub checkpoint_interval: usize,
-}
-
-/// Feature engineering configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeatureConfig {
-    /// Include graph structure features
-    pub include_graph_structure: bool,
-
-    /// Include cardinality features
-    pub include_cardinality: bool,
-
-    /// Include type distribution features
-    pub include_type_distribution: bool,
-
-    /// Include pattern frequency features
-    pub include_pattern_frequency: bool,
-
-    /// Include temporal features
-    pub include_temporal: bool,
-
-    /// Maximum feature dimension
-    pub max_features: usize,
-
-    /// Feature normalization method
-    pub normalization: FeatureNormalization,
-}
-
-/// Feature normalization methods
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FeatureNormalization {
-    None,
-    MinMax,
-    StandardScore,
-    RobustScaler,
-}
-
-/// Performance thresholds for model evaluation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PerformanceThresholds {
-    /// Minimum accuracy for classification models
-    pub min_accuracy: f64,
-
-    /// Minimum precision for pattern recognition
-    pub min_precision: f64,
-
-    /// Minimum recall for anomaly detection
-    pub min_recall: f64,
-
-    /// Maximum mean squared error for regression
-    pub max_mse: f64,
-
-    /// Minimum F1 score
-    pub min_f1_score: f64,
 }
 
 /// AI-powered SHACL assistant for comprehensive validation enhancement
@@ -1550,107 +1478,6 @@ impl Default for ShaclAiAssistant {
     }
 }
 
-/// Configuration for SHACL-AI operations
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ShaclAiConfig {
-    /// Shape learning configuration
-    pub learning: LearningConfig,
-
-    /// Quality assessment configuration
-    pub quality: QualityConfig,
-
-    /// Validation prediction configuration
-    pub prediction: PredictionConfig,
-
-    /// Optimization configuration
-    pub optimization: optimization::OptimizationConfig,
-
-    /// Pattern analysis configuration
-    pub patterns: PatternConfig,
-
-    /// Analytics configuration
-    pub analytics: AnalyticsConfig,
-
-    /// Global AI settings
-    pub global: GlobalAiConfig,
-}
-
-/// Global AI configuration settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GlobalAiConfig {
-    /// Enable parallel processing
-    pub enable_parallel_processing: bool,
-
-    /// Maximum memory usage for AI operations (in MB)
-    pub max_memory_mb: usize,
-
-    /// Enable caching of AI results
-    pub enable_caching: bool,
-
-    /// Cache size limit
-    pub cache_size_limit: usize,
-
-    /// Enable model checkpointing
-    pub enable_checkpointing: bool,
-
-    /// Logging level for AI operations
-    pub log_level: String,
-
-    /// Enable performance monitoring
-    pub enable_monitoring: bool,
-}
-
-impl Default for GlobalAiConfig {
-    fn default() -> Self {
-        Self {
-            enable_parallel_processing: true,
-            max_memory_mb: 1024,
-            enable_caching: true,
-            cache_size_limit: 10000,
-            enable_checkpointing: true,
-            log_level: "info".to_string(),
-            enable_monitoring: true,
-        }
-    }
-}
-
-/// Comprehensive statistics about SHACL-AI operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShaclAiStatistics {
-    pub shapes_learned: usize,
-    pub quality_assessments: usize,
-    pub predictions_made: usize,
-    pub optimizations_performed: usize,
-    pub patterns_analyzed: usize,
-    pub insights_generated: usize,
-}
-
-/// Training dataset for AI models
-#[derive(Debug, Clone)]
-pub struct TrainingDataset {
-    pub shape_data: LearningTrainingData,
-    pub quality_data: QualityTrainingData,
-    pub prediction_data: PredictionTrainingData,
-}
-
-/// Training result for AI models
-#[derive(Debug, Clone)]
-pub struct TrainingResult {
-    pub model_results: Vec<(String, ModelTrainingResult)>,
-    pub overall_success: bool,
-    pub training_time: std::time::Duration,
-}
-
-/// Individual model training result
-#[derive(Debug, Clone)]
-pub struct ModelTrainingResult {
-    pub success: bool,
-    pub accuracy: f64,
-    pub loss: f64,
-    pub epochs_trained: usize,
-    pub training_time: std::time::Duration,
-}
-
 /// Builder for creating SHACL-AI assistant with custom configuration
 #[derive(Debug)]
 pub struct ShaclAiAssistantBuilder {
@@ -1710,255 +1537,6 @@ impl Default for ShaclAiAssistantBuilder {
     }
 }
 
-/// Data types for insight generation
-/// Validation data for insight analysis
-#[derive(Debug, Clone)]
-pub struct ValidationData {
-    pub validation_reports: Vec<ValidationReport>,
-    pub performance_metrics: HashMap<String, f64>,
-    pub success_rate: f64,
-    pub failure_patterns: Vec<String>,
-}
-
-impl ValidationData {
-    pub fn calculate_success_rate(&self) -> f64 {
-        self.success_rate
-    }
-
-    pub fn get_failing_shapes(&self) -> Vec<ShapeId> {
-        self.validation_reports
-            .iter()
-            .flat_map(|r| &r.violations)
-            .map(|v| v.source_shape.clone())
-            .collect()
-    }
-
-    pub fn total_validations(&self) -> usize {
-        self.validation_reports.len()
-    }
-
-    pub fn failed_validations(&self) -> usize {
-        self.validation_reports
-            .iter()
-            .filter(|r| !r.conforms)
-            .count()
-    }
-
-    pub fn extract_violation_patterns(&self) -> Vec<ViolationPattern> {
-        // Simplified implementation
-        vec![ViolationPattern {
-            pattern_type: "missing_property".to_string(),
-            description: "Missing required properties".to_string(),
-            frequency: 0.3,
-            confidence: 0.8,
-            affected_shapes: Vec::new(),
-            recommendations: vec!["Add required property constraints".to_string()],
-            evidence: HashMap::new(),
-        }]
-    }
-
-    pub fn calculate_performance_trend(&self) -> PerformanceTrend {
-        PerformanceTrend {
-            degradation_percentage: 15.0,
-            significance: 0.85,
-            sample_size: self.validation_reports.len(),
-        }
-    }
-}
-
-/// Performance data for insight analysis
-#[derive(Debug, Clone)]
-pub struct PerformanceData {
-    pub current_avg_execution_time: f64,
-    pub peak_memory_usage: f64,
-    pub memory_threshold: f64,
-    pub current_throughput: f64,
-    pub performance_history: Vec<PerformanceMetric>,
-}
-
-impl PerformanceData {
-    pub fn calculate_execution_time_trend(&self) -> ExecutionTimeTrend {
-        ExecutionTimeTrend {
-            increase_percentage: 25.0,
-            significance: 0.8,
-        }
-    }
-
-    pub fn calculate_throughput_trend(&self) -> ThroughputTrend {
-        ThroughputTrend {
-            decline_percentage: 15.0,
-            significance: 0.85,
-        }
-    }
-}
-
-/// Shape data for insight analysis
-#[derive(Debug, Clone)]
-pub struct ShapeData {
-    pub shape_analyses: Vec<ShapeAnalysis>,
-}
-
-/// RDF data for insight analysis
-#[derive(Debug, Clone)]
-pub struct RdfData {
-    pub total_triples: usize,
-    pub missing_data_elements: Vec<Term>,
-    pub inconsistencies: Vec<DataInconsistency>,
-}
-
-impl RdfData {
-    pub fn calculate_missing_data_percentage(&self) -> f64 {
-        0.2 // 20% missing data
-    }
-
-    pub fn get_missing_data_elements(&self) -> Vec<Term> {
-        self.missing_data_elements.clone()
-    }
-
-    pub fn total_elements(&self) -> usize {
-        self.total_triples
-    }
-
-    pub fn detect_inconsistencies(&self) -> Vec<DataInconsistency> {
-        self.inconsistencies.clone()
-    }
-
-    pub fn analyze_distribution(&self) -> DistributionAnalysis {
-        DistributionAnalysis {
-            confidence: 0.8,
-            anomalous_elements: Vec::new(),
-            statistics: HashMap::new(),
-        }
-    }
-}
-
-/// Supporting types for data analysis
-#[derive(Debug, Clone)]
-pub struct ViolationPattern {
-    pub pattern_type: String,
-    pub description: String,
-    pub frequency: f64,
-    pub confidence: f64,
-    pub affected_shapes: Vec<ShapeId>,
-    pub recommendations: Vec<String>,
-    pub evidence: HashMap<String, String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct PerformanceTrend {
-    pub degradation_percentage: f64,
-    pub significance: f64,
-    pub sample_size: usize,
-}
-
-impl PerformanceTrend {
-    pub fn is_degrading(&self) -> bool {
-        self.degradation_percentage > 10.0
-    }
-
-    pub fn to_map(&self) -> HashMap<String, String> {
-        let mut map = HashMap::new();
-        map.insert(
-            "degradation_percentage".to_string(),
-            self.degradation_percentage.to_string(),
-        );
-        map.insert("significance".to_string(), self.significance.to_string());
-        map.insert("sample_size".to_string(), self.sample_size.to_string());
-        map
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ExecutionTimeTrend {
-    pub increase_percentage: f64,
-    pub significance: f64,
-}
-
-impl ExecutionTimeTrend {
-    pub fn is_increasing(&self) -> bool {
-        self.increase_percentage > 5.0
-    }
-
-    pub fn to_map(&self) -> HashMap<String, String> {
-        let mut map = HashMap::new();
-        map.insert(
-            "increase_percentage".to_string(),
-            self.increase_percentage.to_string(),
-        );
-        map.insert("significance".to_string(), self.significance.to_string());
-        map
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ThroughputTrend {
-    pub decline_percentage: f64,
-    pub significance: f64,
-}
-
-impl ThroughputTrend {
-    pub fn is_declining(&self) -> bool {
-        self.decline_percentage > 5.0
-    }
-
-    pub fn to_map(&self) -> HashMap<String, String> {
-        let mut map = HashMap::new();
-        map.insert(
-            "decline_percentage".to_string(),
-            self.decline_percentage.to_string(),
-        );
-        map.insert("significance".to_string(), self.significance.to_string());
-        map
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PerformanceMetric {
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub execution_time_ms: f64,
-    pub memory_usage_mb: f64,
-    pub throughput: f64,
-}
-
-#[derive(Debug, Clone)]
-pub struct ShapeAnalysis {
-    pub shape_id: ShapeId,
-    pub complexity_metrics: crate::insights::ShapeComplexityMetrics,
-    pub effectiveness_score: f64,
-}
-
-#[derive(Debug, Clone)]
-pub struct DataInconsistency {
-    pub pattern_type: String,
-    pub description: String,
-    pub significance: f64,
-    pub impact_level: InconsistencyImpact,
-    pub affected_elements: Vec<Term>,
-    pub suggested_fixes: Vec<String>,
-    pub evidence: HashMap<String, f64>,
-}
-
-#[derive(Debug, Clone)]
-pub struct DistributionAnalysis {
-    pub confidence: f64,
-    pub anomalous_elements: Vec<Term>,
-    pub statistics: HashMap<String, f64>,
-}
-
-impl DistributionAnalysis {
-    pub fn has_significant_anomalies(&self) -> bool {
-        !self.anomalous_elements.is_empty()
-    }
-}
-
-/// Inconsistency impact levels
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InconsistencyImpact {
-    Low,
-    Medium,
-    High,
-}
-
 /// Version information for OxiRS SHACL-AI
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -1966,11 +1544,6 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn init() -> Result<()> {
     tracing::info!("Initializing OxiRS SHACL-AI v{}", VERSION);
     Ok(())
-}
-
-/// Helper function to provide default Instant for serde default
-pub fn default_instant() -> std::time::Instant {
-    std::time::Instant::now()
 }
 
 #[cfg(test)]
@@ -2008,44 +1581,5 @@ mod tests {
         assert!(!assistant.config.global.enable_parallel_processing);
         assert_eq!(assistant.config.global.max_memory_mb, 512);
         assert!(!assistant.config.global.enable_caching);
-    }
-
-    #[test]
-    fn test_ai_model_config() {
-        let config = AiModelConfig {
-            model_type: AiModelType::PatternRecognition,
-            parameters: HashMap::new(),
-            training: TrainingConfig {
-                train_split: 0.8,
-                validation_split: 0.2,
-                max_epochs: 100,
-                learning_rate: 0.001,
-                batch_size: 32,
-                patience: 10,
-                checkpoint_interval: 10,
-            },
-            features: FeatureConfig {
-                include_graph_structure: true,
-                include_cardinality: true,
-                include_type_distribution: true,
-                include_pattern_frequency: true,
-                include_temporal: false,
-                max_features: 1000,
-                normalization: FeatureNormalization::StandardScore,
-            },
-            version: "1.0.0".to_string(),
-            thresholds: PerformanceThresholds {
-                min_accuracy: 0.85,
-                min_precision: 0.80,
-                min_recall: 0.75,
-                max_mse: 0.1,
-                min_f1_score: 0.8,
-            },
-        };
-
-        assert_eq!(config.model_type, AiModelType::PatternRecognition);
-        assert_eq!(config.training.max_epochs, 100);
-        assert_eq!(config.features.max_features, 1000);
-        assert_eq!(config.thresholds.min_accuracy, 0.85);
     }
 }

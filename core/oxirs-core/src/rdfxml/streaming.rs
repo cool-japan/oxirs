@@ -6,8 +6,7 @@
 use crate::{
     interning::StringInterner,
     model::{BlankNode, NamedNode, Object, Subject, Term, Triple},
-    optimization::TermInternerExt,
-    // optimization::{ZeroCopyBuffer, SimdProcessor}, // TODO: Implement these types
+    optimization::{SimdXmlProcessor, TermInternerExt, ZeroCopyBuffer},
     rdfxml::RdfXmlParseError,
 };
 use bumpalo::Bump;
@@ -19,6 +18,8 @@ use quick_xml::{
     Reader as XmlReader,
 };
 use std::io::BufReader;
+#[cfg(not(feature = "parallel"))]
+use std::sync::Mutex as ParkingLotMutex;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
@@ -39,6 +40,11 @@ pub struct DomFreeStreamingRdfXmlParser {
     arena: Bump,
     #[allow(dead_code)]
     buffer_pool: Arc<RdfXmlBufferPool>,
+    /// SIMD-accelerated XML processor for fast parsing
+    simd_processor: SimdXmlProcessor,
+    /// Zero-copy buffer for efficient data handling
+    #[allow(dead_code)]
+    zero_copy_buffer: ZeroCopyBuffer,
 }
 
 /// Configuration for streaming RDF/XML processing
@@ -173,15 +179,24 @@ impl Default for RdfXmlStreamingConfig {
 impl DomFreeStreamingRdfXmlParser {
     /// Create a new DOM-free streaming RDF/XML parser
     pub fn new(config: RdfXmlStreamingConfig) -> Self {
+        let buffer_size = config.xml_buffer_size;
         Self {
             namespace_stack: vec![NamespaceContext::default()],
             element_stack: Vec::with_capacity(config.max_element_depth),
             term_interner: Arc::new(StringInterner::with_capacity(100_000)),
             performance_monitor: Arc::new(RdfXmlPerformanceMonitor::new()),
             arena: Bump::with_capacity(config.arena_size),
-            buffer_pool: Arc::new(RdfXmlBufferPool::new(config.xml_buffer_size, 50)),
+            buffer_pool: Arc::new(RdfXmlBufferPool::new(buffer_size, 50)),
+            simd_processor: SimdXmlProcessor::new(),
+            zero_copy_buffer: ZeroCopyBuffer::new(buffer_size),
             config,
         }
+    }
+
+    /// Get access to the SIMD processor for external use
+    #[allow(dead_code)]
+    pub fn simd_processor(&self) -> &SimdXmlProcessor {
+        &self.simd_processor
     }
 
     /// Stream parse RDF/XML with DOM-free processing
@@ -656,18 +671,29 @@ impl DomFreeStreamingRdfXmlParser {
         Ok(())
     }
 
-    // Helper methods for zero-copy processing
+    // Helper methods for zero-copy processing with SIMD acceleration
     fn process_text_zero_copy(&self, text: &BytesText<'_>) -> Result<String, RdfXmlParseError> {
+        let raw_bytes = text.as_ref();
+
+        // Use SIMD-accelerated UTF-8 validation first
+        if !self.simd_processor.is_valid_utf8(raw_bytes) {
+            return Err(RdfXmlParseError::XmlError(
+                "Invalid UTF-8 in text content".to_string(),
+            ));
+        }
+
+        // Use SIMD-accelerated whitespace trimming
+        let trimmed = self.simd_processor.trim_whitespace(raw_bytes);
+
         if self.config.enable_zero_copy {
             // Use arena allocation for temporary string
-            let text_str = self.arena.alloc_str(
-                std::str::from_utf8(text.as_ref())
-                    .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?,
-            );
-            Ok(text_str.to_string()) // Still need to copy for return value
+            // SAFETY: We validated UTF-8 above
+            let text_str = unsafe { std::str::from_utf8_unchecked(trimmed) };
+            let allocated = self.arena.alloc_str(text_str);
+            Ok(allocated.to_string())
         } else {
-            let text_str =
-                std::str::from_utf8(text).map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?;
+            // SAFETY: We validated UTF-8 above
+            let text_str = unsafe { std::str::from_utf8_unchecked(trimmed) };
             Ok(unescape(text_str)
                 .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?
                 .into_owned())
@@ -676,7 +702,17 @@ impl DomFreeStreamingRdfXmlParser {
 
     fn process_attribute_name_zero_copy(&self, name: &[u8]) -> Result<String, RdfXmlParseError> {
         self.performance_monitor.record_zero_copy_operation();
-        Ok(String::from_utf8_lossy(name).into_owned())
+
+        // Use SIMD-accelerated UTF-8 validation
+        if !self.simd_processor.is_valid_utf8(name) {
+            return Err(RdfXmlParseError::XmlError(
+                "Invalid UTF-8 in attribute name".to_string(),
+            ));
+        }
+
+        // SAFETY: We validated UTF-8 above
+        let name_str = unsafe { std::str::from_utf8_unchecked(name) };
+        Ok(name_str.to_string())
     }
 
     fn process_attribute_value_zero_copy(
@@ -685,23 +721,40 @@ impl DomFreeStreamingRdfXmlParser {
         value: &[u8],
     ) -> Result<String, RdfXmlParseError> {
         self.performance_monitor.record_zero_copy_operation();
-        Ok(String::from_utf8_lossy(value).into_owned())
+
+        // Use SIMD-accelerated UTF-8 validation
+        if !self.simd_processor.is_valid_utf8(value) {
+            return Err(RdfXmlParseError::XmlError(
+                "Invalid UTF-8 in attribute value".to_string(),
+            ));
+        }
+
+        // Use SIMD-accelerated whitespace trimming for attribute values
+        let trimmed = self.simd_processor.trim_whitespace(value);
+
+        // SAFETY: We validated UTF-8 above
+        let value_str = unsafe { std::str::from_utf8_unchecked(trimmed) };
+        Ok(value_str.to_string())
     }
 
     // Utility methods
     fn resolve_qname(&self, qname: &[u8]) -> Result<String, RdfXmlParseError> {
-        let qname_str = String::from_utf8_lossy(qname);
-        if let Some(colon_pos) = qname_str.find(':') {
-            let prefix = &qname_str[..colon_pos];
-            let local_name = &qname_str[colon_pos + 1..];
+        // Use SIMD-accelerated QName parsing for better performance
+        let (prefix_bytes, local_bytes) = self.simd_processor.parse_qname(qname);
 
-            if let Some(namespace_uri) = self.get_namespace_uri(prefix) {
+        if !prefix_bytes.is_empty() {
+            // We have a prefix - use SIMD-parsed components
+            let prefix = String::from_utf8_lossy(prefix_bytes);
+            let local_name = String::from_utf8_lossy(local_bytes);
+
+            if let Some(namespace_uri) = self.get_namespace_uri(&prefix) {
                 Ok(format!("{namespace_uri}{local_name}"))
             } else {
                 Err(RdfXmlParseError::UndefinedPrefix(prefix.to_string()))
             }
         } else {
-            // No prefix, use default namespace or treat as local name
+            // No prefix found - use the whole name as local
+            let qname_str = String::from_utf8_lossy(qname);
             if let Some(default_ns) = self.get_default_namespace() {
                 Ok(format!("{default_ns}{qname_str}"))
             } else {

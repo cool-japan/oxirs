@@ -139,11 +139,292 @@ impl QueryHistory {
         };
         self.entries[start..].iter().collect()
     }
+
+    /// Get analytics for query history
+    pub fn analytics(&self) -> HistoryAnalytics {
+        let total = self.entries.len();
+        let successful = self.entries.iter().filter(|e| e.success).count();
+        let failed = total - successful;
+
+        let avg_execution_time = if successful > 0 {
+            let sum: f64 = self
+                .entries
+                .iter()
+                .filter(|e| e.success && e.execution_time_ms.is_some())
+                .map(|e| e.execution_time_ms.unwrap())
+                .sum();
+            sum / successful as f64
+        } else {
+            0.0
+        };
+
+        // Find slowest queries
+        let mut sorted_by_time: Vec<&HistoryEntry> = self
+            .entries
+            .iter()
+            .filter(|e| e.success && e.execution_time_ms.is_some())
+            .collect();
+        sorted_by_time.sort_by(|a, b| {
+            b.execution_time_ms
+                .partial_cmp(&a.execution_time_ms)
+                .unwrap()
+        });
+        let slowest_queries: Vec<SlowQuery> = sorted_by_time
+            .iter()
+            .take(10)
+            .map(|e| SlowQuery {
+                query: e.query.clone(),
+                execution_time_ms: e.execution_time_ms.unwrap(),
+                result_count: e.result_count,
+            })
+            .collect();
+
+        // Dataset usage statistics
+        let mut dataset_usage: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for entry in &self.entries {
+            *dataset_usage.entry(entry.dataset.clone()).or_insert(0) += 1;
+        }
+
+        // Query type distribution (SELECT, ASK, CONSTRUCT, DESCRIBE)
+        let mut query_types: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for entry in &self.entries {
+            let query_type = extract_query_type(&entry.query);
+            *query_types.entry(query_type).or_insert(0) += 1;
+        }
+
+        // Common error patterns
+        let mut error_patterns: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for entry in self.entries.iter().filter(|e| !e.success) {
+            if let Some(error) = &entry.error {
+                let pattern = classify_error(error);
+                *error_patterns.entry(pattern).or_insert(0) += 1;
+            }
+        }
+
+        HistoryAnalytics {
+            total_queries: total,
+            successful_queries: successful,
+            failed_queries: failed,
+            success_rate: if total > 0 {
+                (successful as f64 / total as f64) * 100.0
+            } else {
+                0.0
+            },
+            avg_execution_time_ms: avg_execution_time,
+            slowest_queries,
+            dataset_usage,
+            query_types,
+            error_patterns,
+        }
+    }
+}
+
+/// Analytics data for query history
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HistoryAnalytics {
+    pub total_queries: usize,
+    pub successful_queries: usize,
+    pub failed_queries: usize,
+    pub success_rate: f64,
+    pub avg_execution_time_ms: f64,
+    pub slowest_queries: Vec<SlowQuery>,
+    pub dataset_usage: std::collections::HashMap<String, usize>,
+    pub query_types: std::collections::HashMap<String, usize>,
+    pub error_patterns: std::collections::HashMap<String, usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SlowQuery {
+    pub query: String,
+    pub execution_time_ms: f64,
+    pub result_count: Option<usize>,
+}
+
+/// Extract query type from SPARQL query
+fn extract_query_type(query: &str) -> String {
+    let query_upper = query.to_uppercase();
+    let lines: Vec<&str> = query_upper.lines().collect();
+
+    for line in lines {
+        let trimmed = line.trim();
+
+        // Skip comments and PREFIX declarations
+        if trimmed.starts_with('#') || trimmed.starts_with("PREFIX") {
+            continue;
+        }
+
+        // Detect query type
+        if trimmed.contains("SELECT") {
+            return "SELECT".to_string();
+        } else if trimmed.contains("ASK") {
+            return "ASK".to_string();
+        } else if trimmed.contains("CONSTRUCT") {
+            return "CONSTRUCT".to_string();
+        } else if trimmed.contains("DESCRIBE") {
+            return "DESCRIBE".to_string();
+        } else if trimmed.contains("INSERT") || trimmed.contains("DELETE") {
+            return "UPDATE".to_string();
+        }
+    }
+
+    "UNKNOWN".to_string()
+}
+
+/// Classify error into common patterns
+fn classify_error(error: &str) -> String {
+    let error_lower = error.to_lowercase();
+
+    if error_lower.contains("syntax") || error_lower.contains("parse") {
+        "Syntax Error".to_string()
+    } else if error_lower.contains("timeout") {
+        "Timeout".to_string()
+    } else if error_lower.contains("not found") {
+        "Not Found".to_string()
+    } else if error_lower.contains("permission") || error_lower.contains("denied") {
+        "Permission Denied".to_string()
+    } else if error_lower.contains("connection") || error_lower.contains("network") {
+        "Connection Error".to_string()
+    } else if error_lower.contains("memory") || error_lower.contains("out of") {
+        "Resource Exhaustion".to_string()
+    } else {
+        "Other Error".to_string()
+    }
 }
 
 /// Query history commands
 pub mod commands {
     use super::*;
+    use colored::Colorize;
+
+    /// Display query history analytics
+    pub async fn analytics_command(dataset: Option<String>) -> Result<()> {
+        let mut history = QueryHistory::new(QueryHistory::default_history_file(), 1000);
+        history.load()?;
+
+        // Filter by dataset if specified
+        let filtered_entries: Vec<HistoryEntry> = if let Some(ds) = &dataset {
+            history
+                .entries()
+                .iter()
+                .filter(|e| &e.dataset == ds)
+                .cloned()
+                .collect()
+        } else {
+            history.entries().to_vec()
+        };
+
+        if filtered_entries.is_empty() {
+            println!("📊 No query history found");
+            return Ok(());
+        }
+
+        // Create temporary history for analytics
+        let mut temp_history = QueryHistory::new(PathBuf::new(), 0);
+        temp_history.entries = filtered_entries;
+        let analytics = temp_history.analytics();
+
+        println!("{}", "📊 Query History Analytics\n".bold());
+
+        // Overall statistics
+        println!("{}", "Overall Statistics:".bold());
+        println!("  Total Queries: {}", analytics.total_queries);
+        println!(
+            "  Successful: {} ({}%)",
+            analytics.successful_queries.to_string().green(),
+            format!("{:.1}", analytics.success_rate).green()
+        );
+        println!(
+            "  Failed: {} ({}%)",
+            analytics.failed_queries.to_string().red(),
+            format!("{:.1}", 100.0 - analytics.success_rate).red()
+        );
+        println!(
+            "  Avg Execution Time: {:.2}ms",
+            analytics.avg_execution_time_ms
+        );
+        println!();
+
+        // Query type distribution
+        if !analytics.query_types.is_empty() {
+            println!("{}", "Query Type Distribution:".bold());
+            for (qtype, count) in &analytics.query_types {
+                let percentage = (*count as f64 / analytics.total_queries as f64) * 100.0;
+                println!("  {}: {} ({:.1}%)", qtype, count, percentage);
+            }
+            println!();
+        }
+
+        // Dataset usage
+        if analytics.dataset_usage.len() > 1 {
+            println!("{}", "Dataset Usage:".bold());
+            let mut sorted_datasets: Vec<_> = analytics.dataset_usage.iter().collect();
+            sorted_datasets.sort_by(|a, b| b.1.cmp(a.1));
+            for (dataset, count) in sorted_datasets.iter().take(10) {
+                let percentage = (**count as f64 / analytics.total_queries as f64) * 100.0;
+                println!("  {}: {} queries ({:.1}%)", dataset, count, percentage);
+            }
+            println!();
+        }
+
+        // Slowest queries
+        if !analytics.slowest_queries.is_empty() {
+            println!("{}", "Top 5 Slowest Queries:".bold());
+            for (i, slow_query) in analytics.slowest_queries.iter().take(5).enumerate() {
+                println!(
+                    "  {}. {:.2}ms",
+                    i + 1,
+                    slow_query.execution_time_ms.to_string().yellow()
+                );
+                let preview = if slow_query.query.len() > 60 {
+                    format!("{}...", &slow_query.query[..57])
+                } else {
+                    slow_query.query.clone()
+                };
+                println!("     {}", preview);
+                if let Some(count) = slow_query.result_count {
+                    println!("     Results: {} solutions", count);
+                }
+            }
+            println!();
+        }
+
+        // Error patterns
+        if !analytics.error_patterns.is_empty() {
+            println!("{}", "Common Error Patterns:".bold());
+            let mut sorted_errors: Vec<_> = analytics.error_patterns.iter().collect();
+            sorted_errors.sort_by(|a, b| b.1.cmp(a.1));
+            for (pattern, count) in sorted_errors {
+                let percentage = (*count as f64 / analytics.failed_queries as f64) * 100.0;
+                println!("  {}: {} ({:.1}%)", pattern.red(), count, percentage);
+            }
+            println!();
+        }
+
+        // Recommendations
+        println!("{}", "💡 Recommendations:".bold());
+        if analytics.avg_execution_time_ms > 1000.0 {
+            println!("  • Consider optimizing slow queries (avg >1s)");
+            println!("  • Use LIMIT clauses to reduce result set sizes");
+            println!("  • Add indexes for frequently queried properties");
+        }
+        if analytics.success_rate < 80.0 {
+            println!("  • Review and fix common error patterns");
+            println!("  • Validate queries with: oxirs qparse <query>");
+        }
+        if let Some((most_common_error, _)) = analytics
+            .error_patterns
+            .iter()
+            .max_by_key(|(_, count)| *count)
+        {
+            println!("  • Most common error: {}", most_common_error);
+            println!("    Consider addressing this systematically");
+        }
+
+        Ok(())
+    }
 
     /// List query history
     pub async fn list_command(limit: Option<usize>, dataset: Option<String>) -> Result<()> {

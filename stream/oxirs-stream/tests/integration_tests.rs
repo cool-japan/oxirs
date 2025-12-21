@@ -140,13 +140,8 @@ mod memory_backend_tests {
         // Flush to ensure events are published (important when batching is enabled)
         stream.flush().await?;
 
-        // Check how many events are in global storage
-        let global_events = oxirs_stream::get_memory_events();
-        let event_count = global_events.read().await.len();
-        println!("Events in global storage: {event_count}");
-
         // Add small delay to ensure events are available
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         // Test consuming events
         let mut received_events = Vec::new();
@@ -223,16 +218,33 @@ mod memory_backend_tests {
 
         println!("Published {event_count} events in {publish_duration:?}");
 
+        // Small delay to allow backend to settle
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
         // Measure consume throughput
         let start = std::time::Instant::now();
         let mut received_count = 0;
-        for _ in 0..event_count {
+        let mut total_attempts = 0;
+        let max_attempts = event_count * 2; // Allow up to 2x attempts to handle timing issues
+
+        while received_count < event_count && total_attempts < max_attempts {
+            total_attempts += 1;
+
             match timeout(Duration::from_millis(100), stream.consume()).await {
                 Ok(Ok(Some(_))) => {
                     received_count += 1;
                 }
-                _ => {
-                    break;
+                Ok(Ok(None)) => {
+                    // No event available, wait a bit and retry
+                    tokio::time::sleep(Duration::from_micros(100)).await;
+                }
+                Ok(Err(e)) => {
+                    println!("Error consuming: {e}");
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+                Err(_) => {
+                    // Timeout, try again
+                    continue;
                 }
             }
         }

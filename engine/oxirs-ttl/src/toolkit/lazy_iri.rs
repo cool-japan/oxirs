@@ -114,21 +114,170 @@ impl LazyIri {
         }
     }
 
-    /// Simple relative IRI resolution
+    /// RFC 3986-compliant relative IRI resolution
     ///
-    /// Note: This is a simplified implementation. Production code should
-    /// use a proper RFC 3986 implementation like the `iri-string` crate.
+    /// Implements the IRI resolution algorithm from RFC 3986 Section 5.2
+    /// with support for:
+    /// - Absolute IRIs (returned as-is)
+    /// - Relative paths with dot segment removal (. and ..)
+    /// - Fragment and query handling
+    /// - Authority component handling
     fn resolve_relative(base: &str, relative: &str) -> String {
-        if relative.starts_with("http://") || relative.starts_with("https://") {
-            // Already absolute
+        // If relative is already absolute, return it
+        if relative.contains("://") {
             return relative.to_string();
         }
 
-        // Handle base URL with or without trailing slash
-        if base.ends_with('/') {
-            format!("{}{}", base, relative)
+        // Parse base IRI components
+        let (base_scheme, base_authority, base_path, _base_query, _base_fragment) =
+            Self::parse_iri(base);
+
+        // Parse relative IRI components
+        if relative.starts_with("//") {
+            // Network-path reference: keep scheme, replace rest
+            return format!("{}:{}", base_scheme, relative);
+        }
+
+        if relative.starts_with('/') {
+            // Absolute-path reference: keep scheme+authority, replace path
+            let authority_str = if base_authority.is_empty() {
+                String::new()
+            } else {
+                format!("//{}", base_authority)
+            };
+            return format!("{}:{}{}", base_scheme, authority_str, relative);
+        }
+
+        if relative.starts_with('?') || relative.starts_with('#') {
+            // Query or fragment reference: keep scheme+authority+path
+            let authority_str = if base_authority.is_empty() {
+                String::new()
+            } else {
+                format!("//{}", base_authority)
+            };
+            return format!("{}:{}{}{}", base_scheme, authority_str, base_path, relative);
+        }
+
+        // Relative-path reference: merge paths
+        let merged_path = Self::merge_paths(&base_path, relative, !base_authority.is_empty());
+        let normalized_path = Self::remove_dot_segments(&merged_path);
+
+        // Split relative into path and query/fragment
+        let (rel_path_only, rel_suffix) = if let Some(pos) = relative.find('?') {
+            (&relative[..pos], &relative[pos..])
+        } else if let Some(pos) = relative.find('#') {
+            (&relative[..pos], &relative[pos..])
         } else {
-            format!("{}/{}", base, relative)
+            (relative, "")
+        };
+
+        let _ = rel_path_only; // Used in merged_path calculation
+
+        let authority_str = if base_authority.is_empty() {
+            String::new()
+        } else {
+            format!("//{}", base_authority)
+        };
+
+        // Ensure proper path formatting (no double slashes)
+        let final_path = if !base_authority.is_empty() && !normalized_path.starts_with('/') {
+            format!("/{}", normalized_path)
+        } else {
+            normalized_path
+        };
+
+        format!(
+            "{}:{}{}{}",
+            base_scheme, authority_str, final_path, rel_suffix
+        )
+    }
+
+    /// Parse IRI into components (scheme, authority, path, query, fragment)
+    fn parse_iri(iri: &str) -> (String, String, String, String, String) {
+        // Extract scheme (without ://)
+        let (scheme, rest) = if let Some(pos) = iri.find("://") {
+            (&iri[..pos], &iri[pos + 3..])
+        } else {
+            ("", iri)
+        };
+
+        // Extract authority (without //)
+        let (authority, rest) = if !scheme.is_empty() {
+            if let Some(pos) = rest.find('/') {
+                (&rest[..pos], &rest[pos..])
+            } else if let Some(pos) = rest.find(['?', '#']) {
+                (&rest[..pos], &rest[pos..])
+            } else {
+                (rest, "")
+            }
+        } else {
+            ("", rest)
+        };
+
+        // Extract path, query, and fragment
+        let (path_query, fragment) = if let Some(pos) = rest.find('#') {
+            (&rest[..pos], &rest[pos..])
+        } else {
+            (rest, "")
+        };
+
+        let (path, query) = if let Some(pos) = path_query.find('?') {
+            (&path_query[..pos], &path_query[pos..])
+        } else {
+            (path_query, "")
+        };
+
+        (
+            scheme.to_string(),
+            authority.to_string(),
+            path.to_string(),
+            query.to_string(),
+            fragment.to_string(),
+        )
+    }
+
+    /// Merge base path with relative path (RFC 3986 Section 5.2.3)
+    fn merge_paths(base_path: &str, relative_path: &str, has_authority: bool) -> String {
+        if has_authority && base_path.is_empty() {
+            // Base has authority but empty path
+            format!("/{}", relative_path)
+        } else if let Some(pos) = base_path.rfind('/') {
+            // Remove last segment from base, append relative
+            format!("{}/{}", &base_path[..pos], relative_path)
+        } else {
+            // Base has no slash
+            relative_path.to_string()
+        }
+    }
+
+    /// Remove dot segments from path (RFC 3986 Section 5.2.4)
+    fn remove_dot_segments(path: &str) -> String {
+        let mut output = Vec::new();
+        let segments: Vec<&str> = path.split('/').collect();
+
+        for segment in segments {
+            match segment {
+                "" | "." => {
+                    // Skip empty segments and current directory
+                }
+                ".." => {
+                    // Go up one level (pop last segment)
+                    output.pop();
+                }
+                _ => {
+                    // Regular segment
+                    output.push(segment);
+                }
+            }
+        }
+
+        // Reconstruct path
+        if path.starts_with('/') {
+            format!("/{}", output.join("/"))
+        } else if output.is_empty() {
+            String::new()
+        } else {
+            output.join("/")
         }
     }
 
@@ -396,10 +545,72 @@ mod tests {
         let iri =
             LazyIri::from_relative("relative/path", Some("http://example.org/base".to_string()));
 
-        assert_eq!(
-            iri.resolve().unwrap(),
-            "http://example.org/base/relative/path"
+        assert_eq!(iri.resolve().unwrap(), "http://example.org/relative/path");
+    }
+
+    #[test]
+    fn test_rfc3986_dot_segments() {
+        // Test dot segment removal
+        // Base: /a/b/c + ../ → /a/b + ../ → /a
+        let iri =
+            LazyIri::from_relative("../sibling", Some("http://example.org/a/b/c".to_string()));
+        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/sibling");
+
+        // Base: /a/ + ./ → /a/current
+        let iri = LazyIri::from_relative("./current", Some("http://example.org/a/".to_string()));
+        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/current");
+
+        // Base: /a/b/c/d + ../../ → /a/b + ../../ → /a
+        let iri =
+            LazyIri::from_relative("../../up", Some("http://example.org/a/b/c/d".to_string()));
+        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/up");
+
+        // Additional RFC 3986 test cases
+        // Base: /a/b (file) + c → /a/c (replaces last segment)
+        let iri = LazyIri::from_relative("c", Some("http://example.org/a/b".to_string()));
+        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/c");
+
+        // Base: /a/b/ (directory) + c → /a/b/c (appends)
+        let iri = LazyIri::from_relative("c", Some("http://example.org/a/b/".to_string()));
+        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/b/c");
+    }
+
+    #[test]
+    fn test_rfc3986_absolute_path() {
+        // Absolute path reference
+        let iri = LazyIri::from_relative("/absolute", Some("http://example.org/a/b/c".to_string()));
+        assert_eq!(iri.resolve().unwrap(), "http://example.org/absolute");
+    }
+
+    #[test]
+    fn test_rfc3986_query_fragment() {
+        // Query reference
+        let iri = LazyIri::from_relative("?query", Some("http://example.org/path".to_string()));
+        assert_eq!(iri.resolve().unwrap(), "http://example.org/path?query");
+
+        // Fragment reference
+        let iri = LazyIri::from_relative("#fragment", Some("http://example.org/path".to_string()));
+        assert_eq!(iri.resolve().unwrap(), "http://example.org/path#fragment");
+    }
+
+    #[test]
+    fn test_rfc3986_network_path() {
+        // Network-path reference
+        let iri = LazyIri::from_relative(
+            "//other.example.org/path",
+            Some("http://example.org/base".to_string()),
         );
+        assert_eq!(iri.resolve().unwrap(), "http://other.example.org/path");
+    }
+
+    #[test]
+    fn test_rfc3986_already_absolute() {
+        // Already absolute IRI
+        let iri = LazyIri::from_relative(
+            "https://absolute.org/path",
+            Some("http://example.org/base".to_string()),
+        );
+        assert_eq!(iri.resolve().unwrap(), "https://absolute.org/path");
     }
 
     #[test]

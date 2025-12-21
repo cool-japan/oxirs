@@ -376,14 +376,34 @@ impl TripleStatistics {
 
     /// Export statistics to a serializable format
     pub fn export(&self) -> StatisticsSnapshot {
+        let total = self.total_triples.load(Ordering::Relaxed);
+        let subjects = self.distinct_subjects() as u64;
+        let predicates = self.distinct_predicates() as u64;
+        let objects = self.distinct_objects() as u64;
+
         StatisticsSnapshot {
-            total_triples: self.total_triples.load(Ordering::Relaxed),
-            distinct_subjects: self.distinct_subjects() as u64,
-            distinct_predicates: self.distinct_predicates() as u64,
-            distinct_objects: self.distinct_objects() as u64,
+            total_triples: total,
+            distinct_subjects: subjects,
+            distinct_predicates: predicates,
+            distinct_objects: objects,
             subject_cardinality: self.subject_cardinality(),
             predicate_cardinality: self.predicate_cardinality(),
             object_cardinality: self.object_cardinality(),
+            avg_properties_per_subject: if subjects > 0 {
+                total as f64 / subjects as f64
+            } else {
+                0.0
+            },
+            avg_objects_per_predicate: if predicates > 0 {
+                total as f64 / predicates as f64
+            } else {
+                0.0
+            },
+            avg_subjects_per_object: if objects > 0 {
+                total as f64 / objects as f64
+            } else {
+                0.0
+            },
         }
     }
 }
@@ -405,6 +425,12 @@ pub struct StatisticsSnapshot {
     pub predicate_cardinality: CardinalityStats,
     /// Object cardinality statistics
     pub object_cardinality: CardinalityStats,
+    /// Average properties per subject (selectivity for S-first queries)
+    pub avg_properties_per_subject: f64,
+    /// Average objects per predicate (selectivity for P-first queries)
+    pub avg_objects_per_predicate: f64,
+    /// Average subjects per object (selectivity for O-first queries)
+    pub avg_subjects_per_object: f64,
 }
 
 #[cfg(test)]

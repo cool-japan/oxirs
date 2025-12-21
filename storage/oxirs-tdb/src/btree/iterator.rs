@@ -3,6 +3,7 @@
 use super::node::{BTreeNode, LeafNode};
 use crate::error::Result;
 use crate::storage::{BufferPool, PageId};
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -10,8 +11,8 @@ use std::sync::Arc;
 /// Range scan iterator for B+Tree
 pub struct BTreeIterator<K, V>
 where
-    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug,
-    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug,
+    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
+    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
 {
     buffer_pool: Arc<BufferPool>,
     current_leaf: Option<PageId>,
@@ -22,8 +23,8 @@ where
 
 impl<K, V> BTreeIterator<K, V>
 where
-    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug,
-    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug,
+    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
+    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
 {
     /// Create a new iterator starting from a leaf node
     pub fn new(
@@ -101,8 +102,8 @@ where
 
 impl<K, V> Iterator for BTreeIterator<K, V>
 where
-    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug,
-    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug,
+    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
+    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
 {
     type Item = Result<(K, V)>;
 

@@ -21,7 +21,7 @@ pub struct HuggingFaceConfig {
 /// Pooling strategies for transformer outputs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PoolingStrategy {
-    /// Use [CLS] token embedding
+    /// Use `[CLS]` token embedding
     Cls,
     /// Mean pooling of all token embeddings
     Mean,

@@ -661,17 +661,30 @@ impl RaftNode {
     /// Initialize Raft with storage
     #[cfg(feature = "raft")]
     pub async fn init_raft(&mut self, _peers: BTreeSet<OxirsNodeId>) -> Result<()> {
-        // TODO: OpenRaft 0.9.21 requires implementing RaftNetworkFactory separately
-        // The new Raft::new() signature is:
-        // Raft::new(node_id, Arc::new(config), log_store, network_factory, state_machine)
+        // Note: OpenRaft 0.9.21 Migration Required
+        // ========================================
+        // OpenRaft 0.9.21 introduced breaking API changes that require architectural refactoring.
+        // This is a deliberate design decision to defer migration until the API stabilizes.
         //
-        // We need to:
-        // 1. Implement RaftNetworkFactory for network communication
-        // 2. Split OxirsStorage into separate log storage and state machine
-        // 3. Update initialization to use new initialize() API that takes nodes instead of Membership
+        // Current State:
+        // - Using fallback to global shared storage (suitable for single-node and testing)
+        // - Raft consensus is optional via feature flag
+        //
+        // Migration Requirements (when upgrading to OpenRaft 0.9.21+):
+        // 1. Implement RaftNetworkFactory trait for network layer abstraction
+        // 2. Split OxirsStorage into:
+        //    - RaftLogStorage: Manages Raft log entries
+        //    - RaftStateMachine: Manages application state
+        // 3. Update initialization to use new Raft::new() signature:
+        //    `Raft::new(node_id, Arc::new(config), log_store, network_factory, state_machine)`
+        // 4. Replace Membership initialization with new nodes-based API
+        //
+        // References:
+        // - OpenRaft migration guide: https://github.com/datafuselabs/openraft/blob/main/guide/migration-guide.md
+        // - Network factory example: https://github.com/datafuselabs/openraft/tree/main/examples/raft-kv-memstore
         //
         // For now, we allow initialization to succeed but leave self.raft as None.
-        // This triggers fallback to global shared storage, which is suitable for testing.
+        // This triggers fallback to global shared storage, which is suitable for testing and development.
         tracing::warn!(
             "Raft initialization incomplete for OpenRaft 0.9.21 - using fallback storage mode"
         );

@@ -3,8 +3,10 @@
 //! This module provides the core geometry types and operations for GeoSPARQL,
 //! wrapping the `geo` crate and providing WKT/GML serialization support.
 
+pub mod compressed_storage;
 pub mod coord3d;
 pub mod memory_pool;
+pub mod streaming;
 pub mod wkt_parser;
 pub mod zero_copy_wkt;
 
@@ -48,7 +50,7 @@ use std::fmt;
 /// Spatial Reference System (CRS) identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Crs {
-    /// The CRS URI (e.g., "http://www.opengis.net/def/crs/EPSG/0/4326")
+    /// The CRS URI (e.g., `http://www.opengis.net/def/crs/EPSG/0/4326`)
     pub uri: String,
 }
 
@@ -550,7 +552,8 @@ impl Geometry {
     /// let geometries = vec![geom];
     ///
     /// let topojson = Geometry::to_topojson(&geometries).unwrap();
-    /// assert!(topojson.contains("\"type\":\"Topology\""));
+    /// // Pretty-printed JSON has spaces: "type": "Topology"
+    /// assert!(topojson.contains("\"type\": \"Topology\""));
     /// # }
     /// ```
     #[cfg(feature = "topojson-support")]

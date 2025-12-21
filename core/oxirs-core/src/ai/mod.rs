@@ -22,8 +22,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub use embeddings::{
-    ComplEx, DistMult, EmbeddingConfig, EmbeddingModelType, KnowledgeGraphEmbedding,
-    TrainingConfig as EmbeddingTrainingConfig, TrainingMetrics as EmbeddingTrainingMetrics, TransE,
+    create_embedding_model, ComplEx, DistMult, EmbeddingConfig, EmbeddingModelType,
+    KnowledgeGraphEmbedding, TransE,
 };
 pub use gnn::{
     Aggregation, GnnArchitecture, GnnConfig, GraphNeuralNetwork, LayerType, MessagePassingType,

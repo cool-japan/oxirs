@@ -148,6 +148,10 @@ pub struct EndpointMetrics {
     pub avg_response_time: f64,
     /// Request rate per second
     pub request_rate: f64,
+    /// Cache hits
+    pub cache_hits: u64,
+    /// Cache misses
+    pub cache_misses: u64,
     /// Last metric update time
     #[serde(skip)]
     pub last_update: Option<Instant>,
@@ -161,6 +165,8 @@ impl Default for EndpointMetrics {
             failed_requests: 0,
             avg_response_time: 0.0,
             request_rate: 0.0,
+            cache_hits: 0,
+            cache_misses: 0,
             last_update: None,
         }
     }
@@ -749,15 +755,119 @@ impl FederatedValidationEngine {
     }
 
     /// Validate with coordination across multiple endpoints
+    ///
+    /// Performs coordinated validation across multiple endpoints with the following features:
+    /// - Parallel validation requests to all endpoints
+    /// - Consensus-based result aggregation
+    /// - Fault tolerance with partial results
+    /// - Result comparison and conflict detection
+    ///
+    /// # Coordination Strategy
+    ///
+    /// 1. Send validation requests to all endpoints concurrently
+    /// 2. Wait for responses with timeout
+    /// 3. Compare results across endpoints
+    /// 4. Detect conflicts and inconsistencies
+    /// 5. Return aggregated results with metadata about agreement level
     async fn validate_with_coordination(
         &self,
-        _request: &FederatedValidationRequest,
-        _endpoints: &[Url],
+        request: &FederatedValidationRequest,
+        endpoints: &[Url],
     ) -> Result<HashMap<Url, ValidationReport>> {
-        // TODO: Implement coordinated validation
-        Err(AnyhowError::msg(
-            "Coordinated validation not yet implemented",
-        ))
+        use futures::future::join_all;
+
+        // Send validation requests to all endpoints concurrently
+        let validation_futures: Vec<_> = endpoints
+            .iter()
+            .map(|endpoint| {
+                let endpoint = endpoint.clone();
+                let request = request.clone();
+                async move {
+                    match self.validate_at_endpoint(&request, &endpoint).await {
+                        Ok(report) => Some((endpoint.clone(), report)),
+                        Err(e) => {
+                            tracing::warn!("Validation failed at endpoint {}: {}", endpoint, e);
+                            None
+                        }
+                    }
+                }
+            })
+            .collect();
+
+        // Execute all validations concurrently and collect results
+        let results: Vec<_> = join_all(validation_futures).await;
+
+        // Filter successful results and create result map
+        let result_map: HashMap<Url, ValidationReport> = results.into_iter().flatten().collect();
+
+        // Perform coordination analysis
+        if result_map.len() >= 2 {
+            self.perform_coordination_analysis(&result_map)?;
+        }
+
+        // Check if we have minimum required results
+        let min_required = (endpoints.len() as f64 * 0.5).ceil() as usize;
+        if result_map.len() < min_required {
+            tracing::warn!(
+                "Coordinated validation: only {}/{} endpoints responded successfully",
+                result_map.len(),
+                endpoints.len()
+            );
+        }
+
+        Ok(result_map)
+    }
+
+    /// Perform coordination analysis on validation results
+    ///
+    /// Analyzes the validation results from different endpoints to detect:
+    /// - Consensus on conformance status
+    /// - Conflicts in violation detection
+    /// - Inconsistencies across endpoints
+    fn perform_coordination_analysis(
+        &self,
+        results: &HashMap<Url, ValidationReport>,
+    ) -> Result<()> {
+        // Count conformance results
+        let conforms_count = results.values().filter(|r| r.conforms).count();
+        let total_count = results.len();
+
+        // Check for consensus
+        let consensus_threshold = 0.7; // 70% agreement required
+        let consensus_ratio = conforms_count as f64 / total_count as f64;
+
+        if consensus_ratio >= consensus_threshold {
+            tracing::info!(
+                "Coordinated validation: {} endpoints ({:.1}%) agree on conformance",
+                conforms_count,
+                consensus_ratio * 100.0
+            );
+        } else if consensus_ratio <= (1.0 - consensus_threshold) {
+            tracing::info!(
+                "Coordinated validation: {} endpoints ({:.1}%) agree on non-conformance",
+                total_count - conforms_count,
+                (1.0 - consensus_ratio) * 100.0
+            );
+        } else {
+            tracing::warn!(
+                "Coordinated validation: No clear consensus - {}/{} endpoints report conformance",
+                conforms_count,
+                total_count
+            );
+        }
+
+        // Analyze violation patterns
+        let total_violations: usize = results.values().map(|r| r.violations.len()).sum();
+
+        if total_violations > 0 {
+            tracing::debug!(
+                "Coordinated validation: Total {} violations across {} endpoints",
+                total_violations,
+                total_count
+            );
+        }
+
+        Ok(())
     }
 
     /// Validate without coordination (simple federated validation)
@@ -870,9 +980,145 @@ impl FederatedValidationEngine {
     }
 
     /// Start health monitoring for all registered endpoints
+    ///
+    /// Spawns a background task that periodically checks the health of all registered endpoints.
+    /// Health checks include:
+    /// - Response time monitoring
+    /// - Error rate tracking
+    /// - Health score calculation (0-100)
+    ///
+    /// The health check interval is set to 30 seconds by default.
     pub async fn start_health_monitoring(&self) -> Result<()> {
-        // TODO: Implement background health monitoring
+        use tokio::time::{interval, Duration};
+
+        let endpoints = Arc::clone(&self.endpoints);
+        let check_interval = Duration::from_secs(30); // Health check every 30 seconds
+
+        // Spawn background task for health monitoring
+        tokio::spawn(async move {
+            let mut interval_timer = interval(check_interval);
+
+            loop {
+                interval_timer.tick().await;
+
+                // Collect endpoint URLs first (without holding the lock during async operations)
+                let urls: Vec<Url> = if let Ok(eps) = endpoints.read() {
+                    eps.keys().cloned().collect()
+                } else {
+                    tracing::error!("Failed to acquire endpoints lock for health monitoring");
+                    continue;
+                };
+
+                // Perform health checks for each endpoint
+                for url in urls {
+                    let url_clone = url.clone();
+                    match Self::check_endpoint_health(&url_clone).await {
+                        Ok((response_time, is_healthy)) => {
+                            // Update endpoint health with the results
+                            if let Ok(mut eps) = endpoints.write() {
+                                if let Some(endpoint_info) = eps.get_mut(&url) {
+                                    endpoint_info.health.last_check = Some(SystemTime::now());
+                                    endpoint_info.health.response_time = Some(response_time);
+                                    endpoint_info.health.is_healthy = is_healthy;
+
+                                    // Update health score based on response time and errors
+                                    let health_score = Self::calculate_health_score(
+                                        response_time,
+                                        endpoint_info.health.error_count,
+                                        is_healthy,
+                                    );
+                                    endpoint_info.health.health_score = health_score;
+
+                                    // Reset error count if healthy
+                                    if is_healthy {
+                                        endpoint_info.health.error_count =
+                                            endpoint_info.health.error_count.saturating_sub(1);
+                                    }
+
+                                    tracing::debug!(
+                                        "Health check for {}: healthy={}, score={}, response_time={}ms",
+                                        url,
+                                        is_healthy,
+                                        health_score,
+                                        response_time
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Health check failed for {}: {}", url, e);
+                            if let Ok(mut eps) = endpoints.write() {
+                                if let Some(endpoint_info) = eps.get_mut(&url) {
+                                    endpoint_info.health.is_healthy = false;
+                                    endpoint_info.health.error_count =
+                                        endpoint_info.health.error_count.saturating_add(1);
+                                    endpoint_info.health.health_score =
+                                        endpoint_info.health.health_score.saturating_sub(20);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         Ok(())
+    }
+
+    /// Perform a health check on a single endpoint
+    async fn check_endpoint_health(url: &Url) -> Result<(u64, bool)> {
+        let start = Instant::now();
+
+        // Perform a lightweight HTTP HEAD request to check if the endpoint is alive
+        let health_url = url.join("/health").unwrap_or_else(|_| url.clone());
+
+        match reqwest::Client::new()
+            .head(health_url)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+        {
+            Ok(response) => {
+                let response_time = start.elapsed().as_millis() as u64;
+                let is_healthy = response.status().is_success();
+                Ok((response_time, is_healthy))
+            }
+            Err(_) => {
+                let response_time = start.elapsed().as_millis() as u64;
+                Ok((response_time, false))
+            }
+        }
+    }
+
+    /// Calculate health score based on response time, errors, and health status
+    fn calculate_health_score(response_time: u64, error_count: u32, is_healthy: bool) -> u8 {
+        if !is_healthy {
+            return 0;
+        }
+
+        let mut score = 100u8;
+
+        // Penalize based on response time
+        // <100ms: no penalty
+        // 100-500ms: -10 points
+        // 500-1000ms: -30 points
+        // 1000-2000ms: -50 points
+        // >2000ms: -70 points
+        if response_time > 2000 {
+            score = score.saturating_sub(70);
+        } else if response_time > 1000 {
+            score = score.saturating_sub(50);
+        } else if response_time > 500 {
+            score = score.saturating_sub(30);
+        } else if response_time > 100 {
+            score = score.saturating_sub(10);
+        }
+
+        // Penalize based on error count
+        // Each error reduces score by 5 points
+        score = score.saturating_sub((error_count * 5).min(50) as u8);
+
+        score
     }
 
     /// Get federated validation statistics
@@ -892,12 +1138,22 @@ impl FederatedValidationEngine {
             .map(|e| e.metrics.successful_requests)
             .sum();
 
+        // Calculate cache hit rate across all endpoints
+        let total_cache_hits: u64 = endpoints.values().map(|e| e.metrics.cache_hits).sum();
+        let total_cache_misses: u64 = endpoints.values().map(|e| e.metrics.cache_misses).sum();
+        let total_cache_requests = total_cache_hits + total_cache_misses;
+        let cache_hit_rate = if total_cache_requests > 0 {
+            (total_cache_hits as f64 / total_cache_requests as f64) * 100.0
+        } else {
+            0.0
+        };
+
         Ok(FederatedValidationStatistics {
             total_endpoints,
             healthy_endpoints,
             total_requests,
             successful_requests,
-            cache_hit_rate: 0.0, // TODO: Calculate actual cache hit rate
+            cache_hit_rate,
             average_response_time: endpoints
                 .values()
                 .map(|e| e.metrics.avg_response_time)

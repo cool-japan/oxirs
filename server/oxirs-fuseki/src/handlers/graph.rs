@@ -1,7 +1,7 @@
 //! SPARQL 1.1 Graph Store HTTP Protocol implementation
 //!
 //! This module implements the SPARQL 1.1 Graph Store HTTP Protocol as defined by W3C:
-//! https://www.w3.org/TR/sparql11-http-rdf-update/
+//! <https://www.w3.org/TR/sparql11-http-rdf-update/>
 //!
 //! Supports:
 //! - GET: Retrieve graph content

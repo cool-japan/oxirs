@@ -1027,14 +1027,205 @@ impl ServiceOptimizer {
     }
 
     /// Estimate range selectivity factor for numeric/temporal predicates
+    /// Estimate selectivity factor for range-based queries
+    ///
+    /// This method analyzes range constraints in triple patterns and estimates
+    /// how selective they are. Lower values indicate more selective queries.
+    ///
+    /// # Arguments
+    /// * `pattern` - The triple pattern to analyze
+    /// * `service` - The target service for statistics lookup
+    ///
+    /// # Returns
+    /// Selectivity factor between 0.0 (highly selective) and 1.0 (not selective)
     pub fn estimate_range_selectivity_factor(
         &self,
-        _pattern: &TriplePattern,
-        _service: &FederatedService,
+        pattern: &TriplePattern,
+        service: &FederatedService,
     ) -> Result<f64> {
-        // TODO: Implement range-based selectivity analysis
-        // For now, return a default factor
-        Ok(1.0)
+        // Extract range information from the pattern
+        let range_info = self.extract_range_constraints(pattern)?;
+
+        if range_info.is_empty() {
+            // No range constraints - return neutral selectivity
+            return Ok(1.0);
+        }
+
+        let mut selectivity_factors = Vec::new();
+
+        for constraint in range_info {
+            let factor = match constraint.constraint_type {
+                RangeType::Equality => {
+                    // Equality is highly selective (=)
+                    0.01 // ~1% selectivity
+                }
+                RangeType::Bounded => {
+                    // Bounded range (e.g., x > 10 AND x < 100)
+                    // Estimate based on range size relative to domain
+                    self.estimate_bounded_range_selectivity(&constraint, service)?
+                }
+                RangeType::LowerBound => {
+                    // Lower bound only (x > 10)
+                    // Typically moderately selective
+                    0.5 // ~50% selectivity
+                }
+                RangeType::UpperBound => {
+                    // Upper bound only (x < 100)
+                    // Typically moderately selective
+                    0.5 // ~50% selectivity
+                }
+                RangeType::Regex => {
+                    // Regex patterns - varies widely
+                    0.3 // ~30% selectivity average
+                }
+                RangeType::StringPrefix => {
+                    // String prefix matching (STRSTARTS)
+                    // Quite selective
+                    0.1 // ~10% selectivity
+                }
+            };
+
+            selectivity_factors.push(factor);
+        }
+
+        // Combine multiple selectivity factors (multiplicative for AND conditions)
+        let combined_selectivity = selectivity_factors
+            .iter()
+            .fold(1.0, |acc, &factor| acc * factor);
+
+        Ok(combined_selectivity.clamp(0.001, 1.0))
+    }
+
+    /// Extract range constraints from a triple pattern
+    fn extract_range_constraints(
+        &self,
+        pattern: &TriplePattern,
+    ) -> Result<Vec<RangeConstraintInfo>> {
+        let mut constraints = Vec::new();
+
+        // Check object for literal values with comparison operators
+        if let Some(ref object) = pattern.object {
+            // Detect equality constraints
+            if !object.starts_with('?') && !object.starts_with('$') {
+                constraints.push(RangeConstraintInfo {
+                    variable: object.clone(),
+                    constraint_type: RangeType::Equality,
+                    min_value: Some(object.clone()),
+                    max_value: Some(object.clone()),
+                });
+            }
+        }
+
+        // Parse pattern_string for FILTER-like expressions
+        let pattern_str = &pattern.pattern_string;
+
+        // Detect bounded ranges: var > X && var < Y
+        if let Some(bounded) = self.detect_bounded_range(pattern_str) {
+            constraints.push(bounded);
+        }
+
+        // Detect single-sided bounds
+        if pattern_str.contains('>') || pattern_str.contains(">=") {
+            if let Some(lower_bound) = self.detect_lower_bound(pattern_str) {
+                constraints.push(lower_bound);
+            }
+        }
+
+        if pattern_str.contains('<') || pattern_str.contains("<=") {
+            if let Some(upper_bound) = self.detect_upper_bound(pattern_str) {
+                constraints.push(upper_bound);
+            }
+        }
+
+        // Detect regex patterns
+        if pattern_str.contains("REGEX") || pattern_str.contains("regex") {
+            constraints.push(RangeConstraintInfo {
+                variable: "regex_var".to_string(),
+                constraint_type: RangeType::Regex,
+                min_value: None,
+                max_value: None,
+            });
+        }
+
+        // Detect string prefix (STRSTARTS)
+        if pattern_str.contains("STRSTARTS") || pattern_str.contains("strstarts") {
+            constraints.push(RangeConstraintInfo {
+                variable: "prefix_var".to_string(),
+                constraint_type: RangeType::StringPrefix,
+                min_value: None,
+                max_value: None,
+            });
+        }
+
+        Ok(constraints)
+    }
+
+    /// Detect bounded range constraints (e.g., x > 10 AND x < 100)
+    fn detect_bounded_range(&self, pattern_str: &str) -> Option<RangeConstraintInfo> {
+        // Simplified pattern matching for bounded ranges
+        if pattern_str.contains('>') && pattern_str.contains('<') {
+            Some(RangeConstraintInfo {
+                variable: "bounded_var".to_string(),
+                constraint_type: RangeType::Bounded,
+                min_value: None,
+                max_value: None,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Detect lower bound constraints (e.g., x > 10)
+    fn detect_lower_bound(&self, pattern_str: &str) -> Option<RangeConstraintInfo> {
+        if pattern_str.contains('>') && !pattern_str.contains('<') {
+            Some(RangeConstraintInfo {
+                variable: "lower_bound_var".to_string(),
+                constraint_type: RangeType::LowerBound,
+                min_value: None,
+                max_value: None,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Detect upper bound constraints (e.g., x < 100)
+    fn detect_upper_bound(&self, pattern_str: &str) -> Option<RangeConstraintInfo> {
+        if pattern_str.contains('<') && !pattern_str.contains('>') {
+            Some(RangeConstraintInfo {
+                variable: "upper_bound_var".to_string(),
+                constraint_type: RangeType::UpperBound,
+                min_value: None,
+                max_value: None,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Estimate selectivity for bounded range queries
+    fn estimate_bounded_range_selectivity(
+        &self,
+        _constraint: &RangeConstraintInfo,
+        service: &FederatedService,
+    ) -> Result<f64> {
+        // Check if service has statistics for better estimation
+        if let Some(stats) = &service.performance.average_response_time {
+            // Use performance metrics as a proxy for data distribution
+            // Services with faster response times might have more selective indices
+            let base_selectivity = if stats.as_millis() < 100 {
+                0.05 // Very fast - likely good indices - 5% selectivity
+            } else if stats.as_millis() < 500 {
+                0.15 // Fast - 15% selectivity
+            } else {
+                0.30 // Slower - 30% selectivity
+            };
+
+            Ok(base_selectivity)
+        } else {
+            // Default bounded range selectivity
+            Ok(0.20) // 20% selectivity for typical bounded ranges
+        }
     }
 
     /// Extract all variables used by a service
@@ -1056,4 +1247,33 @@ impl Default for ServiceOptimizer {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Range constraint information for selectivity estimation
+#[derive(Debug, Clone)]
+struct RangeConstraintInfo {
+    #[allow(dead_code)]
+    variable: String,
+    constraint_type: RangeType,
+    #[allow(dead_code)]
+    min_value: Option<String>,
+    #[allow(dead_code)]
+    max_value: Option<String>,
+}
+
+/// Types of range constraints
+#[derive(Debug, Clone, PartialEq)]
+enum RangeType {
+    /// Equality constraint (x = value)
+    Equality,
+    /// Bounded range (min < x < max)
+    Bounded,
+    /// Lower bound only (x > min)
+    LowerBound,
+    /// Upper bound only (x < max)
+    UpperBound,
+    /// Regular expression pattern
+    Regex,
+    /// String prefix matching
+    StringPrefix,
 }

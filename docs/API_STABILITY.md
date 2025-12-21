@@ -1,15 +1,15 @@
 # OxiRS API Stability Guarantees
 
-**Version**: v0.1.0-beta.1
-**Date**: October 12, 2025
-**Status**: Production Candidate
+**Version**: v0.1.0-beta.2
+**Date**: December 21, 2025
+**Status**: Production-Ready
 **Stability Level**: Beta (Pre-Stable)
 
 ---
 
 ## 🎯 Overview
 
-This document defines OxiRS's API stability guarantees, versioning policy, and deprecation procedures. Starting with v0.1.0-beta.1, we commit to **backward compatibility** within the v0.1.x series and establish a clear path to v1.0.0 stability.
+This document defines OxiRS's API stability guarantees, versioning policy, and deprecation procedures. Starting with v0.1.0-beta.1, we commit to **backward compatibility** within the v0.1.x series and establish a clear path to v1.0.0 stability. As of v0.1.0-beta.2, stability guarantees are now expanded with distributed storage and AI modules reaching unstable/stable status.
 
 ---
 
@@ -442,7 +442,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ## 📊 Stability Roadmap
 
-### v0.1.0-beta.1 (Current - October 2025)
+### v0.1.0-beta.1 (October 2025)
 **Focus**: API freeze for core modules
 
 - 🟢 **Stable**: oxirs-core, oxirs-arq, oxirs-fuseki, oxirs-tdb (95% frozen)
@@ -451,21 +451,22 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: 10% overall
 
-### v0.1.0-beta.2 (November 2025)
-**Focus**: Stabilize distributed storage and GraphQL
+### v0.1.0-beta.2 (Current - December 2025)
+**Focus**: Stabilize distributed storage, GraphQL, and AI modules
 
 - 🟢 **Stable**: oxirs-cluster, oxirs-gql promoted to stable (90%+ frozen)
-- 🟡 **Unstable**: oxirs-embed, oxirs-stream promoted to unstable
-- 🔴 **Experimental**: oxirs-chat, oxirs-shacl-ai remain experimental
+- 🟡 **Unstable**: oxirs-embed, oxirs-stream, oxirs-chat promoted to unstable (75%+ frozen)
+- 🔴 **Experimental**: oxirs-shacl-ai remains experimental (research preview)
+- **New**: CUDA GPU acceleration for embeddings, memory-mapped storage optimization
 
 **Breaking Change Risk**: 5% overall
 
-### v0.1.0-rc.1 (November 2025)
+### v0.1.0-rc.1 (Q1 2026)
 **Focus**: Release candidate with full API freeze
 
 - 🟢 **Stable**: All core modules frozen (99% frozen)
 - 🟡 **Unstable**: Only experimental features remain unstable
-- 🔴 **Experimental**: AI features remain experimental
+- 🔴 **Experimental**: AI research features remain experimental
 
 **Breaking Change Risk**: < 1% overall
 
@@ -500,7 +501,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 # Cargo.toml
 [package]
 name = "oxirs-core"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 rust-version = "1.75.0"  # MSRV declared
 ```
 
@@ -662,7 +663,7 @@ See migration guide: docs/MIGRATION_ALPHA3_BETA1.md
 ### Getting Help with API Changes
 
 #### Documentation
-- **API Docs**: https://docs.rs/oxirs-core/0.1.0-beta.1
+- **API Docs**: https://docs.rs/oxirs-core/0.1.0-beta.2
 - **Migration Guides**: `/docs/MIGRATION_*.md`
 - **Architecture Guide**: `/docs/ARCHITECTURE.md`
 
@@ -681,7 +682,7 @@ If you encounter an **undocumented breaking change**, please report:
 
 ## 🎯 Summary: What You Can Rely On
 
-### ✅ Safe for Production (v0.1.0-beta.1)
+### ✅ Safe for Production (v0.1.0-beta.2)
 
 **Core RDF Operations**:
 - ✅ `oxirs-core`: Store trait, RDF model, error types
@@ -765,21 +766,23 @@ v1.0.0 ────────────────────────�
 
 ## ✅ Conclusion
 
-**OxiRS v0.1.0-beta.1** establishes a **clear stability contract**:
+**OxiRS v0.1.0-beta.2** establishes a **clear stability contract**:
 
 1. **Core APIs (🟢 Stable)**: Safe for production, backward compatible within v0.1.x
-2. **Distributed APIs (🟡 Unstable)**: Use with caution, may change in v0.2.x
-3. **AI APIs (🔴 Experimental)**: Research preview, no stability guarantees
+2. **Distributed APIs (🟡 Unstable → 🟢 Stable)**: Most now stable, safe for production
+3. **AI APIs (🔴→🟡 Unstable)**: Most now unstable, approaching stability
+4. **Research APIs (🔴 Experimental)**: Shape learning remains research preview
 
 **Commitment**: We prioritize **smooth upgrades** with **clear migration paths** over rapid breaking changes.
 
 **Timeline**:
-- **Beta.1 (now)**: Core APIs frozen
-- **Beta.2 (Nov 2025)**: Distributed APIs stabilized
+- **Beta.1 (Oct 2025)**: Core APIs frozen
+- **Beta.2 (Dec 2025, current)**: Distributed and AI APIs stabilized
+- **RC.1 (Q1 2026)**: Full API freeze
 - **v1.0.0 (Q2 2026)**: Long-term stability guarantee
 
 ---
 
-*API Stability Guarantees - October 12, 2025*
-*Version: v0.1.0-beta.1*
-*Status: Production Candidate*
+*API Stability Guarantees - December 21, 2025*
+*Version: v0.1.0-beta.2*
+*Status: Production-Ready*

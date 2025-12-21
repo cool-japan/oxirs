@@ -1,9 +1,9 @@
 //! # OxiRS SHACL - RDF Validation Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl/badge.svg)](https://docs.rs/oxirs-shacl)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SHACL (Shapes Constraint Language) validation engine for RDF data.
@@ -72,9 +72,13 @@ pub mod analytics;
 pub mod builders;
 pub mod constraints;
 pub mod custom_components;
+pub mod designer;
 pub mod federated_validation;
 pub mod incremental;
+pub mod integration;
 pub mod iri_resolver;
+#[cfg(feature = "lsp")]
+pub mod lsp;
 pub mod optimization;
 pub mod paths;
 pub mod report;
@@ -86,7 +90,10 @@ pub mod shape_versioning;
 pub mod shapes;
 pub mod sparql;
 pub mod targets;
+pub mod templates;
+pub mod testing;
 pub mod validation;
+pub mod visual_editor;
 pub mod vocabulary;
 pub mod w3c_test_suite;
 pub mod w3c_test_suite_enhanced;
@@ -101,7 +108,10 @@ pub use advanced_features::{
 };
 pub use analytics::ValidationAnalytics;
 pub use builders::*;
-pub use constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult};
+pub use constraints::{
+    Constraint, ConstraintContext, ConstraintEvaluationResult, NodeKindConstraint,
+    PropertyConstraint,
+};
 pub use custom_components::{
     ComponentMetadata, CustomConstraint, CustomConstraintRegistry, EmailValidationComponent,
     RangeConstraintComponent, RegexConstraintComponent,
@@ -137,8 +147,22 @@ pub use sparql::*;
 pub use targets::{
     Target, TargetCacheStats, TargetOptimizationConfig, TargetSelectionStats, TargetSelector,
 };
+pub use testing::{
+    ShapeTestSuite, TestAssertions, TestCase, TestExpectation, TestResult, TestStatus,
+    TestSuiteResult, TestSummary,
+};
 pub use validation::{ValidationEngine, ValidationViolation};
+pub use visual_editor::{
+    ColorScheme, ExportFormat, LayoutDirection, ShapeVisualizer, VisualizerConfig,
+};
 pub use w3c_test_suite::*;
+
+// Re-export designer types
+pub use designer::{
+    ConstraintSpec, DesignIssue, DesignStep, DesignWizard, Domain, PropertyDesign, PropertyHint,
+    RecommendationEngine, ShapeDesign, ShapeDesigner,
+    ShapeInferenceEngine as DesignerInferenceEngine,
+};
 
 // Re-export optimization types (note: these are already imported above)
 

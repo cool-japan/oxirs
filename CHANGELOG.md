@@ -7,6 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-beta.2] - 2025-12-21
+
+### Overview
+
+**Second beta release** delivering **CUDA GPU acceleration**, **AI module enhancements**, and **performance optimizations** for storage and SIMD operations. This release continues the beta series with improved hardware acceleration capabilities.
+
+✨ **Major Achievements**:
+- **CUDA Support**: GPU acceleration for knowledge graph embeddings and vector operations
+- **AI Enhancements**: Improved vision-language graph processing and Tucker decomposition models
+- **Performance**: Memory-mapped optimizations for oxirs-tdb and enhanced SIMD operations
+- **SAMM**: Performance regression testing and improved code generation
+
+✅ **Production-Ready Beta**: Suitable for production use with comprehensive testing and API stability guarantees.
+
+### Quality Metrics
+
+- ✅ **12,248 tests passing** - 100% pass rate (100 skipped)
+- ✅ **Zero compilation warnings** - Strict `-D warnings` enforced
+- ✅ **Documentation generation** - All crates documented
+
+### Added
+
+#### CUDA GPU Acceleration 🚀
+
+**Knowledge Graph Embeddings**:
+- ✅ CUDA backend for TransE, DistMult, ComplEx, and RotatE models
+- ✅ GPU-accelerated tensor operations for embedding training
+- ✅ Mixed-precision training support (FP16/FP32)
+- ✅ Multi-GPU support for large-scale training
+
+**Vector Operations**:
+- ✅ CUDA-accelerated similarity search
+- ✅ GPU memory pooling for efficient allocation
+- ✅ Tensor caching for repeated operations
+
+#### AI Module Improvements 🧠
+
+**Vision-Language Graph Processing**:
+- ✅ Enhanced multimodal knowledge graph embeddings
+- ✅ Improved graph-text alignment
+- ✅ Better visual feature extraction integration
+
+**Tucker Decomposition Models**:
+- ✅ Improved Tucker model implementation
+- ✅ Enhanced core tensor factorization
+- ✅ Better regularization strategies
+
+#### Performance Optimizations ⚡
+
+**Memory-Mapped Storage (oxirs-tdb)**:
+- ✅ Memory-mapped file I/O for large datasets
+- ✅ Reduced memory footprint for storage operations
+- ✅ Improved cold-start performance
+
+**SIMD Enhancements**:
+- ✅ Enhanced SIMD operations for triple pattern matching
+- ✅ Improved vectorized aggregations
+- ✅ Better CPU cache utilization
+
+#### SAMM Enhancements 🔧
+
+**Performance Regression Testing**:
+- ✅ Automated performance benchmarking
+- ✅ Regression detection in code generation
+- ✅ Performance tracking across versions
+
+### Changed
+
+- Updated all crate version badges to beta.2
+- Improved error messages for CUDA operations
+- Enhanced documentation for GPU features
+- Updated dependencies to latest compatible versions
+
+### Fixed
+
+- Fixed edge cases in Tucker decomposition training
+- Resolved memory leaks in GPU tensor caching
+- Corrected SIMD alignment issues on certain architectures
+- Fixed mmap cleanup on abnormal termination
+
+### Migration from Beta.1
+
+**No Breaking Changes**:
+- All beta.1 APIs remain fully compatible
+- Existing code continues to work without modifications
+- CUDA features are opt-in via feature flags
+
+**New Features**:
+- Enable CUDA with `--features cuda` (requires CUDA toolkit)
+- Memory-mapped storage is automatic for large datasets
+- SIMD improvements are transparent
+
+**Recommended Updates**:
+1. Update Cargo.toml: `oxirs-* = "0.1.0-beta.2"`
+2. Enable CUDA if GPU available: `--features cuda`
+3. Review new AI features for embedding workloads
+
 ## [0.1.0-beta.1] - 2025-11-16
 
 ### Overview

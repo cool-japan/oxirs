@@ -4,6 +4,7 @@
 //! automatic expiration handling, and concurrent session management.
 
 use anyhow::{anyhow, Context, Result};
+use bincode::{Decode, Encode};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -30,6 +31,9 @@ use aes_gcm::{
 use base64::{engine::general_purpose, Engine};
 use zstd::{Decoder, Encoder};
 
+// Cryptographically secure RNG (SCIRS2 POLICY)
+use scirs2_core::random::SecureRandom;
+
 use crate::{
     analytics::{
         ComplexityMetrics, ConfidenceMetrics, ConversationAnalytics, ConversationQuality,
@@ -39,19 +43,21 @@ use crate::{
 };
 
 // Define PersistentChatSession for persistence - different from the main ChatSession
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct PersistentChatSession {
     pub session_id: String,
     pub config: ChatConfig,
+    #[bincode(with_serde)]
     pub messages: Vec<Message>,
     pub created_at: SystemTime,
     pub last_accessed: SystemTime,
     pub metrics: SessionMetrics,
+    #[bincode(with_serde)]
     pub user_preferences: HashMap<String, serde_json::Value>,
 }
 
 /// Configuration for session persistence
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct PersistenceConfig {
     pub enabled: bool,
     pub storage_path: PathBuf,
@@ -85,15 +91,17 @@ impl Default for PersistenceConfig {
 }
 
 /// Serializable session data for persistence
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct PersistedSession {
     pub session_id: String,
     pub config: ChatConfig,
+    #[bincode(with_serde)]
     pub messages: Vec<Message>,
     pub created_at: SystemTime,
     pub last_accessed: SystemTime,
     pub metrics: SessionMetrics,
     pub analytics: Option<ConversationAnalytics>,
+    #[bincode(with_serde)]
     pub user_preferences: HashMap<String, serde_json::Value>,
     pub conversation_state: ConversationState,
     pub checksum: String,
@@ -108,7 +116,7 @@ pub struct SessionWithDirtyFlag {
 }
 
 /// Conversation state for advanced context management
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Encode, Decode)]
 pub struct ConversationState {
     pub current_topic: Option<String>,
     pub context_window: Vec<String>, // Message IDs in current context
@@ -119,7 +127,7 @@ pub struct ConversationState {
 }
 
 /// Entity reference for tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct EntityReference {
     pub entity_uri: String,
     pub entity_label: String,
@@ -129,7 +137,7 @@ pub struct EntityReference {
 }
 
 /// Query context for tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct QueryContext {
     pub sparql_query: String,
     pub natural_language: String,
@@ -140,7 +148,7 @@ pub struct QueryContext {
 }
 
 /// Conversation flow tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct ConversationFlow {
     pub current_phase: ConversationPhase,
     pub topic_transitions: Vec<TopicTransition>,
@@ -160,7 +168,7 @@ impl Default for ConversationFlow {
 }
 
 /// Conversation phases
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub enum ConversationPhase {
     Introduction,
     Exploration,
@@ -171,7 +179,7 @@ pub enum ConversationPhase {
 }
 
 /// Topic transitions
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct TopicTransition {
     pub from_topic: Option<String>,
     pub to_topic: String,
@@ -181,7 +189,7 @@ pub struct TopicTransition {
 }
 
 /// Transition types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub enum TransitionType {
     Natural,       // Logical progression
     UserInitiated, // User changed topic
@@ -191,7 +199,7 @@ pub enum TransitionType {
 }
 
 /// Interaction patterns
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct InteractionPattern {
     pub pattern_type: InteractionType,
     pub frequency: usize,
@@ -200,7 +208,7 @@ pub struct InteractionPattern {
 }
 
 /// Interaction types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub enum InteractionType {
     QuestionAnswer,
     ExploratorySearch,
@@ -211,7 +219,7 @@ pub enum InteractionType {
 }
 
 /// Session recovery information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct RecoveryInfo {
     pub session_id: String,
     pub last_checkpoint: SystemTime,
@@ -221,7 +229,7 @@ pub struct RecoveryInfo {
 }
 
 /// Recovery strategies
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub enum RecoveryStrategy {
     LoadFromCheckpoint,
     LoadFromBackup,
@@ -237,7 +245,7 @@ pub struct SessionPersistenceManager {
 }
 
 /// Persistence statistics
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct PersistenceStats {
     pub total_sessions_saved: usize,
     pub total_sessions_loaded: usize,
@@ -306,7 +314,8 @@ impl SessionPersistenceManager {
         let serialized = if self.config.compression_enabled {
             self.compress_session(&persisted).await?
         } else {
-            bincode::serialize(&persisted)?
+            bincode::encode_to_vec(&persisted, bincode::config::standard())
+                .map_err(|e| anyhow!("Bincode encoding failed: {}", e))?
         };
 
         // Write to file
@@ -380,7 +389,9 @@ impl SessionPersistenceManager {
         let persisted: PersistedSession = if self.config.compression_enabled {
             self.decompress_session(&data).await?
         } else {
-            bincode::deserialize(&data)?
+            bincode::decode_from_slice(&data, bincode::config::standard())
+                .map_err(|e| anyhow!("Bincode decoding failed: {}", e))?
+                .0
         };
 
         // Verify checksum
@@ -843,7 +854,8 @@ impl SessionPersistenceManager {
 
     async fn compress_session(&self, session: &PersistedSession) -> Result<Vec<u8>> {
         // First serialize with bincode
-        let serialized = bincode::serialize(session)?;
+        let serialized = bincode::encode_to_vec(session, bincode::config::standard())
+            .map_err(|e| anyhow!("Bincode encoding failed: {}", e))?;
 
         // Apply compression if enabled
         let compressed = if self.config.compression_enabled {
@@ -883,7 +895,9 @@ impl SessionPersistenceManager {
         };
 
         // Finally deserialize with bincode
-        bincode::deserialize(&decompressed).map_err(Into::into)
+        bincode::decode_from_slice(&decompressed, bincode::config::standard())
+            .map(|(session, _)| session)
+            .map_err(|e| anyhow!("Bincode decoding failed: {}", e))
     }
 
     /// Encrypt data using AES-256-GCM
@@ -908,8 +922,9 @@ impl SessionPersistenceManager {
         let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
         let cipher = Aes256Gcm::new(key);
 
-        // Generate random nonce
-        let nonce_bytes = (0..12).map(|_| fastrand::u8(..)).collect::<Vec<_>>();
+        // Generate cryptographically secure random nonce (SCIRS2 POLICY: use SecureRandom)
+        let mut secure_rng = SecureRandom::new();
+        let nonce_bytes = secure_rng.random_bytes(12);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         // Encrypt data
@@ -963,12 +978,13 @@ impl SessionPersistenceManager {
     }
 
     /// Generate a new encryption key for configuration
+    /// Uses cryptographically secure RNG (SCIRS2 POLICY: SecureRandom for cryptographic operations)
     pub fn generate_encryption_key() -> String {
-        let key_bytes: [u8; 32] = (0..32)
-            .map(|_| fastrand::u8(..))
-            .collect::<Vec<_>>()
+        let mut secure_rng = SecureRandom::new();
+        let key_bytes: [u8; 32] = secure_rng
+            .random_bytes(32)
             .try_into()
-            .unwrap();
+            .expect("Generated exactly 32 bytes");
         general_purpose::STANDARD.encode(key_bytes)
     }
 
@@ -1149,7 +1165,8 @@ impl SessionPersistenceManager {
         let serialized = if self.config.compression_enabled {
             self.compress_session(&checkpoint_session).await?
         } else {
-            bincode::serialize(&checkpoint_session)?
+            bincode::encode_to_vec(&checkpoint_session, bincode::config::standard())
+                .map_err(|e| anyhow!("Bincode encoding failed: {}", e))?
         };
 
         // Write to checkpoint file atomically
@@ -1249,7 +1266,9 @@ impl SessionPersistenceManager {
                 .await
                 .context("Failed to decompress checkpoint session")?
         } else {
-            bincode::deserialize(&data).context("Failed to deserialize checkpoint session")?
+            bincode::decode_from_slice(&data, bincode::config::standard())
+                .map(|(session, _)| session)
+                .context("Failed to deserialize checkpoint session")?
         };
 
         // Verify checksum if available
@@ -1290,7 +1309,9 @@ impl SessionPersistenceManager {
         let persisted: PersistedSession = if self.config.compression_enabled {
             self.decompress_session(&data).await?
         } else {
-            bincode::deserialize(&data)?
+            bincode::decode_from_slice(&data, bincode::config::standard())
+                .map_err(|e| anyhow!("Bincode decoding failed: {}", e))?
+                .0
         };
 
         Ok(Some(
@@ -1398,8 +1419,11 @@ impl SessionPersistenceManager {
                 Ok(session) => session,
                 Err(_) => {
                     // Fallback to direct deserialization if decompression fails
-                    match bincode::deserialize::<PersistedSession>(&data) {
-                        Ok(session) => session,
+                    match bincode::decode_from_slice::<PersistedSession, _>(
+                        &data,
+                        bincode::config::standard(),
+                    ) {
+                        Ok((session, _)) => session,
                         Err(e) => {
                             warn!("Failed to deserialize {} file: {}", source_type, e);
                             return None;
@@ -1408,8 +1432,11 @@ impl SessionPersistenceManager {
                 }
             }
         } else {
-            match bincode::deserialize::<PersistedSession>(&data) {
-                Ok(session) => session,
+            match bincode::decode_from_slice::<PersistedSession, _>(
+                &data,
+                bincode::config::standard(),
+            ) {
+                Ok((session, _)) => session,
                 Err(e) => {
                     warn!("Failed to deserialize {} file: {}", source_type, e);
                     return None;

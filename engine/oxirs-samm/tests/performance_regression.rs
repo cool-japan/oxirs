@@ -225,6 +225,7 @@ where
 }
 
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 async fn test_parser_simple_aspect_performance() {
     // Warmup
     for _ in 0..5 {
@@ -260,6 +261,7 @@ async fn test_parser_simple_aspect_performance() {
 }
 
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 async fn test_parser_complex_aspect_performance() {
     // Warmup
     for _ in 0..5 {
@@ -293,6 +295,7 @@ async fn test_parser_complex_aspect_performance() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 fn test_typescript_generation_performance() {
     let aspect = create_test_aspect(10);
     let options = TsOptions::default();
@@ -308,6 +311,7 @@ fn test_typescript_generation_performance() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 fn test_graphql_generation_performance() {
     let aspect = create_test_aspect(10);
 
@@ -317,6 +321,7 @@ fn test_graphql_generation_performance() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 fn test_python_generation_performance() {
     let aspect = create_test_aspect(10);
     let options = PythonOptions::default();
@@ -327,6 +332,7 @@ fn test_python_generation_performance() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 fn test_java_generation_performance() {
     let aspect = create_test_aspect(10);
     let options = JavaOptions::default();
@@ -337,6 +343,7 @@ fn test_java_generation_performance() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 fn test_sql_generation_performance() {
     let aspect = create_test_aspect(10);
 
@@ -346,6 +353,7 @@ fn test_sql_generation_performance() {
 }
 
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 async fn test_validation_performance() {
     let aspect = create_test_aspect(10);
 
@@ -380,6 +388,7 @@ async fn test_validation_performance() {
 
 /// Test parsing performance scaling with model size
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 async fn test_parser_scaling_performance() {
     println!("\n📈 Parser Scaling Performance:");
 
@@ -420,6 +429,7 @@ async fn test_parser_scaling_performance() {
 
 /// Test generator performance scaling with model size
 #[test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 fn test_generator_scaling_performance() {
     println!("\n📈 Generator Scaling Performance:");
 
@@ -450,6 +460,7 @@ fn test_generator_scaling_performance() {
 
 /// Test end-to-end performance: parse + validate + generate
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 async fn test_end_to_end_performance() {
     const E2E_BASELINE: u64 = 10000; // 10ms for full pipeline
 
@@ -493,6 +504,7 @@ async fn test_end_to_end_performance() {
 
 /// Test memory efficiency: large models should not cause excessive allocations
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 async fn test_memory_efficiency() {
     println!("\n💾 Memory Efficiency Test:");
 
@@ -561,6 +573,7 @@ fn generate_aspect_with_properties(count: usize) -> String {
 
 /// Test concurrent parsing performance
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 async fn test_concurrent_parsing_performance() {
     println!("\n🔀 Concurrent Parsing Performance:");
 
@@ -602,11 +615,11 @@ async fn test_concurrent_parsing_performance() {
 
 /// Test that caching improves performance
 #[tokio::test]
+#[cfg_attr(debug_assertions, ignore = "Performance tests require release builds")]
 async fn test_caching_effectiveness() {
     use oxirs_samm::parser::ModelResolver;
     use std::env;
     use std::fs;
-    use std::path::PathBuf;
 
     println!("\n🗄️  Caching Effectiveness:");
 

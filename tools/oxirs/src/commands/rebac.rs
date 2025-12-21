@@ -3,6 +3,7 @@
 //! CLI commands for managing ReBAC relationships and authorization data.
 
 use crate::cli::error::{CliError, CliResult};
+use crate::commands::rebac_manager::RebacManager;
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 use tracing::{info, warn};
@@ -206,25 +207,50 @@ pub async fn execute(args: RebacArgs) -> CliResult<()> {
 async fn export_relationships(args: ExportArgs) -> CliResult<()> {
     info!("Exporting relationships to {}", args.output.display());
 
-    // TODO: Connect to actual ReBAC manager
-    // For now, create sample data
-    let sample_data = r#"@prefix auth: <http://oxirs.org/auth#> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+    // Create ReBAC manager (in-memory for now, can be extended to persistent)
+    let manager = RebacManager::new_in_memory()?
+        .with_namespace(args.namespace.clone())
+        .with_graph(args.graph.clone());
 
-<urn:oxirs:auth:relationships> {
-  <user:alice> auth:owner <dataset:public> .
-  <user:bob> auth:canRead <dataset:public> .
-  <user:charlie> auth:canWrite <graph:http://example.org/g1> .
-}
-"#;
+    // Query relationships with filters
+    let relationships = manager.query_relationships(
+        args.subject.as_deref(),
+        args.relation.as_deref(),
+        args.object.as_deref(),
+    )?;
 
-    std::fs::write(&args.output, sample_data).map_err(CliError::io_error)?;
+    if relationships.is_empty() {
+        warn!("No relationships found matching the criteria");
+        println!("\n⚠️  No relationships found to export");
+        println!("  Subject filter: {:?}", args.subject);
+        println!("  Relation filter: {:?}", args.relation);
+        println!("  Object filter: {:?}", args.object);
+        return Ok(());
+    }
+
+    // Export to requested format
+    let content = match args.format {
+        ExportFormat::Turtle => manager.export_turtle()?,
+        ExportFormat::Json => manager.export_json()?,
+    };
+
+    std::fs::write(&args.output, content).map_err(CliError::io_error)?;
 
     info!("✅ Export complete: {}", args.output.display());
-    println!("\nExported relationships:");
+    println!("\n✅ Exported relationships:");
     println!("  Format: {:?}", args.format);
     println!("  Output: {}", args.output.display());
-    println!("\nSample relationships exported (3 tuples)");
+    println!("  Count: {} relationships", relationships.len());
+
+    if let Some(subject) = args.subject {
+        println!("  Filtered by subject: {}", subject);
+    }
+    if let Some(relation) = args.relation {
+        println!("  Filtered by relation: {}", relation);
+    }
+    if let Some(object) = args.object {
+        println!("  Filtered by object: {}", object);
+    }
 
     Ok(())
 }
@@ -260,9 +286,43 @@ async fn import_relationships(args: ImportArgs) -> CliResult<()> {
     println!("\nParsed {} bytes of relationship data", content.len());
 
     if !args.dry_run {
-        // TODO: Actually import to ReBAC manager
-        info!("✅ Import complete");
-        println!("\n✅ Successfully imported relationships");
+        // Create ReBAC manager
+        let mut manager = RebacManager::new_in_memory()?.with_namespace(args.namespace.clone());
+
+        // Clear existing if overwrite is enabled
+        if args.overwrite {
+            let cleared = manager.clear_all()?;
+            info!("Cleared {} existing relationships", cleared);
+            println!("  Cleared {} existing relationships", cleared);
+        }
+
+        // Import based on format
+        let count = match format {
+            ImportFormat::Turtle => manager.import_turtle(&content)?,
+            ImportFormat::Json => manager.import_json(&content)?,
+            ImportFormat::Auto => {
+                return Err(CliError::validation_error(
+                    "Auto format should have been resolved",
+                ))
+            }
+        };
+
+        info!("✅ Import complete: {} relationships", count);
+        println!("\n✅ Successfully imported {} relationships", count);
+
+        // Verify integrity after import
+        let report = manager.verify_integrity()?;
+        if !report.is_valid {
+            warn!("⚠️  Integrity issues detected:");
+            if report.duplicates > 0 {
+                println!("  ⚠️  {} duplicate relationships found", report.duplicates);
+            }
+            if report.orphans > 0 {
+                println!("  ⚠️  {} orphaned relationships found", report.orphans);
+            }
+        } else {
+            println!("  ✓ Integrity check passed");
+        }
     } else {
         println!("\n🔍 Dry run complete - no changes made");
     }
@@ -274,29 +334,91 @@ async fn import_relationships(args: ImportArgs) -> CliResult<()> {
 async fn migrate_backend(args: MigrateArgs) -> CliResult<()> {
     info!("Migrating from {:?} to {:?}", args.from, args.to);
 
-    if args.backup {
-        let backup_path = args
-            .backup_path
-            .unwrap_or_else(|| PathBuf::from("rebac_backup.ttl"));
-        info!("📦 Creating backup: {}", backup_path.display());
-        println!("📦 Backup created: {}", backup_path.display());
+    // Create source manager
+    let source_manager = match args.from {
+        Backend::InMemory => RebacManager::new_in_memory()?,
+        Backend::RdfNative => {
+            let path = std::env::temp_dir().join("rebac_source");
+            RebacManager::new_persistent(&path)?
+        }
+    };
+
+    // Get all relationships from source
+    let relationships = source_manager.get_all_relationships()?;
+    let total_count = relationships.len();
+
+    if total_count == 0 {
+        warn!("No relationships found in source backend");
+        println!("\n⚠️  No relationships to migrate");
+        return Ok(());
     }
 
     println!("\n🔄 Migration in progress...");
     println!("  Source: {:?}", args.from);
     println!("  Target: {:?}", args.to);
+    println!("  Relationships to migrate: {}", total_count);
 
-    // TODO: Implement actual migration logic
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    // Backup if requested
+    if args.backup {
+        let backup_path = args
+            .backup_path
+            .unwrap_or_else(|| PathBuf::from("rebac_backup.ttl"));
 
-    println!("✅ Migration complete!");
+        let turtle = source_manager.export_turtle()?;
+        std::fs::write(&backup_path, turtle).map_err(CliError::io_error)?;
+
+        info!("📦 Backup created: {}", backup_path.display());
+        println!("\n📦 Backup created: {}", backup_path.display());
+    }
+
+    // Create target manager
+    let mut target_manager = match args.to {
+        Backend::InMemory => RebacManager::new_in_memory()?,
+        Backend::RdfNative => {
+            let path = std::env::temp_dir().join("rebac_target");
+            RebacManager::new_persistent(&path)?
+        }
+    };
+
+    // Migrate relationships
+    let migrated = target_manager.add_relationships(&relationships)?;
+    info!("Migrated {} relationships", migrated);
+
+    println!("\n✅ Migration complete!");
+    println!("  Migrated: {} relationships", migrated);
 
     if args.verify {
         println!("\n🔍 Verifying migration...");
-        // TODO: Implement verification
-        println!("✅ Verification passed");
-        println!("  - All relationships migrated successfully");
-        println!("  - No data loss detected");
+
+        // Verify counts match
+        let target_rels = target_manager.get_all_relationships()?;
+        if target_rels.len() != total_count {
+            return Err(CliError::validation_error(format!(
+                "Verification failed: expected {} relationships, found {}",
+                total_count,
+                target_rels.len()
+            )));
+        }
+
+        // Verify integrity
+        let report = target_manager.verify_integrity()?;
+        if !report.is_valid {
+            warn!("⚠️  Integrity issues found after migration:");
+            if report.duplicates > 0 {
+                println!("  ⚠️  {} duplicate relationships", report.duplicates);
+            }
+            if report.orphans > 0 {
+                println!("  ⚠️  {} orphaned relationships", report.orphans);
+            }
+        } else {
+            println!("✅ Verification passed");
+            println!(
+                "  - All {} relationships migrated successfully",
+                total_count
+            );
+            println!("  - No data loss detected");
+            println!("  - Integrity check passed");
+        }
     }
 
     Ok(())
@@ -306,22 +428,84 @@ async fn migrate_backend(args: MigrateArgs) -> CliResult<()> {
 async fn verify_integrity(args: VerifyArgs) -> CliResult<()> {
     info!("Verifying {:?} backend integrity", args.backend);
 
+    // Create manager based on backend
+    let manager = match args.backend {
+        Backend::InMemory => RebacManager::new_in_memory()?,
+        Backend::RdfNative => {
+            let path = std::env::temp_dir().join("rebac_persistent");
+            RebacManager::new_persistent(&path)?
+        }
+    };
+
     println!("\n🔍 Verifying ReBAC data integrity...");
     println!("  Backend: {:?}", args.backend);
 
+    let mut issues_found = false;
+
     if args.check_duplicates {
-        println!("  ✓ Checking for duplicates...");
-        // TODO: Implement duplicate check
-        println!("    No duplicates found");
+        println!("\n  ✓ Checking for duplicates...");
+        let duplicates = manager.find_duplicates()?;
+        if duplicates.is_empty() {
+            println!("    ✓ No duplicates found");
+        } else {
+            issues_found = true;
+            warn!("Found {} duplicate relationships", duplicates.len());
+            println!(
+                "    ⚠️  {} duplicate relationships found:",
+                duplicates.len()
+            );
+            for (i, dup) in duplicates.iter().take(5).enumerate() {
+                println!(
+                    "      {}. {} --[{}]-> {}",
+                    i + 1,
+                    dup.subject,
+                    dup.relation,
+                    dup.object
+                );
+            }
+            if duplicates.len() > 5 {
+                println!("      ... and {} more", duplicates.len() - 5);
+            }
+        }
     }
 
     if args.check_orphans {
-        println!("  ✓ Checking for orphaned relationships...");
-        // TODO: Implement orphan check
-        println!("    No orphans found");
+        println!("\n  ✓ Checking for orphaned relationships...");
+        let orphans = manager.find_orphans()?;
+        if orphans.is_empty() {
+            println!("    ✓ No orphans found");
+        } else {
+            issues_found = true;
+            warn!("Found {} orphaned relationships", orphans.len());
+            println!("    ⚠️  {} orphaned relationships found:", orphans.len());
+            for (i, orphan) in orphans.iter().take(5).enumerate() {
+                println!(
+                    "      {}. {} --[{}]-> {} (orphaned)",
+                    i + 1,
+                    orphan.subject,
+                    orphan.relation,
+                    orphan.object
+                );
+            }
+            if orphans.len() > 5 {
+                println!("      ... and {} more", orphans.len() - 5);
+            }
+        }
     }
 
-    println!("\n✅ Verification complete - all checks passed");
+    // Overall integrity report
+    let report = manager.verify_integrity()?;
+    println!("\n📊 Integrity Summary:");
+    println!("  Total relationships: {}", report.total_relationships);
+    println!("  Duplicates: {}", report.duplicates);
+    println!("  Orphans: {}", report.orphans);
+
+    if !issues_found && report.is_valid {
+        println!("\n✅ Verification complete - all checks passed");
+    } else {
+        println!("\n⚠️  Verification complete - issues detected");
+        println!("  Please review the issues above and take corrective action");
+    }
 
     Ok(())
 }
@@ -330,28 +514,74 @@ async fn verify_integrity(args: VerifyArgs) -> CliResult<()> {
 async fn show_statistics(args: StatsArgs) -> CliResult<()> {
     info!("Collecting {:?} backend statistics", args.backend);
 
-    println!("\n📊 ReBAC Statistics");
-    println!("Backend: {:?}\n", args.backend);
+    // Create manager based on backend
+    let manager = match args.backend {
+        Backend::InMemory => RebacManager::new_in_memory()?,
+        Backend::RdfNative => {
+            let path = std::env::temp_dir().join("rebac_persistent");
+            RebacManager::new_persistent(&path)?
+        }
+    };
 
-    // TODO: Get actual statistics from ReBAC manager
-    println!("Total relationships: 42");
-    println!("Conditional relationships: 5");
-    println!("\nBy relation type:");
-    println!("  owner: 10");
-    println!("  can_read: 20");
-    println!("  can_write: 8");
-    println!("  can_delete: 4");
+    // Get statistics
+    let stats = manager.get_statistics()?;
 
-    if args.detailed {
-        println!("\nDetailed breakdown:");
-        println!("  By subject:");
-        println!("    user:alice: 15 relationships");
-        println!("    user:bob: 12 relationships");
-        println!("    organization:engineering: 8 relationships");
-        println!("\n  By object:");
-        println!("    dataset:public: 25 relationships");
-        println!("    dataset:internal: 10 relationships");
-        println!("    graph:*: 7 relationships");
+    // Output based on format
+    match args.format.as_str() {
+        "json" => {
+            let json = serde_json::to_string_pretty(&stats).map_err(|e| {
+                CliError::serialization_error(format!("JSON serialization failed: {}", e))
+            })?;
+            println!("{}", json);
+        }
+        _ => {
+            // Text format
+            println!("\n📊 ReBAC Statistics");
+            println!("Backend: {:?}\n", args.backend);
+
+            println!("Total relationships: {}", stats.total_relationships);
+            println!(
+                "Conditional relationships: {}",
+                stats.conditional_relationships
+            );
+
+            if !stats.by_relation.is_empty() {
+                println!("\nBy relation type:");
+                let mut relations: Vec<_> = stats.by_relation.iter().collect();
+                relations.sort_by(|a, b| b.1.cmp(a.1)); // Sort by count descending
+                for (relation, count) in relations {
+                    println!("  {}: {}", relation, count);
+                }
+            }
+
+            if args.detailed {
+                println!("\nDetailed breakdown:");
+
+                if !stats.by_subject.is_empty() {
+                    println!("  By subject:");
+                    let mut subjects: Vec<_> = stats.by_subject.iter().collect();
+                    subjects.sort_by(|a, b| b.1.cmp(a.1)); // Sort by count descending
+                    for (subject, count) in subjects.iter().take(10) {
+                        println!("    {}: {} relationships", subject, count);
+                    }
+                    if subjects.len() > 10 {
+                        println!("    ... and {} more subjects", subjects.len() - 10);
+                    }
+                }
+
+                if !stats.by_object.is_empty() {
+                    println!("\n  By object:");
+                    let mut objects: Vec<_> = stats.by_object.iter().collect();
+                    objects.sort_by(|a, b| b.1.cmp(a.1)); // Sort by count descending
+                    for (object, count) in objects.iter().take(10) {
+                        println!("    {}: {} relationships", object, count);
+                    }
+                    if objects.len() > 10 {
+                        println!("    ... and {} more objects", objects.len() - 10);
+                    }
+                }
+            }
+        }
     }
 
     Ok(())

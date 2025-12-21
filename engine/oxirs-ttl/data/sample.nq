@@ -1,0 +1,24 @@
+# Sample N-Quads File for Testing
+# OxiRS TTL Parser Test Data
+
+<http://example.org/dataset> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Dataset> .
+<http://example.org/dataset> <http://www.w3.org/2000/01/rdf-schema#label> "Sample N-Quads Dataset" .
+<http://example.org/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> <http://example.org/graph:people> .
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice Smith" <http://example.org/graph:people> .
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> <http://example.org/graph:people> .
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> <http://example.org/graph:people> .
+<http://example.org/bob> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> <http://example.org/graph:people> .
+<http://example.org/bob> <http://xmlns.com/foaf/0.1/name> "Bob Jones" <http://example.org/graph:people> .
+<http://example.org/bob> <http://xmlns.com/foaf/0.1/age> "25"^^<http://www.w3.org/2001/XMLSchema#integer> <http://example.org/graph:people> .
+<http://example.org/bob> <http://xmlns.com/foaf/0.1/knows> <http://example.org/alice> <http://example.org/graph:people> .
+<http://example.org/bob> <http://xmlns.com/foaf/0.1/knows> <http://example.org/charlie> <http://example.org/graph:people> .
+<http://example.org/charlie> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> <http://example.org/graph:people> .
+<http://example.org/charlie> <http://xmlns.com/foaf/0.1/name> "Charlie Brown"@en <http://example.org/graph:people> .
+<http://example.org/charlie> <http://xmlns.com/foaf/0.1/age> "28"^^<http://www.w3.org/2001/XMLSchema#integer> <http://example.org/graph:people> .
+<http://example.org/acme> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Organization> <http://example.org/graph:orgs> .
+<http://example.org/acme> <http://www.w3.org/2000/01/rdf-schema#label> "ACME Corp" <http://example.org/graph:orgs> .
+<http://example.org/acme> <http://example.org/employee> <http://example.org/alice> <http://example.org/graph:orgs> .
+<http://example.org/acme> <http://example.org/employee> <http://example.org/bob> <http://example.org/graph:orgs> .
+<http://example.org/example> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Organization> <http://example.org/graph:orgs> .
+<http://example.org/example> <http://www.w3.org/2000/01/rdf-schema#label> "Example Inc" <http://example.org/graph:orgs> .
+<http://example.org/example> <http://example.org/employee> <http://example.org/charlie> <http://example.org/graph:orgs> .

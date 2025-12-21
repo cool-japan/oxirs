@@ -1,5 +1,6 @@
 use crate::error::{Result, TdbError};
 use crate::storage::page::PageId;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -8,7 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 /// Transaction ID
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct TxnId(u64);
 
 impl TxnId {
@@ -29,7 +32,9 @@ impl TxnId {
 }
 
 /// Log Sequence Number
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct Lsn(u64);
 
 impl Lsn {
@@ -53,7 +58,7 @@ impl Lsn {
 }
 
 /// WAL record type
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub enum LogRecord {
     /// Transaction begin
     Begin {
@@ -89,7 +94,7 @@ pub enum LogRecord {
 }
 
 /// WAL entry with LSN and record
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct LogEntry {
     /// Log sequence number
     pub lsn: Lsn,
@@ -152,8 +157,8 @@ impl WriteAheadLog {
         log_buffer.insert(lsn, entry.clone());
 
         // Write to disk (WAL protocol: log before data)
-        let serialized =
-            bincode::serialize(&entry).map_err(|e| TdbError::Serialization(e.to_string()))?;
+        let serialized = bincode::encode_to_vec(&entry, bincode::config::standard())
+            .map_err(|e| TdbError::Serialization(e.to_string()))?;
 
         let len = (serialized.len() as u32).to_le_bytes();
 
@@ -197,8 +202,8 @@ impl WriteAheadLog {
         wal_file.seek(SeekFrom::Start(0)).map_err(TdbError::Io)?;
 
         for entry in remaining_entries {
-            let serialized =
-                bincode::serialize(&entry).map_err(|e| TdbError::Serialization(e.to_string()))?;
+            let serialized = bincode::encode_to_vec(&entry, bincode::config::standard())
+                .map_err(|e| TdbError::Serialization(e.to_string()))?;
             let len = (serialized.len() as u32).to_le_bytes();
 
             wal_file.write_all(&len).map_err(TdbError::Io)?;
@@ -236,8 +241,10 @@ impl WriteAheadLog {
             let mut entry_buf = vec![0u8; len];
             wal_file.read_exact(&mut entry_buf).map_err(TdbError::Io)?;
 
-            let entry: LogEntry = bincode::deserialize(&entry_buf)
-                .map_err(|e| TdbError::Serialization(e.to_string()))?;
+            let entry: LogEntry =
+                bincode::decode_from_slice(&entry_buf, bincode::config::standard())
+                    .map_err(|e| TdbError::Serialization(e.to_string()))?
+                    .0;
 
             if entry.lsn.as_u64() >= next_lsn.as_u64() {
                 next_lsn = entry.lsn.next();

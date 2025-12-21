@@ -1,7 +1,7 @@
 //! Turtle Format Parser and Serializer
 //!
 //! Extracted and adapted from OxiGraph oxttl with OxiRS enhancements.
-//! Based on W3C Turtle specification: https://www.w3.org/TR/turtle/
+//! Based on W3C Turtle specification: <https://www.w3.org/TR/turtle/>
 
 use super::error::SerializeResult;
 use super::error::{ParseResult, RdfParseError, TextPosition};

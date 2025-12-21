@@ -22,9 +22,7 @@ use tracing::{debug, info};
 // SciRS2 integration for advanced ML operations
 
 use scirs2_core::ndarray_ext::{Array1, Array2};
-
-use rand_distr;
-use scirs2_core::random::Random;
+use scirs2_core::random::{Normal, Random};
 
 /// Configuration for advanced ML optimizer
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,7 +132,7 @@ impl DeepCardinalityEstimator {
         // Create hidden layers
         for &hidden_size in &config.hidden_layers {
             let weights = Array2::from_shape_fn((prev_size, hidden_size), |_| {
-                rng.sample(rand_distr::Normal::new(0.0, (2.0 / prev_size as f64).sqrt()).unwrap())
+                rng.sample(Normal::new(0.0, (2.0 / prev_size as f64).sqrt()).unwrap())
             });
             let biases = Array1::zeros(hidden_size);
             layers.push(Layer {
@@ -147,7 +145,7 @@ impl DeepCardinalityEstimator {
 
         // Output layer
         let weights = Array2::from_shape_fn((prev_size, output_size), |_| {
-            rng.sample(rand_distr::Normal::new(0.0, (2.0 / prev_size as f64).sqrt()).unwrap())
+            rng.sample(Normal::new(0.0, (2.0 / prev_size as f64).sqrt()).unwrap())
         });
         let biases = Array1::zeros(output_size);
         layers.push(Layer {

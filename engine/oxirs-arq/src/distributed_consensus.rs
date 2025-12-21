@@ -280,7 +280,7 @@ impl DistributedConsensusCoordinator {
         let result = self.consensus_engine.propose(optimized_value).await?;
 
         let consensus_time = start_time.elapsed();
-        self.metrics.proposal_time.record(consensus_time);
+        self.metrics.proposal_time.observe(consensus_time);
         self.metrics.proposals_total.increment();
 
         if result.accepted {
@@ -348,20 +348,20 @@ impl DistributedConsensusCoordinator {
     /// Get comprehensive consensus statistics
     pub fn get_statistics(&self) -> ConsensusStatistics {
         ConsensusStatistics {
-            total_proposals: self.metrics.proposals_total.value(),
-            accepted_proposals: self.metrics.proposals_accepted.value(),
+            total_proposals: self.metrics.proposals_total.get(),
+            accepted_proposals: self.metrics.proposals_accepted.get(),
             avg_proposal_time: self.metrics.proposal_time.mean(),
-            node_failures: self.metrics.node_failures.value(),
-            byzantine_failures_detected: self.metrics.byzantine_failures.value(),
-            quantum_optimizations: self.metrics.quantum_optimizations.value(),
+            node_failures: self.metrics.node_failures.get(),
+            byzantine_failures_detected: self.metrics.byzantine_failures.get(),
+            quantum_optimizations: self.metrics.quantum_optimizations.get(),
             consensus_efficiency: self.calculate_consensus_efficiency(),
         }
     }
 
     /// Calculate consensus efficiency
     fn calculate_consensus_efficiency(&self) -> f64 {
-        let total = self.metrics.proposals_total.value();
-        let accepted = self.metrics.proposals_accepted.value();
+        let total = self.metrics.proposals_total.get();
+        let accepted = self.metrics.proposals_accepted.get();
 
         if total > 0 {
             accepted as f64 / total as f64
@@ -676,12 +676,12 @@ struct ConsensusMetrics {
 impl ConsensusMetrics {
     fn new() -> Self {
         Self {
-            proposals_total: Counter::new("proposals_total"),
-            proposals_accepted: Counter::new("proposals_accepted"),
-            proposal_time: Timer::new("proposal_time"),
-            node_failures: Counter::new("node_failures"),
-            byzantine_failures: Counter::new("byzantine_failures"),
-            quantum_optimizations: Counter::new("quantum_optimizations"),
+            proposals_total: Counter::new("proposals_total".to_string()),
+            proposals_accepted: Counter::new("proposals_accepted".to_string()),
+            proposal_time: Timer::new("proposal_time".to_string()),
+            node_failures: Counter::new("node_failures".to_string()),
+            byzantine_failures: Counter::new("byzantine_failures".to_string()),
+            quantum_optimizations: Counter::new("quantum_optimizations".to_string()),
         }
     }
 }

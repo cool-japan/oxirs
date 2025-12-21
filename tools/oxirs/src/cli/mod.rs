@@ -8,12 +8,16 @@ use std::io::{self, Write};
 use std::time::Duration;
 
 pub mod alias;
+pub mod ascii_diagram;
 pub mod checkpoint;
 pub mod completion;
 pub mod dataset_manager;
+pub mod doc_generator;
 pub mod error;
+pub mod error_suggestions;
 pub mod formatters;
 pub mod fuzzy_history;
+pub mod graphviz_export;
 pub mod help;
 pub mod interactive;
 pub mod logging;
@@ -25,23 +29,32 @@ pub mod result_export;
 pub mod schema_autocomplete;
 pub mod sparql_autocomplete;
 pub mod syntax_highlighting;
+pub mod template_formatter;
 pub mod transaction;
+pub mod tutorial;
 pub mod utils;
 pub mod validation;
 pub mod visual_query_builder;
 
 pub use alias::{AliasConfig, AliasManager};
+pub use ascii_diagram::{AsciiDiagramGenerator, DiagramConfig, DiagramTriple, LayoutStyle};
 pub use checkpoint::{Checkpoint, CheckpointManager};
 pub use completion::{CommandCompletionProvider, CompletionContext, CompletionProvider};
 pub use dataset_manager::{
     ConnectionState, DatasetConnection, DatasetManager, DatasetManagerConfig, DatasetManagerStats,
 };
+pub use doc_generator::{ArgumentDoc, CommandDoc, DocFormat, DocGenerator, ExampleDoc, OptionDoc};
 pub use error::{CliError, CliResult};
+pub use error_suggestions::{enhance_error, enhanced_error_from_message};
 pub use formatters::{
     create_formatter, Binding, CsvFormatter, HtmlFormatter, JsonFormatter, MarkdownFormatter,
-    QueryResults, RdfTerm, ResultFormatter, TableFormatter, XmlFormatter,
+    PdfFormatter, QueryResults, RdfTerm, ResultFormatter, TableFormatter, XmlFormatter,
 };
 pub use fuzzy_history::{FuzzyConfig, FuzzyHistorySearch, FuzzyMatch, HistoryEntryWithMetadata};
+pub use graphviz_export::{
+    GraphOptions, GraphvizExporter, LayoutEngine, NodeShape, NodeStyle, PlanNode, PlanOptions,
+    QueryPlanExporter,
+};
 pub use help::{HelpCategory, HelpProvider};
 #[allow(deprecated)]
 pub use interactive::InteractiveMode;
@@ -61,10 +74,12 @@ pub use syntax_highlighting::{
     highlight_error, highlight_info, highlight_sparql, highlight_success, highlight_warning,
     HighlightConfig,
 };
+pub use template_formatter::{TemplateFormatter, TemplatePresets};
 pub use transaction::{
     IsolationLevel, TransactionConfig, TransactionManager, TransactionMetadata,
     TransactionOperation, TransactionState, TransactionStats,
 };
+pub use tutorial::{Difficulty, TutorialLesson, TutorialManager, TutorialStep};
 pub use utils::*;
 pub use validation::ArgumentValidator;
 pub use visual_query_builder::{

@@ -10,7 +10,7 @@ use std::hash::{Hash, Hasher};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Similarity measurement configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct SimilarityConfig {
     /// Primary similarity metric
     pub primary_metric: SimilarityMetric,
@@ -44,7 +44,9 @@ impl Default for SimilarityConfig {
 }
 
 /// Available similarity metrics
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, bincode::Encode, bincode::Decode,
+)]
 pub enum SimilarityMetric {
     /// Cosine similarity
     Cosine,

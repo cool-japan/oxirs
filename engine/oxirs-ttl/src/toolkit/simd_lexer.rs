@@ -161,7 +161,7 @@ impl<'a> SimdLexer<'a> {
 
     /// Scan until any delimiter is found
     ///
-    /// Delimiters: whitespace, <, >, @, ;, ,, ., [, ], (, ), {, }, #, ", '
+    /// Delimiters: whitespace, `<`, `>`, `@`, `;`, `,`, `.`, `[`, `]`, `(`, `)`, `{`, `}`, `#`, `"`, `'`
     pub fn scan_until_delimiter(&self, mut pos: usize) -> usize {
         // Use SIMD-friendly loop
         while pos < self.len {

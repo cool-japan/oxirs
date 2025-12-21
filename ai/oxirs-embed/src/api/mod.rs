@@ -29,6 +29,7 @@ pub use types::*;
 /// Start the API server
 #[cfg(feature = "api-server")]
 pub async fn start_server(state: ApiState) -> anyhow::Result<()> {
+    use axum::http::StatusCode;
     use std::net::SocketAddr;
     use tower::ServiceBuilder;
     use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
@@ -37,9 +38,10 @@ pub async fn start_server(state: ApiState) -> anyhow::Result<()> {
     let app = create_router(state.clone()).layer(
         ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
-            .layer(TimeoutLayer::new(std::time::Duration::from_secs(
-                state.config.request_timeout_secs,
-            )))
+            .layer(TimeoutLayer::with_status_code(
+                StatusCode::REQUEST_TIMEOUT,
+                std::time::Duration::from_secs(state.config.request_timeout_secs),
+            ))
             .layer(if state.config.enable_cors {
                 CorsLayer::permissive()
             } else {

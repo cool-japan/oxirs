@@ -1,9 +1,9 @@
 //! # OxiRS RDF-Star
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! RDF-star and SPARQL-star implementation providing comprehensive support for quoted triples.
@@ -217,13 +217,18 @@ pub mod docs;
 pub mod enhanced_errors;
 pub mod functions;
 pub mod governance;
+pub mod gpu_acceleration;
 pub mod graph_diff;
 pub mod graphql_star;
+pub mod hdt_star;
 pub mod index;
+pub mod jit_query_engine;
+pub mod kg_embeddings;
 pub mod lsm_annotation_store;
 pub mod materialized_views;
 pub mod memory_efficient_store;
 pub mod migration_tools;
+pub mod ml_embedding_pipeline;
 pub mod ml_sparql_optimizer;
 pub mod model;
 pub mod monitoring;
@@ -231,6 +236,7 @@ pub mod parallel_query;
 pub mod parser;
 pub mod production;
 pub mod profiling;
+pub mod property_graph_bridge;
 pub mod quantum_sparql_optimizer;
 pub mod query;
 pub mod query_optimizer;
@@ -243,6 +249,7 @@ pub mod shacl_star;
 pub mod sparql_enhanced;
 pub mod storage_integration;
 pub mod store;
+pub mod streaming_query;
 pub mod temporal_versioning;
 pub mod testing_utilities;
 pub mod tiered_storage;

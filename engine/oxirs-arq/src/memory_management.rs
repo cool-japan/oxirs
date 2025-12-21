@@ -183,11 +183,11 @@ impl MemoryManagedContext {
             peak_usage: Arc::new(Mutex::new(0)),
             allocation_count: Arc::new(Mutex::new(0)),
             deallocation_count: Arc::new(Mutex::new(0)),
-            memory_allocation_timer: Timer::new("memory_allocation"),
-            memory_deallocation_timer: Timer::new("memory_deallocation"),
-            buffer_pool_hit_counter: Counter::new("buffer_pool_hits"),
-            buffer_pool_miss_counter: Counter::new("buffer_pool_misses"),
-            memory_pressure_gauge: Gauge::new("memory_pressure"),
+            memory_allocation_timer: Timer::new("memory_allocation".to_string()),
+            memory_deallocation_timer: Timer::new("memory_deallocation".to_string()),
+            buffer_pool_hit_counter: Counter::new("buffer_pool_hits".to_string()),
+            buffer_pool_miss_counter: Counter::new("buffer_pool_misses".to_string()),
+            memory_pressure_gauge: Gauge::new("memory_pressure".to_string()),
             solution_cache: Arc::new(RwLock::new(MemoryManagedSolutionCache::new(
                 config.memory_limit / 4,
             )?)),
@@ -211,7 +211,7 @@ impl MemoryManagedContext {
                 if let Ok(buffer) = buffer_pool.acquire(size) {
                     self.buffer_pool_hit_counter.increment();
                     self.update_allocation_stats(size);
-                    self.memory_allocation_timer.record(start_time.elapsed());
+                    self.memory_allocation_timer.observe(start_time.elapsed());
                     self.profiler.stop("memory_allocation");
 
                     return Ok(MemoryManagedBuffer::BufferPool(buffer));
@@ -223,7 +223,7 @@ impl MemoryManagedContext {
         // Fall back to global pool
         let buffer = self.global_pool.allocate(size)?;
         self.update_allocation_stats(size);
-        self.memory_allocation_timer.record(start_time.elapsed());
+        self.memory_allocation_timer.observe(start_time.elapsed());
         self.profiler.stop("memory_allocation");
 
         Ok(MemoryManagedBuffer::Global(buffer))
@@ -254,7 +254,7 @@ impl MemoryManagedContext {
         }
 
         self.update_deallocation_stats(size);
-        self.memory_deallocation_timer.record(start_time.elapsed());
+        self.memory_deallocation_timer.observe(start_time.elapsed());
         self.profiler.stop("memory_deallocation");
 
         Ok(())
@@ -460,8 +460,8 @@ impl MemoryManagedContext {
         let allocation_count = *self.allocation_count.lock().unwrap();
         let deallocation_count = *self.deallocation_count.lock().unwrap();
 
-        let buffer_pool_hits = self.buffer_pool_hit_counter.value();
-        let buffer_pool_misses = self.buffer_pool_miss_counter.value();
+        let buffer_pool_hits = self.buffer_pool_hit_counter.get();
+        let buffer_pool_misses = self.buffer_pool_miss_counter.get();
         let buffer_pool_hit_ratio = if buffer_pool_hits + buffer_pool_misses > 0 {
             buffer_pool_hits as f64 / (buffer_pool_hits + buffer_pool_misses) as f64
         } else {

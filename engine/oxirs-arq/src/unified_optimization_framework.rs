@@ -545,10 +545,10 @@ impl UnifiedOptimizationCoordinator {
             total_optimizations: state.total_optimizations,
             average_optimization_time: state.last_optimization_time.unwrap_or(Duration::ZERO),
             average_performance_improvement: state.average_performance,
-            quantum_optimizations: self.metrics.quantum_optimizations.value(),
-            vectorized_executions: self.metrics.vectorized_executions.value(),
-            memory_optimizations: self.metrics.memory_optimizations.value(),
-            ai_decisions: self.metrics.ai_decisions.value(),
+            quantum_optimizations: self.metrics.quantum_optimizations.get(),
+            vectorized_executions: self.metrics.vectorized_executions.get(),
+            memory_optimizations: self.metrics.memory_optimizations.get(),
+            ai_decisions: self.metrics.ai_decisions.get(),
             system_efficiency: self.calculate_system_efficiency(),
         }
     }
@@ -786,7 +786,7 @@ pub struct PerformanceUpdate {
 }
 
 /// Unified performance metrics
-#[derive(Debug, Clone)]
+/// Note: Cannot derive Clone/Debug as metrics use atomic types
 struct UnifiedMetrics {
     optimization_time: Timer,
     quantum_optimizations: Counter,
@@ -798,11 +798,11 @@ struct UnifiedMetrics {
 impl UnifiedMetrics {
     fn new() -> Self {
         Self {
-            optimization_time: Timer::new("optimization_time"),
-            quantum_optimizations: Counter::new("quantum_optimizations"),
-            vectorized_executions: Counter::new("vectorized_executions"),
-            memory_optimizations: Counter::new("memory_optimizations"),
-            ai_decisions: Counter::new("ai_decisions"),
+            optimization_time: Timer::new("optimization_time".to_string()),
+            quantum_optimizations: Counter::new("quantum_optimizations".to_string()),
+            vectorized_executions: Counter::new("vectorized_executions".to_string()),
+            memory_optimizations: Counter::new("memory_optimizations".to_string()),
+            ai_decisions: Counter::new("ai_decisions".to_string()),
         }
     }
 }

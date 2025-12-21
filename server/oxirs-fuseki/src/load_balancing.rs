@@ -541,7 +541,7 @@ impl Drop for BackendConnection {
 }
 
 /// Backend statistics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct BackendStatistics {
     pub backend_id: String,
     pub active_connections: usize,

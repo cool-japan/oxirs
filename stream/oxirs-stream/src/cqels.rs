@@ -11,7 +11,7 @@
 //!
 //! ## References
 //! - Le-Phuoc et al. "A Native and Adaptive Approach for Unified Processing of Linked Streams and Linked Data"
-//! - https://github.com/cqels/cqels
+//! - <https://github.com/cqels/cqels>
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};

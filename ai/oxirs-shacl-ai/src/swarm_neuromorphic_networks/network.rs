@@ -77,6 +77,30 @@ impl SwarmNeuromorphicNetwork {
             swarm_metrics,
         }
     }
+
+    /// Get the number of swarm nodes
+    pub fn node_count(&self) -> usize {
+        self.swarm_nodes.len()
+    }
+
+    /// Get the swarm network configuration
+    pub fn config(&self) -> &SwarmNetworkConfig {
+        &self.config
+    }
+
+    /// Get a reference to the swarm metrics
+    pub fn swarm_metrics(&self) -> Arc<RwLock<SwarmMetrics>> {
+        Arc::clone(&self.swarm_metrics)
+    }
+
+    /// Get the total processing capacity of active swarm nodes
+    pub fn total_processing_capacity(&self) -> f64 {
+        self.swarm_nodes
+            .iter()
+            .filter(|entry| entry.value().is_active)
+            .map(|entry| entry.value().processing_capacity)
+            .sum()
+    }
 }
 
 /// Individual swarm neuromorphic node

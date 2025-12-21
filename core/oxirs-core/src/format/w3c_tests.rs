@@ -4,11 +4,11 @@
 //! for RDF format parsing and serialization compliance testing.
 //!
 //! Supported test suites:
-//! - Turtle Test Suite: https://w3c.github.io/rdf-tests/turtle/
-//! - N-Triples Test Suite: https://w3c.github.io/rdf-tests/ntriples/
-//! - N-Quads Test Suite: https://w3c.github.io/rdf-tests/nquads/
-//! - TriG Test Suite: https://w3c.github.io/rdf-tests/trig/
-//! - RDF/XML Test Suite: https://w3c.github.io/rdf-tests/rdf-xml/
+//! - Turtle Test Suite: <https://w3c.github.io/rdf-tests/turtle/>
+//! - N-Triples Test Suite: <https://w3c.github.io/rdf-tests/ntriples/>
+//! - N-Quads Test Suite: <https://w3c.github.io/rdf-tests/nquads/>
+//! - TriG Test Suite: <https://w3c.github.io/rdf-tests/trig/>
+//! - RDF/XML Test Suite: <https://w3c.github.io/rdf-tests/rdf-xml/>
 
 use super::{RdfFormat, RdfParser};
 use anyhow::Result;

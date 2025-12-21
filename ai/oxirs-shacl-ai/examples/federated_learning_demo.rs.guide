@@ -1,0 +1,196 @@
+//! Comprehensive Federated Learning Demonstration
+//!
+//! This example demonstrates how to set up privacy-preserving distributed SHACL
+//! shape learning across multiple knowledge graph instances using federated learning.
+//!
+//! Features demonstrated:
+//! - Node setup with different privacy levels
+//! - Byzantine Fault Tolerance (BFT)
+//! - Differential Privacy
+//! - Consensus mechanisms
+//! - Secure aggregation
+
+use oxirs_shacl_ai::federated_learning::{
+    AggregationStrategy, ConsensusAlgorithm, FederatedLearningConfig, FederatedLearningCoordinator,
+    FederatedNode, PrivacyConfig, PrivacyLevel,
+};
+use std::net::SocketAddr;
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("=== OxiRS SHACL-AI: Federated Learning Demo ===\n");
+
+    // 1. Setup Federated Learning Coordinator
+    println!("🌐 Setting up Federated Learning Coordinator...");
+    let coordinator_addr: SocketAddr = ([127, 0, 0, 1], 8080).into();
+    let config = create_federated_config();
+    let coordinator = FederatedLearningCoordinator::new(
+        coordinator_addr,
+        PrivacyLevel::DifferentialPrivacy { epsilon: 1.0 },
+        config,
+    );
+    println!("   ✓ Coordinator running on {}", coordinator_addr);
+    println!();
+
+    // 2. Create Federated Nodes
+    println!("📡 Creating federated nodes with different configurations...");
+    let nodes = create_federated_nodes();
+    print_node_summary(&nodes);
+
+    // 3. Demonstrate Privacy Levels
+    println!("\n🔒 Privacy Level Configurations:");
+    demonstrate_privacy_levels();
+
+    // 4. Show Aggregation Strategies
+    println!("\n📊 Available Aggregation Strategies:");
+    demonstrate_aggregation_strategies();
+
+    // 5. Consensus Mechanisms
+    println!("\n🤝 Consensus Mechanisms:");
+    demonstrate_consensus_mechanisms();
+
+    // 6. Federation Statistics
+    println!("\n📈 Federation Statistics:");
+    let stats = coordinator.get_federation_stats().await?;
+    println!("   Total Nodes: {}", stats.total_nodes);
+    println!("   Active Nodes: {}", stats.active_nodes);
+    println!("   Completed Rounds: {}", stats.completed_rounds);
+    println!("   Average Accuracy: {:.4}", stats.average_accuracy);
+
+    // 7. Production Best Practices
+    println!("\n✨ Production Best Practices:");
+    print_best_practices();
+
+    println!("\n✅ Federated Learning demo completed successfully!");
+    Ok(())
+}
+
+/// Create federated learning configuration
+fn create_federated_config() -> FederatedLearningConfig {
+    FederatedLearningConfig {
+        min_nodes_for_consensus: 3,
+        aggregation_strategy: AggregationStrategy::FederatedAveraging,
+        max_staleness: Duration::from_secs(300),
+        byzantine_tolerance: 0.33,
+        privacy_config: PrivacyConfig {
+            enable_differential_privacy: true,
+            epsilon: 1.0,
+            enable_secure_aggregation: true,
+            enable_homomorphic_encryption: false,
+        },
+    }
+}
+
+/// Create multiple federated nodes with different configurations
+fn create_federated_nodes() -> Vec<FederatedNode> {
+    vec![
+        // Node 1: High privacy with differential privacy
+        FederatedNode::new(
+            ([127, 0, 0, 1], 8081).into(),
+            PrivacyLevel::DifferentialPrivacy { epsilon: 0.5 },
+        ),
+        // Node 2: Statistical privacy (aggregated data only)
+        FederatedNode::new(([127, 0, 0, 1], 8082).into(), PrivacyLevel::Statistical),
+        // Node 3: Homomorphic encryption for maximum security
+        FederatedNode::new(
+            ([127, 0, 0, 1], 8083).into(),
+            PrivacyLevel::HomomorphicEncryption,
+        ),
+        // Node 4: Secure multi-party computation
+        FederatedNode::new(
+            ([127, 0, 0, 1], 8084).into(),
+            PrivacyLevel::SecureMultiParty,
+        ),
+    ]
+}
+
+/// Print summary of federated nodes
+fn print_node_summary(nodes: &[FederatedNode]) {
+    for (i, node) in nodes.iter().enumerate() {
+        println!("   Node {}: {:?}", i + 1, node.address);
+        println!("      Privacy Level: {:?}", node.privacy_level);
+        println!("      Trust Score: {:.2}", node.trust_score());
+        println!(
+            "      CPU Cores: {}, RAM: {} MB",
+            node.capacity.cpu_cores, node.capacity.ram_mb
+        );
+    }
+}
+
+/// Demonstrate different privacy levels
+fn demonstrate_privacy_levels() {
+    let levels = vec![
+        ("Open", "Full data sharing - suitable for public datasets"),
+        (
+            "Statistical",
+            "Share aggregated statistics only - good balance",
+        ),
+        (
+            "Differential Privacy",
+            "Adds noise for privacy - epsilon controls privacy/utility trade-off",
+        ),
+        (
+            "Homomorphic Encryption",
+            "Compute on encrypted data - maximum security",
+        ),
+        (
+            "Secure Multi-Party",
+            "Distributed computation - no single party sees all data",
+        ),
+    ];
+
+    for (name, description) in levels {
+        println!("   • {}: {}", name, description);
+    }
+}
+
+/// Demonstrate aggregation strategies
+fn demonstrate_aggregation_strategies() {
+    println!("   1. Federated Averaging:");
+    println!("      Simple average of model updates - standard approach");
+    println!();
+    println!("   2. Weighted Averaging:");
+    println!("      Weight by dataset size - gives more influence to larger datasets");
+    println!();
+    println!("   3. Byzantine Robust:");
+    println!("      Filters malicious updates - critical for untrusted environments");
+    println!();
+    println!("   4. Adaptive:");
+    println!("      Adjusts based on node performance - optimizes for quality");
+}
+
+/// Demonstrate consensus mechanisms
+fn demonstrate_consensus_mechanisms() {
+    println!("   1. PBFT (Practical Byzantine Fault Tolerance):");
+    println!("      3-phase commit protocol - tolerates up to f byzantine nodes");
+    println!();
+    println!("   2. RAFT:");
+    println!("      Leader-based consensus - simpler, assumes crash faults only");
+    println!();
+    println!("   3. Proof of Stake (PoS):");
+    println!("      Stake-based voting - economic incentive for honest behavior");
+}
+
+/// Print production best practices
+fn print_best_practices() {
+    println!("   1. Privacy Configuration:");
+    println!("      • Start with epsilon=1.0, decrease for more privacy");
+    println!("      • Monitor utility loss as privacy increases");
+    println!("      • Use secure aggregation in production");
+    println!();
+    println!("   2. Byzantine Tolerance:");
+    println!("      • Set max byzantine nodes to ~33% of total");
+    println!("      • Enable reputation system for long-running federations");
+    println!("      • Monitor node behavior for anomalies");
+    println!();
+    println!("   3. Performance:");
+    println!("      • Use weighted averaging for heterogeneous datasets");
+    println!("      • Set appropriate staleness limits (5-10 minutes)");
+    println!("      • Monitor convergence and adjust learning rates");
+    println!();
+    println!("   4. Security:");
+    println!("      • Always use TLS for node communication");
+    println!("      • Implement rate limiting per node");
+    println!("      • Regular security audits of federated models");
+}

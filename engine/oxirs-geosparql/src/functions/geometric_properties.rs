@@ -91,26 +91,26 @@ pub fn signed_area(geom: &Geometry) -> Result<f64> {
 /// For Polygon and MultiPolygon: returns the perimeter
 /// For other types: returns 0.0
 pub fn length(geom: &Geometry) -> Result<f64> {
-    use geo::EuclideanLength;
+    use geo::{Euclidean, Length};
 
     let len = match &geom.geom {
-        GeoGeometry::Line(l) => l.euclidean_length(),
-        GeoGeometry::LineString(ls) => ls.euclidean_length(),
-        GeoGeometry::MultiLineString(mls) => mls.euclidean_length(),
+        GeoGeometry::Line(l) => l.length::<Euclidean>(),
+        GeoGeometry::LineString(ls) => ls.length::<Euclidean>(),
+        GeoGeometry::MultiLineString(mls) => mls.length::<Euclidean>(),
         GeoGeometry::Polygon(p) => {
             // Perimeter = exterior + all interiors
-            let mut total = p.exterior().euclidean_length();
+            let mut total = p.exterior().length::<Euclidean>();
             for interior in p.interiors() {
-                total += interior.euclidean_length();
+                total += interior.length::<Euclidean>();
             }
             total
         }
         GeoGeometry::MultiPolygon(mp) => {
             let mut total = 0.0;
             for poly in &mp.0 {
-                total += poly.exterior().euclidean_length();
+                total += poly.exterior().length::<Euclidean>();
                 for interior in poly.interiors() {
-                    total += interior.euclidean_length();
+                    total += interior.length::<Euclidean>();
                 }
             }
             total

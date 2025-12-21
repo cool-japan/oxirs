@@ -2,7 +2,6 @@
 
 use crate::{Result, ShaclError};
 use oxirs_core::model::Term;
-use oxirs_core::RdfTerm;
 
 /// Format a term for use in SPARQL queries
 pub fn format_term_for_sparql(term: &Term) -> Result<String> {
@@ -10,8 +9,27 @@ pub fn format_term_for_sparql(term: &Term) -> Result<String> {
         Term::NamedNode(node) => Ok(format!("<{}>", node.as_str())),
         Term::BlankNode(node) => Ok(node.as_str().to_string()),
         Term::Literal(literal) => {
-            // TODO: Proper literal formatting with datatype and language
-            Ok(format!("\"{}\"", literal.as_str().replace('"', "\\\"")))
+            // Properly format literal with datatype and language tags
+            let mut result = format!(
+                "\"{}\"",
+                literal.value().replace('\\', "\\\\").replace('"', "\\\"")
+            );
+
+            if let Some(lang) = literal.language() {
+                result.push('@');
+                result.push_str(lang);
+            } else {
+                let datatype = literal.datatype();
+                let dt_str = datatype.as_str();
+                // Only add datatype if it's not the default xsd:string
+                if dt_str != "http://www.w3.org/2001/XMLSchema#string" {
+                    result.push_str("^^<");
+                    result.push_str(dt_str);
+                    result.push('>');
+                }
+            }
+
+            Ok(result)
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
         Term::QuotedTriple(_) => Err(ShaclError::ValidationEngine(

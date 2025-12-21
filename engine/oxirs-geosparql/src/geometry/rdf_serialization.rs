@@ -48,11 +48,11 @@ use std::fmt::Write;
 /// RDF serialization format
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RdfFormat {
-    /// Turtle format (https://www.w3.org/TR/turtle/)
+    /// Turtle format (<https://www.w3.org/TR/turtle/>)
     Turtle,
-    /// N-Triples format (https://www.w3.org/TR/n-triples/)
+    /// N-Triples format (<https://www.w3.org/TR/n-triples/>)
     NTriples,
-    /// N-Quads format (https://www.w3.org/TR/n-quads/)
+    /// N-Quads format (<https://www.w3.org/TR/n-quads/>)
     NQuads,
 }
 

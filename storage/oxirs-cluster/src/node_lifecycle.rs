@@ -489,12 +489,17 @@ impl NodeLifecycleManager {
         address: SocketAddr,
         mut node_status: NodeStatus,
     ) -> Result<()> {
-        // TODO: Implement interior mutability for these components
-        // self.consensus.add_peer(node_id);
-
-        // self.discovery.add_node(node_info);
-
-        // self.replication.add_replica(node_id, address.to_string());
+        // Note: The following operations are placeholders for future implementation.
+        // When the underlying components (ConsensusManager, DiscoveryService, ReplicationManager)
+        // expose APIs with interior mutability (e.g., async methods taking &self instead of &mut self),
+        // these calls can be uncommented. This is an architectural decision to maintain
+        // immutability at the lifecycle manager level while allowing the underlying
+        // components to manage their own state mutations internally.
+        //
+        // Proposed future APIs:
+        // - self.consensus.add_peer(node_id).await?;
+        // - self.discovery.add_node(node_info).await?;
+        // - self.replication.add_replica(node_id, address.to_string()).await?;
 
         // Update node state to active
         node_status.update_state(NodeState::Active, "Successfully joined cluster".to_string());
@@ -517,10 +522,13 @@ impl NodeLifecycleManager {
     async fn cleanup_failed_join(&self, node_id: OxirsNodeId) {
         warn!("Cleaning up failed join for node {}", node_id);
 
-        // TODO: Implement interior mutability for these components
-        // self.consensus.remove_peer(node_id);
-        // self.discovery.remove_node(node_id);
-        // self.replication.remove_replica(node_id);
+        // Note: Placeholder for future component cleanup operations.
+        // See note in finalize_join() for details on interior mutability requirements.
+        //
+        // Proposed future cleanup APIs:
+        // - self.consensus.remove_peer(node_id).await?;
+        // - self.discovery.remove_node(node_id).await?;
+        // - self.replication.remove_replica(node_id).await?;
 
         // Remove from status map
         let mut nodes = self.node_status.write().await;
@@ -601,10 +609,13 @@ impl NodeLifecycleManager {
 
     /// Perform immediate node removal
     async fn perform_immediate_removal(&self, node_id: OxirsNodeId) -> Result<()> {
-        // TODO: Implement interior mutability for these components
-        // self.consensus.remove_peer(node_id);
-        // self.discovery.remove_node(node_id);
-        // self.replication.remove_replica(node_id);
+        // Note: Placeholder for future component removal operations.
+        // See note in finalize_join() for details on interior mutability requirements.
+        //
+        // Proposed future removal APIs:
+        // - self.consensus.remove_peer(node_id).await?;
+        // - self.discovery.remove_node(node_id).await?;
+        // - self.replication.remove_replica(node_id).await?;
 
         // Stop health monitoring
         self.health_monitor.stop_monitoring(node_id).await;

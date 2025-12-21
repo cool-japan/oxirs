@@ -166,3 +166,243 @@ impl Default for TransformationCache {
         Self::new()
     }
 }
+
+#[cfg(all(test, feature = "proj-support"))]
+mod tests {
+    use super::*;
+    use geo_types::{coord, Point};
+
+    #[test]
+    fn test_cache_creation() {
+        let cache = TransformationCache::new();
+        assert_eq!(cache.len(), 0);
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_cache_default() {
+        let cache = TransformationCache::default();
+        assert_eq!(cache.len(), 0);
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_transform_same_crs() {
+        let cache = TransformationCache::new();
+        let crs = Crs::epsg(4326);
+        let point = Geometry::with_crs(Point::new(10.0, 20.0).into(), crs.clone());
+
+        let result = cache.transform(&point, &crs).unwrap();
+
+        // Should return clone without transformation
+        assert_eq!(result.crs, crs);
+        match result.geom {
+            geo_types::Geometry::Point(p) => {
+                assert_eq!(p.x(), 10.0);
+                assert_eq!(p.y(), 20.0);
+            }
+            _ => panic!("Expected Point geometry"),
+        }
+
+        // Cache should remain empty when CRS is the same
+        assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn test_transform_wgs84_to_web_mercator() {
+        let cache = TransformationCache::new();
+        let wgs84 = Crs::epsg(4326);
+        let web_mercator = Crs::epsg(3857);
+
+        // Create a point in WGS84 (longitude, latitude)
+        let point = Geometry::with_crs(Point::new(10.0, 20.0).into(), wgs84.clone());
+
+        // Transform to Web Mercator
+        let result = cache.transform(&point, &web_mercator).unwrap();
+
+        assert_eq!(result.crs, web_mercator);
+
+        // Cache should now have one entry
+        assert_eq!(cache.len(), 1);
+        assert!(!cache.is_empty());
+
+        // Transform another point - should use cached parameters
+        let point2 = Geometry::with_crs(Point::new(15.0, 25.0).into(), wgs84);
+        let result2 = cache.transform(&point2, &web_mercator).unwrap();
+
+        assert_eq!(result2.crs, web_mercator);
+
+        // Cache should still have one entry (same CRS pair)
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn test_transform_multiple_crs_pairs() {
+        let cache = TransformationCache::new();
+        let wgs84 = Crs::epsg(4326);
+        let web_mercator = Crs::epsg(3857);
+        let utm_zone_32n = Crs::epsg(32632);
+
+        let point = Geometry::with_crs(Point::new(10.0, 50.0).into(), wgs84.clone());
+
+        // First transformation: WGS84 -> Web Mercator
+        let _ = cache.transform(&point, &web_mercator).unwrap();
+        assert_eq!(cache.len(), 1);
+
+        // Second transformation: WGS84 -> UTM Zone 32N
+        let _ = cache.transform(&point, &utm_zone_32n).unwrap();
+        assert_eq!(cache.len(), 2);
+
+        // Third transformation: Web Mercator -> WGS84 (reverse)
+        let web_merc_point = Geometry::with_crs(
+            Point::new(1113194.91, 6446275.84).into(),
+            web_mercator.clone(),
+        );
+        let _ = cache.transform(&web_merc_point, &wgs84).unwrap();
+        assert_eq!(cache.len(), 3);
+    }
+
+    #[test]
+    fn test_transform_invalid_crs() {
+        let cache = TransformationCache::new();
+
+        // Create a CRS with non-EPSG URI
+        let invalid_crs = Crs::new("http://example.com/custom-crs");
+        let wgs84 = Crs::epsg(4326);
+
+        let point = Geometry::with_crs(Point::new(10.0, 20.0).into(), invalid_crs);
+
+        // Should fail because source CRS doesn't have EPSG code
+        let result = cache.transform(&point, &wgs84);
+        assert!(result.is_err());
+
+        // Cache should remain empty
+        assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn test_transform_roundtrip() {
+        let cache = TransformationCache::new();
+        let wgs84 = Crs::epsg(4326);
+        let web_mercator = Crs::epsg(3857);
+
+        // Original point in WGS84
+        let original = Geometry::with_crs(Point::new(10.0, 50.0).into(), wgs84.clone());
+
+        // Transform to Web Mercator
+        let transformed = cache.transform(&original, &web_mercator).unwrap();
+
+        // Transform back to WGS84
+        let roundtrip = cache.transform(&transformed, &wgs84).unwrap();
+
+        // Should be approximately equal (within floating point tolerance)
+        match (&original.geom, &roundtrip.geom) {
+            (geo_types::Geometry::Point(p1), geo_types::Geometry::Point(p2)) => {
+                assert!((p1.x() - p2.x()).abs() < 1e-6);
+                assert!((p1.y() - p2.y()).abs() < 1e-6);
+            }
+            _ => panic!("Expected Point geometries"),
+        }
+
+        // Cache should have 2 entries (forward and reverse)
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn test_cache_thread_safety() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let cache = Arc::new(TransformationCache::new());
+        let wgs84 = Crs::epsg(4326);
+        let web_mercator = Crs::epsg(3857);
+
+        let mut handles = vec![];
+
+        // Spawn multiple threads that all transform geometries
+        for i in 0..10 {
+            let cache_clone = Arc::clone(&cache);
+            let wgs84_clone = wgs84.clone();
+            let web_merc_clone = web_mercator.clone();
+
+            let handle = thread::spawn(move || {
+                let point =
+                    Geometry::with_crs(Point::new(10.0 + i as f64, 50.0).into(), wgs84_clone);
+                cache_clone.transform(&point, &web_merc_clone).unwrap()
+            });
+
+            handles.push(handle);
+        }
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // All threads used the same CRS pair, so cache should have 1 entry
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn test_transform_linestring() {
+        let cache = TransformationCache::new();
+        let wgs84 = Crs::epsg(4326);
+        let web_mercator = Crs::epsg(3857);
+
+        use geo_types::LineString;
+        let line = LineString::from(vec![
+            coord! { x: 10.0, y: 50.0 },
+            coord! { x: 11.0, y: 51.0 },
+            coord! { x: 12.0, y: 52.0 },
+        ]);
+
+        let geom = Geometry::with_crs(line.into(), wgs84);
+
+        let transformed = cache.transform(&geom, &web_mercator).unwrap();
+
+        assert_eq!(transformed.crs, web_mercator);
+        assert_eq!(cache.len(), 1);
+
+        // Verify it's still a LineString
+        match transformed.geom {
+            geo_types::Geometry::LineString(ls) => {
+                assert_eq!(ls.coords().count(), 3);
+            }
+            _ => panic!("Expected LineString geometry"),
+        }
+    }
+
+    #[test]
+    fn test_transform_polygon() {
+        let cache = TransformationCache::new();
+        let wgs84 = Crs::epsg(4326);
+        let web_mercator = Crs::epsg(3857);
+
+        use geo_types::Polygon;
+        let poly = Polygon::new(
+            geo_types::LineString::from(vec![
+                coord! { x: 10.0, y: 50.0 },
+                coord! { x: 11.0, y: 50.0 },
+                coord! { x: 11.0, y: 51.0 },
+                coord! { x: 10.0, y: 51.0 },
+                coord! { x: 10.0, y: 50.0 },
+            ]),
+            vec![],
+        );
+
+        let geom = Geometry::with_crs(poly.into(), wgs84);
+
+        let transformed = cache.transform(&geom, &web_mercator).unwrap();
+
+        assert_eq!(transformed.crs, web_mercator);
+        assert_eq!(cache.len(), 1);
+
+        // Verify it's still a Polygon
+        match transformed.geom {
+            geo_types::Geometry::Polygon(p) => {
+                assert_eq!(p.exterior().coords().count(), 5);
+            }
+            _ => panic!("Expected Polygon geometry"),
+        }
+    }
+}

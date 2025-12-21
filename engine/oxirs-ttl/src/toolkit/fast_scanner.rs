@@ -129,7 +129,7 @@ impl<'a> FastScanner<'a> {
 
     /// Scan until a delimiter is found
     ///
-    /// Delimiters: space, tab, newline, CR, <, >, @, ;, ,, ., [, ], (, ), {, }, #, "
+    /// Delimiters: space, tab, newline, CR, `<`, `>`, `@`, `;`, `,`, `.`, `[`, `]`, `(`, `)`, `{`, `}`, `#`, `"`
     pub fn scan_until_delimiter(&self, mut pos: usize) -> usize {
         while pos < self.len {
             match self.bytes[pos] {

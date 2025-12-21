@@ -3,12 +3,13 @@
 //! Common types used throughout the streaming module.
 
 use crate::event;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 
 /// Topic name wrapper
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 pub struct TopicName(String);
 
 impl TopicName {
@@ -40,7 +41,7 @@ impl From<String> for TopicName {
 }
 
 /// Partition identifier
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 pub struct PartitionId(u32);
 
 impl PartitionId {
@@ -60,7 +61,7 @@ impl fmt::Display for PartitionId {
 }
 
 /// Message offset
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 pub struct Offset(u64);
 
 impl Offset {
@@ -80,7 +81,7 @@ impl fmt::Display for Offset {
 }
 
 /// Stream position for seeking
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 pub enum StreamPosition {
     /// Start from the beginning
     Beginning,
@@ -91,7 +92,7 @@ pub enum StreamPosition {
 }
 
 /// Enhanced event metadata for tracking and provenance with advanced features
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct EventMetadata {
     /// Source system or component
     pub source: String,
@@ -108,6 +109,7 @@ pub struct EventMetadata {
 
     // Enhanced metadata fields (TODO items)
     /// Event timestamp with high precision
+    #[bincode(with_serde)]
     pub timestamp: chrono::DateTime<chrono::Utc>,
     /// Operation context with request details
     pub operation_context: Option<OperationContext>,
@@ -190,7 +192,7 @@ impl From<event::EventMetadata> for EventMetadata {
 }
 
 /// Operation context for enhanced tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OperationContext {
     /// Operation type (INSERT, DELETE, UPDATE, etc.)
     pub operation_type: String,
@@ -207,7 +209,7 @@ pub struct OperationContext {
 }
 
 /// Client information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct ClientInfo {
     /// Client application name
     pub application: String,
@@ -222,7 +224,7 @@ pub struct ClientInfo {
 }
 
 /// Geographic location information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct GeoLocation {
     /// Country code (ISO 3166-1 alpha-2)
     pub country: String,
@@ -237,7 +239,7 @@ pub struct GeoLocation {
 }
 
 /// Performance metrics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct PerformanceMetrics {
     /// Processing latency in microseconds
     pub processing_latency_us: Option<u64>,
@@ -254,7 +256,7 @@ pub struct PerformanceMetrics {
 }
 
 /// Authentication context
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct AuthContext {
     /// Authenticated user ID
     pub user_id: String,
@@ -265,11 +267,25 @@ pub struct AuthContext {
     /// Authentication method used
     pub auth_method: String,
     /// Token expiration time
+    #[bincode(with_serde)]
     pub token_expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Event priority levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    Default,
+    Encode,
+    Decode,
+)]
 pub enum EventPriority {
     Low = 0,
     #[default]
@@ -279,7 +295,7 @@ pub enum EventPriority {
 }
 
 /// Compression types for payload optimization
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, Encode, Decode)]
 pub enum CompressionType {
     #[default]
     None,
@@ -291,7 +307,7 @@ pub enum CompressionType {
 }
 
 /// Serialization formats supported
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, Encode, Decode)]
 pub enum SerializationFormat {
     #[default]
     Json,
@@ -303,7 +319,7 @@ pub enum SerializationFormat {
 }
 
 /// Processing hints for optimized handling
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct ProcessingHints {
     /// Whether event can be processed out of order
     pub allow_out_of_order: bool,
@@ -320,7 +336,7 @@ pub struct ProcessingHints {
 }
 
 /// Batch processing preferences
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 pub enum BatchPreference {
     /// Process immediately, don't batch
     Immediate,
@@ -331,7 +347,7 @@ pub enum BatchPreference {
 }
 
 /// Consistency level requirements
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 pub enum ConsistencyLevel {
     /// Eventual consistency is acceptable
     Eventual,
@@ -342,7 +358,7 @@ pub enum ConsistencyLevel {
 }
 
 /// Retry policy configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct RetryPolicy {
     /// Maximum number of retries
     pub max_retries: u32,
@@ -426,8 +442,10 @@ pub mod serialization {
             SerializationFormat::Cbor => {
                 serde_cbor::to_vec(metadata).map_err(|e| anyhow!("CBOR serialization failed: {e}"))
             }
-            SerializationFormat::Bincode => bincode::serialize(metadata)
-                .map_err(|e| anyhow!("Bincode serialization failed: {e}")),
+            SerializationFormat::Bincode => {
+                bincode::encode_to_vec(metadata, bincode::config::standard())
+                    .map_err(|e| anyhow!("Bincode serialization failed: {e}"))
+            }
             SerializationFormat::Protobuf | SerializationFormat::Avro => {
                 // These would require schema generation and external dependencies
                 // For now, fallback to JSON
@@ -446,8 +464,11 @@ pub mod serialization {
                 .map_err(|e| anyhow!("MessagePack deserialization failed: {e}")),
             SerializationFormat::Cbor => serde_cbor::from_slice(data)
                 .map_err(|e| anyhow!("CBOR deserialization failed: {e}")),
-            SerializationFormat::Bincode => bincode::deserialize(data)
-                .map_err(|e| anyhow!("Bincode deserialization failed: {e}")),
+            SerializationFormat::Bincode => {
+                bincode::decode_from_slice(data, bincode::config::standard())
+                    .map(|(v, _)| v)
+                    .map_err(|e| anyhow!("Bincode deserialization failed: {e}"))
+            }
             SerializationFormat::Protobuf | SerializationFormat::Avro => {
                 // These would require schema generation and external dependencies
                 // For now, fallback to JSON

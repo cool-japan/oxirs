@@ -421,7 +421,8 @@ impl QueryBus {
     pub async fn execute<Q>(&self, query: Q) -> Result<QueryResult<Q::Result>>
     where
         Q: Query + 'static,
-        Q::Result: Clone + Serialize + for<'de> Deserialize<'de>,
+        Q::Result:
+            Clone + Serialize + for<'de> Deserialize<'de> + bincode::Encode + bincode::Decode<()>,
     {
         let start_time = Instant::now();
         let query_id = query.query_id();
@@ -495,7 +496,8 @@ impl QueryBus {
     async fn execute_query_handler<Q>(&self, query: Q) -> Result<Q::Result>
     where
         Q: Query + 'static,
-        Q::Result: Clone + Serialize + for<'de> Deserialize<'de>,
+        Q::Result:
+            Clone + Serialize + for<'de> Deserialize<'de> + bincode::Encode + bincode::Decode<()>,
     {
         // Validate query
         query.validate()?;
@@ -677,7 +679,7 @@ impl QueryCache {
 
     fn get<T>(&self, key: &str) -> Option<T>
     where
-        T: for<'de> Deserialize<'de>,
+        T: for<'de> Deserialize<'de> + bincode::Decode<()>,
     {
         if !self.config.enabled {
             return None;
@@ -686,7 +688,9 @@ impl QueryCache {
         if let Some(entry) = self.entries.get(key) {
             let age = Utc::now().signed_duration_since(entry.created_at);
             if age.num_seconds() < self.config.ttl_seconds as i64 {
-                if let Ok(value) = bincode::deserialize(&entry.data) {
+                if let Ok((value, _)) =
+                    bincode::decode_from_slice(&entry.data, bincode::config::standard())
+                {
                     return Some(value);
                 }
             }
@@ -697,13 +701,13 @@ impl QueryCache {
 
     fn set<T>(&mut self, key: String, value: T)
     where
-        T: Serialize,
+        T: Serialize + bincode::Encode,
     {
         if !self.config.enabled {
             return;
         }
 
-        if let Ok(data) = bincode::serialize(&value) {
+        if let Ok(data) = bincode::encode_to_vec(&value, bincode::config::standard()) {
             let entry = CacheEntry {
                 size_bytes: data.len(),
                 data,

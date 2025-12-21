@@ -91,3 +91,14 @@ parallel = ["scirs2-linalg/parallel"]
 [[example]]
 name = "conve_model_demo"
 required-features = ["conve"]
+
+[[example]]
+name = "distributed_training_demo"
+required-features = ["basic-models"]
+
+[[example]]
+name = "temporal_embeddings_demo"
+
+[[example]]
+name = "storage_backend_demo"
+required-features = ["basic-models"]

@@ -672,7 +672,7 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
     // Print welcome message
     println!("╔═══════════════════════════════════════════════════════════╗");
     println!("║              OxiRS Interactive SPARQL Shell             ║");
-    println!("║                    Version 0.1.0-beta.1                 ║");
+    println!("║                    Version 0.1.0-beta.2                 ║");
     println!("╚═══════════════════════════════════════════════════════════╝");
     println!();
     println!("Connected to dataset: {}", dataset_name);

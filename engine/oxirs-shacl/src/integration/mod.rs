@@ -6,16 +6,40 @@
 
 #![allow(dead_code)]
 
-pub mod graphql_integration;
-pub mod fuseki_integration;
-pub mod stream_integration;
 pub mod ai_integration;
+pub mod cicd;
+pub mod fuseki_integration;
+pub mod graphql_integration;
+pub mod performance;
+pub mod rule_engine;
+pub mod shex_migration;
+pub mod stream_integration;
 
 // Re-export public API
-pub use graphql_integration::*;
-pub use fuseki_integration::*;
-pub use stream_integration::*;
 pub use ai_integration::*;
+pub use cicd::{
+    CiCdConfig, CiCdEngine, CiCdResult, CiSystem, EnvironmentConfig, ExitCodeConfig, OutputFormat,
+    RegressionAnalysis, ThresholdConfig, ThresholdResults,
+};
+pub use fuseki_integration::*;
+pub use graphql_integration::*;
+pub use performance::{
+    BottleneckType, LatencyPrediction, LoadBalancingRecommendation, PerformanceBottleneck,
+    PerformanceConfig, PerformanceMetrics, PerformanceOptimizer, PerformanceSummary, Severity,
+};
+pub use rule_engine::{
+    CacheStats, ConstraintGenerator, ConstraintPattern, ConstraintRule, ReasoningBridge,
+    ReasoningResult, ReasoningStrategy, RefinementAction, RuleBasedValidator,
+    RuleBasedValidatorBuilder, RuleEngineConfig, ShapeRefinementRule, ViolationPattern,
+};
+pub use shex_migration::{
+    AnnotationHandling, ClosedHandling, ExtraHandling, ImportHandling, MigrationConfig,
+    MigrationConfigBuilder, MigrationError, MigrationReport, MigrationResult, MigrationStatistics,
+    MigrationWarning, NodeConstraint, NumericFacets, SemanticAction, SemanticMappingConfig,
+    ShexAnnotation, ShexExpression, ShexMigrationEngine, ShexSchema, ShexShape, StringFacets,
+    TripleConstraint, UnmappedFeature, ValueSetHandling, ValueSetValue,
+};
+pub use stream_integration::*;
 
 use crate::{Result, ShaclError, ValidationReport, Validator};
 use oxirs_core::Store;
@@ -177,33 +201,38 @@ impl IntegratedValidationReport {
         let mut recommendations = Vec::new();
 
         match &self.context {
-            IntegrationContext::GraphQL { query_complexity, .. } => {
+            IntegrationContext::GraphQL {
+                query_complexity, ..
+            } => {
                 if *query_complexity > 500 {
-                    recommendations.push(
-                        "Consider simplifying GraphQL query or using pagination".to_string()
-                    );
+                    recommendations
+                        .push("Consider simplifying GraphQL query or using pagination".to_string());
                 }
                 if !self.conforms() {
                     recommendations.push(
-                        "GraphQL mutations may fail due to SHACL constraint violations".to_string()
+                        "GraphQL mutations may fail due to SHACL constraint violations".to_string(),
                     );
                 }
             }
             IntegrationContext::Fuseki { operation_type, .. } => {
                 if operation_type == "UPDATE" && !self.conforms() {
                     recommendations.push(
-                        "SPARQL UPDATE operations should be reviewed due to constraint violations".to_string()
+                        "SPARQL UPDATE operations should be reviewed due to constraint violations"
+                            .to_string(),
                     );
                 }
             }
             IntegrationContext::Stream { batch_size, .. } => {
                 if *batch_size > 1000 && !self.conforms() {
                     recommendations.push(
-                        "Consider reducing batch size to isolate validation errors".to_string()
+                        "Consider reducing batch size to isolate validation errors".to_string(),
                     );
                 }
             }
-            IntegrationContext::AI { confidence_threshold, .. } => {
+            IntegrationContext::AI {
+                confidence_threshold,
+                ..
+            } => {
                 if *confidence_threshold < 0.8 && !self.conforms() {
                     recommendations.push(
                         "AI suggestions may be unreliable due to low confidence and validation errors".to_string()
@@ -213,7 +242,8 @@ impl IntegratedValidationReport {
             IntegrationContext::Custom { .. } => {
                 if !self.conforms() {
                     recommendations.push(
-                        "Custom integration should handle validation errors appropriately".to_string()
+                        "Custom integration should handle validation errors appropriately"
+                            .to_string(),
                     );
                 }
             }
@@ -245,8 +275,11 @@ impl IntegratedValidationReport {
             }
             IntegrationContext::Fuseki { .. } => {
                 // Export as SPARQL result format
-                Ok(format!("# SHACL Validation Report\n# Conforms: {}\n# Violations: {}",
-                    self.conforms(), self.violations().len()))
+                Ok(format!(
+                    "# SHACL Validation Report\n# Conforms: {}\n# Violations: {}",
+                    self.conforms(),
+                    self.violations().len()
+                ))
             }
             _ => {
                 // Default JSON export

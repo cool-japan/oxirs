@@ -1,9 +1,9 @@
 //! # OxiRS Stream - Ultra-High Performance RDF Streaming Platform
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-stream/badge.svg)](https://docs.rs/oxirs-stream)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Real-time streaming support with Kafka/NATS/Redis I/O, RDF Patch, SPARQL Update delta,
@@ -196,8 +196,9 @@ pub use tls_security::{
     TlsConfig, TlsManager, TlsMetrics, TlsSessionInfo, TlsVersion,
 };
 pub use wasm_edge_computing::{
-    EdgeExecutionResult, EdgeLocation, OptimizationLevel, ProcessingSpecialization, WasmEdgeConfig,
-    WasmEdgeProcessor, WasmPlugin, WasmResourceLimits,
+    EdgeExecutionResult, EdgeLocation, OptimizationLevel, PerformanceProfile, PluginCapability,
+    PluginSchema, ProcessingSpecialization, ResourceMetrics, SecurityLevel, WasmEdgeConfig,
+    WasmEdgeProcessor, WasmPlugin, WasmProcessingResult, WasmProcessorStats, WasmResourceLimits,
 };
 pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
@@ -257,6 +258,135 @@ pub use transactional_processing::{
 pub use zero_copy::{
     MemoryMappedBuffer, SharedRefBuffer, SimdBatchProcessor, SimdOperation, SplicedBuffer,
     ZeroCopyBuffer, ZeroCopyConfig, ZeroCopyManager, ZeroCopyStats,
+};
+
+// New v0.1.0-rc.3 exports for developer experience and performance
+pub use numa_processing::{
+    CpuAffinityMode, HugePageSize, MemoryBandwidthMonitor, MemoryInterleavePolicy, NodeBufferStats,
+    NodeProcessorStats, NumaAllocationStrategy, NumaBuffer, NumaBufferPool, NumaBufferPoolConfig,
+    NumaBufferPoolStats, NumaConfig, NumaNode, NumaProcessorStats, NumaStreamProcessor,
+    NumaThreadPool, NumaThreadPoolStats, NumaTopology, NumaWorker, NumaWorkerStats,
+    WorkerDistributionStrategy,
+};
+pub use out_of_order::{
+    EmitStrategy, GapFillingStrategy, LateEventStrategy, OrderedEvent, OutOfOrderConfig,
+    OutOfOrderHandler, OutOfOrderHandlerBuilder, OutOfOrderStats, SequenceTracker, Watermark,
+};
+pub use performance_profiler::{
+    HistogramStats, LatencyHistogram, OperationTimer, PerformanceProfiler, PerformanceReport,
+    PerformanceSample, PerformanceWarning, ProfilerBuilder, ProfilerConfig, ProfilerStats,
+    Recommendation, RecommendationCategory, RecommendationEffort, RecommendationImpact, Span,
+    WarningSeverity, WarningThresholds, WarningType,
+};
+pub use stream_sql::{
+    AggregateFunction, BinaryOperator, ColumnDefinition, CreateStreamStatement, DataType,
+    Expression, FromClause, JoinType, Lexer, OrderByItem, Parser,
+    QueryResult as StreamSqlQueryResult, QueryType, ResultRow, SelectItem, SelectStatement,
+    SqlValue, StreamMetadata, StreamSqlConfig, StreamSqlEngine, StreamSqlStats, Token,
+    UnaryOperator, WindowSpec, WindowType as SqlWindowType,
+};
+pub use testing_framework::{
+    Assertion, AssertionType, CapturedEvent, EventGenerator, EventMatcher, GeneratorConfig,
+    GeneratorType, MockClock, PerformanceMetric, TestFixture, TestHarness, TestHarnessBuilder,
+    TestHarnessConfig, TestMetrics, TestReport, TestStatus,
+};
+
+// New v0.1.0-rc.4 exports for ML, versioning, and migration
+pub use anomaly_detection::{
+    Anomaly, AnomalyAlert, AnomalyConfig, AnomalyDetector as AdaptiveAnomalyDetector,
+    AnomalySeverity, AnomalyStats as AdaptiveAnomalyStats, DetectorType, MultiDimensionalDetector,
+};
+pub use migration_tools::{
+    APIMapping, ConceptMapping, GeneratedFile, GeneratedFileType, ManualReviewItem,
+    MigrationConfig, MigrationError, MigrationReport, MigrationSuggestion, MigrationTool,
+    MigrationWarning, QuickStart, ReviewPriority, SourcePlatform, SuggestionCategory,
+};
+pub use online_learning::{
+    ABTestConfig, ABTestResult, DriftDetection, ModelCheckpoint,
+    ModelMetrics as OnlineModelMetrics, ModelType as OnlineModelType, OnlineLearningConfig,
+    OnlineLearningModel as StreamOnlineLearningModel, OnlineLearningStats, Prediction, Sample,
+    StreamFeatureExtractor,
+};
+pub use stream_versioning::{
+    Branch, BranchId, Change, ChangeType, Changeset, Snapshot, StreamVersioning, TimeTravelQuery,
+    TimeTravelTarget, VersionDiff, VersionId, VersionMetadata, VersionedEvent, VersioningConfig,
+    VersioningStats,
+};
+
+// New v0.1.0 advanced ML exports
+pub use automl_stream::{
+    Algorithm, AutoML, AutoMLConfig, AutoMLStats, HyperParameters, ModelPerformance, TaskType,
+    TrainedModel,
+};
+pub use feature_engineering::{
+    Feature, FeatureExtractionConfig, FeatureMetadata, FeaturePipeline, FeatureSet, FeatureStore,
+    FeatureTransform, FeatureValue, ImputationStrategy, PipelineStats,
+};
+pub use neural_architecture_search::{
+    ActivationType, Architecture, ArchitecturePerformance, LayerType, NASConfig, NASStats,
+    ObjectiveWeights, SearchSpace, SearchStrategy, NAS,
+};
+pub use predictive_analytics::{
+    AccuracyMetrics, ForecastAlgorithm, ForecastResult, ForecastingConfig, PredictiveAnalytics,
+    PredictiveStats, SeasonalityType, TrendDirection,
+};
+pub use reinforcement_learning::{
+    Action, Experience, RLAgent, RLAlgorithm, RLConfig, RLStats, State as RLState,
+};
+
+// Utility exports
+pub use utils::{
+    create_dev_stream, create_prod_stream, BatchProcessor, EventFilter, EventSampler,
+    SimpleRateLimiter, StreamMultiplexer, StreamStats,
+};
+
+// Advanced SciRS2 optimization exports
+pub use advanced_scirs2_optimization::{
+    AdvancedOptimizerConfig, AdvancedStreamOptimizer, MovingStats, OptimizerMetrics,
+};
+pub use cdc_processor::{
+    CdcConfig, CdcConnector, CdcEvent, CdcEventBuilder, CdcMetrics, CdcOperation, CdcProcessor,
+    CdcSource,
+};
+
+// Adaptive load shedding exports
+pub use adaptive_load_shedding::{
+    DropStrategy, LoadMetrics, LoadSheddingConfig, LoadSheddingManager, LoadSheddingStats,
+};
+
+// Stream fusion optimizer exports
+pub use stream_fusion::{
+    FusableChain, FusedOperation, FusedType, FusionAnalysis, FusionConfig, FusionOptimizer,
+    FusionStats, Operation,
+};
+
+// Complex Event Processing (CEP) engine exports
+pub use cep_engine::{
+    CepAggregationFunction, CepConfig, CepEngine, CepMetrics, CepStatistics, CompleteMatch,
+    CorrelationFunction, CorrelationResult, CorrelationStats, DetectedPattern, DetectionAlgorithm,
+    DetectionStats, EnrichmentData, EnrichmentService, EnrichmentSource, EnrichmentSourceType,
+    EnrichmentStats, EventBuffer, EventCorrelator, EventPattern, FieldPredicate, PartialMatch,
+    PatternDetector, ProcessingRule, RuleAction, RuleCondition, RuleEngine, RuleExecutionStats,
+    State, StateMachine, TemporalOperator, TimestampedEvent,
+};
+
+// Data quality and validation framework exports
+pub use data_quality::{
+    AlertCondition as QualityAlertCondition, AlertManager as QualityAlertManager,
+    AlertRule as QualityAlertRule, AlertSeverity as QualityAlertSeverity,
+    AlertStats as QualityAlertStats, AlertType as QualityAlertType, AuditAction, AuditEntry,
+    AuditStats, AuditTrail, CleansingRule, CleansingStats, CorrectionType, DataCleanser,
+    DataCorrection, DataProfiler, DataQualityValidator, DuplicateDetector, DuplicateStats,
+    FailureSeverity, FieldProfile, OutlierMethod, ProfileStats, ProfiledEvent, QualityAlert,
+    QualityConfig, QualityDimension, QualityMetrics, QualityReport, QualityScorer, ScoringStats,
+    ValidationFailure, ValidationResult as QualityValidationResult, ValidationRule,
+};
+
+// Advanced sampling techniques exports
+pub use advanced_sampling::{
+    AdvancedSamplingManager, BloomFilter, BloomFilterStats, CountMinSketch, CountMinSketchStats,
+    HyperLogLog, HyperLogLogStats, ReservoirSampler, ReservoirStats, SamplingConfig,
+    SamplingManagerStats, StratifiedSampler, StratifiedStats, TDigest, TDigestStats,
 };
 
 pub mod backend;
@@ -325,6 +455,48 @@ pub mod schema_evolution;
 pub mod stream_replay;
 pub mod transactional_processing;
 pub mod zero_copy;
+
+// New v0.1.0-rc.3 modules for developer experience and performance
+pub mod numa_processing;
+pub mod out_of_order;
+pub mod performance_profiler;
+pub mod stream_sql;
+pub mod testing_framework;
+
+// New v0.1.0-rc.4 modules for ML, versioning, and migration
+pub mod anomaly_detection;
+pub mod migration_tools;
+pub mod online_learning;
+pub mod stream_versioning;
+
+// Advanced ML modules for v0.1.0 completion
+pub mod automl_stream;
+pub mod feature_engineering;
+pub mod neural_architecture_search;
+pub mod predictive_analytics;
+pub mod reinforcement_learning;
+
+// Utilities module
+pub mod utils;
+
+// Advanced SciRS2 optimization module
+pub mod advanced_scirs2_optimization;
+pub mod cdc_processor;
+
+// Adaptive load shedding module
+pub mod adaptive_load_shedding;
+
+// Stream fusion optimizer module
+pub mod stream_fusion;
+
+// Complex Event Processing (CEP) engine module
+pub mod cep_engine;
+
+// Data quality and validation framework module
+pub mod data_quality;
+
+// Advanced sampling techniques module
+pub mod advanced_sampling;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2023,6 +2195,101 @@ impl StreamConfig {
         self.circuit_breaker.enabled = enabled;
         self.circuit_breaker.failure_threshold = failure_threshold;
         self
+    }
+
+    /// Create a development configuration with memory backend and debug settings
+    pub fn development(topic: &str) -> Self {
+        Self {
+            backend: StreamBackendType::Memory {
+                max_size: Some(10000),
+                persistence: false,
+            },
+            topic: topic.to_string(),
+            batch_size: 10,
+            flush_interval_ms: 100,
+            max_connections: 5,
+            connection_timeout: Duration::from_secs(10),
+            enable_compression: false,
+            compression_type: CompressionType::None,
+            retry_config: RetryConfig {
+                max_retries: 3,
+                initial_backoff: Duration::from_millis(100),
+                max_backoff: Duration::from_secs(5),
+                backoff_multiplier: 2.0,
+                jitter: true,
+            },
+            circuit_breaker: CircuitBreakerConfig {
+                enabled: false,
+                failure_threshold: 5,
+                success_threshold: 2,
+                timeout: Duration::from_secs(60),
+                half_open_max_calls: 10,
+            },
+            security: SecurityConfig::default(),
+            performance: StreamPerformanceConfig::default(),
+            monitoring: MonitoringConfig {
+                enable_metrics: true,
+                enable_tracing: false,
+                metrics_interval: Duration::from_secs(5),
+                health_check_interval: Duration::from_secs(30),
+                enable_profiling: false,
+                prometheus_endpoint: None,
+                jaeger_endpoint: None,
+                log_level: "debug".to_string(),
+            },
+        }
+    }
+
+    /// Create a production configuration with optimal performance settings
+    pub fn production(topic: &str) -> Self {
+        Self {
+            backend: StreamBackendType::Memory {
+                max_size: Some(100000),
+                persistence: true,
+            },
+            topic: topic.to_string(),
+            batch_size: 1000,
+            flush_interval_ms: 10,
+            max_connections: 50,
+            connection_timeout: Duration::from_secs(30),
+            enable_compression: true,
+            compression_type: CompressionType::Zstd,
+            retry_config: RetryConfig {
+                max_retries: 5,
+                initial_backoff: Duration::from_millis(200),
+                max_backoff: Duration::from_secs(30),
+                backoff_multiplier: 2.0,
+                jitter: true,
+            },
+            circuit_breaker: CircuitBreakerConfig {
+                enabled: true,
+                failure_threshold: 10,
+                success_threshold: 3,
+                timeout: Duration::from_secs(30),
+                half_open_max_calls: 5,
+            },
+            security: SecurityConfig::default(),
+            performance: StreamPerformanceConfig {
+                enable_batching: true,
+                enable_pipelining: true,
+                parallel_processing: true,
+                buffer_size: 65536,
+                prefetch_count: 1000,
+                enable_zero_copy: true,
+                enable_simd: true,
+                worker_threads: None,
+            },
+            monitoring: MonitoringConfig {
+                enable_metrics: true,
+                enable_tracing: true,
+                metrics_interval: Duration::from_secs(1),
+                health_check_interval: Duration::from_secs(10),
+                enable_profiling: true,
+                prometheus_endpoint: None,
+                jaeger_endpoint: None,
+                log_level: "info".to_string(),
+            },
+        }
     }
 }
 

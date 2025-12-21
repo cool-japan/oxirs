@@ -1,7 +1,7 @@
 //! N-Triples Format Parser and Serializer
 //!
 //! Extracted and adapted from OxiGraph oxttl with OxiRS enhancements.
-//! Based on W3C N-Triples specification: https://www.w3.org/TR/n-triples/
+//! Based on W3C N-Triples specification: <https://www.w3.org/TR/n-triples/>
 
 use super::error::SerializeResult;
 use super::error::{ParseResult, RdfParseError, TextPosition};

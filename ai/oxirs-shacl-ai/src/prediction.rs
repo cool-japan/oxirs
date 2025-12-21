@@ -776,7 +776,6 @@ impl ValidationPredictor {
     fn calculate_shape_complexity(&self, shapes: &[Shape]) -> ShapeComplexityStats {
         let mut total_constraints = 0;
         let mut max_path_complexity = 0;
-        let mut total_path_complexity = 0;
 
         for shape in shapes {
             let constraints = &shape.constraints;
@@ -785,7 +784,6 @@ impl ValidationPredictor {
             if let Some(ref path) = shape.path {
                 let complexity = path.complexity();
                 max_path_complexity = max_path_complexity.max(complexity);
-                total_path_complexity += complexity;
             }
         }
 

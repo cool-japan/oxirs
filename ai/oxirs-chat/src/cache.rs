@@ -10,6 +10,7 @@ pub use semantic::{
 };
 
 use anyhow::{anyhow, Result};
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
@@ -440,7 +441,7 @@ impl<T: Clone> CacheTier<T> {
 }
 
 /// Statistics for a cache tier
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CacheTierStats {
     pub entry_count: usize,
     pub total_size_bytes: usize,
@@ -460,16 +461,17 @@ pub struct AdvancedCacheManager {
 }
 
 /// Cached response data
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CachedResponse {
     pub content: String,
+    #[bincode(with_serde)]
     pub metadata: HashMap<String, serde_json::Value>,
     pub quality_score: f32,
     pub generation_method: String,
 }
 
 /// Cached context data
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CachedContext {
     pub context_text: String,
     pub quality_score: f32,
@@ -479,7 +481,7 @@ pub struct CachedContext {
 }
 
 /// Cached query result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CachedQueryResult {
     pub sparql_query: String,
     pub result_bindings: Vec<HashMap<String, String>>,
@@ -487,7 +489,7 @@ pub struct CachedQueryResult {
 }
 
 /// Cache statistics
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CacheStats {
     pub total_requests: usize,
     pub cache_hits: usize,
@@ -574,7 +576,9 @@ impl AdvancedCacheManager {
             generation_method: format!("{} ({})", response.provider_used, response.model_used),
         };
 
-        let size = bincode::serialize(&cached_response)?.len();
+        let size = bincode::encode_to_vec(&cached_response, bincode::config::standard())
+            .map_err(|e| anyhow!("Bincode encoding failed: {}", e))?
+            .len();
         let mut cache = self.response_cache.write().await;
         cache.put(key, cached_response, size)
     }
@@ -617,7 +621,9 @@ impl AdvancedCacheManager {
                 .unwrap_or(0),
         };
 
-        let size = bincode::serialize(&cached_context)?.len();
+        let size = bincode::encode_to_vec(&cached_context, bincode::config::standard())
+            .map_err(|e| anyhow!("Bincode encoding failed: {}", e))?
+            .len();
         let mut cache = self.context_cache.write().await;
         cache.put(key, cached_context, size)
     }
@@ -683,7 +689,9 @@ impl AdvancedCacheManager {
             execution_time_ms,
         };
 
-        let size = bincode::serialize(&cached_result)?.len();
+        let size = bincode::encode_to_vec(&cached_result, bincode::config::standard())
+            .map_err(|e| anyhow!("Bincode encoding failed: {}", e))?
+            .len();
         let mut cache = self.query_cache.write().await;
         cache.put(key, cached_result, size)
     }

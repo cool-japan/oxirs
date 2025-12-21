@@ -3,7 +3,7 @@
 //! N-Quads is a line-based syntax for RDF quads (subject predicate object graph).
 //! Each line contains one quad, with components separated by spaces and ending with a period.
 //!
-//! W3C Specification: https://www.w3.org/TR/n-quads/
+//! W3C Specification: <https://www.w3.org/TR/n-quads/>
 
 use super::error::FormatError;
 use crate::model::{GraphNameRef, Literal, ObjectRef, PredicateRef, QuadRef, SubjectRef};

@@ -1,10 +1,13 @@
 //! RDF Term representation for dictionary encoding
 
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// RDF Term (IRI, Literal, or Blank Node)
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
+)]
 pub enum Term {
     /// IRI (Internationalized Resource Identifier)
     Iri(String),
@@ -199,8 +202,11 @@ mod tests {
     #[test]
     fn test_term_serialization() {
         let term = Term::literal_with_lang("Bonjour", "fr");
-        let serialized = bincode::serialize(&term).unwrap();
-        let deserialized: Term = bincode::deserialize(&serialized).unwrap();
+        let serialized = bincode::encode_to_vec(&term, bincode::config::standard()).unwrap();
+        let deserialized: Term =
+            bincode::decode_from_slice(&serialized, bincode::config::standard())
+                .unwrap()
+                .0;
         assert_eq!(term, deserialized);
     }
 

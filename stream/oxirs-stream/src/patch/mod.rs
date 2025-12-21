@@ -6,7 +6,7 @@
 //! atomic changes to RDF datasets. RDF Patch provides a standardized
 //! way to represent additions, deletions, and graph operations.
 //!
-//! Reference: https://afs.github.io/rdf-patch/
+//! Reference: <https://afs.github.io/rdf-patch/>
 
 pub mod compressor;
 pub mod conflict;

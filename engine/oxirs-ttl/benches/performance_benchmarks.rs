@@ -7,9 +7,10 @@
 //!
 //! Run with: cargo bench --bench performance_benchmarks
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_ttl::formats::turtle::TurtleParser;
 use oxirs_ttl::toolkit::{BufferManager, FastScanner, Parser, StringInterner};
+use std::hint::black_box;
 
 // Generate realistic RDF data for benchmarking
 fn generate_turtle_data(num_triples: usize) -> String {

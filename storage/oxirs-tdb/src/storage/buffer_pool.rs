@@ -91,6 +91,18 @@ pub struct BufferPoolStats {
     pub writes: AtomicU64,
 }
 
+impl Clone for BufferPoolStats {
+    fn clone(&self) -> Self {
+        Self {
+            total_fetches: AtomicU64::new(self.total_fetches.load(Ordering::Relaxed)),
+            cache_hits: AtomicU64::new(self.cache_hits.load(Ordering::Relaxed)),
+            cache_misses: AtomicU64::new(self.cache_misses.load(Ordering::Relaxed)),
+            evictions: AtomicU64::new(self.evictions.load(Ordering::Relaxed)),
+            writes: AtomicU64::new(self.writes.load(Ordering::Relaxed)),
+        }
+    }
+}
+
 impl BufferPoolStats {
     /// Get cache hit rate (0.0 to 1.0)
     pub fn hit_rate(&self) -> f64 {

@@ -17,12 +17,14 @@
 
 pub mod advanced_targets;
 pub mod conditional;
+pub mod defeasible;
 pub mod functions;
 pub mod parameterized_constraints;
 pub mod qualified_shapes;
 pub mod reasoning;
 pub mod recursive_shapes;
 pub mod rules;
+pub mod shape_comparison;
 pub mod shape_evolution;
 pub mod shape_inference;
 pub mod shape_operations;
@@ -45,6 +47,11 @@ pub use advanced_targets::{
 
 pub use conditional::{
     ConditionalConstraint, ConditionalEvaluator, ConditionalResult, ShapeRegistry,
+};
+
+pub use defeasible::{
+    ConflictResolutionStrategy, DefeasibleEngine, DefeasibleEngineBuilder, DefeasibleRule,
+    DefeasibleRuleType, DefeasibleStats, RuleAction, RuleCondition,
 };
 
 pub use shape_evolution::{
@@ -86,6 +93,11 @@ pub use reasoning::{
     ReasoningValidator,
 };
 
+pub use shape_comparison::{
+    generate_diff_report, ChangeSeverity, ComparatorConfig, CompatibilityAssessment, DiffItem,
+    DiffStats, DiffType, ShapeComparator, ShapeDiff,
+};
+
 /// Version of SHACL-AF implementation
 pub const SHACL_AF_VERSION: &str = "1.0.0-alpha";
 
@@ -93,7 +105,12 @@ pub const SHACL_AF_VERSION: &str = "1.0.0-alpha";
 pub fn is_feature_supported(feature: &str) -> bool {
     matches!(
         feature,
-        "rules" | "functions" | "advanced-targets" | "triple-rules" | "construct-rules"
+        "rules"
+            | "functions"
+            | "advanced-targets"
+            | "triple-rules"
+            | "construct-rules"
+            | "shape-comparison"
     )
 }
 
@@ -112,6 +129,7 @@ pub fn supported_features() -> Vec<&'static str> {
         "implicit-targets",
         "path-targets",
         "function-targets",
+        "shape-comparison",
     ]
 }
 

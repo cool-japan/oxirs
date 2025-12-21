@@ -821,13 +821,13 @@ mod tests {
     async fn test_conve_training() {
         let config = ConvEConfig {
             base: ModelConfig {
-                dimensions: 100,
+                dimensions: 50, // Reduced from 100 for faster tests
                 learning_rate: 0.001,
-                max_epochs: 20,
+                max_epochs: 5, // Reduced from 20 for faster tests
                 ..Default::default()
             },
             reshape_width: 10,
-            num_filters: 16,
+            num_filters: 8, // Reduced from 16 for faster tests
             ..Default::default()
         };
 
@@ -849,9 +849,9 @@ mod tests {
             ))
             .unwrap();
 
-        let stats = model.train(Some(20)).await.unwrap();
+        let stats = model.train(Some(5)).await.unwrap(); // Reduced from 20 for faster tests
 
-        assert_eq!(stats.epochs_completed, 20);
+        assert_eq!(stats.epochs_completed, 5);
         assert!(stats.final_loss >= 0.0);
         assert_eq!(model.entity_embeddings.len(), 3);
         assert_eq!(model.relation_embeddings.len(), 2);

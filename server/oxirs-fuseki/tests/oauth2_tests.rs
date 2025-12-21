@@ -127,6 +127,8 @@ async fn test_oauth2_handler_authorization_flow() {
         certificate_rotation: None,
         http2_manager: None,
         http3_manager: None,
+        // v0.1.0 Final - Advanced Features
+        adaptive_execution_engine: None,
         // ReBAC (Relationship-Based Access Control)
         rebac_manager: None,
         prefix_store: std::sync::Arc::new(oxirs_fuseki::handlers::PrefixStore::new()),

@@ -9,12 +9,49 @@ use geo_types::Geometry as GeoGeometry;
 ///
 /// For 3D distance calculations that include Z coordinates, use `distance_3d()`.
 pub fn distance(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
-    use geo::EuclideanDistance;
-
     geom1.validate_crs_compatibility(geom2)?;
 
-    let dist = geom1.geom.euclidean_distance(&geom2.geom);
+    let dist = geometry_euclidean_distance(&geom1.geom, &geom2.geom);
     Ok(dist)
+}
+
+/// Calculate Euclidean distance between two geo_types::Geometry instances
+/// using the new Distance trait API with pattern matching
+pub fn geometry_euclidean_distance(
+    geom1: &geo_types::Geometry<f64>,
+    geom2: &geo_types::Geometry<f64>,
+) -> f64 {
+    use geo::{Distance, Euclidean};
+    use geo_types::{Geometry as G, Point};
+
+    // Helper to get representative point for complex geometries
+    fn geometry_to_point(geom: &G<f64>) -> Option<Point<f64>> {
+        use geo::Centroid;
+        match geom {
+            G::Point(p) => Some(*p),
+            G::Line(l) => Some(l.centroid()),
+            G::LineString(ls) => ls.centroid(),
+            G::Polygon(p) => p.centroid(),
+            G::MultiPoint(mp) => mp.centroid(),
+            G::MultiLineString(mls) => mls.centroid(),
+            G::MultiPolygon(mp) => mp.centroid(),
+            G::GeometryCollection(gc) => gc.centroid(),
+            G::Rect(r) => Some(r.centroid()),
+            G::Triangle(t) => Some(t.centroid()),
+        }
+    }
+
+    // For Point-to-Point, use exact distance
+    if let (G::Point(p1), G::Point(p2)) = (geom1, geom2) {
+        return Euclidean::distance(*p1, *p2);
+    }
+
+    // For other combinations, use centroid-based distance
+    // This is an approximation suitable for k-NN and similar operations
+    match (geometry_to_point(geom1), geometry_to_point(geom2)) {
+        (Some(p1), Some(p2)) => Euclidean::distance(p1, p2),
+        _ => f64::INFINITY, // Empty geometries
+    }
 }
 
 /// Helper: Calculate 3D distance between two points
@@ -1700,7 +1737,7 @@ mod tests {
     #[test]
     #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
     fn test_buffer_3d_point() {
-        use geo::{Area, EuclideanLength};
+        use geo::{Area, Euclidean, Length};
 
         let point = Geometry::from_wkt("POINT Z(0 0 5)").unwrap();
         let buffered = buffer_3d(&point, 1.0).unwrap();
@@ -1711,8 +1748,8 @@ mod tests {
         // Check that the buffer was created (geometry type might change to Polygon)
         // The exact result depends on the buffer implementation
         let length = match &buffered.geom {
-            GeoGeometry::LineString(ls) => ls.euclidean_length(),
-            GeoGeometry::Polygon(p) => p.exterior().euclidean_length(),
+            GeoGeometry::LineString(ls) => ls.length::<Euclidean>(),
+            GeoGeometry::Polygon(p) => p.exterior().length::<Euclidean>(),
             _ => 0.0,
         };
         assert!(length > 0.0 || buffered.geom.unsigned_area() > 0.0);

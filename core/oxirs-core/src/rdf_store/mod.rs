@@ -663,11 +663,24 @@ impl RdfStore {
                 let _id = index.insert_quad(&quad);
                 Ok(true) // New quad inserted
             }
-            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+            StorageBackend::Memory(storage) => {
                 let mut storage = storage
                     .write()
                     .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
                 Ok(storage.insert_quad(quad))
+            }
+            StorageBackend::Persistent(storage, _) => {
+                let mut storage = storage
+                    .write()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
+                let result = storage.insert_quad(quad);
+                drop(storage); // Release lock before saving
+
+                // Save to disk after insertion
+                if result {
+                    self.save_to_disk()?;
+                }
+                Ok(result)
             }
         }
     }

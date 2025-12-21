@@ -6,16 +6,31 @@
 //! - TriG-star (*.trigs)
 //! - N-Quads-star (*.nqs)
 
-use std::collections::HashMap;
-use std::fmt;
+// Internal parser submodules
+#[path = "parser/context.rs"]
+mod context;
+#[path = "parser/jsonld.rs"]
+mod jsonld;
+#[path = "parser/simd_scanner.rs"]
+mod simd_scanner;
+#[path = "parser/tokenizer.rs"]
+mod tokenizer;
+
 use std::io::{BufRead, BufReader, Read};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use tracing::{debug, span, Level};
 
-use crate::model::{BlankNode, Literal, NamedNode, StarGraph, StarQuad, StarTerm, StarTriple};
+use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::{StarConfig, StarError, StarResult};
+
+// Import parser context types
+use context::{ErrorSeverity, ParseContext, TrigParserState};
+use simd_scanner::SimdScanner;
+
+// Re-export public error types
+pub use context::{ErrorSeverity as PublicErrorSeverity, ParseError as PublicParseError};
 
 /// RDF-star format types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -32,53 +47,7 @@ pub enum StarFormat {
     JsonLdStar,
 }
 
-/// Enhanced state tracking for TriG-star parsing
-#[derive(Debug, Default)]
-struct TrigParserState {
-    /// Current graph context
-    current_graph: Option<StarTerm>,
-    /// Nesting level (for tracking braces)
-    brace_depth: usize,
-    /// Whether we're inside a graph block
-    in_graph_block: bool,
-    /// Buffer for accumulating multi-line graph names
-    graph_name_buffer: String,
-    /// Whether we're parsing a graph name declaration
-    parsing_graph_name: bool,
-}
-
-impl TrigParserState {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn reset_graph_context(&mut self) {
-        self.current_graph = None;
-        self.in_graph_block = false;
-        self.brace_depth = 0;
-        self.graph_name_buffer.clear();
-        self.parsing_graph_name = false;
-    }
-
-    fn enter_graph_block(&mut self, graph: Option<StarTerm>) {
-        self.current_graph = graph;
-        self.in_graph_block = true;
-        self.brace_depth += 1;
-        self.parsing_graph_name = false;
-        self.graph_name_buffer.clear();
-    }
-
-    fn exit_graph_block(&mut self) -> bool {
-        if self.brace_depth > 0 {
-            self.brace_depth -= 1;
-            if self.brace_depth == 0 {
-                self.reset_graph_context();
-                return true;
-            }
-        }
-        false
-    }
-}
+// TrigParserState has been moved to parser/context.rs
 
 impl FromStr for StarFormat {
     type Err = StarError;
@@ -95,192 +64,12 @@ impl FromStr for StarFormat {
     }
 }
 
-/// Parser context for maintaining state during parsing
-#[derive(Debug, Default)]
-struct ParseContext {
-    /// Namespace prefixes
-    prefixes: HashMap<String, String>,
-    /// Current base IRI
-    base_iri: Option<String>,
-    /// Current graph name (for TriG/N-Quads)
-    #[allow(dead_code)]
-    current_graph: Option<StarTerm>,
-    /// Blank node counter
-    blank_node_counter: usize,
-    /// Current line number for error reporting
-    line_number: usize,
-    /// Current column position for error reporting
-    column_position: usize,
-    /// Strict parsing mode (reject any malformed input)
-    strict_mode: bool,
-    /// Error recovery mode (try to continue parsing after errors)
-    error_recovery: bool,
-    /// Accumulated parsing errors for batch reporting
-    parsing_errors: Vec<ParseError>,
-}
-
-/// Enhanced error information for parser errors
-#[derive(Debug, Clone)]
-pub struct ParseError {
-    /// Error message
-    pub message: String,
-    /// Line number where error occurred
-    pub line: usize,
-    /// Column position where error occurred
-    pub column: usize,
-    /// Context around the error (nearby text)
-    pub context: String,
-    /// Severity level
-    pub severity: ErrorSeverity,
-}
-
-/// Error severity levels
-#[derive(Debug, Clone, PartialEq)]
-pub enum ErrorSeverity {
-    /// Warning - parsing can continue
-    Warning,
-    /// Error - current statement failed but parsing can continue
-    Error,
-    /// Fatal - parsing must stop
-    Fatal,
-}
-
-impl fmt::Display for ErrorSeverity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ErrorSeverity::Warning => write!(f, "Warning"),
-            ErrorSeverity::Error => write!(f, "Error"),
-            ErrorSeverity::Fatal => write!(f, "Fatal"),
-        }
-    }
-}
-
-impl ParseContext {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    /// Create context with configuration
-    fn with_config(strict_mode: bool, error_recovery: bool) -> Self {
-        Self {
-            strict_mode,
-            error_recovery,
-            ..Default::default()
-        }
-    }
-
-    /// Update position tracking
-    fn update_position(&mut self, line: usize, column: usize) {
-        self.line_number = line;
-        self.column_position = column;
-    }
-
-    /// Add a parsing error with context
-    fn add_error(&mut self, message: String, context: String, severity: ErrorSeverity) {
-        let error = ParseError {
-            message,
-            line: self.line_number,
-            column: self.column_position,
-            context,
-            severity,
-        };
-        self.parsing_errors.push(error);
-    }
-
-    /// Check if fatal errors occurred
-    fn has_fatal_errors(&self) -> bool {
-        self.parsing_errors
-            .iter()
-            .any(|e| e.severity == ErrorSeverity::Fatal)
-    }
-
-    /// Get all errors
-    fn get_errors(&self) -> &[ParseError] {
-        &self.parsing_errors
-    }
-
-    /// Clear errors
-    #[allow(dead_code)]
-    fn clear_errors(&mut self) {
-        self.parsing_errors.clear();
-    }
-
-    /// Generate a new blank node identifier
-    fn next_blank_node(&mut self) -> String {
-        self.blank_node_counter += 1;
-        let counter = self.blank_node_counter;
-        format!("_:b{counter}")
-    }
-
-    /// Resolve a prefixed name to full IRI with enhanced error reporting
-    fn resolve_prefix(&mut self, prefixed: &str) -> StarResult<String> {
-        if let Some(colon_pos) = prefixed.find(':') {
-            let prefix = &prefixed[..colon_pos];
-            let local = &prefixed[colon_pos + 1..];
-
-            if let Some(namespace) = self.prefixes.get(prefix) {
-                Ok(format!("{namespace}{local}"))
-            } else {
-                let error_msg = format!("Unknown prefix: '{prefix}'");
-                let context = format!("in prefixed name '{prefixed}'");
-
-                if self.strict_mode {
-                    self.add_error(error_msg.clone(), context, ErrorSeverity::Fatal);
-                    Err(StarError::parse_error(error_msg))
-                } else {
-                    self.add_error(error_msg.clone(), context, ErrorSeverity::Warning);
-                    // In non-strict mode, return the prefixed name as-is
-                    Ok(prefixed.to_string())
-                }
-            }
-        } else {
-            let error_msg = format!("Invalid prefixed name: '{prefixed}'");
-            self.add_error(
-                error_msg.clone(),
-                prefixed.to_string(),
-                ErrorSeverity::Error,
-            );
-            Err(StarError::parse_error(error_msg))
-        }
-    }
-
-    /// Resolve relative IRI against base
-    fn resolve_relative(&self, iri: &str) -> String {
-        if let Some(ref base) = self.base_iri {
-            // Simple relative IRI resolution (not fully RFC compliant)
-            if iri.starts_with('#') {
-                format!("{base}{iri}")
-            } else {
-                iri.to_string()
-            }
-        } else {
-            iri.to_string()
-        }
-    }
-
-    /// Try to recover from parsing error
-    fn try_recover_from_error(&mut self, error_context: &str) -> bool {
-        if !self.error_recovery {
-            return false;
-        }
-
-        // Add recovery attempt to error log
-        let recovery_msg = format!("Attempting error recovery from: {error_context}");
-        self.add_error(
-            recovery_msg,
-            error_context.to_string(),
-            ErrorSeverity::Warning,
-        );
-
-        // Simple recovery strategies could be implemented here
-        // For now, just indicate that recovery is possible
-        true
-    }
-}
+// ParseContext, ParseError, and ErrorSeverity have been moved to parser/context.rs
 
 /// RDF-star parser with support for multiple formats
 pub struct StarParser {
     config: StarConfig,
+    simd_scanner: SimdScanner,
 }
 
 impl StarParser {
@@ -288,12 +77,16 @@ impl StarParser {
     pub fn new() -> Self {
         Self {
             config: StarConfig::default(),
+            simd_scanner: SimdScanner::new(),
         }
     }
 
     /// Create a new parser with custom configuration
     pub fn with_config(config: StarConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            simd_scanner: SimdScanner::new(),
+        }
     }
 
     /// Set strict mode for parsing
@@ -354,7 +147,8 @@ impl StarParser {
 
         for (line_num, line_result) in buf_reader.lines().enumerate() {
             let line = line_result.map_err(|e| StarError::parse_error(e.to_string()))?;
-            let line = line.trim();
+            // Use SIMD-accelerated trimming
+            let line = self.simd_scanner.trim(&line);
 
             // Update position tracking
             context.update_position(line_num + 1, 0);
@@ -365,8 +159,9 @@ impl StarParser {
             }
 
             // Strip inline comments (but respect strings)
-            let line = self.strip_inline_comment(line);
-            let line = line.trim();
+            let line = tokenizer::strip_inline_comment(line);
+            // Use SIMD-accelerated trimming
+            let line = self.simd_scanner.trim(line);
 
             // Skip if line becomes empty after comment stripping
             if line.is_empty() {
@@ -376,8 +171,12 @@ impl StarParser {
             // Check if line looks incomplete after comment stripping (no period, not a directive, not in a special block)
             // This handles cases like "ex:charlie ex:knows  # missing object"
             // But allow lines that are part of multi-line blocks (annotation blocks or quoted triples)
-            let in_annotation_block = accumulated_line.contains("{|") || line.contains("{|");
-            let in_quoted_triple = accumulated_line.contains("<<");
+            // Use SIMD-accelerated pattern detection
+            let in_annotation_block = self
+                .simd_scanner
+                .contains_annotation_block(&accumulated_line)
+                || self.simd_scanner.contains_annotation_block(line);
+            let in_quoted_triple = self.simd_scanner.contains_quoted_triple(&accumulated_line);
 
             if !line.ends_with('.')
                 && !line.ends_with('{')
@@ -385,12 +184,11 @@ impl StarParser {
                 && !in_annotation_block
                 && !in_quoted_triple
             {
-                // Check if line contains incomplete quoted triple
-                let has_incomplete_quoted_triple = if line.contains("<<") {
-                    // Count << and >> to see if balanced
-                    let open_count = line.matches("<<").count();
-                    let close_count = line.matches(">>").count();
-                    open_count != close_count
+                // Check if line contains incomplete quoted triple using SIMD
+                let has_incomplete_quoted_triple = if self.simd_scanner.contains_quoted_triple(line)
+                {
+                    // Use SIMD-accelerated counting
+                    !self.simd_scanner.is_quoted_balanced(line)
                 } else {
                     false
                 };
@@ -450,7 +248,7 @@ impl StarParser {
             accumulated_line.push(' ');
 
             // Check if we have a complete statement (ends with '.')
-            if self.is_complete_turtle_statement(&accumulated_line) {
+            if tokenizer::is_complete_turtle_statement(&accumulated_line) {
                 match self.parse_turtle_line_safe(accumulated_line.trim(), &mut context, &mut graph)
                 {
                     Ok(_) => {
@@ -522,106 +320,6 @@ impl StarParser {
 
         debug!("Parsed {} triples in Turtle-star format", graph.len());
         Ok(graph)
-    }
-
-    /// Strip inline comments from a line (but respect strings)
-    fn strip_inline_comment<'a>(&self, line: &'a str) -> &'a str {
-        let mut in_string = false;
-        let mut escape_next = false;
-        let mut byte_index = 0;
-
-        for ch in line.chars() {
-            if escape_next {
-                escape_next = false;
-                byte_index += ch.len_utf8();
-                continue;
-            }
-
-            match ch {
-                '\\' if in_string => {
-                    escape_next = true;
-                    byte_index += ch.len_utf8();
-                }
-                '"' => {
-                    in_string = !in_string;
-                    byte_index += ch.len_utf8();
-                }
-                '#' if !in_string => {
-                    // Found comment start outside of string
-                    return &line[..byte_index];
-                }
-                _ => {
-                    byte_index += ch.len_utf8();
-                }
-            }
-        }
-
-        // No comment found
-        line
-    }
-
-    /// Check if a Turtle statement is complete (ends with '.')
-    fn is_complete_turtle_statement(&self, statement: &str) -> bool {
-        let trimmed = statement.trim();
-
-        // Directives are complete when they end with '.'
-        if trimmed.starts_with("@prefix") || trimmed.starts_with("@base") {
-            return trimmed.ends_with('.');
-        }
-
-        // Check if statement ends with '.' and is balanced
-        let mut in_string = false;
-        let mut escape_next = false;
-        let mut quoted_triple_depth: i32 = 0;
-        let mut annotation_depth: i32 = 0;
-        let mut chars = statement.chars().peekable();
-
-        while let Some(ch) = chars.next() {
-            if escape_next {
-                escape_next = false;
-                continue;
-            }
-
-            match ch {
-                '\\' if in_string => escape_next = true,
-                '"' => in_string = !in_string,
-                '<' if !in_string => {
-                    // Check for quoted triple start
-                    if chars.peek() == Some(&'<') {
-                        chars.next(); // consume second '<'
-                        quoted_triple_depth += 1;
-                    }
-                }
-                '>' if !in_string && quoted_triple_depth > 0 => {
-                    // Check for quoted triple end
-                    if chars.peek() == Some(&'>') {
-                        chars.next(); // consume second '>'
-                        quoted_triple_depth = quoted_triple_depth.saturating_sub(1);
-                    }
-                }
-                '{' if !in_string && quoted_triple_depth == 0 => {
-                    // Check for annotation block start {|
-                    if chars.peek() == Some(&'|') {
-                        chars.next(); // consume '|'
-                        annotation_depth += 1;
-                    }
-                }
-                '|' if !in_string && quoted_triple_depth == 0 && annotation_depth > 0 => {
-                    // Check for annotation block end |}
-                    if chars.peek() == Some(&'}') {
-                        chars.next(); // consume '}'
-                        annotation_depth = annotation_depth.saturating_sub(1);
-                    }
-                }
-                '.' if !in_string && quoted_triple_depth == 0 && annotation_depth == 0 => {
-                    // Statement ends with a dot and we're not in any nested structure
-                    return true;
-                }
-                _ => {}
-            }
-        }
-
-        false
     }
 
     /// Parse a single Turtle-star line with enhanced error handling
@@ -1228,7 +926,7 @@ impl StarParser {
             accumulated_line.push(' ');
 
             // Check if we have a complete statement
-            if self.is_complete_trig_statement(&accumulated_line, &mut trig_state) {
+            if tokenizer::is_complete_trig_statement(&accumulated_line, &mut trig_state) {
                 match self.parse_complete_trig_statement(
                     accumulated_line.trim(),
                     &mut context,
@@ -1530,118 +1228,12 @@ impl StarParser {
 
     /// Tokenize a triple into its three components, handling quoted triples
     fn tokenize_triple(&self, pattern: &str) -> Result<Vec<String>> {
-        let mut tokens = Vec::new();
-        let mut current_token = String::new();
-        let mut chars = pattern.chars().peekable();
-        let mut depth = 0;
-        let mut in_string = false;
-        let mut escape_next = false;
-
-        while let Some(ch) = chars.next() {
-            if escape_next {
-                current_token.push(ch);
-                escape_next = false;
-                continue;
-            }
-
-            match ch {
-                '\\' if in_string => {
-                    escape_next = true;
-                    current_token.push(ch);
-                }
-                '"' => {
-                    in_string = !in_string;
-                    current_token.push(ch);
-                }
-                '<' if !in_string && chars.peek() == Some(&'<') => {
-                    // Start of quoted triple
-                    chars.next(); // consume second '<'
-                    depth += 1;
-                    current_token.push_str("<<");
-                }
-                '>' if !in_string && chars.peek() == Some(&'>') => {
-                    // End of quoted triple
-                    chars.next(); // consume second '>'
-                    depth -= 1;
-                    current_token.push_str(">>");
-                }
-                ' ' | '\t' if !in_string && depth == 0 => {
-                    // Whitespace at top level - end of token
-                    if !current_token.trim().is_empty() {
-                        tokens.push(current_token.trim().to_string());
-                        current_token.clear();
-                    }
-                }
-                _ => {
-                    current_token.push(ch);
-                }
-            }
-        }
-
-        // Add final token
-        if !current_token.trim().is_empty() {
-            tokens.push(current_token.trim().to_string());
-        }
-
-        Ok(tokens)
+        tokenizer::tokenize_triple(pattern)
     }
 
     /// Tokenize a quad pattern (similar to triple but allows 4 terms)
     fn tokenize_quad(&self, pattern: &str) -> Result<Vec<String>> {
-        let mut tokens = Vec::new();
-        let mut current_token = String::new();
-        let mut chars = pattern.chars().peekable();
-        let mut depth = 0;
-        let mut in_string = false;
-        let mut escape_next = false;
-
-        while let Some(ch) = chars.next() {
-            if escape_next {
-                current_token.push(ch);
-                escape_next = false;
-                continue;
-            }
-
-            match ch {
-                '\\' if in_string => {
-                    escape_next = true;
-                    current_token.push(ch);
-                }
-                '"' => {
-                    in_string = !in_string;
-                    current_token.push(ch);
-                }
-                '<' if !in_string && chars.peek() == Some(&'<') => {
-                    // Start of quoted triple
-                    chars.next(); // consume second '<'
-                    depth += 1;
-                    current_token.push_str("<<");
-                }
-                '>' if !in_string && chars.peek() == Some(&'>') => {
-                    // End of quoted triple
-                    chars.next(); // consume second '>'
-                    depth -= 1;
-                    current_token.push_str(">>");
-                }
-                ' ' | '\t' if !in_string && depth == 0 => {
-                    // Whitespace at top level - end of token
-                    if !current_token.trim().is_empty() {
-                        tokens.push(current_token.trim().to_string());
-                        current_token.clear();
-                    }
-                }
-                _ => {
-                    current_token.push(ch);
-                }
-            }
-        }
-
-        // Add final token
-        if !current_token.trim().is_empty() {
-            tokens.push(current_token.trim().to_string());
-        }
-
-        Ok(tokens)
+        tokenizer::tokenize_quad(pattern)
     }
 
     /// Parse a single term (IRI, blank node, literal, or quoted triple)
@@ -1746,80 +1338,6 @@ impl StarParser {
         } else {
             Ok(StarTerm::literal(&value).map_err(|e| anyhow::anyhow!("Invalid literal: {}", e))?)
         }
-    }
-
-    /// Check if a TriG statement is complete (enhanced version)
-    fn is_complete_trig_statement(&self, statement: &str, state: &mut TrigParserState) -> bool {
-        let trimmed = statement.trim();
-
-        // Handle directives (always complete on one line)
-        if trimmed.starts_with("@prefix") || trimmed.starts_with("@base") {
-            return trimmed.ends_with('.');
-        }
-
-        // Handle graph block closing
-        if trimmed == "}" {
-            return true;
-        }
-
-        let mut brace_count: i32 = 0;
-        let mut in_string = false;
-        let mut escape_next = false;
-        let mut quoted_triple_depth: i32 = 0;
-        let mut chars = statement.chars().peekable();
-
-        while let Some(ch) = chars.next() {
-            if escape_next {
-                escape_next = false;
-                continue;
-            }
-
-            match ch {
-                '\\' if in_string => escape_next = true,
-                '"' => in_string = !in_string,
-                '<' if !in_string => {
-                    // Check for quoted triple start
-                    if chars.peek() == Some(&'<') {
-                        chars.next(); // consume second '<'
-                        quoted_triple_depth += 1;
-                    }
-                }
-                '>' if !in_string && quoted_triple_depth > 0 => {
-                    // Check for quoted triple end
-                    if chars.peek() == Some(&'>') {
-                        chars.next(); // consume second '>'
-                        quoted_triple_depth = quoted_triple_depth.saturating_sub(1);
-                    }
-                }
-                '{' if !in_string && quoted_triple_depth == 0 => {
-                    brace_count += 1;
-                    if !state.in_graph_block {
-                        state.parsing_graph_name = false;
-                    }
-                }
-                '}' if !in_string && quoted_triple_depth == 0 => {
-                    brace_count = brace_count.saturating_sub(1);
-                }
-                '.' if !in_string && quoted_triple_depth == 0 && brace_count == 0 => {
-                    // Statement ends with a dot and we're not in any nested structure
-                    return true;
-                }
-                _ => {}
-            }
-        }
-
-        // Special handling for graph declarations
-        if brace_count > 0 && !state.in_graph_block {
-            // We have an opening brace - this is a complete graph declaration start
-            return true;
-        }
-
-        // Check for complete graph block
-        if brace_count == 0 && state.in_graph_block && trimmed.ends_with('}') {
-            return true;
-        }
-
-        false
     }
 
     /// Parse a complete TriG statement (enhanced version with proper named graph support)
@@ -2052,266 +1570,7 @@ impl StarParser {
         graph: &mut StarGraph,
         context: &mut ParseContext,
     ) -> StarResult<()> {
-        match value {
-            serde_json::Value::Object(obj) => {
-                self.process_jsonld_star_object(obj, graph, context)?;
-            }
-            serde_json::Value::Array(arr) => {
-                for item in arr {
-                    self.process_jsonld_star_value(item, graph, context)?;
-                }
-            }
-            _ => {
-                // Skip primitive values at top level
-            }
-        }
-        Ok(())
-    }
-
-    /// Process a JSON-LD-star object
-    fn process_jsonld_star_object(
-        &self,
-        obj: &serde_json::Map<String, serde_json::Value>,
-        graph: &mut StarGraph,
-        context: &mut ParseContext,
-    ) -> StarResult<()> {
-        // Check for quoted triple annotation (RDF-star extension)
-        if obj.contains_key("@annotation") {
-            return self.process_quoted_triple_annotation(obj, graph, context);
-        }
-
-        // Extract subject (either @id or generate blank node)
-        let subject = if let Some(id_value) = obj.get("@id") {
-            match id_value {
-                serde_json::Value::String(id) => StarTerm::iri(id)?,
-                _ => return Err(StarError::parse_error("@id must be a string".to_string())),
-            }
-        } else {
-            StarTerm::BlankNode(BlankNode {
-                id: context.next_blank_node(),
-            })
-        };
-
-        // Process properties
-        for (key, value) in obj {
-            if key.starts_with('@') {
-                // Skip JSON-LD keywords for now
-                continue;
-            }
-
-            let predicate = StarTerm::iri(key)?;
-
-            // Process property values
-            self.process_property_values(&subject, &predicate, value, graph, context)?;
-        }
-
-        Ok(())
-    }
-
-    /// Process property values (which may be arrays or single values)
-    fn process_property_values(
-        &self,
-        subject: &StarTerm,
-        predicate: &StarTerm,
-        value: &serde_json::Value,
-        graph: &mut StarGraph,
-        context: &mut ParseContext,
-    ) -> StarResult<()> {
-        match value {
-            serde_json::Value::Array(arr) => {
-                for item in arr {
-                    self.create_triple_from_value(subject, predicate, item, graph, context)?;
-                }
-            }
-            _ => {
-                self.create_triple_from_value(subject, predicate, value, graph, context)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Create a triple from a JSON-LD value
-    fn create_triple_from_value(
-        &self,
-        subject: &StarTerm,
-        predicate: &StarTerm,
-        value: &serde_json::Value,
-        graph: &mut StarGraph,
-        context: &mut ParseContext,
-    ) -> StarResult<()> {
-        let object = match value {
-            serde_json::Value::String(s) => {
-                if s.starts_with("http://") || s.starts_with("https://") || s.contains(':') {
-                    StarTerm::iri(s)?
-                } else {
-                    StarTerm::Literal(Literal {
-                        value: s.clone(),
-                        datatype: None,
-                        language: None,
-                    })
-                }
-            }
-            serde_json::Value::Object(obj) => {
-                if let Some(id_value) = obj.get("@id") {
-                    // Reference to another resource
-                    if let serde_json::Value::String(id) = id_value {
-                        StarTerm::iri(id)?
-                    } else {
-                        return Err(StarError::parse_error("@id must be a string".to_string()));
-                    }
-                } else if let Some(value_str) = obj.get("@value") {
-                    // Typed literal
-                    let value_str = match value_str {
-                        serde_json::Value::String(s) => s.clone(),
-                        serde_json::Value::Number(n) => n.to_string(),
-                        serde_json::Value::Bool(b) => b.to_string(),
-                        _ => return Err(StarError::parse_error("Invalid @value".to_string())),
-                    };
-
-                    let datatype = obj
-                        .get("@type")
-                        .and_then(|v| v.as_str())
-                        .map(|s| NamedNode { iri: s.to_string() });
-
-                    let language = obj
-                        .get("@language")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-
-                    StarTerm::Literal(Literal {
-                        value: value_str,
-                        language,
-                        datatype,
-                    })
-                } else {
-                    // Nested object - process recursively and return blank node
-                    let blank_node = StarTerm::BlankNode(BlankNode {
-                        id: context.next_blank_node(),
-                    });
-                    self.process_jsonld_star_object(obj, graph, context)?;
-                    blank_node
-                }
-            }
-            serde_json::Value::Number(n) => StarTerm::Literal(Literal {
-                value: n.to_string(),
-                datatype: Some(NamedNode {
-                    iri: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
-                }),
-                language: None,
-            }),
-            serde_json::Value::Bool(b) => StarTerm::Literal(Literal {
-                value: b.to_string(),
-                datatype: Some(NamedNode {
-                    iri: "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
-                }),
-                language: None,
-            }),
-            _ => {
-                return Err(StarError::parse_error(
-                    "Unsupported JSON value type".to_string(),
-                ));
-            }
-        };
-
-        // Create and insert quad
-        let quad = StarQuad::new(subject.clone(), predicate.clone(), object, None);
-        graph.insert_quad(quad)?;
-
-        Ok(())
-    }
-
-    /// Process quoted triple annotation (RDF-star extension for JSON-LD)
-    fn process_quoted_triple_annotation(
-        &self,
-        obj: &serde_json::Map<String, serde_json::Value>,
-        graph: &mut StarGraph,
-        context: &mut ParseContext,
-    ) -> StarResult<()> {
-        let annotation = obj
-            .get("@annotation")
-            .ok_or_else(|| StarError::parse_error("Missing @annotation".to_string()))?;
-
-        match annotation {
-            serde_json::Value::Object(ann_obj) => {
-                // Extract the quoted triple
-                let subject_val = ann_obj.get("subject").ok_or_else(|| {
-                    StarError::parse_error("Missing subject in annotation".to_string())
-                })?;
-                let predicate_val = ann_obj.get("predicate").ok_or_else(|| {
-                    StarError::parse_error("Missing predicate in annotation".to_string())
-                })?;
-                let object_val = ann_obj.get("object").ok_or_else(|| {
-                    StarError::parse_error("Missing object in annotation".to_string())
-                })?;
-
-                let subject = self.json_value_to_star_term(subject_val)?;
-                let predicate = self.json_value_to_star_term(predicate_val)?;
-                let object = self.json_value_to_star_term(object_val)?;
-
-                // Create quoted triple
-                let quoted_triple =
-                    StarTerm::QuotedTriple(Box::new(StarTriple::new(subject, predicate, object)));
-
-                // Process annotation properties
-                for (prop_key, prop_value) in obj {
-                    if prop_key == "@annotation" {
-                        continue;
-                    }
-
-                    let annotation_predicate = StarTerm::iri(prop_key)?;
-                    self.process_property_values(
-                        &quoted_triple,
-                        &annotation_predicate,
-                        prop_value,
-                        graph,
-                        context,
-                    )?;
-                }
-            }
-            _ => {
-                return Err(StarError::parse_error(
-                    "@annotation must be an object".to_string(),
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Convert JSON value to StarTerm
-    fn json_value_to_star_term(&self, value: &serde_json::Value) -> StarResult<StarTerm> {
-        match value {
-            serde_json::Value::String(s) => {
-                if s.starts_with("_:") {
-                    Ok(StarTerm::BlankNode(BlankNode { id: s.clone() }))
-                } else {
-                    StarTerm::iri(s)
-                }
-            }
-            serde_json::Value::Object(obj) => {
-                if let Some(id) = obj.get("@id").and_then(|v| v.as_str()) {
-                    StarTerm::iri(id)
-                } else if let Some(value) = obj.get("@value").and_then(|v| v.as_str()) {
-                    let datatype = obj
-                        .get("@type")
-                        .and_then(|v| v.as_str())
-                        .map(|s| NamedNode { iri: s.to_string() });
-                    let language = obj
-                        .get("@language")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-
-                    Ok(StarTerm::Literal(Literal {
-                        value: value.to_string(),
-                        datatype,
-                        language,
-                    }))
-                } else {
-                    Err(StarError::parse_error("Invalid object term".to_string()))
-                }
-            }
-            _ => Err(StarError::parse_error("Invalid term value".to_string())),
-        }
+        jsonld::process_jsonld_star_value(value, graph, context)
     }
 }
 

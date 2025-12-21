@@ -17,7 +17,7 @@ use crate::vocabulary;
 /// GeoSPARQL function metadata
 #[derive(Debug, Clone)]
 pub struct GeoSparqlFunction {
-    /// Function URI (e.g., "http://www.opengis.net/def/function/geosparql/sfContains")
+    /// Function URI (e.g., `http://www.opengis.net/def/function/geosparql/sfContains`)
     pub uri: String,
     /// Function name (e.g., "sfContains")
     pub name: String,

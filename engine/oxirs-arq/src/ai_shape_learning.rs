@@ -438,8 +438,8 @@ impl AIShapeLearner {
         self.update_shape_repository(&refined_shapes).await?;
 
         let learning_time = start_time.elapsed();
-        self.metrics.learning_time.record(learning_time);
-        self.metrics.shapes_learned.increment_by(refined_shapes.len() as u64);
+        self.metrics.learning_time.observe(learning_time);
+        self.metrics.shapes_learned.add(refined_shapes.len() as u64);
 
         self.profiler.stop("shape_learning");
         Ok(refined_shapes)
@@ -685,10 +685,10 @@ impl AIShapeLearner {
     /// Get comprehensive learning statistics
     pub fn get_learning_statistics(&self) -> ShapeLearningStatistics {
         ShapeLearningStatistics {
-            total_shapes_learned: self.metrics.shapes_learned.value(),
+            total_shapes_learned: self.metrics.shapes_learned.get(),
             avg_learning_time: self.metrics.learning_time.mean(),
             validation_accuracy_avg: self.metrics.validation_accuracy.mean(),
-            pattern_discovery_rate: self.metrics.patterns_discovered.value() as f64 / self.metrics.learning_time.count() as f64,
+            pattern_discovery_rate: self.metrics.patterns_discovered.get() as f64 / self.metrics.learning_time.count() as f64,
             active_shapes: self.learned_shapes.read().map(|s| s.len()).unwrap_or(0),
             neural_model_accuracy: self.calculate_neural_model_accuracy(),
         }
@@ -893,10 +893,10 @@ struct ShapeLearningMetrics {
 impl ShapeLearningMetrics {
     fn new() -> Self {
         Self {
-            shapes_learned: Counter::new("shapes_learned"),
-            learning_time: Timer::new("learning_time"),
-            validation_accuracy: Histogram::new("validation_accuracy"),
-            patterns_discovered: Counter::new("patterns_discovered"),
+            shapes_learned: Counter::new("shapes_learned".to_string()),
+            learning_time: Timer::new("learning_time".to_string()),
+            validation_accuracy: Histogram::new("validation_accuracy".to_string()),
+            patterns_discovered: Counter::new("patterns_discovered".to_string()),
         }
     }
 }

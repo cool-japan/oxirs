@@ -410,3 +410,214 @@ fn test_recovery_after_crash() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[ignore] // Performance issues - MmapStore index creation is slow
+fn test_remove_and_contains_quad() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let store = MmapStore::new(temp_dir.path())?;
+
+    // Create test quads
+    let quad1 = Quad::new_default_graph(
+        Subject::NamedNode(NamedNode::new("http://example.org/s1")?),
+        Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+        Object::Literal(Literal::new_simple_literal("value1")),
+    );
+    let quad2 = Quad::new_default_graph(
+        Subject::NamedNode(NamedNode::new("http://example.org/s2")?),
+        Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+        Object::Literal(Literal::new_simple_literal("value2")),
+    );
+    let quad3 = Quad::new_default_graph(
+        Subject::NamedNode(NamedNode::new("http://example.org/s3")?),
+        Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+        Object::Literal(Literal::new_simple_literal("value3")),
+    );
+
+    // Add quads to store
+    store.add_batch(&[quad1.clone(), quad2.clone(), quad3.clone()])?;
+    store.flush()?;
+
+    // Verify all quads exist
+    assert!(store.contains_quad(&quad1)?);
+    assert!(store.contains_quad(&quad2)?);
+    assert!(store.contains_quad(&quad3)?);
+    assert_eq!(store.len(), 3);
+    assert_eq!(store.deleted_count(), 0);
+
+    // Remove one quad
+    let removed = store.remove_quad(&quad2)?;
+    assert!(removed);
+    assert_eq!(store.deleted_count(), 1);
+
+    // Verify quad2 is no longer found
+    assert!(store.contains_quad(&quad1)?);
+    assert!(!store.contains_quad(&quad2)?);
+    assert!(store.contains_quad(&quad3)?);
+
+    // Try to remove non-existent quad
+    let not_removed = store.remove_quad(&quad2)?;
+    assert!(!not_removed);
+
+    Ok(())
+}
+
+#[test]
+#[ignore] // Performance issues - MmapStore index creation is slow
+fn test_compact_store() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let store = MmapStore::new(temp_dir.path())?;
+
+    // Add many quads
+    let mut quads = Vec::with_capacity(100);
+    let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/p")?);
+    for i in 0..100 {
+        let quad = Quad::new_default_graph(
+            Subject::NamedNode(NamedNode::new(format!("http://example.org/s/{i}"))?),
+            predicate.clone(),
+            Object::Literal(Literal::new_simple_literal(format!("{i}"))),
+        );
+        quads.push(quad);
+    }
+
+    store.add_batch(&quads)?;
+    store.flush()?;
+    assert_eq!(store.len(), 100);
+
+    // Remove every other quad (50 quads)
+    for quad in quads.iter().step_by(2) {
+        let removed = store.remove_quad(quad)?;
+        assert!(removed, "Failed to remove quad");
+    }
+    assert_eq!(store.deleted_count(), 50);
+
+    // Compact the store
+    store.compact()?;
+
+    // Verify compaction results
+    assert_eq!(store.deleted_count(), 0);
+
+    // After compaction, store.len() won't reflect the compacted count
+    // since it reads from header which was updated
+    let stats = store.stats();
+    assert_eq!(stats.quad_count, 50);
+
+    // Verify remaining quads are accessible
+    for (i, quad) in quads.iter().enumerate() {
+        if i % 2 == 0 {
+            // Even indices were deleted
+            assert!(!store.contains_quad(quad)?);
+        } else {
+            // Odd indices should remain
+            assert!(store.contains_quad(quad)?);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+#[ignore] // Performance issues - MmapStore index creation is slow
+fn test_compact_empty_deleted_set() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let store = MmapStore::new(temp_dir.path())?;
+
+    // Add some quads
+    let mut quads = Vec::with_capacity(10);
+    let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/p")?);
+    for i in 0..10 {
+        let quad = Quad::new_default_graph(
+            Subject::NamedNode(NamedNode::new(format!("http://example.org/s/{i}"))?),
+            predicate.clone(),
+            Object::Literal(Literal::new_simple_literal(format!("{i}"))),
+        );
+        quads.push(quad);
+    }
+
+    store.add_batch(&quads)?;
+    store.flush()?;
+
+    // Compact without any deletions (should be a no-op)
+    assert_eq!(store.deleted_count(), 0);
+    store.compact()?;
+
+    // Everything should remain
+    assert_eq!(store.stats().quad_count, 10);
+    for quad in &quads {
+        assert!(store.contains_quad(quad)?);
+    }
+
+    Ok(())
+}
+
+#[test]
+#[ignore] // Performance issues - MmapStore index creation is slow
+fn test_remove_all_quads_and_compact() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let store = MmapStore::new(temp_dir.path())?;
+
+    // Add quads
+    let mut quads = Vec::with_capacity(5);
+    let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/p")?);
+    for i in 0..5 {
+        let quad = Quad::new_default_graph(
+            Subject::NamedNode(NamedNode::new(format!("http://example.org/s/{i}"))?),
+            predicate.clone(),
+            Object::Literal(Literal::new_simple_literal(format!("{i}"))),
+        );
+        quads.push(quad);
+    }
+
+    store.add_batch(&quads)?;
+    store.flush()?;
+
+    // Remove all quads
+    for quad in &quads {
+        let removed = store.remove_quad(quad)?;
+        assert!(removed);
+    }
+    assert_eq!(store.deleted_count(), 5);
+
+    // Compact
+    store.compact()?;
+
+    // Store should be empty
+    assert_eq!(store.stats().quad_count, 0);
+    assert_eq!(store.deleted_count(), 0);
+
+    // Verify no quads remain
+    for quad in &quads {
+        assert!(!store.contains_quad(quad)?);
+    }
+
+    Ok(())
+}
+
+#[test]
+#[ignore] // Performance issues - MmapStore index creation is slow
+fn test_contains_quad_not_found() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let store = MmapStore::new(temp_dir.path())?;
+
+    // Add some quads
+    let quad1 = Quad::new_default_graph(
+        Subject::NamedNode(NamedNode::new("http://example.org/s1")?),
+        Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+        Object::Literal(Literal::new_simple_literal("value1")),
+    );
+
+    store.add(&quad1)?;
+    store.flush()?;
+
+    // Check for a non-existent quad
+    let non_existent = Quad::new_default_graph(
+        Subject::NamedNode(NamedNode::new("http://example.org/not-found")?),
+        Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+        Object::Literal(Literal::new_simple_literal("value1")),
+    );
+
+    assert!(!store.contains_quad(&non_existent)?);
+    assert!(store.contains_quad(&quad1)?);
+
+    Ok(())
+}

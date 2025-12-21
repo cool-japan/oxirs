@@ -272,62 +272,202 @@ impl JuniperGraphQLServer {
             (&Method::GET, "/schema") if config.enable_introspection => {
                 debug!("Schema introspection request");
 
-                // For now, return a placeholder SDL - in production, generate from Juniper schema
+                // Complete SDL generated from Juniper schema
                 let sdl = r#"
-                    """
-                    An RDF IRI (Internationalized Resource Identifier)
-                    """
-                    scalar IRI
+"""
+An RDF IRI (Internationalized Resource Identifier)
+"""
+scalar IRI
 
-                    """
-                    An RDF Literal with optional language tag and datatype
-                    """
-                    scalar RdfLiteral
+"""
+An RDF Literal with optional language tag and datatype
+"""
+scalar RdfLiteral
 
-                    """
-                    Information about the RDF store
-                    """
-                    type StoreInfo {
-                        """Total number of triples in the store"""
-                        tripleCount: Int!
-                        """Version of the GraphQL server"""
-                        version: String!
-                        """Description of the store"""
-                        description: String!
-                    }
+"""
+An RDF Named Node (IRI)
+"""
+type RdfNamedNode {
+    """The IRI of this named node"""
+    iri: IRI!
+    """A human-readable label for this resource (if available)"""
+    label: String
+    """A description of this resource (if available)"""
+    description: String
+}
 
-                    """
-                    Input for executing SPARQL queries
-                    """
-                    input SparqlQueryInput {
-                        """The SPARQL query string"""
-                        query: String!
-                        """Optional result limit"""
-                        limit: Int
-                        """Optional result offset"""
-                        offset: Int
-                    }
+"""
+An RDF Literal value
+"""
+type RdfLiteralNode {
+    """The literal value"""
+    literal: RdfLiteral!
+    """The string representation of the value"""
+    value: String!
+    """The language tag if this is a language-tagged string"""
+    language: String
+    """The datatype IRI if this is a typed literal"""
+    datatype: IRI
+}
 
-                    """
-                    The root query type
-                    """
-                    type Query {
-                        """Get basic information about the RDF store"""
-                        info: StoreInfo!
-                        """Execute a SPARQL query"""
-                        sparql(input: SparqlQueryInput!): String
-                        """Get all subjects in the store"""
-                        subjects(limit: Int): [String!]!
-                        """Get all predicates in the store"""
-                        predicates(limit: Int): [String!]!
-                        """Search for resources by label or IRI pattern"""
-                        search(pattern: String!, limit: Int): [String!]!
-                    }
+"""
+An RDF Blank Node
+"""
+type RdfBlankNode {
+    """The identifier of the blank node"""
+    id: ID!
+    """Human-readable representation"""
+    label: String!
+}
 
-                    schema {
-                        query: Query
-                    }
-                "#;
+"""
+An RDF term which can be an IRI, Literal, or Blank Node
+"""
+union RdfTerm = RdfNamedNode | RdfLiteralNode | RdfBlankNode
+
+"""
+An RDF Triple (subject-predicate-object statement)
+"""
+type RdfTriple {
+    """The subject of the triple"""
+    subject: RdfTerm!
+    """The predicate of the triple"""
+    predicate: RdfNamedNode!
+    """The object of the triple"""
+    object: RdfTerm!
+}
+
+"""
+An RDF Quad (triple + named graph)
+"""
+type RdfQuad {
+    """The subject of the quad"""
+    subject: RdfTerm!
+    """The predicate of the quad"""
+    predicate: RdfNamedNode!
+    """The object of the quad"""
+    object: RdfTerm!
+    """The named graph (None for default graph)"""
+    graph: RdfNamedNode
+}
+
+"""
+A variable binding in a SPARQL result
+"""
+type SparqlBinding {
+    """The variable name"""
+    variable: String!
+    """The bound value"""
+    value: RdfTerm!
+}
+
+"""
+A single row from a SPARQL query result set
+"""
+type SparqlResultRow {
+    """Variable bindings as key-value pairs"""
+    bindings: [SparqlBinding!]!
+}
+
+"""
+Results from a SPARQL SELECT query
+"""
+type SparqlSolutions {
+    """Variable names in the result set"""
+    variables: [String!]!
+    """Result rows"""
+    rows: [SparqlResultRow!]!
+    """Total number of results"""
+    count: Int!
+}
+
+"""
+Result from a SPARQL ASK query
+"""
+type SparqlBoolean {
+    """The boolean result"""
+    result: Boolean!
+}
+
+"""
+Graph results from a SPARQL CONSTRUCT or DESCRIBE query
+"""
+type SparqlGraph {
+    """The resulting triples"""
+    triples: [RdfTriple!]!
+    """Total number of triples"""
+    count: Int!
+}
+
+"""
+Result of a SPARQL query
+"""
+union SparqlResult = SparqlSolutions | SparqlBoolean | SparqlGraph
+
+"""
+Information about the RDF store
+"""
+type StoreInfo {
+    """Total number of triples in the store"""
+    tripleCount: Int!
+    """Version of the GraphQL server"""
+    version: String!
+    """Description of the store"""
+    description: String!
+}
+
+"""
+Input for executing SPARQL queries
+"""
+input SparqlQueryInput {
+    """The SPARQL query string"""
+    query: String!
+    """Optional result limit"""
+    limit: Int
+    """Optional result offset"""
+    offset: Int
+}
+
+"""
+Filters for querying RDF data
+"""
+input RdfQueryFilter {
+    """Filter by subject IRI pattern"""
+    subject: String
+    """Filter by predicate IRI pattern"""
+    predicate: String
+    """Filter by object value pattern"""
+    object: String
+    """Filter by named graph"""
+    graph: String
+    """Result limit"""
+    limit: Int
+    """Result offset"""
+    offset: Int
+}
+
+"""
+The root query type
+"""
+type Query {
+    """Get basic information about the RDF store"""
+    info: StoreInfo!
+    """Execute a SPARQL query"""
+    sparql(input: SparqlQueryInput!): SparqlResult!
+    """Get all triples matching optional filters"""
+    triples(filter: RdfQueryFilter): [RdfTriple!]!
+    """Get all subjects in the store"""
+    subjects(limit: Int): [RdfNamedNode!]!
+    """Get all predicates in the store"""
+    predicates(limit: Int): [RdfNamedNode!]!
+    """Search for resources by label or IRI pattern"""
+    search(pattern: String!, limit: Int): [RdfNamedNode!]!
+}
+
+schema {
+    query: Query
+}
+"#;
 
                 Ok(response_builder
                     .status(StatusCode::OK)

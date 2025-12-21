@@ -838,8 +838,158 @@ impl ResultFormatter for ExcelFormatter {
     }
 }
 
+/// PDF formatter for query results
+pub struct PdfFormatter {
+    pub title: String,
+    pub include_metadata: bool,
+}
+
+impl Default for PdfFormatter {
+    fn default() -> Self {
+        Self {
+            title: "SPARQL Query Results".to_string(),
+            include_metadata: true,
+        }
+    }
+}
+
+impl ResultFormatter for PdfFormatter {
+    fn format(&self, results: &QueryResults, writer: &mut dyn Write) -> std::io::Result<()> {
+        use printpdf::*;
+
+        // Create a new PDF document
+        let mut doc = PdfDocument::new(&self.title);
+
+        // Page setup
+        let left_margin = Mm(15.0);
+        let line_height = Pt(14.0);
+        let font_size = Pt(10.0);
+        let title_font_size = Pt(16.0);
+
+        // Build operations for the page
+        let mut ops = vec![Op::SaveGraphicsState, Op::StartTextSection];
+
+        // Add title
+        ops.push(Op::SetTextCursor {
+            pos: Point::new(left_margin, Mm(280.0)),
+        });
+        ops.push(Op::SetFontSizeBuiltinFont {
+            size: title_font_size,
+            font: BuiltinFont::HelveticaBold,
+        });
+        ops.push(Op::SetLineHeight {
+            lh: title_font_size,
+        });
+        ops.push(Op::WriteTextBuiltinFont {
+            items: vec![TextItem::Text(self.title.clone())],
+            font: BuiltinFont::HelveticaBold,
+        });
+        ops.push(Op::AddLineBreak);
+        ops.push(Op::AddLineBreak);
+
+        // Add metadata if requested
+        if self.include_metadata {
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+            ops.push(Op::SetFontSizeBuiltinFont {
+                size: font_size,
+                font: BuiltinFont::Helvetica,
+            });
+            ops.push(Op::SetLineHeight { lh: line_height });
+            ops.push(Op::WriteTextBuiltinFont {
+                items: vec![TextItem::Text(format!("Generated: {}", timestamp))],
+                font: BuiltinFont::Helvetica,
+            });
+            ops.push(Op::AddLineBreak);
+
+            ops.push(Op::WriteTextBuiltinFont {
+                items: vec![TextItem::Text(format!(
+                    "{} results with {} variables",
+                    results.bindings.len(),
+                    results.variables.len()
+                ))],
+                font: BuiltinFont::Helvetica,
+            });
+            ops.push(Op::AddLineBreak);
+            ops.push(Op::AddLineBreak);
+        }
+
+        // Add table header
+        ops.push(Op::SetFontSizeBuiltinFont {
+            size: font_size,
+            font: BuiltinFont::HelveticaBold,
+        });
+        let header_text = results
+            .variables
+            .iter()
+            .map(|v| format!("?{}", v))
+            .collect::<Vec<_>>()
+            .join("\t");
+        ops.push(Op::WriteTextBuiltinFont {
+            items: vec![TextItem::Text(header_text)],
+            font: BuiltinFont::HelveticaBold,
+        });
+        ops.push(Op::AddLineBreak);
+
+        // Add separator
+        ops.push(Op::SetFontSizeBuiltinFont {
+            size: font_size,
+            font: BuiltinFont::Helvetica,
+        });
+        ops.push(Op::WriteTextBuiltinFont {
+            items: vec![TextItem::Text("─".repeat(60))],
+            font: BuiltinFont::Helvetica,
+        });
+        ops.push(Op::AddLineBreak);
+
+        // Add data rows (simplified - just showing first 100 rows to avoid pagination complexity)
+        for binding in results.bindings.iter().take(100) {
+            let row_text = binding
+                .values
+                .iter()
+                .map(|opt_term| match opt_term {
+                    Some(term) => {
+                        let repr = term.to_string_repr();
+                        if repr.len() > 40 {
+                            format!("{}...", &repr[..37])
+                        } else {
+                            repr
+                        }
+                    }
+                    None => "-".to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join("\t");
+
+            ops.push(Op::WriteTextBuiltinFont {
+                items: vec![TextItem::Text(row_text)],
+                font: BuiltinFont::Helvetica,
+            });
+            ops.push(Op::AddLineBreak);
+        }
+
+        ops.push(Op::EndTextSection);
+        ops.push(Op::RestoreGraphicsState);
+
+        // Create page with operations
+        let page = PdfPage::new(Mm(210.0), Mm(297.0), ops);
+
+        // Save PDF to buffer
+        let pdf_bytes = doc
+            .with_pages(vec![page])
+            .save(&PdfSaveOptions::default(), &mut Vec::new());
+
+        // Write to output
+        writer.write_all(&pdf_bytes)?;
+
+        Ok(())
+    }
+}
+
 /// Factory function to create formatter by name
 pub fn create_formatter(format: &str) -> Option<Box<dyn ResultFormatter>> {
+    use crate::cli::template_formatter::{TemplateFormatter, TemplatePresets};
+
     match format.to_lowercase().as_str() {
         "table" | "text" => Some(Box::new(TableFormatter::default())),
         "table-ascii" => Some(Box::new(TableFormatter {
@@ -864,8 +1014,44 @@ pub fn create_formatter(format: &str) -> Option<Box<dyn ResultFormatter>> {
         "markdown" | "md" => Some(Box::new(MarkdownFormatter::default())),
         "markdown-compact" | "md-compact" => Some(Box::new(MarkdownFormatter { aligned: false })),
         "xlsx" | "excel" => Some(Box::new(ExcelFormatter::default())),
+        "pdf" => Some(Box::new(PdfFormatter::default())),
+        // Template presets
+        "template-html" => TemplateFormatter::from_string(
+            TemplatePresets::html_table().to_string(),
+            "html_template",
+        )
+        .ok()
+        .map(|f| Box::new(f) as Box<dyn ResultFormatter>),
+        "template-markdown" => TemplateFormatter::from_string(
+            TemplatePresets::markdown_table().to_string(),
+            "md_template",
+        )
+        .ok()
+        .map(|f| Box::new(f) as Box<dyn ResultFormatter>),
+        "template-text" => TemplateFormatter::from_string(
+            TemplatePresets::text_plain().to_string(),
+            "text_template",
+        )
+        .ok()
+        .map(|f| Box::new(f) as Box<dyn ResultFormatter>),
+        "template-csv" => TemplateFormatter::from_string(
+            TemplatePresets::csv_custom().to_string(),
+            "csv_template",
+        )
+        .ok()
+        .map(|f| Box::new(f) as Box<dyn ResultFormatter>),
         _ => None,
     }
+}
+
+/// Create a formatter from a custom template file
+pub fn create_formatter_from_template_file(
+    template_path: std::path::PathBuf,
+) -> Result<Box<dyn ResultFormatter>, Box<dyn std::error::Error>> {
+    use crate::cli::template_formatter::TemplateFormatter;
+
+    let formatter = TemplateFormatter::from_file(template_path)?;
+    Ok(Box::new(formatter))
 }
 
 #[cfg(test)]
@@ -1220,5 +1406,45 @@ mod tests {
         assert!(create_formatter("xlsx").is_some());
         assert!(create_formatter("excel").is_some());
         assert!(create_formatter("XLSX").is_some());
+    }
+
+    #[test]
+    fn test_pdf_formatter() {
+        let results = create_test_results();
+        let formatter = PdfFormatter::default();
+        let mut output = Vec::new();
+
+        formatter.format(&results, &mut output).unwrap();
+
+        // Verify that output is not empty (PDF file was generated)
+        assert!(!output.is_empty());
+
+        // Verify it starts with PDF file signature
+        assert_eq!(&output[0..4], b"%PDF");
+
+        // Verify reasonable file size (should be at least a few hundred bytes)
+        assert!(output.len() > 500);
+    }
+
+    #[test]
+    fn test_pdf_formatter_empty_results() {
+        let results = QueryResults {
+            variables: vec!["s".to_string()],
+            bindings: vec![],
+        };
+        let formatter = PdfFormatter::default();
+        let mut output = Vec::new();
+
+        formatter.format(&results, &mut output).unwrap();
+
+        // Should still generate a valid PDF file even with no data
+        assert!(!output.is_empty());
+        assert_eq!(&output[0..4], b"%PDF");
+    }
+
+    #[test]
+    fn test_formatter_factory_pdf() {
+        assert!(create_formatter("pdf").is_some());
+        assert!(create_formatter("PDF").is_some());
     }
 }

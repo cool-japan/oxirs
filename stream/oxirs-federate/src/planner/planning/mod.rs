@@ -160,10 +160,28 @@ impl FederatedQueryPlanner {
 
         // Add service query steps
         for (idx, service_query) in service_queries.iter().enumerate() {
+            // Retrieve service details directly from registry endpoints
+            let (service_url, auth_config) = service_registry
+                .get_sparql_endpoints()
+                .into_iter()
+                .find(|ep| ep.id == service_query.service_id)
+                .map(|ep| (Some(ep.url.to_string()), ep.auth.clone()))
+                .or_else(|| {
+                    // Check GraphQL services if not found in SPARQL endpoints
+                    service_registry
+                        .get_graphql_services()
+                        .into_iter()
+                        .find(|svc| svc.id == service_query.service_id)
+                        .map(|svc| (Some(svc.url.to_string()), svc.auth.clone()))
+                })
+                .unwrap_or((None, None));
+
             let step = ExecutionStep {
                 step_id: format!("service_query_{idx}"),
                 step_type: StepType::ServiceQuery,
                 service_id: Some(service_query.service_id.clone()),
+                service_url,
+                auth_config,
                 query_fragment: service_query.query.clone(),
                 dependencies: Vec::new(),
                 estimated_cost: self
@@ -184,10 +202,27 @@ impl FederatedQueryPlanner {
         // Add entity resolution steps if needed
         if let Some(entity_plan) = entity_plan {
             for (idx, entity_step) in entity_plan.steps.iter().enumerate() {
+                // Retrieve service details directly from registry endpoints
+                let (service_url, auth_config) = service_registry
+                    .get_sparql_endpoints()
+                    .into_iter()
+                    .find(|ep| ep.id == entity_step.service_name)
+                    .map(|ep| (Some(ep.url.to_string()), ep.auth.clone()))
+                    .or_else(|| {
+                        service_registry
+                            .get_graphql_services()
+                            .into_iter()
+                            .find(|svc| svc.id == entity_step.service_name)
+                            .map(|svc| (Some(svc.url.to_string()), svc.auth.clone()))
+                    })
+                    .unwrap_or((None, None));
+
                 let step = ExecutionStep {
                     step_id: format!("entity_resolution_{idx}"),
                     step_type: StepType::EntityResolution,
                     service_id: Some(entity_step.service_name.clone()),
+                    service_url,
+                    auth_config,
                     query_fragment: entity_step.query.clone(),
                     dependencies: entity_step.depends_on.clone(),
                     estimated_cost: 10.0, // Base cost for entity resolution
@@ -211,6 +246,8 @@ impl FederatedQueryPlanner {
                 step_id: "result_stitching".to_string(),
                 step_type: StepType::ResultStitching,
                 service_id: None,
+                service_url: None,
+                auth_config: None,
                 query_fragment: "".to_string(),
                 dependencies: steps.iter().map(|s| s.step_id.clone()).collect(),
                 estimated_cost: 5.0,
@@ -223,6 +260,9 @@ impl FederatedQueryPlanner {
         let planning_time = start_time.elapsed();
 
         let estimated_total_cost: f64 = steps.iter().map(|s| s.estimated_cost).sum();
+
+        // Analyze parallelization opportunities before moving steps
+        let parallelizable_steps = self.analyze_parallelizable_steps(&steps);
 
         Ok(ExecutionPlan {
             query_id: context.query_id.clone(),
@@ -238,7 +278,7 @@ impl FederatedQueryPlanner {
             planning_time,
             cache_key: self.generate_cache_key(query, &variables),
             metadata: self.extract_planning_metadata(&parsed_query, &recommendations),
-            parallelizable_steps: vec![], // TODO: Implement parallelization analysis
+            parallelizable_steps,
         })
     }
 
@@ -262,6 +302,8 @@ impl FederatedQueryPlanner {
             step_id: "single_service_query".to_string(),
             step_type: StepType::ServiceQuery,
             service_id: Some(service_id.clone()),
+            service_url: None,
+            auth_config: None,
             query_fragment: query.to_string(),
             dependencies: Vec::new(),
             estimated_cost: self.estimate_step_cost(query, &service_id),
@@ -276,15 +318,16 @@ impl FederatedQueryPlanner {
             }),
         };
 
+        let steps = vec![step];
         Ok(ExecutionPlan {
             query_id: context.query_id.clone(),
-            steps: vec![step],
+            steps: steps.clone(),
             estimated_total_cost: self.estimate_step_cost(query, &service_id),
             max_parallelism: 1,
             planning_time: std::time::Duration::from_millis(1),
             cache_key: self.generate_cache_key(query, &variables),
             metadata: HashMap::new(),
-            parallelizable_steps: Vec::new(),
+            parallelizable_steps: self.analyze_parallelizable_steps(&steps),
         })
     }
 
@@ -397,6 +440,83 @@ impl FederatedQueryPlanner {
     ) -> Result<ReoptimizationAnalysis> {
         self.performance_optimizer
             .analyze_performance(execution_metrics, context)
+    }
+
+    /// Analyze step dependencies and identify parallelizable steps
+    /// Returns a Vec<Vec<String>> where each inner Vec contains step IDs
+    /// that can be executed in parallel (same level in dependency graph)
+    fn analyze_parallelizable_steps(&self, steps: &[ExecutionStep]) -> Vec<Vec<String>> {
+        if steps.is_empty() {
+            return Vec::new();
+        }
+
+        // Build dependency graph
+        let mut dependency_graph: HashMap<String, Vec<String>> = HashMap::new();
+        let mut reverse_deps: HashMap<String, Vec<String>> = HashMap::new();
+        let mut all_step_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for step in steps {
+            all_step_ids.insert(step.step_id.clone());
+            dependency_graph.insert(step.step_id.clone(), step.dependencies.clone());
+
+            // Build reverse dependency map (which steps depend on this step)
+            for dep in &step.dependencies {
+                reverse_deps
+                    .entry(dep.clone())
+                    .or_default()
+                    .push(step.step_id.clone());
+            }
+        }
+
+        // Topological sort with level-wise grouping for parallelization
+        let mut result: Vec<Vec<String>> = Vec::new();
+        let mut processed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut in_degree: HashMap<String, usize> = HashMap::new();
+
+        // Calculate in-degree for each step
+        for step in steps {
+            in_degree.insert(step.step_id.clone(), step.dependencies.len());
+        }
+
+        // Process steps level by level
+        while processed.len() < steps.len() {
+            // Find all steps with no remaining dependencies (in-degree = 0)
+            let mut current_level: Vec<String> = Vec::new();
+
+            for step_id in &all_step_ids {
+                if !processed.contains(step_id) && in_degree.get(step_id).copied().unwrap_or(0) == 0
+                {
+                    current_level.push(step_id.clone());
+                }
+            }
+
+            if current_level.is_empty() {
+                // Circular dependency or error - break to avoid infinite loop
+                break;
+            }
+
+            // Sort for deterministic output
+            current_level.sort();
+
+            // Add this level to results
+            result.push(current_level.clone());
+
+            // Mark these steps as processed
+            for step_id in &current_level {
+                processed.insert(step_id.clone());
+
+                // Decrease in-degree of dependent steps
+                if let Some(dependents) = reverse_deps.get(step_id) {
+                    for dependent in dependents {
+                        if let Some(degree) = in_degree.get_mut(dependent) {
+                            *degree = degree.saturating_sub(1);
+                        }
+                    }
+                }
+            }
+        }
+
+        result
     }
 
     /// Update performance history
@@ -575,6 +695,8 @@ impl FederatedQueryPlanner {
                 step_id: "sparql_step_1".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some(selected_service_id),
+                service_url: None,
+                auth_config: None,
                 query_fragment: query_info.original_query.clone(),
                 dependencies: vec![],
                 estimated_cost: query_info.estimated_cost as f64,
@@ -750,5 +872,276 @@ impl Default for PlannerConfig {
                 backoff_multiplier: 2.0,
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parallelization_analysis_no_dependencies() {
+        let planner = FederatedQueryPlanner::new();
+
+        // Create steps with no dependencies
+        let steps = vec![
+            ExecutionStep {
+                step_id: "step1".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service1".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query1".to_string(),
+                dependencies: Vec::new(),
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step2".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service2".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query2".to_string(),
+                dependencies: Vec::new(),
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step3".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service3".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query3".to_string(),
+                dependencies: Vec::new(),
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+        ];
+
+        let parallelizable = planner.analyze_parallelizable_steps(&steps);
+
+        // All steps should be in one parallel group
+        assert_eq!(parallelizable.len(), 1);
+        assert_eq!(parallelizable[0].len(), 3);
+        assert!(parallelizable[0].contains(&"step1".to_string()));
+        assert!(parallelizable[0].contains(&"step2".to_string()));
+        assert!(parallelizable[0].contains(&"step3".to_string()));
+    }
+
+    #[test]
+    fn test_parallelization_analysis_linear_dependencies() {
+        let planner = FederatedQueryPlanner::new();
+
+        // Create steps with linear dependencies: step1 -> step2 -> step3
+        let steps = vec![
+            ExecutionStep {
+                step_id: "step1".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service1".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query1".to_string(),
+                dependencies: Vec::new(),
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step2".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service2".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query2".to_string(),
+                dependencies: vec!["step1".to_string()],
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step3".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service3".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query3".to_string(),
+                dependencies: vec!["step2".to_string()],
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+        ];
+
+        let parallelizable = planner.analyze_parallelizable_steps(&steps);
+
+        // Each step should be in its own group (sequential execution)
+        assert_eq!(parallelizable.len(), 3);
+        assert_eq!(parallelizable[0], vec!["step1"]);
+        assert_eq!(parallelizable[1], vec!["step2"]);
+        assert_eq!(parallelizable[2], vec!["step3"]);
+    }
+
+    #[test]
+    fn test_parallelization_analysis_diamond_pattern() {
+        let planner = FederatedQueryPlanner::new();
+
+        // Create diamond pattern: step1 -> (step2, step3) -> step4
+        let steps = vec![
+            ExecutionStep {
+                step_id: "step1".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service1".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query1".to_string(),
+                dependencies: Vec::new(),
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step2".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service2".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query2".to_string(),
+                dependencies: vec!["step1".to_string()],
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step3".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service3".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query3".to_string(),
+                dependencies: vec!["step1".to_string()],
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step4".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service4".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query4".to_string(),
+                dependencies: vec!["step2".to_string(), "step3".to_string()],
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+        ];
+
+        let parallelizable = planner.analyze_parallelizable_steps(&steps);
+
+        // Should have 3 levels: [step1], [step2, step3], [step4]
+        assert_eq!(parallelizable.len(), 3);
+        assert_eq!(parallelizable[0], vec!["step1"]);
+        assert_eq!(parallelizable[1].len(), 2);
+        assert!(parallelizable[1].contains(&"step2".to_string()));
+        assert!(parallelizable[1].contains(&"step3".to_string()));
+        assert_eq!(parallelizable[2], vec!["step4"]);
+    }
+
+    #[test]
+    fn test_parallelization_analysis_complex_pattern() {
+        let planner = FederatedQueryPlanner::new();
+
+        // Create more complex pattern with multiple parallel branches
+        let steps = vec![
+            ExecutionStep {
+                step_id: "step1".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service1".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query1".to_string(),
+                dependencies: Vec::new(),
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step2".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service2".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query2".to_string(),
+                dependencies: Vec::new(),
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step3".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service3".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query3".to_string(),
+                dependencies: vec!["step1".to_string()],
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step4".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service4".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query4".to_string(),
+                dependencies: vec!["step1".to_string()],
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+            ExecutionStep {
+                step_id: "step5".to_string(),
+                step_type: StepType::ServiceQuery,
+                service_id: Some("service5".to_string()),
+                service_url: None,
+                auth_config: None,
+                query_fragment: "query5".to_string(),
+                dependencies: vec!["step2".to_string()],
+                estimated_cost: 1.0,
+                timeout: std::time::Duration::from_secs(30),
+                retry_config: None,
+            },
+        ];
+
+        let parallelizable = planner.analyze_parallelizable_steps(&steps);
+
+        // Level 0: step1, step2 (no dependencies)
+        // Level 1: step3, step4, step5 (depend on step1 or step2)
+        assert_eq!(parallelizable.len(), 2);
+        assert_eq!(parallelizable[0].len(), 2);
+        assert!(parallelizable[0].contains(&"step1".to_string()));
+        assert!(parallelizable[0].contains(&"step2".to_string()));
+        assert_eq!(parallelizable[1].len(), 3);
+        assert!(parallelizable[1].contains(&"step3".to_string()));
+        assert!(parallelizable[1].contains(&"step4".to_string()));
+        assert!(parallelizable[1].contains(&"step5".to_string()));
+    }
+
+    #[test]
+    fn test_parallelization_analysis_empty_steps() {
+        let planner = FederatedQueryPlanner::new();
+        let steps: Vec<ExecutionStep> = Vec::new();
+
+        let parallelizable = planner.analyze_parallelizable_steps(&steps);
+
+        assert!(parallelizable.is_empty());
     }
 }

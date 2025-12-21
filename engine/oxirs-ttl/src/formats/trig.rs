@@ -1,10 +1,146 @@
 //! TriG format parser and serializer
 //!
-//! TriG is an extension of Turtle that supports named graphs.
-//! Syntax examples:
-//! - Default graph: `ex:alice ex:knows ex:bob .`
-//! - Named graph: `ex:graph1 { ex:alice ex:age 30 . }`
-//! - GRAPH syntax: `GRAPH ex:graph2 { ex:alice ex:worksFor ex:company . }`
+//! TriG (Terse RDF Triple Language + Named Graphs) is an extension of Turtle
+//! that adds support for named graphs. It allows you to group triples into
+//! different graphs within a single document.
+//!
+//! # Format Overview
+//!
+//! - **Default Graph**: Triples outside any graph block
+//! - **Named Graphs**: `<graph-iri> { triples... }`
+//! - **GRAPH Keyword**: `GRAPH <graph-iri> { triples... }`
+//! - **Prefixes**: Same as Turtle (`@prefix ex: <http://example.org/> .`)
+//! - **Base IRI**: Same as Turtle (`@base <http://example.org/> .`)
+//!
+//! # Examples
+//!
+//! ## Basic TriG Parsing
+//!
+//! ```rust
+//! use oxirs_ttl::trig::TriGParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let trig_data = r#"
+//! @prefix ex: <http://example.org/> .
+//! ex:alice ex:knows ex:bob .
+//! ex:graph1 {
+//!     ex:alice ex:age 30 .
+//!     ex:bob ex:age 28 .
+//! }
+//! "#;
+//!
+//! let parser = TriGParser::new();
+//! let quads = parser.parse(Cursor::new(trig_data))?;
+//! assert!(quads.len() >= 3);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Multiple Named Graphs
+//!
+//! ```rust
+//! use oxirs_ttl::trig::TriGParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let trig_data = r#"
+//! @prefix ex: <http://example.org/> .
+//! @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+//!
+//! ex:people {
+//!     ex:alice foaf:name "Alice" .
+//!     ex:bob foaf:name "Bob" .
+//! }
+//!
+//! ex:connections {
+//!     ex:alice foaf:knows ex:bob .
+//!     ex:bob foaf:knows ex:charlie .
+//! }
+//! "#;
+//!
+//! let parser = TriGParser::new();
+//! let quads = parser.parse(Cursor::new(trig_data))?;
+//!
+//! // Check that we have quads in different graphs
+//! let graphs: std::collections::HashSet<_> = quads.iter()
+//!     .map(|q| q.graph_name())
+//!     .collect();
+//! assert!(graphs.len() >= 2);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Using GRAPH Keyword
+//!
+//! ```rust
+//! use oxirs_ttl::trig::TriGParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let trig_data = r#"
+//! @prefix ex: <http://example.org/> .
+//!
+//! GRAPH ex:metadata {
+//!     ex:document ex:createdAt "2025-11-29" .
+//!     ex:document ex:author "Alice" .
+//! }
+//! "#;
+//!
+//! let parser = TriGParser::new();
+//! let quads = parser.parse(Cursor::new(trig_data))?;
+//! assert_eq!(quads.len(), 2);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Advanced Turtle Syntax in Graphs
+//!
+//! ```rust
+//! use oxirs_ttl::trig::TriGParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let trig_data = r#"
+//! @prefix ex: <http://example.org/> .
+//! ex:graph1 {
+//!     ex:alice ex:name "Alice" ;
+//!              ex:age 30 ;
+//!              ex:city "Wonderland" .
+//!     ex:bob ex:knows ex:alice, ex:charlie .
+//!     ex:list ex:items (1 2 3 4 5) .
+//! }
+//! "#;
+//!
+//! let parser = TriGParser::new();
+//! let quads = parser.parse(Cursor::new(trig_data))?;
+//! assert!(quads.len() >= 3);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Default and Named Graphs Mixed
+//!
+//! ```rust
+//! use oxirs_ttl::trig::TriGParser;
+//! use oxirs_ttl::Parser;
+//! use std::io::Cursor;
+//!
+//! let trig_data = r#"
+//! @prefix ex: <http://example.org/> .
+//! ex:alice ex:type ex:Person .
+//! ex:bob ex:type ex:Person .
+//! ex:relationships {
+//!     ex:alice ex:knows ex:bob .
+//! }
+//! ex:charlie ex:type ex:Person .
+//! "#;
+//!
+//! let parser = TriGParser::new();
+//! let quads = parser.parse(Cursor::new(trig_data))?;
+//!
+//! let default_graph_count = quads.iter()
+//!     .filter(|q| q.graph_name().is_default_graph())
+//!     .count();
+//! assert!(default_graph_count >= 3);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 use crate::error::{TextPosition, TurtleParseError, TurtleResult, TurtleSyntaxError};
 use crate::formats::turtle::TurtleParser;
@@ -14,6 +150,29 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 
 /// TriG parser with support for named graphs
+///
+/// TriG extends Turtle with the ability to group triples into named graphs.
+/// This parser supports both default graph triples and named graph syntax.
+///
+/// # Examples
+///
+/// ```rust
+/// use oxirs_ttl::trig::TriGParser;
+/// use oxirs_ttl::Parser;
+/// use std::io::Cursor;
+///
+/// let trig = r#"
+/// @prefix ex: <http://example.org/> .
+/// ex:graph1 {
+///     ex:s ex:p ex:o .
+/// }
+/// "#;
+///
+/// let parser = TriGParser::new();
+/// let quads = parser.parse(Cursor::new(trig))?;
+/// assert!(!quads.is_empty());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone)]
 pub struct TriGParser {
     /// Whether to continue parsing after errors

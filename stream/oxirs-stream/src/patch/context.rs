@@ -3,7 +3,7 @@
 use super::PatchResult;
 use crate::{PatchOperation, RdfPatch};
 use anyhow::{anyhow, Result};
-use tracing::{debug, info, warn};
+use tracing::debug;
 
 pub struct PatchContext {
     pub strict_mode: bool,

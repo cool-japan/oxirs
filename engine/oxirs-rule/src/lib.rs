@@ -1,9 +1,9 @@
 //! # OxiRS Rule Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-rule/badge.svg)](https://docs.rs/oxirs-rule)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Forward/backward rule engine for RDFS, OWL, and SWRL reasoning with RETE optimization.
@@ -61,9 +61,11 @@ use anyhow::Result;
 pub mod active_learning;
 pub mod adaptive_strategies;
 pub mod advanced_integration_example;
+pub mod asp;
 pub mod backward;
 pub mod benchmark_suite;
 pub mod cache;
+pub mod chr;
 pub mod composition;
 pub mod comprehensive_tutorial;
 pub mod conflict;
@@ -87,6 +89,7 @@ pub mod lazy_materialization;
 pub mod lockfree;
 pub mod materialization;
 pub mod migration;
+pub mod negation;
 pub mod optimization;
 pub mod owl;
 pub mod owl_profiles;
@@ -96,6 +99,7 @@ pub mod performance;
 pub mod possibilistic;
 pub mod probabilistic;
 pub mod problog;
+pub mod production_utils;
 pub mod profiler;
 pub mod quantum_optimizer;
 pub mod rdf_integration;
@@ -103,7 +107,9 @@ pub mod rdf_processing_simple;
 pub mod rdfs;
 pub mod rete;
 pub mod rete_enhanced;
+pub mod rif;
 pub mod rule_compression;
+pub mod rule_index;
 pub mod rule_learning;
 pub mod rule_refinement;
 pub mod shacl_integration;
@@ -111,6 +117,7 @@ pub mod simd_ops;
 pub mod sparql_integration;
 pub mod statistical_relational;
 pub mod swrl;
+pub mod tabling;
 pub mod temporal;
 pub mod test_generator;
 pub mod transaction;
@@ -229,6 +236,19 @@ impl RuleEngine {
         self.backward_chainer.clear_facts();
         self.rete_network.clear();
         self.clear_cache();
+    }
+
+    /// Set maximum proof depth for backward chaining
+    ///
+    /// This limits the recursion depth to prevent stack overflow.
+    /// Lower values (e.g., 20-30) are safer for large datasets.
+    /// Default is 100.
+    pub fn set_backward_chain_max_depth(&mut self, max_depth: usize) {
+        self.backward_chainer = backward::BackwardChainer::with_config(max_depth, false);
+        // Re-add existing rules to the new backward chainer
+        for rule in &self.rules {
+            self.backward_chainer.add_rule(rule.clone());
+        }
     }
 
     /// Add a single fact to the knowledge base

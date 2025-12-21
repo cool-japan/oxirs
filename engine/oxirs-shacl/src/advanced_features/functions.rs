@@ -573,6 +573,175 @@ impl BuiltInFunctionExecutor {
             ))
         }
     }
+
+    /// Execute trim
+    fn trim(&self, args: &HashMap<String, Term>) -> Result<FunctionResult> {
+        if let Some(Term::Literal(lit)) = args.get("input") {
+            let trimmed = lit.value().trim();
+            Ok(FunctionResult::value(Term::Literal(
+                Literal::new_simple_literal(trimmed),
+            )))
+        } else {
+            Err(ShaclError::ValidationEngine(
+                "trim requires a string literal argument".to_string(),
+            ))
+        }
+    }
+
+    /// Execute replace
+    fn replace(&self, args: &HashMap<String, Term>) -> Result<FunctionResult> {
+        if let (
+            Some(Term::Literal(input)),
+            Some(Term::Literal(pattern)),
+            Some(Term::Literal(replacement)),
+        ) = (
+            args.get("input"),
+            args.get("pattern"),
+            args.get("replacement"),
+        ) {
+            let result = input.value().replace(pattern.value(), replacement.value());
+            Ok(FunctionResult::value(Term::Literal(
+                Literal::new_simple_literal(result),
+            )))
+        } else {
+            Err(ShaclError::ValidationEngine(
+                "replace requires input, pattern, and replacement arguments".to_string(),
+            ))
+        }
+    }
+
+    /// Execute min
+    fn min(&self, args: &HashMap<String, Term>) -> Result<FunctionResult> {
+        if let (Some(Term::Literal(val1)), Some(Term::Literal(val2))) =
+            (args.get("value1"), args.get("value2"))
+        {
+            let v1: f64 = val1.value().parse().map_err(|_| {
+                ShaclError::ValidationEngine("min requires numeric arguments".to_string())
+            })?;
+            let v2: f64 = val2.value().parse().map_err(|_| {
+                ShaclError::ValidationEngine("min requires numeric arguments".to_string())
+            })?;
+            let result = v1.min(v2);
+            Ok(FunctionResult::value(Term::Literal(
+                Literal::new_typed_literal(
+                    result.to_string(),
+                    NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#decimal"),
+                ),
+            )))
+        } else {
+            Err(ShaclError::ValidationEngine(
+                "min requires two numeric literal arguments".to_string(),
+            ))
+        }
+    }
+
+    /// Execute max
+    fn max(&self, args: &HashMap<String, Term>) -> Result<FunctionResult> {
+        if let (Some(Term::Literal(val1)), Some(Term::Literal(val2))) =
+            (args.get("value1"), args.get("value2"))
+        {
+            let v1: f64 = val1.value().parse().map_err(|_| {
+                ShaclError::ValidationEngine("max requires numeric arguments".to_string())
+            })?;
+            let v2: f64 = val2.value().parse().map_err(|_| {
+                ShaclError::ValidationEngine("max requires numeric arguments".to_string())
+            })?;
+            let result = v1.max(v2);
+            Ok(FunctionResult::value(Term::Literal(
+                Literal::new_typed_literal(
+                    result.to_string(),
+                    NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#decimal"),
+                ),
+            )))
+        } else {
+            Err(ShaclError::ValidationEngine(
+                "max requires two numeric literal arguments".to_string(),
+            ))
+        }
+    }
+
+    /// Execute sqrt
+    fn sqrt(&self, args: &HashMap<String, Term>) -> Result<FunctionResult> {
+        if let Some(Term::Literal(lit)) = args.get("value") {
+            let value: f64 = lit.value().parse().map_err(|_| {
+                ShaclError::ValidationEngine("sqrt requires a numeric argument".to_string())
+            })?;
+            if value < 0.0 {
+                return Err(ShaclError::ValidationEngine(
+                    "sqrt requires a non-negative argument".to_string(),
+                ));
+            }
+            let result = value.sqrt();
+            Ok(FunctionResult::value(Term::Literal(
+                Literal::new_typed_literal(
+                    result.to_string(),
+                    NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#decimal"),
+                ),
+            )))
+        } else {
+            Err(ShaclError::ValidationEngine(
+                "sqrt requires a numeric literal argument".to_string(),
+            ))
+        }
+    }
+
+    /// Execute pow
+    fn pow(&self, args: &HashMap<String, Term>) -> Result<FunctionResult> {
+        if let (Some(Term::Literal(base)), Some(Term::Literal(exponent))) =
+            (args.get("base"), args.get("exponent"))
+        {
+            let base_val: f64 = base.value().parse().map_err(|_| {
+                ShaclError::ValidationEngine("pow requires numeric arguments".to_string())
+            })?;
+            let exp_val: f64 = exponent.value().parse().map_err(|_| {
+                ShaclError::ValidationEngine("pow requires numeric arguments".to_string())
+            })?;
+            let result = base_val.powf(exp_val);
+            Ok(FunctionResult::value(Term::Literal(
+                Literal::new_typed_literal(
+                    result.to_string(),
+                    NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#decimal"),
+                ),
+            )))
+        } else {
+            Err(ShaclError::ValidationEngine(
+                "pow requires two numeric literal arguments".to_string(),
+            ))
+        }
+    }
+
+    /// Execute encodeURI
+    fn encode_uri(&self, args: &HashMap<String, Term>) -> Result<FunctionResult> {
+        if let Some(Term::Literal(lit)) = args.get("input") {
+            use url::form_urlencoded;
+            let encoded: String = form_urlencoded::byte_serialize(lit.value().as_bytes()).collect();
+            Ok(FunctionResult::value(Term::Literal(
+                Literal::new_simple_literal(encoded),
+            )))
+        } else {
+            Err(ShaclError::ValidationEngine(
+                "encodeURI requires a string literal argument".to_string(),
+            ))
+        }
+    }
+
+    /// Execute decodeURI
+    fn decode_uri(&self, args: &HashMap<String, Term>) -> Result<FunctionResult> {
+        if let Some(Term::Literal(lit)) = args.get("input") {
+            use url::form_urlencoded;
+            let decoded = form_urlencoded::parse(lit.value().as_bytes())
+                .map(|(key, _)| key)
+                .collect::<Vec<_>>()
+                .join("");
+            Ok(FunctionResult::value(Term::Literal(
+                Literal::new_simple_literal(decoded),
+            )))
+        } else {
+            Err(ShaclError::ValidationEngine(
+                "decodeURI requires a string literal argument".to_string(),
+            ))
+        }
+    }
 }
 
 impl Default for BuiltInFunctionExecutor {
@@ -602,11 +771,20 @@ impl FunctionExecutor for BuiltInFunctionExecutor {
             "contains" => self.contains(&invocation.arguments),
             "startsWith" => self.starts_with(&invocation.arguments),
             "endsWith" => self.ends_with(&invocation.arguments),
+            "trim" => self.trim(&invocation.arguments),
+            "replace" => self.replace(&invocation.arguments),
             // Mathematical functions
             "abs" => self.abs(&invocation.arguments),
             "ceil" => self.ceil(&invocation.arguments),
             "floor" => self.floor(&invocation.arguments),
             "round" => self.round(&invocation.arguments),
+            "min" => self.min(&invocation.arguments),
+            "max" => self.max(&invocation.arguments),
+            "sqrt" => self.sqrt(&invocation.arguments),
+            "pow" => self.pow(&invocation.arguments),
+            // URI encoding functions
+            "encodeURI" => self.encode_uri(&invocation.arguments),
+            "decodeURI" => self.decode_uri(&invocation.arguments),
             _ => Err(ShaclError::UnsupportedOperation(format!(
                 "Unknown built-in function: {}",
                 function.name
@@ -629,10 +807,18 @@ impl FunctionExecutor for BuiltInFunctionExecutor {
                 | "contains"
                 | "startsWith"
                 | "endsWith"
+                | "trim"
+                | "replace"
                 | "abs"
                 | "ceil"
                 | "floor"
                 | "round"
+                | "min"
+                | "max"
+                | "sqrt"
+                | "pow"
+                | "encodeURI"
+                | "decodeURI"
         )
     }
 }
@@ -812,6 +998,113 @@ impl FunctionRegistry {
                 0,
             )],
             ReturnType::Single(ParameterType::Integer),
+        ))
+        .ok();
+
+        // Additional string functions
+
+        // Trim whitespace
+        self.register_function(ShaclFunction::new(
+            "http://www.w3.org/ns/shacl#trim",
+            "trim",
+            vec![FunctionParameter::required(
+                "input",
+                ParameterType::String,
+                0,
+            )],
+            ReturnType::Single(ParameterType::String),
+        ))
+        .ok();
+
+        // String replace
+        self.register_function(ShaclFunction::new(
+            "http://www.w3.org/ns/shacl#replace",
+            "replace",
+            vec![
+                FunctionParameter::required("input", ParameterType::String, 0),
+                FunctionParameter::required("pattern", ParameterType::String, 1),
+                FunctionParameter::required("replacement", ParameterType::String, 2),
+            ],
+            ReturnType::Single(ParameterType::String),
+        ))
+        .ok();
+
+        // Additional mathematical functions
+
+        // Minimum value
+        self.register_function(ShaclFunction::new(
+            "http://www.w3.org/ns/shacl#min",
+            "min",
+            vec![
+                FunctionParameter::required("value1", ParameterType::Decimal, 0),
+                FunctionParameter::required("value2", ParameterType::Decimal, 1),
+            ],
+            ReturnType::Single(ParameterType::Decimal),
+        ))
+        .ok();
+
+        // Maximum value
+        self.register_function(ShaclFunction::new(
+            "http://www.w3.org/ns/shacl#max",
+            "max",
+            vec![
+                FunctionParameter::required("value1", ParameterType::Decimal, 0),
+                FunctionParameter::required("value2", ParameterType::Decimal, 1),
+            ],
+            ReturnType::Single(ParameterType::Decimal),
+        ))
+        .ok();
+
+        // Square root
+        self.register_function(ShaclFunction::new(
+            "http://www.w3.org/ns/shacl#sqrt",
+            "sqrt",
+            vec![FunctionParameter::required(
+                "value",
+                ParameterType::Decimal,
+                0,
+            )],
+            ReturnType::Single(ParameterType::Decimal),
+        ))
+        .ok();
+
+        // Power
+        self.register_function(ShaclFunction::new(
+            "http://www.w3.org/ns/shacl#pow",
+            "pow",
+            vec![
+                FunctionParameter::required("base", ParameterType::Decimal, 0),
+                FunctionParameter::required("exponent", ParameterType::Decimal, 1),
+            ],
+            ReturnType::Single(ParameterType::Decimal),
+        ))
+        .ok();
+
+        // URI encoding functions
+
+        // URL encode
+        self.register_function(ShaclFunction::new(
+            "http://www.w3.org/ns/shacl#encodeURI",
+            "encodeURI",
+            vec![FunctionParameter::required(
+                "input",
+                ParameterType::String,
+                0,
+            )],
+            ReturnType::Single(ParameterType::String),
+        ))
+        .ok();
+
+        // URL decode
+        self.register_function(ShaclFunction::new(
+            "http://www.w3.org/ns/shacl#decodeURI",
+            "decodeURI",
+            vec![FunctionParameter::required(
+                "input",
+                ParameterType::String,
+                0,
+            )],
+            ReturnType::Single(ParameterType::String),
         ))
         .ok();
     }

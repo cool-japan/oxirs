@@ -26,7 +26,7 @@ impl QuotedTriple {
         }
     }
 
-    /// Create from an existing Arc<Triple>
+    /// Create from an existing `Arc<Triple>`
     pub fn from_arc(triple: Arc<Triple>) -> Self {
         QuotedTriple { inner: triple }
     }

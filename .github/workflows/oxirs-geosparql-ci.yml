@@ -1,0 +1,359 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop, '0.*.*' ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Check code formatting
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  # Lint with clippy
+  clippy:
+    name: Clippy Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # Install system dependencies for PROJ
+      - name: Install PROJ
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin
+
+      # Install GEOS
+      - name: Install GEOS
+        run: |
+          sudo apt-get install -y libgeos-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-clippy-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # Run tests on multiple platforms
+  test:
+    name: Test Suite
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable, beta]
+        exclude:
+          # Skip some combinations to reduce CI time
+          - os: macos-latest
+            rust: beta
+          - os: windows-latest
+            rust: beta
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      # Install system dependencies (Linux)
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      # Install system dependencies (macOS)
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install proj geos
+
+      # Install system dependencies (Windows)
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Note: Windows builds may skip PROJ/GEOS features
+          echo "Skipping PROJ/GEOS on Windows"
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.rust }}-target-${{ hashFiles('**/Cargo.lock') }}
+
+      # Install nextest
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      # Run tests with all features (except Windows)
+      - name: Run tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cargo nextest run --workspace --all-features --no-fail-fast
+
+      # Run tests with limited features (Windows)
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: cargo nextest run --workspace --features "wkt-support,geojson-support,parallel" --no-fail-fast
+
+      # Run doc tests
+      - name: Run doc tests
+        run: cargo test --doc --workspace --all-features
+
+  # Run property-based tests with more iterations
+  proptest:
+    name: Property-Based Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run property tests
+        env:
+          PROPTEST_CASES: 10000
+        run: cargo test --package oxirs-geosparql property_tests --all-features -- --nocapture
+
+  # Run stress tests
+  stress-test:
+    name: Stress Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Run stress tests
+        run: cargo nextest run --package oxirs-geosparql stress_tests --all-features --test-threads 1
+
+  # Security audit
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Check code coverage
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Generate coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+
+  # Run benchmarks (performance regression check)
+  bench:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run benchmarks
+        run: cargo bench --package oxirs-geosparql --no-fail-fast -- --output-format bencher | tee bench_output.txt
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Rust Benchmark
+          tool: 'cargo'
+          output-file-path: bench_output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          # Alert if performance regresses
+          alert-threshold: '150%'
+          comment-on-alert: true
+          fail-on-alert: false
+
+  # Check minimum supported Rust version (MSRV)
+  msrv:
+    name: MSRV Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.75.0  # Minimum Rust version
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      - name: Check build
+        run: cargo check --workspace --all-features
+
+  # Check documentation builds
+  docs:
+    name: Documentation Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build documentation
+        run: cargo doc --workspace --all-features --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  # All checks must pass for PR merge
+  ci-success:
+    name: CI Success
+    needs: [fmt, clippy, test, proptest, stress-test, audit, coverage, msrv, docs]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          if [[ "${{ needs.fmt.result }}" != "success" ]]; then
+            echo "Format check failed"
+            exit 1
+          fi
+          if [[ "${{ needs.clippy.result }}" != "success" ]]; then
+            echo "Clippy check failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test.result }}" != "success" ]]; then
+            echo "Test suite failed"
+            exit 1
+          fi
+          if [[ "${{ needs.proptest.result }}" != "success" ]]; then
+            echo "Property tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.stress-test.result }}" != "success" ]]; then
+            echo "Stress tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.audit.result }}" != "success" ]]; then
+            echo "Security audit failed"
+            exit 1
+          fi
+          if [[ "${{ needs.msrv.result }}" != "success" ]]; then
+            echo "MSRV check failed"
+            exit 1
+          fi
+          if [[ "${{ needs.docs.result }}" != "success" ]]; then
+            echo "Documentation build failed"
+            exit 1
+          fi
+          echo "All CI checks passed!"

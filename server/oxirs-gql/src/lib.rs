@@ -1,9 +1,9 @@
 //! # OxiRS GraphQL - GraphQL Interface for RDF
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-gql/badge.svg)](https://docs.rs/oxirs-gql)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Status**: Beta Release (v0.1.0-beta.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! GraphQL interface for RDF data with automatic schema generation from ontologies.
@@ -286,8 +286,10 @@ impl MockStore {
 
 // Individual modules
 pub mod aggregation;
+pub mod ai;
 pub mod api_explorer;
 pub mod ast;
+pub mod auto_caching_strategies;
 pub mod custom_directives;
 pub mod custom_type_mappings;
 pub mod enhanced_errors;
@@ -295,6 +297,7 @@ pub mod execution;
 pub mod federation;
 pub mod file_upload;
 pub mod graphiql_integration;
+pub mod historical_cost_estimator;
 pub mod horizontal_scaling;
 pub mod hybrid_optimizer;
 pub mod intelligent_federation_gateway;
@@ -306,14 +309,17 @@ pub mod ml_optimizer;
 pub mod optimizer;
 pub mod owl_enhanced_schema;
 pub mod pagination_filtering;
+pub mod parallel_field_resolver;
 pub mod parser;
 pub mod persisted_queries;
 pub mod playground_integration;
 pub mod quantum_optimizer;
 pub mod query_builder;
 pub mod query_debugger;
+pub mod query_prefetcher;
 pub mod rate_limiting;
 pub mod rdf_scalars;
+pub mod request_deduplication;
 pub mod resolvers;
 pub mod schema;
 pub mod schema_cache;
@@ -324,6 +330,41 @@ pub mod subscriptions;
 pub mod types;
 pub mod validation;
 pub mod zero_trust_security;
+
+// v0.2.0 Operational Enhancements (November 24, 2025)
+pub mod api_versioning;
+pub mod blue_green_deployment;
+pub mod canary_release;
+pub mod circuit_breaker;
+pub mod graphql_mesh;
+pub mod multi_region;
+pub mod performance_insights;
+pub mod schema_changelog;
+pub mod visual_schema_designer;
+
+// v0.3.0 Security & Integration Features (November 24, 2025)
+pub mod content_security_policy;
+pub mod edge_caching;
+pub mod query_sanitization;
+pub mod response_streaming;
+pub mod webhook_support;
+
+// v0.4.0 Advanced Observability & Protocol Features (November 29, 2025)
+pub mod cost_based_optimizer;
+pub mod incremental_execution;
+pub mod query_batching;
+pub mod query_plan_visualizer;
+pub mod query_result_streaming;
+
+// v0.5.0 Advanced Observability & Monitoring (December 2, 2025)
+pub mod graphql_span_attributes;
+pub mod performance_anomaly_detector;
+pub mod performance_heatmap;
+pub mod query_pattern_analyzer;
+pub mod trace_correlation;
+pub mod trace_sampling;
+pub mod trace_visualization;
+pub mod tracing_exporters;
 
 // Advanced performance modules
 pub mod advanced_cache;
@@ -351,6 +392,7 @@ pub mod production;
 pub mod core;
 pub mod distributed_cache;
 pub mod docs;
+pub mod dynamic_query_planner;
 pub mod features;
 pub mod networking;
 pub mod rdf;

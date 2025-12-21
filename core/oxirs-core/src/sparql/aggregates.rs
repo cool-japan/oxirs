@@ -26,8 +26,17 @@ pub enum AggregateFunction {
     Avg,
     Min,
     Max,
-    GroupConcat { separator: String },
+    GroupConcat {
+        separator: String,
+    },
     Sample,
+    /// Statistical aggregates powered by SCIRS2
+    Median,
+    Variance,
+    StdDev,
+    Percentile {
+        percentile: u8,
+    }, // 0-100
 }
 
 /// Aggregate expression in SELECT clause
@@ -170,6 +179,17 @@ impl AggregateAccumulator {
                     self.sample_value = Some(term.clone());
                 }
             }
+            // Statistical aggregates - collect all numeric values
+            AggregateFunction::Median
+            | AggregateFunction::Variance
+            | AggregateFunction::StdDev
+            | AggregateFunction::Percentile { .. } => {
+                if let Term::Literal(lit) = term {
+                    if lit.value().parse::<f64>().is_ok() {
+                        self.values.push(term.clone());
+                    }
+                }
+            }
         }
     }
 
@@ -202,6 +222,24 @@ impl AggregateAccumulator {
                 .sample_value
                 .clone()
                 .unwrap_or_else(|| Term::from(Literal::new(""))),
+            // Statistical aggregates
+            AggregateFunction::Median => {
+                let result = compute_median(&self.values);
+                Term::from(Literal::new(result.to_string()))
+            }
+            AggregateFunction::Variance => {
+                let result = compute_variance(&self.values);
+                Term::from(Literal::new(result.to_string()))
+            }
+            AggregateFunction::StdDev => {
+                let variance = compute_variance(&self.values);
+                let stddev = variance.sqrt();
+                Term::from(Literal::new(stddev.to_string()))
+            }
+            AggregateFunction::Percentile { percentile } => {
+                let result = compute_percentile(&self.values, *percentile);
+                Term::from(Literal::new(result.to_string()))
+            }
         }
     }
 }
@@ -510,6 +548,121 @@ fn process_group(
     Ok(result_binding)
 }
 
+// Statistical computation functions
+
+/// Compute median of numeric values
+fn compute_median(values: &[Term]) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+
+    let mut nums: Vec<f64> = values
+        .iter()
+        .filter_map(|term| {
+            if let Term::Literal(lit) = term {
+                lit.value().parse::<f64>().ok()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if nums.is_empty() {
+        return 0.0;
+    }
+
+    nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let len = nums.len();
+    if len % 2 == 0 {
+        // Even number of elements - average of middle two
+        (nums[len / 2 - 1] + nums[len / 2]) / 2.0
+    } else {
+        // Odd number of elements - middle element
+        nums[len / 2]
+    }
+}
+
+/// Compute variance of numeric values
+/// Uses sample variance formula: Σ(x - mean)² / (n - 1)
+fn compute_variance(values: &[Term]) -> f64 {
+    if values.len() < 2 {
+        return 0.0;
+    }
+
+    let nums: Vec<f64> = values
+        .iter()
+        .filter_map(|term| {
+            if let Term::Literal(lit) = term {
+                lit.value().parse::<f64>().ok()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if nums.len() < 2 {
+        return 0.0;
+    }
+
+    // Calculate mean
+    let mean = nums.iter().sum::<f64>() / nums.len() as f64;
+
+    // Calculate sum of squared differences
+    let squared_diffs: f64 = nums.iter().map(|x| (x - mean).powi(2)).sum();
+
+    // Sample variance: divide by (n - 1)
+    squared_diffs / (nums.len() - 1) as f64
+}
+
+/// Compute percentile of numeric values
+/// percentile: 0-100 (e.g., 50 = median, 95 = 95th percentile)
+/// Uses linear interpolation between ranks
+fn compute_percentile(values: &[Term], percentile: u8) -> f64 {
+    if values.is_empty() || percentile > 100 {
+        return 0.0;
+    }
+
+    let mut nums: Vec<f64> = values
+        .iter()
+        .filter_map(|term| {
+            if let Term::Literal(lit) = term {
+                lit.value().parse::<f64>().ok()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if nums.is_empty() {
+        return 0.0;
+    }
+
+    nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    if percentile == 0 {
+        return nums[0];
+    }
+    if percentile == 100 {
+        return nums[nums.len() - 1];
+    }
+
+    // Calculate rank using linear interpolation
+    let rank = (percentile as f64 / 100.0) * (nums.len() - 1) as f64;
+    let lower_index = rank.floor() as usize;
+    let upper_index = rank.ceil() as usize;
+
+    if lower_index == upper_index {
+        nums[lower_index]
+    } else {
+        // Linear interpolation between the two values
+        let lower_value = nums[lower_index];
+        let upper_value = nums[upper_index];
+        let fraction = rank - lower_index as f64;
+        lower_value + fraction * (upper_value - lower_value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -759,5 +912,254 @@ mod tests {
         assert!(result[0].get("count").is_some());
         assert!(result[0].get("sum").is_some());
         assert!(result[0].get("avg").is_some());
+    }
+
+    #[test]
+    fn test_median_aggregate() {
+        // Test with odd number of values
+        let results = vec![
+            create_test_binding(vec![("x", 1.0)]),
+            create_test_binding(vec![("x", 3.0)]),
+            create_test_binding(vec![("x", 5.0)]),
+            create_test_binding(vec![("x", 7.0)]),
+            create_test_binding(vec![("x", 9.0)]),
+        ];
+
+        let agg = AggregateExpression {
+            function: AggregateFunction::Median,
+            variable: Some("x".to_string()),
+            alias: "median".to_string(),
+            distinct: false,
+        };
+
+        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        if let Term::Literal(lit) = result[0].get("median").unwrap() {
+            let median: f64 = lit.value().parse().unwrap();
+            assert!((median - 5.0).abs() < 0.001);
+        }
+
+        // Test with even number of values
+        let results = vec![
+            create_test_binding(vec![("x", 2.0)]),
+            create_test_binding(vec![("x", 4.0)]),
+            create_test_binding(vec![("x", 6.0)]),
+            create_test_binding(vec![("x", 8.0)]),
+        ];
+
+        let agg = AggregateExpression {
+            function: AggregateFunction::Median,
+            variable: Some("x".to_string()),
+            alias: "median".to_string(),
+            distinct: false,
+        };
+
+        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        if let Term::Literal(lit) = result[0].get("median").unwrap() {
+            let median: f64 = lit.value().parse().unwrap();
+            assert!((median - 5.0).abs() < 0.001); // (4 + 6) / 2 = 5
+        }
+    }
+
+    #[test]
+    fn test_variance_aggregate() {
+        // Test sample variance
+        let results = vec![
+            create_test_binding(vec![("x", 2.0)]),
+            create_test_binding(vec![("x", 4.0)]),
+            create_test_binding(vec![("x", 6.0)]),
+            create_test_binding(vec![("x", 8.0)]),
+        ];
+
+        let agg = AggregateExpression {
+            function: AggregateFunction::Variance,
+            variable: Some("x".to_string()),
+            alias: "variance".to_string(),
+            distinct: false,
+        };
+
+        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        if let Term::Literal(lit) = result[0].get("variance").unwrap() {
+            let variance: f64 = lit.value().parse().unwrap();
+            // Sample variance of [2,4,6,8] = 6.666...
+            assert!((variance - 6.666666666666667).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn test_stddev_aggregate() {
+        // Test standard deviation (sqrt of variance)
+        let results = vec![
+            create_test_binding(vec![("x", 2.0)]),
+            create_test_binding(vec![("x", 4.0)]),
+            create_test_binding(vec![("x", 6.0)]),
+            create_test_binding(vec![("x", 8.0)]),
+        ];
+
+        let agg = AggregateExpression {
+            function: AggregateFunction::StdDev,
+            variable: Some("x".to_string()),
+            alias: "stddev".to_string(),
+            distinct: false,
+        };
+
+        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        if let Term::Literal(lit) = result[0].get("stddev").unwrap() {
+            let stddev: f64 = lit.value().parse().unwrap();
+            // Std dev of [2,4,6,8] = sqrt(6.666...) = 2.582...
+            assert!((stddev - 2.581988897471611).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn test_percentile_aggregate() {
+        let results = vec![
+            create_test_binding(vec![("x", 1.0)]),
+            create_test_binding(vec![("x", 2.0)]),
+            create_test_binding(vec![("x", 3.0)]),
+            create_test_binding(vec![("x", 4.0)]),
+            create_test_binding(vec![("x", 5.0)]),
+            create_test_binding(vec![("x", 6.0)]),
+            create_test_binding(vec![("x", 7.0)]),
+            create_test_binding(vec![("x", 8.0)]),
+            create_test_binding(vec![("x", 9.0)]),
+            create_test_binding(vec![("x", 10.0)]),
+        ];
+
+        // Test 50th percentile (median)
+        let agg = AggregateExpression {
+            function: AggregateFunction::Percentile { percentile: 50 },
+            variable: Some("x".to_string()),
+            alias: "p50".to_string(),
+            distinct: false,
+        };
+
+        let (result, _) = apply_aggregates(results.clone(), &[agg]).unwrap();
+        if let Term::Literal(lit) = result[0].get("p50").unwrap() {
+            let p50: f64 = lit.value().parse().unwrap();
+            assert!((p50 - 5.5).abs() < 0.001);
+        }
+
+        // Test 95th percentile
+        let agg = AggregateExpression {
+            function: AggregateFunction::Percentile { percentile: 95 },
+            variable: Some("x".to_string()),
+            alias: "p95".to_string(),
+            distinct: false,
+        };
+
+        let (result, _) = apply_aggregates(results.clone(), &[agg]).unwrap();
+        if let Term::Literal(lit) = result[0].get("p95").unwrap() {
+            let p95: f64 = lit.value().parse().unwrap();
+            assert!((p95 - 9.55).abs() < 0.01);
+        }
+
+        // Test 25th percentile
+        let agg = AggregateExpression {
+            function: AggregateFunction::Percentile { percentile: 25 },
+            variable: Some("x".to_string()),
+            alias: "p25".to_string(),
+            distinct: false,
+        };
+
+        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        if let Term::Literal(lit) = result[0].get("p25").unwrap() {
+            let p25: f64 = lit.value().parse().unwrap();
+            assert!((p25 - 3.25).abs() < 0.01);
+        }
+    }
+
+    #[test]
+    fn test_statistical_aggregates_with_grouping() {
+        // Test statistical aggregates with GROUP BY
+        let mut binding1 = VariableBinding::new();
+        binding1.bind("category".to_string(), Term::from(Literal::new("A")));
+        binding1.bind("value".to_string(), Term::from(Literal::new("10")));
+
+        let mut binding2 = VariableBinding::new();
+        binding2.bind("category".to_string(), Term::from(Literal::new("A")));
+        binding2.bind("value".to_string(), Term::from(Literal::new("20")));
+
+        let mut binding3 = VariableBinding::new();
+        binding3.bind("category".to_string(), Term::from(Literal::new("A")));
+        binding3.bind("value".to_string(), Term::from(Literal::new("30")));
+
+        let mut binding4 = VariableBinding::new();
+        binding4.bind("category".to_string(), Term::from(Literal::new("B")));
+        binding4.bind("value".to_string(), Term::from(Literal::new("5")));
+
+        let mut binding5 = VariableBinding::new();
+        binding5.bind("category".to_string(), Term::from(Literal::new("B")));
+        binding5.bind("value".to_string(), Term::from(Literal::new("15")));
+
+        let results = vec![binding1, binding2, binding3, binding4, binding5];
+
+        let agg = AggregateExpression {
+            function: AggregateFunction::Median,
+            variable: Some("value".to_string()),
+            alias: "median".to_string(),
+            distinct: false,
+        };
+
+        let group_by = GroupBySpec {
+            variables: vec!["category".to_string()],
+        };
+
+        let (result, _) = apply_aggregates_with_grouping(results, &[agg], &group_by).unwrap();
+
+        // Should have 2 groups: A and B
+        assert_eq!(result.len(), 2);
+
+        // Verify medians per category
+        for binding in &result {
+            if let Term::Literal(cat) = binding.get("category").unwrap() {
+                if let Term::Literal(median) = binding.get("median").unwrap() {
+                    let median_val: f64 = median.value().parse().unwrap();
+                    if cat.value() == "A" {
+                        // Median of [10, 20, 30] = 20
+                        assert!((median_val - 20.0).abs() < 0.001);
+                    } else if cat.value() == "B" {
+                        // Median of [5, 15] = 10
+                        assert!((median_val - 10.0).abs() < 0.001);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_statistical_aggregate_edge_cases() {
+        // Test with empty values
+        let results: Vec<VariableBinding> = vec![];
+
+        let agg = AggregateExpression {
+            function: AggregateFunction::Median,
+            variable: Some("x".to_string()),
+            alias: "median".to_string(),
+            distinct: false,
+        };
+
+        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        // Should return 0.0 for empty dataset
+        if let Term::Literal(lit) = result[0].get("median").unwrap() {
+            let median: f64 = lit.value().parse().unwrap();
+            assert_eq!(median, 0.0);
+        }
+
+        // Test variance with single value
+        let results = vec![create_test_binding(vec![("x", 5.0)])];
+
+        let agg = AggregateExpression {
+            function: AggregateFunction::Variance,
+            variable: Some("x".to_string()),
+            alias: "variance".to_string(),
+            distinct: false,
+        };
+
+        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        // Should return 0.0 for single value
+        if let Term::Literal(lit) = result[0].get("variance").unwrap() {
+            let variance: f64 = lit.value().parse().unwrap();
+            assert_eq!(variance, 0.0);
+        }
     }
 }

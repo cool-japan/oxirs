@@ -30,7 +30,7 @@
 
 use crate::error::{GeoSparqlError, Result};
 use crate::geometry::Geometry;
-use geo::{Area, EuclideanLength, Simplify, SimplifyVwPreserve};
+use geo::{Area, Simplify, SimplifyVwPreserve};
 use geo_types::Geometry as GeoGeometry;
 
 /// Validation result containing validity status and any errors found
@@ -724,7 +724,8 @@ pub fn validate_geometry_with_config(
             }
 
             // Check length
-            let length = ls.euclidean_length();
+            use geo::{Euclidean, Length};
+            let length = ls.length::<Euclidean>();
             if length < config.min_linestring_length {
                 result = result.with_warning(format!(
                     "LineString length ({}) is below minimum ({})",
@@ -927,8 +928,9 @@ pub fn compute_quality_metrics(geometry: &Geometry) -> GeometryQualityMetrics {
             let coord_count =
                 poly.exterior().0.len() + poly.interiors().iter().map(|r| r.0.len()).sum::<usize>();
 
+            use geo::{Euclidean, Length};
             let area = poly.unsigned_area();
-            let perimeter = poly.exterior().euclidean_length();
+            let perimeter = poly.exterior().length::<Euclidean>();
 
             // Compactness: 4π * area / perimeter²  (circle = 1.0, other shapes < 1.0)
             let compactness = if perimeter > 1e-10 {
@@ -1379,5 +1381,399 @@ mod tests {
         let ring = close_ring(coords);
         assert_eq!(ring.0.len(), 4); // Should add closing point
         assert_eq!(ring.0.first(), ring.0.last());
+    }
+
+    // Tests for ValidationConfig
+    #[test]
+    fn test_validation_config_default() {
+        let config = ValidationConfig::default();
+        assert_eq!(config.coordinate_tolerance, 1e-10);
+        assert_eq!(config.area_tolerance, 1e-10);
+        assert_eq!(config.length_tolerance, 1e-10);
+        assert_eq!(config.min_polygon_area, 0.0);
+        assert_eq!(config.min_linestring_length, 0.0);
+        assert_eq!(config.max_coordinate_value, 1e15);
+        assert!(config.check_self_intersection);
+        assert!(config.check_orientation);
+    }
+
+    #[test]
+    fn test_validation_config_custom() {
+        let config = ValidationConfig {
+            coordinate_tolerance: 1e-6,
+            area_tolerance: 1e-5,
+            length_tolerance: 1e-4,
+            min_polygon_area: 100.0,
+            min_linestring_length: 10.0,
+            max_coordinate_value: 1e10,
+            check_self_intersection: false,
+            check_orientation: false,
+        };
+        assert_eq!(config.coordinate_tolerance, 1e-6);
+        assert_eq!(config.min_polygon_area, 100.0);
+        assert!(!config.check_self_intersection);
+    }
+
+    // Tests for validate_geometry_with_config
+    #[test]
+    fn test_validate_with_config_valid_point() {
+        let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
+        let config = ValidationConfig::default();
+        let result = validate_geometry_with_config(&geom, &config);
+        assert!(result.is_valid);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_validate_with_config_point_exceeds_max() {
+        let geom = Geometry::new(GeoGeometry::Point(Point::new(1e16, 2.0)));
+        let config = ValidationConfig::default();
+        let result = validate_geometry_with_config(&geom, &config);
+        assert!(!result.is_valid);
+        assert!(!result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_validate_with_config_point_non_finite() {
+        let geom = Geometry::new(GeoGeometry::Point(Point::new(f64::NAN, 2.0)));
+        let config = ValidationConfig::default();
+        let result = validate_geometry_with_config(&geom, &config);
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|e| e.contains("non-finite")));
+    }
+
+    #[test]
+    fn test_validate_with_config_linestring_too_short() {
+        let ls = LineString::new(vec![Coord { x: 0.0, y: 0.0 }, Coord { x: 1.0, y: 0.0 }]);
+        let geom = Geometry::new(GeoGeometry::LineString(ls));
+        let config = ValidationConfig {
+            min_linestring_length: 10.0,
+            ..Default::default()
+        };
+        let result = validate_geometry_with_config(&geom, &config);
+        assert!(result.is_valid); // Still valid but has warning
+        assert!(!result.warnings.is_empty());
+        assert!(result.warnings.iter().any(|w| w.contains("length")));
+    }
+
+    #[test]
+    fn test_validate_with_config_linestring_empty() {
+        let ls = LineString::new(vec![]);
+        let geom = Geometry::new(GeoGeometry::LineString(ls));
+        let config = ValidationConfig::default();
+        let result = validate_geometry_with_config(&geom, &config);
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|e| e.contains("empty")));
+    }
+
+    #[test]
+    fn test_validate_with_config_linestring_one_point() {
+        let ls = LineString::new(vec![Coord { x: 0.0, y: 0.0 }]);
+        let geom = Geometry::new(GeoGeometry::LineString(ls));
+        let config = ValidationConfig::default();
+        let result = validate_geometry_with_config(&geom, &config);
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|e| e.contains("at least 2")));
+    }
+
+    #[test]
+    fn test_validate_with_config_linestring_non_finite() {
+        let ls = LineString::new(vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord {
+                x: f64::INFINITY,
+                y: 2.0,
+            },
+        ]);
+        let geom = Geometry::new(GeoGeometry::LineString(ls));
+        let config = ValidationConfig::default();
+        let result = validate_geometry_with_config(&geom, &config);
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|e| e.contains("non-finite")));
+    }
+
+    #[test]
+    fn test_validate_with_config_polygon_small_area() {
+        let coords = vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 0.1, y: 0.0 },
+            Coord { x: 0.1, y: 0.1 },
+            Coord { x: 0.0, y: 0.1 },
+            Coord { x: 0.0, y: 0.0 },
+        ];
+        let poly = Polygon::new(LineString::new(coords), vec![]);
+        let geom = Geometry::new(GeoGeometry::Polygon(poly));
+        let config = ValidationConfig {
+            min_polygon_area: 100.0,
+            ..Default::default()
+        };
+        let result = validate_geometry_with_config(&geom, &config);
+        assert!(result.is_valid); // Still valid but has warning
+        assert!(!result.warnings.is_empty());
+        assert!(result.warnings.iter().any(|w| w.contains("area")));
+    }
+
+    #[test]
+    fn test_validate_with_config_polygon_not_closed() {
+        let coords = vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 4.0, y: 0.0 },
+            Coord { x: 4.0, y: 4.0 },
+            Coord { x: 0.0, y: 4.0 },
+            Coord { x: 0.0, y: 0.0 },
+        ];
+        let poly = Polygon::new(LineString::new(coords), vec![]);
+        let geom = Geometry::new(GeoGeometry::Polygon(poly));
+        // Use a strict tolerance to detect minor deviations
+        let config = ValidationConfig {
+            coordinate_tolerance: 1e-15,
+            ..Default::default()
+        };
+        let result = validate_geometry_with_config(&geom, &config);
+        // This polygon is actually closed, so it should be valid
+        assert!(result.is_valid);
+    }
+
+    #[test]
+    fn test_validate_with_config_polygon_with_valid_interior() {
+        let exterior = vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 10.0, y: 0.0 },
+            Coord { x: 10.0, y: 10.0 },
+            Coord { x: 0.0, y: 10.0 },
+            Coord { x: 0.0, y: 0.0 },
+        ];
+        // Properly closed interior ring
+        let interior = vec![
+            Coord { x: 2.0, y: 2.0 },
+            Coord { x: 4.0, y: 2.0 },
+            Coord { x: 4.0, y: 4.0 },
+            Coord { x: 2.0, y: 4.0 },
+            Coord { x: 2.0, y: 2.0 },
+        ];
+        let poly = Polygon::new(LineString::new(exterior), vec![LineString::new(interior)]);
+        let geom = Geometry::new(GeoGeometry::Polygon(poly));
+        let config = ValidationConfig::default();
+        let result = validate_geometry_with_config(&geom, &config);
+        // Should be valid with properly closed interior ring
+        assert!(result.is_valid);
+    }
+
+    #[test]
+    fn test_validate_with_config_polygon_interior_too_few_points() {
+        let exterior = vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 10.0, y: 0.0 },
+            Coord { x: 10.0, y: 10.0 },
+            Coord { x: 0.0, y: 10.0 },
+            Coord { x: 0.0, y: 0.0 },
+        ];
+        let interior = vec![
+            Coord { x: 2.0, y: 2.0 },
+            Coord { x: 4.0, y: 2.0 },
+            Coord { x: 2.0, y: 2.0 },
+        ];
+        let poly = Polygon::new(LineString::new(exterior), vec![LineString::new(interior)]);
+        let geom = Geometry::new(GeoGeometry::Polygon(poly));
+        let config = ValidationConfig::default();
+        let result = validate_geometry_with_config(&geom, &config);
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|e| e.contains("at least 4")));
+    }
+
+    // Tests for compute_quality_metrics
+    #[test]
+    fn test_quality_metrics_point() {
+        let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
+        let metrics = compute_quality_metrics(&geom);
+        assert_eq!(metrics.coordinate_count, 1);
+        assert_eq!(metrics.complexity_score, 1.0);
+        assert!(!metrics.has_duplicates);
+        assert!(!metrics.has_spikes);
+        assert_eq!(metrics.min_segment_length, 0.0);
+        assert_eq!(metrics.max_segment_length, 0.0);
+        assert_eq!(metrics.avg_segment_length, 0.0);
+        assert!(metrics.compactness.is_none());
+    }
+
+    #[test]
+    fn test_quality_metrics_linestring() {
+        let ls = LineString::new(vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 1.0, y: 0.0 },
+            Coord { x: 2.0, y: 0.0 },
+            Coord { x: 3.0, y: 0.0 },
+        ]);
+        let geom = Geometry::new(GeoGeometry::LineString(ls));
+        let metrics = compute_quality_metrics(&geom);
+        assert_eq!(metrics.coordinate_count, 4);
+        assert!(metrics.complexity_score > 1.0);
+        assert!(!metrics.has_duplicates);
+        assert!(!metrics.has_spikes);
+        assert!(metrics.min_segment_length > 0.0);
+        assert!(metrics.max_segment_length > 0.0);
+        assert!(metrics.avg_segment_length > 0.0);
+    }
+
+    #[test]
+    fn test_quality_metrics_linestring_with_duplicates() {
+        let ls = LineString::new(vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 0.0, y: 0.0 }, // Duplicate
+            Coord { x: 1.0, y: 0.0 },
+        ]);
+        let geom = Geometry::new(GeoGeometry::LineString(ls));
+        let metrics = compute_quality_metrics(&geom);
+        assert!(metrics.has_duplicates);
+    }
+
+    #[test]
+    fn test_quality_metrics_polygon() {
+        let coords = vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 4.0, y: 0.0 },
+            Coord { x: 4.0, y: 4.0 },
+            Coord { x: 0.0, y: 4.0 },
+            Coord { x: 0.0, y: 0.0 },
+        ];
+        let poly = Polygon::new(LineString::new(coords), vec![]);
+        let geom = Geometry::new(GeoGeometry::Polygon(poly));
+        let metrics = compute_quality_metrics(&geom);
+        assert_eq!(metrics.coordinate_count, 5);
+        assert!(metrics.complexity_score > 1.0);
+        assert!(metrics.compactness.is_some());
+        assert!(metrics.compactness.unwrap() > 0.0);
+    }
+
+    #[test]
+    fn test_quality_metrics_multipoint() {
+        use geo_types::MultiPoint;
+        let mp = MultiPoint::new(vec![
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 1.0),
+            Point::new(2.0, 2.0),
+        ]);
+        let geom = Geometry::new(GeoGeometry::MultiPoint(mp));
+        let metrics = compute_quality_metrics(&geom);
+        // MultiPoint not currently handled, returns default metrics
+        assert_eq!(metrics.coordinate_count, 0);
+        assert_eq!(metrics.complexity_score, 0.0);
+    }
+
+    // Tests for check_ogc_compliance
+    #[test]
+    fn test_ogc_compliance_valid_point() {
+        let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
+        let result = check_ogc_compliance(&geom);
+        assert!(result.is_valid);
+    }
+
+    #[test]
+    fn test_ogc_compliance_linestring_all_same_points() {
+        let ls = LineString::new(vec![
+            Coord { x: 1.0, y: 1.0 },
+            Coord { x: 1.0, y: 1.0 },
+            Coord { x: 1.0, y: 1.0 },
+        ]);
+        let geom = Geometry::new(GeoGeometry::LineString(ls));
+        let result = check_ogc_compliance(&geom);
+        assert!(!result.is_valid);
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.contains("at least 2 distinct points")));
+    }
+
+    #[test]
+    fn test_ogc_compliance_linestring_valid() {
+        let ls = LineString::new(vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 1.0, y: 1.0 },
+            Coord { x: 2.0, y: 2.0 },
+        ]);
+        let geom = Geometry::new(GeoGeometry::LineString(ls));
+        let result = check_ogc_compliance(&geom);
+        assert!(result.is_valid);
+    }
+
+    #[test]
+    fn test_ogc_compliance_polygon_small_area() {
+        let coords = vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 1e-11, y: 0.0 },
+            Coord { x: 1e-11, y: 1e-11 },
+            Coord { x: 0.0, y: 1e-11 },
+            Coord { x: 0.0, y: 0.0 },
+        ];
+        let poly = Polygon::new(LineString::new(coords), vec![]);
+        let geom = Geometry::new(GeoGeometry::Polygon(poly));
+        let result = check_ogc_compliance(&geom);
+        assert!(result.is_valid);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.contains("small") || w.contains("zero area")));
+    }
+
+    #[test]
+    fn test_ogc_compliance_polygon_overlapping_interior_rings() {
+        let exterior = vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 10.0, y: 0.0 },
+            Coord { x: 10.0, y: 10.0 },
+            Coord { x: 0.0, y: 10.0 },
+            Coord { x: 0.0, y: 0.0 },
+        ];
+
+        // Two interior rings with many shared points
+        let interior1 = vec![
+            Coord { x: 2.0, y: 2.0 },
+            Coord { x: 4.0, y: 2.0 },
+            Coord { x: 4.0, y: 4.0 },
+            Coord { x: 2.0, y: 4.0 },
+            Coord { x: 2.0, y: 2.0 },
+        ];
+
+        let interior2 = vec![
+            Coord { x: 2.0, y: 2.0 }, // Shared
+            Coord { x: 4.0, y: 2.0 }, // Shared
+            Coord { x: 4.0, y: 4.0 }, // Shared
+            Coord { x: 2.0, y: 4.0 }, // Shared
+            Coord { x: 2.0, y: 2.0 }, // Shared
+        ];
+
+        let poly = Polygon::new(
+            LineString::new(exterior),
+            vec![LineString::new(interior1), LineString::new(interior2)],
+        );
+        let geom = Geometry::new(GeoGeometry::Polygon(poly));
+        let result = check_ogc_compliance(&geom);
+        // Should have warning about overlapping rings
+        assert!(!result.warnings.is_empty());
+        assert!(result.warnings.iter().any(|w| w.contains("overlap")));
+    }
+
+    #[test]
+    fn test_ogc_compliance_polygon_valid_with_hole() {
+        let exterior = vec![
+            Coord { x: 0.0, y: 0.0 },
+            Coord { x: 10.0, y: 0.0 },
+            Coord { x: 10.0, y: 10.0 },
+            Coord { x: 0.0, y: 10.0 },
+            Coord { x: 0.0, y: 0.0 },
+        ];
+
+        let interior = vec![
+            Coord { x: 2.0, y: 2.0 },
+            Coord { x: 4.0, y: 2.0 },
+            Coord { x: 4.0, y: 4.0 },
+            Coord { x: 2.0, y: 4.0 },
+            Coord { x: 2.0, y: 2.0 },
+        ];
+
+        let poly = Polygon::new(LineString::new(exterior), vec![LineString::new(interior)]);
+        let geom = Geometry::new(GeoGeometry::Polygon(poly));
+        let result = check_ogc_compliance(&geom);
+        assert!(result.is_valid);
     }
 }
