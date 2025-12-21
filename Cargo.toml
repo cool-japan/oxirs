@@ -122,7 +122,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"]
 rocksdb = "0.22"
 
 # Text search
-tantivy = "0.22"
+tantivy = "0.25"
 
 # Vector search
 hnsw_rs = "0.3"
