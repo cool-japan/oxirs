@@ -42,7 +42,7 @@ num_cpus.workspace = true
 serde_yaml = "0.9"
 semver = { version = "1.0", features = ["serde"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-wasmi = "0.40"  # Lightweight WASM interpreter for custom validators
+wasmi = "1.0"  # Lightweight WASM interpreter for custom validators
 tower-lsp = { version = "0.20", optional = true }  # LSP server implementation (includes lsp-types)
 tower = { version = "0.5", optional = true }  # Service abstraction for LSP
 
