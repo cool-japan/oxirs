@@ -106,7 +106,7 @@ oxsdatatypes.workspace = true  # Fast XSD datatype validation and parsing
 # Dependencies for Unicode normalization
 icu = "1.5"
 icu_normalizer = "1.5"
-icu_properties = "1.5"
+icu_properties = "2.1"
 
 # Random number generation now provided by scirs2-core
 
