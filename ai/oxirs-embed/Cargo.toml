@@ -20,7 +20,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 # ndarray and rand now provided by scirs2-core
 rayon = "1.10"
-nalgebra = "0.33"
+nalgebra = "0.34"
 uuid = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }

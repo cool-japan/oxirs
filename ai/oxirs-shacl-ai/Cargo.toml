@@ -39,7 +39,7 @@ indexmap = "2.11"
 uuid = { version = "1.19", features = ["v4", "serde"] }
 threadpool = "1.8"
 sysinfo = "0.30"
-nalgebra = { version = "0.33", features = ["serde-serialize"] }
+nalgebra = { version = "0.34", features = ["serde-serialize"] }
 num-complex = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
 futures = "0.3"

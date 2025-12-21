@@ -38,7 +38,7 @@ blake3 = "1.8"
 lru = "0.16"
 crossbeam-utils = "0.8"
 libc = "0.2"
-nalgebra = "0.33"
+nalgebra = "0.34"
 petgraph = "0.8"
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1.47", features = ["rt", "time"] }

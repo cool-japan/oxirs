@@ -54,7 +54,7 @@ prometheus = { version = "0.13", optional = true }
 async-stream = "0.3"
 pin-project = "1.1"
 # oxigraph = "0.4.11"  # REMOVED: Using oxirs-core instead
-nalgebra = { version = "0.33", features = ["serde"] }
+nalgebra = { version = "0.34", features = ["serde"] }
 async-graphql = { version = "7.0", optional = true }
 async-graphql-parser = { version = "7.0", optional = true }
 mdns-sd = { version = "0.15", optional = true }

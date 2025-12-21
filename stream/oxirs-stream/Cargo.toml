@@ -66,7 +66,7 @@ brotli = "8.0"
 crc32fast = "1.5"
 dashmap = "6.1"
 num_cpus = "1.17"
-nalgebra = "0.33"
+nalgebra = "0.34"
 num-complex = "0.4"
 # OpenTelemetry for enhanced observability (optional)
 opentelemetry = { workspace = true, optional = true }
