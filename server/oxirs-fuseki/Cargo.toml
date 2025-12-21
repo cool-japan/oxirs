@@ -155,7 +155,7 @@ async-graphql = "7.0"
 async-graphql-axum = "7.0"
 
 # OpenAPI
-utoipa = { version = "4.2", features = ["chrono"] }
+utoipa = { version = "5.4", features = ["chrono"] }
 utoipa-swagger-ui = { version = "7.0", features = ["axum"] }
 
 # DNS resolution for service discovery
