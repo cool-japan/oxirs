@@ -142,7 +142,7 @@ sysinfo = "0.33"
 # Kubernetes operator support (optional)
 kube = { version = "0.96", default-features = false, features = ["client", "rustls-tls", "runtime", "derive"], optional = true }
 k8s-openapi = { version = "0.23", default-features = false, features = ["v1_31"], optional = true }
-schemars = { version = "0.8", optional = true }
+schemars = { version = "1.1", optional = true }
 
 # Async utilities
 futures = "0.3"
