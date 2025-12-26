@@ -1232,7 +1232,8 @@ mod tests {
                 // Check that statistics are collected
                 let stats = executor.statistics();
                 assert!(stats.pattern_evaluations > 0);
-                assert!(stats.execution_time_us > 0);
+                // Note: execution_time_us may be 0 on fast systems where execution
+                // completes in sub-microsecond time, so we don't assert > 0
             }
         }
     }
@@ -1340,7 +1341,7 @@ mod tests {
         let stats = executor.statistics();
         assert!(stats.pattern_evaluations >= 2); // At least 2 patterns evaluated
         assert!(stats.join_operations >= 1); // At least 1 join performed
-        assert!(stats.execution_time_us > 0);
+        // Note: execution_time_us may be 0 on fast systems (sub-microsecond execution)
         assert!(stats.intermediate_results > 0);
     }
 

@@ -442,8 +442,7 @@ mod tests {
         std::fs::remove_file(&test_file_path).ok();
 
         // Verify processing succeeded
-        if chunks_result.is_ok() {
-            let chunks = chunks_result.unwrap();
+        if let Ok(chunks) = chunks_result {
             assert!(!chunks.is_empty());
         }
     }

@@ -175,8 +175,7 @@ async fn test_parse_aspect_empty_properties() {
     let result = parse_aspect_model(&path).await;
 
     // Should succeed even if no properties
-    if result.is_ok() {
-        let aspect = result.unwrap();
+    if let Ok(aspect) = result {
         assert!(!aspect.name().is_empty());
     }
     // If it fails, that's also acceptable for this edge case

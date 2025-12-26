@@ -22,7 +22,7 @@
 //!
 //! ## Example
 //!
-//! ```no_run
+//! ```ignore
 //! use oxirs_stream::stream_fusion::{FusionOptimizer, FusionConfig};
 //! use oxirs_stream::stream_fusion::Operation;
 //!

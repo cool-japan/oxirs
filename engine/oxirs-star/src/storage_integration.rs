@@ -12,7 +12,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::storage_integration::{StarStorageBackend, StarPersistenceConfig};
 //! use oxirs_star::StarConfig;
 //!

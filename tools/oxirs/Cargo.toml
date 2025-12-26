@@ -22,6 +22,11 @@ oxirs-fuseki.workspace = true
 oxirs-gql.workspace = true
 oxirs-tdb.workspace = true
 oxirs-samm.workspace = true
+
+# Phase D: Industrial Connectivity (0.1.0-rc.1)
+oxirs-tsdb.workspace = true
+oxirs-modbus.workspace = true
+oxirs-canbus.workspace = true
 clap.workspace = true
 tokio.workspace = true
 serde.workspace = true
@@ -76,7 +81,7 @@ tokio-test = "0.4"
 default = []
 all-features = [
     "star",
-    "ai", 
+    "ai",
     "cluster",
     "text",
     "geo",
@@ -112,6 +117,12 @@ optional = true
 [dependencies.tantivy]
 workspace = true
 optional = true
+
+[package.metadata.docs.rs]
+# Use minimal features for docs.rs build (avoid features with system dependencies)
+features = ["star", "geo"]
+# Exclude: ai (complex), cluster (lmdb), text (tantivy build issues), vec
+rustdoc-args = ["--cfg", "docsrs"]
 
 [[bin]]
 name = "oxirs"

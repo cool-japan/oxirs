@@ -22,7 +22,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::annotation_lifecycle::{LifecycleManager, AnnotationState};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

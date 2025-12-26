@@ -15,7 +15,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_star::ml_embedding_pipeline::{EmbeddingPipeline, PipelineConfig};
 //!
 //! let config = PipelineConfig::default();

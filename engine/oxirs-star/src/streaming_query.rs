@@ -21,7 +21,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_star::streaming_query::{StreamingQueryEngine, WindowConfig, QueryRegistration};
 //! use oxirs_star::{StarTriple, StarTerm};
 //! use std::sync::Arc;

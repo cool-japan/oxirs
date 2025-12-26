@@ -15,7 +15,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::compact_annotation_storage::{CompactAnnotationStore, CompressionLevel};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

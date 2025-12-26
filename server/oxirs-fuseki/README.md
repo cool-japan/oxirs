@@ -1,12 +1,12 @@
 # OxiRS Fuseki
 
-[![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility**
 
-**Status**: Beta Release (v0.1.0-beta.2) - Released December 21, 2025
+**Status**: Release Candidate (v0.1.0-rc.1) - Released December 26, 2025
 
-✨ **Beta Software**: Production-ready with API stability guarantees. Semantic versioning enforced.
+✨ **Release Candidate**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 ## Overview
 
@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-oxirs-fuseki = "0.1.0-beta.2"
+oxirs-fuseki = "0.1.0-rc.1"
 ```
 
 ### As a Binary
@@ -309,13 +309,13 @@ GET /health
 ```json
 {
   "status": "healthy",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "uptime": "2h 15m 30s",
   "datasets": {
     "example": {
       "status": "ready",
       "triples": 15420,
-      "last_update": "2025-01-15T10:30:00Z"
+      "last_update": "2025-12-25T10:30:00Z"
     }
   }
 }
@@ -500,21 +500,21 @@ oxirs-fuseki --config config.yaml --profile
 ## OxiRS Ecosystem
 
 ### Core Components
-- [`oxirs-core`](../core/oxirs-core/): RDF data model and core functionality
-- [`oxirs-arq`](../engine/oxirs-arq/): SPARQL query engine with optimization
-- [`oxirs-shacl`](../engine/oxirs-shacl/): SHACL validation engine
-- [`oxirs-star`](../engine/oxirs-star/): RDF-star and SPARQL-star support
+- [`oxirs-core`](../../core/oxirs-core/): RDF data model and core functionality
+- [`oxirs-arq`](../../engine/oxirs-arq/): SPARQL query engine with optimization
+- [`oxirs-shacl`](../../engine/oxirs-shacl/): SHACL validation engine
+- [`oxirs-star`](../../engine/oxirs-star/): RDF-star and SPARQL-star support
 
 ### Server & Networking
 - [`oxirs-fuseki`](./): HTTP server (this crate)
-- [`oxirs-gql`](./oxirs-gql/): GraphQL interface and schema generation
-- [`oxirs-stream`](../stream/oxirs-stream/): Real-time data streaming
-- [`oxirs-federate`](../stream/oxirs-federate/): Federated query processing
+- [`oxirs-gql`](../oxirs-gql/): GraphQL interface and schema generation
+- [`oxirs-stream`](../../stream/oxirs-stream/): Real-time data streaming
+- [`oxirs-federate`](../../stream/oxirs-federate/): Federated query processing
 
 ### AI & Analytics
-- [`oxirs-vec`](../ai/oxirs-vec/): Vector embeddings and similarity search
-- [`oxirs-shacl-ai`](../ai/oxirs-shacl-ai/): AI-powered data validation
-- [`oxirs-rule`](../engine/oxirs-rule/): Rule-based reasoning engine
+- [`oxirs-vec`](../../engine/oxirs-vec/): Vector embeddings and similarity search
+- [`oxirs-shacl-ai`](../../ai/oxirs-shacl-ai/): AI-powered data validation
+- [`oxirs-rule`](../../engine/oxirs-rule/): Rule-based reasoning engine
 
 ### Integration Examples
 
@@ -551,16 +551,16 @@ at your option.
 
 ## Status
 
-� **Beta Release (v0.1.0-beta.2)** - November 16, 2025
+🚀 **Release Candidate (v0.1.0-rc.1)** - December 26, 2025
 
-Current alpha features:
+Current features:
 - ✅ SPARQL query/update endpoints backed by persisted N-Quads datasets
 - ✅ Federation (`SERVICE` clause) with retries, `SERVICE SILENT`, and result merging
 - ✅ OAuth2/OIDC + JWT security with hardened headers and HSTS
 - ✅ Prometheus metrics, slow-query tracing, and structured logging via SciRS2
 - ✅ Multi-dataset support with auto save/load and CLI integration
-- 🚧 Advanced admin UI & live reconfiguration (planned for beta)
+- 🚧 Advanced admin UI & live reconfiguration (planned for future release)
 - 🚧 Authentication system (in progress)
 - 🚧 GraphQL integration (in progress)
 
-Note: This is an alpha release. Some features are incomplete and APIs may change.
+Note: This is a release candidate. Some features are incomplete and APIs may change.

@@ -1,0 +1,235 @@
+# OxiRS Digital Twin Platform Configuration
+# Version: 0.1.0-rc.1
+
+[server]
+host = "0.0.0.0"
+port = 3030
+admin_ui = true
+cors_enabled = true
+max_connections = 1000
+
+[server.features]
+# Digital Twin Platform Features
+ngsi_ld = true              # ETSI NGSI-LD API v1.6 (Smart City)
+mqtt_bridge = true          # MQTT 3.1.1/5.0 integration
+opcua_bridge = false        # OPC UA (requires feature flag)
+ids_connector = true        # IDS/Gaia-X data sovereignty
+physics_simulation = false  # SciRS2 integration (requires feature flag)
+
+# Core Features
+graphql = true
+text_search = true
+vector_search = true
+geosparql = true
+rdfstar = true
+shacl = true
+rules = false
+streaming = true
+
+[logging]
+level = "info"
+format = "json"
+output = "/data/logs/oxirs.log"
+
+# ============================================================================
+# Datasets
+# ============================================================================
+
+# Smart City Dataset (NGSI-LD entities)
+[dataset.smart_city]
+type = "tdb2"
+location = "/data/datasets/smart_city"
+description = "Smart City NGSI-LD entities (sensors, actuators, services)"
+
+# NGSI-LD specific configuration
+ngsi_ld_enabled = true
+ngsi_ld_default_context = "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
+
+# GeoSPARQL for location queries
+geosparql = { enabled = true, index_geometry = true }
+
+# Text search for entity names
+text = { enabled = true, analyzer = "standard" }
+
+# Factory IoT Dataset (MQTT/OPC UA data)
+[dataset.factory_iot]
+type = "tdb2"
+location = "/data/datasets/factory_iot"
+description = "Industrial IoT sensor data from MQTT/OPC UA"
+
+# Time-series optimized storage
+temporal_indexing = true
+
+# Vector search for anomaly detection
+vector = { enabled = true, dimensions = 128, index_type = "hnsw" }
+
+# IDS Data Space Dataset (Catena-X, Gaia-X)
+[dataset.data_space]
+type = "tdb2"
+location = "/data/datasets/data_space"
+description = "IDS/Gaia-X federated data catalog"
+
+# Security and access control
+security_enabled = true
+
+# ============================================================================
+# NGSI-LD Configuration
+# ============================================================================
+
+[ngsi_ld]
+# Default graph for NGSI-LD entities
+default_graph = "urn:ngsi-ld:entities"
+
+# Subscription notification settings
+notifications = { batch_size = 100, retry_count = 3 }
+
+# Temporal entity retention (days)
+temporal_retention = 90
+
+# GeoQuery settings
+geo_query = { max_distance_km = 100, default_crs = "WGS84" }
+
+# ============================================================================
+# MQTT Bridge Configuration
+# ============================================================================
+
+[[mqtt_bridge]]
+broker_url = "mqtt://mosquitto:1883"
+client_id = "oxirs-factory-bridge"
+username = ""  # Set in production
+password = ""  # Set in production
+
+# Topic subscriptions
+[[mqtt_bridge.subscriptions]]
+topic_pattern = "factory/+/sensor/#"
+qos = 1
+payload_format = "json"
+
+# RDF mapping
+[mqtt_bridge.subscriptions.rdf_mapping]
+graph_iri = "urn:factory:sensors"
+subject_template = "urn:sensor:{topic.1}:{topic.3}"
+predicate_base = "http://example.org/factory#"
+
+[[mqtt_bridge.subscriptions]]
+topic_pattern = "factory/production/+/status"
+qos = 2
+payload_format = "sparkplug_b"
+
+[mqtt_bridge.subscriptions.rdf_mapping]
+graph_iri = "urn:factory:production"
+subject_template = "urn:production:line:{topic.2}"
+
+# ============================================================================
+# IDS/Gaia-X Configuration
+# ============================================================================
+
+[ids_connector]
+connector_id = "urn:ids:connector:oxirs:001"
+connector_url = "https://ids.example.com"
+daps_url = "https://daps.aisec.fraunhofer.de"
+security_profile = "TrustSecurityProfile"
+
+# Data residency enforcement
+[ids_connector.residency]
+allowed_regions = ["EU", "JP"]  # GDPR adequacy
+storage_region = "EU"
+transfer_logging = true
+
+# ODRL policy enforcement
+[ids_connector.policy]
+default_policy = "urn:policy:default:research-only"
+contract_auto_accept = false
+usage_tracking_enabled = true
+
+# ============================================================================
+# Security & Access Control
+# ============================================================================
+
+[security]
+enabled = true
+admin_ui_auth = true
+api_key_required = false
+
+[security.policy_engine]
+mode = "Combined"  # RbacOnly | RebacOnly | Combined | Both
+
+# Relationship-Based Access Control (ReBAC)
+[security.rebac]
+backend = "RdfNative"  # InMemory | RdfNative
+namespace = "http://oxirs.org/auth#"
+inference_enabled = true
+
+# Initial relationships for digital twin platform
+[[security.rebac.initial_relationships]]
+subject = "user:admin"
+relation = "owner"
+object = "dataset:smart_city"
+
+[[security.rebac.initial_relationships]]
+subject = "user:admin"
+relation = "owner"
+object = "dataset:factory_iot"
+
+[[security.rebac.initial_relationships]]
+subject = "role:city-planner"
+relation = "viewer"
+object = "dataset:smart_city"
+
+[[security.rebac.initial_relationships]]
+subject = "role:factory-operator"
+relation = "editor"
+object = "dataset:factory_iot"
+
+# ============================================================================
+# Monitoring & Observability
+# ============================================================================
+
+[monitoring]
+metrics_enabled = true
+prometheus_endpoint = "/metrics"
+health_check_endpoint = "/$/ping"
+
+# OpenTelemetry (optional)
+[monitoring.opentelemetry]
+enabled = false
+# endpoint = "http://otel-collector:4317"
+# service_name = "oxirs-fuseki"
+# trace_ratio = 0.1
+
+# ============================================================================
+# Performance Tuning
+# ============================================================================
+
+[performance]
+# Query engine
+max_query_time_ms = 30000
+query_cache_size = 1000
+
+# Connection pooling
+connection_pool_size = 100
+connection_timeout_ms = 5000
+
+# Memory management
+max_memory_mb = 4096
+gc_interval_sec = 300
+
+# Batch operations
+batch_size = 1000
+parallel_threads = 4
+
+# ============================================================================
+# Development & Testing
+# ============================================================================
+
+[development]
+debug_mode = false
+verbose_logging = false
+api_playground = true  # Enable GraphiQL, SPARQL query editor
+
+# Backup & Recovery
+[backup]
+enabled = true
+schedule = "0 2 * * *"  # 2 AM daily
+retention_days = 30
+backup_location = "/data/backups"

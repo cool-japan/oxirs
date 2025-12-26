@@ -76,7 +76,7 @@ SELECT ?person ?name WHERE {
   ?person foaf:name ?name {| 
     :source :wikipedia ;
     :confidence 0.95 ;
-    :lastUpdated "2024-01-01"^^xsd:date 
+    :lastUpdated "2025-12-01"^^xsd:date 
   |}
 }
 ```

@@ -1,8 +1,8 @@
 //! # OxiRS SAMM - Semantic Aspect Meta Model Implementation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Beta.1 Release (v0.1.0-beta.2)
+//! **Status**: Beta.1 Release (v0.1.0-rc.1)
 //! ✅ All public APIs documented. API stability guarantees in place.
 //!
 //! This crate provides a Rust implementation of the Semantic Aspect Meta Model (SAMM),
@@ -181,6 +181,7 @@ pub mod cache;
 pub mod cloud_storage;
 pub mod comparison;
 pub mod documentation;
+pub mod dtdl_parser;
 pub mod error;
 pub mod generators;
 pub mod graph_analytics;
@@ -218,6 +219,7 @@ pub use cloud_storage::{
 };
 pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, PropertyChange};
 pub use documentation::{DocumentationFormat, DocumentationGenerator, DocumentationStyle};
+pub use dtdl_parser::parse_dtdl_interface;
 pub use error::{ErrorCategory, Result, SammError, SourceLocation};
 pub use generators::{GeneratedFile, MultiFileGenerator, MultiFileOptions, OutputLayout};
 pub use graph_analytics::{

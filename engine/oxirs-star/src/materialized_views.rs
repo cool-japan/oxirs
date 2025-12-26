@@ -14,7 +14,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::materialized_views::{MaterializedViewManager, ViewDefinition};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -169,7 +169,7 @@ mod tests {
     fn test_triple_serialization() {
         let triple = Triple::new(NodeId::new(1), NodeId::new(2), NodeId::new(3));
 
-        let serialized = bincode::encode_to_vec(&triple, bincode::config::standard()).unwrap();
+        let serialized = bincode::encode_to_vec(triple, bincode::config::standard()).unwrap();
         let deserialized: Triple =
             bincode::decode_from_slice(&serialized, bincode::config::standard())
                 .unwrap()

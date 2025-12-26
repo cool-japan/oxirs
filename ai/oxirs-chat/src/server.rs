@@ -470,7 +470,6 @@ async fn get_message_replies(
                 .messages
                 .iter()
                 .filter(|msg| msg.parent_message_id.as_ref() == Some(&message_id))
-                .cloned()
                 .map(|msg| MessageResponse {
                     message_id: msg.id.clone(),
                     content: msg.content.to_string(),

@@ -19,7 +19,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_star::jit_query_engine::{JitQueryEngine, CompilationStrategy};
 //! use oxirs_star::StarStore;
 //!

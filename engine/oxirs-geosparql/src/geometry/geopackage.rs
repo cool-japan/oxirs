@@ -3,7 +3,7 @@
 //! GeoPackage is an OGC standard for SQLite-based geospatial data exchange.
 //! It supports vector features, tile matrix sets, raster images, and attributes.
 //!
-//! Reference: http://www.geopackage.org/spec/
+//! Reference: <http://www.geopackage.org/spec/>
 
 use crate::error::{GeoSparqlError, Result};
 use crate::geometry::Geometry;

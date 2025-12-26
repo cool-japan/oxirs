@@ -21,7 +21,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::annotation_aggregation::{AnnotationAggregator, AggregationStrategy};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

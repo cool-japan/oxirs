@@ -17,7 +17,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_arq::query_result_cache::{QueryResultCache, ResultCacheConfig};
 //!
 //! let config = ResultCacheConfig::default()

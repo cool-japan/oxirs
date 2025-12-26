@@ -341,6 +341,47 @@ impl CodeGenerator for PayloadGenerator {
     }
 }
 
+/// DTDL generator wrapper
+struct DtdlGenerator;
+
+impl CodeGenerator for DtdlGenerator {
+    fn name(&self) -> &str {
+        "dtdl"
+    }
+
+    fn description(&self) -> &str {
+        "DTDL v3 generator for Azure Digital Twins"
+    }
+
+    fn generate(&self, aspect: &Aspect) -> Result<String, SammError> {
+        use crate::generators::dtdl::generate_dtdl;
+        generate_dtdl(aspect)
+    }
+
+    fn file_extension(&self) -> &str {
+        "json"
+    }
+
+    fn mime_type(&self) -> &str {
+        "application/json"
+    }
+
+    fn metadata(&self) -> GeneratorMetadata {
+        GeneratorMetadata {
+            version: Some("3.0".to_string()),
+            author: Some("OxiRS Team".to_string()),
+            license: Some("MIT OR Apache-2.0".to_string()),
+            homepage: Some("https://github.com/cool-japan/oxirs".to_string()),
+            custom: {
+                let mut custom = HashMap::new();
+                custom.insert("dtdl_version".to_string(), "3".to_string());
+                custom.insert("target".to_string(), "Azure Digital Twins".to_string());
+                custom
+            },
+        }
+    }
+}
+
 /// Registry for managing code generators
 ///
 /// The registry allows registering custom generators and retrieving them by name.
@@ -473,6 +514,7 @@ impl GeneratorRegistry {
         self.register(Box::new(SqlGenerator));
         self.register(Box::new(JsonLdGenerator));
         self.register(Box::new(PayloadGenerator));
+        self.register(Box::new(DtdlGenerator));
     }
 }
 
@@ -731,8 +773,8 @@ mod tests {
     fn test_registry_with_builtin() {
         let registry = GeneratorRegistry::with_builtin();
 
-        // Should have all 8 built-in generators
-        assert_eq!(registry.count(), 8);
+        // Should have all 9 built-in generators
+        assert_eq!(registry.count(), 9);
 
         // Check that specific generators are present
         assert!(registry.get("typescript").is_some());
@@ -743,6 +785,7 @@ mod tests {
         assert!(registry.get("sql").is_some());
         assert!(registry.get("jsonld").is_some());
         assert!(registry.get("payload").is_some());
+        assert!(registry.get("dtdl").is_some());
     }
 
     #[test]

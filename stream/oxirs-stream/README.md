@@ -1,10 +1,10 @@
 # OxiRS Stream - Real-time RDF Streaming
 
-[![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Beta Release (v0.1.0-beta.2) - Released December 21, 2025
+**Status**: Release Candidate (v0.1.0-rc.1) - Released December 26, 2025
 
-✨ **Beta Software**: Production-ready with API stability guarantees and comprehensive testing.
+✨ **Release Candidate**: Production-ready with API stability guarantees and comprehensive testing.
 
 Real-time RDF data streaming with support for Kafka, NATS, and other message brokers. Process RDF streams with windowing, aggregation, and pattern matching.
 
@@ -35,10 +35,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-stream = "0.1.0-beta.2"
+oxirs-stream = "0.1.0-rc.1"
 
 # Enable specific brokers
-oxirs-stream = { version = "0.1.0-beta.2", features = ["kafka", "nats"] }
+oxirs-stream = { version = "0.1.0-rc.1", features = ["kafka", "nats"] }
 ```
 
 ## Quick Start
@@ -398,14 +398,14 @@ let processor = StreamProcessor::builder()
 
 ## Status
 
-### Beta Release (v0.1.0-beta.2)
+### Release Candidate (v0.1.0-rc.1)
 - ✅ Kafka/NATS integrations with persisted offset checkpoints
 - ✅ Windowing, filtering, and mapping tied into CLI persistence workflows
 - ✅ SPARQL stream federation with `SERVICE` bridging to remote endpoints
 - ✅ Prometheus/SciRS2 metrics for throughput, lag, and error rates
 - 🚧 Aggregation operators (tumbling/sliding) final polish (in progress)
 - 🚧 Pattern matching DSL and CEP (in progress)
-- ⏳ Exactly-once semantics (planned for beta)
+- ⏳ Exactly-once semantics (planned for future release)
 - ⏳ Distributed stream processing (planned for v0.2.0)
 
 ## Contributing

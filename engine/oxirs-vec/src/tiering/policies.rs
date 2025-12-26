@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime};
 
 /// Tiering policy for determining index placement
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TieringPolicy {
     /// Least Recently Used (LRU)
     Lru,
@@ -18,15 +18,10 @@ pub enum TieringPolicy {
     /// Latency-sensitive optimization
     LatencyOptimized,
     /// Adaptive policy (ML-driven)
+    #[default]
     Adaptive,
     /// Custom policy with user-defined rules
     Custom,
-}
-
-impl Default for TieringPolicy {
-    fn default() -> Self {
-        Self::Adaptive
-    }
 }
 
 /// Reason for tier transition

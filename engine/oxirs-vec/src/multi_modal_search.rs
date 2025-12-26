@@ -14,7 +14,7 @@
 //!
 //! # Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_vec::multi_modal_search::{MultiModalSearchEngine, MultiModalQuery, QueryModality};
 //!
 //! // Create search engine

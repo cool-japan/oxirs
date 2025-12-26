@@ -895,6 +895,7 @@ impl NeuralPatternLearner {
         let mut f1_sum = 0.0;
         let mut valid_classes = 0;
 
+        #[allow(clippy::needless_range_loop)]
         for class_idx in 0..num_classes {
             // True positives: diagonal element
             let tp = confusion_matrix[class_idx][class_idx];

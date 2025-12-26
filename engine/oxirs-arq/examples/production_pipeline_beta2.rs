@@ -350,7 +350,7 @@ fn main() {
     let pipeline = ProductionQueryPipeline::new();
 
     // Example queries with different characteristics
-    let queries = vec![
+    let queries = [
         QuerySubmission {
             query_text: "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10".to_string(),
             user_id: Some("user1".to_string()),

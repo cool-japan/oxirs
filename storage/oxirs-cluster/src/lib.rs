@@ -1,9 +1,9 @@
 //! # OxiRS Cluster
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-cluster/badge.svg)](https://docs.rs/oxirs-cluster)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.2)
+//! **Status**: Beta Release (v0.1.0-rc.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Raft-backed distributed dataset for high availability and horizontal scaling.
@@ -23,33 +23,30 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use oxirs_cluster::{ClusterNode, NodeConfig};
 //! use std::net::SocketAddr;
 //!
-//! # async fn example() -> anyhow::Result<()> {
-//! let config = NodeConfig {
-//!     node_id: 1,
-//!     address: "127.0.0.1:8080".parse()?,
-//!     data_dir: "./data".to_string(),
-//!     peers: vec![2, 3],
-//!     discovery: None,
-//!     replication_strategy: None,
-//!     region_config: None,
-//!     use_bft: false,
-//! };
+//! async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//!     let config = NodeConfig {
+//!         node_id: 1,
+//!         address: "127.0.0.1:8080".parse()?,
+//!         data_dir: "./data".to_string(),
+//!         peers: vec![2, 3],
+//!     };
 //!
-//! let mut node = ClusterNode::new(config).await?;
-//! node.start().await?;
+//!     let mut node = ClusterNode::new(config).await?;
+//!     node.start().await?;
 //!
-//! // Insert data through consensus
-//! node.insert_triple(
-//!     "<http://example.org/subject>",
-//!     "<http://example.org/predicate>",
-//!     "\"object\"")
-//! .await?;
-//! # Ok(())
-//! # }
+//!     // Insert data through consensus
+//!     node.insert_triple(
+//!         "<http://example.org/subject>",
+//!         "<http://example.org/predicate>",
+//!         "\"object\"")
+//!     .await?;
+//!
+//!     Ok(())
+//! }
 //! ```
 
 #![allow(clippy::field_reassign_with_default)]

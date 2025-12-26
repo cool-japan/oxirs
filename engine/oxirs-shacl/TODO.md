@@ -2,11 +2,11 @@
 
 *Last Updated: December 9, 2025*
 
-## ✅ Current Status: v0.1.0-beta.2+ - Production-Ready SHACL with Cross-Module Integration
+## ✅ Current Status: v0.1.0-rc.1+ - Production-Ready SHACL with Cross-Module Integration
 
-### 🎉 Beta.2+ Status (December 9, 2025) - **Cross-Module Integration Complete!**
+### 🎉 RC.1+ Status (December 9, 2025) - **Cross-Module Integration Complete!**
 
-#### New in Beta.2+ (December 9, 2025)
+#### New in RC.1+ (December 9, 2025)
 - **6 new integration modules** totaling 3,304 lines of production code
 - **GraphQL integration** (486 lines) - automatic mutation/query validation
 - **Fuseki integration** (526 lines) - SPARQL endpoint validation
@@ -18,9 +18,9 @@
 - **Comprehensive example** (371 lines) demonstrating all integration patterns
 - All 498 existing tests continue to pass
 
-### 🎉 Beta.2 Release Status (November 19, 2025) - **Major Production Features Complete!**
+### 🎉 RC.1 Release Status (November 19, 2025) - **Major Production Features Complete!**
 
-#### New Modules Added in Beta.2
+#### New Modules Added in RC.1
 1. **`analytics/shape_quality_metrics.rs`** - Comprehensive shape quality analysis
    - Complexity, maintainability, performance, security metrics
    - Best practice compliance checking
@@ -98,7 +98,7 @@
    - Language tag and datatype detection in literals
    - Range-based token generation for incremental updates
 
-#### Beta.2 Achievements Summary
+#### RC.1 Achievements Summary
 - **Shape Quality Metrics**: Complete analysis of shape complexity, maintainability, performance predictions
 - **Constraint Component Library**: 30+ reusable validators for common validation patterns
 - **CI/CD Integration**: Full pipeline support with multiple output formats
@@ -119,13 +119,13 @@
 
 ---
 
-## ✅ Previous Status: v0.1.0-beta.1 - SHACL-AF Alpha
+## ✅ Previous Status: v0.1.0-rc.1 - SHACL-AF Alpha
 
 **oxirs-shacl** provides SHACL (Shapes Constraint Language) validation for RDF data with advanced features.
 
-### Beta.1 Release Status (November 1, 2025) - **🎉 SHACL-AF Complete + Production Enhancements!**
+### RC.1 Release Status (November 1, 2025) - **🎉 SHACL-AF Complete + Production Enhancements!**
 - **SHACL-AF (Advanced Features) fully implemented** - Rules, Functions, Advanced Targets, Qualified Shapes, Recursive Shapes, Parameterized Constraints, Reasoning ✅
-- **302 tests passing** (+38 from previous alpha.3) with zero errors ✅
+- **302 tests passing** (+38 from previous rc.1) with zero errors ✅
 - **Clean build** with zero warnings ✅
 - **New module: advanced_features/** (4,737 lines) - Complete SHACL Advanced Features Implementation
   - `rules.rs` - SHACL Rules for data transformation (535 lines, full RuleEngine)
@@ -148,8 +148,8 @@
   - Memory-efficient change tracking
   - Production-ready statistics
 
-### Beta.1 Release Status (November 15, 2025)
-- **Comprehensive test suite** (344/344 passing) with zero warnings ⬆️ +36 tests from alpha.2
+### RC.1 Release Status (November 15, 2025)
+- **Comprehensive test suite** (344/344 passing) with zero warnings ⬆️ +36 tests from rc.1
 - **SciRS2-powered parallel validation** with Rayon integration and adaptive load balancing
 - **Memory-efficient validation** with buffer pools and chunked processing for large datasets
 - **SIMD-accelerated constraint checking** for numeric, set membership, and pattern matching
@@ -167,9 +167,9 @@
 - **Property path support** with streaming validation enhancements
 - **Validation engine** integrated with CLI import/export workflows
 - **Metrics & tracing** surfaced through SciRS2 for slow-shape analysis
-- **Released on crates.io**: `oxirs-shacl = "0.1.0-beta.1"`
+- **Released on crates.io**: `oxirs-shacl = "0.1.0-rc.1"`
 
-## 🚀 Beta.1 Achievements
+## 🚀 RC.1 Achievements
 
 ### New Modules Added
 1. **`optimization/scirs2_parallel.rs`** - SciRS2-powered parallel validation with Rayon
@@ -208,29 +208,29 @@
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Beta Release Targets (v0.1.0-beta.1 - November 2025)
+### Release Targets (v0.1.0-rc.1 - December 2025)
 
-#### W3C Compliance (🎉 100% Complete for Beta!)
+#### W3C Compliance (🎉 100% Complete for RC!)
 - [x] Complete W3C SHACL test suite infrastructure ✅ (Enhanced runner with RDF parsing)
 - [x] All constraint types support ✅ (27/27 W3C Core constraint components)
 - [x] Advanced property paths ✅ (Comprehensive 2,238-line implementation)
 - [x] SHACL-SPARQL features ✅ (Query optimization and execution)
 
-#### Performance (🎉 Major Progress in Beta.1)
+#### Performance (🎉 Major Progress in RC.1)
 - [x] Validation caching ✅ (Advanced constraint evaluator with caching)
 - [x] Batch validation optimization ✅ (AdvancedBatchValidator with memory monitoring)
 - [x] Parallel constraint checking ✅ (SciRS2ParallelValidator with Rayon)
 - [x] Memory usage optimization ✅ (SciRS2MemoryValidator with buffer pools)
 - [x] SIMD-accelerated constraint evaluation ✅ (SimdConstraintValidator)
 
-#### Features (🎉 Beta.1 Additions)
+#### Features (🎉 RC.1 Additions)
 - [x] Detailed validation reports ✅ (Multiple serializers)
 - [x] Multiple output formats ✅ (Turtle, JSON, HTML, CSV, YAML, Prometheus, RDF/XML, N-Triples)
 - [x] Custom severity levels ✅ (Violation, Warning, Info)
 - [x] Validation statistics ✅ (ValidationSummary with comprehensive metrics)
 - [x] Prometheus metrics export ✅ (PrometheusSerializer for production monitoring)
 
-#### Developer Experience (🎉 Beta.1 Enhancements)
+#### Developer Experience (🎉 RC.1 Enhancements)
 - [x] Better error messages ✅ (NestedValidationViolation with root cause analysis)
 - [x] Shape debugging tools ✅ (ShapeValidator with validation results)
 - [x] Validation profiling ✅ (AdvancedPerformanceAnalytics with profiling)
@@ -241,52 +241,52 @@
 ### v0.1.0 Final Release Targets (Q4 2025) - ALL FEATURES
 
 #### Progress Summary
-- ✅ **SHACL Core** - 100% Complete (Beta.1)
-- ✅ **W3C Compliance** - 27/27 constraint components (Beta.1)
-- ✅ **Performance Optimizations** - SIMD, parallel, memory-efficient (Beta.1)
-- 🚧 **SHACL-AF Foundation** - Module structure complete, full implementation in progress (Beta.1)
+- ✅ **SHACL Core** - 100% Complete (RC.1)
+- ✅ **W3C Compliance** - 27/27 constraint components (RC.1)
+- ✅ **Performance Optimizations** - SIMD, parallel, memory-efficient (RC.1)
+- 🚧 **SHACL-AF Foundation** - Module structure complete, full implementation in progress (RC.1)
 - ⏳ **AI/ML Features** - Pending (Shape Inference, Statistical Discovery)
 - ⏳ **Reasoning Integration** - Pending
 
 #### SHACL Advanced Features (Target: v0.1.0) - 🎉 **COMPLETE**
-- [x] SHACL-AF (Advanced Features) module structure ✅ **(Beta.1)**
-- [x] SHACL Rules for data transformation (RuleEngine with execution) ✅ **(Beta.1)**
-- [x] SHACL Functions with built-in library ✅ **(Beta.1 - Nov 1, 2025)** ⬆️
+- [x] SHACL-AF (Advanced Features) module structure ✅ **(RC.1)**
+- [x] SHACL Rules for data transformation (RuleEngine with execution) ✅ **(RC.1)**
+- [x] SHACL Functions with built-in library ✅ **(RC.1 - Nov 1, 2025)** ⬆️
   - String functions: concat, upperCase, lowerCase, substring, strLength
   - Function registry with extensible executor pattern
   - Parameter validation and type checking
   - 688 lines of production code
-- [x] Advanced SHACL Targets with caching ✅ **(Beta.1 - Nov 1, 2025)** ⬆️
+- [x] Advanced SHACL Targets with caching ✅ **(RC.1 - Nov 1, 2025)** ⬆️
   - SPARQL-based targets (sh:target)
   - sh:targetObjectsOf and sh:targetSubjectsOf
   - Implicit class targets with optional subclass reasoning
   - Path-based and function-based targets
   - LRU cache with TTL and performance statistics
   - 571 lines of production code
-- [x] Qualified value shapes with complex constraints ✅ **(Beta.1 - Nov 1, 2025)** ⬆️
+- [x] Qualified value shapes with complex constraints ✅ **(RC.1 - Nov 1, 2025)** ⬆️
   - sh:qualifiedValueShape with min/max count
   - Complex constraints (ALL OF, ANY OF, NONE OF, ONE OF)
   - Disjointness checking
   - 543 lines of production code
-- [x] Recursive shape definitions ✅ **(Beta.1 - Nov 1, 2025)** ⬆️
+- [x] Recursive shape definitions ✅ **(RC.1 - Nov 1, 2025)** ⬆️
   - Cycle detection with Tarjan's algorithm
   - Depth-first, breadth-first, and optimized strategies
   - Shape dependency analyzer
   - Topological sorting
   - 534 lines of production code
-- [x] Parameterized constraints ✅ **(Beta.1 - Nov 1, 2025)** ⬆️
+- [x] Parameterized constraints ✅ **(RC.1 - Nov 1, 2025)** ⬆️
   - Constraint component templates
   - Multiple implementation backends (SPARQL, JS/WASM, built-in)
   - Parameter type constraints and validation
   - 546 lines of production code
-- [x] Conditional constraints (sh:if/sh:then/sh:else) ✅ **(Beta.1)**
-- [x] Shape Inference with SciRS2 (foundation) ✅ **(Beta.1)**
+- [x] Conditional constraints (sh:if/sh:then/sh:else) ✅ **(RC.1)**
+- [x] Shape Inference with SciRS2 (foundation) ✅ **(RC.1)**
 
 #### Custom Constraint Components (Target: v0.1.0) - 🎉 **Major Progress**
-- [x] User-defined constraint components ✅ **(Beta.2)**
-- [x] JavaScript constraint validators ✅ **(Beta.1)** - js_wasm.rs
-- [x] WASM-based custom validators ✅ **(Beta.1)** - js_wasm.rs
-- [x] Library of reusable components ✅ **(Beta.2)** - library.rs with 30+ components
+- [x] User-defined constraint components ✅ **(RC.1)**
+- [x] JavaScript constraint validators ✅ **(RC.1)** - js_wasm.rs
+- [x] WASM-based custom validators ✅ **(RC.1)** - js_wasm.rs
+- [x] Library of reusable components ✅ **(RC.1)** - library.rs with 30+ components
   - Identity validators: UUID, IRI, ISBN, DOI, ORCID
   - Temporal validators: DateRange, Duration, Timezone, BusinessHours
   - Geospatial validators: Coordinates, BoundingBox, CountryCode, GeoJSON
@@ -294,35 +294,35 @@
   - Personal validators: PhoneNumber, PostalCode, NamePattern, AgeRange
   - Scientific validators: Unit, ChemicalFormula, ScientificNotation
   - Semantic validators: ClassHierarchy, PropertyDomainRange, OntologyConsistency
-- [x] Constraint composition patterns ✅ **(Beta.1)** - CompositeConstraint
-- [x] Domain-specific constraint languages ✅ **(Beta.2)** - dsl.rs
+- [x] Constraint composition patterns ✅ **(RC.1)** - CompositeConstraint
+- [x] Domain-specific constraint languages ✅ **(RC.1)** - dsl.rs
   - Fluent API for SHACL shapes in Rust
   - Type-safe constraint definitions with builders
   - Pre-built patterns for common domains
   - Template system for reusable constraints
   - XSD datatype helpers and namespace management
-- [x] Performance-optimized validators ✅ **(Beta.1)** - GPU, SIMD acceleration
-- [x] Constraint marketplace/registry ✅ **(Beta.2)** - marketplace.rs
+- [x] Performance-optimized validators ✅ **(RC.1)** - GPU, SIMD acceleration
+- [x] Constraint marketplace/registry ✅ **(RC.1)** - marketplace.rs
   - Component discovery and search
   - Versioning and dependencies
   - User authentication and reviews
   - Install/publish workflow
 
 #### Shape Inference & Learning (Target: v0.1.0) - 🎉 **Complete**
-- [x] Automatic shape inference from data (foundation) ✅ **(Beta.1 - Updated)**
-- [x] Statistical shape discovery with SciRS2 (foundation) ✅ **(Beta.1 - Updated)**
-- [x] Machine learning-based shape extraction framework ✅ **(Beta.1 - Updated)**
-- [x] Shape generalization and specialization ✅ **(Beta.2)** - shape_operations.rs
+- [x] Automatic shape inference from data (foundation) ✅ **(RC.1 - Updated)**
+- [x] Statistical shape discovery with SciRS2 (foundation) ✅ **(RC.1 - Updated)**
+- [x] Machine learning-based shape extraction framework ✅ **(RC.1 - Updated)**
+- [x] Shape generalization and specialization ✅ **(RC.1)** - shape_operations.rs
   - ShapeGeneralizer with multiple strategies
   - ShapeSpecializer for constraint refinement
-- [x] Shape merging and refactoring ✅ **(Beta.2)** - shape_operations.rs
+- [x] Shape merging and refactoring ✅ **(RC.1)** - shape_operations.rs
   - ShapeMerger with union/intersection strategies
   - ShapeRefactorer for pattern extraction
-- [x] Shape evolution tracking ✅ **(Beta.1)** - shape_evolution.rs
+- [x] Shape evolution tracking ✅ **(RC.1)** - shape_evolution.rs
   - Version history with rollback
   - Evolution metrics and statistics
-- [x] Anomaly-based shape refinement ✅ **(Beta.1)** - AnomalyDetector
-- [x] Interactive shape designer ✅ **(Beta.2 - Nov 24, 2025)** - designer/mod.rs ⬆️
+- [x] Anomaly-based shape refinement ✅ **(RC.1)** - AnomalyDetector
+- [x] Interactive shape designer ✅ **(RC.1 - Nov 24, 2025)** - designer/mod.rs ⬆️
   - Step-by-step wizard for guided shape creation
   - Domain-aware constraint recommendations (8 domains)
   - Shape inference from sample RDF data
@@ -330,61 +330,61 @@
   - Constraint specification with validation rules
 
 #### Reasoning Integration (Target: v0.1.0) - 🎉 **Complete**
-- [x] Integration with oxirs-rule reasoning ✅ **(Beta.2)** - integration/rule_engine.rs
+- [x] Integration with oxirs-rule reasoning ✅ **(RC.1)** - integration/rule_engine.rs
   - Reasoning-aware validation with forward/backward chaining
   - Constraint inference from ontologies
   - Shape refinement based on reasoning
   - Multiple reasoning strategies (RDFS, OWL, OWL RL, Custom, Optimized)
   - Inference caching for performance
   - Builder pattern for easy configuration
-- [x] OWL axiom validation ✅ **(Beta.1)** - reasoning.rs
-- [x] Reasoning-aware constraint checking ✅ **(Beta.1)** - ReasoningValidator
-- [x] Entailment regimes (RDFS, OWL) ✅ **(Beta.1)** - EntailmentRegime support
-- [x] Closed-world assumption support ✅ **(Beta.1)** - ClosedWorldValidator
-- [x] Negation as failure ✅ **(Beta.1)** - NegationAsFailure
-- [x] Defeasible reasoning ✅ **(Beta.2)** - advanced_features/defeasible.rs
+- [x] OWL axiom validation ✅ **(RC.1)** - reasoning.rs
+- [x] Reasoning-aware constraint checking ✅ **(RC.1)** - ReasoningValidator
+- [x] Entailment regimes (RDFS, OWL) ✅ **(RC.1)** - EntailmentRegime support
+- [x] Closed-world assumption support ✅ **(RC.1)** - ClosedWorldValidator
+- [x] Negation as failure ✅ **(RC.1)** - NegationAsFailure
+- [x] Defeasible reasoning ✅ **(RC.1)** - advanced_features/defeasible.rs
   - Default rules with override capability
   - Prioritized constraint resolution
   - Exception handling in validation
   - Multiple conflict resolution strategies
   - Rule dependency graph with cycle detection
   - Comprehensive statistics tracking
-- [x] Probabilistic shape validation ✅ **(Beta.1)** - ProbabilisticValidator
+- [x] Probabilistic shape validation ✅ **(RC.1)** - ProbabilisticValidator
 
 #### Production Features (Target: v0.1.0) - 🎉 **Complete**
-- [x] Real-time validation streaming ✅ **(Beta.1)** - streaming.rs
+- [x] Real-time validation streaming ✅ **(RC.1)** - streaming.rs
   - StreamingValidationEngine with batch processing
   - Backpressure handling and alert system
   - Hot-swappable shapes
-- [x] Incremental validation updates ✅ **(Beta.1)** - incremental.rs
+- [x] Incremental validation updates ✅ **(RC.1)** - incremental.rs
   - Delta-based validation with changeset tracking
   - Dependency analysis for affected shapes
   - LRU result caching
-- [x] Distributed validation across clusters ✅ **(Beta.2)** - distributed.rs
+- [x] Distributed validation across clusters ✅ **(RC.1)** - distributed.rs
   - Coordinator-worker pattern
   - Multiple load balancing strategies
   - Fault tolerance with retries
-- [x] GPU-accelerated constraint checking ✅ **(Beta.1)** - gpu_accelerated.rs
+- [x] GPU-accelerated constraint checking ✅ **(RC.1)** - gpu_accelerated.rs
   - WebGPU, CUDA, Metal, OpenCL backends
   - Mixed precision computation
   - Tensor core acceleration
-- [x] Validation result caching ✅ **(Beta.1)** - Constraint cache with LRU
-- [x] Multi-version shape management ✅ **(Beta.1)** - ShapeEvolutionTracker
-- [x] Continuous validation monitoring ✅ **(Beta.1)** - Real-time metrics
-- [x] Validation CI/CD integration ✅ **(Beta.2)** - cicd.rs
+- [x] Validation result caching ✅ **(RC.1)** - Constraint cache with LRU
+- [x] Multi-version shape management ✅ **(RC.1)** - ShapeEvolutionTracker
+- [x] Continuous validation monitoring ✅ **(RC.1)** - Real-time metrics
+- [x] Validation CI/CD integration ✅ **(RC.1)** - cicd.rs
   - JUnit, TAP, SARIF output formats
   - GitHub Actions / GitLab CI integration
   - Pre-commit hook generation
   - Threshold-based pass/fail criteria
 
 #### Developer Experience (Target: v0.1.0) - 🎉 **Complete**
-- [x] Visual shape editor ✅ **(Beta.2 - Nov 24, 2025)** - visual_editor/mod.rs ⬆️
+- [x] Visual shape editor ✅ **(RC.1 - Nov 24, 2025)** - visual_editor/mod.rs ⬆️
   - Multi-format export: DOT/GraphViz, Mermaid, SVG, JSON Schema, PlantUML, D3.js, Cytoscape.js
   - Configurable color schemes (default, high contrast, pastel, monochrome, custom)
   - Hierarchical shape visualization with property nodes
   - Interactive JavaScript/JSON for web integration
   - Layout algorithms: hierarchical, force-directed, circular, grid
-- [x] IDE Integration (LSP Server) ✅ **(Beta.2 - Nov 23, 2025)** - lsp/mod.rs  ⬆️
+- [x] IDE Integration (LSP Server) ✅ **(RC.1 - Nov 23, 2025)** - lsp/mod.rs  ⬆️
   - Language Server Protocol implementation for IDE integration
   - Real-time validation diagnostics
   - Code completion for SHACL properties (50+ completions)
@@ -396,37 +396,37 @@
   - Full SHACL vocabulary completion (sh:, xsd:, rdf:, rdfs:)
   - Binary: shacl_lsp with stdio transport
   - Production-ready with 6 specialized modules (backend, completion, diagnostics, hover, semantic_tokens, server)
-- [x] Interactive constraint tester ✅ **(Beta.2)** - bin/constraint_tester.rs
+- [x] Interactive constraint tester ✅ **(RC.1)** - bin/constraint_tester.rs
   - REPL-style interactive interface
   - Shape creation and constraint management
   - Session save/load with JSON serialization
   - Built-in constraint examples and domain suggestions
   - Command history tracking
   - Real-time validation feedback
-- [x] Validation report visualizer ✅ **(Beta.2)** - visualizer.rs
+- [x] Validation report visualizer ✅ **(RC.1)** - visualizer.rs
   - HTML, SVG, ASCII, Markdown, JSON output formats
   - Interactive charts (pie, bar, heatmap)
   - Configurable themes and styles
-- [x] Shape documentation generator ✅ **(Beta.2)** - documentation.rs
+- [x] Shape documentation generator ✅ **(RC.1)** - documentation.rs
   - Markdown, HTML, RST, AsciiDoc formats
   - Cross-reference generation
   - Property path documentation
-- [x] Migration from ShEx ✅ **(Beta.2)** - shex_migration.rs
+- [x] Migration from ShEx ✅ **(RC.1)** - shex_migration.rs
   - Complete ShEx parser
   - Semantic mapping configuration
   - Migration reports
-- [x] Testing framework for shapes ✅ **(Beta.2)** - testing/mod.rs
+- [x] Testing framework for shapes ✅ **(RC.1)** - testing/mod.rs
   - Test case definitions
   - Test suite organization
   - Assertion helpers
-- [x] Shape quality metrics ✅ **(Beta.2)** - shape_quality_metrics.rs
+- [x] Shape quality metrics ✅ **(RC.1)** - shape_quality_metrics.rs
   - Complexity metrics (cyclomatic, Halstead, nesting depth)
   - Maintainability index with documentation scoring
   - Performance predictions (scalability, cacheability, parallelizability)
   - Security analysis with vulnerability detection
   - Best practice compliance checking
   - Coverage and semantic analysis
-- [x] Shape template library ✅ **(Beta.2)** - templates.rs
+- [x] Shape template library ✅ **(RC.1)** - templates.rs
   - Pre-built templates for common patterns across 8 domains
   - Identity (Person, Organization)
   - Contact (Email, Phone)
@@ -437,7 +437,7 @@
   - Financial (Price)
   - Scientific (Dataset)
   - 14 ready-to-use templates with examples
-- [x] Shape analyzer CLI tool ✅ **(Beta.2)** - bin/shape_analyzer.rs
+- [x] Shape analyzer CLI tool ✅ **(RC.1)** - bin/shape_analyzer.rs
   - Complexity analysis and scoring
   - Dependency graph generation (DOT format)
   - Issue detection (errors, warnings, info)

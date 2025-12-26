@@ -1,6 +1,6 @@
 # OxiRS Vec - Performance Tuning Guide
 
-**Version**: v0.1.0-beta.2
+**Version**: v0.1.0-rc.1
 **Last Updated**: December 6, 2025
 
 ## Table of Contents
@@ -784,5 +784,5 @@ fn profile_queries(store: &VectorStore) -> anyhow::Result<()> {
 ---
 
 **Document Version**: 1.0
-**OxiRS Vec Version**: v0.1.0-beta.2
+**OxiRS Vec Version**: v0.1.0-rc.1
 **Last Updated**: December 6, 2025

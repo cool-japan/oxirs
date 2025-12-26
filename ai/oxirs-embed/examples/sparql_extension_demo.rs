@@ -132,7 +132,7 @@ async fn create_knowledge_graph() -> Result<TransE> {
     ];
 
     // Add research network knowledge
-    let research_triples = vec![
+    let research_triples = [
         ("dr_smith", "researches", "alzheimers_disease"),
         ("dr_jones", "researches", "parkinsons_disease"),
         ("dr_smith", "collaborates_with", "dr_jones"),

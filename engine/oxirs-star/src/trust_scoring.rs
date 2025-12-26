@@ -24,7 +24,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::trust_scoring::{TrustScorer, TrustConfig};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

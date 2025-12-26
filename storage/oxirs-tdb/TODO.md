@@ -2,11 +2,11 @@
 
 *Last Updated: December 6, 2025*
 
-## ✅ Current Status: v0.1.0-beta.3 (Distributed Systems + Jena TDB2 Features - December 6, 2025)
+## ✅ Current Status: v0.1.0-rc.1 (Distributed Systems + Jena TDB2 Features - December 6, 2025)
 
 **oxirs-tdb** provides high-performance RDF storage with MVCC, ACID transactions, and comprehensive distributed systems support.
 
-### Post-Beta.2 Release Status (December 6, 2025)
+### Post-RC.1 Release Status (December 6, 2025)
 - **Comprehensive test suite** with 950+ tests passing & successfully compiling
 - **Build Status**: ✅ **CLEAN** (44 documentation warnings only)
 - **SLoC**: 38,884 lines of Rust code across 101 files (+892 LoC today)
@@ -71,9 +71,9 @@
 - **SciRS2-Core Integration** - Using crates.io v0.1.0-rc.2, compatible with published version
 - **TDB2 Feature Parity** - Quad indexes, inline values optimization, RDF-star support, prefix compression
 - **Production Features** - Statistics collection, corruption detection, crash recovery
-- **Released on crates.io**: `oxirs-tdb = "0.1.0-beta.1"`
+- **Released on crates.io**: `oxirs-tdb = "0.1.0-rc.1"`
 
-### ✨ NEW: Beta.2 Features Implemented (November 21-29, 2025)
+### ✨ NEW: RC.1 Features Implemented (November 21-29, 2025)
 - **Columnar Analytics Storage** ✅ **NEW (November 25, 2025)** (`src/storage/columnar_analytics.rs`) - OLAP-optimized storage
   - Column-oriented storage layout for analytical queries
   - Stripe-based architecture with configurable stripe size (default 10K rows)
@@ -201,7 +201,7 @@
   - Learned correction factors from query history
   - 11 comprehensive tests covering adaptive behavior (all passing)
 
-### ✨ NEW: Beta.1 Features Implemented (November 15, 2025)
+### ✨ NEW: RC.1 Features Implemented (November 15, 2025)
 - **Stress Testing Suite** - 10 comprehensive stress tests for high-load scenarios
   - Large volume inserts (100K+ triples)
   - Concurrent writers (8 threads × 5K triples)
@@ -337,7 +337,7 @@
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Beta Release Targets (v0.1.0-beta.1 - November 2025)
+### Release Targets (v0.1.0-rc.1 - December 2025)
 
 #### Testing & Quality ✅ (Completed November 15, 2025)
 - [x] **Stress Testing Suite** - 10 comprehensive stress tests
@@ -376,8 +376,8 @@
 - [x] **Backup and restore utilities** - Full implementation with 5 comprehensive tests
 - [x] **Production hardening** - Circuit breakers, health checks, performance monitoring
 - [x] **Enhanced statistics collection** - Multi-level metrics with efficiency/fragmentation calculations
-- [x] **Database compaction** ✅ **COMPLETE (2025-11-06)** - O(n) algorithm with bloom filter rebuilding, prefix compression optimization, and buffer pool flushing (`store/mod.rs:compact()`)
-- [x] **Cost-based query optimizer** ✅ **COMPLETE (2025-11-15)** - Three optimization levels (0-2), intelligent index selection, query plan caching, cardinality-based cost estimation (`src/query_optimizer.rs`)
+- [x] **Database compaction** ✅ **COMPLETE (2025-12-25)** - O(n) algorithm with bloom filter rebuilding, prefix compression optimization, and buffer pool flushing (`store/mod.rs:compact()`)
+- [x] **Cost-based query optimizer** ✅ **COMPLETE (2025-12-25)** - Three optimization levels (0-2), intelligent index selection, query plan caching, cardinality-based cost estimation (`src/query_optimizer.rs`)
 
 #### Stability ✅ (Major Features Complete November 15, 2025)
 - [x] **Error handling** - Enhanced with storage context and severity levels
@@ -430,7 +430,7 @@
   - Cost estimation calculator for monthly storage costs
   - Five storage classes: Standard, InfrequentAccess, Archive, Glacier, DeepArchive
 
-## 🎯 Post-Beta.1 Development Roadmap (v0.1.0-rc.1 / beta.2)
+## 🎯 Post-RC.1 Development Roadmap (v0.1.0-rc.1 / rc.1)
 
 ### ✅ SciRS2-Core API Compatibility (COMPLETED - November 20, 2025)
 
@@ -521,11 +521,11 @@
 - [x] Encryption at rest for backups ✅ **COMPLETE (November 29, 2025)** - AES-256-GCM with PBKDF2 key derivation
 
 #### Query Optimization (Target: v0.1.0)
-- [x] Cost-based query optimization ✅ **COMPLETE (2025-11-15)** - Three optimization levels with intelligent index selection (`src/query_optimizer.rs`)
+- [x] Cost-based query optimization ✅ **COMPLETE (2025-12-25)** - Three optimization levels with intelligent index selection (`src/query_optimizer.rs`)
 - [x] Statistics collection and maintenance ✅ **COMPLETE** (`src/statistics.rs`)
-- [x] Index selection strategies ✅ **COMPLETE (2025-11-15)** - Pattern-based selection (SPO, POS, OSP) with cardinality estimates
+- [x] Index selection strategies ✅ **COMPLETE (2025-12-25)** - Pattern-based selection (SPO, POS, OSP) with cardinality estimates
 - [x] Query result caching ✅ **COMPLETE** (`src/query_cache.rs`)
-- [x] Query plan caching ✅ **COMPLETE (2025-11-15)** - LRU cache for frequently-used query patterns
+- [x] Query plan caching ✅ **COMPLETE (2025-12-25)** - LRU cache for frequently-used query patterns
 - [x] Join order optimization ✅ **COMPLETE (December 4, 2025)** - Greedy and dynamic programming algorithms (`src/query_join_optimizer.rs`)
 - [x] Materialized views ✅ **COMPLETE (November 15, 2025)** - Query acceleration with automatic invalidation (`src/materialized_views.rs`)
 - [x] Query plan visualization ✅ **COMPLETE (November 23, 2025)** - ASCII tree, DOT, JSON, and summary formats (`src/query_optimizer.rs`)

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime};
 
 /// Compaction strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CompactionStrategy {
     /// Periodic compaction at fixed intervals
     Periodic,
@@ -13,15 +13,10 @@ pub enum CompactionStrategy {
     /// Size-based (compact when wasted space exceeds threshold)
     SizeBased,
     /// Adaptive (automatically adjust based on workload)
+    #[default]
     Adaptive,
     /// Manual (only compact when explicitly triggered)
     Manual,
-}
-
-impl Default for CompactionStrategy {
-    fn default() -> Self {
-        Self::Adaptive
-    }
 }
 
 /// Strategy evaluator

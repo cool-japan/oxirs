@@ -65,8 +65,10 @@ async fn test_subscription_lifecycle() {
     assert!(json.contains("subscribe"));
     assert!(json.contains("SELECT"));
 
-    // Deserialize back
-    let deserialized: WsMessage = serde_json::from_str(&json).unwrap();
+    // Deserialize back - use from_value to work around serde_json issue with
+    // internally-tagged enums containing nested Option<Struct> fields
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let deserialized: WsMessage = serde_json::from_value(value).unwrap();
     match deserialized {
         WsMessage::Subscribe { query, .. } => {
             assert!(query.contains("SELECT"));

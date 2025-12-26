@@ -1,11 +1,11 @@
 # OxiRS SAMM - Semantic Aspect Meta Model for Rust
 
-[![Version](https://img.shields.io/badge/version-0.1.0--beta.2-brightgreen)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-brightgreen)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](../../../LICENSE)
-[![Tests](https://img.shields.io/badge/tests-359%20passing-brightgreen)](./TODO.md)
+[![Tests](https://img.shields.io/badge/tests-446%20passing-brightgreen)](./TODO.md)
 [![Documentation](https://img.shields.io/badge/docs-100%25-brightgreen)](./src/lib.rs)
 
-**Status**: 🚀 Beta.1 Production-Ready (v0.1.0-beta.2+++++++++++++)
+**Status**: ✅ Release Candidate (v0.1.0-rc.1) - Production Ready
 ✅ APIs stable. Ready for production use with backward compatibility guarantees.
 
 ## Overview
@@ -24,11 +24,11 @@ SAMM was developed by the [Eclipse Semantic Modeling Framework (ESMF)](https://g
 - ✅ **HTTP/HTTPS Resolution**: Remote URN resolution with caching
 - ✅ **Error Recovery**: Robust parser with configurable recovery strategies
 
-### Code Generation (16 Formats)
+### Code Generation (17 Formats)
 - ✅ **Programming Languages**: Rust, Java, Python, TypeScript, Scala
 - ✅ **API Specs**: GraphQL, OpenAPI, AsyncAPI, JSON Schema
 - ✅ **Data Formats**: JSON-LD, SQL DDL, HTML documentation
-- ✅ **Industry Standards**: AAS (Asset Administration Shell), AASX packages
+- ✅ **Industry Standards**: AAS (Asset Administration Shell), AASX packages, DTDL (Azure Digital Twins)
 - ✅ **Multi-File Generation**: Package/module organization with automatic imports
 
 ### Advanced Features
@@ -47,7 +47,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-samm = "0.1.0-beta.2"
+oxirs-samm = "0.1.0-rc.1"
 ```
 
 ### Basic Usage
@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Runnable Examples
 
-The crate includes 6 comprehensive examples demonstrating real-world workflows:
+The crate includes 7 comprehensive examples demonstrating real-world workflows:
 
 1. **`model_query`** - Model introspection, dependency analysis, and complexity metrics
    ```bash
@@ -113,7 +113,32 @@ The crate includes 6 comprehensive examples demonstrating real-world workflows:
    cargo run --example model_lifecycle
    ```
 
+7. **`dtdl_generation`** - Azure Digital Twins DTDL generation with deployment guide
+   ```bash
+   cargo run --example dtdl_generation
+   ```
+
 Each example includes extensive documentation and demonstrates best practices for production use.
+
+### DTDL Support (Azure Digital Twins Integration)
+
+**Bidirectional Conversion:**
+```bash
+# SAMM → DTDL (Generate Azure models)
+oxirs aspect to Movement.ttl dtdl -o azure/Movement.json
+
+# DTDL → SAMM (Import Azure models)
+oxirs aspect from azure/Movement.json -o samm/Movement.ttl
+```
+
+**Features:**
+- ✅ DTDL v3 generator (SAMM → Azure)
+- ✅ DTDL v3 parser (Azure → SAMM)
+- ✅ Round-trip conversion (lossless for core features)
+- ✅ 21 DTDL-specific tests + 6 round-trip integration tests
+- ✅ Complete documentation: [DTDL_COMPLETE_GUIDE.md](./DTDL_COMPLETE_GUIDE.md)
+
+See [DTDL_GUIDE.md](./DTDL_GUIDE.md) and [DTDL_COMPLETE_GUIDE.md](./DTDL_COMPLETE_GUIDE.md) for complete usage guide.
 
 ## SAMM Metamodel
 
@@ -358,6 +383,10 @@ oxirs aspect AspectModel.ttl to payload
 
 # Generate JSON-LD with semantic context
 oxirs aspect AspectModel.ttl to jsonld
+
+# Generate DTDL for Azure Digital Twins
+oxirs aspect AspectModel.ttl to dtdl
+oxirs aspect AspectModel.ttl to dtdl -o azure/models/Movement.json
 ```
 
 ### Java ESMF SDK Compatibility
@@ -405,8 +434,8 @@ oxirs aas file.aasx to aspect       # AASX (default)
 
 ### Test Coverage
 
-**359 tests passing (100% pass rate)**:
-- 224 unit tests
+**446 tests passing (100% pass rate)**:
+- 245 unit tests (including 10 DTDL generator tests, 11 DTDL parser tests)
 - 16 advanced integration tests
 - 13 fuzz tests
 - 11 integration tests
@@ -416,6 +445,8 @@ oxirs aas file.aasx to aspect       # AASX (default)
 - 8 property-based tests (proptest generators)
 - 12 property-based tests (proptest metadata)
 - 42 documentation tests
+- 60 plugin and generator tests
+- 6 DTDL round-trip integration tests
 
 ### Quality Metrics
 
@@ -483,7 +514,7 @@ Robust fuzz testing for parser resilience:
 
 ## Development Status
 
-### ✅ Beta.1 Production-Ready (v0.1.0-beta.2+++++++++++++)
+### ✅ RC.1 Production-Ready (v0.1.0-rc.1+++++++++++++)
 
 **All major features complete and tested**:
 - [x] SAMM 2.0.0-2.3.0 full specification support

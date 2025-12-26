@@ -38,7 +38,7 @@
 - **✨ NEW: CDN static assets** (Asset fingerprinting, compression, cache policies, Admin UI serving)
 - **✨ NEW: Enhanced K8s operator** (kube-rs integration, CRD generation, leader election, HPA management)
 
-### 🎉 Beta.1 Achievements
+### 🎉 RC.1 Achievements
 
 #### Production Deployment Ready ✅
 - ✅ **CLI Serve Command**: Full integration with oxirs CLI & persisted datasets
@@ -50,7 +50,7 @@
 - ✅ **Docker Support**: Multi-stage Dockerfile with production & development compose files
 - ✅ **Kubernetes Ready**: Complete manifests (deployment, service, ingress, HPA, RBAC)
 
-#### Beta.1 Production Features ✅ (Complete)
+#### RC.1 Production Features ✅ (Complete)
 - ✅ **Production Hardening** (production.rs - 693 lines)
   - HTTP-specific error handling with request context (method, path, status, client IP, user agent)
   - HTTP request circuit breakers for fault tolerance
@@ -60,7 +60,7 @@
   - Global statistics tracking (uptime, total requests, timeouts, errors)
   - **All 6 production tests passing** ✅
 
-#### Beta.1 Deployment & Operations ✅ (Complete in Beta.1)
+#### RC.1 Deployment & Operations ✅ (Complete in RC.1)
 - ✅ **Docker Deployment** (Dockerfile + docker-compose.yml)
   - Multi-stage build with optimized runtime image
   - Production stack with monitoring (Prometheus, Grafana, Jaeger, Redis)
@@ -295,7 +295,7 @@
 
 ## 🔧 New Modules Created
 
-### v0.1.0-beta.1 (Previously Completed)
+### v0.1.0-rc.1 (Previously Completed)
 1. **k8s_operator.rs** - Kubernetes operator for managing Fuseki instances
 2. **auth/mfa_storage.rs** - Persistent MFA storage
 3. **tls_rotation.rs** - TLS certificate rotation
@@ -306,7 +306,7 @@
 8. **ddos_protection.rs** - DDoS protection and traffic analysis
 9. **disaster_recovery.rs** - Disaster recovery and failover management
 
-### v0.1.0-beta.1 (November 3, 2025) ✨
+### v0.1.0-rc.1 (November 3, 2025) ✨
 10. **concurrent.rs** - Advanced concurrent request handling (780 lines)
     - Work-stealing scheduler with configurable worker threads
     - Priority-based request queuing (Low, Normal, High, Critical)
@@ -529,7 +529,7 @@
   - DDoS protection rate limiting and blocking
   - Disaster recovery failover procedures
 
-## 🎯 Beta.1 → v0.1.0 Roadmap
+## 🎯 RC.1 → v0.1.0 Roadmap
 
 **Estimated Timeline**: 2-3 weeks (Updated from 4-6 weeks - major features completed!)
 
@@ -555,7 +555,7 @@
 - [ ] Migration guides
 - [ ] Release preparation and packaging
 
-## 🏆 Success Metrics for v0.1.0 beta.1
+## 🏆 Success Metrics for v0.1.0 rc.1
 
 - [x] 400+ tests passing with zero warnings ✅ (795 tests passing)
 - [x] <50MB binary size for production image ✅ (12MB stripped)
@@ -575,11 +575,11 @@
 
 ### Summary of Latest Additions
 
-#### Session 1 (November 6, 2025) - Beta.2 Infrastructure & Testing
+#### Session 1 (November 6, 2025) - RC.1 Infrastructure & Testing
 - ✅ Ansible playbooks (deployment/ansible/ - 4 comprehensive roles)
 - ✅ Terraform GCP modules (deployment/terraform/gcp/ - complete GKE infrastructure)
 - ✅ Terraform Azure modules (deployment/terraform/azure/ - complete AKS infrastructure)
-- ✅ Integration tests (tests/integration/ - 30+ tests for beta.2 modules)
+- ✅ Integration tests (tests/integration/ - 30+ tests for rc.1 modules)
 - ✅ Load testing suite (benches/load_testing.rs - 9 benchmark categories)
 - ✅ Performance benchmarking (benches/performance_benchmarks.rs - 16 detailed benchmarks)
 - ✅ ~15,000 lines of infrastructure, testing, and documentation
@@ -673,7 +673,7 @@
 - ✅ GraphQL and REST API v2 routes enabled (lines 954-970 in server.rs) ✅
 - ✅ RC.1 production routes integrated (November 21, 2025 - Session 6)
   - Admin routes re-enabled (server_info, server_stats, compact, backup)
-  - Performance monitoring routes enabled (Beta.2 features)
+  - Performance monitoring routes enabled (RC.1 features)
   - Metrics routes enabled (Prometheus export)
   - Performance profiler routes enabled (RC.1 features)
   - LDAP routes re-enabled with corrected signatures

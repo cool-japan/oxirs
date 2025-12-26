@@ -17,11 +17,11 @@ See [docs/README.md](docs/README.md) for complete documentation index.
 
 ---
 
-## ✅ Current Status: v0.1.0-beta.2 (Production-Ready Beta)
+## ✅ Current Status: v0.1.0-rc.1 (Production-Ready RC)
 
 **oxirs-vec** provides comprehensive vector search infrastructure for semantic similarity with full SPARQL integration.
 
-### Beta.2 Release Status (December 9, 2025) - **COMPLETE & PRODUCTION-READY** ✨
+### RC.1 Release Status (December 9, 2025) - **COMPLETE & PRODUCTION-READY** ✨
 - **Compiles with zero warnings** - Clean build achieved ✅
 - **All 683 tests passing** - 100% test success rate ✅
 - **SCIRS2 POLICY compliant** - Using scirs2-core for random/arrays ✅
@@ -37,11 +37,11 @@ See [docs/README.md](docs/README.md) for complete documentation index.
 - **Hybrid search**: Keyword + semantic search combination with BM25
 - **Persistence layer**: Zstd compression, incremental checkpointing, **Write-Ahead Logging**
 - **Monitoring & analytics**: Performance metrics, alerting, health monitoring
-- **101,000+ lines of Rust code** across 214 files (2,230 lines added in Beta.2 final)
+- **101,000+ lines of Rust code** across 214 files (2,230 lines added in RC.1 final)
 - **126 KB of comprehensive documentation**: 6 production guides including FAISS/Annoy migration
-- **Ready for production**: All Beta.2 targets completed ✅
+- **Ready for production**: All RC.1 targets completed ✅
 
-## ✅ Beta Release Targets - COMPLETED (v0.1.0-beta.2 - November 2025)
+## ✅ RC Release Targets - COMPLETED (v0.1.0-rc.1 - December 2025)
 
 ### Performance ✅
 - [x] HNSW index optimization (configurable M, ef_construction, ef_search)
@@ -71,7 +71,7 @@ See [docs/README.md](docs/README.md) for complete documentation index.
 - [x] Data validation (dimension checks, value validation, metadata schemas)
 - [x] Comprehensive testing (361 tests passing, 99.0% pass rate)
 
-## 🚧 Known Issues (Beta.2)
+## 🚧 Known Issues (RC.1)
 - **Tree indices** (Ball Tree, KD-Tree, VP-Tree): Marked as **EXPERIMENTAL**
   - Conservative depth limits implemented (20 levels max)
   - Best for moderate datasets (< 100K vectors)
@@ -210,7 +210,7 @@ See [docs/README.md](docs/README.md) for complete documentation index.
 - [ ] Snapshot and restore (enhanced - deferred to v0.1.1)
 - [ ] SLA-based resource allocation (deferred to v0.1.1)
 
-## 🎯 Beta.3 Priorities (Target: November 30, 2025)
+## 🎯 RC.1 Priorities (Target: November 30, 2025)
 
 ### ✅ Completed (November 20-23, 2025)
 
@@ -230,7 +230,7 @@ See [docs/README.md](docs/README.md) for complete documentation index.
    - ✅ Fixed recovery test edge case (checkpoint filtering at seq=0)
    - ✅ Robust error handling for incomplete writes
    - ✅ Sanity checks for corrupted entries
-   - ⏭️  WAL compression (deferred to post-Beta.3)
+   - ⏭️  WAL compression (deferred to post-RC.1)
    - ⏭️  Performance optimization (functional, optimizations can wait)
 
 4. ~~**High**: Complete GPU kernel implementations~~ **COMPLETED (November 23, 2025)**

@@ -7,7 +7,7 @@ Comprehensive load testing and performance benchmarking suite for OxiRS Fuseki.
 This suite includes:
 
 1. **Load Testing** (`load_testing.rs`) - Stress testing under various load conditions
-2. **Performance Benchmarking** (`performance_benchmarks.rs`) - Detailed performance analysis of beta.2 optimizations
+2. **Performance Benchmarking** (`performance_benchmarks.rs`) - Detailed performance analysis of rc.1 optimizations
 
 ## Running Benchmarks
 
@@ -111,7 +111,7 @@ Compares cache hit vs miss performance.
 cargo bench --bench load_testing -- query_cache
 ```
 
-### Performance Benchmarking (Beta.2 Optimizations)
+### Performance Benchmarking (RC.1 Optimizations)
 
 #### Concurrency (concurrent.rs)
 

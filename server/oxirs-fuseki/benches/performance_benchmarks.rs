@@ -1,4 +1,4 @@
-// Performance benchmarking suite for new beta.2 optimizations
+// Performance benchmarking suite for new rc.1 optimizations
 // Run with: cargo bench --bench performance_benchmarks
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};

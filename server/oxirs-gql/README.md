@@ -1,12 +1,12 @@
 # OxiRS GraphQL
 
-[![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **High-performance GraphQL server for RDF data with automatic schema generation**
 
-**Status**: Beta Release (v0.1.0-beta.2) - Released December 21, 2025
+**Status**: Release Candidate (v0.1.0-rc.1) - Released December 26, 2025
 
-✨ **Beta Software**: Production-ready with API stability guarantees. Semantic versioning enforced.
+✨ **Release Candidate**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 ## Overview
 
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-gql = "0.1.0-beta.2"
+oxirs-gql = "0.1.0-rc.1"
 ```
 
 ## Quick Start
@@ -413,7 +413,7 @@ let schema = Schema::new(dataset)
 ### Docker
 
 ```dockerfile
-FROM rust:1.70 as builder
+FROM rust:1.84 as builder
 WORKDIR /app
 COPY . .
 RUN cargo build --release --bin oxirs-gql
@@ -459,10 +459,10 @@ spec:
 
 ## Related Crates
 
-- [`oxirs-core`](../core/oxirs-core/): RDF data model
-- [`oxirs-fuseki`](./oxirs-fuseki/): SPARQL HTTP server
-- [`oxirs-arq`](../engine/oxirs-arq/): SPARQL query engine
-- [`oxirs-stream`](../stream/oxirs-stream/): Real-time subscriptions
+- [`oxirs-core`](../../core/oxirs-core/): RDF data model
+- [`oxirs-fuseki`](../oxirs-fuseki/): SPARQL HTTP server
+- [`oxirs-arq`](../../engine/oxirs-arq/): SPARQL query engine
+- [`oxirs-stream`](../../stream/oxirs-stream/): Real-time subscriptions
 
 ## Contributing
 
@@ -483,13 +483,13 @@ at your option.
 
 ## Status
 
-� **Beta Release (v0.1.0-beta.2)** - November 16, 2025
+🚀 **Release Candidate (v0.1.0-rc.1)** - December 26, 2025
 
-Current alpha features:
+Current features:
 - ✅ GraphQL server with persisted dataset introspection and hot-reload
 - ✅ GraphQL ⇄ SPARQL translation covering vector/federation-aware resolvers
 - ✅ Schema generation with CLI configuration parity and dataset auto-sync
 - ✅ Subscriptions bridged to SPARQL/stream events (experimental)
 - 🚧 Apollo Federation interoperability (in progress)
 
-Note: This is an alpha release. Some features remain experimental and APIs may evolve before beta.
+Note: This is a release candidate. Some features remain experimental and APIs may evolve before stable.

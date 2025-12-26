@@ -43,21 +43,16 @@ use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 /// Async I/O backend type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AsyncIoBackend {
     /// Automatically select best backend for platform
+    #[default]
     Auto,
     /// Use tokio::fs (cross-platform)
     Tokio,
     /// Use io_uring (Linux only, requires feature flag)
     #[cfg(target_os = "linux")]
     IoUring,
-}
-
-impl Default for AsyncIoBackend {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 impl AsyncIoBackend {

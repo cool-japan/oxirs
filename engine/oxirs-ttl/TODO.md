@@ -1,15 +1,15 @@
 # OxiRS TTL - TODO List
 
-## Status Overview (Updated: 2025-12-09 - Beta.2 COMPLETE++++++++++++++++++++++++ + UTILITIES ECOSYSTEM - VERIFIED)
+## Status Overview (Updated: 2025-12-09 - RC.1 COMPLETE++++++++++++++++++++++++ + UTILITIES ECOSYSTEM - VERIFIED)
 
-**Overall Progress**: **220%** - Beta.1 + Beta.2 complete + N3 Reasoning + Documentation + Developer Tools + IRI Normalization + N3 Serializer + Benchmarks + Integration + Convenience API + **W3C RDF 1.2 Full Cross-Format Support** + **RDF Graph Utilities** + **Format Conversion** + **Pattern Matching**
+**Overall Progress**: **220%** - RC.1 + RC.1 complete + N3 Reasoning + Documentation + Developer Tools + IRI Normalization + N3 Serializer + Benchmarks + Integration + Convenience API + **W3C RDF 1.2 Full Cross-Format Support** + **RDF Graph Utilities** + **Format Conversion** + **Pattern Matching**
 **Total Tests**: **672 tests passing** (594 integration/unit + 78 doc tests, 11 ignored for future work, 36+ test suites)
-**Status**: **🎉 v0.1.0-beta.2+++++++ PRODUCTION-READY WITH COMPLETE RDF UTILITIES ECOSYSTEM - QUALITY VERIFIED 🎉**
+**Status**: **🎉 v0.1.0-rc.1+++++++ PRODUCTION-READY WITH COMPLETE RDF UTILITIES ECOSYSTEM - QUALITY VERIFIED 🎉**
 **Latest**: ✅ **Final Quality Assurance Verification** - All tests passing, zero warnings, SCIRS2 compliant (Dec 9, 2025)
 **Compliance**: ✅ SCIRS2 Policy compliant - No direct rand/ndarray dependencies - VERIFIED
 **New Achievement**: ✅ **Complete RDF Utilities Ecosystem** - Graph operations, format conversion, and pattern matching in one package
 
-### ✅ Beta.2 Accomplishments (November-December 2025):
+### ✅ RC.1 Accomplishments (November-December 2025):
 
 **NEW SESSION (December 9, 2025 - Part 6)**:
 
@@ -579,7 +579,7 @@
    - 9 comprehensive tests including round-trip verification
    - All tests passing
 
-### Previous Beta.2 Accomplishments:
+### Previous RC.1 Accomplishments:
 
 1. **Code Refactoring** - Split turtle.rs (2216 lines) into proper module structure:
    - `turtle/mod.rs` - Module organization (52 lines)
@@ -643,14 +643,14 @@
 
 ---
 
-## Status Overview (Beta.1 COMPLETE - 2025-11-15 ✅)
+## Status Overview (RC.1 COMPLETE - 2025-12-25 ✅)
 
-**Overall Progress**: **100%** - All Beta.1 priorities complete
+**Overall Progress**: **100%** - All RC.1 priorities complete
 **Total Tests**: **324 tests passing** (14 test suites including performance regression + W3C compliance)
-**Status**: **🎉 v0.1.0-beta.1 RELEASED 🎉**
+**Status**: **🎉 v0.1.0-rc.1 RELEASED 🎉**
 **Latest**: ✅ **All 6 Major Features COMPLETE** + Performance regression tests + W3C compliance suite + Showcase example + Documentation
 
-### ✅ Completed Beta.1 Features:
+### ✅ Completed RC.1 Features:
 1. **RDF 1.2 Support** (19/19 tests) - Quoted triples & directional language tags
 2. **Error Recovery & Validation** (9/10 tests) - Lenient mode with error collection
 3. **Serialization Enhancements** (10/10 tests) - Smart prefixes & pretty printing
@@ -666,7 +666,7 @@
 | Turtle Parser Tests | ✅ | 100% (26/26) | All passing |
 | Turtle Advanced Tests | ✅ | 100% (24/24) | All passing, 1 ignored |
 | N-Triples Tests | ✅ | 100% (22/22) | **FIXED: # in IRIs** ✅ |
-| N-Quads Tests | ✅ | 100% (25/25) | **FIXED: # in IRIs** ✅, 1 streaming test ignored (beta.2) |
+| N-Quads Tests | ✅ | 100% (25/25) | **FIXED: # in IRIs** ✅, 1 streaming test ignored (rc.1) |
 | TriG Tests | ✅ | 100% (28/28) | **COMPLETE: All tests passing** ✅ |
 | **RDF 1.2 Basic Tests** | ✅ | **100% (19/19)** | **Quoted triples + Directional language tags** ✅ |
 | **W3C RDF 1.2 Compliance Tests** | ✅ | **100% (26/26)** | **NEW: Official W3C RDF 1.2 / RDF-star compliance** ✅ (Dec 5, 2025) |
@@ -682,7 +682,7 @@
 | **Doc Tests** | ✅ | **96% (24/25)** | **Comprehensive API examples** ✅ (1 ignored) |
 | **Total** | ✅ | **624 tests passing** | **556 integration + 68 doc, 9 ignored** ✅
 
-### Session 2 Accomplishments (2025-11-06)
+### Session 2 Accomplishments (2025-12-25)
 - ✅ **Fixed N-Triples/N-Quads inline comment parsing**: `#` inside IRIs no longer treated as comments
   - Added IRI boundary tracking (`in_iri` flag) to `strip_inline_comment()`
   - Fixes: `http://www.w3.org/2001/XMLSchema#integer` now parses correctly
@@ -701,7 +701,7 @@
   - Fixed `chars().nth(self.position)` at turtle.rs:701 → proper byte slicing
   - Fixes panic: `called Option::unwrap() on a None value`
   - Impact: No more panics on multi-byte UTF-8 characters, robust Unicode handling
-- ✅ **Fixed N-Quads streaming parser**: Test properly marked as deferred to beta.2
+- ✅ **Fixed N-Quads streaming parser**: Test properly marked as deferred to rc.1
   - Issue: `StreamingParser` hardcoded to use `TurtleParser` (triples only)
   - Solution: Marked test as `#[ignore]` with clear explanation
 - ✅ **Code quality**: All clippy warnings fixed, code formatted
@@ -725,7 +725,7 @@
 - ✅ **Unicode Escape Sequences**: Complete (\uXXXX + \UXXXXXXXX)
 - ⚠️ **TriG Parser**: 43% complete, needs full Turtle syntax support
 
-## v0.1.0-beta.1 Core Features
+## v0.1.0-rc.1 Core Features
 
 ### ✅ Completed Tasks
 
@@ -760,7 +760,7 @@
 
 ### High Priority - Urgent Bug Fixes
 
-- [x] **Unicode Character Handling** ✅ **FIXED (Session 1: 2025-11-06)**
+- [x] **Unicode Character Handling** ✅ **FIXED (Session 1: 2025-12-25)**
   - [x] Fix N-Triples Unicode character parsing ✅
   - [x] Fix N-Quads Unicode character parsing ✅
   - [x] Fix N-Quads Unicode escape sequences (\UXXXXXXXX support) ✅
@@ -768,7 +768,7 @@
   - **Implementation**: `ntriples.rs:323-343`, `nquads.rs:367-387`
   - **Tests passing**: `test_unicode_characters` (N-Triples + N-Quads)
 
-- [x] **Inline Comment Support with IRI Handling** ✅ **FIXED (Session 2: 2025-11-06)**
+- [x] **Inline Comment Support with IRI Handling** ✅ **FIXED (Session 2: 2025-12-25)**
   - [x] Fix `#` character in IRIs being treated as comments ✅
   - [x] Add IRI boundary tracking to N-Triples lexer ✅
   - [x] Add IRI boundary tracking to N-Quads lexer ✅
@@ -777,7 +777,7 @@
   - **Implementation**: `ntriples.rs:35-58`, `nquads.rs:20-43`
   - **Tests passing**: All N-Triples typed literal tests, all N-Quads typed literal tests
 
-- [x] **TriG Parser Prefix Handling** ✅ **FIXED (Session 2: 2025-11-06)**
+- [x] **TriG Parser Prefix Handling** ✅ **FIXED (Session 2: 2025-12-25)**
   - [x] Fix `@prefix` declarations being ignored ✅
   - [x] Implement prefix storage and expansion ✅
   - [x] Fix prefixed name resolution (e.g., `ex:subject`) ✅
@@ -786,16 +786,16 @@
   - **Implementation**: `trig.rs:87-110`, added `_with_prefixes` methods for all parsers
   - **Tests passing**: +10 TriG tests (43% pass rate, up from 7%)
 
-- [x] **N-Quads Streaming Parser** ✅ **RESOLVED (Session 2: 2025-11-06)**
-  - [x] Mark streaming test as deferred to beta.2 ✅
+- [x] **N-Quads Streaming Parser** ✅ **RESOLVED (Session 2: 2025-12-25)**
+  - [x] Mark streaming test as deferred to rc.1 ✅
   - **Problem**: `StreamingParser` hardcoded to use `TurtleParser` (triples only), doesn't support quads
   - **Solution**: Marked `test_streaming_parsing` as `#[ignore]` with explanation
-  - **Status**: Deferred to beta.2 - requires format-aware streaming parser
+  - **Status**: Deferred to rc.1 - requires format-aware streaming parser
   - File: `tests/nquads_tests.rs::test_streaming_parsing`
 
 - [ ] ~~**TriG Parser - Multi-line Statement Handling**~~ → **MOVED TO BETA.1 IMPLEMENTATION** (See below)
 
-## v0.1.0-beta.1 - Active Implementation (November 2025)
+## v0.1.0-rc.1 - Implementation (December 2025)
 
 **Status**: 🚧 **ALL ITEMS BEING IMPLEMENTED FOR BETA.1 RELEASE** 🚧
 
@@ -998,9 +998,9 @@
 - **Accuracy**: High confidence scoring with weighted combination
 - **Test Coverage**: 8 comprehensive tests covering all detection methods
 
-### Medium Priority - Enhancements (Beta.2)
+### Medium Priority - Enhancements (RC.1)
 
-- [x] **Advanced N3 Support** ✅ **COMPLETE (November 2025)**
+- [x] **Advanced N3 Support** ✅ **COMPLETE (December 2025)**
   - [x] N3 type definitions (N3Variable, N3Formula, N3Term, N3Statement) ✅
   - [x] N3 implication/rule support (N3Implication) ✅
   - [x] Built-in predicate registry (40+ predicates across 7 categories) ✅
@@ -1014,14 +1014,14 @@
     - Knowledge base management
   - 42 tests passing total (6 types + 12 lexer + 5 parser + 15 integration + 4 reasoning)
 
-- [x] **Incremental Parsing** ✅ **COMPLETE (November 2025)**
+- [x] **Incremental Parsing** ✅ **COMPLETE (December 2025)**
   - [x] Parse as bytes arrive (non-blocking) ✅
   - [x] Resume parsing from checkpoint ✅
   - [x] Partial document handling ✅
   - [x] `IncrementalParser`, `ParseCheckpoint`, `ParseState` types ✅
   - 11 tests passing
 
-- [x] **SciRS2 Integration** ✅ **REVIEWED (November 2025)**
+- [x] **SciRS2 Integration** ✅ **REVIEWED (December 2025)**
   - [x] Reviewed: memchr is optimal for SIMD byte scanning (scirs2-core SIMD is for numerical ops)
   - [x] Reviewed: rayon integration is appropriate for parallel parsing
   - [x] Reviewed: Current profiling is suitable for RDF parsing use case
@@ -1030,8 +1030,8 @@
 ## Technical Debt
 
 - [x] Improve IRI resolution (currently simplified) ✅ **COMPLETE (December 2, 2025)** - Full RFC 3987 normalization implemented
-- [x] Add proper RFC 3987 IRI validation ✅ **COMPLETE (November 2025)**
-- [x] Refactor turtle.rs ✅ **COMPLETE (November 2025)** - Split into 5 modules
+- [x] Add proper RFC 3987 IRI validation ✅ **COMPLETE (December 2025)**
+- [x] Refactor turtle.rs ✅ **COMPLETE (December 2025)** - Split into 5 modules
 - [x] Add documentation examples for all public APIs ✅ **COMPLETE (November 29, 2025)** - 27 new doc test examples
 - [x] Add cargo-doc examples that are tested ✅ **COMPLETE (November 29, 2025)** - All doc tests passing
 
@@ -1090,45 +1090,45 @@
   - Streaming, interrupted parsing, error recovery, buffer reuse
   - All formats: Turtle, N-Triples, N-Quads, TriG
   - File: `tests/memory_leak_tests.rs`
-- [x] **Test data directory** ✅ **COMPLETE (November 2025)**
+- [x] **Test data directory** ✅ **COMPLETE (December 2025)**
   - Sample files for all formats (Turtle, N-Triples, TriG, N-Quads)
   - Directory: `data/`
 
 ## Documentation
 
-- [x] API documentation for all public items ✅ **COMPLETE (November 2025)**
+- [x] API documentation for all public items ✅ **COMPLETE (December 2025)**
   - Comprehensive lib.rs documentation with 24 passing doc tests
   - Module-level documentation for all public APIs
   - Examples in profiling.rs, streaming.rs, and other key modules
-- [x] Usage examples in README ✅ **COMPLETE (November 2025)**
+- [x] Usage examples in README ✅ **COMPLETE (December 2025)**
   - Complete rewrite with comprehensive examples
   - Quick start guide with all formats
   - Advanced usage examples (streaming, async, parallel, serialization)
   - Configuration examples
   - Error handling patterns
-- [x] Streaming tutorial ✅ **COMPLETE (November 2025)**
+- [x] Streaming tutorial ✅ **COMPLETE (December 2025)**
   - docs/STREAMING_TUTORIAL.md (400+ lines)
   - Comprehensive guide with real-world examples
   - Database import, format conversion, statistical analysis examples
   - Performance optimization techniques
-- [x] Async usage guide ✅ **COMPLETE (November 2025)**
+- [x] Async usage guide ✅ **COMPLETE (December 2025)**
   - docs/ASYNC_GUIDE.md (500+ lines)
   - Full Tokio integration guide
   - Network integration (HTTP, WebSocket, S3, Kafka)
   - Concurrent parsing examples
   - Production patterns (timeouts, retries, backpressure)
-- [x] Performance tuning guide ✅ **COMPLETE (November 2025)**
+- [x] Performance tuning guide ✅ **COMPLETE (December 2025)**
   - docs/PERFORMANCE_GUIDE.md (500+ lines)
   - Complete optimization reference
   - Profiling, benchmarking, and measurement
   - Parse/serialization performance optimization
   - Memory and I/O optimization
   - Platform-specific tuning
-- [x] Documentation index ✅ **COMPLETE (November 2025)**
+- [x] Documentation index ✅ **COMPLETE (December 2025)**
   - docs/README.md - Navigation hub for all documentation
   - Quick links by use case and feature
   - Code example reference
-- [x] **Migration guide from oxigraph/rio** ✅ **COMPLETE (November 2025)**
+- [x] **Migration guide from oxigraph/rio** ✅ **COMPLETE (December 2025)**
   - Comprehensive guide with side-by-side comparisons
   - Basic usage migration examples
   - Advanced features showcase (streaming, async, parallel, N3)
@@ -1139,7 +1139,7 @@
 
 ## CI/CD
 
-- [x] **CI/CD Infrastructure** ✅ **COMPLETE (November 2025)**
+- [x] **CI/CD Infrastructure** ✅ **COMPLETE (December 2025)**
   - [x] Clippy checks (no warnings policy) ✅
   - [x] Format checks (cargo fmt) ✅
   - [x] Test coverage reporting ✅
@@ -1166,19 +1166,7 @@
 
 ## Next Milestones
 
-### v0.1.0-beta.2 (Target: 2 weeks)
-- Complete test suite (80%+ coverage)
-- Streaming support for all formats
-- Async I/O implementation
-- Performance benchmarks baseline
-
-### v0.1.0-rc.1 (Target: 1 month)
-- RDF 1.2 support complete
-- Parallel processing implementation
-- All performance targets met
-- W3C test suite passing
-
-### v0.1.0 Stable (Target: 6 weeks)
+### v0.1.0 Stable
 - Production-ready stability
 - Complete documentation
 - No known critical bugs

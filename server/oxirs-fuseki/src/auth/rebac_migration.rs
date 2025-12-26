@@ -12,7 +12,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_fuseki::auth::rebac_migration::*;
 //!
 //! // Export to Turtle

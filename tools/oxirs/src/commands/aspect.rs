@@ -29,6 +29,11 @@ pub async fn run(action: AspectAction) -> CliResult<()> {
         } => convert(file, format, output, examples, format_variant).await,
         AspectAction::Edit { action } => edit(action).await,
         AspectAction::Usage { input, models_root } => usage(input, models_root).await,
+        AspectAction::From {
+            file,
+            output,
+            format,
+        } => from_dtdl(file, output, format).await,
     }
 }
 
@@ -856,6 +861,15 @@ async fn convert(
             println!("{}", output);
             Ok(())
         }
+        "dtdl" => {
+            use oxirs_samm::generators::dtdl::generate_dtdl;
+
+            let output =
+                generate_dtdl(&aspect).map_err(|e| format!("DTDL generation failed: {}", e))?;
+
+            println!("{}", output);
+            Ok(())
+        }
         "python" | "py" => {
             use oxirs_samm::generators::python::{generate_python, PythonOptions};
 
@@ -888,7 +902,7 @@ async fn convert(
         }
         _ => {
             eprintln!("Error: Unsupported format '{}'", format);
-            eprintln!("Supported formats: rust, markdown, jsonschema, openapi, asyncapi, html, aas, diagram, sql, jsonld, payload, graphql, typescript, python, java, scala");
+            eprintln!("Supported formats: rust, markdown, jsonschema, openapi, asyncapi, html, aas, diagram, sql, jsonld, payload, graphql, typescript, dtdl, python, java, scala");
             Err(format!("Unsupported format: {}", format).into())
         }
     }
@@ -946,6 +960,44 @@ fn to_snake_case(s: &str) -> String {
         }
     }
     result
+}
+
+/// Convert DTDL to SAMM Aspect model
+async fn from_dtdl(file: PathBuf, output: Option<PathBuf>, _format: String) -> CliResult<()> {
+    use oxirs_samm::dtdl_parser::parse_dtdl_interface;
+    use oxirs_samm::serializer::serialize_aspect_to_string;
+
+    // Read DTDL JSON file
+    let dtdl_json = tokio::fs::read_to_string(&file)
+        .await
+        .map_err(|e| format!("Failed to read DTDL file: {}", e))?;
+
+    // Parse DTDL Interface to SAMM Aspect
+    let aspect =
+        parse_dtdl_interface(&dtdl_json).map_err(|e| format!("DTDL parsing error: {}", e))?;
+
+    println!("✓ Converted DTDL Interface to SAMM Aspect");
+    println!("  Aspect: {}", aspect.name());
+    println!("  Properties: {}", aspect.properties().len());
+    println!("  Operations: {}", aspect.operations().len());
+    println!("  Events: {}", aspect.events().len());
+
+    // Serialize to Turtle format
+    let turtle = serialize_aspect_to_string(&aspect)
+        .map_err(|e| format!("SAMM serialization error: {}", e))?;
+
+    // Output to file or stdout
+    if let Some(output_path) = output {
+        tokio::fs::write(&output_path, turtle)
+            .await
+            .map_err(|e| format!("Failed to write output: {}", e))?;
+        println!("\n✓ Saved to: {}", output_path.display());
+    } else {
+        println!("\n# SAMM Aspect Model (Turtle)");
+        println!("{}", turtle);
+    }
+
+    Ok(())
 }
 
 /// Edit Aspect model (move elements or create new version)

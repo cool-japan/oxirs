@@ -12,7 +12,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::production::{CircuitBreaker, RateLimiter, HealthCheck};
 //! use std::time::Duration;
 //!

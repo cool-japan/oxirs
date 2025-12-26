@@ -1,14 +1,14 @@
 # oxirs-geosparql TODO and Future Enhancements
 
-*Last Updated: January 6, 2025*
+*Last Updated: December 25, 2025*
 
-## ✅ Current Status: v0.1.0-beta.1 Development (November 2025)
+## ✅ Current Status: v0.1.0-rc.1 (December 2025)
 
-**Status**: 🚧 **Implementing all future work items for beta.1 release** 🚧
+**Status**: 🚧 **Implementing all future work items for rc.1 release** 🚧
 
 `oxirs-geosparql` delivers full GeoSPARQL 1.1 compliance with production-ready performance profiling, 3D support, and advanced spatial analysis.
 
-### Alpha.4 Development Status - Session 5 (January 6, 2025)
+### Alpha.4 Development Status - Session 5 (December 25, 2025)
 - **FlatGeobuf v5.0 API Migration**: Stubbed out broken implementation
   - FlatGeobuf v5.0 has breaking API changes requiring research
   - Temporarily disabled implementation with clear error messages
@@ -33,7 +33,7 @@
   - 2 FlatGeobuf stub tests (error handling verification)
   - All existing tests remain passing after refactoring
 
-### Alpha.4 Development Status - Session 4 (January 6, 2025)
+### Alpha.4 Development Status - Session 4 (December 25, 2025)
 - **Codebase Analysis**: Reviewed entire project structure and prioritized remaining tasks
 - **FlatGeobuf Support**: Started implementation (partial - v5 API needs research)
   - Added Cargo.toml dependency for flatgeobuf 5.0
@@ -53,7 +53,7 @@
 - **Documentation**: Updated TODO.md with MVT and FlatGeobuf status
 - **Code Quality**: Zero warnings, full compliance maintained
 
-### Alpha.4 Development Status (January 2025)
+### Alpha.4 Development Status (December 2025)
 - **361 tests passing** with zero warnings in oxirs-geosparql (1 skipped)
   - 10 coord3d tests (3D infrastructure)
   - 16 WKT 3D parsing/serialization tests
@@ -78,7 +78,7 @@
 - **Comprehensive benchmarking** capturing distance, boolean ops, CRS transforms, and indexing
 - **Prometheus-ready metrics** and stress validation up to 50K geometry datasets
 
-### Alpha.4 Highlights (January 2025) - NEWLY COMPLETED
+### Alpha.4 Highlights (December 2025) - NEWLY COMPLETED
 - ✅ **GeoPackage support** - Full OGC GeoPackage 1.3.0 standard (SQLite-based format)
   - In-memory and file-based databases
   - Feature table creation and management
@@ -305,7 +305,7 @@
   - Supports Point-to-Point, Point-to-LineString, LineString-to-LineString, Point-to-Polygon in 3D
   - Helper functions: `point_to_point_3d`, `point_to_linestring_3d`, `point_to_segment_3d`, etc.
   - Tests passing for 3D distance calculations
-- [x] **3D topological relations** - **COMPLETED** (November 2025)
+- [x] **3D topological relations** - **COMPLETED** (December 2025)
   - Implemented in `src/functions/topological_3d.rs` (468 lines)
   - All 8 3D relations: equals_3d, disjoint_3d, intersects_3d, within_3d, contains_3d, overlaps_3d, touches_3d, crosses_3d
   - Z-coordinate range checking and 3D bounding box optimization
@@ -323,7 +323,7 @@
 - Full Z/M parsing from WKT will be implemented in future version
 - Performance impact minimal as Z/M storage is optional
 
-## v0.1.0-beta.1 - Active Implementation (November 2025)
+## v0.1.0-rc.1 - Implementation (December 2025)
 
 **Status**: ✅ **4 OUT OF 5 PRIORITIES COMPLETED FOR BETA.1 RELEASE** ✅
 
@@ -334,10 +334,10 @@
 - ✅ Priority 4: TopoJSON Support (3 tests)
 - ✅ Priority 5: Advanced Spatial Indexing (83 tests)
 
-**Total New Tests**: 113 comprehensive tests for beta.1 features
+**Total New Tests**: 113 comprehensive tests for rc.1 features
 
 ### ✅ Priority 1: 3D Buffer Operations
-**Status**: ✅ **COMPLETED FOR BETA.1** (January 2025)
+**Status**: ✅ **COMPLETED FOR BETA.1** (December 2025)
 
 - [x] **3D Buffer Algorithm Implementation** - ✅ **COMPLETED**
   - [x] Extended 2D buffer to handle Z-coordinates with Coord3D
@@ -368,7 +368,7 @@
 - Z-interpolation strategies for smooth 3D surfaces
 
 ### ✅ Priority 2: Zero-Copy WKT Parsing Optimization
-**Status**: ✅ **COMPLETED FOR BETA.1** (January 2025)
+**Status**: ✅ **COMPLETED FOR BETA.1** (December 2025)
 
 - [x] **String Interning System** - ✅ **COMPLETED**
   - [x] Implemented string arena for coordinate values
@@ -393,7 +393,7 @@
 - Reduced memory pressure for large WKT datasets
 
 ### ✅ Priority 3: FlatGeobuf v5.0 Reading Implementation
-**Status**: ✅ **READING COMPLETED FOR BETA.1** (January 2025)
+**Status**: ✅ **READING COMPLETED FOR BETA.1** (December 2025)
 
 - [x] **v5.0 API Integration** - ✅ **COMPLETED**
   - [x] Researched FlatGeobuf v5.0 geo-traits API and geozero ecosystem
@@ -427,7 +427,7 @@
 **Note**: Writing support requires implementing `geozero::GeozeroDatasource` trait for the Geometry type, which is a complex integration planned for future enhancement. Current implementation focuses on the more common use case of reading existing FlatGeobuf files.
 
 ### ✅ Priority 4: Add TopoJSON Serialization Format
-**Status**: ✅ **COMPLETED FOR BETA.1** (January 2025)
+**Status**: ✅ **COMPLETED FOR BETA.1** (December 2025)
 
 - [x] **TopoJSON Parser Implementation** - ✅ **COMPLETED**
   - [x] Implemented topology parsing (arcs, transforms)
@@ -459,7 +459,7 @@
 - GeometryCollection support
 
 ### ✅ Priority 5: Advanced Spatial Indexing
-**Status**: ✅ **COMPLETED FOR BETA.1** (January 2025)
+**Status**: ✅ **COMPLETED FOR BETA.1** (December 2025)
 
 - [x] **R*-tree Implementation** - ✅ **COMPLETED**
   - [x] R*-tree with improved splitting heuristics (20-40% query speedup)
@@ -476,17 +476,17 @@
   - [x] Configurable cell size for optimal performance
   - [x] Excellent for uniformly distributed data
   - [x] Implemented in `src/index/spatial_hash.rs` (589 lines, 15 tests)
-- [x] **Grid-Based Spatial Index** - ✅ **COMPLETED** (January 2025)
+- [x] **Grid-Based Spatial Index** - ✅ **COMPLETED** (December 2025)
   - [x] Regular grid partitioning with automatic sizing
   - [x] Adaptive grid based on expected geometry count
   - [x] Sparse grid representation with HashMap
   - [x] Implemented in `src/index/grid_index.rs` (670 lines, 17 tests)
-- [x] **Quadtree/Octree Indexing** - ✅ **COMPLETED** (January 2025)
+- [x] **Quadtree/Octree Indexing** - ✅ **COMPLETED** (December 2025)
   - [x] Quadtree for 2D with recursive 4-way subdivision
   - [x] Adaptive subdivision based on point density
   - [x] Configurable node capacity for balancing
   - [x] Implemented in `src/index/quadtree.rs` (835 lines, 15 tests)
-- [x] **K-d Tree for Point Clouds** - ✅ **COMPLETED** (January 2025)
+- [x] **K-d Tree for Point Clouds** - ✅ **COMPLETED** (December 2025)
   - [x] Specialized K-d tree for point-only datasets
   - [x] Optimal k-nearest neighbor queries (O(log n))
   - [x] Bulk loading with median-based construction
@@ -527,7 +527,7 @@
   - Thread-safe caching using RwLock<HashMap>
   - Caches CRS transformation parameters for performance
   - Tested with 2 comprehensive tests
-- [x] **Memory pool for geometry allocations** - **NEWLY COMPLETED** (January 2025)
+- [x] **Memory pool for geometry allocations** - **NEWLY COMPLETED** (December 2025)
   - Implemented in `src/geometry/memory_pool.rs` (661 lines)
   - Thread-safe geometry allocation and deallocation with parking_lot
   - Pre-allocated geometry objects for common types (Point, LineString, Polygon, Multi*)
@@ -536,7 +536,7 @@
   - `GeometryPool` with `alloc_point()`, `return_point()`, etc.
   - Pool management: `clear()`, `shrink_to_fit()`, `reserve()`
   - 11 comprehensive tests covering all pool operations and thread safety
-- [x] **Profile and optimize hot paths** - **COMPLETED** (January 6, 2025)
+- [x] **Profile and optimize hot paths** - **COMPLETED** (December 25, 2025)
   - Profiling utilities implemented in `src/performance/profiling.rs` (425 lines)
   - Identified `SpatialIndex::remove()` as O(n) bottleneck (203ms for 500 removes)
   - **Optimization**: Added HashMap ID index for O(1) remove lookups
@@ -621,7 +621,7 @@
   - 5 EWKB tests + 11 EWKT tests (all passing)
   - EWKB handles byte order (little/big endian)
   - EWKT format: `SRID=4326;POINT(1 2)`
-- [x] **GeoPackage support** - **COMPLETED** (January 2025)
+- [x] **GeoPackage support** - **COMPLETED** (December 2025)
   - Implemented in `src/geometry/geopackage.rs` (494 lines)
   - Full OGC GeoPackage 1.3.0 standard support
   - SQLite-based spatial data format
@@ -636,7 +636,7 @@
   - Supports: Point, LineString, Polygon, Multi* geometries
   - File-based and in-memory database support
   - Known limitation: 3D coordinate preservation requires WKB encoding enhancement
-- [ ] **FlatGeobuf support** - **DOCUMENTED - AWAITING FULL IMPLEMENTATION** (January 2025)
+- [ ] **FlatGeobuf support** - **DOCUMENTED - AWAITING FULL IMPLEMENTATION** (December 2025)
   - Implementation skeleton in `src/geometry/flatgeobuf_parser.rs` (146 lines)
   - Modern cloud-native binary format optimized for HTTP range requests
   - Feature flag: `flatgeobuf-support` added to Cargo.toml
@@ -655,7 +655,7 @@
     - Add writing support using temporary files or wait for memory-based writer
     - Add comprehensive tests once implementation is complete
   - **Notes**: Module structure preserved for easy future migration; clear error messages guide users
-- [x] **MVT (Mapbox Vector Tiles) support** - **COMPLETED** (January 2025)
+- [x] **MVT (Mapbox Vector Tiles) support** - **COMPLETED** (December 2025)
   - Implemented in `src/geometry/mvt_parser.rs` (447 lines)
   - Full MVT 2.1 standard support for web mapping
   - Binary Protocol Buffers encoding for efficient tile delivery
@@ -718,13 +718,13 @@
   - Uses SciRS2 for statistical computations
   - 10 comprehensive tests covering various scenarios
   - Returns SpatialAutocorrelation structures with z-scores and p-values
-- [x] **Heatmap generation** - **COMPLETED** (November 2025)
+- [x] **Heatmap generation** - **COMPLETED** (December 2025)
   - Implemented in `src/analysis/heatmap.rs` (578 lines)
   - Multiple kernel functions: Gaussian, Quartic, Epanechnikov, Triangular, Uniform
   - Configurable grid size, radius, and normalization
   - Hotspot detection with local maxima finding
   - 10 comprehensive tests including weighted heatmaps
-- [x] **Network analysis** - **COMPLETED** (November 2025)
+- [x] **Network analysis** - **COMPLETED** (December 2025)
   - Implemented in `src/analysis/network.rs` (631 lines)
   - Dijkstra's shortest path algorithm
   - A* shortest path with Euclidean heuristic
@@ -750,7 +750,7 @@
   - Example: `examples/sparql_integration.rs` (177 lines) with SPARQL query examples
   - Provides registration template for oxirs-arq integration
   - Includes Simple Features, Egenhofer, and RCC8 topological functions
-- [x] **RDF serialization of geometries** - **COMPLETED** (November 2025)
+- [x] **RDF serialization of geometries** - **COMPLETED** (December 2025)
   - Implemented in `src/geometry/rdf_serialization.rs` (480 lines)
   - Full Turtle format support (human-readable RDF with prefixes)
   - N-Triples format (line-based RDF)
@@ -796,7 +796,7 @@
   - 10 comprehensive repair tests covering all geometry types
   - Handles: NaN/Infinity removal, duplicate removal, ring closure
   - Preserves CRS information during repair
-- [x] **Topology validation (advanced checks)** - **NEWLY COMPLETED** (January 2025)
+- [x] **Topology validation (advanced checks)** - **NEWLY COMPLETED** (December 2025)
   - `ValidationConfig` - Configurable validation tolerances and rules
   - `validate_geometry_with_config()` - Custom validation with user-defined rules
   - `GeometryQualityMetrics` - Quality assessment metrics
@@ -805,7 +805,7 @@
   - Configurable tolerances: coordinate, area, length, minimum thresholds
   - Quality metrics: coordinate count, complexity score, segment statistics, compactness ratio
   - OGC checks: distinct points, ring orientation, interior ring validation
-- [x] **Error tolerance configuration** - **NEWLY COMPLETED** (January 2025)
+- [x] **Error tolerance configuration** - **NEWLY COMPLETED** (December 2025)
   - `ValidationConfig` struct with 8 configurable parameters
   - Coordinate, area, and length tolerance settings
   - Minimum polygon area and linestring length thresholds
@@ -819,7 +819,7 @@
 
 ## Documentation Improvements 📚
 
-- [x] **Performance tuning guide** - **COMPLETED** (January 2025)
+- [x] **Performance tuning guide** - **COMPLETED** (December 2025)
   - Comprehensive 603-line guide covering all optimization strategies
   - Spatial indexing comparison (7 index types)
   - SIMD/GPU acceleration examples
@@ -828,7 +828,7 @@
   - Real-world performance benchmarks
   - Production checklist
   - Located in: `docs/PERFORMANCE_TUNING.md`
-- [x] **Cookbook with common recipes** - **COMPLETED** (January 2025)
+- [x] **Cookbook with common recipes** - **COMPLETED** (December 2025)
   - 891-line cookbook with 40+ ready-to-use examples
   - Basic geometry operations
   - Spatial queries and indexing
@@ -838,7 +838,7 @@
   - 7 real-world scenarios
   - Error handling and testing patterns
   - Located in: `docs/COOKBOOK.md`
-- [x] **Migration guide from Apache Jena GeoSPARQL** - **COMPLETED** (January 2025)
+- [x] **Migration guide from Apache Jena GeoSPARQL** - **COMPLETED** (December 2025)
   - Comprehensive 826-line migration guide
   - Feature comparison (Jena vs OxiRS)
   - Performance improvements (2-100x faster)
@@ -848,7 +848,7 @@
   - Fuseki integration guide
   - Troubleshooting section
   - Located in: `docs/MIGRATION_FROM_JENA.md`
-- [x] **Architecture documentation** - **COMPLETED** (January 2025)
+- [x] **Architecture documentation** - **COMPLETED** (December 2025)
   - Comprehensive 617-line architecture guide
   - Design principles and rationale
   - Complete module organization diagram
@@ -858,7 +858,7 @@
   - Integration point documentation
   - Testing strategy explanation
   - Located in: `docs/ARCHITECTURE.md`
-- [x] **Contribution guide** - **COMPLETED** (January 2025)
+- [x] **Contribution guide** - **COMPLETED** (December 2025)
   - Comprehensive 647-line contribution guide
   - Code of conduct
   - Development setup instructions
@@ -868,7 +868,7 @@
   - Performance considerations
   - Community resources
   - Located in: `CONTRIBUTING.md`
-- [x] **Practical cookbook examples (runnable)** - **COMPLETED** (January 6, 2025)
+- [x] **Practical cookbook examples (runnable)** - **COMPLETED** (December 25, 2025)
   - Created comprehensive runnable cookbook with 10 common patterns
   - 500+ lines of production-ready code examples
   - Covers: Bulk loading, safe operations, proximity analysis, streaming
@@ -877,7 +877,7 @@
   - Demonstrates best practices for real-world applications
   - Located in: `examples/cookbook_common_patterns.rs`
   - Total examples: 28 (including format-specific examples)
-- [x] **Profiling utilities and examples** - **COMPLETED** (January 6, 2025)
+- [x] **Profiling utilities and examples** - **COMPLETED** (December 25, 2025)
   - Built-in performance profiling module for identifying bottlenecks
   - Lightweight `Profiler` struct with HashMap-based timing storage
   - RAII-style `ProfileScope` for automatic profiling
@@ -899,7 +899,7 @@
   - 17 mathematical property tests
   - Tests: distance symmetry, reflexivity, triangle inequality, WKT/GeoJSON round-trips
   - All properties validated automatically with random test cases
-- [x] **Add fuzzing tests** - ✅ **COMPLETED** (January 2025)
+- [x] **Add fuzzing tests** - ✅ **COMPLETED** (December 2025)
   - Implemented in `fuzz/` directory with cargo-fuzz infrastructure
   - 6 comprehensive fuzz targets covering all critical parsers:
     - `fuzz_wkt_parser` - WKT parsing robustness
@@ -924,13 +924,13 @@
   - Round-trip conversion tests
   - Error handling tests
   - CRS preservation tests
-- [x] **Add conformance tests for OGC specifications** - **COMPLETED** (January 6, 2025)
+- [x] **Add conformance tests for OGC specifications** - **COMPLETED** (December 25, 2025)
   - 80 comprehensive OGC GeoSPARQL conformance tests implemented
   - Tests cover: Core, Topology Vocabulary, Geometry Extension, Properties, Spatial Analysis, CRS handling, Egenhofer relations, RCC8 relations, Serialization formats, 3D geometry, Spatial indexing, Performance requirements, Advanced analysis
   - All tests passing with full OGC GeoSPARQL 1.0/1.1 compliance validation
   - Located in: `tests/ogc_conformance.rs`
 - [ ] Add regression tests for reported issues
-- [x] **Test with real-world datasets (OpenStreetMap, etc.)** - **COMPLETED** (January 6, 2025)
+- [x] **Test with real-world datasets (OpenStreetMap, etc.)** - **COMPLETED** (December 25, 2025)
   - Enhanced real-world dataset testing with 7 new large-scale scenarios
   - City-scale POI dataset: 100,000 points with <5s indexing, <100ms queries
   - Building footprint dataset: 10,000 polygons with area calculations
@@ -940,7 +940,7 @@
   - All synthetic tests passing, demonstrates production-scale performance
   - Total real-world dataset tests: 28 (25 passing, 3 ignored for manual execution)
 
-**Current Test Coverage** (Updated: January 6, 2025):
+**Current Test Coverage** (Updated: December 25, 2025):
 - **889+ total tests** (including unit, property, integration, stress, conformance, real-world, profiling, and doc tests)
   - Unit tests: 581 tests across all modules
   - Profiling tests: 6 tests for performance measurement utilities
@@ -978,7 +978,7 @@
 
 ## Infrastructure 🛠️
 
-- [x] **Set up CI/CD pipeline** - **COMPLETED** (January 2025)
+- [x] **Set up CI/CD pipeline** - **COMPLETED** (December 2025)
   - Comprehensive GitHub Actions workflow
   - Multi-platform testing (Linux, macOS, Windows)
   - Multi-Rust version testing (stable, beta)
@@ -988,7 +988,7 @@
   - MSRV check (Rust 1.75.0)
   - Documentation build verification
   - Located in: `.github/workflows/oxirs-geosparql-ci.yml`
-- [x] **Automated benchmark tracking** - **COMPLETED** (January 2025)
+- [x] **Automated benchmark tracking** - **COMPLETED** (December 2025)
   - Automated benchmark execution on main branch
   - PR performance comparison
   - Historical tracking with gh-pages
@@ -997,7 +997,7 @@
   - Memory leak detection with Valgrind
   - Weekly scheduled benchmark runs
   - Located in: `.github/workflows/oxirs-geosparql-benchmark.yml`
-- [x] **Release automation** - **COMPLETED** (January 2025)
+- [x] **Release automation** - **COMPLETED** (December 2025)
   - Automated GitHub release creation
   - Changelog generation
   - Multi-platform binary builds (Linux, macOS x86/ARM, Windows)
@@ -1005,17 +1005,17 @@
   - Automatic crates.io publishing
   - docs.rs update automation
   - Located in: `.github/workflows/oxirs-geosparql-release.yml`
-- [x] **Code coverage reporting** - **COMPLETED** (January 2025)
+- [x] **Code coverage reporting** - **COMPLETED** (December 2025)
   - LLVM-based coverage with cargo-llvm-cov
   - Codecov integration
   - Coverage reports on PRs
   - Included in CI workflow
-- [x] **Performance regression detection** - **COMPLETED** (January 2025)
+- [x] **Performance regression detection** - **COMPLETED** (December 2025)
   - Automated benchmark tracking
   - Baseline comparison for PRs
   - Regression alerts with notifications
   - Included in benchmark workflow
-- [x] **Automated dependency updates** - **COMPLETED** (January 6, 2025)
+- [x] **Automated dependency updates** - **COMPLETED** (December 25, 2025)
   - GitHub Dependabot configuration added
   - Weekly automated updates for Cargo dependencies
   - Grouped updates for related packages (SciRS2, Oxirs, Tokio, Serde, Geo, etc.)

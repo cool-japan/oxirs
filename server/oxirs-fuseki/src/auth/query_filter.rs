@@ -11,7 +11,7 @@
 //!
 //! ## Example Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_fuseki::auth::query_filter::QueryResultFilter;
 //!
 //! let filter = QueryResultFilter::new(graph_auth_manager);

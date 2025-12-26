@@ -1,6 +1,6 @@
 //! Advanced features demonstration for oxirs-tdb
 //!
-//! This example demonstrates the advanced features added in v0.1.0-beta.1:
+//! This example demonstrates the advanced features added in v0.1.0-rc.1:
 //! - Query result caching with LRU eviction
 //! - Statistics collection for cost-based optimization
 //! - Query monitoring with timeout enforcement

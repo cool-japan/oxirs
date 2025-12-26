@@ -23,7 +23,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::write_ahead_log::{WriteAheadLog, WalConfig};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

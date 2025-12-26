@@ -1,6 +1,6 @@
 # OxiRS Vec - Best Practices Guide
 
-**Version**: v0.1.0-beta.2
+**Version**: v0.1.0-rc.1
 **Last Updated**: December 6, 2025
 
 ## Table of Contents
@@ -298,7 +298,7 @@ let filtered = all_results.into_iter()
 let filter = FilterConfig {
     conditions: vec![
         FilterCondition::Equals("category".to_string(), "technology".to_string()),
-        FilterCondition::GreaterThan("timestamp".to_string(), "2024-01-01".to_string()),
+        FilterCondition::GreaterThan("timestamp".to_string(), "2025-12-01".to_string()),
     ],
 };
 
@@ -920,5 +920,5 @@ fn test_search_during_index_rebuild() {
 ---
 
 **Document Version**: 1.0
-**OxiRS Vec Version**: v0.1.0-beta.2
+**OxiRS Vec Version**: v0.1.0-rc.1
 **Last Updated**: December 6, 2025

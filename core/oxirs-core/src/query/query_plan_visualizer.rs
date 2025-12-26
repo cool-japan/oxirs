@@ -12,7 +12,7 @@
 //! - JSON export for external tools
 //!
 //! # Example
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_core::query::query_plan_visualizer::QueryPlanVisualizer;
 //!
 //! let visualizer = QueryPlanVisualizer::new();

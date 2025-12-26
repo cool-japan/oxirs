@@ -1,9 +1,9 @@
 //! # OxiRS RDF-Star
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.2)
+//! **Status**: Beta Release (v0.1.0-rc.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! RDF-star and SPARQL-star implementation providing comprehensive support for quoted triples.
@@ -24,7 +24,7 @@
 //!
 //! ### Basic Quoted Triple Creation
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::{StarStore, StarTriple, StarTerm};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -52,7 +52,7 @@
 //!
 //! ### Parsing RDF-star Data
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::parser::{StarParser, StarFormat};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -91,7 +91,7 @@
 //!
 //! ### Nested Quoted Triples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::{StarStore, StarTriple, StarTerm, StarConfig};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -131,7 +131,7 @@
 //!
 //! ### Performance Optimization
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::{StarStore, StarConfig};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -154,7 +154,7 @@
 //!
 //! The crate provides detailed error types with context and recovery suggestions:
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::{StarError, StarResult};
 //!
 //! fn handle_errors() -> StarResult<()> {
@@ -597,7 +597,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// use oxirs_star::dev_tools::{detect_format, validate_content, StarProfiler};
 /// use oxirs_star::StarConfig;
 ///

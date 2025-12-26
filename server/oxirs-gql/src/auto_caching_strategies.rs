@@ -45,7 +45,7 @@ pub enum CachingError {
 }
 
 /// Caching strategy types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CachingStrategy {
     /// Least Recently Used - evict least recently accessed items
     LRU,
@@ -54,6 +54,7 @@ pub enum CachingStrategy {
     LFU,
 
     /// Adaptive - automatically adjust between LRU/LFU based on workload
+    #[default]
     Adaptive,
 
     /// Predictive - use ML to predict which queries to cache
@@ -64,12 +65,6 @@ pub enum CachingStrategy {
 
     /// Cost-based - cache expensive queries preferentially
     CostBased,
-}
-
-impl Default for CachingStrategy {
-    fn default() -> Self {
-        Self::Adaptive
-    }
 }
 
 /// Query access pattern

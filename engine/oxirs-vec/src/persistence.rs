@@ -151,14 +151,14 @@ impl PersistenceManager {
         writer.write_all(&data)?;
 
         // Write URI mapping
-        let uri_mapping = bincode::encode_to_vec(&index.uri_to_id(), bincode::config::standard())
+        let uri_mapping = bincode::encode_to_vec(index.uri_to_id(), bincode::config::standard())
             .map_err(|e| anyhow!("Failed to serialize URI mapping: {}", e))?;
         let mapping_len = uri_mapping.len() as u32;
         writer.write_all(&mapping_len.to_le_bytes())?;
         writer.write_all(&uri_mapping)?;
 
         // Write entry point
-        let entry_point = bincode::encode_to_vec(&index.entry_point(), bincode::config::standard())
+        let entry_point = bincode::encode_to_vec(index.entry_point(), bincode::config::standard())
             .map_err(|e| anyhow!("Failed to serialize entry point: {}", e))?;
         writer.write_all(&entry_point)?;
 
@@ -279,10 +279,8 @@ impl PersistenceManager {
             })
             .collect();
 
-        Ok(
-            bincode::encode_to_vec(&serializable_nodes, bincode::config::standard())
-                .map_err(|e| anyhow!("Failed to serialize nodes: {}", e))?,
-        )
+        bincode::encode_to_vec(&serializable_nodes, bincode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize nodes: {}", e))
     }
 
     /// Deserialize nodes from bytes

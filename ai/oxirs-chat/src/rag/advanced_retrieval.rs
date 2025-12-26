@@ -615,7 +615,7 @@ mod tests {
     #[test]
     fn test_bm25_plus_scoring() {
         let bm25 = BM25Plus::new();
-        let docs = vec![
+        let docs = [
             RagDocument {
                 id: "1".to_string(),
                 content: "machine learning artificial intelligence".to_string(),

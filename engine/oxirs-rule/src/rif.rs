@@ -43,20 +43,15 @@ use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 
 /// RIF dialect variant
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RifDialect {
     /// RIF-Core: Basic Horn rules
     Core,
     /// RIF-BLD: Basic Logic Dialect with equality and NAF
+    #[default]
     Bld,
     /// RIF-PRD: Production Rule Dialect (future)
     Prd,
-}
-
-impl Default for RifDialect {
-    fn default() -> Self {
-        Self::Bld
-    }
 }
 
 /// RIF document structure

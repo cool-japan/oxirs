@@ -8,6 +8,7 @@
 //! - AsyncAPI 2.6
 //! - HTML documentation
 //! - **AAS (Asset Administration Shell)** - Industry 4.0 digital twin standard
+//! - **DTDL (Digital Twins Definition Language)** - Azure Digital Twins modeling language
 //! - **Diagram (SVG/PNG)** - Visual diagrams via Graphviz
 //! - **SQL Schema** - Database DDL for PostgreSQL, MySQL, SQLite
 //! - **JSON-LD** - Linked Data with semantic context
@@ -22,6 +23,7 @@
 
 pub mod aas;
 pub mod diagram;
+pub mod dtdl;
 pub mod graphql;
 pub mod java;
 pub mod jsonld;
@@ -36,6 +38,7 @@ pub mod typescript;
 // Re-export for convenience
 pub use aas::{generate_aas, AasFormat};
 pub use diagram::{generate_diagram, DiagramFormat, DiagramStyle};
+pub use dtdl::{generate_dtdl, generate_dtdl_with_options, DtdlOptions};
 pub use graphql::generate_graphql;
 pub use java::{generate_java, JavaOptions};
 pub use jsonld::generate_jsonld;

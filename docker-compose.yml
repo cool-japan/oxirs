@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # OxiRS Digital Twin Platform
+  oxirs-fuseki:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oxirs-fuseki
+    ports:
+      - "3030:3030"     # SPARQL/NGSI-LD API
+      - "3031:3031"     # GraphQL (if enabled)
+    volumes:
+      - oxirs-data:/data/datasets
+      - oxirs-logs:/data/logs
+      - ./server/oxirs-fuseki/oxirs.toml:/data/config/oxirs.toml:ro
+    environment:
+      - RUST_LOG=info
+      - RUST_BACKTRACE=1
+      - OXIRS_DATA_DIR=/data/datasets
+      - OXIRS_LOG_DIR=/data/logs
+    networks:
+      - oxirs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/$/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Eclipse Mosquitto MQTT Broker (for Industry 4.0 scenarios)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: oxirs-mosquitto
+    ports:
+      - "1883:1883"     # MQTT
+      - "9001:9001"     # WebSocket
+    volumes:
+      - ./deployments/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-logs:/mosquitto/log
+    networks:
+      - oxirs-network
+    restart: unless-stopped
+
+  # MQTT → OxiRS Bridge (example service)
+  mqtt-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oxirs-mqtt-bridge
+    environment:
+      - RUST_LOG=info
+      - MQTT_BROKER=mosquitto:1883
+      - OXIRS_ENDPOINT=http://oxirs-fuseki:3030
+      - BRIDGE_TOPICS=factory/+/sensor/#
+    command: >
+      /bin/sh -c "
+      echo 'MQTT Bridge would start here';
+      echo 'In production, run: cargo run --example mqtt_to_rdf_bridge';
+      sleep infinity
+      "
+    depends_on:
+      - oxirs-fuseki
+      - mosquitto
+    networks:
+      - oxirs-network
+    restart: unless-stopped
+
+  # Prometheus (metrics collection)
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    container_name: oxirs-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - oxirs-network
+    restart: unless-stopped
+
+  # Grafana (dashboards)
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: oxirs-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deployments/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
+    depends_on:
+      - prometheus
+    networks:
+      - oxirs-network
+    restart: unless-stopped
+
+networks:
+  oxirs-network:
+    driver: bridge
+
+volumes:
+  oxirs-data:
+    driver: local
+  oxirs-logs:
+    driver: local
+  mosquitto-data:
+    driver: local
+  mosquitto-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

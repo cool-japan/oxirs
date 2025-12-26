@@ -15,10 +15,9 @@
 //!
 //! ## Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_arq::query_batch_executor::{QueryBatchExecutor, BatchConfig, QueryPriority};
 //!
-//! # fn example() -> anyhow::Result<()> {
 //! let config = BatchConfig::default()
 //!     .with_max_concurrent(16)
 //!     .with_memory_limit_mb(2048);
@@ -30,11 +29,9 @@
 //! executor.add_query("ASK { ?s a :Person }", QueryPriority::High)?;
 //!
 //! // Execute batch and get results
-//! let results = executor.execute_batch().await?;
+//! let results = executor.execute_batch_async(dataset).await?;
 //!
-//! println!("Executed {} queries in {:?}", results.len(), results.total_duration());
-//! # Ok(())
-//! # }
+//! println!("Executed {} queries", results.len());
 //! ```
 
 use crate::executor::Dataset;

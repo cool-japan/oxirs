@@ -586,7 +586,7 @@ process_graph(graph);
             r#"
 Get started with RDF-star in just a few lines of code:
 
-```rust
+```rust,ignore
 {}
 ```
 

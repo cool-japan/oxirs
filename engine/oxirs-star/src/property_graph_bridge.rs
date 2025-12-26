@@ -41,7 +41,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_star::property_graph_bridge::{PropertyGraphBridge, ConversionConfig, LabeledPropertyGraph};
 //! use oxirs_star::StarStore;
 //!

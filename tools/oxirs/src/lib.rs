@@ -1,9 +1,9 @@
 //! # OxiRS CLI Tool
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs/badge.svg)](https://docs.rs/oxirs)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.2)
+//! **Status**: Beta Release (v0.1.0-rc.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Command-line interface for OxiRS providing import, export, SPARQL queries,
@@ -19,6 +19,7 @@
 //!
 //! ## Commands
 //!
+//! ### Core RDF Operations
 //! - `init`: Initialize a new knowledge graph dataset
 //! - `import`: Import RDF data from various formats (data persisted automatically)
 //! - `query`: Execute SPARQL queries (SELECT, ASK, CONSTRUCT, DESCRIBE)
@@ -26,7 +27,28 @@
 //! - `interactive`: Interactive REPL for SPARQL queries
 //! - `serve`: Start the OxiRS SPARQL server
 //! - `benchmark`: Run performance benchmarks
-//! - Various tools: `tdbloader`, `tdbquery`, `arq`, `sparql`, etc.
+//!
+//! ### Phase D: Industrial Connectivity (0.1.0-rc.1)
+//! - `tsdb`: Time-series database operations with SPARQL temporal extensions
+//! - `modbus`: Modbus TCP/RTU monitoring and RDF mapping
+//! - `canbus`: CANbus/J1939 monitoring, DBC parsing, SAMM generation
+//!
+//! ### Storage Tools
+//! - `tdbloader`, `tdbquery`, `tdbstats`, `tdbbackup`, `tdbcompact`
+//!
+//! ### Validation Tools
+//! - `shacl`: SHACL shape validation
+//! - `shex`: ShEx validation
+//! - `infer`: Reasoning and inference
+//!
+//! ### SAMM/AAS Tools (Java ESMF SDK compatible)
+//! - `aspect`: SAMM Aspect Model tools
+//! - `aas`: Asset Administration Shell tools
+//! - `package`: Package management
+//!
+//! ### Advanced Tools
+//! - `graph-analytics`: RDF graph analytics using scirs2-graph
+//! - Various utilities: `arq`, `riot`, `rdfcat`, etc.
 //!
 //! ## Quick Start
 //!
@@ -75,6 +97,56 @@
 //! # CONSTRUCT new triples
 //! oxirs query mykg "CONSTRUCT { ?s <http://example.org/hasName> ?name }
 //!                   WHERE { ?s <http://example.org/name> ?name }"
+//! ```
+//!
+//! ## Phase D: Industrial Connectivity Examples (0.1.0-rc.1)
+//!
+//! ### Time-Series Operations
+//! ```bash
+//! # Query time-series with aggregation
+//! oxirs tsdb query mykg --series 1 --start 2025-12-01T00:00:00Z --end 2025-12-25T23:59:59Z --aggregate avg
+//!
+//! # Insert data point
+//! oxirs tsdb insert mykg --series 1 --value 22.5
+//!
+//! # Show compression statistics
+//! oxirs tsdb stats mykg --detailed
+//!
+//! # Export to CSV
+//! oxirs tsdb export mykg --series 1 --output data.csv --format csv
+//! ```
+//!
+//! ### Modbus Operations
+//! ```bash
+//! # Monitor Modbus TCP device (real-time)
+//! oxirs modbus monitor-tcp --address 192.168.1.100:502 --start 40001 --count 10 --interval 1000
+//!
+//! # Read registers
+//! oxirs modbus read --device 192.168.1.100:502 --address 40001 --count 5 --datatype float32
+//!
+//! # Generate RDF from Modbus data
+//! oxirs modbus to-rdf --device 192.168.1.100:502 --config modbus_map.toml --output data.ttl
+//!
+//! # Start mock server for testing
+//! oxirs modbus mock-server --port 5020
+//! ```
+//!
+//! ### CANbus Operations
+//! ```bash
+//! # Monitor CAN interface
+//! oxirs canbus monitor --interface can0 --dbc vehicle.dbc --j1939
+//!
+//! # Parse DBC file
+//! oxirs canbus parse-dbc --file vehicle.dbc --detailed
+//!
+//! # Decode CAN frame
+//! oxirs canbus decode --id 0x0CF00400 --data DEADBEEF --dbc vehicle.dbc
+//!
+//! # Generate SAMM Aspect Models from DBC
+//! oxirs canbus to-samm --dbc vehicle.dbc --output ./models/
+//!
+//! # Generate RDF from live CAN data
+//! oxirs canbus to-rdf --interface can0 --dbc vehicle.dbc --output can_data.ttl --count 1000
 //! ```
 //!
 //! ## Data Persistence
@@ -856,6 +928,25 @@ pub enum Commands {
         /// Top K results to display
         #[arg(short = 'k', long, default_value = "20")]
         top: usize,
+    },
+
+    // === Phase D: Industrial Connectivity (0.1.0-rc.1) ===
+    /// Time-series database operations
+    Tsdb {
+        #[command(subcommand)]
+        action: TsdbAction,
+    },
+
+    /// Modbus protocol monitoring and configuration
+    Modbus {
+        #[command(subcommand)]
+        action: ModbusAction,
+    },
+
+    /// CANbus/J1939 monitoring and DBC parsing
+    Canbus {
+        #[command(subcommand)]
+        action: CanbusAction,
     },
 }
 
@@ -1703,5 +1794,18 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 
             Ok(())
         }
+
+        // === Phase D: Industrial Connectivity CLI Handlers (0.1.0-rc.1) ===
+        Commands::Tsdb { action } => commands::tsdb::execute(action, &ctx)
+            .await
+            .map_err(|e| e.into()),
+
+        Commands::Modbus { action } => commands::modbus::execute(action, &ctx)
+            .await
+            .map_err(|e| e.into()),
+
+        Commands::Canbus { action } => commands::canbus::execute(action, &ctx)
+            .await
+            .map_err(|e| e.into()),
     }
 }

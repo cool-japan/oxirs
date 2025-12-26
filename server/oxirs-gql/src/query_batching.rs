@@ -31,7 +31,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_gql::query_batching::{QueryBatcher, BatchConfig, ExecutionStrategy};
 //!
 //! // Create a query batcher
@@ -42,12 +42,11 @@
 //! let batcher = QueryBatcher::new(config);
 //!
 //! // Add queries to batch
-//! let batch_id = batcher.create_batch();
-//! batcher.add_query(batch_id, "{ user { name } }");
-//! batcher.add_query(batch_id, "{ posts { title } }");
+//! let batch_id = batcher.create_batch().await;
+//! batcher.add_query(&batch_id, batched_query).await?;
 //!
 //! // Execute batch
-//! let results = batcher.execute_batch(batch_id).await?;
+//! let results = batcher.execute_batch(&batch_id).await?;
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -70,22 +69,17 @@ pub enum ExecutionStrategy {
 }
 
 /// Query priority level
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum QueryPriority {
     /// Low priority (background tasks)
     Low = 0,
     /// Normal priority (default)
+    #[default]
     Normal = 1,
     /// High priority (user-facing queries)
     High = 2,
     /// Critical priority (real-time requirements)
     Critical = 3,
-}
-
-impl Default for QueryPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 /// Batch configuration

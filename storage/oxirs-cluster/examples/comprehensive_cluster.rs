@@ -1,6 +1,6 @@
 //! Comprehensive OxiRS Cluster Example
 //!
-//! This example demonstrates how to use all the major features of oxirs-cluster v0.1.0-beta.1:
+//! This example demonstrates how to use all the major features of oxirs-cluster v0.1.0-rc.1:
 //! - Distributed Tracing
 //! - Alerting System
 //! - Visualization Dashboard
@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    println!("🚀 OxiRS Cluster v0.1.0-beta.1 - Comprehensive Example");
+    println!("🚀 OxiRS Cluster v0.1.0-rc.1 - Comprehensive Example");
     println!("=====================================================\n");
 
     // ==========================================

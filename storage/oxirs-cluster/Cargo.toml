@@ -101,3 +101,9 @@ leak_detection = []
 cuda = []   # GPU acceleration with CUDA (NVIDIA)
 metal = []  # GPU acceleration with Metal (Apple Silicon)
 
+[package.metadata.docs.rs]
+# lmdb requires system library, but is always enabled (non-optional)
+# This crate may fail on docs.rs due to lmdb C library requirement
+# Consider making lmdb optional in the future
+rustdoc-args = ["--cfg", "docsrs"]
+

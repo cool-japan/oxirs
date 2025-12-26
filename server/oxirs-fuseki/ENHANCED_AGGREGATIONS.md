@@ -136,7 +136,7 @@ SELECT
 WHERE {
   ?visit ex:userAgent ?browser ;
          ex:timestamp ?time .
-  FILTER(?time >= "2024-01-01"^^xsd:date)
+  FILTER(?time >= "2025-12-01"^^xsd:date)
 }
 ```
 

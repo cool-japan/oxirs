@@ -50,7 +50,7 @@ pub enum PrefetchError {
 }
 
 /// Prefetch strategies
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum PrefetchStrategy {
     /// Sequential - prefetch queries that typically follow current query
     Sequential,
@@ -62,16 +62,11 @@ pub enum PrefetchStrategy {
     Popularity,
 
     /// Adaptive - automatically adapt strategy based on hit rate
+    #[default]
     Adaptive,
 
     /// ML-based - use machine learning to predict next queries
     MLBased,
-}
-
-impl Default for PrefetchStrategy {
-    fn default() -> Self {
-        Self::Adaptive
-    }
 }
 
 /// Query sequence pattern

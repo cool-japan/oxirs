@@ -450,7 +450,7 @@ mod tests {
     fn test_quoted_triple_serialization() {
         let triple = QuotedTriple::new(NodeId::from(1), NodeId::from(2), NodeId::from(3));
 
-        let serialized = bincode::encode_to_vec(&triple, bincode::config::standard()).unwrap();
+        let serialized = bincode::encode_to_vec(triple, bincode::config::standard()).unwrap();
         let deserialized: QuotedTriple =
             bincode::decode_from_slice(&serialized, bincode::config::standard())
                 .unwrap()

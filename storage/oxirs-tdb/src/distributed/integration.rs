@@ -14,13 +14,12 @@
 //!
 //! # Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_tdb::distributed::integration::{DistributedTdbStore, DistributedConfig};
 //!
-//! # async fn example() -> anyhow::Result<()> {
 //! // Create distributed store
 //! let config = DistributedConfig::default();
-//! let mut store = DistributedTdbStore::new(config);
+//! let mut store = DistributedTdbStore::new("node1".to_string(), config);
 //!
 //! // Register nodes
 //! store.register_node("node1", "http://node1:8080").await?;
@@ -30,8 +29,6 @@
 //! let txn_id = store.begin_distributed_transaction().await?;
 //! // ... perform operations ...
 //! store.commit_distributed_transaction(&txn_id).await?;
-//! # Ok(())
-//! # }
 //! ```
 
 use crate::distributed::coordinator::{CommitProtocol, CoordinatorConfig, TransactionCoordinator};

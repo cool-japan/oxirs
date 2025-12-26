@@ -116,8 +116,9 @@ impl EntityLinker {
         candidates.truncate(self.config.max_candidates);
 
         // Apply context if available
-        let results = if self.config.use_context && context_embeddings.is_some() {
-            self.rerank_with_context(&candidates, context_embeddings.unwrap())?
+        let results = if let Some(ctx_emb) = context_embeddings.filter(|_| self.config.use_context)
+        {
+            self.rerank_with_context(&candidates, ctx_emb)?
         } else {
             candidates
                 .into_iter()

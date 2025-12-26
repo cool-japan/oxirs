@@ -397,7 +397,7 @@ fn test_large_document() {
 }
 
 #[test]
-#[ignore = "StreamingParser currently only supports Turtle (triples), not N-Quads (quads). Requires format-aware streaming parser - deferred to beta.2"]
+#[ignore = "StreamingParser currently only supports Turtle (triples), not N-Quads (quads). Requires format-aware streaming parser - deferred to rc.2"]
 fn test_streaming_parsing() {
     use oxirs_ttl::streaming::{StreamingConfig, StreamingParser};
 

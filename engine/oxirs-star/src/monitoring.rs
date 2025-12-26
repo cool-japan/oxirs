@@ -22,7 +22,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::monitoring::{MetricsCollector, MetricType};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

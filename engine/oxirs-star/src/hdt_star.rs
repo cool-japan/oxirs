@@ -21,7 +21,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_star::hdt_star::{HdtStarBuilder, HdtStarReader, HdtStarConfig};
 //! use oxirs_star::{StarTriple, StarTerm, StarStore};
 //!

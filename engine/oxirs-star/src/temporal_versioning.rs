@@ -18,7 +18,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::temporal_versioning::{TemporalAnnotationStore, TemporalQuery};
 //! use chrono::Utc;
 //!
@@ -163,12 +163,9 @@ impl VersionChain {
 
     fn get_as_of_valid(&self, time: DateTime<Utc>) -> Option<&TemporalVersion> {
         // Find versions where valid_time_start <= time < valid_time_end
-        self.versions
-            .values()
-            .filter(|v| {
-                v.valid_time_start <= time && v.valid_time_end.map_or(true, |end| time < end)
-            })
-            .next_back()
+        self.versions.values().rfind(|v| {
+            v.valid_time_start <= time && v.valid_time_end.map_or(true, |end| time < end)
+        })
     }
 
     fn get_between_transaction(

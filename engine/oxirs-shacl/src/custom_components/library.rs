@@ -478,8 +478,8 @@ impl CustomConstraintComponent for IriValidator {
             parameters,
             sparql_query: Some(sparql),
             validation_function: None,
-            message_template: Some(if scheme.is_some() {
-                format!("Value must be a valid IRI with scheme: {}", scheme.unwrap())
+            message_template: Some(if let Some(s) = scheme {
+                format!("Value must be a valid IRI with scheme: {}", s)
             } else {
                 "Value must be a valid IRI".to_string()
             }),

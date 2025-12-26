@@ -1,6 +1,6 @@
 # OxiRS Embed - Production Deployment Guide
 
-**Version**: 0.1.0-beta.2
+**Version**: 0.1.0-rc.1
 **Last Updated**: November 20, 2025
 **Status**: Production Ready ✅
 
@@ -72,7 +72,7 @@ GPU: NVIDIA A100 (40GB+) or H100
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-embed = { version = "0.1.0-beta.2", features = ["all"] }
+oxirs-embed = { version = "0.1.0-rc.1", features = ["all"] }
 tokio = { version = "1.48", features = ["full"] }
 tracing-subscriber = "0.3"
 ```
@@ -193,7 +193,7 @@ spec:
     spec:
       containers:
       - name: oxirs-embed
-        image: ghcr.io/cool-japan/oxirs-embed:0.1.0-beta.2
+        image: ghcr.io/cool-japan/oxirs-embed:0.1.0-rc.1
         ports:
         - containerPort: 8080
           name: http
@@ -317,7 +317,7 @@ async fn main() -> Result<()> {
 
 ```bash
 # Download latest release
-wget https://github.com/cool-japan/oxirs/releases/download/v0.1.0-beta.2/oxirs-embed-linux-x86_64.tar.gz
+wget https://github.com/cool-japan/oxirs/releases/download/v0.1.0-rc.1/oxirs-embed-linux-x86_64.tar.gz
 
 # Extract
 tar -xzf oxirs-embed-linux-x86_64.tar.gz
@@ -370,7 +370,7 @@ CMD ["oxirs-embed", "serve"]
 
 ```bash
 # Build Docker image
-docker build -t oxirs-embed:0.1.0-beta.2 .
+docker build -t oxirs-embed:0.1.0-rc.1 .
 
 # Run container
 docker run -d \
@@ -378,7 +378,7 @@ docker run -d \
   -p 8080:8080 \
   -p 9090:9090 \
   -v /path/to/models:/var/lib/oxirs/models \
-  oxirs-embed:0.1.0-beta.2
+  oxirs-embed:0.1.0-rc.1
 ```
 
 ---
@@ -607,7 +607,7 @@ gpu_memory_usage_bytes
 
 ```json
 {
-  "timestamp": "2025-11-20T10:30:45Z",
+  "timestamp": "2025-12-25T10:30:45Z",
   "level": "INFO",
   "target": "oxirs_embed::inference",
   "message": "Batch inference completed",
@@ -637,7 +637,7 @@ tracing_subscriber::registry()
 // GET /health
 {
   "status": "healthy",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-rc.1",
   "uptime_seconds": 86400,
   "cache_hit_rate": 0.85,
   "models_loaded": 3
@@ -784,4 +784,4 @@ burst_size = 50
 
 **License**: MIT
 **Maintainers**: OxiRS Team
-**Version**: 0.1.0-beta.2 (Production Ready)
+**Version**: 0.1.0-rc.1 (Production Ready)

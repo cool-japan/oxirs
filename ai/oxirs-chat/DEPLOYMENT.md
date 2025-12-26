@@ -302,7 +302,7 @@ Structured JSON logs with tracing spans:
 
 ```json
 {
-  "timestamp": "2025-01-22T10:30:00Z",
+  "timestamp": "2025-12-25T10:30:00Z",
   "level": "INFO",
   "target": "oxirs_chat",
   "message": "Processing message",

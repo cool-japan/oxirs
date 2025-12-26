@@ -141,6 +141,29 @@ pub enum ExternalSystemType {
         pattern: String,
         watch_mode: bool,
     },
+    /// MQTT broker
+    Mqtt {
+        broker_url: String,
+        client_id: String,
+        topic_subscriptions: Vec<String>,
+        qos: u8,
+        username: Option<String>,
+        password: Option<String>,
+    },
+    /// OPC UA server
+    OpcUa {
+        endpoint_url: String,
+        security_policy: String,
+        user_identity: String,
+        node_subscriptions: Vec<String>,
+    },
+    /// Eclipse Sparkplug B (MQTT-based Industry 4.0)
+    SparkplugB {
+        broker_url: String,
+        group_id: String,
+        edge_node_id: String,
+        device_ids: Vec<String>,
+    },
 }
 
 /// AWS credentials

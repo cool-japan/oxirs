@@ -1,7 +1,7 @@
 # OxiRS Fuseki - Performance Baseline Documentation
 
 **Version**: v0.1.0-rc.3
-**Date**: November 2025
+**Date**: December 2025
 **Status**: Release Candidate
 
 ---

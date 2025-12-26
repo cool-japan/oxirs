@@ -166,7 +166,7 @@ Available tags for selective execution:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `oxirs_version` | `0.1.0-beta.2` | OxiRS Fuseki version |
+| `oxirs_version` | `0.1.0-rc.1` | OxiRS Fuseki version |
 | `oxirs_http_port` | `3030` | HTTP port |
 | `oxirs_https_port` | `3031` | HTTPS port |
 | `enable_tls` | `false` | Enable TLS/HTTPS |

@@ -703,7 +703,7 @@ Quantum annealing and variational quantum algorithms for complex join order opti
 - **SplitRS Attempt Failed**: 573 compilation errors due to complex interdependencies
 - **Recommendation**: Manual refactoring in v0.2.0 with careful type and import management
 
-### Beta.1 Status (November 6, 2025 - FINAL)
+### RC.1 Status (November 6, 2025 - FINAL)
 - **Complete test suite** (238 lib tests passing) with zero errors
 - **Storage backends** - Memory, Persistent, UltraPerformance, MemoryMapped with compression
 - **SHACL-star validation** - Complete constraint engine with 7+ constraint types
@@ -721,7 +721,7 @@ Quantum annealing and variational quantum algorithms for complex join order opti
 - **Memory-efficient storage** - Support for datasets larger than RAM via memory-mapping
 - **Performance validated** - 122-257% throughput improvements (benchmarked)
 - **Interoperability testing** - 17 comprehensive tests for Apache Jena, RDF4J, Virtuoso compatibility
-- **Released on crates.io**: `oxirs-star = "0.1.0-beta.1"` (experimental)
+- **Released on crates.io**: `oxirs-star = "0.1.0-rc.1"` (experimental)
 
 ## ✅ Recently Completed (November 6, 2025 - Session 5)
 
@@ -799,7 +799,7 @@ Quantum annealing and variational quantum algorithms for complex join order opti
 
 ## ✅ Previously Completed (October 30, 2025 - Session 3)
 
-### Beta Release Implementation (v0.1.0-beta.1)
+### Release Implementation (v0.1.0-rc.1)
 - **Storage Backend Integration** - Multi-backend storage system (src/storage_integration.rs)
   - Memory backend for in-memory RDF-star storage
   - Persistent backend with auto-save and disk serialization
@@ -844,7 +844,7 @@ Quantum annealing and variational quantum algorithms for complex join order opti
   - ShutdownManager for graceful termination
   - RequestTracer for distributed tracing
 - **Test Suite** - 150/150 lib tests passing, zero errors
-  - All Beta release features fully tested
+  - All release features fully tested
   - Integration tests for all new modules
   - Fixed 3 test failures related to nesting depth and storage backends
 
@@ -892,7 +892,7 @@ See `../../docs/oxirs_star_scirs2_integration_summary.md` for detailed technical
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Beta Release Targets (v0.1.0-beta.1 - November 2025)
+### Release Targets (v0.1.0-rc.1 - December 2025)
 
 #### Specification Compliance
 - [ ] Complete RDF-star specification
@@ -1643,7 +1643,7 @@ This addresses all gaps in SciRS2-Core usage while maintaining backward compatib
 **Phase 1 is COMPLETE and ready for:**
 - Production deployment
 - Performance benchmarking
-- Integration into oxirs-star v0.4.0-beta.1
+- Integration into oxirs-star v0.4.0-rc.1
 - Progression to Phase 2 (JIT Compilation)
 
 **All objectives met or exceeded!**

@@ -10,7 +10,32 @@ mod integration_tests {
         StorageTier, TierTransitionReason, TieringConfig, TieringManager, TieringPolicy,
     };
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::time::SystemTime;
+
+    /// Create a test config with unique temp directory to avoid race conditions
+    fn create_test_config() -> (TieringConfig, PathBuf) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let unique_id = COUNTER.fetch_add(1, Ordering::Relaxed);
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "oxirs-tiering-test-{}-{}",
+            std::process::id(),
+            unique_id
+        ));
+        // Clean up any stale files from previous runs
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let mut config = TieringConfig::development();
+        config.storage_base_path = temp_dir.clone();
+        (config, temp_dir)
+    }
+
+    /// Cleanup helper for test directories
+    fn cleanup_test_dir(path: &PathBuf) {
+        let _ = std::fs::remove_dir_all(path);
+    }
 
     fn create_test_metadata(id: &str, tier: StorageTier, qps: f64, size_mb: u64) -> IndexMetadata {
         IndexMetadata {
@@ -49,7 +74,7 @@ mod integration_tests {
 
     #[test]
     fn test_end_to_end_tiering() {
-        let config = TieringConfig::development();
+        let (config, temp_dir) = create_test_config();
         let manager = TieringManager::new(config).unwrap();
 
         // Register indices with different access patterns
@@ -105,6 +130,8 @@ mod integration_tests {
                 "Recommended tier should be valid"
             );
         }
+
+        cleanup_test_dir(&temp_dir);
     }
 
     #[test]
@@ -117,9 +144,10 @@ mod integration_tests {
             TieringPolicy::LatencyOptimized,
             TieringPolicy::Adaptive,
         ] {
+            let (base_config, temp_dir) = create_test_config();
             let config = TieringConfig {
                 policy: *policy,
-                ..TieringConfig::development()
+                ..base_config
             };
 
             let manager = TieringManager::new(config).unwrap();
@@ -145,12 +173,14 @@ mod integration_tests {
 
             let metadata = manager.get_index_metadata("test_index").unwrap();
             assert_eq!(metadata.current_tier, StorageTier::Hot);
+
+            cleanup_test_dir(&temp_dir);
         }
     }
 
     #[test]
     fn test_metrics_collection() {
-        let config = TieringConfig::development();
+        let (config, temp_dir) = create_test_config();
         let manager = TieringManager::new(config).unwrap();
 
         let metadata = create_test_metadata("test_index", StorageTier::Hot, 10.0, 10);
@@ -174,11 +204,13 @@ mod integration_tests {
         assert!(hot_stats.total_queries > 0);
         assert!(hot_stats.bytes_read > 0);
         assert!(hot_stats.bytes_written > 0);
+
+        cleanup_test_dir(&temp_dir);
     }
 
     #[test]
     fn test_capacity_management() {
-        let config = TieringConfig::development();
+        let (config, temp_dir) = create_test_config();
         let manager = TieringManager::new(config).unwrap();
 
         let stats = manager.get_tier_statistics();
@@ -203,13 +235,16 @@ mod integration_tests {
         manager.apply_optimizations(Some(0)).unwrap();
 
         // Note: In a real scenario, utilization would be > 0 after metrics update
+
+        cleanup_test_dir(&temp_dir);
     }
 
     #[test]
     fn test_auto_optimization() {
+        let (base_config, temp_dir) = create_test_config();
         let config = TieringConfig {
             auto_tier_management: true,
-            ..TieringConfig::development()
+            ..base_config
         };
 
         let manager = TieringManager::new(config).unwrap();
@@ -238,17 +273,20 @@ mod integration_tests {
 
         // Should have made some transitions or already be optimal
         assert!(!applied.is_empty() || applied.is_empty()); // Either optimized or already optimal
+
+        cleanup_test_dir(&temp_dir);
     }
 
     #[test]
     fn test_gradual_transition() {
+        let (base_config, temp_dir) = create_test_config();
         let config = TieringConfig {
             gradual_transition: super::super::types::GradualTransitionConfig {
                 enabled: true,
                 stages: 2,
                 ..Default::default()
             },
-            ..TieringConfig::development()
+            ..base_config
         };
 
         let manager = TieringManager::new(config).unwrap();
@@ -271,11 +309,13 @@ mod integration_tests {
         );
 
         assert!(result.is_ok());
+
+        cleanup_test_dir(&temp_dir);
     }
 
     #[test]
     fn test_tier_statistics() {
-        let config = TieringConfig::development();
+        let (config, temp_dir) = create_test_config();
         let manager = TieringManager::new(config).unwrap();
 
         let stats = manager.get_tier_statistics();
@@ -289,11 +329,13 @@ mod integration_tests {
             assert_eq!(stat.index_count, 0);
             eprintln!("Tier {:?}: capacity={} bytes", tier, stat.capacity_bytes);
         }
+
+        cleanup_test_dir(&temp_dir);
     }
 
     #[test]
     fn test_multiple_transitions() {
-        let config = TieringConfig::development();
+        let (config, temp_dir) = create_test_config();
         let manager = TieringManager::new(config).unwrap();
 
         let metadata = create_test_metadata("test_index", StorageTier::Cold, 10.0, 10);
@@ -341,5 +383,7 @@ mod integration_tests {
 
         let meta = manager.get_index_metadata("test_index").unwrap();
         assert_eq!(meta.current_tier, StorageTier::Cold);
+
+        cleanup_test_dir(&temp_dir);
     }
 }

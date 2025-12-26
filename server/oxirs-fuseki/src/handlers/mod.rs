@@ -10,6 +10,7 @@ pub mod graph;
 pub mod gsp; // Graph Store Protocol (W3C SPARQL 1.1)
 pub mod ldap;
 pub mod mfa;
+pub mod ngsi_ld; // NGSI-LD API (ETSI GS CIM 009 V1.6.1) for Smart City/Industry 4.0
 pub mod oauth2;
 pub mod patch; // RDF Patch
 pub mod performance; // Beta.2 Performance Monitoring
@@ -71,3 +72,29 @@ pub use validation::{
     validate_query, validate_query_get, validate_update, validate_update_get,
 };
 pub use websocket::{websocket_handler, SubscriptionManager};
+
+// NGSI-LD API handlers
+pub use ngsi_ld::{
+    // Batch operations
+    batch_create_entities_server as ngsi_batch_create,
+    batch_delete_entities_server as ngsi_batch_delete,
+    batch_update_entities_server as ngsi_batch_update,
+    batch_upsert_entities_server as ngsi_batch_upsert,
+    // Entity operations
+    create_entity_server as ngsi_create_entity,
+    // Subscription operations
+    create_subscription_server as ngsi_create_subscription,
+    // Temporal operations
+    create_temporal_entity_server as ngsi_create_temporal,
+    delete_entity_server as ngsi_delete_entity,
+    delete_subscription_server as ngsi_delete_subscription,
+    delete_temporal_entity_server as ngsi_delete_temporal,
+    get_entity_server as ngsi_get_entity,
+    get_subscription_server as ngsi_get_subscription,
+    get_temporal_entity_server as ngsi_get_temporal,
+    list_subscriptions_server as ngsi_list_subscriptions,
+    query_entities_server as ngsi_query_entities,
+    query_temporal_entities_server as ngsi_query_temporal,
+    update_entity_attrs_server as ngsi_update_entity,
+    update_subscription_server as ngsi_update_subscription,
+};

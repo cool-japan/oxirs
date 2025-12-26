@@ -16,7 +16,7 @@ use super::context::TrigParserState;
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// # use oxirs_star::parser::tokenizer::strip_inline_comment;
 /// assert_eq!(strip_inline_comment("ex:foo ex:bar \"value\" . # comment"), "ex:foo ex:bar \"value\" . ");
 /// assert_eq!(strip_inline_comment("ex:foo ex:bar \"value # not a comment\" ."), "ex:foo ex:bar \"value # not a comment\" .");

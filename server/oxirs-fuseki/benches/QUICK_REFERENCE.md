@@ -24,7 +24,7 @@ This document provides a quick reference for running and interpreting oxirs-fuse
 - `query_cache` - Cache hit vs miss performance
 
 ### 2. Performance Benchmarks (`performance_benchmarks.rs`)
-**Purpose**: Detailed analysis of beta.2 optimization features
+**Purpose**: Detailed analysis of rc.1 optimization features
 **Run**: `cargo bench --bench performance_benchmarks`
 
 **Benchmark Groups**:

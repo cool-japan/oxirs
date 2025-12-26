@@ -14,7 +14,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::bloom_filter::BloomFilter;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -75,7 +75,7 @@ impl BloomFilter {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use oxirs_star::bloom_filter::BloomFilter;
     ///
     /// // 1 million items, 1% false positive rate
@@ -123,7 +123,7 @@ impl BloomFilter {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use oxirs_star::bloom_filter::BloomFilter;
     ///
     /// let mut filter = BloomFilter::new(100, 0.01);

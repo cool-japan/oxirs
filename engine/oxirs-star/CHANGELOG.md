@@ -5,12 +5,57 @@ All notable changes to the oxirs-star crate will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0-beta.1] - 2025-11-06
+## [Unreleased]
 
-### Status: Feature Complete ✅
+### Planned for v0.2.0
+- Visual UI tools for annotation exploration
+- Provenance graph visualizer
+- Advanced distributed consensus algorithms
+- Machine learning integration for pattern detection
+- Real-time streaming RDF-star processing
+- Cloud-native deployment templates (Kubernetes operators)
+- Enhanced SPARQL-star federation
+- Additional compliance frameworks (FISMA, FedRAMP)
+
+---
+
+## [0.1.0-rc.1] - 2025-12-25
+
+### Status: Production Ready ✅
+
 All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Production-ready RDF-star implementation with enterprise features.
 
-### Added - Session 5 (November 6, 2025)
+### Highlights
+
+**For Developers:**
+- Complete RDF-star specification compliance
+- 292 passing tests with zero warnings
+- Comprehensive developer tools (graph diff, validation, testing utilities)
+- Full SPARQL 1.1 compliance with RDF-star extensions
+- 8 major RDF platform integrations
+
+**For Enterprises:**
+- Compliance reporting for 7 major frameworks
+- Security audit logging with tamper-proof records
+- Horizontal scaling with automatic replication
+- Backup/restore with encryption
+- Comprehensive monitoring and metrics
+
+**For Data Engineers:**
+- Migration tools with automated reification detection
+- Tool-specific helpers for smooth transitions
+- Performance profiling and optimization
+- Memory-efficient storage for large datasets
+- SIMD-optimized operations for maximum throughput
+
+**For Researchers:**
+- Advanced provenance tracking with cryptographic signatures
+- Trust scoring with Bayesian updating
+- Annotation aggregation and lifecycle management
+- Temporal versioning (bi-temporal support)
+- Reasoning engine with RDFS and OWL 2 RL
+
+### Added
 
 #### Compliance Reporting System (800+ lines)
 - Multi-framework compliance engine supporting GDPR, HIPAA, SOC2, ISO 27001, CCPA, PCI DSS, NIST CSF
@@ -32,7 +77,7 @@ All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Produ
 - Similarity metrics and statistics
 - Module: `src/graph_diff.rs`
 
-#### Enhanced Migration Tools (428 new lines)
+#### Enhanced Migration Tools (428 lines)
 - Tool-specific integration helpers for 8 major RDF platforms:
   - Apache Jena with TDB2 recommendations for large graphs
   - Eclipse RDF4J with native RDF-star support (version 3.7+)
@@ -56,8 +101,6 @@ All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Produ
 - Node status tracking: Active, Draining, Unavailable, Starting
 - Cluster statistics and observability
 - Module: `src/cluster_scaling.rs`
-
-### Added - Session 4 (November 2, 2025)
 
 #### Annotation Aggregation & Rollup
 - Statistical aggregation system with 6 strategies: Mean, WeightedMean, Median, Maximum, Minimum, Bayesian
@@ -88,8 +131,6 @@ All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Produ
 - Prometheus export format support
 - Performance, resource, and business metrics
 - Module: `src/monitoring.rs`
-
-### Added - Session 3 (October 30, 2025)
 
 #### Storage Backend Integration
 - Memory backend for in-memory RDF-star storage
@@ -145,8 +186,6 @@ All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Produ
 - RequestTracer for distributed tracing
 - Module: `src/production.rs`
 
-### Added - Session 2 (October 12, 2025)
-
 #### Annotation Support
 - TripleAnnotation with confidence, source, timestamp, validity periods
 - Evidence tracking with strength scoring
@@ -179,15 +218,6 @@ All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Produ
 - Automatic reification detection and validation
 - Module: `src/compatibility.rs`
 
-#### Interoperability Testing
-- 17 tests covering round-trip conversions, format conversions, tool presets
-- Apache Jena, RDF4J, Virtuoso preset validation
-- Performance benchmarking for conversion operations
-- 3 integration tests for actual tool instances
-- Module: `tests/interoperability_tests.rs`
-
-### Added - Session 1 (SCIRS2 Integration)
-
 #### SCIRS2 POLICY Compliance
 - Removed direct rand/ndarray dependencies
 - Integrated scirs2-core for all scientific computing
@@ -207,11 +237,6 @@ All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Produ
 - MemoryEfficientStore with memory-mapping
 - Support for datasets larger than RAM
 - Module: `src/memory_efficient_store.rs`
-
-#### Benchmarking
-- Validated 122-257% throughput improvements
-- Comprehensive performance benchmarks
-- Modules: `benches/benchmarks.rs`, `benches/enhanced_benchmarks.rs`
 
 ### Performance Improvements
 
@@ -240,7 +265,6 @@ All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Produ
 - Performance tuning guide
 - Troubleshooting guide
 - Ecosystem integration patterns
-- Session summaries documenting all features
 
 ### Dependencies
 
@@ -260,68 +284,6 @@ All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Produ
 - **Module Count**: 50+ modules
 - **Zero Unsafe Code**: All safe Rust (storage layer refactored)
 
-## [0.1.0-alpha.3] - 2025-10-12
-
-### Added
-- Initial alpha release
-- Basic RDF-star data model
-- Turtle-star and N-Triples-star parsing
-- SPARQL-star query support
-- Standard reification conversion
-- Basic storage backends
-
-### Known Issues
-- Limited SPARQL-star function support
-- No production hardening features
-- Missing compliance and security features
-- No clustering support
-
-## [Unreleased]
-
-### Planned for v0.2.0
-- Visual UI tools for annotation exploration
-- Provenance graph visualizer
-- Advanced distributed consensus algorithms
-- Machine learning integration for pattern detection
-- Real-time streaming RDF-star processing
-- Cloud-native deployment templates (Kubernetes operators)
-- Enhanced SPARQL-star federation
-- Additional compliance frameworks (FISMA, FedRAMP)
-
 ---
-
-## Release Notes
-
-### v0.1.0-beta.1 Highlights
-
-This release marks the completion of the v0.1.0 feature roadmap with 100% implementation of all planned features. OxiRS-Star is now a production-ready RDF-star implementation with enterprise features:
-
-**For Developers:**
-- Complete RDF-star specification compliance
-- 292 passing tests with zero warnings
-- Comprehensive developer tools (graph diff, validation, testing utilities)
-- Full SPARQL 1.1 compliance with RDF-star extensions
-- 8 major RDF platform integrations
-
-**For Enterprises:**
-- Compliance reporting for 7 major frameworks
-- Security audit logging with tamper-proof records
-- Horizontal scaling with automatic replication
-- Backup/restore with encryption
-- Comprehensive monitoring and metrics
-
-**For Data Engineers:**
-- Migration tools with automated reification detection
-- Tool-specific helpers for smooth transitions
-- Performance profiling and optimization
-- Memory-efficient storage for large datasets
-- SIMD-optimized operations for maximum throughput
-
-**For Researchers:**
-- Advanced provenance tracking with cryptographic signatures
-- Trust scoring with Bayesian updating
-- Annotation aggregation and lifecycle management
-- Temporal versioning (bi-temporal support)
-- Reasoning engine with RDFS and OWL 2 RL
 
 The crate is ready for production use in semantic web applications requiring advanced RDF-star capabilities.

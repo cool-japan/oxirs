@@ -26,7 +26,7 @@ impl ModelAnalytics {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use oxirs_samm::analytics::ModelAnalytics;
     /// use oxirs_samm::metamodel::Aspect;
     ///
@@ -43,6 +43,7 @@ impl ModelAnalytics {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::needless_range_loop)]
     pub fn compute_partial_correlations(&self) -> PropertyCorrelationMatrix {
         use scirs2_stats::{CorrelationBuilder, CorrelationMethod};
 

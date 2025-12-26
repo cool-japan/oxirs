@@ -1,6 +1,6 @@
 # GPU Acceleration Setup Guide for OxiRS Cluster
 
-**Version:** 0.1.0-beta.2
+**Version:** 0.1.0-rc.1
 **Last Updated:** December 4, 2025
 
 ## Overview
@@ -229,7 +229,7 @@ async fn main() -> Result<()> {
 
 ```toml
 [dependencies]
-oxirs-cluster = { version = "0.1.0-beta.2", features = ["cuda"] }  # Or "metal"
+oxirs-cluster = { version = "0.1.0-rc.1", features = ["cuda"] }  # Or "metal"
 
 [features]
 default = []

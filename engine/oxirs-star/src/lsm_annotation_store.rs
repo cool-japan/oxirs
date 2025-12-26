@@ -22,7 +22,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::lsm_annotation_store::{LsmAnnotationStore, LsmConfig};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -1039,6 +1039,64 @@ impl Runtime {
                 get(crate::graphql_integration::graphql_playground),
             );
 
+        // NGSI-LD API v1.6 (RC.1) - ETSI GS CIM 009 V1.6.1 for Smart City/Industry 4.0
+        app = app
+            // Entity operations
+            .route(
+                "/ngsi-ld/v1/entities",
+                get(handlers::ngsi_query_entities).post(handlers::ngsi_create_entity),
+            )
+            .route(
+                "/ngsi-ld/v1/entities/:id",
+                get(handlers::ngsi_get_entity).delete(handlers::ngsi_delete_entity),
+            )
+            .route(
+                "/ngsi-ld/v1/entities/:id/attrs",
+                post(handlers::ngsi_ld::append_entity_attrs_server)
+                    .patch(handlers::ngsi_update_entity),
+            )
+            .route(
+                "/ngsi-ld/v1/entities/:id/attrs/:attrId",
+                delete(handlers::ngsi_ld::delete_entity_attr_server),
+            )
+            // Subscription operations
+            .route(
+                "/ngsi-ld/v1/subscriptions",
+                get(handlers::ngsi_list_subscriptions).post(handlers::ngsi_create_subscription),
+            )
+            .route(
+                "/ngsi-ld/v1/subscriptions/:id",
+                get(handlers::ngsi_get_subscription)
+                    .patch(handlers::ngsi_update_subscription)
+                    .delete(handlers::ngsi_delete_subscription),
+            )
+            // Batch operations
+            .route(
+                "/ngsi-ld/v1/entityOperations/create",
+                post(handlers::ngsi_batch_create),
+            )
+            .route(
+                "/ngsi-ld/v1/entityOperations/upsert",
+                post(handlers::ngsi_batch_upsert),
+            )
+            .route(
+                "/ngsi-ld/v1/entityOperations/update",
+                post(handlers::ngsi_batch_update),
+            )
+            .route(
+                "/ngsi-ld/v1/entityOperations/delete",
+                post(handlers::ngsi_batch_delete),
+            )
+            // Temporal entity operations
+            .route(
+                "/ngsi-ld/v1/temporal/entities",
+                get(handlers::ngsi_query_temporal).post(handlers::ngsi_create_temporal),
+            )
+            .route(
+                "/ngsi-ld/v1/temporal/entities/:id",
+                get(handlers::ngsi_get_temporal).delete(handlers::ngsi_delete_temporal),
+            );
+
         // REST API v2 (RC.1) - OpenAPI documented RESTful endpoints
         // REST API v2 routes
         app = crate::rest_api_v2::register_routes(app);

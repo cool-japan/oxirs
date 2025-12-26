@@ -371,7 +371,7 @@ impl GpuEmbeddingGenerator {
         -distance.sqrt() // Negative distance for ranking
     }
 
-    /// DistMult scoring: <h, r, t>
+    /// DistMult scoring: `<h, r, t>`
     fn score_distmult(&self, triple: &KgTriple) -> f32 {
         let h = self.entity_embeddings.row(triple.subject_id);
         let r = self.relation_embeddings.row(triple.predicate_id);

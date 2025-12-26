@@ -1,6 +1,6 @@
 # OxiRS Interactive Mode Guide
 
-**Version**: 0.1.0-beta.2
+**Version**: 0.1.0-rc.1
 **Last Updated**: December 21, 2025
 **Status**: Production-Ready
 
@@ -40,7 +40,7 @@ oxirs interactive --history ~/.oxirs_history
 ### First Steps
 
 ```
-OxiRS Interactive Mode v0.1.0-beta.2
+OxiRS Interactive Mode v0.1.0-rc.1
 Type 'help' for commands, 'exit' to quit
 
 oxirs> connect mydata
@@ -541,7 +541,7 @@ oxirs[mydata]> SELECT * WHERE {
 # Date range queries
 oxirs[mydata]> SELECT * WHERE {
 ...>   ?s ex:created ?date .
-...>   FILTER(?date >= "2025-01-01"^^xsd:date &&
+...>   FILTER(?date >= "2025-12-01"^^xsd:date &&
 ...>          ?date <= "2025-12-31"^^xsd:date)
 ...> }
 ```
@@ -670,4 +670,4 @@ oxirs[mydata]> SELECT * WHERE { ?s ?p ?o } | xclip   # Linux
 
 ---
 
-**OxiRS Interactive Mode v0.1.0-beta.2** - Powerful REPL for RDF and SPARQL
+**OxiRS Interactive Mode v0.1.0-rc.1** - Powerful REPL for RDF and SPARQL

@@ -56,9 +56,10 @@ pub enum AccessPattern {
 }
 
 /// Eviction policy for buffer pool
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EvictionPolicy {
     /// Least Recently Used
+    #[default]
     LRU,
     /// Least Frequently Used
     LFU,
@@ -66,12 +67,6 @@ pub enum EvictionPolicy {
     ARC,
     /// Clock/Second Chance
     Clock,
-}
-
-impl Default for EvictionPolicy {
-    fn default() -> Self {
-        Self::LRU
-    }
 }
 
 /// Tuning recommendation

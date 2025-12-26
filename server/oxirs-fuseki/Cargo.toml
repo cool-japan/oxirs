@@ -215,6 +215,12 @@ k8s = ["kube", "k8s-openapi", "schemars"]  # Kubernetes operator support
 acme = ["instant-acme", "rcgen"]  # ACME/Let's Encrypt certificate automation
 memory_management = []  # SciRS2-Core advanced memory leak detection
 
+[package.metadata.docs.rs]
+# Exclude features requiring system libraries not available on docs.rs
+features = ["metrics", "auth", "admin-ui", "tracing", "rate-limit", "tls", "hot-reload", "acme"]
+# Exclude: kafka (rdkafka), nats (async-nats has build issues), ldap, k8s (kube/k8s-openapi)
+rustdoc-args = ["--cfg", "docsrs"]
+
 [[bin]]
 name = "oxirs-fuseki"
 path = "src/main.rs"

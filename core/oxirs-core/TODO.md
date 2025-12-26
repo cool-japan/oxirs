@@ -2,7 +2,7 @@
 
 *Last Updated: December 10, 2025*
 
-## ✅ Current Status: v0.1.0-beta.2 - ML-Based Query Optimization Complete
+## ✅ Current Status: v0.1.0-rc.1 - ML-Based Query Optimization Complete
 
 ### ✨ December 10, 2025 - ML-Based Query Optimizer with Adaptive Learning 🤖📈
 
@@ -311,7 +311,7 @@ SELECT ?employee ?manager WHERE {
 - ✅ src/query/functions/aggregate.rs - NEW 57-line aggregate functions module
 - ✅ TODO.md - Updated with comprehensive refactoring documentation
 
-## ✅ Current Status: v0.1.0-beta.2 - Self-Learning Query Optimizer Complete
+## ✅ Current Status: v0.1.0-rc.1 - Self-Learning Query Optimizer Complete
 
 ### ✨ December 6, 2025 (Evening) - Self-Learning Optimizer with Advanced Statistics 🧠📈
 
@@ -453,7 +453,7 @@ println!("Histogram size: {}", stats.predicate_histogram_size);
 println!("Join samples: {}", stats.join_samples);
 ```
 
-## ✅ Current Status: v0.1.0-beta.2 - Query Optimization Visualization Complete (Morning)
+## ✅ Current Status: v0.1.0-rc.1 - Query Optimization Visualization Complete (Morning)
 
 ### ✨ December 6, 2025 (Morning) - Query Optimizer Visualization Integration 🎯📊
 
@@ -606,7 +606,7 @@ println!("{}", visualizer.visualize_as_tree(&visual_plan));
 - ✅ Cargo.toml - Added query_visualization_bench entry
 - ✅ TODO.md - Comprehensive documentation of enhancements
 
-## ✅ Current Status: v0.1.0-beta.2 - Documentation Complete
+## ✅ Current Status: v0.1.0-rc.1 - Documentation Complete
 
 ### ✨ December 4, 2025 - Comprehensive Documentation Suite Completed
 
@@ -675,7 +675,7 @@ println!("{}", visualizer.visualize_as_tree(&visual_plan));
 **DELIVERABLES COMPLETE:**
 All planned v0.1.0 documentation is now complete and ready for release. The documentation suite provides comprehensive coverage from getting started to production deployment, with detailed guides for performance optimization, best practices, and troubleshooting.
 
-## ✅ Current Status: v0.1.0-beta.2 Advanced Features
+## ✅ Current Status: v0.1.0-rc.1 Advanced Features
 
 ### ✨ December 2, 2025 - Advanced SPARQL Functions & Statistical Aggregates (Final Evening Update)
 
@@ -1066,7 +1066,7 @@ All planned v0.1.0 documentation is now complete and ready for release. The docu
 - **Status:** 18 existing working examples remain
 
 **SUMMARY:**
-OxiRS-Core v0.1.0-beta.2 is production-ready with:
+OxiRS-Core v0.1.0-rc.1 is production-ready with:
 - ✅ Full test coverage (693 tests)
 - ✅ Zero warnings (clippy + compilation)
 - ✅ 100% SCIRS2 policy compliance
@@ -1391,7 +1391,7 @@ File size guidelines are maintainability recommendations, not hard requirements.
 
 ### 🚀 November 7, 2025 - Async I/O Integration & Code Quality! 
 
-**✨ NEW MILESTONE: v0.1.0-beta.1+ Async I/O Support**
+**✨ NEW MILESTONE: v0.1.0-rc.1 Async I/O Support**
 - ✅ **Async I/O integration complete** - AsyncRdfStore with tokio for non-blocking operations
 - ✅ **AsyncRdfStore wrapper** - Async insert, remove, query, and store management
 - ✅ **Code refactoring** - Split 2 large files (gnn.rs 2629→8 modules, training.rs 2421→6 modules) using SplitRS
@@ -1437,7 +1437,7 @@ File size guidelines are maintainability recommendations, not hard requirements.
 - ✅ `cargo fmt --all -- --check` → PASS
 - ✅ SCIRS2 policy compliance verified (no direct rand/ndarray imports)
 
-### 🚀 November 2025 Enhancements - v0.1.0 Major Update
+### 🚀 RC.1 Enhancements - v0.1.0 Major Update
 
 **NEW FEATURES ADDED:**
 - ✅ **Zero-copy RDF operations** - Memory-mapped files, BufferPool, efficient parsing
@@ -1461,7 +1461,7 @@ File size guidelines are maintainability recommendations, not hard requirements.
 - 3-8x speedup on parallel batch loading (>100 items)
 - Optimized for read-heavy workloads (10:1 read/write ratio)
 
-### Beta.1 Release Status (October 30, 2025) - **All Features Complete!** 🎉
+### RC.1 Release Status (October 30, 2025) - **All Features Complete!** 🎉
 - **Persistent RDF pipeline** with automatic N-Quads save/load
 - **Streaming import/export/migrate** covering all 7 serialization formats
 - **SciRS2 instrumentation** for metrics, tracing, and slow-query diagnostics
@@ -1472,7 +1472,7 @@ File size guidelines are maintainability recommendations, not hard requirements.
 - **✨ NEW: Comprehensive benchmarking suite** (8 benchmark groups covering all operations)
 - **✨ NEW: Production hardening** (Circuit breakers, health checks, resource quotas, performance monitoring)
 
-### 🎉 Beta.1 Achievements
+### 🎉 RC.1 Achievements
 
 #### Persistence & Streaming ✅
 - ✅ **Automatic Persistence**: Disk-backed N-Quads serializer/loader integrated with CLI/server
@@ -1484,13 +1484,13 @@ File size guidelines are maintainability recommendations, not hard requirements.
 - ✅ **Continuous benchmarking** with SciRS2 telemetry
 - ✅ **W3C RDF/SPARQL compliance** verified against reference suites
 
-## 🎉 Beta.1 Release Complete (October 30, 2025)
+## 🎉 RC.1 Release Complete (October 30, 2025)
 
-All Beta.1 targets have been successfully completed!
+All RC.1 targets have been successfully completed!
 
-### Beta Release Summary (v0.1.0-beta.1)
+### Release Summary (v0.1.0-rc.1)
 
-#### Performance Optimization ✅ (Complete in Beta.1)
+#### Performance Optimization ✅ (Complete in RC.1)
 - [x] Query execution performance improvements (optimization module)
 - [x] Memory usage optimization (RdfArena, zero-copy operations)
 - [x] Index structure enhancements (OptimizedGraph with multi-index)
@@ -1503,18 +1503,18 @@ All Beta.1 targets have been successfully completed!
 - [x] Comprehensive API documentation (lib.rs, model, parser modules)
 - [x] Migration guides from alpha (MIGRATION_GUIDE.md created)
 
-#### Feature Enhancements ✅ (Complete in Beta.1)
-- [x] Additional RDF serialization formats (7 formats complete: alpha.3)
-- [x] N-Triples/N-Quads parsing implementation (alpha.3)
+#### Feature Enhancements ✅ (Complete in RC.1)
+- [x] Additional RDF serialization formats (7 formats complete: rc.1)
+- [x] N-Triples/N-Quads parsing implementation (rc.1)
 - [x] Turtle parser implementation (complete with serialization)
 - [x] Improved error messages and debugging (ProductionError with detailed context)
 
-#### Testing & Quality ✅ (Complete in Beta.1)
+#### Testing & Quality ✅ (Complete in RC.1)
 - [x] Performance benchmarking suite (comprehensive_bench.rs - 8 benchmark groups)
 - [x] Stress testing and edge cases (stress_tests.rs - 10 comprehensive tests)
 - [x] Production hardening (Circuit breaker, resource quotas, health checks)
 
-## 📚 Documentation Completeness (Beta.1) ✅
+## 📚 Documentation Completeness (RC.1) ✅
 
 - [x] **Main library documentation** (lib.rs) - 116 lines, 8 examples
 - [x] **Model module** (model/mod.rs) - 183 lines, 6 examples
@@ -1531,13 +1531,13 @@ All Beta.1 targets have been successfully completed!
 - **Test coverage**: 687 tests passing (100%)
 - **Compilation**: 0 warnings with `-D warnings`
 
-## 🎯 v0.1.0 Enhanced Feature Status (November 2025)
+## 🎯 v0.1.0 Enhanced Feature Status (December 2025)
 
 ### v0.1.0 Advanced Features - **MAJOR PROGRESS** 🚀
 
 **626 tests passing** | **Zero warnings** | **Production-ready**
 
-#### Performance ✅ (November 2025 - Implemented!)
+#### Performance ✅ (December 2025 - Implemented!)
 - [x] **Advanced query optimization** - Cost-based optimizer with statistics
 - [x] **SIMD-optimized triple matching** - Platform-adaptive SIMD (AVX2/AVX-512/NEON)
 - [x] **Lock-free data structures** - Concurrent graph with epoch-based memory reclamation
@@ -1557,7 +1557,7 @@ All Beta.1 targets have been successfully completed!
 - [x] **Named graph operations** - Quad support with full transactional guarantees
 - [x] **Named graph transactions** - Integrated with MVCC, graph-level locking, atomic operations
 
-#### Concurrency ✅ (November 2025 - Implemented!)
+#### Concurrency ✅ (December 2025 - Implemented!)
 - [x] **Enhanced concurrency support** - Thread-per-core architecture
 - [x] **Multi-reader single-writer (MRSW)** - Optimized for read-heavy workloads (10:1 ratio)
 - [x] **Lock-free read paths** - Wait-free readers with hazard pointers
@@ -1566,7 +1566,7 @@ All Beta.1 targets have been successfully completed!
 - [x] **Parallel batch operations** - Automatic parallelization for batches >100 items
 - [x] **Async I/O integration** - AsyncRdfStore with tokio support for non-blocking operations
 
-#### Transactions ✅ (November 2025 - Implemented!)
+#### Transactions ✅ (December 2025 - Implemented!)
 - [x] **ACID transaction support** - Full Atomicity, Consistency, Isolation, Durability
 - [x] **Write-Ahead Logging (WAL)** - Crash recovery and durability guarantees
 - [x] **MVCC snapshot isolation** - Multi-version concurrency control
@@ -1574,7 +1574,7 @@ All Beta.1 targets have been successfully completed!
 - [x] **Transaction recovery** - Automatic WAL replay after crashes
 - [x] **Named graph transaction integration** - Graph-level ACID guarantees with atomic multi-graph operations
 
-#### Benchmarking ✅ (November 2025 - Comprehensive Suite!)
+#### Benchmarking ✅ (December 2025 - Comprehensive Suite!)
 - [x] **v0.1.0 feature benchmarks** - Zero-copy, SIMD, transactions, concurrency
 - [x] **Zero-copy RDF benchmarks** - Insert, bulk insert, file loading, query performance
 - [x] **Concurrent index benchmarks** - Batch operations, index rebuilding, parallel queries

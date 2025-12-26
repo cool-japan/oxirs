@@ -72,7 +72,7 @@
   - `src/edge_deployment.rs` (1,000 lines)
   - `src/production_monitoring.rs` (1,000 lines)
 - **Code Quality**: Zero clippy warnings, building successfully ✅
-- **Total Lines of Code**: 15,728+ lines (Beta.2 + RC.1 + RC.2 + v0.1.0)
+- **Total Lines of Code**: 15,728+ lines (RC.1 + RC.1 + RC.2 + v0.1.0)
 - **Test Status**: **462 tests passing** (100% success rate) ✅
 
 ### v0.1.0+ Post-Release Enhancements (✅ COMPLETED - November 20, 2025)
@@ -300,10 +300,10 @@
   - `src/model_compression.rs` (700 lines)
   - `src/realtime_anomaly_streams.rs` (900 lines)
 - **Code Quality**: Zero clippy warnings, all 404 tests passing ✅
-- **Total Lines of Code**: 10,928 lines added in Beta.2 + RC.1 + RC.2
+- **Total Lines of Code**: 10,928 lines added in RC.1 + RC.1 + RC.2
 
 ### RC.1 Release Status (✅ COMPLETED - November 7, 2025)
-- **All Beta.1 & Beta.2 features** plus advanced ML techniques
+- **All RC.1 & RC.1 features** plus advanced ML techniques
 - **Reinforcement Learning for optimization**: Q-learning, DQN, experience replay ✅
   - Q-network with target network
   - Epsilon-greedy and softmax policies
@@ -337,7 +337,7 @@
   - Pre/in/post-processing mitigation strategies
   - Fairness tracking and monitoring
   - 3 comprehensive tests
-- **Test Coverage**: 397 tests passing (+10 from Beta.2) with zero warnings ✅
+- **Test Coverage**: 397 tests passing (+10 from RC.1) with zero warnings ✅
 - **New Files Added** (2,800+ total lines):
   - `src/reinforcement_learning.rs` (783 lines)
   - `src/automated_retraining.rs` (752 lines)
@@ -345,10 +345,10 @@
   - `src/knowledge_distillation.rs` (720 lines)
   - `src/bias_detection.rs` (830 lines)
 - **Code Quality**: Zero clippy warnings, all 397 tests passing ✅
-- **Total Lines of Code**: 9,328 lines added in Beta.2 + RC.1
+- **Total Lines of Code**: 9,328 lines added in RC.1 + RC.1
 
-### Beta.2 Release Status (✅ COMPLETED November 3, 2025)
-- **All Beta.1 features** plus advanced production capabilities
+### RC.1 Release Status (✅ COMPLETED November 3, 2025)
+- **All RC.1 features** plus advanced production capabilities
 - **Transformer-based constraint generation**: Multi-head attention, SHAP attribution, fine-tuning ✅
 - **Advanced explainable AI**: SHAP values, natural language generation, decision trees ✅
 - **Model registry and versioning**: Semantic versioning, lifecycle management, performance tracking ✅
@@ -365,7 +365,7 @@
   - `src/constraint_generation/transformer_based.rs` (736 lines)
 - **Code Quality**: Zero clippy warnings, all 379 tests passing
 
-### Beta.1 Release Status (November 1, 2025)
+### RC.1 Release Status (November 1, 2025)
 - **360 tests passing** (unit + integration) with zero warnings
 - **Neural network validation** wired into persisted dataset workflow & telemetry
 - **Shape learning** leveraging CLI pipelines and vector embeddings
@@ -376,11 +376,11 @@
 - **Continual Learning**: Memory buffer and plasticity preservation
 - **Ensemble Methods**: Bagging, boosting, and weighted voting
 - **Generative Models**: VAE for synthetic test data generation
-- **Released on crates.io**: `oxirs-shacl-ai = "0.1.0-beta.1"` (experimental)
+- **Released on crates.io**: `oxirs-shacl-ai = "0.1.0-rc.1"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Beta.1 Release Status (COMPLETED - November 1, 2025)
+### RC.1 Release Status (COMPLETED - November 1, 2025)
 
 #### AI Models
 - [x] Improved shape learning - **Graph Neural Networks implemented**
@@ -406,7 +406,7 @@
 - [x] Model versioning - **Pre-trained model support in transfer learning**
 - [x] Deployment tools - **Full API for production use**
 
-### Next: Beta.2 Targets (v0.1.0-beta.2 - ✅ COMPLETED November 3, 2025)
+### Next: RC.1 Targets (v0.1.0-rc.1 - ✅ COMPLETED November 3, 2025)
 - [x] Transformer-based constraint generation - **✅ COMPLETED November 3, 2025**
   - Multi-head attention architecture for RDF pattern understanding
   - Fine-tuning support for domain-specific constraints
@@ -455,8 +455,8 @@
 ### v0.1.0 Final Release Targets (Q4 2025) - ALL FEATURES
 
 #### Advanced ML Techniques (Target: v0.1.0)
-- [x] Graph neural networks for shape learning - **v0.1.0-beta.1**
-- [x] Transformer-based constraint generation - **v0.1.0-beta.2 (November 2, 2025)**
+- [x] Graph neural networks for shape learning - **v0.1.0-rc.1**
+- [x] Transformer-based constraint generation - **v0.1.0-rc.1 (November 2, 2025)**
 - [x] Reinforcement learning for optimization - **✅ COMPLETED November 3, 2025 (RC.1)**
   - Q-learning with experience replay
   - Epsilon-greedy and softmax policies
@@ -464,10 +464,10 @@
   - Double DQN and prioritized replay
   - Dueling DQN architecture support
   - Full SciRS2 integration
-- [x] Generative models for test data - **VAE implemented in v0.1.0-beta.1**
-- [x] Ensemble methods for robustness - **v0.1.0-beta.1**
-- [x] Meta-learning for few-shot adaptation - **v0.1.0-beta.1** (existing implementation enhanced)
-- [x] Continual learning for evolving schemas - **v0.1.0-beta.1**
+- [x] Generative models for test data - **VAE implemented in v0.1.0-rc.1**
+- [x] Ensemble methods for robustness - **v0.1.0-rc.1**
+- [x] Meta-learning for few-shot adaptation - **v0.1.0-rc.1** (existing implementation enhanced)
+- [x] Continual learning for evolving schemas - **v0.1.0-rc.1**
 - [x] Federated learning for privacy - **✅ COMPLETED November 29, 2025 (Phase 3)**
   - Advanced Byzantine Fault Tolerance with HoneyBadger BFT
   - Differential Privacy with budget tracking
@@ -476,14 +476,14 @@
   - 28 comprehensive tests covering all features
 
 #### Transfer Learning (Target: v0.1.0)
-- [x] Pre-trained models for common domains - **v0.1.0-beta.1**
-- [x] Domain adaptation techniques - **v0.1.0-beta.1**
+- [x] Pre-trained models for common domains - **v0.1.0-rc.1**
+- [x] Domain adaptation techniques - **v0.1.0-rc.1**
 - [x] Cross-lingual shape transfer - **✅ COMPLETED November 20, 2025 (v0.1.0+)**
   - Multilingual transformer-based translation (25+ languages)
   - Semantic preservation during translation
   - Translation quality metrics
   - Language detection and automatic translation
-- [x] Zero-shot constraint prediction - **v0.1.0-beta.1**
+- [x] Zero-shot constraint prediction - **v0.1.0-rc.1**
 - [x] Multi-task learning framework - **✅ COMPLETED November 7, 2025 (RC.1)**
   - Hard and soft parameter sharing
   - Dynamic task weighting (GradNorm)
@@ -496,7 +496,7 @@
   - Attention transfer
   - Progressive and multi-teacher distillation
   - Compression metrics tracking
-- [x] Model fine-tuning strategies - **v0.1.0-beta.1**
+- [x] Model fine-tuning strategies - **v0.1.0-rc.1**
 - [x] Transfer from OWL to SHACL - **✅ COMPLETED November 20, 2025 (v0.1.0+)**
   - Convert OWL classes to SHACL NodeShapes
   - Map property restrictions to SHACL constraints
@@ -504,26 +504,26 @@
   - Semantic equivalence validation
 
 #### Active Learning (Target: v0.1.0)
-- [x] Uncertainty sampling for validation - **v0.1.0-beta.1**
-- [x] Query-by-committee strategies - **v0.1.0-beta.1**
-- [x] Expected model change selection - **v0.1.0-beta.1**
-- [x] Diversity-based sampling - **v0.1.0-beta.1**
+- [x] Uncertainty sampling for validation - **v0.1.0-rc.1**
+- [x] Query-by-committee strategies - **v0.1.0-rc.1**
+- [x] Expected model change selection - **v0.1.0-rc.1**
+- [x] Diversity-based sampling - **v0.1.0-rc.1**
 - [x] Interactive labeling interface - **✅ COMPLETED November 20, 2025 (v0.1.0+)**
   - Uncertainty-driven sample prioritization
   - Multi-annotator support with agreement tracking
   - Quality control and validation
   - Annotation history and versioning
-- [x] Budget-constrained learning - **v0.1.0-beta.1**
-- [x] Human-in-the-loop validation - **v0.1.0-beta.1**
-- [x] Confidence-based feedback - **v0.1.0-beta.1**
+- [x] Budget-constrained learning - **v0.1.0-rc.1**
+- [x] Human-in-the-loop validation - **v0.1.0-rc.1**
+- [x] Confidence-based feedback - **v0.1.0-rc.1**
 
 #### Anomaly Detection (Target: v0.1.0)
-- [x] Outlier detection in RDF data - **v0.1.0-beta.1**
-- [x] Novelty detection for new patterns - **v0.1.0-beta.1**
-- [x] Drift detection in data distributions - **v0.1.0-beta.1**
-- [x] Collective anomaly identification - **v0.1.0-beta.1**
-- [x] Contextual anomaly scoring - **v0.1.0-beta.1**
-- [x] Explainable anomaly reports - **v0.1.0-beta.2 (November 2, 2025) with SHAP, NLG, and Decision Trees**
+- [x] Outlier detection in RDF data - **v0.1.0-rc.1**
+- [x] Novelty detection for new patterns - **v0.1.0-rc.1**
+- [x] Drift detection in data distributions - **v0.1.0-rc.1**
+- [x] Collective anomaly identification - **v0.1.0-rc.1**
+- [x] Contextual anomaly scoring - **v0.1.0-rc.1**
+- [x] Explainable anomaly reports - **v0.1.0-rc.1 (November 2, 2025) with SHAP, NLG, and Decision Trees**
 - [x] Real-time anomaly streams - **✅ COMPLETED November 7, 2025 (RC.2)**
   - Sliding window stream processing
   - Incremental anomaly detection models
@@ -532,7 +532,7 @@
 - [x] Adaptive threshold tuning - **✅ COMPLETED (Integrated into Real-time Anomaly Streams)**
 
 #### Production Hardening (Target: v0.1.0)
-- [x] Model versioning and registry - **v0.1.0-beta.2 (November 2, 2025) with full lifecycle management**
+- [x] Model versioning and registry - **v0.1.0-rc.1 (November 2, 2025) with full lifecycle management**
 - [x] A/B testing framework - **✅ COMPLETED November 20, 2025 (v0.1.0+)**
   - Multi-variant testing with traffic splitting
   - Statistical significance testing
@@ -565,7 +565,7 @@
   - Intersectional bias analysis
   - Pre/in/post-processing mitigation
   - Fairness tracking over time
-- [x] Explainability frameworks - **v0.1.0-beta.2 (November 2, 2025) with SHAP, NLG, Decision Trees**
+- [x] Explainability frameworks - **v0.1.0-rc.1 (November 2, 2025) with SHAP, NLG, Decision Trees**
 - [x] Production monitoring - **✅ COMPLETED November 15, 2025 (v0.1.0)**
   - Real-time performance monitoring
   - SLA compliance checking
@@ -587,7 +587,7 @@
   - A/B testing framework
   - Automatic rollback on degradation
   - Full pipeline orchestration
-- [x] Model drift monitoring - **v0.1.0-beta.2 (November 2, 2025) - KL/PSI/KS tests, alerting**
+- [x] Model drift monitoring - **v0.1.0-rc.1 (November 2, 2025) - KL/PSI/KS tests, alerting**
 - [x] Feature store integration - **✅ COMPLETED November 15, 2025 (v0.1.0)**
   - Online/offline feature serving
   - Feature versioning and lineage tracking
@@ -600,7 +600,7 @@
   - Artifact storage
   - Experiment comparison
   - Search and filtering capabilities
-- [x] Hyperparameter optimization - **v0.1.0-beta.2 (November 2, 2025) - Grid/Random/Bayesian/Hyperband**
+- [x] Hyperparameter optimization - **v0.1.0-rc.1 (November 2, 2025) - Grid/Random/Bayesian/Hyperband**
 - [x] Model compression and quantization - **v0.1.0-RC.2 (November 7, 2025)**
 - [x] Edge deployment support - **✅ COMPLETED November 15, 2025 (v0.1.0)**
   - Device profiling and capability detection

@@ -374,7 +374,7 @@ impl TutorialManager {
                     TutorialStep {
                         instruction: "Let's start by checking the OxiRS version. Run 'oxirs --version' to see what version you have installed.".to_string(),
                         example_command: Some("oxirs --version".to_string()),
-                        expected_output: Some("oxirs 0.1.0-beta.2".to_string()),
+                        expected_output: Some("oxirs 0.1.0-rc.1".to_string()),
                         hints: vec!["Make sure OxiRS is installed and in your PATH".to_string()],
                         validation: None,
                     },

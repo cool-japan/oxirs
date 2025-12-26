@@ -68,7 +68,8 @@ impl From<crate::streaming::NatsConfig> for NatsConfig {
 /// NATS producer implementation
 pub struct NatsProducer {
     config: NatsConfig,
-    // TODO: Add actual NATS client when library is integrated
+    // Future enhancement: Add actual NATS client (requires async-nats crate).
+    // For 0.1.0-rc.1: Stub implementation provides API surface for future NATS integration.
 }
 
 impl NatsProducer {
@@ -76,7 +77,8 @@ impl NatsProducer {
     pub async fn new(config: NatsConfig) -> FusekiResult<Self> {
         tracing::info!("Creating NATS producer for: {}", config.url);
 
-        // TODO: Initialize actual NATS client
+        // Future enhancement: Initialize async-nats client with config.
+        // For 0.1.0-rc.1: Stub allows testing of streaming pipeline without NATS dependency.
         Ok(Self { config })
     }
 }
@@ -86,7 +88,8 @@ impl StreamProducer for NatsProducer {
     async fn send(&self, event: RDFEvent) -> FusekiResult<()> {
         tracing::debug!("Sending RDF event to NATS");
 
-        // TODO: Implement actual NATS message sending
+        // Future enhancement: Implement async-nats publish.
+        // For 0.1.0-rc.1: Logs events for debugging. Full NATS integration is optional.
         tracing::info!("Would send to NATS: {:?}", event);
 
         Ok(())
@@ -95,7 +98,8 @@ impl StreamProducer for NatsProducer {
     async fn send_batch(&self, events: Vec<RDFEvent>) -> FusekiResult<()> {
         tracing::debug!("Sending batch of {} RDF events to NATS", events.len());
 
-        // TODO: Implement actual batch sending
+        // Future enhancement: Implement async-nats batch publishing.
+        // For 0.1.0-rc.1: Logs individual events. Batch optimization is future work.
         for event in events {
             self.send(event).await?;
         }
@@ -105,7 +109,8 @@ impl StreamProducer for NatsProducer {
 
     async fn flush(&self) -> FusekiResult<()> {
         tracing::debug!("Flushing NATS producer");
-        // TODO: Implement actual flush
+        // Future enhancement: Implement async-nats flush for guaranteed delivery.
+        // For 0.1.0-rc.1: No-op. Full NATS integration is optional.
         Ok(())
     }
 }
@@ -113,7 +118,8 @@ impl StreamProducer for NatsProducer {
 /// NATS consumer implementation
 pub struct NatsConsumer {
     config: NatsConfig,
-    // TODO: Add actual NATS client when library is integrated
+    // Future enhancement: Add actual NATS client (requires async-nats crate).
+    // For 0.1.0-rc.1: Stub implementation provides API surface for future NATS integration.
 }
 
 impl NatsConsumer {
@@ -121,7 +127,8 @@ impl NatsConsumer {
     pub async fn new(config: NatsConfig) -> FusekiResult<Self> {
         tracing::info!("Creating NATS consumer for: {}", config.url);
 
-        // TODO: Initialize actual NATS client
+        // Future enhancement: Initialize async-nats client with config.
+        // For 0.1.0-rc.1: Stub allows testing of streaming pipeline without NATS dependency.
         Ok(Self { config })
     }
 }
@@ -134,14 +141,16 @@ impl StreamConsumer for NatsConsumer {
     ) -> FusekiResult<()> {
         tracing::info!("Subscribing to NATS events with handler");
 
-        // TODO: Implement actual subscription
+        // Future enhancement: Implement async-nats subscribe with subject patterns.
+        // For 0.1.0-rc.1: No-op. Full NATS integration is optional.
         Ok(())
     }
 
     async fn unsubscribe(&self) -> FusekiResult<()> {
         tracing::info!("Unsubscribing from NATS events");
 
-        // TODO: Implement actual unsubscription
+        // Future enhancement: Implement async-nats unsubscribe.
+        // For 0.1.0-rc.1: No-op. Full NATS integration is optional.
         Ok(())
     }
 

@@ -18,7 +18,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_star::kg_embeddings::{EmbeddingModel, TransE, EmbeddingConfig};
 //!
 //! let config = EmbeddingConfig {

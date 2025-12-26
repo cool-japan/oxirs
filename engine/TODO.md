@@ -2,7 +2,7 @@
 
 *Last Updated: November 15, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.3 Released
+## ✅ Current Status: v0.1.0-rc.1 Released
 
 **Overall Achievement**: ✅ **ENGINE MODULES BETA.1 RELEASE** (4,421+ unit & integration tests passing, zero compile warnings with `-D warnings`)
 
@@ -12,17 +12,17 @@ Comprehensive implementation of SPARQL, SHACL, vector search, RDF-star, and rule
 
 | Module | Status | Tests | Highlights | Release Status |
 |--------|--------|-------|-----------|----------------|
-| **oxirs-arq** | Beta.1 | 228 tests (100%) | SPARQL 1.1/1.2, federation (`SERVICE`), `oxirs explain` plans, SciRS2 telemetry | ✅ Beta.1 Released |
-| **oxirs-rule** | Beta.1 (Exp) | 170 tests (100%) | RETE, forward/backward chaining, SIMD optimizations, provenance tracing | ✅ Beta.1 Released |
-| **oxirs-shacl** | Beta.1 | 344 tests (100%) | W3C SHACL Core (27/27 constraints), streaming validation, Prometheus metrics | ✅ Beta.1 Released |
-| **oxirs-star** | Beta.1 (Exp) | 208 tests (100%) | RDF-star/SPARQL-star with annotations, interoperability presets, SIMD indexing | ✅ Beta.1 Released |
-| **oxirs-vec** | Beta.1 (Exp) | 323 tests (100%) | Vector search, SPARQL/GraphQL extensions, SciRS2 observability | ✅ Beta.1 Released |
-| **oxirs-ttl** | Beta.1 | 90+ tests (100%) | Streaming Turtle/TriG + CLI import/export pipelines, zero-copy parsing | ✅ Beta.1 Released |
-| **oxirs-samm** | Beta.1 | 400+ tests (100%) | SAMM/AAS support, 16 code generators, Java ESMF SDK compatibility | ✅ Beta.1 Released |
+| **oxirs-arq** | RC.1 | 228 tests (100%) | SPARQL 1.1/1.2, federation (`SERVICE`), `oxirs explain` plans, SciRS2 telemetry | ✅ RC.1 Released |
+| **oxirs-rule** | RC.1 (Exp) | 170 tests (100%) | RETE, forward/backward chaining, SIMD optimizations, provenance tracing | ✅ RC.1 Released |
+| **oxirs-shacl** | RC.1 | 344 tests (100%) | W3C SHACL Core (27/27 constraints), streaming validation, Prometheus metrics | ✅ RC.1 Released |
+| **oxirs-star** | RC.1 (Exp) | 208 tests (100%) | RDF-star/SPARQL-star with annotations, interoperability presets, SIMD indexing | ✅ RC.1 Released |
+| **oxirs-vec** | RC.1 (Exp) | 323 tests (100%) | Vector search, SPARQL/GraphQL extensions, SciRS2 observability | ✅ RC.1 Released |
+| **oxirs-ttl** | RC.1 | 90+ tests (100%) | Streaming Turtle/TriG + CLI import/export pipelines, zero-copy parsing | ✅ RC.1 Released |
+| **oxirs-samm** | RC.1 | 400+ tests (100%) | SAMM/AAS support, 16 code generators, Java ESMF SDK compatibility | ✅ RC.1 Released |
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Beta Release Targets (All Modules - November 2025)
+### Release Targets (All Modules - December 2025)
 
 #### Quality & Stability
 - [ ] All tests passing (100%)

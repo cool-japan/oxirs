@@ -1,9 +1,9 @@
 //! # OxiRS SHACL-AI
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.2)
+//! **Status**: Beta Release (v0.1.0-rc.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.
@@ -516,7 +516,7 @@ pub use ab_testing::{
     StatisticalTestType, Variant,
 };
 
-// Advanced Features (v0.1.0-beta.2 - NEW)
+// Advanced Features (v0.1.0-rc.1 - NEW)
 pub use advanced_features::{
     // Active Learning
     ActiveLearner,

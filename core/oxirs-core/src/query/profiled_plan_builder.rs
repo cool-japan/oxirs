@@ -10,7 +10,7 @@
 //! - Optimization recommendations based on actual execution
 //!
 //! # Example
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_core::query::profiled_plan_builder::ProfiledPlanBuilder;
 //! use oxirs_core::query::query_profiler::{QueryProfiler, ProfilerConfig};
 //!

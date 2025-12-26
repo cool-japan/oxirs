@@ -114,7 +114,7 @@ pub struct AccessStatistics {
 }
 
 /// Access pattern classification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AccessPattern {
     /// Frequently accessed, high QPS
     Hot,
@@ -127,13 +127,8 @@ pub enum AccessPattern {
     /// Seasonal pattern
     Seasonal,
     /// Unknown pattern (insufficient data)
+    #[default]
     Unknown,
-}
-
-impl Default for AccessPattern {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 /// Latency percentiles

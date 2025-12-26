@@ -526,10 +526,9 @@ pub async fn metrics_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<String, (StatusCode, String)> {
     if let Some(ref metrics_service) = state.metrics_service {
-        metrics_service
-            .get_prometheus_metrics()
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        let result: Result<String, crate::error::FusekiError> =
+            metrics_service.get_prometheus_metrics().await;
+        result.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
     } else {
         Err((
             StatusCode::SERVICE_UNAVAILABLE,

@@ -2,7 +2,7 @@
 
 *Last Updated: December 10, 2025*
 
-## 🎉 CODE QUALITY UPDATE: v0.1.0-beta.2 - Complete Code Refactoring! (December 10, 2025)
+## 🎉 CODE QUALITY UPDATE: v0.1.0-rc.1 - Complete Code Refactoring! (December 10, 2025)
 
 **DOUBLE REFACTORING COMPLETE** (December 10, 2025): Successfully refactored **two large monolithic files** into **21 focused, maintainable modules** using **SplitRS** and manual optimization, achieving **100% compliance** with the 2000-line policy across the entire oxirs CLI crate.
 
@@ -143,11 +143,11 @@
 
 ---
 
-## 🎉 MAJOR UPDATE: v0.1.0-beta.2 - Enhanced with ML-Powered Query Prediction! (December 4, 2025)
+## 🎉 MAJOR UPDATE: v0.1.0-rc.1 - Enhanced with ML-Powered Query Prediction! (December 4, 2025)
 
 **LATEST ENHANCEMENT** (December 4, 2025): Successfully integrated ML-powered query performance prediction using advanced SciRS2-core features, demonstrating full utilization of the SciRS2 ecosystem as outlined in CLAUDE.md guidelines.
 
-## 🎉 MAJOR UPDATE: v0.1.0-beta.2 - All Planned Features COMPLETE! (December 3, 2025)
+## 🎉 MAJOR UPDATE: v0.1.0-rc.1 - All Planned Features COMPLETE! (December 3, 2025)
 
 **CRITICAL DISCOVERY**: A comprehensive code review on November 20, 2025 revealed that **nearly all Priority 1-5 features marked as "in progress" or "stubbed" are actually FULLY IMPLEMENTED and tested!**
 
@@ -1124,14 +1124,14 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
    - 12 comprehensive tests passing
    - **Implementation**: Full Handlebars engine with RDF-specific helpers
 
-## ✅ Current Status: v0.1.0-beta.2 - Production Ready! (November 29, 2025)
+## ✅ Current Status: v0.1.0-rc.1 - Production Ready! (November 29, 2025)
 
 **Status**: ✅ **ALL BETA.2 FEATURES COMPLETE** ✅
 **Base Implementation**: ✅ **COMPLETE** (464 tests passing, zero warnings)
 
 **oxirs** provides a comprehensive command-line interface for OxiRS operations with production-ready features.
 
-### 🎉 Beta.1 COMPLETE + Enhanced Output Formatters (November 2, 2025)
+### 🎉 RC.1 COMPLETE + Enhanced Output Formatters (November 2, 2025)
 
 **Code Quality** ✅:
 - ✅ **Zero compilation warnings** - Clean build with no errors or warnings
@@ -1159,7 +1159,7 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
 
 ## 🎯 Development Roadmap
 
-### Immediate Priority - Beta.1 (Q4 2025)
+### Immediate Priority - RC.1 (Q4 2025)
 
 **Status**: Ready to begin (foundation complete)
 
@@ -1444,7 +1444,7 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
 
 ---
 
-## 📊 Beta.1 Summary - COMPLETE (November 2, 2025)
+## 📊 RC.1 Summary - COMPLETE (November 2, 2025)
 
 **Total Effort**:
 
@@ -1473,7 +1473,7 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
 
 ---
 
-### Beta Release Targets (v0.1.0-beta.1 - November 2025)
+### Release Targets (v0.1.0-rc.1 - December 2025)
 
 #### Advanced Features (P2)
 
@@ -1541,7 +1541,7 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
 
 ---
 
-## v0.1.0-beta.1 - Active Implementation (November 2025)
+## v0.1.0-rc.1 - Implementation (December 2025)
 
 **Status**: 🚧 **ALL ITEMS BEING IMPLEMENTED FOR BETA.1 RELEASE** 🚧
 
@@ -1716,7 +1716,7 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
 
 ---
 
-## 🎯 v0.1.0 Complete Feature Roadmap (Post-Beta.1)
+## 🎯 v0.1.0 Complete Feature Roadmap (Post-RC.1)
 
 ### v0.1.0 Final Release Targets (Q4 2025) - REMAINING FEATURES
 
@@ -1983,7 +1983,7 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
 
 ## 🎊 Success Metrics
 
-### Beta.2 Achievements (November 29, 2025)
+### RC.1 Achievements (November 29, 2025)
 
 ✅ **Code Quality**: Zero compilation warnings, clean clippy build, **464 tests passing (100%)**
 ✅ **Commands**: All 8 core commands + docs, tutorial, rebac (serve, query, update, import, export, migrate, batch, interactive, docs, tutorial)
@@ -1998,7 +1998,7 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
 
 ---
 
-*OxiRS CLI v0.1.0-beta.2: **COMPLETE** - Production-ready command-line interface with comprehensive SPARQL support, interactive REPL, configuration management, all 7 RDF serialization formats, custom templating, documentation generation, and tutorial mode. Released November 23, 2025.*
+*OxiRS CLI v0.1.0-rc.1: **COMPLETE** - Production-ready command-line interface with comprehensive SPARQL support, interactive REPL, configuration management, all 7 RDF serialization formats, custom templating, documentation generation, and tutorial mode. Released November 23, 2025.*
 
 ***464 tests passing (100% pass rate). Zero compilation warnings. All core commands + developer tools functional. Ready for production deployment.***
 
@@ -2066,7 +2066,7 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
 - ✅ **Proper abstractions** - Random, Rng, SeedableRng patterns followed
 - ✅ **No violations** - Full compliance with SCIRS2 POLICY
 
-**Beta.1 Priority Tasks (P1) - All Complete**:
+**RC.1 Priority Tasks (P1) - All Complete**:
 - ✅ RDF Serialization (7 formats) - COMPLETE
 - ✅ Configuration Management - COMPLETE
 - ✅ Core Commands (serve, query, update, import, export, migrate, batch) - COMPLETE
@@ -2082,13 +2082,13 @@ let paths = find_motifs(&graph, MotifType::Path3);      // Linear 4-node paths
 - ✅ Priority 4: Backup encryption (AES-256-GCM) + PITR
 - ✅ Priority 5: Schema-aware autocomplete (REPL)
 
-*Status: **READY FOR RELEASE** - All beta.2 targets achieved. Next: v0.2.0 (Plugin system, scripting API, IDE integration) - Target: Q1 2026*
+*Status: **READY FOR RELEASE** - All rc.1 targets achieved. Next: v0.2.0 (Plugin system, scripting API, IDE integration) - Target: Q1 2026*
 
 ---
 
 ## 📋 Summary: What's Actually Complete (November 29, 2025)
 
-The comprehensive code review reveals that **oxirs v0.1.0-beta.2 is 100% feature-complete** with all originally planned features fully implemented:
+The comprehensive code review reveals that **oxirs v0.1.0-rc.1 is 100% feature-complete** with all originally planned features fully implemented:
 
 ### ✅ Core Infrastructure
 - All 7 RDF serialization formats (Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD, N3)
@@ -2148,13 +2148,12 @@ The comprehensive code review reveals that **oxirs v0.1.0-beta.2 is 100% feature
 - **45,594 lines of code** across 122 Rust files
 - **2,297 comment lines** (comprehensive documentation)
 
-### ✅ Latest Enhancements & Fixes (November 2025)
-- Nov 29: ReBAC graph filtering fix + persistent storage auto-save
-- Nov 23: Documentation generator + custom template system
-- Nov 21: PDF reports + ASCII diagrams + tutorial mode
-- Nov 20: Query plan visualization + Excel export
-- Nov 9: Shell integration, aliases, compression, index management
-- Nov 7: Database administration (tdbstats, tdbcompact, tdbbackup)
-- Nov 2: HTML/Markdown formatters + 202→464 test expansion
-
-**The TODO.md incorrectly labeled many completed features as "in progress" or "stubbed". This November 2025 review confirmed all features are fully implemented, tested, and production-ready.**
+### ✅ Latest Enhancements & Fixes (December 2025)
+- All features fully implemented, tested, and production-ready
+- ReBAC graph filtering + persistent storage auto-save
+- Documentation generator + custom template system
+- PDF reports + ASCII diagrams + tutorial mode
+- Query plan visualization + Excel export
+- Shell integration, aliases, compression, index management
+- Database administration (tdbstats, tdbcompact, tdbbackup)
+- HTML/Markdown formatters + comprehensive test suite

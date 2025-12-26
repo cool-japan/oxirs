@@ -442,7 +442,10 @@ impl SubscriptionManager {
 
         match msg {
             Message::Text(text) => {
-                let ws_msg: WsMessage = serde_json::from_str(&text)
+                // Parse to Value first to work around serde_json issue with internally-tagged enums
+                let value: serde_json::Value = serde_json::from_str(&text)
+                    .map_err(|e| FusekiError::bad_request(format!("Invalid JSON: {e}")))?;
+                let ws_msg: WsMessage = serde_json::from_value(value)
                     .map_err(|e| FusekiError::bad_request(format!("Invalid message: {e}")))?;
                 self.handle_ws_message(ws_msg, connection_id).await?;
             }
@@ -450,7 +453,10 @@ impl SubscriptionManager {
                 // Handle compressed messages if enabled
                 if self.config.enable_compression {
                     let decompressed = Self::decompress_message(&data)?;
-                    let ws_msg: WsMessage = serde_json::from_slice(&decompressed)
+                    // Parse to Value first to work around serde_json issue
+                    let value: serde_json::Value = serde_json::from_slice(&decompressed)
+                        .map_err(|e| FusekiError::bad_request(format!("Invalid JSON: {e}")))?;
+                    let ws_msg: WsMessage = serde_json::from_value(value)
                         .map_err(|e| FusekiError::bad_request(format!("Invalid message: {e}")))?;
                     self.handle_ws_message(ws_msg, connection_id).await?;
                 } else {
@@ -1271,7 +1277,11 @@ mod tests {
         };
 
         let json = serde_json::to_string(&msg).unwrap();
-        let deserialized: WsMessage = serde_json::from_str(&json).unwrap();
+
+        // Parse to Value first, then from_value - this works around serde_json issue
+        // with internally-tagged enums containing nested Option<Struct> fields
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let deserialized: WsMessage = serde_json::from_value(value).unwrap();
 
         match deserialized {
             WsMessage::Subscribe { query, .. } => {

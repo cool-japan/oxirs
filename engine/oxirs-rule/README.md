@@ -1,10 +1,10 @@
 # OxiRS Rule Engine
 
-[![Version](https://img.shields.io-badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Beta Release (v0.1.0-beta.2) - Released December 21, 2025
+**Status**: Release Candidate (v0.1.0-rc.1) - Released December 26, 2025
 
-✨ **Beta Software**: Production-ready with API stability guarantees and comprehensive testing.
+✨ **Release Candidate**: Production-ready with API stability guarantees and comprehensive testing.
 
 A high-performance, comprehensive reasoning engine for Semantic Web applications, implementing forward chaining, backward chaining, RETE networks, RDFS, OWL RL, and SWRL rule processing.
 
@@ -36,7 +36,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-rule = "0.1.0-beta.2"
+oxirs-rule = "0.1.0-rc.1"
 ```
 
 ## Quick Start
@@ -279,7 +279,7 @@ cargo test --release --features benchmarks
 ```
 
 ### Test Coverage
-- 34/34 tests passing (100% success rate)
+- 722/722 tests passing (100% success rate)
 - Unit tests for all reasoning algorithms
 - Integration tests with real-world datasets
 - Performance regression tests
@@ -347,11 +347,11 @@ Licensed under the Apache License, Version 2.0 or the MIT License, at your optio
 
 ## Status
 
-🚀 **Beta Release (v0.1.0-beta.2)** – November 16, 2025
+🚀 **Release Candidate (v0.1.0-rc.1)** – December 26, 2025
 
 Highlights:
 - ✅ Forward/backward chaining over persisted datasets with automatic inference snapshots
 - ✅ RETE network optimized with SciRS2 metrics and tracing hooks
 - ✅ Integrated with federation-aware SPARQL workflows for rule-driven post-processing
-- ✅ 89/89 tests passing plus CLI end-to-end coverage
-- 🚧 Advanced distributed reasoning (planned for beta)
+- ✅ 722/722 tests passing plus CLI end-to-end coverage
+- 🚧 Advanced distributed reasoning (planned for future release)

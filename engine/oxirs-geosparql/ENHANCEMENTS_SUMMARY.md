@@ -1,8 +1,8 @@
 # OxiRS GeoSPARQL Enhancement Summary
 
-**Date:** January 29, 2025
-**Session:** Beta.2 Development - Documentation & Infrastructure
-**Branch:** 0.1.0-beta.2
+**Date:** December 25, 2025
+**Session:** RC.1 Development - Documentation & Infrastructure
+**Branch:** 0.1.0-rc.1
 
 ---
 
@@ -421,7 +421,7 @@ The crate is now ready for broader adoption with:
 
 ---
 
-**Status:** oxirs-geosparql v0.1.0-beta.2 development complete
-**Next Milestone:** v0.1.0-beta.3 (Additional testing and integration examples)
+**Status:** oxirs-geosparql v0.1.0-rc.1 development complete
+**Next Milestone:** v0.1.0-rc.1 (Additional testing and integration examples)
 
-*Generated: January 29, 2025*
+*Generated: December 25, 2025*

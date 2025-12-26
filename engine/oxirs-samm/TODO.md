@@ -4,9 +4,9 @@
 
 ## 🎯 **Current Status**
 
-**Version**: 0.1.0-beta.1+++++++++++++++++++++++++
+**Version**: 0.1.0-rc.1+++++++++++++++++++++++++
 **Build Status**: ✅ All tests passing (398 lib tests - Session 23: +5 new visualization tests)
-**Implementation Status**: 🚀 **Beta.1+++++++++++++++++++++++++Production-Ready** - All Features + Graph Visualization
+**Implementation Status**: 🚀 **RC.1+++++++++++++++++++++++++Production-Ready** - All Features + Graph Visualization
 **Clippy Warnings**: 0 (Clean - strict -D warnings compliance)
 **Documentation**: ✅ 100% (All public APIs documented + Migration Guide)
 **Benchmarks**: ✅ 24 benchmarks (parser, generators, validation, SIMD, large models)
@@ -576,7 +576,7 @@
 - **+2 files**: documentation.rs + example (85 → 87 files)
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: All 463 tests passing, no regressions
-- **Beta.1+++++++++++++++++++ Complete**: Production-ready with comprehensive documentation
+- **RC.1+++++++++++++++++++ Complete**: Production-ready with comprehensive documentation
 
 ### Technical Decisions
 
@@ -723,7 +723,7 @@
 - **+1,148 code lines**: Total codebase growth (22,290 → 23,438 lines)
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: All 453 tests passing, no regressions
-- **Beta.1+++++++++++++++++ Complete**: Production-ready with advanced model intelligence
+- **RC.1+++++++++++++++++ Complete**: Production-ready with advanced model intelligence
 
 ### Technical Decisions
 
@@ -838,7 +838,7 @@
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: No regressions, all enhancements verified
 - **30x performance boost**: Character counting in production workloads
-- **Beta.1++++++++++++++++ Complete**: Production-ready with SIMD optimization
+- **RC.1++++++++++++++++ Complete**: Production-ready with SIMD optimization
 
 ### Technical Decisions
 
@@ -931,7 +931,7 @@
 - **+12 new public APIs**: CodeGenerator, GeneratorRegistry, GeneratorRef, GeneratorMetadata, Extension, ExtensionElement, PropertyDefinition, ValidationRule, ExtensionRegistry, ParseEvent, ParseState, IncrementalParser
 - **0 warnings**: Maintained strict quality standards (fixed oxirs-ttl warning)
 - **100% passing**: All 356 tests passing, no regressions
-- **Beta.1++++++++++++++++ Complete**: ALL planned features implemented, tested, and integrated
+- **RC.1++++++++++++++++ Complete**: ALL planned features implemented, tested, and integrated
 
 ### Technical Decisions
 
@@ -985,7 +985,7 @@
 5. **Error Handling**: Proper Result types and error propagation throughout
 6. **Real-world Scenarios**: Examples demonstrate practical use cases (large files, resumable parsing, cancellation)
 
-## 🆕 **Session 15 Achievements** (January 7, 2025)
+## 🆕 **Session 15 Achievements** (December 25, 2025)
 
 ### What Was Completed
 
@@ -1051,7 +1051,7 @@
 - **+2,845 lines**: Example code ready for production use
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: All 359 tests passing (224 unit + 16 advanced integration + 13 fuzz + 11 integration + 11 memory + 8 lifecycle + 14 perf + 8 proptest-gen + 12 proptest + 42 doc)
-- **Beta.1+++++++++++ Complete**: All planned features + examples + comprehensive testing
+- **RC.1+++++++++++ Complete**: All planned features + examples + comprehensive testing
 
 ### Technical Decisions
 
@@ -1156,7 +1156,7 @@
 - **+3 doc test fixes**: Fixed utils.rs doc tests to use proper API constructors
 - **0 warnings**: Maintained strict quality standards (0 clippy warnings)
 - **100% passing**: All 343 tests passing, no regressions
-- **Beta.1++++++++++ Complete**: Advanced utilities and validation helpers production-ready
+- **RC.1++++++++++ Complete**: Advanced utilities and validation helpers production-ready
 
 ### Technical Decisions
 
@@ -1220,7 +1220,7 @@
 - **Complete lifecycle**: Demonstrates full model lifecycle (parse → query → transform → compare → validate)
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: All 289 tests passing, no regressions
-- **Beta.1+++++++ Complete**: Production-ready with complete integration examples
+- **RC.1+++++++ Complete**: Production-ready with complete integration examples
 
 ### Technical Decisions
 
@@ -1318,7 +1318,7 @@
 - **+8 new public APIs**: ModelQuery, ComplexityMetrics, Dependency, ModelComparison, PropertyChange, MetadataChange, MetadataChangeType, ModelTransformation, TransformationRule
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: No regressions, all enhancements verified
-- **Beta.1++++++ Complete**: Advanced model introspection + comparison + transformation
+- **RC.1++++++ Complete**: Advanced model introspection + comparison + transformation
 
 ### Technical Decisions
 
@@ -1452,7 +1452,7 @@
 - **+11 new public APIs**: GeneratedFile, MultiFileGenerator, MultiFileOptions, OutputLayout, ErrorRecoveryStrategy, RecoveryAction, RecoveryContext, ModelMigrator, MigrationOptions, MigrationResult, SammVersion
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: No regressions, all enhancements verified
-- **Beta.1+++++ Complete**: Advanced code generation + robust error handling + version migration
+- **RC.1+++++ Complete**: Advanced code generation + robust error handling + version migration
 
 ### Technical Decisions
 
@@ -1538,7 +1538,7 @@
 - **+3 new public APIs**: StreamingParser, template hooks (PreRenderHook, PostRenderHook, ValidationHook)
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: No regressions, all enhancements verified
-- **Beta.1+++ Complete**: Production-ready with comprehensive testing and migration support
+- **RC.1+++ Complete**: Production-ready with comprehensive testing and migration support
 
 ### Technical Decisions
 
@@ -1584,7 +1584,7 @@
 - **+30 new utility functions**: URN, naming, inspection, datatype utilities
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: No regressions, all enhancements verified
-- **Beta.1++ Complete**: Enhanced error UX and developer productivity
+- **RC.1++ Complete**: Enhanced error UX and developer productivity
 
 ### Technical Decisions
 
@@ -1626,13 +1626,13 @@
    - Incomplete documentation for production use
    - **Action**: Wait for scirs2 v1.0.0 stable release
 
-2. **Beta.1 Status**: oxirs-samm remains production-ready for Beta.1 release
+2. **RC.1 Status**: oxirs-samm remains production-ready for RC.1 release
    - All planned features complete
    - Full test coverage
    - 100% documentation
    - Zero warnings
 
-3. **Future Enhancements Planned** (Post-Beta.1, awaiting scirs2 1.0.0):
+3. **Future Enhancements Planned** (Post-RC.1, awaiting scirs2 1.0.0):
    - Dependency graph analysis with circular dependency detection
    - Statistical validation insights with anomaly detection
    - SIMD-accelerated URN parsing and string operations
@@ -1713,7 +1713,7 @@
 - **+7 TODOs resolved**: All remaining actionable TODOs in source code completed
 - **0 warnings**: Maintained strict quality standards with clippy
 - **100% passing**: No regressions, all enhancements verified
-- **Beta.1 Complete**: All planned features implemented and tested
+- **RC.1 Complete**: All planned features implemented and tested
 
 ### Technical Decisions
 
@@ -1790,7 +1790,7 @@
 - **+5 major features**: Source location errors, HTTP resolution, SciRS2 profiling, API guarantees, stress testing
 - **0 warnings**: Maintained strict quality standards
 - **100% passing**: No regressions, all enhancements verified
-- **Beta.1 Quality**: Production-ready with comprehensive testing
+- **RC.1 Quality**: Production-ready with comprehensive testing
 
 ### Technical Decisions
 
@@ -2048,7 +2048,7 @@
 - [x] Incremental parsing for large files (Session 16 - Already implemented with 6 tests)
 - [ ] Visual model editor integration (Future)
 
-## 🚀 **Beta.1 Release Checklist**
+## 🚀 **RC.1 Release Checklist**
 
 ### API Stabilization
 - [x] Finalize public API surface
@@ -2205,7 +2205,7 @@
 - **+109 doc comments**: Complete public API documentation
 - **+3 doc tests** (123 → 126)
 - **+35% documentation**: From 65% to 100% coverage
-- **Beta.1 Ready**: API stability and documentation complete
+- **RC.1 Ready**: API stability and documentation complete
 
 ## 🎉 **Session 5 Achievements**
 
@@ -2236,7 +2236,7 @@
 - **+7 tests** (126 → 133)
 - **+15 benchmarks**
 - **+784 lines**: Benchmark and proptest infrastructure
-- **Beta.1 Quality Gate**: Benchmarks requirement satisfied
+- **RC.1 Quality Gate**: Benchmarks requirement satisfied
 
 ## 🔗 **Dependencies**
 
@@ -2263,7 +2263,7 @@
 
 ---
 
-**Session 14 Completion**: ✅ Advanced Utility Functions & Validation Helpers - **Beta.1++++++++++ COMPLETE**
+**Session 14 Completion**: ✅ Advanced Utility Functions & Validation Helpers - **RC.1++++++++++ COMPLETE**
 
 **Status Summary**:
 - ✅ **343 tests passing** (100% pass rate) - **+54 tests from Session 13** (utility + validation helpers + doc tests)
@@ -2304,7 +2304,7 @@
 - ✅ **All source files <2000 lines** (refactoring policy compliant)
 
 **Next Actions**:
-- ✅ Session 16 objectives complete - **PRODUCTION-READY** 0.1.0-beta.1+++++++++++++ release
+- ✅ Session 16 objectives complete - **PRODUCTION-READY** 0.1.0-rc.1+++++++++++++ release
 - ✅ ALL planned features now implemented (plugin architecture, extensions, incremental parsing)
 - ✅ Built-in generators integrated with plugin system (8 generators accessible via unified API)
 - ✅ Production-ready with ALL examples and advanced integration tests working
@@ -2318,7 +2318,7 @@
 - ✅ 356 tests passing (100%) - added 3 new built-in generator integration tests
 
 **Ready for 0.1.0 GA Release**:
-- All Beta features complete ✅ (including plugin architecture, extensions, incremental parsing)
+- All features complete ✅ (including plugin architecture, extensions, incremental parsing)
 - All examples working ✅
 - All 356 tests passing ✅
 - Documentation complete ✅

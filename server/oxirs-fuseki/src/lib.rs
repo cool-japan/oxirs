@@ -1,9 +1,9 @@
 //! # OxiRS Fuseki - SPARQL HTTP Server
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-fuseki/badge.svg)](https://docs.rs/oxirs-fuseki)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.2)
+//! **Status**: Beta Release (v0.1.0-rc.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SPARQL 1.1/1.2 HTTP protocol server with Apache Fuseki compatibility.
@@ -71,6 +71,7 @@ pub mod graphql_integration; // GraphQL API integration (Beta.2/RC.1)
 pub mod handlers;
 pub mod health; // Enhanced health checks
 pub mod http_protocol; // HTTP/2 and HTTP/3 support
+pub mod ids; // IDS/Gaia-X Connector for Data Sovereignty (Phase B)
 pub mod k8s_operator; // Kubernetes operator for managing Fuseki instances
 pub mod memory_pool; // Memory pooling and optimization
 pub mod metrics;

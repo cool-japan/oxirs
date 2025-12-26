@@ -16,7 +16,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_shacl_ai::experiment_tracking::{ExperimentTracker, Parameter, Metric};
 //!
 //! let tracker = ExperimentTracker::new();

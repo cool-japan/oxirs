@@ -1,12 +1,12 @@
 # OxiRS SAMM - API Stability Guarantees
 
-**Version**: 0.1.0-beta.1
+**Version**: 0.1.0-rc.1
 **Status**: Beta Release
 **Date**: November 1, 2025
 
 ## Overview
 
-This document outlines the API stability guarantees for the OxiRS SAMM crate. As a beta release, we commit to maintaining backward compatibility for all public APIs unless explicitly marked as unstable.
+This document outlines the API stability guarantees for the OxiRS SAMM crate. As a release candidate, we commit to maintaining backward compatibility for all public APIs unless explicitly marked as unstable.
 
 ## Stability Levels
 

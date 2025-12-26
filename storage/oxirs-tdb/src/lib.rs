@@ -1,8 +1,8 @@
 //! # OxiRS TDB - Apache Jena TDB/TDB2 Compatible Storage Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Beta Release (v0.1.0-beta.2)
+//! **Status**: Beta Release (v0.1.0-rc.1)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! High-performance RDF triple store with B+Tree indexes, ACID transactions,
@@ -76,7 +76,7 @@
 //! - [`oxirs-core`](https://docs.rs/oxirs-core) - RDF data model
 //! - [`oxirs-arq`](https://docs.rs/oxirs-arq) - SPARQL query engine
 
-#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.1.0-beta.2")]
+#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.1.0-rc.1")]
 #![warn(missing_docs)]
 #![allow(dead_code)] // Allow during development
 #![allow(unused_imports)] // Allow during development

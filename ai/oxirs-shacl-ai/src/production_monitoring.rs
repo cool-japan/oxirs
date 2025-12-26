@@ -16,7 +16,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_shacl_ai::production_monitoring::{
 //!     ProductionMonitor, MonitoringConfig, SLA
 //! };

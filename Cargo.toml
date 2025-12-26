@@ -19,6 +19,13 @@ members = [
     "ai/oxirs-embed",
     "ai/oxirs-shacl-ai",  # Re-enabled after major refactoring fixes
     "ai/oxirs-chat",
+    "ai/oxirs-physics",  # Phase B: Neuro-Symbolic AI Bridge
+    "ai/oxirs-graphrag",  # Phase C: GraphRAG Hybrid Search
+    "security/oxirs-did",  # Phase C: DID/VC Trust Layer
+    "platforms/oxirs-wasm",  # Phase C: WASM Browser/Edge Support
+    "stream/oxirs-modbus",  # Phase D: Modbus TCP/RTU Industrial Connectivity
+    "storage/oxirs-tsdb",  # Phase D: Time-Series Optimization
+    "stream/oxirs-canbus",  # Phase D: CANbus/J1939 Automotive Integration
     "tools/oxirs",
 ]
 exclude = [
@@ -27,7 +34,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.0-beta.2"
+version = "0.1.0-rc.1"
 authors = ["KitaSan <info@kitasan.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -56,24 +63,31 @@ unsafe_code = "warn"
 
 [workspace.dependencies]
 # Internal OxiRS crates (version inherited from workspace.package)
-oxirs-core = { version = "0.1.0-beta.2", path = "core/oxirs-core" }
-oxirs-fuseki = { version = "0.1.0-beta.2", path = "server/oxirs-fuseki" }
-oxirs-gql = { version = "0.1.0-beta.2", path = "server/oxirs-gql" }
-oxirs-arq = { version = "0.1.0-beta.2", path = "engine/oxirs-arq" }
-oxirs-geosparql = { version = "0.1.0-beta.2", path = "engine/oxirs-geosparql" }
-oxirs-rule = { version = "0.1.0-beta.2", path = "engine/oxirs-rule" }
-oxirs-samm = { version = "0.1.0-beta.2", path = "engine/oxirs-samm" }
-oxirs-shacl = { version = "0.1.0-beta.2", path = "engine/oxirs-shacl" }
-oxirs-star = { version = "0.1.0-beta.2", path = "engine/oxirs-star" }
-oxirs-ttl = { version = "0.1.0-beta.2", path = "engine/oxirs-ttl" }
-oxirs-vec = { version = "0.1.0-beta.2", path = "engine/oxirs-vec" }
-oxirs-tdb = { version = "0.1.0-beta.2", path = "storage/oxirs-tdb" }
-oxirs-cluster = { version = "0.1.0-beta.2", path = "storage/oxirs-cluster" }
-oxirs-stream = { version = "0.1.0-beta.2", path = "stream/oxirs-stream" }
-oxirs-federate = { version = "0.1.0-beta.2", path = "stream/oxirs-federate" }
-oxirs-embed = { version = "0.1.0-beta.2", path = "ai/oxirs-embed" }
-oxirs-shacl-ai = { version = "0.1.0-beta.2", path = "ai/oxirs-shacl-ai" }
-oxirs-chat = { version = "0.1.0-beta.2", path = "ai/oxirs-chat" }
+oxirs-core = { version = "0.1.0-rc.1", path = "core/oxirs-core" }
+oxirs-fuseki = { version = "0.1.0-rc.1", path = "server/oxirs-fuseki" }
+oxirs-gql = { version = "0.1.0-rc.1", path = "server/oxirs-gql" }
+oxirs-arq = { version = "0.1.0-rc.1", path = "engine/oxirs-arq" }
+oxirs-geosparql = { version = "0.1.0-rc.1", path = "engine/oxirs-geosparql" }
+oxirs-rule = { version = "0.1.0-rc.1", path = "engine/oxirs-rule" }
+oxirs-samm = { version = "0.1.0-rc.1", path = "engine/oxirs-samm" }
+oxirs-shacl = { version = "0.1.0-rc.1", path = "engine/oxirs-shacl" }
+oxirs-star = { version = "0.1.0-rc.1", path = "engine/oxirs-star" }
+oxirs-ttl = { version = "0.1.0-rc.1", path = "engine/oxirs-ttl" }
+oxirs-vec = { version = "0.1.0-rc.1", path = "engine/oxirs-vec" }
+oxirs-tdb = { version = "0.1.0-rc.1", path = "storage/oxirs-tdb" }
+oxirs-cluster = { version = "0.1.0-rc.1", path = "storage/oxirs-cluster" }
+oxirs-stream = { version = "0.1.0-rc.1", path = "stream/oxirs-stream" }
+oxirs-federate = { version = "0.1.0-rc.1", path = "stream/oxirs-federate" }
+oxirs-embed = { version = "0.1.0-rc.1", path = "ai/oxirs-embed" }
+oxirs-shacl-ai = { version = "0.1.0-rc.1", path = "ai/oxirs-shacl-ai" }
+oxirs-chat = { version = "0.1.0-rc.1", path = "ai/oxirs-chat" }
+oxirs-physics = { version = "0.1.0-rc.1", path = "ai/oxirs-physics" }
+oxirs-graphrag = { version = "0.1.0-rc.1", path = "ai/oxirs-graphrag" }
+oxirs-did = { version = "0.1.0-rc.1", path = "security/oxirs-did" }
+oxirs-wasm = { version = "0.1.0-rc.1", path = "platforms/oxirs-wasm" }
+oxirs-modbus = { version = "0.1.0-rc.1", path = "stream/oxirs-modbus" }
+oxirs-tsdb = { version = "0.1.0-rc.1", path = "storage/oxirs-tsdb" }
+oxirs-canbus = { version = "0.1.0-rc.1", path = "stream/oxirs-canbus" }
 
 # Core RDF and SPARQL functionality (native OxiRS implementations)
 # oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations
@@ -184,19 +198,19 @@ futures = "0.3"
 # Direct rand and ndarray usage removed per SciRS2 integration policy
 # Use scirs2-core::random and scirs2-core::ndarray_ext instead
 
-# SciRS2 dependencies (Scientific Computing Library) - Using rc.3 from crates.io
+# SciRS2 dependencies (Scientific Computing Library) - Using rc.4 from crates.io
 # Note: scirs2 meta crate removed - we only use specific sub-crates as needed
-scirs2-core = { version = "0.1.0-rc.3", features = ["random"] }
-scirs2-linalg = { version = "0.1.0-rc.3" }
-scirs2-stats = { version = "0.1.0-rc.3" }
-scirs2-neural = { version = "0.1.0-rc.3" }
-scirs2-graph = { version = "0.1.0-rc.3" }
-scirs2-metrics = { version = "0.1.0-rc.3" }
-scirs2-fft = { version = "0.1.0-rc.3" }
-scirs2-signal = { version = "0.1.0-rc.3" }
-scirs2-optimize = { version = "0.1.0-rc.3" }
-scirs2-cluster = { version = "0.1.0-rc.3" }
-scirs2-text = { version = "0.1.0-rc.3" }
+scirs2-core = { version = "0.1.0-rc.4", features = ["random"] }
+scirs2-linalg = { version = "0.1.0-rc.6" }
+scirs2-stats = { version = "0.1.0-rc.4" }
+scirs2-neural = { version = "0.1.0-rc.4" }
+scirs2-graph = { version = "0.1.0-rc.4" }
+scirs2-metrics = { version = "0.1.0-rc.4" }
+scirs2-fft = { version = "0.1.0-rc.4" }
+scirs2-signal = { version = "0.1.0-rc.4" }
+scirs2-optimize = { version = "0.1.0-rc.4" }
+scirs2-cluster = { version = "0.1.0-rc.4" }
+scirs2-text = { version = "0.1.0-rc.4" }
 # array! macro is now in scirs2-core, scirs2-autograd not needed
 
 # System utilities
@@ -231,6 +245,28 @@ sha2 = { version = "0.10.9", features = ["oid"] }
 hmac = "0.12.1"
 hex = "0.4.3"
 base64 = "0.22"
+ed25519-dalek = { version = "2.1", features = ["rand_core", "serde"] }
+multibase = "0.9"
+bs58 = "0.5"
+
+# Graph algorithms (GraphRAG)
+petgraph = "0.6"
+
+# Phase D: Industrial Connectivity Dependencies
+tokio-serial = "5.4"      # Modbus RTU serial port support
+socketcan = "3.3"         # Linux CAN interface
+bit-vec = "0.6"           # Bit manipulation for Gorilla compression
+arrow = "57"              # Apache Arrow for zero-copy Python integration
+deadpool = "0.12"         # Generic async connection pooling
+humantime-serde = "1.1"   # Human-readable duration serialization
+
+# WASM support
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["console", "Window", "Performance"] }
+console_error_panic_hook = "0.1"
+tracing-wasm = "0.2"
 
 # OpenTelemetry for observability
 opentelemetry = { version = "0.31", features = ["trace", "metrics"] }
@@ -240,7 +276,9 @@ opentelemetry_sdk = { version = "0.31", features = ["trace", "rt-tokio"] }
 opentelemetry-semantic-conventions = "0.31"
 
 [workspace.metadata.docs.rs]
-all-features = true
+# Note: Individual crates override with [package.metadata.docs.rs] to exclude
+# features with system dependencies (rdkafka, lmdb, kube, etc.)
+# See individual crate Cargo.toml files for specific exclusions
 rustdoc-args = ["--cfg", "docsrs"]
 
 # Feature flags to keep optional dependencies out of default builds

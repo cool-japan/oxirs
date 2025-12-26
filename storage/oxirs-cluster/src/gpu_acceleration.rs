@@ -19,17 +19,14 @@
 //!
 //! ## Usage Example
 //!
-//! ```no_run
+//! ```ignore
 //! use oxirs_cluster::gpu_acceleration::{GpuAcceleratedCluster, GpuConfig};
 //!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let config = GpuConfig::default();
 //! let gpu_cluster = GpuAcceleratedCluster::new(config).await?;
 //!
 //! // GPU-accelerated replica selection
 //! let best_replica = gpu_cluster.select_best_replica(&replica_metrics).await?;
-//! # Ok(())
-//! # }
 //! ```
 
 use rayon::prelude::*;

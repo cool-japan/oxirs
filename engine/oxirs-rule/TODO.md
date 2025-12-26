@@ -2,11 +2,11 @@
 
 *Last Updated: December 9, 2025*
 
-## ✅ Current Status: v0.1.0-beta.4+ (Production Ready - December 9, 2025)
+## ✅ Current Status: v0.1.0-rc.1+ (Production Ready - December 9, 2025)
 
 **oxirs-rule** provides rule-based reasoning engine for RDF data with production-ready performance.
 
-### Beta.4+ Development Status (December 9, 2025) ✨ ALL TESTS PASSING!
+### RC.1+ Development Status (December 9, 2025) ✨ ALL TESTS PASSING!
 - **722 tests passing** (unit + integration + 40 builtin tests + 8 fixpoint tests) - All tests passing ✨
 - **ZERO WARNINGS** - Full compliance with no warnings policy 🎉
 - **Fixpoint Iteration** ✨ NEW - Proper transitive closure for recursive ProbLog rules
@@ -31,7 +31,7 @@
 - **Quantum-Inspired Optimization** ✨ - 5 quantum algorithms for rule ordering (Quantum Annealing, Quantum Genetic, QPSO, Quantum Walk, Grover-Inspired) (11 tests)
 - **Benchmark Suite** ✨ - Comprehensive performance testing with 10 benchmark categories and statistical analysis (10 tests, 2 ignored)
 - **Migration Tools** ✨ - Rule conversion from Apache Jena, Drools DRL, and CLIPS formats with detailed warnings (15 tests)
-- **All previous features** - 655 tests from previous Beta.3 development continue to pass
+- **All previous features** - 655 tests from previous RC.1 development continue to pass
 
 #### RIF (Rule Interchange Format) Support (November 24, 2025) ✨
 **File**: `src/rif.rs` (1,999 lines) - Optimized December 5, 2025 ✅
@@ -564,12 +564,12 @@ Successfully refactored monolithic SWRL builtins file into **13 semantic modules
 - **SPARQL integration** ✨ NEW - Query-driven reasoning with multiple execution modes
 - **SHACL integration** ✨ NEW - Validation hooks with pre/post reasoning and constraint repair
 - **Distributed reasoning** ✨ - Foundation for horizontal scaling with work partitioning
-- **Comprehensive integration example** ✨ NEW - E-commerce scenario demonstrating all Beta.1 features
+- **Comprehensive integration example** ✨ NEW - E-commerce scenario demonstrating all RC.1 features
 - **SciRS2 integration** - Using scirs2-core for performance primitives
 - **SIMD operations** ✨ NEW - Parallel processing and vectorized operations for hot paths
 - **Memory optimization** - Efficient data structures for large knowledge graphs
 
-## 🎯 Beta.1 Accomplishments (Beta.1 Features Completed)
+## 🎯 RC.1 Accomplishments (RC.1 Features Completed)
 
 ### ✅ Reasoning Engine (100% Complete)
 - [x] Complete RDFS reasoning with all W3C entailment rules
@@ -582,7 +582,7 @@ Successfully refactored monolithic SWRL builtins file into **13 semantic modules
 - [x] Memory usage optimization with scirs2-core structures
 - [x] Materialization strategies (eager, lazy, semi-eager, adaptive)
 
-### ✅ Features (100% Complete - Beta.1 Features Delivered in Beta.1+)
+### ✅ Features (100% Complete - RC.1 Features Delivered in RC.1+)
 - [x] Rule conflict resolution with priority system
 - [x] Explanation support for inference tracing
 - [x] Transaction support (ACID reasoning operations)
@@ -1172,9 +1172,9 @@ Identified **CRITICAL** allocation hotspots in `src/incremental.rs`:
 - ✅ Metrics infrastructure deployed (5 global timers + 12 memory metrics) ⚡
 - ✅ Documentation complete in TODO.md
 
-## 🎯 Beta.1 Targets (Updated - Target: November 2025)
+## 🎯 RC.1 Targets (Updated - Target: December 2025)
 
-### ✅ ALL Beta.1 Features Completed in Beta.1+ 🎉
+### ✅ ALL RC.1 Features Completed in RC.1+ 🎉
 1. ✅ **Explanation Support** - Complete with provenance tracking, inference graphs, why/how explanations
 2. ✅ **Rule Conflict Resolution** - Priority-based, specificity ordering, confidence scoring
 3. ✅ **Transaction Support** - ACID transactions with isolation levels
@@ -1185,8 +1185,8 @@ Identified **CRITICAL** allocation hotspots in `src/incremental.rs`:
 8. ✅ **SHACL Integration** - Validation hooks with pre/post reasoning and repair rules
 9. ✅ **Distributed Reasoning** - Node management, work partitioning, load balancing
 
-### Beta.1 Status
-**ALL FEATURES COMPLETE!** Beta.1+ has successfully delivered all planned Beta.1 functionality ahead of schedule.
+### RC.1 Status
+**ALL FEATURES COMPLETE!** RC.1+ has successfully delivered all planned RC.1 functionality ahead of schedule.
 
 ## 🎯 v0.1.0 Complete Feature Roadmap
 

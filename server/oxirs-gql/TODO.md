@@ -8,18 +8,7 @@
 
 ### Implementation Status Summary
 - **1213 tests passing** (100% success rate) ✅ **+78 new tests (Dec 9 - v0.5.0 Observability)**
-- **Beta.1 targets: 100% complete** ✅
-- **v0.1.0 targets: 100% complete** ✅ **ALL FEATURES IMPLEMENTED**
-- **v0.2.0 Advanced Query Optimization: 5/5 complete** ✅ **100% COMPLETE - Nov 21 AM**
-- **v0.2.0 Enhanced Federation: 5/5 complete** ✅ **100% COMPLETE - Nov 22 AM** 🎉
-- **v0.2.0 AI-Powered Features: 5/5 complete** ✅ **100% COMPLETE - Nov 22 PM** 🎉🎉
-- **v0.2.0 Operational Enhancements: 5/5 complete** ✅ **100% COMPLETE - Nov 24** 🎉🎉🎉
-- **v0.2.0 Developer Experience: 5/5 complete** ✅ **100% COMPLETE - Nov 24** 🎉🎉🎉🎉
-- **v0.3.0 Security & Integration: 5/5 complete** ✅ **100% COMPLETE - Nov 29** 🎉🎉🎉🎉🎉
-- **v0.4.0 Protocol Enhancements: 5/5 complete** ✅ **100% COMPLETE - Dec 2 AM** 🎉🎉🎉🎉🎉🎉
-- **v0.5.0 Observability & Monitoring: 18/25 in progress** 🔄 **IN PROGRESS - Dec 9**
-- **Total implementation: ~100,000+ lines** (~89,000+ code) across 138 modules (+10 modules since v0.4.0)
-- **v0.4.0 COMPLETE** ✅🎉 | **v0.5.0 IN PROGRESS** 🔄
+- **RC.1 targets: 100% complete** ✅
 
 ### v0.1.0 Release Status (November 21, 2025) - ENHANCED
 - **417 tests passing** with zero errors (unit + integration + all modules) **+29 new since Nov 20**
@@ -39,11 +28,11 @@
 - **Code Generation** ✅ NEW: Generate client code for TypeScript, Rust, Python, Go, Java, C#, Swift
 - **Live Queries** ✅ NEW: Automatic query re-execution when RDF data changes
 - **Schema Documentation** ✅ NEW: Generate Markdown, HTML, JSON, and OpenAPI docs from schema
-- **Released on crates.io**: `oxirs-gql = "0.1.0-beta.1"`
+- **Released on crates.io**: `oxirs-gql = "0.1.0-rc.1"`
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Beta Release Targets (v0.1.0-beta.1 - November 2025) ✅ COMPLETED
+### Release Targets (v0.1.0-rc.1 - December 2025) ✅ COMPLETED
 
 #### Schema Generation ✅ COMPLETED
 - [x] Advanced schema generation from RDFS/OWL (owl_enhanced_schema.rs - 984 lines)
@@ -891,7 +880,7 @@
 ## 📊 Implementation Metrics
 
 ### v0.1.0 to v0.5.0 Journey
-- **Start (v0.1.0-beta.1)**: 417 tests, ~50K lines
+- **Start (v0.1.0-rc.1)**: 417 tests, ~50K lines
 - **v0.2.0**: 654 tests, ~75K lines
 - **v0.3.0**: 734 tests, ~79.6K lines
 - **v0.4.0**: 834 tests, ~85K lines

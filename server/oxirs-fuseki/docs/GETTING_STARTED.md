@@ -81,7 +81,7 @@ query_timeout_secs = 300
 You should see:
 
 ```
-INFO  Starting OxiRS Fuseki v0.1.0-beta.2
+INFO  Starting OxiRS Fuseki v0.1.0-rc.1
 INFO  Binding to http://0.0.0.0:3030
 INFO  Admin UI available at http://localhost:3030
 INFO  Server started successfully
@@ -192,27 +192,27 @@ enabled = true
 requests_per_minute = 1000
 burst_size = 100
 
-# Concurrency (Beta.2 features)
+# Concurrency (RC.1 features)
 [performance.concurrency]
 enabled = true
 worker_threads = 8
 max_queue_size = 10000
 priority_scheduling = true
 
-# Memory management (Beta.2 features)
+# Memory management (RC.1 features)
 [performance.memory]
 enabled = true
 pool_size = 1000
 gc_interval_secs = 300
 max_memory_mb = 4096
 
-# Batch execution (Beta.2 features)
+# Batch execution (RC.1 features)
 [performance.batch_execution]
 enabled = true
 max_batch_size = 100
 adaptive_sizing = true
 
-# Streaming (Beta.2 features)
+# Streaming (RC.1 features)
 [performance.streaming]
 enabled = true
 chunk_size = 65536

@@ -1,6 +1,6 @@
 # OxiRS Configuration Reference
 
-**Version**: 0.1.0-beta.2
+**Version**: 0.1.0-rc.1
 **Last Updated**: December 21, 2025
 **Status**: Production-Ready
 
@@ -940,4 +940,4 @@ Error: Environment variable 'JWT_SECRET' is not set
 
 ---
 
-**OxiRS v0.1.0-beta.2** - Production-ready semantic web server configuration
+**OxiRS v0.1.0-rc.1** - Production-ready semantic web server configuration

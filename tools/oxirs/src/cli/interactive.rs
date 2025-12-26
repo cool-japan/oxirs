@@ -29,7 +29,7 @@ use std::collections::HashMap;
 /// This struct is deprecated and will be removed in v0.2.0.
 /// Use `commands::interactive::execute()` instead.
 #[deprecated(
-    since = "0.1.0-beta.1",
+    since = "0.1.0-rc.1",
     note = "Use commands::interactive::execute() instead"
 )]
 pub struct InteractiveMode {

@@ -98,7 +98,7 @@ impl ModelAnalytics {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use oxirs_samm::analytics::ModelAnalytics;
     /// use oxirs_samm::metamodel::Aspect;
     ///

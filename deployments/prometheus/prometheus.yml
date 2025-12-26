@@ -1,0 +1,38 @@
+# Prometheus configuration for OxiRS Digital Twin Platform
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'oxirs-digital-twin'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# Scrape configurations
+scrape_configs:
+  # OxiRS Fuseki metrics
+  - job_name: 'oxirs-fuseki'
+    static_configs:
+      - targets: ['oxirs-fuseki:3030']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # MQTT Broker metrics (if exposed)
+  # - job_name: 'mosquitto'
+  #   static_configs:
+  #     - targets: ['mosquitto:9091']
+
+# Recording rules (optional - for pre-computed metrics)
+# rule_files:
+#   - 'recording_rules.yml'
+#   - 'alerting_rules.yml'

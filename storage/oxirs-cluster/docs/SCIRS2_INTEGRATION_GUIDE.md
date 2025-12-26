@@ -1,6 +1,6 @@
 # SciRS2 Integration Guide for OxiRS Cluster
 
-**Version:** 0.1.0-beta.2
+**Version:** 0.1.0-rc.1
 **Last Updated:** December 4, 2025
 
 ## Overview

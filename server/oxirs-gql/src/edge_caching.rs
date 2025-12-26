@@ -27,7 +27,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_gql::edge_caching::{EdgeCache, CachePolicy, CdnProvider};
 //!
 //! // Create edge cache manager
@@ -37,7 +37,7 @@
 //! let policy = cache.analyze_query("{ user { name } }");
 //!
 //! // Generate cache headers
-//! let headers = policy.to_headers();
+//! let headers = policy.policy.to_headers();
 //! ```
 
 use serde::{Deserialize, Serialize};

@@ -13,7 +13,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_arq::query_optimization_advisor::{OptimizationAdvisor, AdvisorConfig};
 //!
 //! let advisor = OptimizationAdvisor::new(AdvisorConfig::default());

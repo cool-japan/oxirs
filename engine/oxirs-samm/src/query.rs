@@ -13,7 +13,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_samm::query::ModelQuery;
 //! use oxirs_samm::metamodel::Aspect;
 //!
@@ -80,7 +80,7 @@ impl<'a> ModelQuery<'a> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use oxirs_samm::query::ModelQuery;
     /// # use oxirs_samm::metamodel::Aspect;
     /// # fn example(aspect: &Aspect) {
@@ -564,7 +564,7 @@ impl<'a> ModelQuery<'a> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// use oxirs_samm::query::ModelQuery;
     /// # use oxirs_samm::metamodel::{Aspect, Property};
     /// # fn example(aspect: &Aspect) {

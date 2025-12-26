@@ -360,7 +360,7 @@ impl DocGenerator {
     fn generate_man(&self) -> String {
         let mut output = String::new();
 
-        output.push_str(".TH OXIRS 1 \"2025\" \"OxiRS v0.1.0-beta.2\" \"OxiRS Manual\"\n");
+        output.push_str(".TH OXIRS 1 \"2025\" \"OxiRS v0.1.0-rc.1\" \"OxiRS Manual\"\n");
         output.push_str(".SH NAME\n");
         output.push_str("oxirs \\- Semantic web command-line interface\n");
         output.push_str(".SH SYNOPSIS\n");

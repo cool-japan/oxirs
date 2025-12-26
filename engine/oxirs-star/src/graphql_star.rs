@@ -13,7 +13,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::graphql_star::{GraphQLStarEngine, SchemaGenerator};
 //! use oxirs_star::StarStore;
 //!

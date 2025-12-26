@@ -364,7 +364,7 @@ impl ZeroCopyTripleStore {
     /// Parse a single N-Triple line into a Triple
     ///
     /// This is a simple parser for the N-Triples format, which has the structure:
-    /// <subject> <predicate> <object> .
+    /// `<subject> <predicate> <object> .`
     ///
     /// We use string slicing to avoid allocations where possible.
     fn parse_ntriple_line(&self, line: &str) -> Result<Triple> {

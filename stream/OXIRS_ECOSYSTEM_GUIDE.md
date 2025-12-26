@@ -922,7 +922,7 @@ async fn stream_fed_federation_pattern() -> Result<()> {
         SELECT ?entity ?property ?value ?lastModified WHERE {
             ?entity ?property ?value .
             ?entity <http://purl.org/dc/terms/modified> ?lastModified .
-            FILTER(?lastModified > "2024-12-30T00:00:00Z"^^xsd:dateTime)
+            FILTER(?lastModified > "2025-12-20T00:00:00Z"^^xsd:dateTime)
         }
         ORDER BY DESC(?lastModified)
         LIMIT 100

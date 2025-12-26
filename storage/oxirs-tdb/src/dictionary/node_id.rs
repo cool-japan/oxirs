@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn test_node_id_serialization() {
         let id = NodeId::new(123);
-        let serialized = bincode::encode_to_vec(&id, bincode::config::standard()).unwrap();
+        let serialized = bincode::encode_to_vec(id, bincode::config::standard()).unwrap();
         let deserialized: NodeId =
             bincode::decode_from_slice(&serialized, bincode::config::standard())
                 .unwrap()
@@ -459,7 +459,7 @@ mod tests {
     #[test]
     fn test_inline_int_serialization() {
         let id = NodeId::inline_int(-42);
-        let serialized = bincode::encode_to_vec(&id, bincode::config::standard()).unwrap();
+        let serialized = bincode::encode_to_vec(id, bincode::config::standard()).unwrap();
         let deserialized: NodeId =
             bincode::decode_from_slice(&serialized, bincode::config::standard())
                 .unwrap()
@@ -471,7 +471,7 @@ mod tests {
     #[test]
     fn test_inline_bool_serialization() {
         let id = NodeId::inline_bool(true);
-        let serialized = bincode::encode_to_vec(&id, bincode::config::standard()).unwrap();
+        let serialized = bincode::encode_to_vec(id, bincode::config::standard()).unwrap();
         let deserialized: NodeId =
             bincode::decode_from_slice(&serialized, bincode::config::standard())
                 .unwrap()
@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn test_inline_string_serialization() {
         let id = NodeId::inline_short_string("test").unwrap();
-        let serialized = bincode::encode_to_vec(&id, bincode::config::standard()).unwrap();
+        let serialized = bincode::encode_to_vec(id, bincode::config::standard()).unwrap();
         let deserialized: NodeId =
             bincode::decode_from_slice(&serialized, bincode::config::standard())
                 .unwrap()

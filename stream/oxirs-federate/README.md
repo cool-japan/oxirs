@@ -1,10 +1,10 @@
 # OxiRS Federate - Federated Query Processing
 
-[![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Beta Release (v0.1.0-beta.2) - Released December 21, 2025
+**Status**: Release Candidate (v0.1.0-rc.1) - Released December 26, 2025
 
-✨ **Beta Features Complete!** All Beta Release Targets implemented. APIs stabilizing. Ready for beta promotion.
+✨ **Features Complete!** All Release Targets implemented. APIs stable. Ready for promotion.
 
 Federated SPARQL query processing across multiple RDF endpoints. Execute queries spanning distributed knowledge graphs with intelligent optimization and result integration.
 
@@ -33,9 +33,9 @@ Federated SPARQL query processing across multiple RDF endpoints. Execute queries
 Add to your `Cargo.toml`:
 
 ```toml
-# Beta features complete - APIs stabilizing
+# Features complete - APIs stable
 [dependencies]
-oxirs-federate = "0.1.0-beta.2"
+oxirs-federate = "0.1.0-rc.1"
 ```
 
 ## Quick Start
@@ -401,7 +401,7 @@ println!("SPARQL endpoint: {}", description.sparql_endpoint);
 
 ## Status
 
-### Beta Release (v0.1.0-beta.2) - Beta Features Complete!
+### Release Candidate (v0.1.0-rc.1) - Features Complete!
 - ✅ **Distributed Transactions** - 2PC and Saga patterns with automatic compensation
 - ✅ **Advanced Authentication** - OAuth2, SAML, JWT, API keys, Basic, Service-to-Service
 - ✅ **ML-Driven Optimization** - Intelligent source selection and query planning

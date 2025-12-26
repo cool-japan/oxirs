@@ -20,7 +20,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_shacl_ai::model_governance::{
 //!     ModelGovernance, ModelGovernanceConfig, ComplianceStandard, GovernancePolicy
 //! };

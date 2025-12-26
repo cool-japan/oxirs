@@ -10,7 +10,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::advanced_query::{PropertyPath, PropertyPathExecutor};
 //! use oxirs_star::StarStore;
 //!

@@ -35,7 +35,7 @@ impl DistMult {
         }
     }
 
-    /// Compute DistMult score: <h, r, t> = sum(h * r * t)
+    /// Compute DistMult score: `<h, r, t>` = sum(h * r * t)
     async fn compute_score(&self, head: &str, relation: &str, tail: &str) -> Result<f32> {
         let entity_embs = self.entity_embeddings.read().await;
         let relation_embs = self.relation_embeddings.read().await;

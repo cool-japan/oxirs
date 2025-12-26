@@ -1,12 +1,12 @@
 # OxiRS Quick Start Guide
 
-## Beta.2 Release - Production-Ready with API Stability
+## RC.1 Release - Production-Ready with API Stability
 
 ### Installation
 
 ```bash
 # Install from crates.io
-cargo install oxirs --version 0.1.0-beta.2
+cargo install oxirs --version 0.1.0-rc.1
 
 # Or build from source
 git clone https://github.com/cool-japan/oxirs
@@ -167,7 +167,7 @@ Edit `oxirs.toml` to configure:
 
 ### Performance
 
-#### Benchmark Results (Beta.1)
+#### Benchmark Results (RC.1)
 
 | Operation | Dataset Size | Throughput | Improvement |
 |-----------|--------------|------------|-------------|
@@ -177,7 +177,7 @@ Edit `oxirs.toml` to configure:
 | N-Triples Parsing | 10,000 quads | 1.1 Melem/s | +30% |
 | Format Conversion | 10,000 quads | 920 Kelem/s | +29% |
 
-Performance improvements in Beta.1:
+Performance improvements in RC.1:
 - Optimized memory allocation for parsing and serialization
 - SIMD-accelerated operations for string processing
 - Parallel batch operations with work-stealing
@@ -279,13 +279,13 @@ oxirs serve --config oxirs.toml --port 3031
 
 ### Features
 
-#### Beta.1 Highlights
+#### RC.1 Highlights
 
 ✅ **Production-Ready**
 - API stability with semantic versioning guarantees
 - Complete SPARQL 1.1/1.2 query and update support
 - 7 RDF format support (Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD, N3)
-- High-performance parsing and serialization (20-30% faster than alpha.2)
+- High-performance parsing and serialization (20-30% faster than rc.1)
 
 ✅ **Enhanced User Experience**
 - Comprehensive help text for all commands
@@ -303,7 +303,7 @@ oxirs serve --config oxirs.toml --port 3031
 - SIMD-accelerated string operations
 - Parallel batch operations with work-stealing
 - Memory-efficient streaming architecture
-- 20-30% performance improvement over alpha.2
+- 20-30% performance improvement over rc.1
 
 ✅ **Quality**
 - 95%+ test coverage
@@ -317,7 +317,7 @@ oxirs serve --config oxirs.toml --port 3031
 - Health endpoints for monitoring
 - Prometheus-compatible metrics
 
-### What's New in Beta.1
+### What's New in RC.1
 
 **API Stability**:
 - All commands and flags are now stable
@@ -351,4 +351,4 @@ See [CHANGELOG.md](../../CHANGELOG.md) for detailed release notes.
 
 ---
 
-**OxiRS Beta.1** - Production-ready SPARQL 1.2 server with AI augmentation and stable APIs
+**OxiRS RC.1** - Production-ready SPARQL 1.2 server with AI augmentation and stable APIs

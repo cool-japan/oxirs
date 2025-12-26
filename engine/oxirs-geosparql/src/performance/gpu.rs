@@ -78,8 +78,8 @@ impl GpuGeometryContext {
 
     /// Calculate pairwise Euclidean distances between all geometries
     ///
-    /// Computes an N×N distance matrix where result[i][j] is the distance
-    /// between geometries[i] and geometries[j].
+    /// Computes an N×N distance matrix where result\[i\]\[j\] is the distance
+    /// between geometries\[i\] and geometries\[j\].
     ///
     /// # Arguments
     ///
@@ -202,7 +202,7 @@ impl GpuGeometryContext {
     ///
     /// # Returns
     ///
-    /// M×N matrix where result[i][j] is distance from queries[i] to targets[j]
+    /// M×N matrix where result\[i\]\[j\] is distance from queries\[i\] to targets\[j\]
     ///
     /// # Examples
     ///

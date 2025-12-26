@@ -435,21 +435,21 @@ let backup_mgr = BackupManager::new();
 // Full backup
 backup_mgr.create_backup(
     &store,
-    "backup/full_20241204.db",
+    "backup/full_20251225.db",
     BackupType::Full
 )?;
 
 // Incremental backup (only changes since last backup)
 backup_mgr.create_backup(
     &store,
-    "backup/incr_20241204_1200.db",
+    "backup/incr_20251225_1200.db",
     BackupType::Incremental
 )?;
 
 // Restore from backup chain
 backup_mgr.restore(
     &store,
-    &["backup/full_20241201.db", "backup/incr_20241204_1200.db"]
+    &["backup/full_20251220.db", "backup/incr_20251225_1200.db"]
 )?;
 ```
 

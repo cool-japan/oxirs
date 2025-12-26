@@ -386,4 +386,4 @@ This implementation meets and exceeds the requirements specified in TODO.md for 
 ---
 
 *Implementation completed with humility and with the highest possible performance.*
-*October 12, 2025 - OxiRS v0.1.0-alpha.3*
+*October 12, 2025 - OxiRS v0.1.0-rc.1*

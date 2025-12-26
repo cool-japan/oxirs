@@ -587,7 +587,7 @@ pub fn create_default_service_description(endpoint: String) -> ServiceDescriptio
         .add_result_format(ResultFormat::Binary)
         // Metadata
         .add_metadata("name".to_string(), "OxiRS SPARQL Endpoint".to_string())
-        .add_metadata("version".to_string(), "0.1.0-beta.1".to_string())
+        .add_metadata("version".to_string(), "0.1.0-rc.1".to_string())
         .add_metadata(
             "engine".to_string(),
             "OxiRS ARQ - Jena-compatible SPARQL engine".to_string(),
@@ -763,7 +763,7 @@ mod tests {
         );
         assert_eq!(
             desc.metadata.get("version"),
-            Some(&"0.1.0-beta.1".to_string())
+            Some(&"0.1.0-rc.1".to_string())
         );
     }
 

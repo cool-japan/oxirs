@@ -106,3 +106,14 @@ pub mod rebac_manager;
 
 /// Command stubs and utilities
 pub mod stubs;
+
+// === Phase D: Industrial Connectivity CLI Commands (0.1.0-rc.1) ===
+
+/// Time-series database commands
+pub mod tsdb;
+
+/// Modbus protocol commands
+pub mod modbus;
+
+/// CANbus/J1939 protocol commands
+pub mod canbus;

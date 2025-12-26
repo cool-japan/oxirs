@@ -136,5 +136,11 @@ pub mod pulsar;
 #[cfg(feature = "rabbitmq")]
 pub mod rabbitmq;
 
+#[cfg(feature = "mqtt")]
+pub mod mqtt;
+
+#[cfg(feature = "opcua")]
+pub mod opcua;
+
 #[cfg(feature = "kafka")]
 pub mod kafka_schema_registry;

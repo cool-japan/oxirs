@@ -1,6 +1,6 @@
 # OxiRS Best Practices Guide
 
-**Version**: 0.1.0-beta.2
+**Version**: 0.1.0-rc.1
 **Last Updated**: December 21, 2025
 **Status**: Production-Ready
 
@@ -507,7 +507,7 @@ CMD ["oxirs", "serve", "--config", "/etc/oxirs/oxirs.toml"]
 
 ```bash
 # Build
-docker build -t oxirs:beta.1 .
+docker build -t oxirs:rc.1 .
 
 # Run
 docker run -d \
@@ -517,7 +517,7 @@ docker run -d \
   -v $(pwd)/oxirs.toml:/etc/oxirs/oxirs.toml:ro \
   -e JWT_SECRET="$(openssl rand -base64 64)" \
   --restart unless-stopped \
-  oxirs:beta.1
+  oxirs:rc.1
 ```
 
 ### 4. Kubernetes Deployment
@@ -540,7 +540,7 @@ spec:
     spec:
       containers:
       - name: oxirs
-        image: oxirs:beta.1
+        image: oxirs:rc.1
         ports:
         - containerPort: 3030
         env:
@@ -839,4 +839,4 @@ done
 
 ---
 
-**OxiRS v0.1.0-beta.2** - Production-ready best practices for semantic web operations
+**OxiRS v0.1.0-rc.1** - Production-ready best practices for semantic web operations

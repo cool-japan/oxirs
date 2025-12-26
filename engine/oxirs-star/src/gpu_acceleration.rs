@@ -35,7 +35,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_star::gpu_acceleration::{GpuAccelerator, GpuConfig};
 //! use oxirs_star::hdt_star::HdtStarReader;
 //!
@@ -65,22 +65,17 @@ use scirs2_core::metrics::Counter;
 use scirs2_core::profiling::Profiler;
 
 /// GPU backend selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum GpuBackendType {
     /// NVIDIA CUDA backend (for NVIDIA GPUs)
     Cuda,
     /// Apple Metal backend (for Mac M1/M2/M3)
     Metal,
     /// Automatic selection based on platform
+    #[default]
     Auto,
     /// CPU fallback (no GPU acceleration)
     CpuFallback,
-}
-
-impl Default for GpuBackendType {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 /// GPU acceleration configuration

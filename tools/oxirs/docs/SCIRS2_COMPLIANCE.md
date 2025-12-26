@@ -125,4 +125,4 @@ All random number generation, array operations, and scientific computing properl
 
 **Verified by**: Automated compliance scan  
 **Date**: November 23, 2025  
-**Version**: v0.1.0-beta.2
+**Version**: v0.1.0-rc.1

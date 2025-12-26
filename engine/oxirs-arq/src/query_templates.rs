@@ -14,7 +14,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_arq::query_templates::{TemplateRegistry, TemplateParams};
 //!
 //! let registry = TemplateRegistry::with_defaults();

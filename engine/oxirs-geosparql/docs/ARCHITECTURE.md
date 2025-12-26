@@ -1,6 +1,6 @@
 # OxiRS GeoSPARQL Architecture
 
-*Last Updated: January 2025*
+*Last Updated: December 2025*
 
 ## Overview
 
@@ -614,4 +614,4 @@ GitHub Actions workflow tests:
 
 ---
 
-*This architecture document is maintained by the OxiRS team. Last updated: January 2025*
+*This architecture document is maintained by the OxiRS team. Last updated: December 2025*

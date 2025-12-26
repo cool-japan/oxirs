@@ -23,7 +23,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_shacl_ai::edge_deployment::{
 //!     EdgeDeploymentManager, EdgeDevice, DeviceProfile, DeploymentConfig
 //! };

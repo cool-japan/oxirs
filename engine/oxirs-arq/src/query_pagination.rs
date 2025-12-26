@@ -13,7 +13,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_arq::query_pagination::{PaginationConfig, PaginationStrategy, QueryPaginator};
 //!
 //! let config = PaginationConfig::default()

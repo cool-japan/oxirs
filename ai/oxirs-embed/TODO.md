@@ -2,11 +2,11 @@
 
 *Last Updated: December 3, 2025*
 
-## ✅ Current Status: v0.1.0-beta.2+ (Production Ready Enhanced)
+## ✅ Current Status: v0.1.0-rc.1+ (Production Ready Enhanced)
 
 **oxirs-embed** provides vector embeddings for knowledge graphs (experimental feature).
 
-### Beta.2+ Development Status (December 3, 2025) ✅
+### RC.1+ Development Status (December 3, 2025) ✅
 - **408 tests passing** (100% pass rate) with **ZERO warnings** 🎉
 - **Knowledge graph embeddings** fully integrated with persisted dataset pipelines
 - **Multiple embedding models** with provider failover and batch streaming
@@ -21,7 +21,7 @@
 
 ## 🎯 v0.1.0 Complete Feature Roadmap
 
-### v0.1.0-beta.1 Target (November 2025) - MAJOR PROGRESS
+### v0.1.0-rc.1 Target (December 2025) - MAJOR PROGRESS
 
 #### Embedding Models (Target: v0.1.0)
 - [x] **HolE (Holographic Embeddings)** ✅ Implemented with circular correlation
@@ -176,7 +176,7 @@
    - Compression statistics
    - Dequantization for inference
 
-### ✅ Resolved Issues (Beta.2+)
+### ✅ Resolved Issues (RC.1+)
 
 1. **Trait Alignment**: ✅ **RESOLVED** - Both HolE and ConvE fully implement EmbeddingModel trait
    - Use `Vector::from_array1()` for seamless Array1<f32> → Vector conversions
@@ -201,7 +201,7 @@
    - Interactive refinement and caching
    - Full EmbeddingModel trait implementation
 
-### Known Issues (Beta.2)
+### Known Issues (RC.1)
 
 *No critical issues identified* - Ready for production use in v0.1.0 release
 
@@ -227,7 +227,7 @@
 
 ## 🧪 Testing
 
-### Test Statistics (Beta.2+ Enhanced - December 10, 2025)
+### Test Statistics (RC.1+ Enhanced - December 10, 2025)
 - **Total Tests**: 398 tests (basic features) / **408 tests (all features)** ✅
 - **Pass Rate**: 100% ✅
 - **Warnings**: 0 ⚡ (Zero clippy warnings!)
@@ -302,7 +302,7 @@ cargo test --features conve conve:: --lib
   - `DEPLOYMENT_GUIDE.md` - Complete deployment documentation
   - `/tmp/oxirs-embed-beta2-summary.md` - Feature summary
 
-## 🎉 Production Ready - v0.1.0-beta.2+ (Enhanced & Extended)
+## 🎉 Production Ready - v0.1.0-rc.1+ (Enhanced & Extended)
 
 **All high, medium, AND low priority items completed!** 🎊
 
@@ -389,7 +389,7 @@ The oxirs-embed crate is now production-ready with:
 - Knowledge distillation demonstration
 - Before/after prediction comparison
 
-### Module Statistics (Beta.2+ Enhanced - December 3, 2025)
+### Module Statistics (RC.1+ Enhanced - December 3, 2025)
 
 | Module | Lines | Status | Description |
 |--------|-------|--------|-------------|
@@ -412,7 +412,7 @@ The oxirs-embed crate is now production-ready with:
 | **TOTAL CODE** | **78,204 lines** | ✅ | **Production-ready codebase** (180 Rust files) |
 | **TOTAL LINES** | **96,810 lines** | ✅ | **Including documentation** |
 
-### Documentation Statistics (Beta.2+ Enhanced - December 3, 2025)
+### Documentation Statistics (RC.1+ Enhanced - December 3, 2025)
 
 | Document | Lines | Status | Description |
 |----------|-------|--------|-------------|
@@ -499,7 +499,7 @@ The oxirs-embed crate is now production-ready with:
 
 ---
 
-## 🏆 Beta.2 Final Achievement Summary
+## 🏆 RC.1 Final Achievement Summary
 
 ### What's Included
 
@@ -533,7 +533,7 @@ The oxirs-embed crate is now production-ready with:
 
 ### Ready for v0.1.0 Release ✅
 
-**oxirs-embed v0.1.0-beta.2+** is feature-complete and production-ready with:
+**oxirs-embed v0.1.0-rc.1+** is feature-complete and production-ready with:
 - ✅ All planned v0.1.0 features implemented + early v0.2.0 additions
 - ✅ **408 tests passing (100%)** ✅
 - ✅ **Zero compiler warnings** ✅

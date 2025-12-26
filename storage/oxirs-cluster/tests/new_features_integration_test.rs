@@ -1,4 +1,4 @@
-//! Integration tests for new v0.1.0-beta.1 features
+//! Integration tests for new v0.1.0-rc.1 features
 //!
 //! This file tests the integration of:
 //! - Distributed Tracing

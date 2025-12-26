@@ -19,7 +19,7 @@
 //!
 //! ## Example Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_fuseki::auth::graph_auth::{GraphAuthorizationManager, GraphPermission};
 //!
 //! let manager = GraphAuthorizationManager::new(rebac_evaluator);

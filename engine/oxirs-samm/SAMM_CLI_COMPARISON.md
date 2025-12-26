@@ -240,7 +240,7 @@ Java ESMF SDK global options available for all commands:
    --custom-resolver <path> # Custom resolver
    ```
 
-### Beta.1 - Package Management
+### RC.1 - Package Management
 
 3. **Package Commands** (Ecosystem expansion):
    ```bash
@@ -248,7 +248,7 @@ Java ESMF SDK global options available for all commands:
    oxirs package <urn> export --output <zip>
    ```
 
-### Beta.2 - Advanced Editing
+### RC.1 - Advanced Editing
 
 4. **Edit Commands** (Advanced editing features):
    ```bash

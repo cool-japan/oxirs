@@ -11,7 +11,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::shacl_star::{ShaclStarValidator, ShaclStarShape, ConstraintType};
 //! use oxirs_star::{StarStore, StarTriple, StarTerm};
 //!

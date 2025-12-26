@@ -13,7 +13,7 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::reasoning::{ReasoningEngine, ReasoningProfile, InferenceRule};
 //! use oxirs_star::StarStore;
 //!

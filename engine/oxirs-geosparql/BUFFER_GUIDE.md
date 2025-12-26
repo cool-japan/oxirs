@@ -18,11 +18,11 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # Recommended: Both backends for maximum compatibility
-oxirs-geosparql = { version = "0.1.0-beta.1", features = ["rust-buffer", "geos-backend"] }
+oxirs-geosparql = { version = "0.1.0-rc.1", features = ["rust-buffer", "geos-backend"] }
 
 # Or choose only one:
-# oxirs-geosparql = { version = "0.1.0-beta.1", features = ["rust-buffer"] }  # Pure Rust only
-# oxirs-geosparql = { version = "0.1.0-beta.1", features = ["geos-backend"] }  # GEOS only
+# oxirs-geosparql = { version = "0.1.0-rc.1", features = ["rust-buffer"] }  # Pure Rust only
+# oxirs-geosparql = { version = "0.1.0-rc.1", features = ["geos-backend"] }  # GEOS only
 ```
 
 ### System Requirements
@@ -324,14 +324,14 @@ cargo bench --bench buffer_performance --features rust-buffer,geos-backend
 
 **Solution**: Enable at least one buffer feature in `Cargo.toml`:
 ```toml
-oxirs-geosparql = { version = "0.1.0-beta.1", features = ["rust-buffer"] }
+oxirs-geosparql = { version = "0.1.0-rc.1", features = ["rust-buffer"] }
 ```
 
 ### Error: "Pure Rust buffer only supports Polygon and MultiPolygon"
 
 **Solution**: Enable `geos-backend` feature for Point/LineString support:
 ```toml
-oxirs-geosparql = { version = "0.1.0-beta.1", features = ["rust-buffer", "geos-backend"] }
+oxirs-geosparql = { version = "0.1.0-rc.1", features = ["rust-buffer", "geos-backend"] }
 ```
 
 ### Error: "failed to run custom build command for `geos-sys`"
@@ -414,5 +414,5 @@ Found a bug or have a feature request? Please open an issue on [GitHub](https://
 
 ---
 
-**Last Updated**: 2025-10-11
-**oxirs-geosparql Version**: 0.1.0-alpha.3
+**Last Updated**: 2025-12-25
+**oxirs-geosparql Version**: 0.1.0-rc.1

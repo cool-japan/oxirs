@@ -1,6 +1,6 @@
 # OxiRS GeoSPARQL Performance Tuning Guide
 
-*Last Updated: January 2025*
+*Last Updated: December 2025*
 
 ## Overview
 
@@ -27,7 +27,7 @@ This guide helps you optimize `oxirs-geosparql` for production workloads, coveri
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-geosparql = { version = "0.1.0-beta.1", features = [
+oxirs-geosparql = { version = "0.1.0-rc.1", features = [
     "performance",    # Enables parallel, GPU, and caching
     "parallel",       # Parallel processing with rayon
     "gpu",            # GPU acceleration (optional)

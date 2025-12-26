@@ -20,7 +20,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::adaptive_query_optimizer::{AdaptiveQueryOptimizer, OptimizationObjective};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

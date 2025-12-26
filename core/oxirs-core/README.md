@@ -1,12 +1,12 @@
 # OxiRS Core
 
-[![Version](https://img.shields.io/badge/version-0.1.0--beta.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Zero-dependency, Rust-native RDF data model and SPARQL engine for the OxiRS semantic web platform**
 
-**Status**: Beta Release (v0.1.0-beta.2) - Released December 21, 2025
+**Status**: Release Candidate (v0.1.0-rc.1) - Released December 26, 2025
 
-✨ **Beta Software**: Production-ready with API stability guarantees. Semantic versioning enforced.
+✨ **Release Candidate**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 ## Overview
 
@@ -55,17 +55,17 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.1.0-beta.2"
+oxirs-core = "0.1.0-rc.1"
 
 # Optional: Enable async streaming support
-oxirs-core = { version = "0.1.0-beta.2", features = ["async"] }
+oxirs-core = { version = "0.1.0-rc.1", features = ["async"] }
 ```
 
 For maximum performance in production:
 
 ```toml
 [dependencies]
-oxirs-core = { version = "0.1.0-beta.2"", features = ["async"] }
+oxirs-core = { version = "0.1.0-rc.1", features = ["async"] }
 
 [profile.release]
 lto = "fat"                    # Maximum link-time optimization
@@ -539,9 +539,9 @@ at your option.
 
 ## Status
 
-� **Beta Release (v0.1.0-beta.2)** - Durable RDF core with streaming persistence, SciRS2 telemetry, and federation-ready SPARQL execution
+🚀 **Release Candidate (v0.1.0-rc.1)** - Durable RDF core with streaming persistence, SciRS2 telemetry, and federation-ready SPARQL execution
 
-### 🎉 Current Status (October 2025)
+### 🎉 Current Status (December 2025)
 - **Disk Persistence**: ✅ **Delivered** – Native N-Quads save/load powering the CLI and server workflows
 - **Streaming Pipelines**: ✅ **Expanded** – Multi-format import/export/migrate with configurable parallel ingestion
 - **Federation Support**: ✅ **Integrated** – Core algebra updated for `SERVICE` clause execution and robust result merging
@@ -553,7 +553,7 @@ at your option.
 - **OxiGraph Compatibility**: Drop-in replacement maintaining API compatibility
 - **High Performance**: SIMD-enhanced operators with SciRS2 acceleration
 - **Complete SPARQL Engine**: Full SPARQL 1.1/1.2 support with cost-based optimisation and federation hooks
-- **Production Guardrails**: Persistence, telemetry, and error reporting suitable for controlled alpha deployments
+- **Production Guardrails**: Persistence, telemetry, and error reporting suitable for production deployments
 
 ### 🎯 Certification & Compliance
 - **W3C Standards**: Full RDF 1.2 and SPARQL 1.2 compliance
@@ -562,37 +562,19 @@ at your option.
 - **Enterprise Adoption**: Deployed in Fortune 500 environments
 - **Open Source**: Apache 2.0 + MIT dual licensing for maximum flexibility
 
-### 🎯 Next Phase Priorities (Q1-Q3 2025)
+### 🎯 Next Phase Priorities (Q1-Q2 2026)
 
-#### 🚀 Phase 2A: Advanced Query Engine (Q1 2025)
-- **AI-Powered Query Optimization**: Machine learning-based cost models
-- **GPU Acceleration**: CUDA/OpenCL integration for massive parallel processing
-- **Just-In-Time Compilation**: Hot path optimization with LLVM backend
-- **Federated Query Distribution**: Cross-datacenter query optimization
+#### 🚀 Phase 2: v0.2.0 (Q1 2026)
+- **Query Optimization**: 10x performance improvements
+- **AI Production Hardening**: Production-ready AI features
+- **Multi-Region Clustering**: Distributed deployment support
+- **Advanced Caching**: Intelligent query result caching
 
-#### 🏗️ Phase 2B: Next-Gen Storage (Q2 2025)
-- **Quantum-Ready Architecture**: Tiered storage with intelligent placement
-- **Advanced Compression**: Custom RDF codecs with 70%+ compression ratios
-- **Multi-Version Concurrency**: MVCC with serializable snapshot isolation
-- **Byzantine Fault Tolerance**: Consensus protocols for untrusted environments
-
-#### 🧠 Phase 2C: AI/ML Platform (Q2-Q3 2025)
-- **Neural Graph Processing**: GNN integration with knowledge graph embeddings
-- **Automated Knowledge Discovery**: Schema inference and ontology evolution
-- **Multi-Modal Support**: Text, image, audio, and video data in RDF
-- **Federated Learning**: Privacy-preserving ML on distributed knowledge graphs
-
-#### 🌐 Phase 2D: Enterprise Platform (Q3 2025)
-- **Zero-Trust Security**: RBAC/ABAC with homomorphic encryption
-- **Cloud-Native Operations**: Kubernetes operators with GitOps deployment
-- **Advanced Monitoring**: Real-time dashboards with anomaly detection
-- **Compliance Automation**: GDPR/CCPA compliance with audit trails
-
-### 🔬 Research & Innovation (Q4 2025 - Q1 2026)
-- **Quantum Computing Integration**: Quantum algorithms for graph problems
-- **Edge Computing Optimization**: Lightweight deployment for IoT devices
-- **Neuro-Symbolic Reasoning**: LLM integration with knowledge graphs
-- **Blockchain Provenance**: Immutable audit trails with smart contracts
+#### 🏗️ Phase 3: v0.3.0 (Q2 2026)
+- **Full-Text Search**: Tantivy integration
+- **GeoSPARQL Enhancement**: Advanced spatial operations
+- **Bulk Loader**: High-throughput data ingestion
+- **Performance SLAs**: Guaranteed latency targets
 
 ### 🚀 Architecture Advancement
 OxiRS Core represents a **paradigm shift in RDF processing technology**:

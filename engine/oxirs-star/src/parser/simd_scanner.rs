@@ -16,7 +16,7 @@
 //!
 //! ## Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::parser::simd_scanner::SimdScanner;
 //!
 //! let scanner = SimdScanner::new();

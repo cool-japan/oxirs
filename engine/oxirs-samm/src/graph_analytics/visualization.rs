@@ -37,20 +37,15 @@ use crate::graph_analytics::ModelGraph;
 use std::fmt::Write as FmtWrite;
 
 /// Visualization style for graph rendering
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum VisualizationStyle {
     /// Compact layout - minimal labels, optimized for overview
     Compact,
     /// Detailed layout - full URNs and metadata
+    #[default]
     Detailed,
     /// Hierarchical layout - top-down tree structure
     Hierarchical,
-}
-
-impl Default for VisualizationStyle {
-    fn default() -> Self {
-        Self::Detailed
-    }
 }
 
 /// Color scheme for graph elements

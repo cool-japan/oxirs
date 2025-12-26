@@ -520,7 +520,7 @@ mod tests {
 
     #[test]
     fn test_suggestion_sorting() {
-        let mut suggestions = vec![
+        let mut suggestions = [
             SchemaSuggestion::new(
                 SuggestionType::NewField,
                 "A".to_string(),

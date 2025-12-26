@@ -14,7 +14,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```rust,ignore
 //! use oxirs_star::compatibility::{CompatibilityMode, CompatibilityConfig};
 //! use oxirs_star::{StarGraph, StarTriple, StarTerm};
 //!

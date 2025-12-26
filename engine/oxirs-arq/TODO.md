@@ -2,14 +2,14 @@
 
 *Last Updated: December 9, 2025 (Final)*
 
-## ✅ Current Status: v0.1.0-beta.2 Production-Ready - **Beta.2++++++++++++++ Enhanced!** 🎉
+## ✅ Current Status: v0.1.0-rc.1 Production-Ready - **RC.1++++++++++++++ Enhanced!** 🎉
 
 **oxirs-arq** provides a SPARQL 1.1/1.2 query engine with optimization.
 
-### Beta.2++++++++++++++ Release Status (December 9, 2025) - **Major Production Features!** ✨
+### RC.1++++++++++++++ Release Status (December 9, 2025) - **Major Production Features!** ✨
 
 #### December 9, 2025 (Final) - Two Major Production Modules + Complete Quality Verification
-- ✅ **Smart Query Batch Executor** (`query_batch_executor.rs` - 752 lines) - NEW MODULE! [Beta.2++++++++++]
+- ✅ **Smart Query Batch Executor** (`query_batch_executor.rs` - 752 lines) - NEW MODULE! [RC.1++++++++++]
   - Parallel execution of multiple SPARQL queries with configurable thread pools
   - Priority queuing system (High, Normal, Low, Background) with fair scheduling
   - Advanced resource management (memory limits, CPU limits, automatic throttling)
@@ -25,7 +25,7 @@
     - 7 complete demonstrations covering all batch execution scenarios
     - Real-world usage patterns with performance comparisons
     - Production-ready code with async/await patterns
-- ✅ **Query Performance Analyzer** (`query_performance_analyzer.rs` - 851 lines) - NEW MODULE! [Beta.2++++++++++++++]
+- ✅ **Query Performance Analyzer** (`query_performance_analyzer.rs` - 851 lines) - NEW MODULE! [RC.1++++++++++++++]
   - ML-powered performance analysis with bottleneck detection
   - Execution profiling with phase breakdown (parse, optimize, execute, serialize)
   - Automatic bottleneck detection (parsing, optimization, execution, memory, CPU, I/O)
@@ -59,7 +59,7 @@
   - All examples compile and run successfully
 - ✅ **Documentation Updates** - Comprehensive module documentation and API migration notes
 
-### Beta.2++++++ Release Status (December 5, 2025) - **All Quality Checks Passed!** ✨
+### RC.1++++++ Release Status (December 5, 2025) - **All Quality Checks Passed!** ✨
 
 #### December 5, 2025 (Evening - Final) - Complete Quality Verification
 - ✅ **All Tests Passing** - 635 tests passing, 1 skipped (up from 629)
@@ -117,7 +117,7 @@
     - Module structure for memory-efficient streaming documented
 - ✅ **New Comprehensive Example** - Query Result Caching Demo (December 5)
   - `examples/query_caching_demo.rs` - 400+ line comprehensive example
-  - Demonstrates all query caching features introduced in Beta.2++++
+  - Demonstrates all query caching features introduced in RC.1++++
   - 6 complete demonstrations covering all caching scenarios
     1. Basic caching with cache hit/miss
     2. Cache configuration and statistics
@@ -133,7 +133,7 @@
   - All benchmarks functional
   - All examples compile and run successfully
 
-### Beta.2++++ Release Status (December 4, 2025) - **Code Quality & Documentation Enhanced!** ✨
+### RC.1++++ Release Status (December 4, 2025) - **Code Quality & Documentation Enhanced!** ✨
 
 #### December 4, 2025 - Code Quality Improvements & New Features
 - ✅ **File Organization Documentation** - Added comprehensive module structure docs to production.rs (3018 lines)
@@ -149,7 +149,7 @@
   - All features compile cleanly
   - All examples build successfully
   - Clippy clean with `--all-features --all-targets`
-- ✅ **Query Result Caching** (`query_result_cache.rs`) - NEW MODULE! [Beta.2++++]
+- ✅ **Query Result Caching** (`query_result_cache.rs`) - NEW MODULE! [RC.1++++]
   - Fingerprint-based caching with structural query hashing
   - LRU eviction policy with configurable cache size
   - TTL-based expiration for cache freshness
@@ -163,7 +163,7 @@
   - Integrated with `QueryFingerprinter` for cache key generation
 - ✅ **Testing Improvements** - Tests increased from 568 → 578 (+10 new cache tests)
 
-### Beta.2+++ Release Status (December 2, 2025) - **Beta.2+++ Enhanced with Advanced Features!** ✨
+### RC.1+++ Release Status (December 2, 2025) - **RC.1+++ Enhanced with Advanced Features!** ✨
 - **568 tests** (unit + integration) passing with zero failures (with --all-features - lib tests - +26 new tests)
 - **Code Quality Improvements** (November 29, 2025)
   - ✅ Fixed all clippy warnings (no warnings policy compliance)
@@ -188,7 +188,7 @@
     - Pattern count preservation
     - Bound variable handling
     - Index plan structure verification
-- **Beta.2+++ New Features** ✨ **LATEST** (December 2, 2025)
+- **RC.1+++ New Features** ✨ **LATEST** (December 2, 2025)
   - **Query Result Pagination** (`query_pagination.rs`) - Efficient pagination for large result sets
     - Multiple pagination strategies (Offset/Limit, Cursor-based, Keyset, Streaming)
     - Adaptive page sizing based on result complexity
@@ -231,7 +231,7 @@
     - Builder pattern for parameter construction
     - 15 comprehensive tests covering all template features
     - Templates follow SPARQL best practices and optimization guidelines
-- **Beta.2++ New Features** ✨ (November 24, 2025)
+- **RC.1++ New Features** ✨ (November 24, 2025)
   - **Query Hints System** (`query_hints.rs`) - PostgreSQL/MySQL-style optimizer hints
     - Join algorithm hints (HASH_JOIN, MERGE_JOIN, NESTED_LOOP, INDEX_JOIN)
     - Index usage hints (USE_INDEX, IGNORE_INDEX, FORCE_INDEX)
@@ -312,14 +312,14 @@
     - Configurable export options (pretty print, metadata, etc.)
     - Plan tree manipulation (node count, depth, properties)
     - 15 comprehensive tests validating all export features
-- **Beta.2 Advanced Query Management Features** ✨ NEW
+- **RC.1 Advanced Query Management Features** ✨ NEW
   - **Query Cancellation Support** - Cooperative cancellation with callbacks and child tokens
   - **Query Timeout Management** - Soft/hard timeouts with configurable warning thresholds
   - **Memory Usage Tracking** - Per-query memory limits, pressure detection, and throttling
   - **Query Session Management** - Unified session lifecycle with integrated features
   - **Query Rate Limiting** - Token bucket rate limiter with per-user tracking
   - **Query Audit Trail** - Circular buffer audit logging for compliance and debugging
-- **Beta.2+ Performance Enhancements** ✨ **LATEST** (November 22, 2025)
+- **RC.1+ Performance Enhancements** ✨ **LATEST** (November 22, 2025)
   - **Quantum Optimization Advanced Features** - SIMD & Parallel Processing
     - SIMD-accelerated quantum amplitude calculations for large states (>64 qubits)
     - Parallel quantum gate application with thread pool optimization
@@ -370,7 +370,7 @@
       - Configuration profile comparison
       - Parallel query execution (1 → 16 concurrent queries)
       - Memory efficiency testing
-- **Beta.2 Production Enhancements** ✨
+- **RC.1 Production Enhancements** ✨
   - **Query Priority System** - 5-level priority scheduler (Critical, High, Normal, Low, Batch)
     - Priority-based query scheduling with aging to prevent starvation
     - Per-priority concurrency limits and queue management
@@ -389,13 +389,13 @@
     - 3 comprehensive tests including regression severity classification
   - **Production Pipeline Example** - Complete integration demonstration
     - `examples/production_pipeline_beta2.rs` - 450-line working example
-    - Demonstrates all three Beta.2 features working together
+    - Demonstrates all three RC.1 features working together
     - Realistic production query processing scenario
     - Cost-based priority adjustment and regression detection
     - Comprehensive logging and statistics reporting
-- All Beta.1 features preserved and enhanced
+- All RC.1 features preserved and enhanced
 
-### Beta.1 Release Status (November 15, 2025) - **Beta.1 Features Complete!** 🎉
+### RC.1 Release Status (November 15, 2025) - **RC.1 Features Complete!** 🎉
 - **228 tests** (unit + integration) passing with zero failures
 - **SPARQL 1.1/1.2 support** with persisted dataset awareness
 - **Federation (`SERVICE`)** with retries, failover, and JSON result merging
@@ -407,7 +407,7 @@
 - **✨ NEW: SPARQL stress testing suite** (10 comprehensive tests for edge cases and high load)
 - **✨ NEW: Production hardening** (Query circuit breakers, SPARQL performance monitoring, resource quotas, health checks)
 
-### 🎉 Beta.1 Achievements
+### 🎉 RC.1 Achievements
 
 #### Federation & Tooling ✅
 - ✅ **Query Command Integration**: Full SPARQL execution via CLI & REPL with streaming output
@@ -415,7 +415,7 @@
 - ✅ **Instrumentation**: Exposed metrics and tracing hooks through SciRS2
 - ✅ **Production Testing**: Validated with 7 integration tests plus federation smoke tests
 
-#### Beta.1 Production Features ✅ (Complete in Beta.1)
+#### RC.1 Production Features ✅ (Complete in RC.1)
 - ✅ **Comprehensive SPARQL Benchmarking** (comprehensive_sparql_bench.rs - 9 benchmark groups)
   - Query parsing performance
   - Pattern matching scalability (100 → 10K triples)
@@ -465,7 +465,7 @@
 
 ## 🎯 v0.1.0 Complete Feature Roadmap
 
-### v0.1.0-beta.1 Target (November 2025) - ALL FEATURES
+### v0.1.0-rc.1 Target (December 2025) - ALL FEATURES
 
 #### Query Optimization (Target: v0.1.0)
 - [x] Cost-based optimization ✅ (Implemented)

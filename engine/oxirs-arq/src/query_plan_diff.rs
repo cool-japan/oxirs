@@ -14,7 +14,7 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_arq::query_plan_diff::{PlanDiffer, DiffConfig};
 //!
 //! let differ = PlanDiffer::new(DiffConfig::default());

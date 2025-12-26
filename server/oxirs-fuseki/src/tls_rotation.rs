@@ -41,20 +41,15 @@ use tokio::time;
 use tracing::{debug, error, info, warn};
 
 /// ACME challenge types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChallengeType {
     /// HTTP-01 challenge - requires port 80 access
+    #[default]
     Http01,
     /// DNS-01 challenge - requires DNS TXT record management
     Dns01,
     /// TLS-ALPN-01 challenge - requires port 443 TLS access
     TlsAlpn01,
-}
-
-impl Default for ChallengeType {
-    fn default() -> Self {
-        Self::Http01
-    }
 }
 
 /// ACME provider configuration
@@ -113,22 +108,17 @@ pub enum DnsProvider {
 }
 
 /// Key type for certificate generation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum KeyType {
     /// RSA 2048-bit
     Rsa2048,
     /// RSA 4096-bit
     Rsa4096,
     /// ECDSA P-256
+    #[default]
     EcdsaP256,
     /// ECDSA P-384
     EcdsaP384,
-}
-
-impl Default for KeyType {
-    fn default() -> Self {
-        Self::EcdsaP256
-    }
 }
 
 /// Certificate rotation statistics
