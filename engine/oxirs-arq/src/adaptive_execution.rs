@@ -115,7 +115,10 @@ impl OperatorStats {
     pub fn update(&mut self, actual_card: u64) {
         self.actual_cardinality = actual_card;
         self.end_time = Some(Instant::now());
-        self.actual_time = self.end_time.unwrap().duration_since(self.start_time);
+        self.actual_time = self
+            .end_time
+            .expect("end_time was just set on the previous line")
+            .duration_since(self.start_time);
 
         if self.estimated_cardinality > 0 {
             self.selectivity = actual_card as f64 / self.estimated_cardinality as f64;

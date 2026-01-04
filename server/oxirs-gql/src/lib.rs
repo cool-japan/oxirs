@@ -1,6 +1,6 @@
 //! # OxiRS GraphQL - GraphQL Interface for RDF
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-gql/badge.svg)](https://docs.rs/oxirs-gql)
 //!
 //! **Status**: Beta Release (v0.1.0-rc.1)

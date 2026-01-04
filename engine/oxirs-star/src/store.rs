@@ -148,7 +148,7 @@ impl StarStore {
         let mut results = Vec::new();
 
         // Query star triples (those containing quoted triples)
-        let star_triples = self.star_triples.read().unwrap();
+        let star_triples = self.star_triples.read().expect("lock poisoned");
         for triple in star_triples.iter() {
             let matches = (subject.is_none() || subject == Some(&triple.subject))
                 && (predicate.is_none() || predicate == Some(&triple.predicate))
@@ -213,7 +213,7 @@ impl StarStore {
 
         // Update statistics
         {
-            let mut stats = self.statistics.write().unwrap();
+            let mut stats = self.statistics.write().expect("lock poisoned");
             stats.processing_time_us += start_time.elapsed().as_micros() as u64;
             if triple.contains_quoted_triples() {
                 stats.quoted_triples_count += 1;
@@ -237,7 +237,7 @@ impl StarStore {
         // Insert into core store (convert triple to quad in default graph)
         let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
         eprintln!("DEBUG: Created core quad for insertion: {core_quad:?}");
-        let core_store = self.core_store.write().unwrap();
+        let core_store = self.core_store.write().expect("lock poisoned");
         let result = CoreStore::insert_quad(&core_store, core_quad).map_err(StarError::CoreError);
         eprintln!("DEBUG: Core store insert result: {result:?}");
         result?;
@@ -257,8 +257,8 @@ impl StarStore {
 
     /// Insert a RDF-star triple (containing quoted triples) into star storage
     fn insert_star_triple(&self, triple: &StarTriple) -> StarResult<()> {
-        let mut star_triples = self.star_triples.write().unwrap();
-        let mut index = self.quoted_triple_index.write().unwrap();
+        let mut star_triples = self.star_triples.write().expect("lock poisoned");
+        let mut index = self.quoted_triple_index.write().expect("lock poisoned");
 
         let triple_index = star_triples.len();
         star_triples.push(triple.clone());
@@ -456,13 +456,13 @@ impl StarStore {
 
         // First try to remove from star triples
         if triple.contains_quoted_triples() {
-            let mut star_triples = self.star_triples.write().unwrap();
+            let mut star_triples = self.star_triples.write().expect("lock poisoned");
 
             if let Some(pos) = star_triples.iter().position(|t| t == triple) {
                 star_triples.remove(pos);
 
                 // Update all indices
-                let mut index = self.quoted_triple_index.write().unwrap();
+                let mut index = self.quoted_triple_index.write().expect("lock poisoned");
 
                 // Update signature index
                 for (_, indices) in index.signature_to_indices.iter_mut() {
@@ -495,7 +495,7 @@ impl StarStore {
         } else {
             // Try to remove from core store for regular triples
             eprintln!("DEBUG: Attempting to remove regular triple from core store");
-            let core_store = self.core_store.write().unwrap();
+            let core_store = self.core_store.write().expect("lock poisoned");
             if let Ok(core_triple) = self.convert_to_core_triple(triple) {
                 eprintln!("DEBUG: Successfully converted to core triple");
                 let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
@@ -527,14 +527,14 @@ impl StarStore {
     /// Check if the store contains a specific triple
     pub fn contains(&self, triple: &StarTriple) -> bool {
         // First check star triples
-        let star_triples = self.star_triples.read().unwrap();
+        let star_triples = self.star_triples.read().expect("lock poisoned");
         if star_triples.contains(triple) {
             return true;
         }
 
         // Then check regular triples in core store
         if !triple.contains_quoted_triples() {
-            let core_store = self.core_store.read().unwrap();
+            let core_store = self.core_store.read().expect("lock poisoned");
             if let Ok(core_triple) = self.convert_to_core_triple(triple) {
                 // Convert triple to quad with default graph
                 let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
@@ -558,13 +558,13 @@ impl StarStore {
 
         // Add star triples (clone to release lock quickly)
         {
-            let star_triples = self.star_triples.read().unwrap();
+            let star_triples = self.star_triples.read().expect("lock poisoned");
             all_triples.extend(star_triples.clone());
         }
 
         // Add regular triples from core store (release lock quickly)
         {
-            let core_store = self.core_store.read().unwrap();
+            let core_store = self.core_store.read().expect("lock poisoned");
             if let Ok(core_triples) = core_store.triples() {
                 drop(core_store); // Release lock before conversion
                 for core_triple in core_triples {
@@ -584,8 +584,8 @@ impl StarStore {
         let _enter = span.enter();
 
         let key = self.quoted_triple_key(quoted_triple);
-        let index = self.quoted_triple_index.read().unwrap();
-        let star_triples = self.star_triples.read().unwrap();
+        let index = self.quoted_triple_index.read().expect("lock poisoned");
+        let star_triples = self.star_triples.read().expect("lock poisoned");
 
         if let Some(indices) = index.signature_to_indices.get(&key) {
             indices
@@ -608,8 +608,8 @@ impl StarStore {
         let span = span!(Level::DEBUG, "find_triples_by_quoted_pattern");
         let _enter = span.enter();
 
-        let index = self.quoted_triple_index.read().unwrap();
-        let star_triples = self.star_triples.read().unwrap();
+        let index = self.quoted_triple_index.read().expect("lock poisoned");
+        let star_triples = self.star_triples.read().expect("lock poisoned");
         let mut candidate_indices: Option<BTreeSet<usize>> = None;
 
         // Use subject index if subject pattern is provided
@@ -649,7 +649,11 @@ impl StarStore {
                     candidate_indices = Some(indices.clone());
                 }
 
-                if candidate_indices.as_ref().unwrap().is_empty() {
+                if candidate_indices
+                    .as_ref()
+                    .expect("candidate_indices should be Some after setting")
+                    .is_empty()
+                {
                     return Vec::new(); // No matches
                 }
             } else {
@@ -667,7 +671,11 @@ impl StarStore {
                     candidate_indices = Some(indices.clone());
                 }
 
-                if candidate_indices.as_ref().unwrap().is_empty() {
+                if candidate_indices
+                    .as_ref()
+                    .expect("candidate_indices should be Some after setting")
+                    .is_empty()
+                {
                     return Vec::new(); // No matches
                 }
             } else {
@@ -706,7 +714,7 @@ impl StarStore {
 
         // If we're looking for depth 0 triples, include regular triples from core_store
         if min_depth == 0 {
-            let core_store = self.core_store.read().unwrap();
+            let core_store = self.core_store.read().expect("lock poisoned");
             if let Ok(quads) = core_store.find_quads(None, None, None, None) {
                 for quad in quads {
                     let core_triple = quad.to_triple();
@@ -720,8 +728,8 @@ impl StarStore {
         }
 
         // Find star triples (quoted triples) by nesting depth
-        let index = self.quoted_triple_index.read().unwrap();
-        let star_triples = self.star_triples.read().unwrap();
+        let index = self.quoted_triple_index.read().expect("lock poisoned");
+        let star_triples = self.star_triples.read().expect("lock poisoned");
         let mut result_indices = BTreeSet::new();
 
         for (&_depth, indices) in index.nesting_depth_index.range(min_depth..=max_d) {
@@ -740,8 +748,8 @@ impl StarStore {
 
     /// Get the number of triples in the store
     pub fn len(&self) -> usize {
-        let star_triples = self.star_triples.read().unwrap();
-        let core_store = self.core_store.read().unwrap();
+        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let core_store = self.core_store.read().expect("lock poisoned");
 
         // Count both star triples and regular triples from core store
         let regular_count = core_store.len().unwrap_or(0);
@@ -752,8 +760,8 @@ impl StarStore {
 
     /// Check if the store is empty
     pub fn is_empty(&self) -> bool {
-        let star_triples = self.star_triples.read().unwrap();
-        let core_store = self.core_store.read().unwrap();
+        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let core_store = self.core_store.read().expect("lock poisoned");
 
         // Empty only if both stores are empty
         star_triples.is_empty() && core_store.is_empty().unwrap_or(true)
@@ -765,24 +773,24 @@ impl StarStore {
         let _enter = span.enter();
 
         {
-            let mut star_triples = self.star_triples.write().unwrap();
+            let mut star_triples = self.star_triples.write().expect("lock poisoned");
             star_triples.clear();
         }
 
         // Clear the core store by recreating it
         // Note: This is a workaround since clear_all/remove_quad have trait/impl conflicts
         {
-            let mut core_store = self.core_store.write().unwrap();
+            let mut core_store = self.core_store.write().expect("lock poisoned");
             *core_store = CoreStore::new().map_err(StarError::CoreError)?;
         }
 
         {
-            let mut index = self.quoted_triple_index.write().unwrap();
+            let mut index = self.quoted_triple_index.write().expect("lock poisoned");
             index.clear();
         }
 
         {
-            let mut stats = self.statistics.write().unwrap();
+            let mut stats = self.statistics.write().expect("lock poisoned");
             *stats = StarStatistics::default();
         }
 
@@ -792,30 +800,34 @@ impl StarStore {
 
     /// Get statistics about the store
     pub fn statistics(&self) -> StarStatistics {
-        let stats = self.statistics.read().unwrap();
+        let stats = self.statistics.read().expect("lock poisoned");
         stats.clone()
     }
 
     /// Export the store as a StarGraph
     pub fn to_graph(&self) -> StarGraph {
-        let star_triples = self.star_triples.read().unwrap();
+        let star_triples = self.star_triples.read().expect("lock poisoned");
         let mut graph = StarGraph::new();
 
         // Add star triples (containing quoted triples)
         for triple in star_triples.iter() {
-            // Unwrap is safe here because we validate on insert
-            graph.insert(triple.clone()).unwrap();
+            // Safe because we validate triples on insert
+            graph
+                .insert(triple.clone())
+                .expect("triple should be valid after validation on insert");
         }
 
         // Add regular triples from core store
-        let core_store = self.core_store.read().unwrap();
+        let core_store = self.core_store.read().expect("lock poisoned");
         if let Ok(quads) = core_store.find_quads(None, None, None, None) {
             for quad in quads {
                 let core_triple = quad.to_triple();
                 if let Ok(star_triple) = self.convert_from_core_triple(&core_triple) {
                     // Only add if it doesn't contain quoted triples (those are already in star_triples)
                     if !star_triple.contains_quoted_triples() {
-                        graph.insert(star_triple).unwrap();
+                        graph
+                            .insert(star_triple)
+                            .expect("triple should be valid after core store validation");
                     }
                 }
             }
@@ -842,8 +854,8 @@ impl StarStore {
         let span = span!(Level::INFO, "optimize_store");
         let _enter = span.enter();
 
-        let star_triples = self.star_triples.read().unwrap();
-        let mut index = self.quoted_triple_index.write().unwrap();
+        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let mut index = self.quoted_triple_index.write().expect("lock poisoned");
 
         // Rebuild the quoted triple index with all new B-tree structures
         index.clear();
@@ -887,7 +899,7 @@ impl StarStore {
         let mut results = Vec::new();
 
         // Query star triples
-        let star_triples = self.star_triples.read().unwrap();
+        let star_triples = self.star_triples.read().expect("lock poisoned");
         for triple in star_triples.iter() {
             if self.triple_matches(triple, subject, predicate, object) {
                 results.push(triple.clone());
@@ -915,7 +927,7 @@ impl StarStore {
         predicate: Option<&StarTerm>,
         object: Option<&StarTerm>,
     ) -> StarResult<Vec<StarTriple>> {
-        let core_store = self.core_store.read().unwrap();
+        let core_store = self.core_store.read().expect("lock poisoned");
 
         // Convert patterns to core types
         let core_subject = match subject {
@@ -1090,13 +1102,13 @@ impl StarStore {
 
         // Add star triples (containing quoted triples)
         {
-            let star_triples = self.star_triples.read().unwrap();
+            let star_triples = self.star_triples.read().expect("lock poisoned");
             all_triples.extend(star_triples.clone());
         }
 
         // Add regular triples from core store
         {
-            let core_store = self.core_store.read().unwrap();
+            let core_store = self.core_store.read().expect("lock poisoned");
             if let Ok(quads) = core_store.find_quads(None, None, None, None) {
                 drop(core_store); // Release lock before conversion
                 for quad in quads {
@@ -1138,7 +1150,7 @@ impl StarStore {
 
         // Enable bulk mode
         {
-            let mut bulk_state = self.bulk_insert_state.write().unwrap();
+            let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
             bulk_state.active = true;
             bulk_state.pending_triples.clear();
             bulk_state.current_memory_usage = 0;
@@ -1163,7 +1175,7 @@ impl StarStore {
 
         // Update statistics
         {
-            let mut stats = self.statistics.write().unwrap();
+            let mut stats = self.statistics.write().expect("lock poisoned");
             stats.processing_time_us += elapsed.as_micros() as u64;
         }
 
@@ -1185,7 +1197,7 @@ impl StarStore {
                 if triple.contains_quoted_triples() {
                     if config.defer_index_updates {
                         // Add to pending list for later indexing
-                        let mut bulk_state = self.bulk_insert_state.write().unwrap();
+                        let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
                         bulk_state.pending_triples.push(triple.clone());
                         bulk_state.current_memory_usage += self.estimate_triple_memory_size(triple);
                     } else {
@@ -1198,7 +1210,7 @@ impl StarStore {
 
             // Check memory threshold
             {
-                let bulk_state = self.bulk_insert_state.read().unwrap();
+                let bulk_state = self.bulk_insert_state.read().expect("lock poisoned");
                 if bulk_state.current_memory_usage >= config.memory_threshold {
                     drop(bulk_state);
                     self.flush_pending_triples(config)?;
@@ -1207,7 +1219,7 @@ impl StarStore {
 
             // Update batch count
             {
-                let mut bulk_state = self.bulk_insert_state.write().unwrap();
+                let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
                 bulk_state.batch_count += 1;
             }
         }
@@ -1247,7 +1259,7 @@ impl StarStore {
     /// Flush pending triples and rebuild indices
     fn flush_pending_triples(&self, config: &BulkInsertConfig) -> StarResult<()> {
         let pending_triples = {
-            let mut bulk_state = self.bulk_insert_state.write().unwrap();
+            let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
             let triples = bulk_state.pending_triples.clone();
             bulk_state.pending_triples.clear();
             bulk_state.current_memory_usage = 0;
@@ -1259,13 +1271,13 @@ impl StarStore {
 
             // Insert all pending triples into storage
             {
-                let mut star_triples = self.star_triples.write().unwrap();
+                let mut star_triples = self.star_triples.write().expect("lock poisoned");
                 let base_index = star_triples.len();
                 star_triples.extend(pending_triples.clone());
 
                 // Build indices for the new triples
                 if !config.defer_index_updates {
-                    let mut index = self.quoted_triple_index.write().unwrap();
+                    let mut index = self.quoted_triple_index.write().expect("lock poisoned");
                     for (i, triple) in pending_triples.iter().enumerate() {
                         self.index_quoted_triples(triple, base_index + i, &mut index);
                     }
@@ -1289,7 +1301,7 @@ impl StarStore {
 
         // Reset bulk state
         {
-            let mut bulk_state = self.bulk_insert_state.write().unwrap();
+            let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
             bulk_state.active = false;
             bulk_state.pending_triples.clear();
             bulk_state.current_memory_usage = 0;
@@ -1338,7 +1350,7 @@ impl StarStore {
         info!("Enabling memory-mapped storage at: {}", file_path);
 
         {
-            let mut mm_state = self.memory_mapped.write().unwrap();
+            let mut mm_state = self.memory_mapped.write().expect("lock poisoned");
             mm_state.enabled = true;
             mm_state.file_path = Some(file_path.to_string());
             mm_state.compression_enabled = enable_compression;
@@ -1391,11 +1403,11 @@ impl StarStore {
         let base_stats = self.statistics();
         let cache_stats = self.cache.get_statistics();
         let index_stats = {
-            let index = self.quoted_triple_index.read().unwrap();
+            let index = self.quoted_triple_index.read().expect("lock poisoned");
             index.get_statistics()
         };
-        let bulk_state = self.bulk_insert_state.read().unwrap();
-        let mm_state = self.memory_mapped.read().unwrap();
+        let bulk_state = self.bulk_insert_state.read().expect("lock poisoned");
+        let mm_state = self.memory_mapped.read().expect("lock poisoned");
 
         DetailedStorageStatistics {
             basic_stats: base_stats,

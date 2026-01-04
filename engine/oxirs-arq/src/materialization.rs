@@ -233,8 +233,9 @@ impl MaterializedResults {
     /// Switch from in-memory to disk-based storage
     fn switch_to_disk(&mut self) -> Result<()> {
         // Serialize all in-memory data
-        let serialized = bincode::serialize(&self.in_memory)
-            .map_err(|e| anyhow!("Failed to serialize results: {}", e))?;
+        let serialized =
+            oxicode::serde::encode_to_vec(&self.in_memory, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to serialize results: {}", e))?;
 
         // Create memory-mapped file
         use std::env::temp_dir;

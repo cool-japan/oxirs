@@ -102,7 +102,7 @@ impl SimpleTransE {
         let mut random_gen = Random::default();
         for &(s, p, o) in &self.triples {
             // Generate negative sample by corrupting object
-            let neg_o = random_gen.random_range(0, self.entity_embeddings.len());
+            let neg_o = random_gen.random_range(0..self.entity_embeddings.len());
 
             if neg_o != o {
                 // Make sure it's actually negative

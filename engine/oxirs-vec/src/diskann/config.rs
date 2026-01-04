@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Pruning strategy for graph construction
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode,
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, oxicode::Encode, oxicode::Decode,
 )]
 pub enum PruningStrategy {
     /// Standard alpha pruning
@@ -17,7 +17,7 @@ pub enum PruningStrategy {
 
 /// Search mode for queries
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode,
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, oxicode::Encode, oxicode::Decode,
 )]
 pub enum SearchMode {
     /// Load full index into memory (fastest)
@@ -29,7 +29,7 @@ pub enum SearchMode {
 }
 
 /// Configuration for DiskANN index
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct DiskAnnConfig {
     /// Vector dimensionality
     pub dimension: usize,

@@ -208,16 +208,19 @@ impl RealTimeVectorUpdater {
 
     /// Get update statistics
     pub fn get_stats(&self) -> UpdateStats {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("rwlock should not be poisoned")
+            .clone()
     }
 
     /// Force index compaction
     pub async fn compact_index(&self) -> Result<()> {
-        let _index = self.index.read().unwrap();
+        let _index = self.index.read().expect("rwlock should not be poisoned");
         // Compact implementation would go here
         // For now, this is a placeholder
 
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("rwlock should not be poisoned");
         stats.last_compaction = Some(Instant::now());
 
         Ok(())
@@ -226,7 +229,7 @@ impl RealTimeVectorUpdater {
     /// Rebuild index if needed
     pub async fn rebuild_index_if_needed(&self) -> Result<bool> {
         let index_size = {
-            let stats = self.stats.read().unwrap();
+            let stats = self.stats.read().expect("rwlock should not be poisoned");
             stats.index_size
         };
 
@@ -482,12 +485,12 @@ impl RealTimeVectorUpdater {
         index: &Arc<RwLock<dyn VectorIndex + Send + Sync>>,
         stats: &Arc<RwLock<UpdateStats>>,
     ) -> Result<()> {
-        let index_guard = index.read().unwrap();
+        let index_guard = index.read().expect("rwlock should not be poisoned");
         // Compaction logic would go here
         // This is a placeholder
         drop(index_guard);
 
-        let mut stats_guard = stats.write().unwrap();
+        let mut stats_guard = stats.write().expect("rwlock should not be poisoned");
         stats_guard.last_compaction = Some(Instant::now());
 
         Ok(())
@@ -502,7 +505,7 @@ impl RealTimeVectorUpdater {
         let start_time = Instant::now();
         let operations = std::mem::take(&mut processor.pending_batch);
 
-        let mut index = self.index.write().unwrap();
+        let mut index = self.index.write().expect("rwlock should not be poisoned");
         let mut successful_ops = 0;
         let mut failed_ops = 0;
 
@@ -522,7 +525,7 @@ impl RealTimeVectorUpdater {
 
         // Update statistics
         let processing_time = start_time.elapsed();
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("rwlock should not be poisoned");
         stats.total_batches += 1;
         stats.total_updates += successful_ops;
         stats.failed_updates += failed_ops;
@@ -586,7 +589,11 @@ impl RealTimeVectorSearch {
         }
 
         // Perform search
-        let index = self.updater.index.read().unwrap();
+        let index = self
+            .updater
+            .index
+            .read()
+            .expect("rwlock should not be poisoned");
         // Create Vector from query slice
         let query_vec = crate::Vector::new(query_vector.to_vec());
         let search_results = index.search_knn(&query_vec, k)?;
@@ -622,13 +629,19 @@ impl RealTimeVectorSearch {
 
     /// Invalidate search cache (called after updates)
     pub fn invalidate_cache(&self) {
-        let mut cache = self.search_cache.write().unwrap();
+        let mut cache = self
+            .search_cache
+            .write()
+            .expect("rwlock should not be poisoned");
         cache.clear();
     }
 
     /// Get cached search results
     fn get_cached_results(&self, query_hash: &str) -> Option<Vec<SimilarityResult>> {
-        let cache = self.search_cache.read().unwrap();
+        let cache = self
+            .search_cache
+            .read()
+            .expect("rwlock should not be poisoned");
         cache.get(query_hash).and_then(|(results, timestamp)| {
             if timestamp.elapsed() < self.cache_ttl {
                 Some(results.clone())
@@ -640,7 +653,10 @@ impl RealTimeVectorSearch {
 
     /// Cache search results
     fn cache_results(&self, query_hash: String, results: &[SimilarityResult]) {
-        let mut cache = self.search_cache.write().unwrap();
+        let mut cache = self
+            .search_cache
+            .write()
+            .expect("rwlock should not be poisoned");
         cache.insert(query_hash, (results.to_vec(), Instant::now()));
 
         // Cleanup old cache entries

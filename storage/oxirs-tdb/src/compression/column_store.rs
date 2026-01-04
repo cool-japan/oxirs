@@ -422,9 +422,9 @@ impl ColumnStoreCompressor {
             } else if uniqueness_ratio < 0.1 {
                 // Low cardinality - dictionary
                 ColumnCompressionType::Dictionary
-            } else if stats.min_value.is_some() && stats.max_value.is_some() {
+            } else if let (Some(min), Some(max)) = (stats.min_value, stats.max_value) {
                 // Numeric data with range - frame of reference or delta
-                let range = stats.max_value.unwrap() - stats.min_value.unwrap();
+                let range = max - min;
                 if range < 1000.0 {
                     ColumnCompressionType::FrameOfReference
                 } else {

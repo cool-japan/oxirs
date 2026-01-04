@@ -11,6 +11,10 @@ keywords = ["graphql", "rdf", "semantic-web", "api", "federation"]
 categories = ["web-programming", "api-bindings", "database"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 # oxigraph.workspace = true  # REMOVED: Using oxirs-core instead
 oxirs-core.workspace = true

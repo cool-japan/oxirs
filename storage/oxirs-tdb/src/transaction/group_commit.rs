@@ -159,7 +159,7 @@ impl GroupCommitCoordinator {
 
             // Still update stats
             let wait_time_us = requested_at.elapsed().as_micros() as u64;
-            let mut stats = self.stats.lock().unwrap();
+            let mut stats = self.stats.lock().expect("lock poisoned");
             stats.total_commits += 1;
             stats.total_flushes += 1; // Each commit flushes immediately when disabled
             stats.total_wait_time_us += wait_time_us;
@@ -170,7 +170,7 @@ impl GroupCommitCoordinator {
 
         // Add to pending queue
         {
-            let mut pending = self.pending.lock().unwrap();
+            let mut pending = self.pending.lock().expect("lock poisoned");
             pending.commits.push(PendingCommit {
                 txn_id,
                 commit_lsn,
@@ -187,7 +187,7 @@ impl GroupCommitCoordinator {
 
         // Record wait time
         let wait_time_us = requested_at.elapsed().as_micros() as u64;
-        let mut stats = self.stats.lock().unwrap();
+        let mut stats = self.stats.lock().expect("lock poisoned");
         stats.total_commits += 1;
         stats.total_wait_time_us += wait_time_us;
         stats.max_wait_time_us = stats.max_wait_time_us.max(wait_time_us);
@@ -197,7 +197,7 @@ impl GroupCommitCoordinator {
 
     /// Try to flush pending commits if conditions are met
     fn try_flush(&self) -> Result<()> {
-        let mut pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock().expect("lock poisoned");
 
         if !pending.should_flush(&self.config) {
             return Ok(());
@@ -225,7 +225,7 @@ impl GroupCommitCoordinator {
 
         // Update flushed LSN and notify waiters
         {
-            let mut pending = self.pending.lock().unwrap();
+            let mut pending = self.pending.lock().expect("lock poisoned");
             pending.last_flushed_lsn = max_lsn;
         }
 
@@ -234,7 +234,7 @@ impl GroupCommitCoordinator {
 
         // Update statistics
         {
-            let mut stats = self.stats.lock().unwrap();
+            let mut stats = self.stats.lock().expect("lock poisoned");
             stats.total_flushes += 1;
             let total_commits = stats.total_commits as f64;
             stats.avg_batch_size = (stats.avg_batch_size * (total_commits - batch_size as f64)
@@ -249,7 +249,7 @@ impl GroupCommitCoordinator {
     fn wait_for_flush(&self, target_lsn: Lsn, timeout: Duration) -> Result<()> {
         let deadline = Instant::now() + timeout;
 
-        let mut pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock().expect("lock poisoned");
 
         loop {
             // Check if already flushed
@@ -267,7 +267,10 @@ impl GroupCommitCoordinator {
             }
 
             let remaining = deadline.duration_since(now);
-            let (guard, timeout_result) = self.commit_cv.wait_timeout(pending, remaining).unwrap();
+            let (guard, timeout_result) = self
+                .commit_cv
+                .wait_timeout(pending, remaining)
+                .expect("lock poisoned");
             pending = guard;
 
             if timeout_result.timed_out() {
@@ -281,7 +284,7 @@ impl GroupCommitCoordinator {
 
     /// Force an immediate flush of pending commits
     pub fn force_flush(&self) -> Result<()> {
-        let mut pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock().expect("lock poisoned");
 
         if pending.is_empty() {
             return Ok(());
@@ -305,7 +308,7 @@ impl GroupCommitCoordinator {
 
         // Update flushed LSN
         {
-            let mut pending = self.pending.lock().unwrap();
+            let mut pending = self.pending.lock().expect("lock poisoned");
             pending.last_flushed_lsn = max_lsn;
         }
 
@@ -314,7 +317,7 @@ impl GroupCommitCoordinator {
 
         // Update stats
         {
-            let mut stats = self.stats.lock().unwrap();
+            let mut stats = self.stats.lock().expect("lock poisoned");
             stats.total_flushes += 1;
             let total_commits = stats.total_commits as f64;
             stats.avg_batch_size = (stats.avg_batch_size * (total_commits - batch_size as f64)
@@ -327,7 +330,7 @@ impl GroupCommitCoordinator {
 
     /// Get current statistics
     pub fn stats(&self) -> GroupCommitStats {
-        let stats = self.stats.lock().unwrap();
+        let stats = self.stats.lock().expect("lock poisoned");
         GroupCommitStats {
             total_commits: stats.total_commits,
             total_flushes: stats.total_flushes,
@@ -339,7 +342,7 @@ impl GroupCommitCoordinator {
 
     /// Get average commits per flush
     pub fn avg_commits_per_flush(&self) -> f64 {
-        let stats = self.stats.lock().unwrap();
+        let stats = self.stats.lock().expect("lock poisoned");
         if stats.total_flushes == 0 {
             0.0
         } else {
@@ -349,7 +352,7 @@ impl GroupCommitCoordinator {
 
     /// Get number of pending commits
     pub fn pending_count(&self) -> usize {
-        self.pending.lock().unwrap().len()
+        self.pending.lock().expect("lock poisoned").len()
     }
 }
 

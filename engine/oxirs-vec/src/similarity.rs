@@ -10,7 +10,7 @@ use std::hash::{Hash, Hasher};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Similarity measurement configuration
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct SimilarityConfig {
     /// Primary similarity metric
     pub primary_metric: SimilarityMetric,
@@ -45,7 +45,7 @@ impl Default for SimilarityConfig {
 
 /// Available similarity metrics
 #[derive(
-    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, bincode::Encode, bincode::Decode,
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, oxicode::Encode, oxicode::Decode,
 )]
 pub enum SimilarityMetric {
     /// Cosine similarity
@@ -269,7 +269,7 @@ impl SemanticSimilarity {
             })
             .collect();
 
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         similarities.truncate(k);
 
         Ok(similarities)
@@ -512,7 +512,7 @@ fn spearman_correlation(a: &[f32], b: &[f32]) -> Result<f32> {
 
 fn compute_ranks(values: &[f32]) -> Vec<f32> {
     let mut indexed: Vec<(usize, f32)> = values.iter().enumerate().map(|(i, &v)| (i, v)).collect();
-    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
     let mut ranks = vec![0.0; values.len()];
     for (rank, (original_index, _)) in indexed.iter().enumerate() {
@@ -789,7 +789,11 @@ impl BatchSimilarityProcessor {
             }
 
             // Sort by similarity (descending)
-            query_results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+            query_results.sort_by(|a, b| {
+                b.similarity
+                    .partial_cmp(&a.similarity)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             results.push(query_results);
         }
 

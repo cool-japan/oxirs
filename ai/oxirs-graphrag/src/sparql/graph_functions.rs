@@ -217,7 +217,8 @@ impl GraphRAGFunctions {
         let mut calls = Vec::new();
 
         // Simple regex-based parsing (full implementation would use SPARQL parser)
-        let re = regex::Regex::new(r"graphrag:(\w+)\(([^)]*)\)").unwrap();
+        let re = regex::Regex::new(r"graphrag:(\w+)\(([^)]*)\)")
+            .expect("GraphRAG function regex pattern is valid");
 
         for cap in re.captures_iter(sparql) {
             if let (Some(func), Some(args)) = (cap.get(1), cap.get(2)) {

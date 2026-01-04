@@ -25,7 +25,7 @@
 //! assert!(validation.is_valid);
 //!
 //! // Simplify geometry
-//! let simplified = simplify_geometry(&geom, 0.01).unwrap();
+//! let simplified = simplify_geometry(&geom, 0.01).expect("simplification should succeed");
 //! ```
 
 use crate::error::{GeoSparqlError, Result};
@@ -251,7 +251,7 @@ fn has_invalid_coordinates(geom: &GeoGeometry<f64>) -> bool {
 /// let ls = LineString::new(coords);
 /// let geom = Geometry::new(GeoGeometry::LineString(ls));
 ///
-/// let simplified = simplify_geometry(&geom, 0.2).unwrap();
+/// let simplified = simplify_geometry(&geom, 0.2).expect("simplification should succeed");
 /// ```
 pub fn simplify_geometry(geometry: &Geometry, epsilon: f64) -> Result<Geometry> {
     if epsilon <= 0.0 {
@@ -297,7 +297,7 @@ pub fn simplify_geometry(geometry: &Geometry, epsilon: f64) -> Result<Geometry> 
 /// let ls = LineString::new(coords);
 /// let geom = Geometry::new(GeoGeometry::LineString(ls));
 ///
-/// let simplified = simplify_geometry_vw(&geom, 0.05).unwrap();
+/// let simplified = simplify_geometry_vw(&geom, 0.05).expect("simplification should succeed");
 /// ```
 pub fn simplify_geometry_vw(geometry: &Geometry, epsilon: f64) -> Result<Geometry> {
     if epsilon <= 0.0 {
@@ -339,7 +339,7 @@ pub fn simplify_geometry_vw(geometry: &Geometry, epsilon: f64) -> Result<Geometr
 /// use geo_types::{Point, Geometry as GeoGeometry};
 ///
 /// let geom = Geometry::new(GeoGeometry::Point(Point::new(1.234567, 2.345678)));
-/// let snapped = snap_to_precision(&geom, 2).unwrap();
+/// let snapped = snap_to_precision(&geom, 2).expect("snap should succeed");
 ///
 /// match snapped.geom {
 ///     GeoGeometry::Point(p) => {
@@ -434,7 +434,7 @@ pub fn snap_to_precision(geometry: &Geometry, precision: u32) -> Result<Geometry
 ///     Coord { x: 2.0, y: 2.0 },
 /// ];
 /// let geom = Geometry::new(GeoGeometry::LineString(LineString::new(coords)));
-/// let repaired = repair_geometry(&geom).unwrap();
+/// let repaired = repair_geometry(&geom).expect("repair should succeed");
 /// ```
 pub fn repair_geometry(geometry: &Geometry) -> Result<Geometry> {
     let repaired_geom = match &geometry.geom {
@@ -583,7 +583,7 @@ fn remove_consecutive_duplicates(coords: &[geo_types::Coord<f64>]) -> Vec<geo_ty
     let epsilon = 1e-10; // Tolerance for floating-point comparison
 
     for coord in &coords[1..] {
-        let last = result.last().unwrap();
+        let last = result.last().expect("result should not be empty");
         let dx = (coord.x - last.x).abs();
         let dy = (coord.y - last.y).abs();
 
@@ -599,7 +599,7 @@ fn remove_consecutive_duplicates(coords: &[geo_types::Coord<f64>]) -> Vec<geo_ty
 fn close_ring(mut coords: Vec<geo_types::Coord<f64>>) -> geo_types::LineString<f64> {
     if !coords.is_empty() {
         let first = coords[0];
-        let last = *coords.last().unwrap();
+        let last = *coords.last().expect("coords should not be empty");
         let epsilon = 1e-10;
 
         let dx = (first.x - last.x).abs();
@@ -886,12 +886,18 @@ pub fn compute_quality_metrics(geometry: &Geometry) -> GeometryQualityMetrics {
             let min_length = segment_lengths
                 .iter()
                 .copied()
-                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .min_by(|a, b| {
+                    a.partial_cmp(b)
+                        .expect("segment lengths should be comparable")
+                })
                 .unwrap_or(0.0);
             let max_length = segment_lengths
                 .iter()
                 .copied()
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .max_by(|a, b| {
+                    a.partial_cmp(b)
+                        .expect("segment lengths should be comparable")
+                })
                 .unwrap_or(0.0);
             let avg_length = if segment_lengths.is_empty() {
                 0.0
@@ -980,12 +986,18 @@ pub fn compute_quality_metrics(geometry: &Geometry) -> GeometryQualityMetrics {
             let min_length = segment_lengths
                 .iter()
                 .copied()
-                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .min_by(|a, b| {
+                    a.partial_cmp(b)
+                        .expect("segment lengths should be comparable")
+                })
                 .unwrap_or(0.0);
             let max_length = segment_lengths
                 .iter()
                 .copied()
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .max_by(|a, b| {
+                    a.partial_cmp(b)
+                        .expect("segment lengths should be comparable")
+                })
                 .unwrap_or(0.0);
             let avg_length = if segment_lengths.is_empty() {
                 0.0
@@ -1051,7 +1063,9 @@ pub fn check_ogc_compliance(geometry: &Geometry) -> ValidationResult {
         GeoGeometry::LineString(ls) => {
             // OGC SF: LineString must have at least 2 distinct points
             if ls.0.len() >= 2 {
-                let first = ls.0.first().unwrap();
+                let first =
+                    ls.0.first()
+                        .expect("linestring should have at least one point");
                 let all_same =
                     ls.0.iter()
                         .all(|c| (c.x - first.x).abs() < 1e-10 && (c.y - first.y).abs() < 1e-10);

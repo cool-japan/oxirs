@@ -705,7 +705,10 @@ impl MemoryOptimizer {
         }
 
         let start = Instant::now();
-        let mut interner = self.string_interner.write().unwrap();
+        let mut interner = self
+            .string_interner
+            .write()
+            .expect("rwlock should not be poisoned");
         let result = interner.intern(s);
 
         self.stats.optimization_time += start.elapsed();
@@ -716,7 +719,10 @@ impl MemoryOptimizer {
 
     /// Get an interned string
     pub fn get_interned_string(&self, id: InternedString) -> Option<String> {
-        let interner = self.string_interner.read().unwrap();
+        let interner = self
+            .string_interner
+            .read()
+            .expect("rwlock should not be poisoned");
         interner.get(id).cloned()
     }
 
@@ -729,7 +735,10 @@ impl MemoryOptimizer {
         }
 
         let start = Instant::now();
-        let mut pool = self.memory_pool.lock().unwrap();
+        let mut pool = self
+            .memory_pool
+            .lock()
+            .expect("mutex lock should not be poisoned");
         let result = pool.allocate(size);
 
         self.stats.optimization_time += start.elapsed();
@@ -741,7 +750,10 @@ impl MemoryOptimizer {
     /// Deallocate memory back to pool
     pub fn pool_deallocate(&mut self, ptr: *mut u8) {
         if self.config.enable_memory_pooling {
-            let mut pool = self.memory_pool.lock().unwrap();
+            let mut pool = self
+                .memory_pool
+                .lock()
+                .expect("mutex lock should not be poisoned");
             pool.deallocate(ptr);
         }
     }
@@ -775,7 +787,10 @@ impl MemoryOptimizer {
         // Compact string interner if enabled
         if self.config.enable_string_interning {
             let used_strings = self.collect_used_strings()?;
-            let mut interner = self.string_interner.write().unwrap();
+            let mut interner = self
+                .string_interner
+                .write()
+                .expect("rwlock should not be poisoned");
             let old_size = interner.strings.len();
             interner.compact(&used_strings);
             let new_size = interner.strings.len();
@@ -784,7 +799,10 @@ impl MemoryOptimizer {
 
         // Compact memory pool if enabled
         if self.config.enable_memory_pooling {
-            let mut pool = self.memory_pool.lock().unwrap();
+            let mut pool = self
+                .memory_pool
+                .lock()
+                .expect("mutex lock should not be poisoned");
             pool.compact(self.config.compaction_interval);
             result.pool_objects_freed =
                 pool.stats().total_allocations - pool.stats().active_objects;
@@ -813,7 +831,10 @@ impl MemoryOptimizer {
     /// Clear all caches to free memory
     pub fn clear_caches(&mut self) {
         if self.config.enable_string_interning {
-            let mut interner = self.string_interner.write().unwrap();
+            let mut interner = self
+                .string_interner
+                .write()
+                .expect("rwlock should not be poisoned");
             interner.clear();
         }
     }
@@ -823,12 +844,18 @@ impl MemoryOptimizer {
         let mut stats = self.stats.clone();
 
         if self.config.enable_string_interning {
-            let interner = self.string_interner.read().unwrap();
+            let interner = self
+                .string_interner
+                .read()
+                .expect("rwlock should not be poisoned");
             stats.interning_stats = interner.stats().clone();
         }
 
         if self.config.enable_memory_pooling {
-            let pool = self.memory_pool.lock().unwrap();
+            let pool = self
+                .memory_pool
+                .lock()
+                .expect("mutex lock should not be poisoned");
             stats.pool_stats = pool.stats().clone();
         }
 
@@ -852,12 +879,18 @@ impl MemoryOptimizer {
     fn update_statistics(&mut self) {
         // Update stats from component statistics
         if self.config.enable_string_interning {
-            let interner = self.string_interner.read().unwrap();
+            let interner = self
+                .string_interner
+                .read()
+                .expect("rwlock should not be poisoned");
             self.stats.interning_stats = interner.stats().clone();
         }
 
         if self.config.enable_memory_pooling {
-            let pool = self.memory_pool.lock().unwrap();
+            let pool = self
+                .memory_pool
+                .lock()
+                .expect("mutex lock should not be poisoned");
             self.stats.pool_stats = pool.stats().clone();
         }
 
@@ -963,7 +996,10 @@ pub mod compact {
             &self,
             violation: &crate::validation::ValidationViolation,
         ) -> Result<CompactViolation> {
-            let mut interner = self.interner.write().unwrap();
+            let mut interner = self
+                .interner
+                .write()
+                .expect("rwlock should not be poisoned");
 
             let focus_node = interner.intern(&format!("{:?}", violation.focus_node));
             let shape_id = interner.intern(&violation.source_shape.to_string());
@@ -995,7 +1031,7 @@ pub mod compact {
             &self,
             compact: &CompactViolation,
         ) -> Result<crate::validation::ValidationViolation> {
-            let interner = self.interner.read().unwrap();
+            let interner = self.interner.read().expect("rwlock should not be poisoned");
 
             let _focus_node_str = interner.get(compact.focus_node).ok_or_else(|| {
                 ShaclError::MemoryOptimization("Invalid focus node reference".to_string())

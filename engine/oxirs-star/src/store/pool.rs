@@ -39,7 +39,10 @@ impl ConnectionPool {
 
     /// Get a connection from the pool (blocks if none available)
     pub fn get_connection(&self) -> StarResult<PooledConnection> {
-        let mut available = self.available_connections.lock().unwrap();
+        let mut available = self
+            .available_connections
+            .lock()
+            .expect("connection pool lock should not be poisoned");
 
         // Try to get an existing connection
         if let Some(store) = available.pop_front() {
@@ -47,7 +50,10 @@ impl ConnectionPool {
         }
 
         // Check if we can create a new connection
-        let mut active_count = self.active_connections.lock().unwrap();
+        let mut active_count = self
+            .active_connections
+            .lock()
+            .expect("active count lock should not be poisoned");
         if *active_count < self.max_connections {
             *active_count += 1;
             drop(active_count);
@@ -59,7 +65,10 @@ impl ConnectionPool {
 
         // Wait for a connection to become available
         drop(active_count);
-        available = self.connection_available.wait(available).unwrap();
+        available = self
+            .connection_available
+            .wait(available)
+            .expect("condition variable wait should not be poisoned");
 
         match available.pop_front() {
             Some(store) => Ok(PooledConnection::new(store, self.clone())),
@@ -92,15 +101,24 @@ impl ConnectionPool {
 
     /// Return a connection to the pool
     pub(super) fn return_connection(&self, store: Arc<StarStore>) {
-        let mut available = self.available_connections.lock().unwrap();
+        let mut available = self
+            .available_connections
+            .lock()
+            .expect("connection pool lock should not be poisoned");
         available.push_back(store);
         self.connection_available.notify_one();
     }
 
     /// Get pool statistics
     pub fn get_statistics(&self) -> PoolStatistics {
-        let available = self.available_connections.lock().unwrap();
-        let active_count = self.active_connections.lock().unwrap();
+        let available = self
+            .available_connections
+            .lock()
+            .expect("connection pool lock should not be poisoned");
+        let active_count = self
+            .active_connections
+            .lock()
+            .expect("active count lock should not be poisoned");
 
         PoolStatistics {
             available_connections: available.len(),

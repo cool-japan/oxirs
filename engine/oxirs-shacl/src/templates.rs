@@ -340,13 +340,15 @@ fn create_person_shape() -> Shape {
     let mut shape = Shape::new(shape_id, ShapeType::NodeShape);
 
     shape.add_target(Target::Class(
-        NamedNode::new("http://xmlns.com/foaf/0.1/Person").unwrap(),
+        NamedNode::new("http://xmlns.com/foaf/0.1/Person").expect("valid IRI"),
     ));
 
     // Name property (required, 1-n values)
     let mut name_shape = Shape::property_shape(
         ShapeId::new("http://example.org/shapes#PersonName"),
-        PropertyPath::predicate(NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap()),
+        PropertyPath::predicate(
+            NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI"),
+        ),
     );
     name_shape.add_constraint(
         ConstraintComponentId::new("sh:minCount"),
@@ -355,7 +357,8 @@ fn create_person_shape() -> Shape {
     name_shape.add_constraint(
         ConstraintComponentId::new("sh:datatype"),
         Constraint::Datatype(DatatypeConstraint {
-            datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+            datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#string")
+                .expect("valid IRI"),
         }),
     );
 
@@ -367,7 +370,7 @@ fn create_organization_shape() -> Shape {
     let mut shape = Shape::new(shape_id, ShapeType::NodeShape);
 
     shape.add_target(Target::Class(
-        NamedNode::new("http://xmlns.com/foaf/0.1/Organization").unwrap(),
+        NamedNode::new("http://xmlns.com/foaf/0.1/Organization").expect("valid IRI"),
     ));
 
     shape
@@ -410,7 +413,7 @@ fn create_product_shape() -> Shape {
     let mut shape = Shape::new(shape_id, ShapeType::NodeShape);
 
     shape.add_target(Target::Class(
-        NamedNode::new("http://schema.org/Product").unwrap(),
+        NamedNode::new("http://schema.org/Product").expect("valid IRI"),
     ));
 
     shape
@@ -421,7 +424,7 @@ fn create_order_shape() -> Shape {
     let mut shape = Shape::new(shape_id, ShapeType::NodeShape);
 
     shape.add_target(Target::Class(
-        NamedNode::new("http://schema.org/Order").unwrap(),
+        NamedNode::new("http://schema.org/Order").expect("valid IRI"),
     ));
 
     shape
@@ -448,7 +451,7 @@ fn create_webpage_shape() -> Shape {
     let mut shape = Shape::new(shape_id, ShapeType::NodeShape);
 
     shape.add_target(Target::Class(
-        NamedNode::new("http://schema.org/WebPage").unwrap(),
+        NamedNode::new("http://schema.org/WebPage").expect("valid IRI"),
     ));
 
     shape
@@ -461,7 +464,8 @@ fn create_date_shape() -> Shape {
     shape.add_constraint(
         ConstraintComponentId::new("sh:datatype"),
         Constraint::Datatype(DatatypeConstraint {
-            datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#date").unwrap(),
+            datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#date")
+                .expect("valid IRI"),
         }),
     );
 
@@ -473,7 +477,7 @@ fn create_event_shape() -> Shape {
     let mut shape = Shape::new(shape_id, ShapeType::NodeShape);
 
     shape.add_target(Target::Class(
-        NamedNode::new("http://schema.org/Event").unwrap(),
+        NamedNode::new("http://schema.org/Event").expect("valid IRI"),
     ));
 
     shape
@@ -484,7 +488,7 @@ fn create_place_shape() -> Shape {
     let mut shape = Shape::new(shape_id, ShapeType::NodeShape);
 
     shape.add_target(Target::Class(
-        NamedNode::new("http://schema.org/Place").unwrap(),
+        NamedNode::new("http://schema.org/Place").expect("valid IRI"),
     ));
 
     shape
@@ -495,7 +499,7 @@ fn create_address_shape() -> Shape {
     let mut shape = Shape::new(shape_id, ShapeType::NodeShape);
 
     shape.add_target(Target::Class(
-        NamedNode::new("http://schema.org/PostalAddress").unwrap(),
+        NamedNode::new("http://schema.org/PostalAddress").expect("valid IRI"),
     ));
 
     shape
@@ -508,7 +512,8 @@ fn create_price_shape() -> Shape {
     shape.add_constraint(
         ConstraintComponentId::new("sh:datatype"),
         Constraint::Datatype(DatatypeConstraint {
-            datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
+            datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal")
+                .expect("valid IRI"),
         }),
     );
 
@@ -530,7 +535,7 @@ fn create_dataset_shape() -> Shape {
     let mut shape = Shape::new(shape_id, ShapeType::NodeShape);
 
     shape.add_target(Target::Class(
-        NamedNode::new("http://www.w3.org/ns/dcat#Dataset").unwrap(),
+        NamedNode::new("http://www.w3.org/ns/dcat#Dataset").expect("valid IRI"),
     ));
 
     shape

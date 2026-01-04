@@ -1027,7 +1027,7 @@ macro_rules! var {
 #[macro_export]
 macro_rules! iri {
     ($iri:expr_2021) => {
-        Term::Iri(NamedNode::new($iri).unwrap())
+        Term::Iri(NamedNode::new($iri).expect("macro argument should be valid IRI"))
     };
 }
 
@@ -1047,7 +1047,7 @@ macro_rules! literal {
         Term::Literal(Literal::new(
             $value.to_string(),
             None,
-            Some(NamedNode::new($dt).unwrap()),
+            Some(NamedNode::new($dt).expect("macro datatype argument should be valid IRI")),
         ))
     };
 }
@@ -1105,7 +1105,8 @@ impl Literal {
     pub fn integer(value: i64) -> Self {
         Literal::typed(
             value.to_string(),
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                .expect("XSD URI is well-formed and valid"),
         )
     }
 
@@ -1113,7 +1114,8 @@ impl Literal {
     pub fn decimal(value: f64) -> Self {
         Literal::typed(
             value.to_string(),
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal")
+                .expect("XSD URI is well-formed and valid"),
         )
     }
 
@@ -1121,7 +1123,8 @@ impl Literal {
     pub fn boolean(value: bool) -> Self {
         Literal::typed(
             value.to_string(),
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+                .expect("XSD URI is well-formed and valid"),
         )
     }
 
@@ -1129,7 +1132,8 @@ impl Literal {
     pub fn date(value: impl Into<String>) -> Self {
         Literal::typed(
             value.into(),
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#date").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#date")
+                .expect("XSD URI is well-formed and valid"),
         )
     }
 
@@ -1137,7 +1141,8 @@ impl Literal {
     pub fn datetime(value: impl Into<String>) -> Self {
         Literal::typed(
             value.into(),
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#dateTime")
+                .expect("XSD URI is well-formed and valid"),
         )
     }
 
@@ -1146,9 +1151,11 @@ impl Literal {
         if let Some(ref dt) = self.datatype {
             dt.clone()
         } else if self.language.is_some() {
-            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString").unwrap()
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")
+                .expect("RDF URI is well-formed and valid")
         } else {
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#string")
+                .expect("XSD URI is well-formed and valid")
         }
     }
 

@@ -587,7 +587,7 @@ impl EvolutionaryOptimizer {
         for _ in 0..tournament_size {
             let candidate = &self.population[{
                 let mut random = Random::default();
-                random.random_range(0, self.population.len())
+                random.random_range(0..self.population.len())
             }];
             if candidate.fitness > best_individual.fitness {
                 best_individual = candidate;
@@ -601,7 +601,7 @@ impl EvolutionaryOptimizer {
     fn crossover(&self, parent1: &Individual, parent2: &Individual) -> (Individual, Individual) {
         let crossover_point = {
             let mut random = Random::default();
-            random.random_range(0, parent1.genome.len())
+            random.random_range(0..parent1.genome.len())
         };
 
         let mut child1_genome = parent1.genome.clone();

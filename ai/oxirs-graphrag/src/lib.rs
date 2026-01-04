@@ -275,16 +275,23 @@ where
         llm_client: Arc<L>,
         config: GraphRAGConfig,
     ) -> Self {
-        let cache_size = config.cache_size.unwrap_or(1000);
+        const DEFAULT_CACHE_SIZE: std::num::NonZeroUsize = match std::num::NonZeroUsize::new(1000) {
+            Some(size) => size,
+            None => panic!("constant is non-zero"),
+        };
+
+        let cache_size = config
+            .cache_size
+            .and_then(std::num::NonZeroUsize::new)
+            .unwrap_or(DEFAULT_CACHE_SIZE);
+
         Self {
             vec_index,
             embedding_model,
             sparql_engine,
             llm_client,
             config,
-            cache: Arc::new(RwLock::new(lru::LruCache::new(
-                std::num::NonZeroUsize::new(cache_size).unwrap(),
-            ))),
+            cache: Arc::new(RwLock::new(lru::LruCache::new(cache_size))),
             community_detector: None,
         }
     }

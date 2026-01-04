@@ -1232,7 +1232,7 @@ impl LoadBalancer {
             if indices.is_empty() {
                 break;
             }
-            let idx = rng.random_range(0, indices.len());
+            let idx = rng.random_range(0..indices.len());
             let selected_idx = indices.swap_remove(idx);
             result.push(available[selected_idx].clone());
         }

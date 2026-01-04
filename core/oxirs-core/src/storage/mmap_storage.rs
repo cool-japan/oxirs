@@ -199,7 +199,7 @@ impl MmapTripleStore {
         }
 
         // Serialize the triple using bincode
-        let serialized = bincode::serde::encode_to_vec(triple, bincode::config::standard())
+        let serialized = oxicode::serde::encode_to_vec(triple, oxicode::config::standard())
             .map_err(|e| OxirsError::Serialize(format!("Failed to serialize triple: {}", e)))?;
 
         // Check if serialized size fits within our allocated space
@@ -449,9 +449,9 @@ impl ReadOnlyMmapView {
         }
 
         // Deserialize the triple
-        let triple: Triple = bincode::serde::decode_from_slice(
+        let triple: Triple = oxicode::serde::decode_from_slice(
             &raw_bytes[4..4 + data_len],
-            bincode::config::standard(),
+            oxicode::config::standard(),
         )
         .map(|(v, _)| v)
         .map_err(|e| OxirsError::Parse(format!("Failed to deserialize triple: {}", e)))?;

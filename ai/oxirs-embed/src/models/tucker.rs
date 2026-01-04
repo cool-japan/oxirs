@@ -138,7 +138,7 @@ impl TuckER {
         let std_dev = (2.0 / total_elements as f64).sqrt();
 
         for elem in self.core_tensor.iter_mut() {
-            *elem = rng.random_range(-std_dev, std_dev);
+            *elem = rng.random_range(-std_dev..std_dev);
         }
 
         // Normalize embeddings

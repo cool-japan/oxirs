@@ -248,7 +248,7 @@ impl ModelSelector {
 
         for _ in 0..self.config.n_iter {
             // Randomly select a model
-            let model_idx = rng.random_range(0, models.len());
+            let model_idx = rng.random_range(0..models.len());
             let model = &mut models[model_idx];
             let model_name = format!("model_{model_idx}");
 
@@ -510,12 +510,12 @@ impl ModelSelector {
                 ScaleType::Log => {
                     let log_min = cont_param.min.ln();
                     let log_max = cont_param.max.ln();
-                    rng.random_range(log_min, log_max).exp()
+                    rng.random_range(log_min..log_max).exp()
                 }
                 ScaleType::Exponential => {
                     let exp_min = cont_param.min.exp();
                     let exp_max = cont_param.max.exp();
-                    rng.random_range(exp_min, exp_max).ln()
+                    rng.random_range(exp_min..exp_max).ln()
                 }
             };
 
@@ -569,7 +569,7 @@ impl ModelSelector {
         // Simplified evolution - just keep best and mutate
         let mut indexed_scores: Vec<(usize, f64)> =
             scores.iter().enumerate().map(|(i, &s)| (i, s)).collect();
-        indexed_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        indexed_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let mut new_population = Vec::new();
 
@@ -629,7 +629,7 @@ impl CrossValidator {
             let mut random = Random::default();
             // Note: Seeding not implemented here - would need to be added to scirs2_core if needed
             for i in (1..indices.len()).rev() {
-                let j = random.random_range(0, i + 1);
+                let j = random.random_range(0..i + 1);
                 indices.swap(i, j);
             }
         }

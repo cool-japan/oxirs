@@ -374,13 +374,19 @@ impl Parser {
 
         // Handle negative sign
         if self.peek_char('-') {
-            number.push(self.next_char().unwrap());
+            number.push(
+                self.next_char()
+                    .expect("peeked character should be available"),
+            );
         }
 
         // Parse integer part
         while let Some(&ch) = self.chars.peek() {
             if ch.is_ascii_digit() {
-                number.push(self.next_char().unwrap());
+                number.push(
+                    self.next_char()
+                        .expect("peeked character should be available"),
+                );
             } else {
                 break;
             }
@@ -388,11 +394,17 @@ impl Parser {
 
         // Check for decimal point
         if self.peek_char('.') {
-            number.push(self.next_char().unwrap());
+            number.push(
+                self.next_char()
+                    .expect("peeked character should be available"),
+            );
 
             while let Some(&ch) = self.chars.peek() {
                 if ch.is_ascii_digit() {
-                    number.push(self.next_char().unwrap());
+                    number.push(
+                        self.next_char()
+                            .expect("peeked character should be available"),
+                    );
                 } else {
                     break;
                 }
@@ -406,15 +418,24 @@ impl Parser {
         } else {
             // Check for exponent
             if self.peek_char('e') || self.peek_char('E') {
-                number.push(self.next_char().unwrap());
+                number.push(
+                    self.next_char()
+                        .expect("peeked character should be available"),
+                );
 
                 if self.peek_char('+') || self.peek_char('-') {
-                    number.push(self.next_char().unwrap());
+                    number.push(
+                        self.next_char()
+                            .expect("peeked character should be available"),
+                    );
                 }
 
                 while let Some(&ch) = self.chars.peek() {
                     if ch.is_ascii_digit() {
-                        number.push(self.next_char().unwrap());
+                        number.push(
+                            self.next_char()
+                                .expect("peeked character should be available"),
+                        );
                     } else {
                         break;
                     }
@@ -509,7 +530,10 @@ impl Parser {
         // First character must be letter or underscore
         match self.chars.peek() {
             Some(&ch) if ch.is_alphabetic() || ch == '_' => {
-                name.push(self.next_char().unwrap());
+                name.push(
+                    self.next_char()
+                        .expect("peeked character should be available"),
+                );
             }
             _ => return Err(anyhow!("Expected name at line {}", self.line)),
         }
@@ -517,7 +541,10 @@ impl Parser {
         // Subsequent characters can be letters, digits, or underscores
         while let Some(&ch) = self.chars.peek() {
             if ch.is_alphanumeric() || ch == '_' {
-                name.push(self.next_char().unwrap());
+                name.push(
+                    self.next_char()
+                        .expect("peeked character should be available"),
+                );
             } else {
                 break;
             }

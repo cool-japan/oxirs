@@ -109,7 +109,7 @@ impl FederatedExecutor {
                 .timeout(config.request_timeout)
                 .pool_max_idle_per_host(max_concurrent)
                 .build()
-                .unwrap(),
+                .expect("HTTP client builder should succeed"),
             semaphore: Arc::new(Semaphore::new(max_concurrent)),
             config,
             planner,
@@ -627,10 +627,12 @@ impl FederatedExecutor {
 
         let term = match term_type {
             "uri" => oxirs_core::model::Term::NamedNode(
-                oxirs_core::model::NamedNode::new(value).unwrap(),
+                oxirs_core::model::NamedNode::new(value)
+                    .expect("IRI from remote endpoint should be valid"),
             ),
             "bnode" => oxirs_core::model::Term::BlankNode(
-                oxirs_core::model::BlankNode::new(value).unwrap(),
+                oxirs_core::model::BlankNode::new(value)
+                    .expect("blank node from remote endpoint should be valid"),
             ),
             "literal" => {
                 let language = term_obj
@@ -638,13 +640,13 @@ impl FederatedExecutor {
                     .and_then(|l| l.as_str())
                     .map(|s| s.to_string());
 
-                let datatype = term_obj
-                    .get("datatype")
-                    .and_then(|d| d.as_str())
-                    .map(|s| oxirs_core::model::NamedNode::new(s).unwrap());
+                let datatype = term_obj.get("datatype").and_then(|d| d.as_str()).map(|s| {
+                    oxirs_core::model::NamedNode::new(s).expect("graph IRI should be valid")
+                });
 
                 oxirs_core::model::Term::Literal(if let Some(lang) = language {
-                    oxirs_core::model::Literal::new_language_tagged_literal(value, lang).unwrap()
+                    oxirs_core::model::Literal::new_language_tagged_literal(value, lang)
+                        .expect("language-tagged literal should be valid")
                 } else if let Some(dt) = datatype {
                     oxirs_core::model::Literal::new_typed_literal(value, dt)
                 } else {
@@ -700,7 +702,8 @@ impl FederatedExecutor {
 
         // Default graph for federation results
         let graph = oxirs_core::model::GraphName::NamedNode(
-            oxirs_core::model::NamedNode::new("http://default-graph").unwrap(),
+            oxirs_core::model::NamedNode::new("http://default-graph")
+                .expect("hardcoded default graph IRI should be valid"),
         );
 
         let subject_pos: oxirs_core::model::Subject =
@@ -769,12 +772,13 @@ impl FederatedExecutor {
             // IRI
             let iri = &term_str[1..term_str.len() - 1];
             Ok(oxirs_core::model::Term::NamedNode(
-                oxirs_core::model::NamedNode::new(iri).unwrap(),
+                oxirs_core::model::NamedNode::new(iri).expect("IRI from N-Triples should be valid"),
             ))
         } else if let Some(bnode) = term_str.strip_prefix("_:") {
             // Blank node
             Ok(oxirs_core::model::Term::BlankNode(
-                oxirs_core::model::BlankNode::new(bnode).unwrap(),
+                oxirs_core::model::BlankNode::new(bnode)
+                    .expect("blank node from N-Triples should be valid"),
             ))
         } else if term_str.starts_with('"') {
             // Literal
@@ -795,7 +799,8 @@ impl FederatedExecutor {
             if let Some(lang) = rest.strip_prefix('@') {
                 // Language tag
                 Ok(oxirs_core::model::Term::Literal(
-                    oxirs_core::model::Literal::new_language_tagged_literal(value, lang).unwrap(),
+                    oxirs_core::model::Literal::new_language_tagged_literal(value, lang)
+                        .expect("language-tagged literal should be valid"),
                 ))
             } else if let Some(datatype) = rest.strip_prefix("^^") {
                 // Datatype
@@ -807,7 +812,8 @@ impl FederatedExecutor {
                 Ok(oxirs_core::model::Term::Literal(
                     oxirs_core::model::Literal::new_typed_literal(
                         value,
-                        oxirs_core::model::NamedNode::new(datatype).unwrap(),
+                        oxirs_core::model::NamedNode::new(datatype)
+                            .expect("datatype IRI from remote endpoint should be valid"),
                     ),
                 ))
             } else {
@@ -874,7 +880,10 @@ impl FederatedResultMerger {
         }
 
         if results.len() == 1 {
-            return Ok(results.into_iter().next().unwrap());
+            return Ok(results
+                .into_iter()
+                .next()
+                .expect("results should not be empty after non_empty check"));
         }
 
         match &self.merge_strategy {
@@ -897,7 +906,9 @@ impl FederatedResultMerger {
         }
 
         if results.len() == 1 {
-            return Ok(results.pop().unwrap());
+            return Ok(results
+                .pop()
+                .expect("results should not be empty after non_empty check"));
         }
 
         // Extract the first result as base
@@ -973,7 +984,9 @@ impl FederatedResultMerger {
         }
 
         if results.len() == 1 {
-            return Ok(results.pop().unwrap());
+            return Ok(results
+                .pop()
+                .expect("results should not be empty after non_empty check"));
         }
 
         // Extract the first result as base
@@ -1049,7 +1062,9 @@ impl FederatedResultMerger {
         }
 
         if results.len() == 1 {
-            return Ok(results.pop().unwrap());
+            return Ok(results
+                .pop()
+                .expect("results should not be empty after non_empty check"));
         }
 
         // Only solutions can be joined (Boolean and Graph don't support join)
@@ -1064,7 +1079,11 @@ impl FederatedResultMerger {
                     // Convert join_vars to Variable objects for comparison
                     let join_variables: Vec<Variable> = join_vars
                         .iter()
-                        .map(|v| Variable::new(v).unwrap_or_else(|_| Variable::new("_").unwrap()))
+                        .map(|v| {
+                            Variable::new(v).unwrap_or_else(|_| {
+                                Variable::new("_").expect("underscore variable should be valid")
+                            })
+                        })
                         .collect();
 
                     // If no join variables specified, use all common variables

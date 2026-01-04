@@ -502,7 +502,7 @@ fn generate_api_key() -> String {
     let mut rng = Random::seed(42);
     let key: String = (0..KEY_LENGTH)
         .map(|_| {
-            let idx = rng.random_range(0, CHARSET.len());
+            let idx = rng.random_range(0..CHARSET.len());
             CHARSET[idx] as char
         })
         .collect();

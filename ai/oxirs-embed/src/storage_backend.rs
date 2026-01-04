@@ -411,8 +411,8 @@ impl StorageBackend for DiskBackend {
     async fn save_entity_embeddings(&mut self, embeddings: &HashMap<String, Vector>) -> Result<()> {
         info!("Saving {} entity embeddings to disk", embeddings.len());
 
-        let serialized =
-            bincode::serialize(embeddings).context("Failed to serialize entity embeddings")?;
+        let serialized = oxicode::serde::encode_to_vec(embeddings, oxicode::config::standard())
+            .context("Failed to serialize entity embeddings")?;
 
         let compressed = self.compress_data(&serialized).await?;
 
@@ -432,8 +432,8 @@ impl StorageBackend for DiskBackend {
     ) -> Result<()> {
         info!("Saving {} relation embeddings to disk", embeddings.len());
 
-        let serialized =
-            bincode::serialize(embeddings).context("Failed to serialize relation embeddings")?;
+        let serialized = oxicode::serde::encode_to_vec(embeddings, oxicode::config::standard())
+            .context("Failed to serialize relation embeddings")?;
 
         let compressed = self.compress_data(&serialized).await?;
 
@@ -456,8 +456,9 @@ impl StorageBackend for DiskBackend {
 
         let decompressed = self.decompress_data(&compressed).await?;
 
-        let embeddings: HashMap<String, Vector> = bincode::deserialize(&decompressed)
-            .context("Failed to deserialize entity embeddings")?;
+        let (embeddings, _): (HashMap<String, Vector>, _) =
+            oxicode::serde::decode_from_slice(&decompressed, oxicode::config::standard())
+                .context("Failed to deserialize entity embeddings")?;
 
         info!("Loaded {} entity embeddings", embeddings.len());
         Ok(embeddings)
@@ -472,8 +473,9 @@ impl StorageBackend for DiskBackend {
 
         let decompressed = self.decompress_data(&compressed).await?;
 
-        let embeddings: HashMap<String, Vector> = bincode::deserialize(&decompressed)
-            .context("Failed to deserialize relation embeddings")?;
+        let (embeddings, _): (HashMap<String, Vector>, _) =
+            oxicode::serde::decode_from_slice(&decompressed, oxicode::config::standard())
+                .context("Failed to deserialize relation embeddings")?;
 
         info!("Loaded {} relation embeddings", embeddings.len());
         Ok(embeddings)

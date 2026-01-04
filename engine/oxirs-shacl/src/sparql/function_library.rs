@@ -62,13 +62,19 @@ impl SparqlFunctionLibrary {
 
         // Register function
         {
-            let mut functions = self.functions.write().unwrap();
+            let mut functions = self
+                .functions
+                .write()
+                .expect("rwlock should not be poisoned");
             functions.insert(function_name.clone(), function);
         }
 
         // Register security policy
         {
-            let mut policies = self.security_policies.write().unwrap();
+            let mut policies = self
+                .security_policies
+                .write()
+                .expect("rwlock should not be poisoned");
             policies.insert(function_name.clone(), policy);
         }
 
@@ -79,12 +85,18 @@ impl SparqlFunctionLibrary {
     /// Unregister a function
     pub fn unregister_function(&mut self, function_name: &str) -> Result<()> {
         {
-            let mut functions = self.functions.write().unwrap();
+            let mut functions = self
+                .functions
+                .write()
+                .expect("rwlock should not be poisoned");
             functions.remove(function_name);
         }
 
         {
-            let mut policies = self.security_policies.write().unwrap();
+            let mut policies = self
+                .security_policies
+                .write()
+                .expect("rwlock should not be poisoned");
             policies.remove(function_name);
         }
 
@@ -103,8 +115,14 @@ impl SparqlFunctionLibrary {
 
         // Get function and security policy
         let (function, policy) = {
-            let functions = self.functions.read().unwrap();
-            let policies = self.security_policies.read().unwrap();
+            let functions = self
+                .functions
+                .read()
+                .expect("rwlock should not be poisoned");
+            let policies = self
+                .security_policies
+                .read()
+                .expect("rwlock should not be poisoned");
 
             let function = functions
                 .get(function_name)
@@ -130,7 +148,10 @@ impl SparqlFunctionLibrary {
         // Record execution metrics
         let execution_time = start_time.elapsed();
         {
-            let mut monitor = self.execution_monitor.write().unwrap();
+            let mut monitor = self
+                .execution_monitor
+                .write()
+                .expect("rwlock should not be poisoned");
             monitor.record_execution(function_name, execution_time, result.memory_used);
         }
 
@@ -159,7 +180,10 @@ impl SparqlFunctionLibrary {
 
         // Register library
         {
-            let mut libraries = self.libraries.write().unwrap();
+            let mut libraries = self
+                .libraries
+                .write()
+                .expect("rwlock should not be poisoned");
             libraries.insert(library.metadata.name.clone(), library);
         }
 
@@ -170,7 +194,10 @@ impl SparqlFunctionLibrary {
     pub fn unload_library(&mut self, library_name: &str) -> Result<()> {
         // Get library
         let library = {
-            let libraries = self.libraries.read().unwrap();
+            let libraries = self
+                .libraries
+                .read()
+                .expect("rwlock should not be poisoned");
             libraries
                 .get(library_name)
                 .ok_or_else(|| {
@@ -186,7 +213,10 @@ impl SparqlFunctionLibrary {
 
         // Remove library
         {
-            let mut libraries = self.libraries.write().unwrap();
+            let mut libraries = self
+                .libraries
+                .write()
+                .expect("rwlock should not be poisoned");
             libraries.remove(library_name);
         }
 
@@ -195,13 +225,19 @@ impl SparqlFunctionLibrary {
 
     /// Get list of available functions
     pub fn list_functions(&self) -> Vec<FunctionMetadata> {
-        let functions = self.functions.read().unwrap();
+        let functions = self
+            .functions
+            .read()
+            .expect("rwlock should not be poisoned");
         functions.values().map(|f| f.metadata().clone()).collect()
     }
 
     /// Get execution statistics
     pub fn get_execution_stats(&self) -> ExecutionStats {
-        let monitor = self.execution_monitor.read().unwrap();
+        let monitor = self
+            .execution_monitor
+            .read()
+            .expect("rwlock should not be poisoned");
         monitor.get_stats()
     }
 
@@ -257,7 +293,10 @@ impl SparqlFunctionLibrary {
         }
 
         // Check for version conflicts
-        let libraries = self.libraries.read().unwrap();
+        let libraries = self
+            .libraries
+            .read()
+            .expect("rwlock should not be poisoned");
         if let Some(existing) = libraries.get(&metadata.name) {
             if existing.metadata.version == metadata.version {
                 return Err(ShaclError::ValidationEngine(format!(

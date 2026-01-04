@@ -8,9 +8,9 @@ pub mod node;
 
 use crate::error::{Result, TdbError};
 use crate::storage::{BufferPool, PageGuard, PageId, PageType};
-use bincode::{Decode, Encode};
 use iterator::BTreeIterator;
 use node::{BTreeNode, InternalNode, LeafNode, ORDER};
+use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -18,8 +18,8 @@ use std::sync::Arc;
 /// B+Tree for disk-based key-value storage
 pub struct BTree<K, V>
 where
-    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
-    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
+    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug,
+    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug,
 {
     buffer_pool: Arc<BufferPool>,
     root_page: Option<PageId>,
@@ -28,8 +28,8 @@ where
 
 impl<K, V> BTree<K, V>
 where
-    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
-    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug + Encode + bincode::Decode<()>,
+    K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug,
+    V: Clone + Serialize + for<'de> Deserialize<'de> + Debug,
 {
     /// Create a new B+Tree
     pub fn new(buffer_pool: Arc<BufferPool>) -> Self {
@@ -91,7 +91,7 @@ where
             let root_id = guard.page_id();
             {
                 let mut page = guard.page_mut();
-                let page = page.as_mut().unwrap();
+                let page = page.as_mut().expect("page should be available");
                 let mut node = BTreeNode::new_leaf();
                 if let BTreeNode::Leaf(ref mut leaf) = node {
                     leaf.insert(key.clone(), value.clone());
@@ -103,7 +103,9 @@ where
             return Ok(None);
         }
 
-        let root_id = self.root_page.unwrap();
+        let root_id = self
+            .root_page
+            .expect("root page should exist after is_none check");
 
         // Try insert, handle split if needed
         match self.insert_recursive(root_id, key.clone(), value.clone())? {
@@ -114,7 +116,7 @@ where
                 let new_root_id = new_root_guard.page_id();
                 {
                     let mut page = new_root_guard.page_mut();
-                    let page = page.as_mut().unwrap();
+                    let page = page.as_mut().expect("page should be available");
                     let new_root = InternalNode {
                         keys: vec![split_key],
                         children: vec![root_id, new_page_id],
@@ -166,7 +168,7 @@ where
                         let guard = self.buffer_pool.fetch_page(page_id)?;
                         {
                             let mut page = guard.page_mut();
-                            let page = page.as_mut().unwrap();
+                            let page = page.as_mut().expect("page should be available");
                             node.serialize_to_page(page)?;
                         }
                         drop(guard);
@@ -195,7 +197,7 @@ where
                 let guard = self.buffer_pool.fetch_page(page_id)?;
                 {
                     let mut page = guard.page_mut();
-                    let page = page.as_mut().unwrap();
+                    let page = page.as_mut().expect("page should be available");
                     node.serialize_to_page(page)?;
                 }
                 drop(guard);
@@ -228,7 +230,7 @@ where
 
         {
             let mut page = right_guard.page_mut();
-            let page = page.as_mut().unwrap();
+            let page = page.as_mut().expect("page should be available");
             let right_node = BTreeNode::Leaf(right_leaf);
             right_node.serialize_to_page(page)?;
         }
@@ -238,7 +240,7 @@ where
         let left_guard = self.buffer_pool.fetch_page(page_id)?;
         {
             let mut page = left_guard.page_mut();
-            let page = page.as_mut().unwrap();
+            let page = page.as_mut().expect("page should be available");
             let left_node = BTreeNode::Leaf(leaf);
             left_node.serialize_to_page(page)?;
         }
@@ -261,7 +263,7 @@ where
 
         {
             let mut page = right_guard.page_mut();
-            let page = page.as_mut().unwrap();
+            let page = page.as_mut().expect("page should be available");
             let right_node: BTreeNode<K, V> = BTreeNode::Internal(right_internal);
             right_node.serialize_to_page(page)?;
         }
@@ -271,7 +273,7 @@ where
         let left_guard = self.buffer_pool.fetch_page(page_id)?;
         {
             let mut page = left_guard.page_mut();
-            let page = page.as_mut().unwrap();
+            let page = page.as_mut().expect("page should be available");
             let left_node: BTreeNode<K, V> = BTreeNode::Internal(internal);
             left_node.serialize_to_page(page)?;
         }
@@ -313,7 +315,7 @@ where
                     let guard = self.buffer_pool.fetch_page(page_id)?;
                     {
                         let mut page = guard.page_mut();
-                        let page = page.as_mut().unwrap();
+                        let page = page.as_mut().expect("page should be available");
                         node.serialize_to_page(page)?;
                     }
                     drop(guard);

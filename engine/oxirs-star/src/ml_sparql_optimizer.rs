@@ -214,7 +214,8 @@ impl MLCostPredictor {
         // Xavier: weights ~ U[-sqrt(6/(n_in+n_out)), sqrt(6/(n_in+n_out))]
         let mut rng = thread_rng();
         let limit = (6.0 / (feature_dim as f64 + 1.0)).sqrt();
-        let uniform = rand_distr::Uniform::new(-limit, limit).unwrap();
+        let uniform = rand_distr::Uniform::new(-limit, limit)
+            .expect("Xavier initialization uniform distribution parameters are valid");
         let weights_vec: Vec<f64> = (0..feature_dim).map(|_| rng.sample(uniform)).collect();
 
         Self {
@@ -703,7 +704,8 @@ impl NeuralNetworkPredictor {
 
             // He initialization: weights ~ N(0, sqrt(2/n_in))
             let std_dev = (2.0 / n_in as f64).sqrt();
-            let uniform = rand_distr::Uniform::new(-std_dev, std_dev).unwrap();
+            let uniform = rand_distr::Uniform::new(-std_dev, std_dev)
+                .expect("He initialization uniform distribution parameters are valid");
             let weights = Array2::from_shape_fn((n_in, n_out), |_| rng.sample(uniform));
 
             let biases = Array1::zeros(n_out);
@@ -743,7 +745,9 @@ impl NeuralNetworkPredictor {
         let mut z_values = Vec::new();
 
         for (weights, biases) in self.layer_weights.iter().zip(&self.layer_biases) {
-            let last_activation = activations.last().unwrap();
+            let last_activation = activations
+                .last()
+                .expect("activations initialized with input, must have at least one element");
 
             // Linear transformation: z = W^T * a + b
             let mut z = biases.clone();
@@ -778,7 +782,9 @@ impl NeuralNetworkPredictor {
     /// Predict output for given input
     pub fn predict(&self, input: &Array1<f64>) -> f64 {
         let (activations, _) = self.forward(input);
-        let output = activations.last().unwrap();
+        let output = activations
+            .last()
+            .expect("forward pass must produce at least one activation");
         output[0].max(0.0) // Ensure non-negative cost
     }
 
@@ -810,7 +816,8 @@ impl NeuralNetworkPredictor {
             // Shuffle training data using Fisher-Yates algorithm
             let mut indices: Vec<usize> = (0..training_data.len()).collect();
             for i in (1..indices.len()).rev() {
-                let uniform = rand_distr::Uniform::new(0, i + 1).unwrap();
+                let uniform = rand_distr::Uniform::new(0, i + 1)
+                    .expect("Fisher-Yates shuffle uniform distribution parameters are valid");
                 let j = rng.sample(uniform);
                 indices.swap(i, j);
             }
@@ -824,7 +831,9 @@ impl NeuralNetworkPredictor {
                     let (activations, z_values) = self.forward(input);
 
                     // Calculate loss (MSE)
-                    let prediction = activations.last().unwrap()[0];
+                    let prediction = activations
+                        .last()
+                        .expect("forward pass must produce at least one activation")[0];
                     let error = prediction - target;
                     epoch_loss += error * error;
 

@@ -574,7 +574,7 @@ impl PruningProcessor {
     /// Calculate magnitude threshold for pruning
     fn calculate_magnitude_threshold(&self, tensor: &Array2<f32>) -> f32 {
         let mut abs_values: Vec<f32> = tensor.iter().copied().map(|x| x.abs()).collect();
-        abs_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        abs_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let percentile_index = (abs_values.len() as f32 * self.config.sparsity_ratio) as usize;
         abs_values.get(percentile_index).copied().unwrap_or(0.0)
@@ -592,7 +592,7 @@ impl PruningProcessor {
     /// Calculate SNIP threshold
     fn calculate_snip_threshold(&self, importance_scores: &Array2<f32>) -> f32 {
         let mut scores: Vec<f32> = importance_scores.iter().copied().collect();
-        scores.sort_by(|a, b| b.partial_cmp(a).unwrap()); // Descending order
+        scores.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)); // Descending order
 
         let keep_index = ((scores.len() as f32) * (1.0 - self.config.sparsity_ratio)) as usize;
         scores.get(keep_index).copied().unwrap_or(0.0)
@@ -631,7 +631,7 @@ impl PruningProcessor {
             .filter(|&&x| x != 0.0) // Only consider non-zero values
             .map(|&x| x.abs())
             .collect();
-        abs_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        abs_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         if abs_values.is_empty() {
             return 0.0;
@@ -820,19 +820,19 @@ impl NASProcessor {
         use scirs2_core::random::{Random, Rng};
         let mut rng = Random::default();
 
-        let num_layers = rng.random_range(2, 11); // 2-10 layers
+        let num_layers = rng.random_range(2..11); // 2-10 layers
         let mut layers = Vec::new();
 
         for _ in 0..num_layers {
-            let layer_type = match rng.random_range(0, 4) {
+            let layer_type = match rng.random_range(0..4) {
                 0 => LayerType::Linear,
                 1 => LayerType::Attention,
                 2 => LayerType::Convolution,
                 _ => LayerType::Normalization,
             };
 
-            let input_dim = rng.random_range(128, 640);
-            let output_dim = rng.random_range(128, 640);
+            let input_dim = rng.random_range(128..640);
+            let output_dim = rng.random_range(128..640);
 
             layers.push(LayerConfig {
                 layer_type,
@@ -969,8 +969,11 @@ impl NASProcessor {
     /// Evolve population using genetic algorithm
     fn evolve_population(&mut self) -> Result<()> {
         // Sort by score (descending)
-        self.population
-            .sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        self.population.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Keep top 50%
         let survivors = self.population.len() / 2;
@@ -995,7 +998,7 @@ impl NASProcessor {
         use scirs2_core::random::{Random, Rng};
         let mut rng = Random::default();
 
-        let mutation_type = rng.random_range(0, 4);
+        let mutation_type = rng.random_range(0..4);
 
         match mutation_type {
             0 => {
@@ -1004,7 +1007,7 @@ impl NASProcessor {
                 if layer_count > 0 {
                     if let Some(layer) = architecture
                         .layers
-                        .get_mut(rng.random_range(0, layer_count))
+                        .get_mut(rng.random_range(0..layer_count))
                     {
                         layer.output_dim = (layer.output_dim as f32
                             * (0.8 + rng.random_f64() as f32 * 0.4))
@@ -1019,9 +1022,9 @@ impl NASProcessor {
                 if layer_count > 0 {
                     if let Some(layer) = architecture
                         .layers
-                        .get_mut(rng.random_range(0, layer_count))
+                        .get_mut(rng.random_range(0..layer_count))
                     {
-                        layer.layer_type = match rng.random_range(0, 4) {
+                        layer.layer_type = match rng.random_range(0..4) {
                             0 => LayerType::Linear,
                             1 => LayerType::Attention,
                             2 => LayerType::Convolution,

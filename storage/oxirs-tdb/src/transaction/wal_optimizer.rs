@@ -5,7 +5,7 @@
 
 use crate::error::{Result, TdbError};
 use crate::transaction::wal::{LogEntry, LogRecord, Lsn};
-use bincode::{Decode, Encode};
+use oxicode::Decode;
 use parking_lot::{Mutex, RwLock};
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
@@ -218,7 +218,7 @@ impl WalOptimizer {
         let lsn = entry.lsn;
 
         // Serialize entry
-        let serialized = bincode::encode_to_vec(&entry, bincode::config::standard())
+        let serialized = oxicode::serde::encode_to_vec(&entry, oxicode::config::standard())
             .map_err(|e| TdbError::Serialization(e.to_string()))?;
 
         let original_size = serialized.len();

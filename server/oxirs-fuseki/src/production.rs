@@ -152,7 +152,7 @@ impl HttpCircuitBreaker {
     }
 
     pub fn is_request_allowed(&self) -> bool {
-        let state = self.state.read().unwrap();
+        let state = self.state.read().expect("lock poisoned");
         match *state {
             CircuitState::Closed => true,
             CircuitState::Open => false,
@@ -164,7 +164,7 @@ impl HttpCircuitBreaker {
     }
 
     pub fn record_success(&self) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().expect("lock poisoned");
         match *state {
             CircuitState::Closed => {
                 self.failures.store(0, Ordering::Relaxed);
@@ -182,7 +182,7 @@ impl HttpCircuitBreaker {
     }
 
     pub fn record_failure(&self) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().expect("lock poisoned");
         let failures = self.failures.fetch_add(1, Ordering::Relaxed) + 1;
 
         if failures >= self.config.failure_threshold {
@@ -192,7 +192,7 @@ impl HttpCircuitBreaker {
     }
 
     pub fn try_half_open(&self) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().expect("lock poisoned");
         if *state == CircuitState::Open {
             *state = CircuitState::HalfOpen;
             self.successes.store(0, Ordering::Relaxed);
@@ -200,7 +200,7 @@ impl HttpCircuitBreaker {
     }
 
     pub fn state(&self) -> String {
-        format!("{:?}", *self.state.read().unwrap())
+        format!("{:?}", *self.state.read().expect("lock poisoned"))
     }
 }
 
@@ -241,7 +241,7 @@ impl ServerPerformanceMonitor {
         // Record latency
         self.endpoint_latencies
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .entry(endpoint.to_string())
             .or_default()
             .push(latency);
@@ -249,7 +249,7 @@ impl ServerPerformanceMonitor {
         // Increment count
         self.endpoint_counts
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .entry(endpoint.to_string())
             .or_insert_with(|| AtomicU64::new(0))
             .fetch_add(1, Ordering::Relaxed);
@@ -257,7 +257,7 @@ impl ServerPerformanceMonitor {
         // Record status code
         self.status_codes
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .entry(status_code)
             .or_insert_with(|| AtomicU64::new(0))
             .fetch_add(1, Ordering::Relaxed);
@@ -265,7 +265,7 @@ impl ServerPerformanceMonitor {
         // Record request size
         self.request_sizes
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .entry(endpoint.to_string())
             .or_default()
             .push(request_size);
@@ -273,7 +273,7 @@ impl ServerPerformanceMonitor {
         // Record response size
         self.response_sizes
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .entry(endpoint.to_string())
             .or_default()
             .push(response_size);
@@ -289,10 +289,10 @@ impl ServerPerformanceMonitor {
     }
 
     pub fn get_endpoint_statistics(&self, endpoint: &str) -> EndpointStatistics {
-        let latencies = self.endpoint_latencies.read().unwrap();
-        let counts = self.endpoint_counts.read().unwrap();
-        let req_sizes = self.request_sizes.read().unwrap();
-        let resp_sizes = self.response_sizes.read().unwrap();
+        let latencies = self.endpoint_latencies.read().expect("lock poisoned");
+        let counts = self.endpoint_counts.read().expect("lock poisoned");
+        let req_sizes = self.request_sizes.read().expect("lock poisoned");
+        let resp_sizes = self.response_sizes.read().expect("lock poisoned");
 
         let latency_data = latencies.get(endpoint);
         let count = counts
@@ -375,7 +375,7 @@ impl ServerPerformanceMonitor {
     }
 
     pub fn get_global_statistics(&self) -> ServerStatistics {
-        let status_codes = self.status_codes.read().unwrap();
+        let status_codes = self.status_codes.read().expect("lock poisoned");
         let total_requests: u64 = status_codes
             .values()
             .map(|c| c.load(Ordering::Relaxed))
@@ -394,11 +394,14 @@ impl ServerPerformanceMonitor {
     }
 
     pub fn reset(&self) {
-        self.endpoint_latencies.write().unwrap().clear();
-        self.endpoint_counts.write().unwrap().clear();
-        self.status_codes.write().unwrap().clear();
-        self.request_sizes.write().unwrap().clear();
-        self.response_sizes.write().unwrap().clear();
+        self.endpoint_latencies
+            .write()
+            .expect("lock poisoned")
+            .clear();
+        self.endpoint_counts.write().expect("lock poisoned").clear();
+        self.status_codes.write().expect("lock poisoned").clear();
+        self.request_sizes.write().expect("lock poisoned").clear();
+        self.response_sizes.write().expect("lock poisoned").clear();
         self.timeouts.store(0, Ordering::Relaxed);
         self.errors.store(0, Ordering::Relaxed);
     }
@@ -448,7 +451,7 @@ impl RequestRateLimiter {
             return Ok(());
         }
 
-        let mut window_start = self.window_start.write().unwrap();
+        let mut window_start = self.window_start.write().expect("lock poisoned");
         let now = Instant::now();
         let elapsed = now.duration_since(*window_start);
 
@@ -523,7 +526,7 @@ impl ServerHealth {
     }
 
     pub fn register_check(&self, name: &str) {
-        self.checks.write().unwrap().insert(
+        self.checks.write().expect("lock poisoned").insert(
             name.to_string(),
             HealthCheck {
                 name: name.to_string(),
@@ -535,7 +538,7 @@ impl ServerHealth {
     }
 
     pub fn update_check(&self, name: &str, status: HealthStatus, message: String) {
-        if let Some(check) = self.checks.write().unwrap().get_mut(name) {
+        if let Some(check) = self.checks.write().expect("lock poisoned").get_mut(name) {
             check.status = status;
             check.last_check = SystemTime::now();
             check.message = message;
@@ -569,7 +572,7 @@ impl ServerHealth {
     }
 
     pub fn get_overall_status(&self) -> HealthStatus {
-        let checks = self.checks.read().unwrap();
+        let checks = self.checks.read().expect("lock poisoned");
 
         if checks.is_empty() {
             return HealthStatus::Unknown;
@@ -596,7 +599,12 @@ impl ServerHealth {
     }
 
     pub fn get_checks(&self) -> Vec<HealthCheck> {
-        self.checks.read().unwrap().values().cloned().collect()
+        self.checks
+            .read()
+            .expect("lock poisoned")
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub fn perform_all_checks(&self) {

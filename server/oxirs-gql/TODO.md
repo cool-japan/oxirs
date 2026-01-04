@@ -28,11 +28,11 @@
 - **Code Generation** ✅ NEW: Generate client code for TypeScript, Rust, Python, Go, Java, C#, Swift
 - **Live Queries** ✅ NEW: Automatic query re-execution when RDF data changes
 - **Schema Documentation** ✅ NEW: Generate Markdown, HTML, JSON, and OpenAPI docs from schema
-- **Released on crates.io**: `oxirs-gql = "0.1.0-rc.1"`
+- **Released on crates.io**: `oxirs-gql = "0.1.0-rc.2"`
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Release Targets (v0.1.0-rc.1 - December 2025) ✅ COMPLETED
+### Release Targets (v0.1.0-rc.2 - December 2025) ✅ COMPLETED
 
 #### Schema Generation ✅ COMPLETED
 - [x] Advanced schema generation from RDFS/OWL (owl_enhanced_schema.rs - 984 lines)
@@ -880,7 +880,7 @@
 ## 📊 Implementation Metrics
 
 ### v0.1.0 to v0.5.0 Journey
-- **Start (v0.1.0-rc.1)**: 417 tests, ~50K lines
+- **Start (v0.1.0-rc.2)**: 417 tests, ~50K lines
 - **v0.2.0**: 654 tests, ~75K lines
 - **v0.3.0**: 734 tests, ~79.6K lines
 - **v0.4.0**: 834 tests, ~85K lines

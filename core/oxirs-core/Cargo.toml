@@ -11,6 +11,10 @@ keywords = ["rdf", "sparql", "semantic-web", "triple-store", "knowledge-graph"]
 categories = ["database", "data-structures", "parsing"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 # OxiGraph parser dependencies (upgraded to latest versions)
 oxttl.workspace = true         # Turtle, N-Triples, N-Quads, TriG, N3 parsers (v0.2.1)
@@ -69,7 +73,7 @@ urlencoding = "2.1"
 
 # Storage engine dependencies
 rocksdb = { workspace = true, optional = true }
-bincode = "2.0"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 lru = "0.16"
 glob = "0.3"
 
@@ -113,7 +117,7 @@ icu_properties = "1.5"
 [dev-dependencies]
 criterion.workspace = true
 tokio = { workspace = true, features = ["test-util", "rt", "io-util", "macros"] }
-tempfile = "3.23"
+tempfile = "3.24"
 
 [features]
 default = ["serde", "parallel", "rdf-12", "rdf-star", "sparql-12"]

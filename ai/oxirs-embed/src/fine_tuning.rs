@@ -400,7 +400,7 @@ impl FineTuningManager {
 
         // Shuffle indices
         for i in (1..indices.len()).rev() {
-            let j = rng.random_range(0, i + 1);
+            let j = rng.random_range(0..i + 1);
             indices.swap(i, j);
         }
 

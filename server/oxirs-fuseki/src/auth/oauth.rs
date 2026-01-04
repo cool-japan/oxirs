@@ -585,7 +585,7 @@ fn generate_code_verifier() -> String {
 
     (0..128)
         .map(|_| {
-            let idx = rng.random_range(0, CHARSET.len());
+            let idx = rng.random_range(0..CHARSET.len());
             CHARSET[idx] as char
         })
         .collect()

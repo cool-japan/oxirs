@@ -809,7 +809,7 @@ impl QualityForecastingModel {
         let fan_out = 128.0; // Approximate fan-out
         let limit = (6.0_f64 / (fan_in + fan_out)).sqrt();
 
-        random.random_range(-limit, limit)
+        random.random_range(-limit..limit)
     }
 
     /// Calculate advanced model accuracy with cross-validation
@@ -973,7 +973,12 @@ impl QualityForecastingModel {
                 let intercept = self
                     .model_parameters
                     .get(&format!("{metric_name}_intercept"))
-                    .unwrap_or(&train_data.last().unwrap().value);
+                    .unwrap_or(
+                        &train_data
+                            .last()
+                            .expect("train_data validated to be non-empty")
+                            .value,
+                    );
 
                 Ok(intercept + slope)
             }
@@ -985,7 +990,10 @@ impl QualityForecastingModel {
                     .unwrap_or(&0.3);
 
                 // Simple exponential smoothing prediction
-                let last_value = train_data.last().unwrap().value;
+                let last_value = train_data
+                    .last()
+                    .expect("train_data validated to be non-empty")
+                    .value;
                 Ok(last_value * (1.0 + alpha * 0.1))
             }
 

@@ -274,7 +274,12 @@ fn to_camel_case_suggestion(s: &str) -> String {
             // Capitalize first letter of subsequent parts
             let mut chars = part.chars();
             if let Some(first) = chars.next() {
-                result.push(first.to_uppercase().next().unwrap());
+                result.push(
+                    first
+                        .to_uppercase()
+                        .next()
+                        .expect("to_uppercase() always returns at least one character"),
+                );
                 result.push_str(&chars.as_str().to_lowercase());
             }
         }
@@ -339,7 +344,12 @@ pub fn validate_aspect_name(aspect: &Aspect) -> Result<()> {
     }
 
     // First character should be uppercase
-    if !name.chars().next().unwrap().is_uppercase() {
+    if !name
+        .chars()
+        .next()
+        .expect("name should not be empty (validated earlier)")
+        .is_uppercase()
+    {
         return Err(SammError::ValidationError(format!(
             "Aspect name '{}' should start with an uppercase letter (PascalCase)",
             name
@@ -372,7 +382,12 @@ pub fn validate_property_names(aspect: &Aspect) -> Result<()> {
         }
 
         // First character should be lowercase
-        if !name.chars().next().unwrap().is_lowercase() {
+        if !name
+            .chars()
+            .next()
+            .expect("property name should not be empty")
+            .is_lowercase()
+        {
             return Err(SammError::ValidationError(format!(
                 "Property name '{}' should start with a lowercase letter (camelCase)",
                 name

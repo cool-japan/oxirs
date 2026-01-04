@@ -548,7 +548,7 @@ fn compute_aggregation(values: &[f64], function: &AggregationFunction) -> Option
         }
         AggregationFunction::Median => {
             let mut sorted = values.to_vec();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let mid = sorted.len() / 2;
             if sorted.len() % 2 == 0 {
                 Some((sorted[mid - 1] + sorted[mid]) / 2.0)
@@ -558,14 +558,16 @@ fn compute_aggregation(values: &[f64], function: &AggregationFunction) -> Option
         }
         AggregationFunction::Percentile(p) => {
             let mut sorted = values.to_vec();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let index = ((*p / 100.0) * (sorted.len() - 1) as f64).round() as usize;
             sorted.get(index).copied()
         }
         AggregationFunction::Rate => {
             // Simple rate calculation: (last - first) / time_span
             if values.len() >= 2 {
-                Some(values.last().unwrap() - values.first().unwrap())
+                let last = values.last().expect("values has at least 2 elements");
+                let first = values.first().expect("values has at least 2 elements");
+                Some(last - first)
             } else {
                 None
             }
@@ -622,7 +624,7 @@ fn compute_statistics(values: &[f64]) -> StatisticalSummary {
     let std_dev = variance.sqrt();
 
     let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     let min = sorted[0];
     let max = sorted[count - 1];
@@ -949,7 +951,11 @@ mod tests {
             }
 
             // Deduplicate and rank anomalies by confidence
-            anomalies.sort_by(|a, b| b.confidence_score.partial_cmp(&a.confidence_score).unwrap());
+            anomalies.sort_by(|a, b| {
+                b.confidence_score
+                    .partial_cmp(&a.confidence_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             anomalies.dedup_by(|a, b| a.timestamp == b.timestamp && a.metric == b.metric);
 
             Ok(anomalies)
@@ -996,13 +1002,15 @@ mod tests {
                             (
                                 "z_score".to_string(),
                                 serde_json::Value::Number(
-                                    serde_json::Number::from_f64(z_score).unwrap(),
+                                    serde_json::Number::from_f64(z_score)
+                                        .unwrap_or_else(|| serde_json::Number::from(0)),
                                 ),
                             ),
                             (
                                 "threshold".to_string(),
                                 serde_json::Value::Number(
-                                    serde_json::Number::from_f64(threshold).unwrap(),
+                                    serde_json::Number::from_f64(threshold)
+                                        .unwrap_or_else(|| serde_json::Number::from(0)),
                                 ),
                             ),
                         ]),
@@ -1085,7 +1093,10 @@ mod tests {
             let intercept = (sum_y - slope * sum_x) / n;
 
             // Generate forecast timestamps
-            let last_time = data_points.last().unwrap().timestamp;
+            let last_time = data_points
+                .last()
+                .expect("data_points validated to have at least 2 elements")
+                .timestamp;
             let forecast_hours = config.prediction_horizon_hours as i64;
             let mut forecast_timestamps = Vec::new();
             let mut predicted_values = Vec::new();

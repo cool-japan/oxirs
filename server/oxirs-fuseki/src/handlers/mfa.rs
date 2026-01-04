@@ -766,7 +766,7 @@ fn parse_mfa_type(type_str: &str) -> FusekiResult<MfaType> {
 
 fn generate_sms_verification_code() -> String {
     let mut rng = Random::seed(42);
-    format!("{:06}", rng.random_range(100000, 1000000))
+    format!("{:06}", rng.random_range(100000..1000000))
 }
 
 fn generate_email_verification_code() -> String {
@@ -774,7 +774,7 @@ fn generate_email_verification_code() -> String {
     let chars: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     (0..8)
         .map(|_| {
-            let idx = rng.random_range(0, chars.len());
+            let idx = rng.random_range(0..chars.len());
             chars[idx] as char
         })
         .collect()
@@ -797,7 +797,7 @@ fn generate_new_backup_codes() -> Vec<String> {
             let code: String = (0..8)
                 .map(|_| {
                     let chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-                    chars[rng.random_range(0, chars.len())] as char
+                    chars[rng.random_range(0..chars.len())] as char
                 })
                 .collect();
             code

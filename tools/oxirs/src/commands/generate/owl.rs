@@ -682,7 +682,7 @@ fn generate_owl_property_values<R: scirs2_core::RngCore>(
             }
             OwlPropertyType::Annotation => {
                 // Annotation properties can be either literals or IRIs
-                if rng.random_range(0, 2) == 0 {
+                if rng.random_range(0..2) == 0 {
                     // Generate literal
                     generate_literal_value(&format!("{}string", XSD_NS), rng)
                 } else {
@@ -715,12 +715,12 @@ fn generate_literal_value<R: scirs2_core::RngCore>(
         dt if dt == format!("{}integer", XSD_NS) => rng.gen_range(0..10000).to_string(),
         dt if dt == format!("{}int", XSD_NS) => rng.gen_range(-1000..1000).to_string(),
         dt if dt == format!("{}decimal", XSD_NS) || dt == format!("{}double", XSD_NS) => {
-            format!("{:.2}", rng.random_range(0, 10000) as f64 / 10.0)
+            format!("{:.2}", rng.random_range(0..10000) as f64 / 10.0)
         }
         dt if dt == format!("{}float", XSD_NS) => {
-            format!("{:.2}", rng.random_range(0, 1000) as f32 / 10.0)
+            format!("{:.2}", rng.random_range(0..1000) as f32 / 10.0)
         }
-        dt if dt == format!("{}boolean", XSD_NS) => if rng.random_range(0, 2) == 0 {
+        dt if dt == format!("{}boolean", XSD_NS) => if rng.random_range(0..2) == 0 {
             "true"
         } else {
             "false"

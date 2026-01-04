@@ -443,7 +443,7 @@ impl QueryRouter {
                 plan,
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("SystemTime should be after UNIX_EPOCH")
                     .as_secs(),
                 access_count: 1,
             },

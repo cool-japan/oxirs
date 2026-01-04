@@ -169,8 +169,8 @@ impl ServiceDescription {
     /// Generate SPARQL query result format
     pub fn to_query_result(&self) -> QueryResult {
         let variables = vec![
-            Variable::new("feature").unwrap(),
-            Variable::new("value").unwrap(),
+            Variable::new("feature").expect("hardcoded variable name should be valid"),
+            Variable::new("value").expect("hardcoded variable name should be valid"),
         ];
 
         let mut solutions = Vec::new();
@@ -179,7 +179,7 @@ impl ServiceDescription {
         for feature in &self.features {
             let mut binding = HashMap::new();
             binding.insert(
-                Variable::new("feature").unwrap(),
+                Variable::new("feature").expect("hardcoded variable name should be valid"),
                 crate::algebra::Term::Literal(crate::algebra::Literal {
                     value: "feature".to_string(),
                     language: None,
@@ -187,7 +187,7 @@ impl ServiceDescription {
                 }),
             );
             binding.insert(
-                Variable::new("value").unwrap(),
+                Variable::new("value").expect("hardcoded variable name should be valid"),
                 crate::algebra::Term::Literal(crate::algebra::Literal {
                     value: feature.as_iri().to_string(),
                     language: None,

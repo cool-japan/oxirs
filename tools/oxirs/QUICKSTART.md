@@ -6,7 +6,7 @@
 
 ```bash
 # Install from crates.io
-cargo install oxirs --version 0.1.0-rc.1
+cargo install oxirs --version 0.1.0-rc.2
 
 # Or build from source
 git clone https://github.com/cool-japan/oxirs

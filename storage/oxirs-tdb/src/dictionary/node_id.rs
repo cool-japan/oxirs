@@ -4,7 +4,7 @@
 //! and inline values for small, frequently-used terms. This significantly reduces
 //! dictionary lookups for common values.
 
-use bincode::{Decode, Encode};
+use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -67,9 +67,7 @@ impl InlineType {
 /// - Eliminates dictionary lookups for ~30-40% of common values
 /// - Reduces memory pressure on dictionary cache
 /// - Improves query performance for predicates with many small literals
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NodeId(u64);
 
 impl NodeId {
@@ -299,9 +297,9 @@ mod tests {
     #[test]
     fn test_node_id_serialization() {
         let id = NodeId::new(123);
-        let serialized = bincode::encode_to_vec(id, bincode::config::standard()).unwrap();
+        let serialized = oxicode::serde::encode_to_vec(&id, oxicode::config::standard()).unwrap();
         let deserialized: NodeId =
-            bincode::decode_from_slice(&serialized, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&serialized, oxicode::config::standard())
                 .unwrap()
                 .0;
         assert_eq!(id, deserialized);
@@ -459,9 +457,9 @@ mod tests {
     #[test]
     fn test_inline_int_serialization() {
         let id = NodeId::inline_int(-42);
-        let serialized = bincode::encode_to_vec(id, bincode::config::standard()).unwrap();
+        let serialized = oxicode::serde::encode_to_vec(&id, oxicode::config::standard()).unwrap();
         let deserialized: NodeId =
-            bincode::decode_from_slice(&serialized, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&serialized, oxicode::config::standard())
                 .unwrap()
                 .0;
         assert_eq!(id, deserialized);
@@ -471,9 +469,9 @@ mod tests {
     #[test]
     fn test_inline_bool_serialization() {
         let id = NodeId::inline_bool(true);
-        let serialized = bincode::encode_to_vec(id, bincode::config::standard()).unwrap();
+        let serialized = oxicode::serde::encode_to_vec(&id, oxicode::config::standard()).unwrap();
         let deserialized: NodeId =
-            bincode::decode_from_slice(&serialized, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&serialized, oxicode::config::standard())
                 .unwrap()
                 .0;
         assert_eq!(id, deserialized);
@@ -483,9 +481,9 @@ mod tests {
     #[test]
     fn test_inline_string_serialization() {
         let id = NodeId::inline_short_string("test").unwrap();
-        let serialized = bincode::encode_to_vec(id, bincode::config::standard()).unwrap();
+        let serialized = oxicode::serde::encode_to_vec(&id, oxicode::config::standard()).unwrap();
         let deserialized: NodeId =
-            bincode::decode_from_slice(&serialized, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&serialized, oxicode::config::standard())
                 .unwrap()
                 .0;
         assert_eq!(id, deserialized);

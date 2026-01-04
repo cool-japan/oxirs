@@ -139,7 +139,7 @@ impl PromptBuilder {
     pub fn user_template(mut self, template: &str) -> Self {
         self.template.user_template = template.to_string();
         // Extract placeholders
-        let re = regex::Regex::new(r"\{(\w+)\}").unwrap();
+        let re = regex::Regex::new(r"\{(\w+)\}").expect("placeholder regex pattern is valid");
         self.template.placeholders = re
             .captures_iter(template)
             .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))

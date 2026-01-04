@@ -540,7 +540,7 @@ impl PerformanceMonitor {
 
         // Update metrics
         {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("rwlock should not be poisoned");
             metrics.latency.total_measurements += 1;
 
             // Update min/max
@@ -554,7 +554,10 @@ impl PerformanceMonitor {
 
             // Calculate percentiles from window
             let mut sorted_latencies: Vec<f64> = window.iter().copied().collect();
-            sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted_latencies.sort_by(|a, b| {
+                a.partial_cmp(b)
+                    .expect("latency values should be comparable")
+            });
 
             if !sorted_latencies.is_empty() {
                 let len = sorted_latencies.len();
@@ -582,7 +585,7 @@ impl PerformanceMonitor {
 
         // Update metrics
         {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("rwlock should not be poisoned");
             metrics.throughput.requests_per_second = requests_per_second;
             metrics.throughput.peak_throughput =
                 metrics.throughput.peak_throughput.max(requests_per_second);
@@ -610,7 +613,7 @@ impl PerformanceMonitor {
 
         // Update metrics
         {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("rwlock should not be poisoned");
             metrics.errors.total_errors += 1;
             metrics.errors.last_error = Some(error_event.timestamp);
 
@@ -651,7 +654,7 @@ impl PerformanceMonitor {
     /// Update resource metrics
     pub async fn update_resource_metrics(&self, resources: ResourceMetrics) {
         {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("rwlock should not be poisoned");
 
             // Update peak values
             metrics.resources.peak_memory_mb = metrics
@@ -675,7 +678,7 @@ impl PerformanceMonitor {
     /// Update cache metrics
     pub async fn update_cache_metrics(&self, cache_metrics: CacheMetrics) {
         {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("rwlock should not be poisoned");
             metrics.cache = cache_metrics.clone();
         }
 
@@ -705,7 +708,10 @@ impl PerformanceMonitor {
 
     /// Get current metrics snapshot
     pub fn get_metrics(&self) -> PerformanceMetrics {
-        self.metrics.read().unwrap().clone()
+        self.metrics
+            .read()
+            .expect("rwlock should not be poisoned")
+            .clone()
     }
 
     /// Add alert handler
@@ -729,7 +735,7 @@ impl PerformanceMonitor {
 
                 // Update metrics
                 {
-                    let mut metrics = metrics.write().unwrap();
+                    let mut metrics = metrics.write().expect("rwlock should not be poisoned");
                     metrics.resources = system_metrics;
                 }
 
@@ -755,7 +761,7 @@ impl PerformanceMonitor {
 
                 // Update metrics
                 {
-                    let mut metrics = metrics.write().unwrap();
+                    let mut metrics = metrics.write().expect("rwlock should not be poisoned");
                     metrics.drift = drift_metrics;
                     metrics.drift.last_drift_check = Utc::now();
                 }
@@ -791,7 +797,7 @@ impl PerformanceMonitor {
 
                 // Update metrics
                 {
-                    let mut metrics = metrics.write().unwrap();
+                    let mut metrics = metrics.write().expect("rwlock should not be poisoned");
                     metrics.quality.avg_quality_score = quality_assessment.quality_score;
                     metrics.quality.last_assessment = quality_assessment.timestamp;
 
@@ -832,7 +838,10 @@ impl PerformanceMonitor {
                 interval_timer.tick().await;
 
                 // Export metrics
-                let current_metrics = metrics.read().unwrap().clone();
+                let current_metrics = metrics
+                    .read()
+                    .expect("rwlock should not be poisoned")
+                    .clone();
 
                 if export_config.enable_prometheus {
                     Self::export_prometheus_metrics(&current_metrics).await;
@@ -877,8 +886,14 @@ impl PerformanceMonitor {
         }
 
         // Calculate quality drift
-        let recent_quality = history.back().unwrap().quality_score;
-        let baseline_quality = history.front().unwrap().quality_score;
+        let recent_quality = history
+            .back()
+            .expect("quality history should not be empty")
+            .quality_score;
+        let baseline_quality = history
+            .front()
+            .expect("quality history should not be empty")
+            .quality_score;
         let quality_drift = (recent_quality - baseline_quality).abs() / baseline_quality;
 
         // Simulate other drift metrics
@@ -1060,7 +1075,7 @@ impl PerformanceMonitor {
 
     /// Get performance summary
     pub fn get_performance_summary(&self) -> String {
-        let metrics = self.metrics.read().unwrap();
+        let metrics = self.metrics.read().expect("rwlock should not be poisoned");
 
         format!(
             "Performance Summary:\n\

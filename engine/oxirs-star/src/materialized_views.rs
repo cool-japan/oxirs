@@ -248,7 +248,7 @@ impl MaterializedView {
                     .data
                     .values()
                     .map(|ann| ann.trust_score())
-                    .min_by(|a, b| a.partial_cmp(b).unwrap())
+                    .min_by(|a, b| a.partial_cmp(b).expect("f64 comparison"))
                     .unwrap_or(0.0);
                 AggregatedResult::Min(min)
             }
@@ -258,7 +258,7 @@ impl MaterializedView {
                     .data
                     .values()
                     .map(|ann| ann.trust_score())
-                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .max_by(|a, b| a.partial_cmp(b).expect("f64 comparison"))
                     .unwrap_or(1.0);
                 AggregatedResult::Max(max)
             }
@@ -340,11 +340,14 @@ impl MaterializedViewManager {
 
         // Initial refresh
         {
-            let source_data = self.source_data.read().unwrap();
+            let source_data = self.source_data.read().expect("lock poisoned");
             view.refresh(&source_data);
         } // Drop read guard
 
-        self.views.write().unwrap().insert(name.clone(), view);
+        self.views
+            .write()
+            .expect("lock poisoned")
+            .insert(name.clone(), view);
 
         info!("Created materialized view: {}", name);
         self.update_statistics();
@@ -354,7 +357,7 @@ impl MaterializedViewManager {
 
     /// Drop a materialized view
     pub fn drop_view(&mut self, name: &str) -> StarResult<()> {
-        self.views.write().unwrap().remove(name);
+        self.views.write().expect("lock poisoned").remove(name);
 
         // Remove from dependency graph
         self.dependency_graph.remove(name);
@@ -374,7 +377,7 @@ impl MaterializedViewManager {
     ) -> StarResult<()> {
         self.source_data
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .insert(triple_hash, annotation);
 
         // Refresh views that need immediate updates
@@ -385,7 +388,7 @@ impl MaterializedViewManager {
 
     /// Query a specific view
     pub fn query_view(&self, view_name: &str) -> Option<Vec<TripleAnnotation>> {
-        let mut views = self.views.write().unwrap();
+        let mut views = self.views.write().expect("lock poisoned");
 
         if let Some(view) = views.get_mut(view_name) {
             view.hit_count += 1;
@@ -397,7 +400,7 @@ impl MaterializedViewManager {
 
     /// Get aggregated result from a view
     pub fn get_aggregated_result(&self, view_name: &str) -> Option<AggregatedResult> {
-        let mut views = self.views.write().unwrap();
+        let mut views = self.views.write().expect("lock poisoned");
 
         if let Some(view) = views.get_mut(view_name) {
             view.hit_count += 1;
@@ -409,8 +412,8 @@ impl MaterializedViewManager {
 
     /// Manually refresh a view
     pub fn refresh_view(&mut self, view_name: &str) -> StarResult<()> {
-        let source_data = self.source_data.read().unwrap();
-        let mut views = self.views.write().unwrap();
+        let source_data = self.source_data.read().expect("lock poisoned");
+        let mut views = self.views.write().expect("lock poisoned");
 
         if let Some(view) = views.get_mut(view_name) {
             view.refresh(&source_data);
@@ -430,8 +433,8 @@ impl MaterializedViewManager {
 
     /// Refresh all views
     pub fn refresh_all_views(&mut self) -> StarResult<()> {
-        let source_data = self.source_data.read().unwrap();
-        let mut views = self.views.write().unwrap();
+        let source_data = self.source_data.read().expect("lock poisoned");
+        let mut views = self.views.write().expect("lock poisoned");
 
         for view in views.values_mut() {
             view.refresh(&source_data);
@@ -441,8 +444,8 @@ impl MaterializedViewManager {
     }
 
     fn refresh_immediate_views(&mut self) -> StarResult<()> {
-        let source_data = self.source_data.read().unwrap();
-        let mut views = self.views.write().unwrap();
+        let source_data = self.source_data.read().expect("lock poisoned");
+        let mut views = self.views.write().expect("lock poisoned");
 
         for view in views.values_mut() {
             if matches!(view.definition.refresh_strategy, RefreshStrategy::Immediate) {
@@ -459,7 +462,7 @@ impl MaterializedViewManager {
     }
 
     fn update_statistics(&mut self) {
-        let views = self.views.read().unwrap();
+        let views = self.views.read().expect("lock poisoned");
 
         self.stats.view_count = views.len();
         self.stats.total_hits = views.values().map(|v| v.hit_count).sum();
@@ -481,7 +484,12 @@ impl MaterializedViewManager {
 
     /// List all view names
     pub fn list_views(&self) -> Vec<String> {
-        self.views.read().unwrap().keys().cloned().collect()
+        self.views
+            .read()
+            .expect("lock poisoned")
+            .keys()
+            .cloned()
+            .collect()
     }
 }
 

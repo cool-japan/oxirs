@@ -199,7 +199,7 @@ async fn setup_federation_environment(config: &FederationBenchmarkConfig) -> Res
                 supports_joins: rng.random_bool(),
                 supports_aggregations: rng.random_bool(),
                 supports_filters: true,
-                max_concurrent_queries: rng.random_range(1, 20),
+                max_concurrent_queries: rng.random_range(1..20),
             },
             performance_profile: PerformanceProfile {
                 average_latency_ms: rng.random_range(
@@ -209,7 +209,7 @@ async fn setup_federation_environment(config: &FederationBenchmarkConfig) -> Res
                 throughput_queries_per_sec: rng.random_range(10.0, 100.0),
                 reliability_percent: rng.random_range(85.0, 99.9),
             },
-            data_size: rng.random_range(1000, 1000000),
+            data_size: rng.random_range(1000..1000000),
         };
         endpoints.push(endpoint);
     }
@@ -366,7 +366,7 @@ fn generate_test_query(complexity: &QueryComplexity, endpoint_count: usize) -> T
             left_endpoint: format!("endpoint_{}", i - 1),
             right_endpoint: format!("endpoint_{}", i),
             join_type: "INNER".to_string(),
-            estimated_cardinality: rng.random_range(100, 10000),
+            estimated_cardinality: rng.random_range(100..10000),
         });
     }
 
@@ -503,7 +503,7 @@ async fn create_optimized_execution_plan(
 
     for join in &optimized_join_order {
         let join_key = format!("{}_{}", join.left_endpoint, join.right_endpoint);
-        join_cardinality_predictions.insert(join_key, rng.random_range(50, 5000));
+        join_cardinality_predictions.insert(join_key, rng.random_range(50..5000));
     }
 
     let ml_predictions = MLPredictions {
@@ -531,7 +531,7 @@ async fn create_optimized_execution_plan(
 fn shuffle_joins_optimally<R: rand::Rng>(joins: &mut [JoinPattern], rng: &mut Random<R>) {
     // Use scirs2's Fisher-Yates shuffle for optimal join ordering
     for i in (1..joins.len()).rev() {
-        let j = rng.random_range(0, i + 1);
+        let j = rng.random_range(0..i + 1);
         if i != j {
             joins.swap(i, j);
         }

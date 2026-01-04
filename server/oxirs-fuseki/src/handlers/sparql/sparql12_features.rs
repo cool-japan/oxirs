@@ -278,7 +278,10 @@ impl PropertyPathOptimizer {
     pub async fn optimize_path(&self, path: &str) -> FusekiResult<OptimizedPath> {
         // Check cache first
         {
-            let cache = self.path_cache.read().unwrap();
+            let cache = self
+                .path_cache
+                .read()
+                .expect("rwlock should not be poisoned");
             if let Some(cached) = cache.get(path) {
                 return Ok(cached.clone());
             }
@@ -295,7 +298,10 @@ impl PropertyPathOptimizer {
 
         // Cache the result
         {
-            let mut cache = self.path_cache.write().unwrap();
+            let mut cache = self
+                .path_cache
+                .write()
+                .expect("rwlock should not be poisoned");
             cache.insert(path.to_string(), optimized.clone());
         }
 
@@ -432,7 +438,10 @@ impl AggregationEngine {
     async fn optimize_aggregation_function(&self, function: &str) -> FusekiResult<Option<String>> {
         // Check cache first
         {
-            let cache = self.optimization_cache.read().unwrap();
+            let cache = self
+                .optimization_cache
+                .read()
+                .expect("rwlock should not be poisoned");
             if let Some(cached) = cache.get(function) {
                 return Ok(Some(cached.optimized_expr.clone()));
             }
@@ -449,7 +458,10 @@ impl AggregationEngine {
 
         // Cache the result
         if let Some(ref opt) = optimized {
-            let mut cache = self.optimization_cache.write().unwrap();
+            let mut cache = self
+                .optimization_cache
+                .write()
+                .expect("rwlock should not be poisoned");
             cache.insert(
                 function.to_string(),
                 OptimizedAggregation {
@@ -559,7 +571,10 @@ impl SubqueryOptimizer {
     async fn optimize_subquery(&self, subquery: &str) -> FusekiResult<Option<String>> {
         // Check cache
         {
-            let cache = self.subquery_cache.read().unwrap();
+            let cache = self
+                .subquery_cache
+                .read()
+                .expect("rwlock should not be poisoned");
             if let Some(cached) = cache.get(subquery) {
                 return Ok(Some(cached.optimized_query.clone()));
             }
@@ -579,7 +594,10 @@ impl SubqueryOptimizer {
 
         // Cache result
         if let Some(ref opt) = optimized {
-            let mut cache = self.subquery_cache.write().unwrap();
+            let mut cache = self
+                .subquery_cache
+                .write()
+                .expect("rwlock should not be poisoned");
             cache.insert(
                 subquery.to_string(),
                 OptimizedSubquery {
@@ -757,7 +775,10 @@ impl BindOptimizer {
     fn optimize_bind_clause(&self, bind_clause: &str) -> FusekiResult<Option<String>> {
         // Check cache
         {
-            let cache = self.expression_cache.read().unwrap();
+            let cache = self
+                .expression_cache
+                .read()
+                .expect("rwlock should not be poisoned");
             if let Some(cached) = cache.get(bind_clause) {
                 return Ok(Some(cached.clone()));
             }
@@ -774,7 +795,10 @@ impl BindOptimizer {
 
         // Cache result
         if let Some(ref opt) = optimized {
-            let mut cache = self.expression_cache.write().unwrap();
+            let mut cache = self
+                .expression_cache
+                .write()
+                .expect("rwlock should not be poisoned");
             cache.insert(bind_clause.to_string(), opt.clone());
         }
 
@@ -867,7 +891,10 @@ impl ValuesOptimizer {
     fn optimize_values_clause(&self, values_clause: &str) -> FusekiResult<Option<String>> {
         // Check cache
         {
-            let cache = self.values_cache.read().unwrap();
+            let cache = self
+                .values_cache
+                .read()
+                .expect("rwlock should not be poisoned");
             if let Some(cached) = cache.get(values_clause) {
                 return Ok(Some(cached.optimized_values.clone()));
             }
@@ -882,7 +909,10 @@ impl ValuesOptimizer {
 
         // Cache result
         if let Some(ref opt) = optimized {
-            let mut cache = self.values_cache.write().unwrap();
+            let mut cache = self
+                .values_cache
+                .write()
+                .expect("rwlock should not be poisoned");
             cache.insert(
                 values_clause.to_string(),
                 OptimizedValues {

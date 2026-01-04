@@ -51,7 +51,7 @@ impl ProgressTracker {
                 pb.set_style(
                     ProgressStyle::default_spinner()
                         .template("{spinner:.green} {prefix:>12.cyan.dim} {msg}")
-                        .unwrap()
+                        .expect("progress bar template should be valid")
                         .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
                 );
                 pb.enable_steady_tick(Duration::from_millis(100));
@@ -62,7 +62,7 @@ impl ProgressTracker {
                 pb.set_style(
                     ProgressStyle::default_bar()
                         .template("{spinner:.green} {prefix:>12.cyan.dim} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
-                        .unwrap()
+                        .expect("progress bar template should be valid")
                         .progress_chars("=>-"),
                 );
                 pb
@@ -72,7 +72,7 @@ impl ProgressTracker {
                 pb.set_style(
                     ProgressStyle::default_bar()
                         .template("{spinner:.green} {prefix:>12.cyan.dim} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {msg}")
-                        .unwrap()
+                        .expect("progress bar template should be valid")
                         .progress_chars("=>-"),
                 );
                 pb
@@ -82,7 +82,7 @@ impl ProgressTracker {
                 pb.set_style(
                     ProgressStyle::default_spinner()
                         .template("{spinner:.green} {prefix:>12.cyan.dim} {pos} {msg}")
-                        .unwrap(),
+                        .expect("progress bar template should be valid"),
                 );
                 pb.enable_steady_tick(Duration::from_millis(100));
                 pb
@@ -160,7 +160,7 @@ impl ProgressBuilder {
     pub fn bytes_style(mut self) -> Self {
         self.style = ProgressStyle::default_bar()
             .template("{spinner:.green} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {msg}")
-            .unwrap()
+            .expect("progress bar template should be valid")
             .progress_chars("=>-");
         self
     }
@@ -169,7 +169,7 @@ impl ProgressBuilder {
     pub fn spinner_style(mut self) -> Self {
         self.style = ProgressStyle::default_spinner()
             .template("{spinner:.green} {msg}")
-            .unwrap();
+            .expect("progress bar template should be valid");
         self
     }
 
@@ -203,7 +203,7 @@ pub mod helpers {
             .with_style(
                 ProgressStyle::default_bar()
                     .template("{spinner:.green} {msg:30} [{bar:40.cyan/blue}] {pos}/{len} files")
-                    .unwrap()
+                    .expect("progress bar template should be valid")
                     .progress_chars("=>-"),
             )
             .build()
@@ -238,7 +238,7 @@ pub mod helpers {
                     .template(
                         "{spinner:.green} {msg:20} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%)",
                     )
-                    .unwrap()
+                    .expect("progress bar template should be valid")
                     .progress_chars("=>-"),
             )
             .build()

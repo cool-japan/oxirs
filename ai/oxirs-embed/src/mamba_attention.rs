@@ -330,9 +330,14 @@ impl LayerNorm {
     }
 
     pub fn forward(&self, x: &Array2<f32>) -> Result<Array2<f32>> {
-        let mean = x.mean_axis(Axis(1)).unwrap();
+        let mean = x
+            .mean_axis(Axis(1))
+            .expect("mean should succeed on valid axis");
         let centered = x - &mean.insert_axis(Axis(1));
-        let variance = centered.mapv(|x| x.powi(2)).mean_axis(Axis(1)).unwrap();
+        let variance = centered
+            .mapv(|x| x.powi(2))
+            .mean_axis(Axis(1))
+            .expect("mean should succeed on valid axis");
         let std = variance.mapv(|x| (x + self.eps).sqrt());
 
         let normalized = &centered / &std.insert_axis(Axis(1));
@@ -522,13 +527,13 @@ impl crate::EmbeddingModel for MambaEmbedding {
 
             for i in 0..num_entities {
                 for j in 0..self.config.dimensions {
-                    self.entity_embeddings[[i, j]] = rng.random_range(-0.1, 0.1);
+                    self.entity_embeddings[[i, j]] = rng.random_range(-0.1..0.1);
                 }
             }
 
             for i in 0..num_relations {
                 for j in 0..self.config.dimensions {
-                    self.relation_embeddings[[i, j]] = rng.random_range(-0.1, 0.1);
+                    self.relation_embeddings[[i, j]] = rng.random_range(-0.1..0.1);
                 }
             }
         }
@@ -621,7 +626,10 @@ impl crate::EmbeddingModel for MambaEmbedding {
             }
         }
 
-        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        predictions.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("prediction scores should be comparable")
+        });
         predictions.truncate(k);
 
         Ok(predictions)
@@ -641,7 +649,10 @@ impl crate::EmbeddingModel for MambaEmbedding {
             }
         }
 
-        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        predictions.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("prediction scores should be comparable")
+        });
         predictions.truncate(k);
 
         Ok(predictions)
@@ -661,7 +672,10 @@ impl crate::EmbeddingModel for MambaEmbedding {
             }
         }
 
-        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        predictions.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("prediction scores should be comparable")
+        });
         predictions.truncate(k);
 
         Ok(predictions)
@@ -692,20 +706,28 @@ impl crate::EmbeddingModel for MambaEmbedding {
         let relation_data: std::collections::HashMap<String, usize> = self.relations.clone();
 
         // Convert ndarray embeddings to vectors for JSON serialization
-        let entity_embeddings_data = self.entity_embeddings.as_slice().unwrap().to_vec();
-        let relation_embeddings_data = self.relation_embeddings.as_slice().unwrap().to_vec();
+        let entity_embeddings_data = self
+            .entity_embeddings
+            .as_slice()
+            .expect("array should be contiguous")
+            .to_vec();
+        let relation_embeddings_data = self
+            .relation_embeddings
+            .as_slice()
+            .expect("array should be contiguous")
+            .to_vec();
 
         // Serialize Mamba blocks parameters (first block as representative)
         let mamba_blocks_data = if let Some(first_block) = self.mamba_blocks.first() {
             serde_json::json!({
                 "config": first_block.config,
-                "in_proj": first_block.in_proj.as_slice().unwrap().to_vec(),
+                "in_proj": first_block.in_proj.as_slice().expect("array should be contiguous").to_vec(),
                 "in_proj_shape": first_block.in_proj.shape(),
-                "conv1d": first_block.conv1d.as_slice().unwrap().to_vec(),
+                "conv1d": first_block.conv1d.as_slice().expect("array should be contiguous").to_vec(),
                 "conv1d_shape": first_block.conv1d.shape(),
-                "a_log": first_block.a_log.as_slice().unwrap().to_vec(),
+                "a_log": first_block.a_log.as_slice().expect("array should be contiguous").to_vec(),
                 "a_log_shape": first_block.a_log.shape(),
-                "d": first_block.d.as_slice().unwrap().to_vec(),
+                "d": first_block.d.as_slice().expect("array should be contiguous").to_vec(),
                 "d_shape": first_block.d.shape(),
                 "num_blocks": self.mamba_blocks.len(),
             })

@@ -78,7 +78,7 @@ impl PyRdfStarStore {
     /// Parse and load RDF-star data from string
     #[pyo3(signature = (data, format = "turtle-star", graph = None, **kwargs))]
     fn load_data(&self, data: &str, format: &str, graph: Option<&str>, kwargs: Option<&PyDict>) -> PyResult<usize> {
-        let mut store = self.store.write().unwrap();
+        let mut store = self.store.write().expect("lock poisoned");
 
         let triples_count = match format.to_lowercase().as_str() {
             "turtle-star" | "ttls" => {
@@ -110,7 +110,7 @@ impl PyRdfStarStore {
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.total_triples += triples_count;
             stats.load_operations += 1;
         }
@@ -121,7 +121,7 @@ impl PyRdfStarStore {
     /// Load RDF-star data from file
     #[pyo3(signature = (file_path, format = None, graph = None, **kwargs))]
     fn load_file(&self, file_path: &str, format: Option<&str>, graph: Option<&str>, kwargs: Option<&PyDict>) -> PyResult<usize> {
-        let mut store = self.store.write().unwrap();
+        let mut store = self.store.write().expect("lock poisoned");
 
         // Auto-detect format from file extension if not provided
         let detected_format = format.unwrap_or_else(|| {
@@ -143,7 +143,7 @@ impl PyRdfStarStore {
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.total_triples += triples_count;
             stats.load_operations += 1;
         }
@@ -163,7 +163,7 @@ impl PyRdfStarStore {
         quoted_triple_object: Option<&str>,
         kwargs: Option<&PyDict>
     ) -> PyResult<()> {
-        let mut store = self.store.write().unwrap();
+        let mut store = self.store.write().expect("lock poisoned");
 
         // In a real implementation, we'd create and add the quoted triple
         store.add_quoted_triple(subject, predicate, object, quoted_triple_subject, quoted_triple_predicate, quoted_triple_object)
@@ -171,7 +171,7 @@ impl PyRdfStarStore {
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.total_triples += 1;
             stats.quoted_triples += 1;
         }
@@ -182,7 +182,7 @@ impl PyRdfStarStore {
     /// Query the store with SPARQL-star
     #[pyo3(signature = (query, **kwargs))]
     fn query(&self, query: &str, kwargs: Option<&PyDict>) -> PyResult<PyStarQueryResult> {
-        let store = self.store.read().unwrap();
+        let store = self.store.read().expect("lock poisoned");
         let executor = SparqlStarExecutor::new();
 
         let result = executor.execute_query(&store, query)
@@ -190,7 +190,7 @@ impl PyRdfStarStore {
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.query_operations += 1;
         }
 
@@ -200,7 +200,7 @@ impl PyRdfStarStore {
     /// Serialize store content to string
     #[pyo3(signature = (format = "turtle-star", graph = None, **kwargs))]
     fn serialize(&self, format: &str, graph: Option<&str>, kwargs: Option<&PyDict>) -> PyResult<String> {
-        let store = self.store.read().unwrap();
+        let store = self.store.read().expect("lock poisoned");
         let config = SerializationConfig::default();
 
         let serialized = match format.to_lowercase().as_str() {
@@ -233,7 +233,7 @@ impl PyRdfStarStore {
     /// Export store content to file
     #[pyo3(signature = (file_path, format = None, graph = None, **kwargs))]
     fn export_file(&self, file_path: &str, format: Option<&str>, graph: Option<&str>, kwargs: Option<&PyDict>) -> PyResult<()> {
-        let store = self.store.read().unwrap();
+        let store = self.store.read().expect("lock poisoned");
 
         // Auto-detect format from file extension if not provided
         let detected_format = format.unwrap_or_else(|| {
@@ -258,19 +258,19 @@ impl PyRdfStarStore {
 
     /// Get store statistics
     fn get_statistics(&self) -> PyStoreStatistics {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("lock poisoned");
         PyStoreStatistics { stats: stats.clone() }
     }
 
     /// Clear all data from the store
     fn clear(&self) -> PyResult<()> {
-        let mut store = self.store.write().unwrap();
+        let mut store = self.store.write().expect("lock poisoned");
         store.clear()
             .map_err(|e| PyErr::new::<RdfStarError, _>(e.to_string()))?;
 
         // Reset statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             *stats = StoreStatistics::default();
         }
 
@@ -279,7 +279,7 @@ impl PyRdfStarStore {
 
     /// Get all quoted triples in the store
     fn get_quoted_triples(&self) -> PyResult<Vec<PyQuotedTriple>> {
-        let store = self.store.read().unwrap();
+        let store = self.store.read().expect("lock poisoned");
         let quoted_triples = store.get_quoted_triples()
             .map_err(|e| PyErr::new::<RdfStarError, _>(e.to_string()))?;
 
@@ -292,7 +292,7 @@ impl PyRdfStarStore {
     /// Check if store contains a specific quoted triple
     #[pyo3(signature = (subject, predicate, object, **kwargs))]
     fn contains_quoted_triple(&self, subject: &str, predicate: &str, object: &str, kwargs: Option<&PyDict>) -> PyResult<bool> {
-        let store = self.store.read().unwrap();
+        let store = self.store.read().expect("lock poisoned");
         Ok(store.contains_quoted_triple(subject, predicate, object)
             .map_err(|e| PyErr::new::<RdfStarError, _>(e.to_string()))?)
     }
@@ -300,14 +300,14 @@ impl PyRdfStarStore {
     /// Get number of triples in the store
     #[getter]
     fn triple_count(&self) -> usize {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("lock poisoned");
         stats.total_triples
     }
 
     /// Get number of quoted triples in the store
     #[getter]
     fn quoted_triple_count(&self) -> usize {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("lock poisoned");
         stats.quoted_triples
     }
 }

@@ -177,7 +177,7 @@ impl ReinforcementLearner {
                 let mut rng = Random::default();
                 if rng.random::<f64>() < *epsilon {
                     // Explore: random action
-                    available_actions[rng.random_range(0, available_actions.len())].clone()
+                    available_actions[rng.random_range(0..available_actions.len())].clone()
                 } else {
                     // Exploit: best action
                     self.get_best_action(state, available_actions)
@@ -197,7 +197,7 @@ impl ReinforcementLearner {
             .max_by(|a, b| {
                 let q_a = self.get_q_value(state, a);
                 let q_b = self.get_q_value(state, b);
-                q_a.partial_cmp(&q_b).unwrap()
+                q_a.partial_cmp(&q_b).unwrap_or(std::cmp::Ordering::Equal)
             })
             .cloned()
             .unwrap_or(Action::EarlyTermination)
@@ -477,14 +477,14 @@ impl ReinforcementLearner {
         ValidationResult {
             success: rng.random::<bool>(),
             violations_found: if rng.random::<bool>() {
-                rng.random_range(1, 5)
+                rng.random_range(1..5)
             } else {
                 0
             },
             constraints_checked: 1,
-            time_taken: std::time::Duration::from_millis(rng.random_range(10, 100)),
+            time_taken: std::time::Duration::from_millis(rng.random_range(10..100)),
             cache_hits: if matches!(action, Action::EnableCaching) {
-                rng.random_range(0, 10)
+                rng.random_range(0..10)
             } else {
                 0
             },
@@ -676,7 +676,7 @@ impl ReplayBuffer {
 
         (0..sample_size)
             .map(|_| {
-                let idx = rng.random_range(0, self.buffer.len());
+                let idx = rng.random_range(0..self.buffer.len());
                 self.buffer[idx].clone()
             })
             .collect()

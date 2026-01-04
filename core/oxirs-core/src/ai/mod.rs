@@ -537,7 +537,7 @@ impl EvaluationMetrics {
             let corrupt_idx = {
                 use scirs2_core::random::Random;
                 let mut rng = Random::default();
-                rng.random_range(0, entity_vec.len())
+                rng.random_range(0..entity_vec.len())
             };
             let corrupt_entity = &entity_vec[corrupt_idx];
 

@@ -222,10 +222,10 @@ impl<'a> QueryBuilder<'a> {
         }
 
         // Calculate aggregation if specified (and no resampling)
-        let aggregated_value = if self.aggregation.is_some() && self.resample.is_none() {
+        let aggregated_value = if let (Some(agg), None) = (self.aggregation, self.resample) {
             let mut aggregator = Aggregator::new();
             aggregator.add_batch(&points);
-            Some(aggregator.result(self.aggregation.unwrap())?)
+            Some(aggregator.result(agg)?)
         } else {
             None
         };

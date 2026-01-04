@@ -385,17 +385,17 @@ impl CacheManager {
 
                 // Cleanup expired entries
                 let expired_l1 = {
-                    let mut cache = l1_cache.write().unwrap();
+                    let mut cache = l1_cache.write().expect("lock poisoned");
                     cache.cleanup_expired()
                 };
 
                 let expired_l2 = {
-                    let mut cache = l2_cache.write().unwrap();
+                    let mut cache = l2_cache.write().expect("lock poisoned");
                     cache.cleanup_expired()
                 };
 
                 let expired_l3 = {
-                    let mut cache = l3_cache.write().unwrap();
+                    let mut cache = l3_cache.write().expect("lock poisoned");
                     cache.cleanup_expired()
                 };
 
@@ -406,10 +406,10 @@ impl CacheManager {
 
                 // Update stats
                 {
-                    let mut stats = stats.write().unwrap();
-                    stats.l1_stats.size = l1_cache.read().unwrap().len();
-                    stats.l2_stats.size = l2_cache.read().unwrap().len();
-                    stats.l3_stats.size = l3_cache.read().unwrap().len();
+                    let mut stats = stats.write().expect("lock poisoned");
+                    stats.l1_stats.size = l1_cache.read().expect("lock poisoned").len();
+                    stats.l2_stats.size = l2_cache.read().expect("lock poisoned").len();
+                    stats.l3_stats.size = l3_cache.read().expect("lock poisoned").len();
 
                     // Update hit rate
                     let total_requests = stats.total_hits + stats.total_misses;
@@ -441,13 +441,13 @@ impl CacheManager {
         let start = Instant::now();
 
         let result = {
-            let mut cache = self.l1_cache.write().unwrap();
+            let mut cache = self.l1_cache.write().expect("lock poisoned");
             cache.get(&entity.to_string())
         };
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             if result.is_some() {
                 stats.total_hits += 1;
                 stats.l1_stats.hits += 1;
@@ -480,13 +480,13 @@ impl CacheManager {
         };
 
         {
-            let mut cache = self.l1_cache.write().unwrap();
+            let mut cache = self.l1_cache.write().expect("lock poisoned");
             cache.put(entity, cached);
         }
 
         // Update capacity stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.l1_stats.capacity = self.config.l1_max_size;
         }
     }
@@ -496,13 +496,13 @@ impl CacheManager {
         let start = Instant::now();
 
         let result = {
-            let mut cache = self.l2_cache.write().unwrap();
+            let mut cache = self.l2_cache.write().expect("lock poisoned");
             cache.get(key)
         };
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             if result.is_some() {
                 stats.total_hits += 1;
                 stats.l2_stats.hits += 1;
@@ -533,7 +533,7 @@ impl CacheManager {
         };
 
         {
-            let mut cache = self.l2_cache.write().unwrap();
+            let mut cache = self.l2_cache.write().expect("lock poisoned");
             cache.put(key, cached);
         }
     }
@@ -543,13 +543,13 @@ impl CacheManager {
         let start = Instant::now();
 
         let result = {
-            let mut cache = self.l3_cache.write().unwrap();
+            let mut cache = self.l3_cache.write().expect("lock poisoned");
             cache.get(&query.to_string())
         };
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             if result.is_some() {
                 stats.total_hits += 1;
                 stats.l3_stats.hits += 1;
@@ -566,7 +566,7 @@ impl CacheManager {
 
     /// Cache similarity results
     pub fn put_similarity_cache(&self, query: String, results: Vec<(String, f64)>) {
-        let mut cache = self.l3_cache.write().unwrap();
+        let mut cache = self.l3_cache.write().expect("lock poisoned");
         cache.put(query, results);
     }
 
@@ -659,27 +659,27 @@ impl CacheManager {
 
     /// Get cache statistics
     pub fn get_stats(&self) -> CacheStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().expect("lock poisoned").clone()
     }
 
     /// Clear all caches
     pub fn clear_all(&self) {
         {
-            let mut cache = self.l1_cache.write().unwrap();
+            let mut cache = self.l1_cache.write().expect("lock poisoned");
             cache.clear();
         }
         {
-            let mut cache = self.l2_cache.write().unwrap();
+            let mut cache = self.l2_cache.write().expect("lock poisoned");
             cache.clear();
         }
         {
-            let mut cache = self.l3_cache.write().unwrap();
+            let mut cache = self.l3_cache.write().expect("lock poisoned");
             cache.clear();
         }
 
         // Reset stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             *stats = CacheStats::default();
         }
 
@@ -689,17 +689,17 @@ impl CacheManager {
     /// Get memory usage estimation
     pub fn estimate_memory_usage(&self) -> usize {
         let l1_size = {
-            let cache = self.l1_cache.read().unwrap();
+            let cache = self.l1_cache.read().expect("lock poisoned");
             cache.len() * std::mem::size_of::<CachedEmbedding>()
         };
 
         let l2_size = {
-            let cache = self.l2_cache.read().unwrap();
+            let cache = self.l2_cache.read().expect("lock poisoned");
             cache.len() * std::mem::size_of::<CachedComputation>()
         };
 
         let l3_size = {
-            let cache = self.l3_cache.read().unwrap();
+            let cache = self.l3_cache.read().expect("lock poisoned");
             cache.len() * std::mem::size_of::<Vec<(String, f64)>>()
         };
 
@@ -1105,7 +1105,7 @@ impl CacheManager {
         let mut removed_count = 0;
 
         {
-            let mut cache = self.l2_cache.write().unwrap();
+            let mut cache = self.l2_cache.write().expect("lock poisoned");
             let keys_to_remove: Vec<_> = cache
                 .map
                 .keys()
@@ -1129,7 +1129,7 @@ impl CacheManager {
     /// Get cache hit rates by computation type  
     pub fn get_cache_hit_rates(&self) -> HashMap<String, f64> {
         let mut hit_rates = HashMap::new();
-        let cache = self.l2_cache.read().unwrap();
+        let cache = self.l2_cache.read().expect("lock poisoned");
 
         // Group by operation type
         let mut operation_stats = HashMap::new();

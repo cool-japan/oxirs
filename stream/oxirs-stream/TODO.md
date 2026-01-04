@@ -54,7 +54,7 @@
 
 **Next Steps:**
 - ✅ **Ready for v0.1.0 release** - all quality gates passed
-- 📦 Consider tagging release: `git tag v0.1.0-rc.1`
+- 📦 Consider tagging release: `git tag v0.1.0-rc.2`
 - 📚 Documentation updates for new features (optional)
 - 🎯 Future: Explore additional streaming patterns and optimizations
 
@@ -1092,7 +1092,7 @@ println!("Fused {} operations, saved {}% overhead",
 - **SIMD acceleration** (500+ lines) - Batch processing, correlation matrices, moving averages
 - **235 passing tests** - Comprehensive test coverage with integration & performance tests (21 new tests added)
 
-### Release Targets (v0.1.0-rc.1 - **ACHIEVED December 2025**)
+### Release Targets (v0.1.0-rc.2 - **ACHIEVED December 2025**)
 
 #### ✅ Stream Processing (100% Complete)
 - [x] Advanced stream operators (Map, Filter, FlatMap, Partition, Distinct, Throttle, Debounce, Reduce)

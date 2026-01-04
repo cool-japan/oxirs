@@ -11,6 +11,10 @@ keywords = ["samm", "aspect-model", "semantic-web", "rdf", "digital-twin"]
 categories = ["data-structures", "parser-implementations", "web-programming"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 # OxiRS dependencies
 oxirs-core.workspace = true

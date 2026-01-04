@@ -28,7 +28,7 @@
 //! ```no_run
 //! use oxirs_geosparql::geometry::shapefile_parser::read_shapefile;
 //!
-//! let geometries = read_shapefile("data/cities.shp").unwrap();
+//! let geometries = read_shapefile("data/cities.shp").expect("shapefile reading should succeed");
 //! for geometry in geometries {
 //!     println!("Geometry: {}", geometry.to_wkt());
 //! }
@@ -64,7 +64,7 @@ use shapefile;
 /// ```no_run
 /// use oxirs_geosparql::geometry::shapefile_parser::read_shapefile;
 ///
-/// let geometries = read_shapefile("data/cities.shp").unwrap();
+/// let geometries = read_shapefile("data/cities.shp").expect("shapefile reading should succeed");
 /// println!("Read {} geometries", geometries.len());
 /// ```
 #[cfg(feature = "shapefile-support")]
@@ -267,7 +267,12 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
             if polygons.is_empty() {
                 return Ok(None);
             } else if polygons.len() == 1 {
-                GeoGeometry::Polygon(polygons.into_iter().next().unwrap())
+                GeoGeometry::Polygon(
+                    polygons
+                        .into_iter()
+                        .next()
+                        .expect("polygon vec should have exactly 1 element"),
+                )
             } else {
                 GeoGeometry::MultiPolygon(MultiPolygon(polygons))
             }
@@ -278,7 +283,12 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
             if polygons.is_empty() {
                 return Ok(None);
             } else if polygons.len() == 1 {
-                GeoGeometry::Polygon(polygons.into_iter().next().unwrap())
+                GeoGeometry::Polygon(
+                    polygons
+                        .into_iter()
+                        .next()
+                        .expect("polygon vec should have exactly 1 element"),
+                )
             } else {
                 GeoGeometry::MultiPolygon(MultiPolygon(polygons))
             }
@@ -289,7 +299,12 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
             if polygons.is_empty() {
                 return Ok(None);
             } else if polygons.len() == 1 {
-                GeoGeometry::Polygon(polygons.into_iter().next().unwrap())
+                GeoGeometry::Polygon(
+                    polygons
+                        .into_iter()
+                        .next()
+                        .expect("polygon vec should have exactly 1 element"),
+                )
             } else {
                 GeoGeometry::MultiPolygon(MultiPolygon(polygons))
             }

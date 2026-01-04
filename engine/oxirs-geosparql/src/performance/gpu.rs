@@ -20,7 +20,7 @@
 //! use geo_types::{Point, Geometry as GeoGeometry};
 //!
 //! // Create GPU context (currently uses CPU fallback)
-//! let ctx = GpuGeometryContext::new().unwrap();
+//! let ctx = GpuGeometryContext::new().expect("GPU context creation should succeed");
 //!
 //! let points: Vec<Geometry> = vec![
 //!     Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))),
@@ -28,7 +28,7 @@
 //! ];
 //!
 //! // Batch distance calculation
-//! let distances = ctx.pairwise_distance_matrix(&points).unwrap();
+//! let distances = ctx.pairwise_distance_matrix(&points).expect("distance calculation should succeed");
 //! assert_eq!(distances.shape(), &[2, 2]);
 //! ```
 
@@ -92,13 +92,13 @@ impl GpuGeometryContext {
     /// use oxirs_geosparql::geometry::Geometry;
     /// use geo_types::{Point, Geometry as GeoGeometry};
     ///
-    /// let ctx = GpuGeometryContext::new().unwrap();
+    /// let ctx = GpuGeometryContext::new().expect("GPU context creation should succeed");
     /// let points: Vec<Geometry> = vec![
     ///     Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))),
     ///     Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0))),
     /// ];
     ///
-    /// let distance_matrix = ctx.pairwise_distance_matrix(&points).unwrap();
+    /// let distance_matrix = ctx.pairwise_distance_matrix(&points).expect("distance calculation should succeed");
     /// assert_eq!(distance_matrix.shape(), &[2, 2]);
     /// assert!((distance_matrix[[0, 1]] - 5.0).abs() < 1e-5);
     /// ```
@@ -154,7 +154,7 @@ impl GpuGeometryContext {
     /// use oxirs_geosparql::geometry::Geometry;
     /// use geo_types::{Point, Geometry as GeoGeometry};
     ///
-    /// let ctx = GpuGeometryContext::new().unwrap();
+    /// let ctx = GpuGeometryContext::new().expect("GPU context creation should succeed");
     /// let points: Vec<Geometry> = vec![
     ///     Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))),
     ///     Geometry::new(GeoGeometry::Point(Point::new(1.0, 0.0))),
@@ -162,7 +162,7 @@ impl GpuGeometryContext {
     /// ];
     ///
     /// // Find all pairs within 2.0 units
-    /// let pairs = ctx.spatial_join_within_distance(&points, 2.0).unwrap();
+    /// let pairs = ctx.spatial_join_within_distance(&points, 2.0).expect("spatial join should succeed");
     /// assert_eq!(pairs.len(), 1); // Only (0,1) pair
     /// ```
     pub fn spatial_join_within_distance(
@@ -211,7 +211,7 @@ impl GpuGeometryContext {
     /// use oxirs_geosparql::geometry::Geometry;
     /// use geo_types::{Point, Geometry as GeoGeometry};
     ///
-    /// let ctx = GpuGeometryContext::new().unwrap();
+    /// let ctx = GpuGeometryContext::new().expect("GPU context creation should succeed");
     /// let queries: Vec<Geometry> = vec![
     ///     Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))),
     /// ];
@@ -220,7 +220,7 @@ impl GpuGeometryContext {
     ///     Geometry::new(GeoGeometry::Point(Point::new(1.0, 0.0))),
     /// ];
     ///
-    /// let distances = ctx.batch_euclidean_distance(&queries, &targets).unwrap();
+    /// let distances = ctx.batch_euclidean_distance(&queries, &targets).expect("distance calculation should succeed");
     /// assert_eq!(distances.shape(), &[1, 2]);
     /// assert!((distances[[0, 0]] - 5.0).abs() < 1e-5);
     /// ```
@@ -269,7 +269,7 @@ impl GpuGeometryContext {
     /// use oxirs_geosparql::geometry::Geometry;
     /// use geo_types::{Point, Geometry as GeoGeometry};
     ///
-    /// let ctx = GpuGeometryContext::new().unwrap();
+    /// let ctx = GpuGeometryContext::new().expect("GPU context creation should succeed");
     /// let queries: Vec<Geometry> = vec![
     ///     Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))),
     /// ];
@@ -279,7 +279,7 @@ impl GpuGeometryContext {
     ///     Geometry::new(GeoGeometry::Point(Point::new(0.5, 0.0))),
     /// ];
     ///
-    /// let results = ctx.k_nearest_neighbors(&queries, &candidates, 2).unwrap();
+    /// let results = ctx.k_nearest_neighbors(&queries, &candidates, 2).expect("k-NN search should succeed");
     /// assert_eq!(results.len(), 1);
     /// assert_eq!(results[0].len(), 2);
     /// // Nearest should be index 2 (0.5, 0.0), then index 0 (1.0, 0.0)
@@ -306,7 +306,10 @@ impl GpuGeometryContext {
         for i in 0..m {
             let mut dists: Vec<(usize, f32)> = (0..n).map(|j| (j, distances[[i, j]])).collect();
 
-            dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            dists.sort_by(|a, b| {
+                a.1.partial_cmp(&b.1)
+                    .expect("distances should be comparable")
+            });
             results.push(dists.into_iter().take(k_clamped).collect());
         }
 

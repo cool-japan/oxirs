@@ -1,6 +1,6 @@
 //! # OxiRS Core - RDF and SPARQL Foundation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 //!
 //! **Status**: Beta Release (v0.1.0-rc.1)
@@ -356,14 +356,8 @@ impl From<std::io::Error> for OxirsError {
 }
 
 // Additional error conversions
-impl From<bincode::error::EncodeError> for OxirsError {
-    fn from(err: bincode::error::EncodeError) -> Self {
-        OxirsError::Serialize(err.to_string())
-    }
-}
-
-impl From<bincode::error::DecodeError> for OxirsError {
-    fn from(err: bincode::error::DecodeError) -> Self {
+impl From<oxicode::Error> for OxirsError {
+    fn from(err: oxicode::Error) -> Self {
         OxirsError::Serialize(err.to_string())
     }
 }

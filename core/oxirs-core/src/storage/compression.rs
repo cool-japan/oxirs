@@ -223,7 +223,7 @@ impl Compressor {
         compressed.triples = data.to_vec();
 
         // Apply secondary compression
-        let serialized = bincode::serde::encode_to_vec(&compressed, bincode::config::standard())?;
+        let serialized = oxicode::serde::encode_to_vec(&compressed, oxicode::config::standard())?;
         self.compress_zstd(&serialized, 3)
     }
 
@@ -234,7 +234,7 @@ impl Compressor {
 
         // Deserialize
         let compressed: RdfCompressedData =
-            bincode::serde::decode_from_slice(&decompressed, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&decompressed, oxicode::config::standard())
                 .map(|(v, _)| v)?;
 
         // Restore dictionary

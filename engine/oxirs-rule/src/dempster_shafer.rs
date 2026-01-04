@@ -406,7 +406,7 @@ impl DempsterShaferReasoner {
         let dist = self.system.pignistic_distribution()?;
 
         dist.into_iter()
-            .max_by(|(_, p1), (_, p2)| p1.partial_cmp(p2).unwrap())
+            .max_by(|(_, p1), (_, p2)| p1.partial_cmp(p2).unwrap_or(std::cmp::Ordering::Equal))
             .ok_or_else(|| anyhow!("No hypotheses in system"))
     }
 }

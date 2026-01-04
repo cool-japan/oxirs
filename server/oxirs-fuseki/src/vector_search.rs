@@ -557,7 +557,11 @@ impl VectorSearchEngine {
         }
 
         // Sort by similarity (descending) and take top_k
-        candidates.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap());
+        candidates.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         candidates.truncate(top_k);
 
         Ok(candidates)
@@ -631,14 +635,19 @@ impl VectorSearchEngine {
                                         for sim_result in &vector_result.results {
                                             if sim_result.resource_uri == uri_str {
                                                 let score_key = format!("{variable}_similarity");
-                                                binding.as_object_mut().unwrap().insert(
-                                                    score_key,
-                                                    serde_json::json!({
-                                                        "type": "literal",
-                                                        "datatype": "http://www.w3.org/2001/XMLSchema#float",
-                                                        "value": sim_result.similarity_score.to_string()
-                                                    })
-                                                );
+                                                binding
+                                                    .as_object_mut()
+                                                    .expect(
+                                                        "SPARQL JSON result bindings must be objects",
+                                                    )
+                                                    .insert(
+                                                        score_key,
+                                                        serde_json::json!({
+                                                            "type": "literal",
+                                                            "datatype": "http://www.w3.org/2001/XMLSchema#float",
+                                                            "value": sim_result.similarity_score.to_string()
+                                                        }),
+                                                    );
                                                 break;
                                             }
                                         }

@@ -517,7 +517,11 @@ impl StarParser {
         // Handle graph declarations
         if line.contains('{') && !*in_graph_block {
             // Start of named graph block
-            let graph_part = line.split('{').next().unwrap().trim();
+            let graph_part = line
+                .split('{')
+                .next()
+                .expect("split always returns at least one element")
+                .trim();
             if !graph_part.is_empty() {
                 let graph_term = self.parse_term(graph_part, context)?;
                 *current_graph = Some(graph_term);

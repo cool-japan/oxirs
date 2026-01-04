@@ -11,6 +11,10 @@ keywords = ["inference", "reasoning", "rules", "owl", "rdfs"]
 categories = ["algorithms", "science", "data-structures"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 scirs2-core = { workspace = true }
 scirs2-graph = { workspace = true }
@@ -24,11 +28,11 @@ regex = "1.12"
 tokio = { version = "1.47", features = ["fs", "io-util"] }
 lazy_static = "1.5"
 num_cpus = "1.17"
-bincode = "1.3"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 
 [dev-dependencies]
 criterion.workspace = true
-tempfile = "3.23"
+tempfile = "3.24"
 tokio = { version = "1.47", features = ["full"] }
 tracing-subscriber = "0.3"
 once_cell = "1.21"

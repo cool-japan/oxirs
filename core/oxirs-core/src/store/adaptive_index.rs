@@ -288,7 +288,10 @@ impl AdaptiveIndexManager {
         }
 
         // Sort by benefit and take top candidates
-        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        candidates.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("benefit scores should be finite")
+        });
         candidates.truncate(self.config.max_adaptive_indexes);
 
         candidates.into_iter().map(|(pattern, _)| pattern).collect()

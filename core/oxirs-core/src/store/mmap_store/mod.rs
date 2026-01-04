@@ -813,7 +813,12 @@ impl MmapStore {
                 if let Some(spo_index) = self.indexes.read().get("spo") {
                     let results = spo_index.search_prefix(&key)?;
                     for (_, entry) in results {
-                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                        if g.is_none()
+                            || self.check_graph_match(
+                                entry.offset,
+                                g.expect("g is Some when not is_none"),
+                            )?
+                        {
                             offsets.push(entry.offset);
                         }
                     }
@@ -825,7 +830,12 @@ impl MmapStore {
                 if let Some(spo_index) = self.indexes.read().get("spo") {
                     let results = spo_index.search_prefix(&prefix)?;
                     for (_, entry) in results {
-                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                        if g.is_none()
+                            || self.check_graph_match(
+                                entry.offset,
+                                g.expect("g is Some when not is_none"),
+                            )?
+                        {
                             offsets.push(entry.offset);
                         }
                     }
@@ -837,7 +847,12 @@ impl MmapStore {
                 if let Some(spo_index) = self.indexes.read().get("spo") {
                     let results = spo_index.search_prefix(&prefix)?;
                     for (_, entry) in results {
-                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                        if g.is_none()
+                            || self.check_graph_match(
+                                entry.offset,
+                                g.expect("g is Some when not is_none"),
+                            )?
+                        {
                             offsets.push(entry.offset);
                         }
                     }
@@ -849,7 +864,12 @@ impl MmapStore {
                 if let Some(pos_index) = self.indexes.read().get("pos") {
                     let results = pos_index.search_prefix(&key)?;
                     for (_, entry) in results {
-                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                        if g.is_none()
+                            || self.check_graph_match(
+                                entry.offset,
+                                g.expect("g is Some when not is_none"),
+                            )?
+                        {
                             offsets.push(entry.offset);
                         }
                     }
@@ -861,7 +881,12 @@ impl MmapStore {
                 if let Some(osp_index) = self.indexes.read().get("osp") {
                     let results = osp_index.search_prefix(&prefix)?;
                     for (_, entry) in results {
-                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                        if g.is_none()
+                            || self.check_graph_match(
+                                entry.offset,
+                                g.expect("g is Some when not is_none"),
+                            )?
+                        {
                             offsets.push(entry.offset);
                         }
                     }

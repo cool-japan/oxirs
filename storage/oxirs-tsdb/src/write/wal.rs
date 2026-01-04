@@ -59,9 +59,21 @@ impl WalEntry {
             )));
         }
 
-        let series_id = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
-        let ts_ms = i64::from_le_bytes(bytes[8..16].try_into().unwrap());
-        let value = f64::from_le_bytes(bytes[16..24].try_into().unwrap());
+        let series_id = u64::from_le_bytes(
+            bytes[0..8]
+                .try_into()
+                .expect("slice is exactly 8 bytes as verified above"),
+        );
+        let ts_ms = i64::from_le_bytes(
+            bytes[8..16]
+                .try_into()
+                .expect("slice is exactly 8 bytes as verified above"),
+        );
+        let value = f64::from_le_bytes(
+            bytes[16..24]
+                .try_into()
+                .expect("slice is exactly 8 bytes as verified above"),
+        );
 
         let timestamp = DateTime::from_timestamp_millis(ts_ms)
             .ok_or_else(|| TsdbError::Wal(format!("Invalid timestamp: {}", ts_ms)))?;

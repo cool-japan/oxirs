@@ -140,7 +140,7 @@ impl GraphSageNetwork {
             if indices.is_empty() {
                 break;
             }
-            let idx = rng.random_range(0, indices.len());
+            let idx = rng.random_range(0..indices.len());
             sampled.push(neighbors[indices[idx]]);
             indices.remove(idx);
         }

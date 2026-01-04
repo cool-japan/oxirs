@@ -328,7 +328,9 @@ fn dtmi_to_urn(dtmi: &str) -> Result<String, SammError> {
         )));
     }
 
-    let without_prefix = dtmi.strip_prefix("dtmi:").unwrap();
+    let without_prefix = dtmi
+        .strip_prefix("dtmi:")
+        .expect("DTMI should start with 'dtmi:' prefix (validated earlier)");
 
     // Split by ';' to get version
     let parts: Vec<&str> = without_prefix.split(';').collect();
@@ -442,7 +444,11 @@ fn to_pascal_case(s: &str) -> String {
         if ch == '_' || ch == '-' {
             capitalize_next = true;
         } else if capitalize_next {
-            result.push(ch.to_uppercase().next().unwrap());
+            result.push(
+                ch.to_uppercase()
+                    .next()
+                    .expect("to_uppercase() always returns at least one character"),
+            );
             capitalize_next = false;
         } else {
             result.push(ch);

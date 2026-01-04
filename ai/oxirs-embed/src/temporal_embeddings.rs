@@ -376,7 +376,7 @@ impl TemporalEmbeddingModel {
         for temporal_triple in triples.iter() {
             let embedding = Vector::new(
                 (0..dim)
-                    .map(|_| rng.random_range(-1.0, 1.0) as f32)
+                    .map(|_| rng.random_range(-1.0..1.0) as f32)
                     .collect(),
             );
 
@@ -434,7 +434,10 @@ impl TemporalEmbeddingModel {
                 future_timestamps.push(future_time);
 
                 // Simple forecasting: use last known embedding with decay
-                let last_embedding = time_series.values().last().unwrap();
+                let last_embedding = time_series
+                    .values()
+                    .last()
+                    .expect("time_series should have at least one embedding");
                 let decay_factor = self.config.decay_rate.powi(i as i32);
 
                 let prediction = last_embedding.mapv(|v| v * decay_factor);

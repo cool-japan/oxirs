@@ -83,7 +83,7 @@ impl MemorySnapshot {
     pub fn new(query_id: String, operation_name: Option<String>, initial_memory: u64) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         Self {
@@ -167,7 +167,7 @@ impl MemoryAllocation {
     pub fn from_snapshot(snapshot: MemorySnapshot) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         let net_change = snapshot.net_memory_change();
@@ -350,12 +350,14 @@ impl MemoryTracker {
         stats
     }
 
-    /// Get top memory consumers
+    /// Get top memory consumers sorted by total_allocated (the query's own allocations)
     pub async fn get_top_consumers(&self, limit: usize) -> Vec<MemoryAllocation> {
         let completed = self.completed.read().await;
 
         let mut sorted = completed.clone();
-        sorted.sort_by(|a, b| b.peak_memory.cmp(&a.peak_memory));
+        // Sort by total_allocated (query's own allocations) rather than peak_memory
+        // which includes varying system memory baseline
+        sorted.sort_by(|a, b| b.total_allocated.cmp(&a.total_allocated));
         sorted.truncate(limit);
         sorted
     }
@@ -392,7 +394,7 @@ impl MemoryTracker {
         let retention_secs = self.config.retention_period.as_secs();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         completed.retain(|a| now - a.end_time < retention_secs);
@@ -699,7 +701,32 @@ mod tests {
 
         let top = tracker.get_top_consumers(2).await;
         assert_eq!(top.len(), 2);
-        assert_eq!(top[0].query_id, "query-2"); // Highest peak memory
+        // Verify ordering by total_allocated (highest first)
+        assert!(
+            top[0].total_allocated >= top[1].total_allocated,
+            "Top consumers should be sorted by total_allocated descending: {:?}",
+            top.iter()
+                .map(|t| (&t.query_id, t.total_allocated))
+                .collect::<Vec<_>>()
+        );
+        // Verify the highest consumer has the expected total_allocated (query-2 with 2000)
+        assert_eq!(
+            top[0].total_allocated, 2000,
+            "Highest consumer should have 2000 bytes allocated"
+        );
+        assert_eq!(
+            top[0].query_id, "query-2",
+            "Highest consumer should be query-2"
+        );
+        // Second highest is query-1 with 1000
+        assert_eq!(
+            top[1].total_allocated, 1000,
+            "Second highest consumer should have 1000 bytes allocated"
+        );
+        assert_eq!(
+            top[1].query_id, "query-1",
+            "Second highest consumer should be query-1"
+        );
     }
 
     #[tokio::test]

@@ -6,7 +6,7 @@
 use crate::hnsw::{HnswConfig, HnswIndex};
 use crate::Vector;
 use anyhow::{anyhow, Result};
-use bincode::{Decode, Encode};
+use oxicode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -129,7 +129,7 @@ impl PersistenceManager {
         };
 
         // Serialize header
-        let header_bytes = bincode::encode_to_vec(&header, bincode::config::standard())
+        let header_bytes = oxicode::serde::encode_to_vec(&header, oxicode::config::standard())
             .map_err(|e| anyhow!("Failed to serialize header: {}", e))?;
         let header_len = header_bytes.len() as u32;
         writer.write_all(&header_len.to_le_bytes())?;
@@ -151,15 +151,17 @@ impl PersistenceManager {
         writer.write_all(&data)?;
 
         // Write URI mapping
-        let uri_mapping = bincode::encode_to_vec(index.uri_to_id(), bincode::config::standard())
-            .map_err(|e| anyhow!("Failed to serialize URI mapping: {}", e))?;
+        let uri_mapping =
+            oxicode::serde::encode_to_vec(index.uri_to_id(), oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to serialize URI mapping: {}", e))?;
         let mapping_len = uri_mapping.len() as u32;
         writer.write_all(&mapping_len.to_le_bytes())?;
         writer.write_all(&uri_mapping)?;
 
         // Write entry point
-        let entry_point = bincode::encode_to_vec(index.entry_point(), bincode::config::standard())
-            .map_err(|e| anyhow!("Failed to serialize entry point: {}", e))?;
+        let entry_point =
+            oxicode::serde::encode_to_vec(&index.entry_point(), oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to serialize entry point: {}", e))?;
         writer.write_all(&entry_point)?;
 
         writer.flush()?;
@@ -196,7 +198,7 @@ impl PersistenceManager {
         let mut header_bytes = vec![0u8; header_len];
         reader.read_exact(&mut header_bytes)?;
         let (header, _): (IndexHeader, _) =
-            bincode::decode_from_slice(&header_bytes, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&header_bytes, oxicode::config::standard())
                 .map_err(|e| anyhow!("Failed to deserialize header: {}", e))?;
 
         // Verify version
@@ -232,14 +234,14 @@ impl PersistenceManager {
         let mut mapping_bytes = vec![0u8; mapping_len];
         reader.read_exact(&mut mapping_bytes)?;
         let (uri_mapping, _): (std::collections::HashMap<String, usize>, _) =
-            bincode::decode_from_slice(&mapping_bytes, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&mapping_bytes, oxicode::config::standard())
                 .map_err(|e| anyhow!("Failed to deserialize URI mapping: {}", e))?;
 
         // Read entry point
         let mut entry_point_bytes = Vec::new();
         reader.read_to_end(&mut entry_point_bytes)?;
         let (entry_point, _): (Option<usize>, _) =
-            bincode::decode_from_slice(&entry_point_bytes, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&entry_point_bytes, oxicode::config::standard())
                 .map_err(|e| anyhow!("Failed to deserialize entry point: {}", e))?;
 
         // Reconstruct index
@@ -279,14 +281,14 @@ impl PersistenceManager {
             })
             .collect();
 
-        bincode::encode_to_vec(&serializable_nodes, bincode::config::standard())
+        oxicode::serde::encode_to_vec(&serializable_nodes, oxicode::config::standard())
             .map_err(|e| anyhow!("Failed to serialize nodes: {}", e))
     }
 
     /// Deserialize nodes from bytes
     fn deserialize_nodes(&self, data: &[u8], index: &mut HnswIndex) -> Result<()> {
         let (serializable_nodes, _): (Vec<SerializableNode>, _) =
-            bincode::decode_from_slice(data, bincode::config::standard())
+            oxicode::serde::decode_from_slice(data, oxicode::config::standard())
                 .map_err(|e| anyhow!("Failed to deserialize nodes: {}", e))?;
 
         for node_data in serializable_nodes {

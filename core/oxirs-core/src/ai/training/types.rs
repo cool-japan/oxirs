@@ -387,7 +387,7 @@ impl HyperparameterOptimizer {
                 let good_count = (sorted_history.len() as f32 * percentile) as usize;
                 let good_configs: Vec<_> = sorted_history.iter().take(good_count.max(1)).collect();
                 if !good_configs.is_empty() {
-                    let idx = rng.random_range(0, good_configs.len());
+                    let idx = rng.random_range(0..good_configs.len());
                     config = good_configs[idx].0.clone();
                     for (param_name, range) in &self.search_space {
                         if rng.random::<f32>() < 0.3 {
@@ -493,19 +493,19 @@ impl HyperparameterOptimizer {
     fn sample_parameter(&self, range: &ParameterRange, rng: &mut Random) -> Result<ParameterValue> {
         match range {
             ParameterRange::Float { min, max } => {
-                Ok(ParameterValue::Float(rng.random_range(*min, *max)))
+                Ok(ParameterValue::Float(rng.random_range(*min..*max)))
             }
             ParameterRange::Int { min, max } => {
-                Ok(ParameterValue::Int(rng.random_range(*min, *max)))
+                Ok(ParameterValue::Int(rng.random_range(*min..*max)))
             }
             ParameterRange::Choice(choices) => {
-                let idx = rng.random_range(0, choices.len());
+                let idx = rng.random_range(0..choices.len());
                 Ok(ParameterValue::String(choices[idx].clone()))
             }
             ParameterRange::LogFloat { min, max } => {
                 let log_min = min.ln();
                 let log_max = max.ln();
-                let log_value = rng.random_range(log_min, log_max);
+                let log_value = rng.random_range(log_min..log_max);
                 Ok(ParameterValue::Float(log_value.exp()))
             }
         }
@@ -981,13 +981,13 @@ impl DefaultTrainer {
         let _relation_vec: Vec<_> = relations.into_iter().collect();
         for _ in 0..num_negatives {
             if !positive_triples.is_empty() {
-                let index = rng.random_range(0, positive_triples.len());
+                let index = rng.random_range(0..positive_triples.len());
                 let pos_triple = &positive_triples[index];
                 match self.config.negative_sampling_strategy {
                     NegativeSamplingStrategy::Random => {
                         if rng.random_bool() {
                             if !subject_vec.is_empty() {
-                                let subject_index = rng.random_range(0, subject_vec.len());
+                                let subject_index = rng.random_range(0..subject_vec.len());
                                 let random_subject = &subject_vec[subject_index];
                                 let corrupted = Triple::new(
                                     random_subject.clone(),
@@ -999,7 +999,7 @@ impl DefaultTrainer {
                                 }
                             }
                         } else if !object_vec.is_empty() {
-                            let object_index = rng.random_range(0, object_vec.len());
+                            let object_index = rng.random_range(0..object_vec.len());
                             let random_object = &object_vec[object_index];
                             let corrupted = Triple::new(
                                 pos_triple.subject().clone(),
@@ -1013,7 +1013,7 @@ impl DefaultTrainer {
                     }
                     NegativeSamplingStrategy::TypeConstrained => {
                         if rng.random_bool() && !subject_vec.is_empty() {
-                            let subject_index = rng.random_range(0, subject_vec.len());
+                            let subject_index = rng.random_range(0..subject_vec.len());
                             let random_subject = &subject_vec[subject_index];
                             let corrupted = Triple::new(
                                 random_subject.clone(),
@@ -1024,7 +1024,7 @@ impl DefaultTrainer {
                                 negative_triples.push(corrupted);
                             }
                         } else if !object_vec.is_empty() {
-                            let object_index = rng.random_range(0, object_vec.len());
+                            let object_index = rng.random_range(0..object_vec.len());
                             let random_object = &object_vec[object_index];
                             let corrupted = Triple::new(
                                 pos_triple.subject().clone(),
@@ -1038,7 +1038,7 @@ impl DefaultTrainer {
                     }
                     NegativeSamplingStrategy::Adversarial => {
                         if !object_vec.is_empty() {
-                            let object_index = rng.random_range(0, object_vec.len());
+                            let object_index = rng.random_range(0..object_vec.len());
                             let random_object = &object_vec[object_index];
                             let corrupted = Triple::new(
                                 pos_triple.subject().clone(),

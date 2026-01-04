@@ -756,7 +756,7 @@ impl FaissGpuIndex {
             loop {
                 // Process pending operations
                 if let Some(operation) = {
-                    let mut queue = work_queue.lock().unwrap();
+                    let mut queue = work_queue.lock().expect("lock poisoned");
                     queue.pop_front()
                 } {
                     if let Err(e) = Self::process_gpu_operation(
@@ -815,7 +815,7 @@ impl FaissGpuIndex {
         compute_streams: &Arc<RwLock<HashMap<i32, Vec<GpuComputeStream>>>>,
         _operation: &GpuOperation,
     ) -> Result<(i32, usize)> {
-        let streams = compute_streams.read().unwrap();
+        let streams = compute_streams.read().expect("lock poisoned");
 
         // Simple strategy: find device with lowest utilization
         let mut best_device = 0;
@@ -824,7 +824,11 @@ impl FaissGpuIndex {
 
         for (&device_id, device_streams) in streams.iter() {
             for (stream_id, stream) in device_streams.iter().enumerate() {
-                let utilization = stream.utilization.read().unwrap().utilization_percentage;
+                let utilization = stream
+                    .utilization
+                    .read()
+                    .expect("lock poisoned")
+                    .utilization_percentage;
                 if utilization < lowest_utilization {
                     lowest_utilization = utilization;
                     best_device = device_id;
@@ -906,7 +910,7 @@ impl FaissGpuIndex {
         result: &GpuOperationResult,
         execution_time: Duration,
     ) -> Result<()> {
-        let mut stats = stats.write().unwrap();
+        let mut stats = stats.write().expect("lock poisoned");
 
         // Update throughput metrics
         stats.throughput.operations_per_second += 1.0 / execution_time.as_secs_f64();
@@ -945,7 +949,7 @@ impl FaissGpuIndex {
         stats: &Arc<RwLock<GpuPerformanceStats>>,
         device_ids: &[i32],
     ) -> Result<()> {
-        let mut stats = stats.write().unwrap();
+        let mut stats = stats.write().expect("lock poisoned");
 
         for &device_id in device_ids {
             // Simulate GPU metrics collection
@@ -1008,7 +1012,7 @@ impl FaissGpuIndex {
         memory_pools: &Arc<RwLock<HashMap<i32, FaissGpuMemoryPool>>>,
         _gpu_config: &FaissGpuConfig,
     ) -> Result<()> {
-        let pools = memory_pools.read().unwrap();
+        let pools = memory_pools.read().expect("lock poisoned");
 
         for (device_id, pool) in pools.iter() {
             // Check for memory fragmentation
@@ -1022,7 +1026,7 @@ impl FaissGpuIndex {
             }
 
             // Check for memory leaks
-            let allocated_blocks = pool.allocated_blocks.read().unwrap();
+            let allocated_blocks = pool.allocated_blocks.read().expect("lock poisoned");
             let now = Instant::now();
             for (_, block) in allocated_blocks.iter() {
                 if now.duration_since(block.allocated_at) > Duration::from_secs(3600) {
@@ -1064,8 +1068,8 @@ impl FaissGpuIndex {
         load_balancer: &Arc<RwLock<GpuLoadBalancer>>,
         stats: &Arc<RwLock<GpuPerformanceStats>>,
     ) -> Result<()> {
-        let stats = stats.read().unwrap();
-        let mut balancer = load_balancer.write().unwrap();
+        let stats = stats.read().expect("lock poisoned");
+        let mut balancer = load_balancer.write().expect("lock poisoned");
 
         // Update device utilization from stats
         for (&device_id, device_stats) in &stats.device_stats {
@@ -1095,7 +1099,7 @@ impl FaissGpuIndex {
                 balancer
                     .performance_history
                     .get_mut(&device_id)
-                    .unwrap()
+                    .expect("device_id should exist in performance_history")
                     .pop_front();
             }
         }
@@ -1131,7 +1135,7 @@ impl FaissGpuIndex {
 
         // Queue operation
         {
-            let mut queue = self.work_queue.lock().unwrap();
+            let mut queue = self.work_queue.lock().expect("lock poisoned");
             queue.push_back(operation);
         }
 
@@ -1174,7 +1178,7 @@ impl FaissGpuIndex {
         };
 
         {
-            let mut queue = self.work_queue.lock().unwrap();
+            let mut queue = self.work_queue.lock().expect("lock poisoned");
             queue.push_back(operation);
         }
 
@@ -1195,7 +1199,7 @@ impl FaissGpuIndex {
 
     /// Get GPU performance statistics
     pub fn get_gpu_stats(&self) -> Result<GpuPerformanceStats> {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("lock poisoned");
         Ok(stats.clone())
     }
 
@@ -1216,7 +1220,7 @@ impl FaissGpuIndex {
         };
 
         {
-            let mut queue = self.work_queue.lock().unwrap();
+            let mut queue = self.work_queue.lock().expect("lock poisoned");
             queue.push_back(operation);
         }
 
@@ -1269,7 +1273,7 @@ impl FaissGpuMemoryPool {
 
         // Update statistics
         {
-            let mut stats = self.allocation_stats.write().unwrap();
+            let mut stats = self.allocation_stats.write().expect("lock poisoned");
             stats.total_allocations += 1;
             let current_usage = self.allocated_size.load(Ordering::Relaxed);
             if current_usage > stats.peak_usage {
@@ -1285,7 +1289,7 @@ impl FaissGpuMemoryPool {
         self.allocated_size.fetch_sub(block.size, Ordering::Relaxed);
 
         {
-            let mut stats = self.allocation_stats.write().unwrap();
+            let mut stats = self.allocation_stats.write().expect("lock poisoned");
             stats.total_deallocations += 1;
         }
 
@@ -1296,7 +1300,7 @@ impl FaissGpuMemoryPool {
     pub fn calculate_fragmentation(&self) -> f32 {
         // Simplified fragmentation calculation
         let allocated = self.allocated_size.load(Ordering::Relaxed);
-        let free_blocks = self.free_blocks.lock().unwrap();
+        let free_blocks = self.free_blocks.lock().expect("lock poisoned");
         let num_free_blocks = free_blocks.len();
 
         if allocated == 0 {

@@ -453,10 +453,11 @@ impl Parser {
                     // Check for language tag or datatype after closing quote
                     if let Some(&'@') = chars.peek() {
                         // Language tag
-                        current_token.push(chars.next().unwrap()); // @
+                        current_token.push(chars.next().expect("peeked '@' should be available"));
                         while let Some(&next_char) = chars.peek() {
                             if next_char.is_alphanumeric() || next_char == '-' {
-                                current_token.push(chars.next().unwrap());
+                                current_token
+                                    .push(chars.next().expect("peeked char should be available"));
                             } else {
                                 break;
                             }

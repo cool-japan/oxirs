@@ -203,7 +203,7 @@ impl<V: Clone> QueryResultCache<V> {
         self.ensure_capacity(size_bytes);
 
         {
-            let mut entries = self.entries.write().unwrap();
+            let mut entries = self.entries.write().expect("entries lock poisoned");
 
             // Remove old entry if exists
             if let Some(old_entry) = entries.remove(&key) {
@@ -218,7 +218,7 @@ impl<V: Clone> QueryResultCache<V> {
 
         // Update LRU queue
         if self.config.enable_lru {
-            let mut lru = self.lru_queue.write().unwrap();
+            let mut lru = self.lru_queue.write().expect("lru_queue lock poisoned");
             lru.retain(|k| k != &key); // Remove if already exists
             lru.push_back(key);
         }
@@ -231,7 +231,7 @@ impl<V: Clone> QueryResultCache<V> {
         // Clean expired entries periodically
         self.clean_expired();
 
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().expect("entries lock poisoned");
 
         if let Some(entry) = entries.get_mut(key) {
             if entry.is_expired() {
@@ -249,7 +249,7 @@ impl<V: Clone> QueryResultCache<V> {
 
             // Update LRU queue
             if self.config.enable_lru {
-                let mut lru = self.lru_queue.write().unwrap();
+                let mut lru = self.lru_queue.write().expect("lru_queue lock poisoned");
                 lru.retain(|k| k != key);
                 lru.push_back(key.to_string());
             }
@@ -264,14 +264,14 @@ impl<V: Clone> QueryResultCache<V> {
 
     /// Invalidate (remove) a cache entry
     pub fn invalidate(&self, key: &str) -> bool {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().expect("entries lock poisoned");
 
         if let Some(entry) = entries.remove(key) {
             self.current_memory
                 .fetch_sub(entry.size_bytes, Ordering::Relaxed);
 
             if self.config.enable_lru {
-                let mut lru = self.lru_queue.write().unwrap();
+                let mut lru = self.lru_queue.write().expect("lru_queue lock poisoned");
                 lru.retain(|k| k != key);
             }
 
@@ -284,11 +284,11 @@ impl<V: Clone> QueryResultCache<V> {
 
     /// Clear all cache entries
     pub fn clear(&self) {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().expect("entries lock poisoned");
         entries.clear();
 
         if self.config.enable_lru {
-            let mut lru = self.lru_queue.write().unwrap();
+            let mut lru = self.lru_queue.write().expect("lru_queue lock poisoned");
             lru.clear();
         }
 
@@ -297,7 +297,7 @@ impl<V: Clone> QueryResultCache<V> {
 
     /// Get current cache size (number of entries)
     pub fn len(&self) -> usize {
-        self.entries.read().unwrap().len()
+        self.entries.read().expect("entries lock poisoned").len()
     }
 
     /// Check if cache is empty
@@ -317,7 +317,7 @@ impl<V: Clone> QueryResultCache<V> {
 
     /// Clean expired entries
     fn clean_expired(&self) {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().expect("entries lock poisoned");
         let mut to_remove = Vec::new();
 
         for (key, entry) in entries.iter() {
@@ -332,7 +332,7 @@ impl<V: Clone> QueryResultCache<V> {
             self.stats.expirations.fetch_add(1, Ordering::Relaxed);
 
             if self.config.enable_lru {
-                let mut lru = self.lru_queue.write().unwrap();
+                let mut lru = self.lru_queue.write().expect("lru_queue lock poisoned");
                 lru.retain(|k| k != &key);
             }
         }
@@ -356,12 +356,12 @@ impl<V: Clone> QueryResultCache<V> {
         if !self.config.enable_lru {
             // If LRU is disabled, evict a random entry
             let key_to_evict = {
-                let entries = self.entries.read().unwrap();
+                let entries = self.entries.read().expect("entries lock poisoned");
                 entries.keys().next().cloned()
             };
 
             if let Some(key) = key_to_evict {
-                let mut entries = self.entries.write().unwrap();
+                let mut entries = self.entries.write().expect("entries lock poisoned");
                 if let Some(entry) = entries.remove(&key) {
                     self.current_memory
                         .fetch_sub(entry.size_bytes, Ordering::Relaxed);
@@ -373,12 +373,12 @@ impl<V: Clone> QueryResultCache<V> {
 
         // Evict from LRU queue
         let key_to_evict = {
-            let mut lru = self.lru_queue.write().unwrap();
+            let mut lru = self.lru_queue.write().expect("lru_queue lock poisoned");
             lru.pop_front()
         };
 
         if let Some(key) = key_to_evict {
-            let mut entries = self.entries.write().unwrap();
+            let mut entries = self.entries.write().expect("entries lock poisoned");
             if let Some(entry) = entries.remove(&key) {
                 self.current_memory
                     .fetch_sub(entry.size_bytes, Ordering::Relaxed);

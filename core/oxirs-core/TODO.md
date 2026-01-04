@@ -2,7 +2,7 @@
 
 *Last Updated: December 10, 2025*
 
-## ✅ Current Status: v0.1.0-rc.1 - ML-Based Query Optimization Complete
+## ✅ Current Status: v0.1.0-rc.2 - ML-Based Query Optimization Complete
 
 ### ✨ December 10, 2025 - ML-Based Query Optimizer with Adaptive Learning 🤖📈
 
@@ -311,7 +311,7 @@ SELECT ?employee ?manager WHERE {
 - ✅ src/query/functions/aggregate.rs - NEW 57-line aggregate functions module
 - ✅ TODO.md - Updated with comprehensive refactoring documentation
 
-## ✅ Current Status: v0.1.0-rc.1 - Self-Learning Query Optimizer Complete
+## ✅ Current Status: v0.1.0-rc.2 - Self-Learning Query Optimizer Complete
 
 ### ✨ December 6, 2025 (Evening) - Self-Learning Optimizer with Advanced Statistics 🧠📈
 
@@ -453,7 +453,7 @@ println!("Histogram size: {}", stats.predicate_histogram_size);
 println!("Join samples: {}", stats.join_samples);
 ```
 
-## ✅ Current Status: v0.1.0-rc.1 - Query Optimization Visualization Complete (Morning)
+## ✅ Current Status: v0.1.0-rc.2 - Query Optimization Visualization Complete (Morning)
 
 ### ✨ December 6, 2025 (Morning) - Query Optimizer Visualization Integration 🎯📊
 
@@ -606,7 +606,7 @@ println!("{}", visualizer.visualize_as_tree(&visual_plan));
 - ✅ Cargo.toml - Added query_visualization_bench entry
 - ✅ TODO.md - Comprehensive documentation of enhancements
 
-## ✅ Current Status: v0.1.0-rc.1 - Documentation Complete
+## ✅ Current Status: v0.1.0-rc.2 - Documentation Complete
 
 ### ✨ December 4, 2025 - Comprehensive Documentation Suite Completed
 
@@ -675,7 +675,7 @@ println!("{}", visualizer.visualize_as_tree(&visual_plan));
 **DELIVERABLES COMPLETE:**
 All planned v0.1.0 documentation is now complete and ready for release. The documentation suite provides comprehensive coverage from getting started to production deployment, with detailed guides for performance optimization, best practices, and troubleshooting.
 
-## ✅ Current Status: v0.1.0-rc.1 Advanced Features
+## ✅ Current Status: v0.1.0-rc.2 Advanced Features
 
 ### ✨ December 2, 2025 - Advanced SPARQL Functions & Statistical Aggregates (Final Evening Update)
 
@@ -1066,7 +1066,7 @@ All planned v0.1.0 documentation is now complete and ready for release. The docu
 - **Status:** 18 existing working examples remain
 
 **SUMMARY:**
-OxiRS-Core v0.1.0-rc.1 is production-ready with:
+OxiRS-Core v0.1.0-rc.2 is production-ready with:
 - ✅ Full test coverage (693 tests)
 - ✅ Zero warnings (clippy + compilation)
 - ✅ 100% SCIRS2 policy compliance
@@ -1391,7 +1391,7 @@ File size guidelines are maintainability recommendations, not hard requirements.
 
 ### 🚀 November 7, 2025 - Async I/O Integration & Code Quality! 
 
-**✨ NEW MILESTONE: v0.1.0-rc.1 Async I/O Support**
+**✨ NEW MILESTONE: v0.1.0-rc.2 Async I/O Support**
 - ✅ **Async I/O integration complete** - AsyncRdfStore with tokio for non-blocking operations
 - ✅ **AsyncRdfStore wrapper** - Async insert, remove, query, and store management
 - ✅ **Code refactoring** - Split 2 large files (gnn.rs 2629→8 modules, training.rs 2421→6 modules) using SplitRS
@@ -1488,7 +1488,7 @@ File size guidelines are maintainability recommendations, not hard requirements.
 
 All RC.1 targets have been successfully completed!
 
-### Release Summary (v0.1.0-rc.1)
+### Release Summary (v0.1.0-rc.2)
 
 #### Performance Optimization ✅ (Complete in RC.1)
 - [x] Query execution performance improvements (optimization module)

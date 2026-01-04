@@ -125,23 +125,23 @@ impl HtmlHandler {
 
         // Remove script and style elements
         text = regex::Regex::new(r"<script[^>]*>.*?</script>")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, "")
             .to_string();
         text = regex::Regex::new(r"<style[^>]*>.*?</style>")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, "")
             .to_string();
 
         // Remove HTML tags
         text = regex::Regex::new(r"<[^>]*>")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, " ")
             .to_string();
 
         // Clean up whitespace
         text = regex::Regex::new(r"\s+")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, " ")
             .to_string();
 
@@ -150,7 +150,7 @@ impl HtmlHandler {
 
     fn extract_headings(&self, html: &str) -> Vec<Heading> {
         let mut headings = Vec::new();
-        let tag_remove_re = regex::Regex::new(r"<[^>]*>").unwrap();
+        let tag_remove_re = regex::Regex::new(r"<[^>]*>").expect("valid regex pattern");
 
         for level in 1..=6 {
             let pattern = format!(r"<h{}[^>]*>(.*?)</h{}>", level, level);
@@ -183,7 +183,7 @@ impl HtmlHandler {
 
     fn extract_links(&self, html: &str) -> Vec<crate::content_processing::ExtractedLink> {
         let mut links = Vec::new();
-        let tag_remove_re = regex::Regex::new(r"<[^>]*>").unwrap();
+        let tag_remove_re = regex::Regex::new(r"<[^>]*>").expect("valid regex pattern");
 
         if let Ok(re) = regex::Regex::new(r#"<a[^>]*href\s*=\s*["']([^"']*)["'][^>]*>(.*?)</a>"#) {
             for capture in re.captures_iter(html) {
@@ -291,13 +291,13 @@ impl XmlHandler {
     fn extract_text_from_xml(&self, xml: &str) -> String {
         // Basic XML text extraction - strip tags and return text content
         let text = regex::Regex::new(r"<[^>]*>")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(xml, " ")
             .to_string();
 
         // Clean up whitespace
         regex::Regex::new(r"\s+")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, " ")
             .trim()
             .to_string()
@@ -369,37 +369,37 @@ impl MarkdownHandler {
 
         // Remove code blocks
         text = regex::Regex::new(r"```[\s\S]*?```")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, "")
             .to_string();
 
         // Remove inline code
         text = regex::Regex::new(r"`[^`]*`")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, "")
             .to_string();
 
         // Remove markdown formatting
         text = regex::Regex::new(r"[*_]{1,2}([^*_]*)[*_]{1,2}")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, "$1")
             .to_string();
 
         // Remove headers
         text = regex::Regex::new(r"^#+\s*(.*)$")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, "$1")
             .to_string();
 
         // Remove links
         text = regex::Regex::new(r"\[([^\]]*)\]\([^)]*\)")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, "$1")
             .to_string();
 
         // Clean up whitespace
         regex::Regex::new(r"\s+")
-            .unwrap()
+            .expect("valid regex pattern")
             .replace_all(&text, " ")
             .trim()
             .to_string()
@@ -407,7 +407,7 @@ impl MarkdownHandler {
 
     fn extract_headings(&self, markdown: &str) -> Vec<Heading> {
         let mut headings = Vec::new();
-        let heading_re = regex::Regex::new(r"^(#{1,6})\s+(.+)$").unwrap();
+        let heading_re = regex::Regex::new(r"^(#{1,6})\s+(.+)$").expect("valid regex pattern");
 
         for (i, line) in markdown.lines().enumerate() {
             if let Some(captures) = heading_re.captures(line) {

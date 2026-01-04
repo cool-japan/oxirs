@@ -70,7 +70,10 @@ impl LockTableEntry {
 
         while let Some(waiting_req) = self.waiting.front() {
             if self.is_compatible(waiting_req.mode) {
-                let req = self.waiting.pop_front().unwrap();
+                let req = self
+                    .waiting
+                    .pop_front()
+                    .expect("waiting queue should have element from front()");
                 self.granted.push(req.clone());
                 promoted.push((req.txn_id, req.mode));
             } else {
@@ -121,7 +124,7 @@ impl LockManager {
 
         // Add to wait queue
         {
-            let mut lock_table = self.lock_table.write().unwrap();
+            let mut lock_table = self.lock_table.write().expect("lock poisoned");
             let entry = lock_table
                 .entry(page_id)
                 .or_insert_with(LockTableEntry::new);
@@ -132,11 +135,11 @@ impl LockManager {
         std::thread::sleep(self.deadlock_timeout);
 
         // Check if lock was granted
-        let lock_table = self.lock_table.read().unwrap();
+        let lock_table = self.lock_table.read().expect("lock poisoned");
         if let Some(entry) = lock_table.get(&page_id) {
             if entry.holds_lock(txn_id) {
                 // Lock was granted
-                let mut txn_locks = self.txn_locks.write().unwrap();
+                let mut txn_locks = self.txn_locks.write().expect("lock poisoned");
                 txn_locks.entry(txn_id).or_default().insert((page_id, mode));
                 return Ok(());
             }
@@ -150,7 +153,7 @@ impl LockManager {
 
     /// Try to acquire lock without blocking
     pub fn try_lock(&self, txn_id: TxnId, page_id: PageId, mode: LockMode) -> Result<bool> {
-        let mut lock_table = self.lock_table.write().unwrap();
+        let mut lock_table = self.lock_table.write().expect("lock poisoned");
         let entry = lock_table
             .entry(page_id)
             .or_insert_with(LockTableEntry::new);
@@ -164,7 +167,7 @@ impl LockManager {
         if entry.is_compatible(mode) && entry.waiting.is_empty() {
             entry.grant(txn_id, mode);
 
-            let mut txn_locks = self.txn_locks.write().unwrap();
+            let mut txn_locks = self.txn_locks.write().expect("lock poisoned");
             txn_locks.entry(txn_id).or_default().insert((page_id, mode));
 
             Ok(true)
@@ -175,13 +178,13 @@ impl LockManager {
 
     /// Release a specific lock
     pub fn unlock(&self, txn_id: TxnId, page_id: PageId) -> Result<()> {
-        let mut lock_table = self.lock_table.write().unwrap();
+        let mut lock_table = self.lock_table.write().expect("lock poisoned");
 
         if let Some(entry) = lock_table.get_mut(&page_id) {
             let promoted = entry.release(txn_id);
 
             // Update txn_locks for promoted transactions
-            let mut txn_locks = self.txn_locks.write().unwrap();
+            let mut txn_locks = self.txn_locks.write().expect("lock poisoned");
             for (promoted_txn, promoted_mode) in promoted {
                 txn_locks
                     .entry(promoted_txn)
@@ -205,7 +208,7 @@ impl LockManager {
 
     /// Release all locks held by a transaction (on commit/abort)
     pub fn release_all(&self, txn_id: TxnId) -> Result<()> {
-        let txn_locks = self.txn_locks.read().unwrap();
+        let txn_locks = self.txn_locks.read().expect("lock poisoned");
         let locks_to_release: Vec<_> = txn_locks
             .get(&txn_id)
             .map(|locks| locks.iter().map(|(page_id, _)| *page_id).collect())
@@ -218,7 +221,7 @@ impl LockManager {
         }
 
         // Clean up transaction entry
-        let mut txn_locks = self.txn_locks.write().unwrap();
+        let mut txn_locks = self.txn_locks.write().expect("lock poisoned");
         txn_locks.remove(&txn_id);
 
         Ok(())
@@ -226,7 +229,7 @@ impl LockManager {
 
     /// Check if transaction holds any locks
     pub fn has_locks(&self, txn_id: TxnId) -> bool {
-        let txn_locks = self.txn_locks.read().unwrap();
+        let txn_locks = self.txn_locks.read().expect("lock poisoned");
         txn_locks
             .get(&txn_id)
             .map(|locks| !locks.is_empty())
@@ -235,7 +238,7 @@ impl LockManager {
 
     /// Get all locks held by a transaction
     pub fn get_locks(&self, txn_id: TxnId) -> Vec<(PageId, LockMode)> {
-        let txn_locks = self.txn_locks.read().unwrap();
+        let txn_locks = self.txn_locks.read().expect("lock poisoned");
         txn_locks
             .get(&txn_id)
             .map(|locks| locks.iter().cloned().collect())
@@ -244,7 +247,7 @@ impl LockManager {
 
     /// Get all transactions currently holding locks on a page
     pub fn get_lock_holders(&self, page_id: PageId) -> Vec<(TxnId, LockMode)> {
-        let lock_table = self.lock_table.read().unwrap();
+        let lock_table = self.lock_table.read().expect("lock poisoned");
         lock_table
             .get(&page_id)
             .map(|entry| {
@@ -259,7 +262,7 @@ impl LockManager {
 
     /// Get all transactions waiting for a lock on a page
     pub fn get_lock_waiters(&self, page_id: PageId) -> Vec<(TxnId, LockMode)> {
-        let lock_table = self.lock_table.read().unwrap();
+        let lock_table = self.lock_table.read().expect("lock poisoned");
         lock_table
             .get(&page_id)
             .map(|entry| {

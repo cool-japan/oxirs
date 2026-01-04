@@ -1,5 +1,5 @@
 use crate::error::{Result, TdbError};
-use bincode::{Decode, Encode};
+use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -20,7 +20,7 @@ pub struct PrefixCompressor {
 }
 
 /// Compressed string representation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompressedString {
     /// Prefix ID (0 = no prefix)
     pub prefix_id: u32,
@@ -283,9 +283,10 @@ mod tests {
             suffix: "Person".to_string(),
         };
 
-        let serialized = bincode::encode_to_vec(&compressed, bincode::config::standard()).unwrap();
+        let serialized =
+            oxicode::serde::encode_to_vec(&compressed, oxicode::config::standard()).unwrap();
         let deserialized: CompressedString =
-            bincode::decode_from_slice(&serialized, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&serialized, oxicode::config::standard())
                 .unwrap()
                 .0;
 

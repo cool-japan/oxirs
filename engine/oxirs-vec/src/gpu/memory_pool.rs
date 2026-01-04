@@ -69,7 +69,7 @@ impl GpuMemoryPool {
                 let ptr_value = buffer.ptr() as usize;
                 self.allocation_times
                     .lock()
-                    .unwrap()
+                    .expect("lock poisoned")
                     .push((ptr_value, Instant::now()));
 
                 return Ok(buffer);
@@ -77,7 +77,7 @@ impl GpuMemoryPool {
         }
 
         // No available buffers, check if we can allocate a new one
-        if self.allocated_buffers.lock().unwrap().len() >= self.max_buffers {
+        if self.allocated_buffers.lock().expect("lock poisoned").len() >= self.max_buffers {
             let elapsed = start_time.elapsed();
             self.record_operation_time("buffer_acquire_failed", elapsed);
             return Err(anyhow!("Memory pool exhausted"));
@@ -100,7 +100,7 @@ impl GpuMemoryPool {
         let ptr_value = buffer.ptr() as usize;
         self.allocation_times
             .lock()
-            .unwrap()
+            .expect("lock poisoned")
             .push((ptr_value, Instant::now()));
 
         // Record total acquisition time
@@ -139,7 +139,7 @@ impl GpuMemoryPool {
 
         // Remove from allocation tracking
         {
-            let mut alloc_times = self.allocation_times.lock().unwrap();
+            let mut alloc_times = self.allocation_times.lock().expect("lock poisoned");
             alloc_times.retain(|(ptr, _)| *ptr != ptr_value);
         }
 
@@ -161,8 +161,8 @@ impl GpuMemoryPool {
 
     /// Get pool statistics
     pub fn stats(&self) -> MemoryPoolStats {
-        let allocated_count = self.allocated_buffers.lock().unwrap().len();
-        let available_count = self.available_buffers.lock().unwrap().len();
+        let allocated_count = self.allocated_buffers.lock().expect("lock poisoned").len();
+        let available_count = self.available_buffers.lock().expect("lock poisoned").len();
 
         MemoryPoolStats {
             total_buffers: allocated_count + available_count,
@@ -199,15 +199,21 @@ impl GpuMemoryPool {
     /// Clear all buffers and reset the pool
     pub fn clear(&mut self) {
         // Clear all buffers (Drop will handle GPU memory deallocation)
-        self.available_buffers.lock().unwrap().clear();
-        self.allocated_buffers.lock().unwrap().clear();
+        self.available_buffers
+            .lock()
+            .expect("lock poisoned")
+            .clear();
+        self.allocated_buffers
+            .lock()
+            .expect("lock poisoned")
+            .clear();
         self.used_memory = 0;
     }
 
     /// Check if pool has available capacity
     pub fn has_capacity(&self) -> bool {
-        let total_buffers = self.available_buffers.lock().unwrap().len()
-            + self.allocated_buffers.lock().unwrap().len();
+        let total_buffers = self.available_buffers.lock().expect("lock poisoned").len()
+            + self.allocated_buffers.lock().expect("lock poisoned").len();
         total_buffers < self.max_buffers
     }
 
@@ -255,7 +261,7 @@ impl GpuMemoryPool {
     pub fn detect_leaks(&self, threshold_secs: u64) -> Vec<MemoryLeak> {
         let mut leaks = Vec::new();
         let now = Instant::now();
-        let alloc_times = self.allocation_times.lock().unwrap();
+        let alloc_times = self.allocation_times.lock().expect("lock poisoned");
 
         for (ptr, alloc_time) in alloc_times.iter() {
             let duration = now.duration_since(*alloc_time);
@@ -273,15 +279,15 @@ impl GpuMemoryPool {
 
     /// Get profiling report for memory operations
     pub fn profiling_report(&self) -> String {
-        let timings = self.operation_timings.lock().unwrap();
+        let timings = self.operation_timings.lock().expect("lock poisoned");
         let mut report = String::from("GPU Memory Pool Performance Report:\n");
 
         for (operation, durations) in timings.iter() {
             if !durations.is_empty() {
                 let total: Duration = durations.iter().sum();
                 let avg = total / durations.len() as u32;
-                let min = durations.iter().min().unwrap();
-                let max = durations.iter().max().unwrap();
+                let min = durations.iter().min().expect("non-empty durations");
+                let max = durations.iter().max().expect("non-empty durations");
 
                 report.push_str(&format!(
                     "  {}: {} calls, avg={:.2}µs, min={:.2}µs, max={:.2}µs\n",
@@ -309,7 +315,7 @@ impl GpuMemoryPool {
             } else {
                 0.0
             },
-            active_allocations: self.allocation_times.lock().unwrap().len(),
+            active_allocations: self.allocation_times.lock().expect("lock poisoned").len(),
         }
     }
 

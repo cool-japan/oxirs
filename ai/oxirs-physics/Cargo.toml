@@ -19,7 +19,7 @@ oxirs-stream = { workspace = true, optional = true }
 
 # SciRS2 scientific computing foundation
 scirs2-core.workspace = true
-scirs2-integrate = { version = "0.1.0-rc.4", optional = true }
+scirs2-integrate = { version = "0.1.1", optional = true }
 scirs2-optimize = { workspace = true, optional = true }
 scirs2-neural = { workspace = true, optional = true }
 scirs2-linalg = { workspace = true, optional = true }

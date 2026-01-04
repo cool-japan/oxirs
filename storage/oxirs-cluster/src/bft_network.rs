@@ -224,7 +224,7 @@ impl BftNetworkService {
         // Check message freshness (5 minute window)
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         if current_time > auth_msg.timestamp + 300 {
@@ -298,7 +298,7 @@ impl BftNetworkService {
         // Get current timestamp
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         // Create message without signature
@@ -392,7 +392,7 @@ impl BftNetworkService {
                         operation: b"HEARTBEAT".to_vec(),
                         timestamp: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
+                            .expect("SystemTime should be after UNIX_EPOCH")
                             .as_secs(),
                         signature: None,
                     };

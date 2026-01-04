@@ -18,7 +18,7 @@ pub mod urn {
     /// ```
     /// use oxirs_samm::utils::urn::extract_namespace;
     ///
-    /// let namespace = extract_namespace("urn:samm:org.eclipse.examples:1.0.0#Movement").unwrap();
+    /// let namespace = extract_namespace("urn:samm:org.eclipse.examples:1.0.0#Movement").expect("URN should be valid");
     /// assert_eq!(namespace, "org.eclipse.examples");
     /// ```
     pub fn extract_namespace(urn: &str) -> Result<String> {
@@ -54,7 +54,7 @@ pub mod urn {
     /// ```
     /// use oxirs_samm::utils::urn::extract_version;
     ///
-    /// let version = extract_version("urn:samm:org.eclipse.examples:1.0.0#Movement").unwrap();
+    /// let version = extract_version("urn:samm:org.eclipse.examples:1.0.0#Movement").expect("URN should be valid");
     /// assert_eq!(version, "1.0.0");
     /// ```
     pub fn extract_version(urn: &str) -> Result<String> {
@@ -90,7 +90,7 @@ pub mod urn {
     /// ```
     /// use oxirs_samm::utils::urn::extract_element;
     ///
-    /// let element = extract_element("urn:samm:org.eclipse.examples:1.0.0#Movement").unwrap();
+    /// let element = extract_element("urn:samm:org.eclipse.examples:1.0.0#Movement").expect("URN should be valid");
     /// assert_eq!(element, "Movement");
     /// ```
     pub fn extract_element(urn: &str) -> Result<String> {
@@ -141,7 +141,9 @@ pub mod urn {
             )));
         }
 
-        let namespace_version = parts[0].strip_prefix("urn:samm:").unwrap();
+        let namespace_version = parts[0]
+            .strip_prefix("urn:samm:")
+            .expect("URN should start with 'urn:samm:' prefix");
         let nv_parts: Vec<&str> = namespace_version.split(':').collect();
         if nv_parts.len() != 2 {
             return Err(SammError::InvalidUrn(format!(
@@ -189,7 +191,11 @@ pub mod naming {
         }
 
         let mut chars = s.chars();
-        let first = chars.next().unwrap().to_lowercase().to_string();
+        let first = chars
+            .next()
+            .expect("string should not be empty")
+            .to_lowercase()
+            .to_string();
         first + chars.as_str()
     }
 
@@ -208,7 +214,11 @@ pub mod naming {
         }
 
         let mut chars = s.chars();
-        let first = chars.next().unwrap().to_uppercase().to_string();
+        let first = chars
+            .next()
+            .expect("string should not be empty")
+            .to_uppercase()
+            .to_string();
         first + chars.as_str()
     }
 
@@ -231,7 +241,11 @@ pub mod naming {
                 if !result.is_empty() && chars.peek().is_some_and(|c| c.is_lowercase()) {
                     result.push('_');
                 }
-                result.push(ch.to_lowercase().next().unwrap());
+                result.push(
+                    ch.to_lowercase()
+                        .next()
+                        .expect("to_lowercase should yield at least one char"),
+                );
             } else {
                 result.push(ch);
             }
@@ -248,7 +262,7 @@ pub mod naming {
             return false;
         }
 
-        let first_char = name.chars().next().unwrap();
+        let first_char = name.chars().next().expect("name should not be empty");
         if !first_char.is_lowercase() && !first_char.is_ascii_digit() {
             return false;
         }
@@ -262,7 +276,7 @@ pub mod naming {
             return false;
         }
 
-        let first_char = name.chars().next().unwrap();
+        let first_char = name.chars().next().expect("name should not be empty");
         if !first_char.is_uppercase() {
             return false;
         }
@@ -500,7 +514,7 @@ pub mod serialization {
     ///
     /// let aspect = Aspect::new("urn:samm:test:1.0.0#Test".to_string());
     ///
-    /// let json = to_json_string(&aspect).unwrap();
+    /// let json = to_json_string(&aspect).expect("JSON serialization should succeed");
     /// assert!(json.contains("Test"));
     /// ```
     pub fn to_json_string(aspect: &Aspect) -> Result<String> {
@@ -692,8 +706,16 @@ pub mod diff {
         let mut properties_modified = 0;
 
         for urn in common_urns {
-            let old_prop = old.properties.iter().find(|p| p.urn() == *urn).unwrap();
-            let new_prop = new.properties.iter().find(|p| p.urn() == *urn).unwrap();
+            let old_prop = old
+                .properties
+                .iter()
+                .find(|p| p.urn() == *urn)
+                .expect("property should exist in old aspect");
+            let new_prop = new
+                .properties
+                .iter()
+                .find(|p| p.urn() == *urn)
+                .expect("property should exist in new aspect");
 
             if old_prop.optional != new_prop.optional
                 || old_prop.example_values != new_prop.example_values

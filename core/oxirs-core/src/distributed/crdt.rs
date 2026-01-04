@@ -697,7 +697,7 @@ impl RdfCrdt {
         // Remove old tombstones based on age
         let cutoff = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock should be after Unix epoch")
             .as_secs()
             - self.config.gc_config.tombstone_ttl_secs;
 

@@ -77,7 +77,7 @@ impl BftMessage {
     pub fn digest(&self) -> Vec<u8> {
         use sha2::{Digest, Sha256};
         let serialized =
-            bincode::serde::encode_to_vec(self, bincode::config::standard()).unwrap_or_default();
+            oxicode::serde::encode_to_vec(self, oxicode::config::standard()).unwrap_or_default();
         Sha256::digest(&serialized).to_vec()
     }
 

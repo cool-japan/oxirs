@@ -1,7 +1,6 @@
 //! Session management and chat functionality
 
 use crate::messages::Message;
-use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -9,7 +8,7 @@ use std::{
 };
 
 /// Session configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatConfig {
     pub max_context_tokens: usize,
     pub sliding_window_size: usize,
@@ -39,7 +38,7 @@ impl Default for ChatConfig {
 }
 
 /// Session state enumeration
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SessionState {
     Active,
     Idle,
@@ -76,17 +75,21 @@ impl ContextWindow {
     pub fn add_message(&mut self, message_id: String, importance: f32, tokens: usize) {
         // Remove oldest if window is full and message isn't pinned
         while self.active_messages.len() >= self.window_size {
-            if let Some(oldest_id) = self.active_messages.front() {
-                if !self.pinned_messages.contains(oldest_id) {
-                    let removed_id = self.active_messages.pop_front().unwrap();
+            // Check if front message is pinned before removing
+            let should_remove = self
+                .active_messages
+                .front()
+                .map(|id| !self.pinned_messages.contains(id))
+                .unwrap_or(false);
+
+            if should_remove {
+                if let Some(removed_id) = self.active_messages.pop_front() {
                     if let Some(removed_tokens) = self.importance_scores.remove(&removed_id) {
                         // Estimate tokens from importance score (simplified)
                         self.token_count = self
                             .token_count
                             .saturating_sub((removed_tokens * 100.0) as usize);
                     }
-                } else {
-                    break;
                 }
             } else {
                 break;
@@ -326,7 +329,7 @@ impl PartialEq<&str> for TransitionType {
 }
 
 /// Session performance metrics
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SessionMetrics {
     pub total_messages: usize,
     pub user_messages: usize,
@@ -342,7 +345,6 @@ pub struct SessionMetrics {
     pub warning_count: usize,
     pub cache_hits: usize,
     pub cache_misses: usize,
-    #[bincode(with_serde)]
     pub last_updated: chrono::DateTime<chrono::Utc>,
 }
 

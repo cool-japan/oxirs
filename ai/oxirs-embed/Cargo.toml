@@ -11,6 +11,10 @@ keywords = ["embeddings", "knowledge-graph", "machine-learning", "ai", "rdf"]
 categories = ["science", "algorithms", "data-structures"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 # Core dependencies - using workspace versions for consistency
 serde = { workspace = true }
@@ -34,7 +38,7 @@ futures-util = { workspace = true }
 regex = "1.12"
 
 # Federated learning dependencies
-bincode = "1.3"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 flate2 = "1.1"
 
 # Internal OxiRS dependencies

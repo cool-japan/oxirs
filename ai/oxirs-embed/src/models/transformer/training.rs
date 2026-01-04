@@ -51,7 +51,7 @@ impl TransformerTrainer {
             let mut shuffled_triples = triples.to_vec();
             // Manual Fisher-Yates shuffle using scirs2-core
             for i in (1..shuffled_triples.len()).rev() {
-                let j = random.random_range(0, i + 1);
+                let j = random.random_range(0..i + 1);
                 shuffled_triples.swap(i, j);
             }
 
@@ -224,7 +224,7 @@ impl TransformerTrainer {
                         // Generate negative samples
                         let mut negative_scores = Vec::new();
                         for _ in 0..negative_samples {
-                            let neg_idx = random.random_range(0, entity_keys.len());
+                            let neg_idx = random.random_range(0..entity_keys.len());
                             let neg_entity = &entity_keys[neg_idx];
                             {
                                 if neg_entity != entity1 && neg_entity != entity2 {

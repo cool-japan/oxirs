@@ -325,7 +325,7 @@ impl QuantumGraphProcessor {
                 let max_idx = probabilities
                     .iter()
                     .enumerate()
-                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
                     .map(|(i, _)| i)
                     .unwrap_or(0);
                 Ok(max_idx)
@@ -423,20 +423,26 @@ impl QuantumGateSet {
                 -1.0 / 2.0_f64.sqrt(),
             ],
         )
-        .unwrap();
+        .expect("Hadamard gate shape and vector length match");
 
         // Pauli gates
-        let pauli_x = Array2::from_shape_vec((2, 2), vec![0.0, 1.0, 1.0, 0.0]).unwrap();
-        let pauli_y = Array2::from_shape_vec((2, 2), vec![0.0, -1.0, 1.0, 0.0]).unwrap();
-        let pauli_z = Array2::from_shape_vec((2, 2), vec![1.0, 0.0, 0.0, -1.0]).unwrap();
+        let pauli_x = Array2::from_shape_vec((2, 2), vec![0.0, 1.0, 1.0, 0.0])
+            .expect("Pauli X gate shape and vector length match");
+        let pauli_y = Array2::from_shape_vec((2, 2), vec![0.0, -1.0, 1.0, 0.0])
+            .expect("Pauli Y gate shape and vector length match");
+        let pauli_z = Array2::from_shape_vec((2, 2), vec![1.0, 0.0, 0.0, -1.0])
+            .expect("Pauli Z gate shape and vector length match");
 
         // CNOT gate (simplified 2x2 representation)
-        let cnot = Array2::from_shape_vec((2, 2), vec![1.0, 0.0, 0.0, 1.0]).unwrap();
+        let cnot = Array2::from_shape_vec((2, 2), vec![1.0, 0.0, 0.0, 1.0])
+            .expect("CNOT gate shape and vector length match");
 
         // Custom RDF gates
-        let rdf_similarity = Array2::from_shape_vec((2, 2), vec![0.8, 0.6, 0.6, 0.8]).unwrap();
+        let rdf_similarity = Array2::from_shape_vec((2, 2), vec![0.8, 0.6, 0.6, 0.8])
+            .expect("RDF similarity gate shape and vector length match");
 
-        let rdf_hierarchy = Array2::from_shape_vec((2, 2), vec![1.0, 0.5, 0.0, 1.0]).unwrap();
+        let rdf_hierarchy = Array2::from_shape_vec((2, 2), vec![1.0, 0.5, 0.0, 1.0])
+            .expect("RDF hierarchy gate shape and vector length match");
 
         Self {
             hadamard,

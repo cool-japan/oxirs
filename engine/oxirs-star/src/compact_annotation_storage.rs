@@ -457,9 +457,9 @@ impl CompactAnnotationStore {
 
     /// Serialize to compressed binary format
     pub fn serialize_compressed<W: Write>(&self, writer: W) -> StarResult<()> {
-        let config = bincode::config::standard();
-        let data = bincode::serde::encode_to_vec(
-            (&self.dictionary, &self.annotations, &self.meta_annotations),
+        let config = oxicode::config::standard();
+        let data = oxicode::serde::encode_to_vec(
+            &(&self.dictionary, &self.annotations, &self.meta_annotations),
             config,
         )
         .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
@@ -496,12 +496,12 @@ impl CompactAnnotationStore {
             data
         };
 
-        let config = bincode::config::standard();
+        let config = oxicode::config::standard();
         let (dictionary, annotations, meta_annotations): (
             StringDictionary,
             HashMap<u64, CompactAnnotation>,
             HashMap<u64, Vec<CompactAnnotation>>,
-        ) = bincode::serde::decode_from_slice(&decompressed, config)
+        ) = oxicode::serde::decode_from_slice(&decompressed, config)
             .map_err(|e| crate::StarError::parse_error(e.to_string()))?
             .0;
 

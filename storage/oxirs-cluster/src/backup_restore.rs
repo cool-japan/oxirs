@@ -562,10 +562,11 @@ impl BackupRestoreManager {
         match self.config.format {
             BackupFormat::Json => serde_json::to_vec(data)
                 .map_err(|e| ClusterError::Serialize(format!("JSON serialization failed: {}", e))),
-            BackupFormat::Binary | BackupFormat::CompressedBinary => bincode::serialize(data)
-                .map_err(|e| {
+            BackupFormat::Binary | BackupFormat::CompressedBinary => {
+                oxicode::serde::encode_to_vec(&data, oxicode::config::standard()).map_err(|e| {
                     ClusterError::Serialize(format!("Binary serialization failed: {}", e))
-                }),
+                })
+            }
         }
     }
 
@@ -575,10 +576,13 @@ impl BackupRestoreManager {
             BackupFormat::Json => serde_json::from_slice(data).map_err(|e| {
                 ClusterError::Serialize(format!("JSON deserialization failed: {}", e))
             }),
-            BackupFormat::Binary | BackupFormat::CompressedBinary => bincode::deserialize(data)
-                .map_err(|e| {
-                    ClusterError::Serialize(format!("Binary deserialization failed: {}", e))
-                }),
+            BackupFormat::Binary | BackupFormat::CompressedBinary => {
+                oxicode::serde::decode_from_slice(data, oxicode::config::standard())
+                    .map(|(v, _)| v)
+                    .map_err(|e| {
+                        ClusterError::Serialize(format!("Binary deserialization failed: {}", e))
+                    })
+            }
         }
     }
 

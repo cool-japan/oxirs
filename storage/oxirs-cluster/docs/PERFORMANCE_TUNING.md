@@ -1,6 +1,6 @@
 # OxiRS Cluster Performance Tuning Guide
 
-**Version:** 0.1.0-rc.1
+**Version:** 0.1.0-rc.2
 **Last Updated:** November 20, 2025
 
 ## Overview

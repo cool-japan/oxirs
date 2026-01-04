@@ -82,25 +82,41 @@ impl StarCache {
 
     /// Get cached results for a query
     pub fn get(&self, key: &str) -> Option<Vec<StarTriple>> {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("rwlock should not be poisoned");
         stats.total_lookups += 1;
 
         // Check triple cache first
-        if let Some(results) = self.triple_cache.read().unwrap().get(key) {
+        if let Some(results) = self
+            .triple_cache
+            .read()
+            .expect("rwlock should not be poisoned")
+            .get(key)
+        {
             stats.hits += 1;
 
             // Update access frequency
-            let mut freq = self.access_frequency.write().unwrap();
+            let mut freq = self
+                .access_frequency
+                .write()
+                .expect("rwlock should not be poisoned");
             *freq.entry(key.to_string()).or_insert(0) += 1;
 
             return Some(results.clone());
         }
 
         // Check pattern cache
-        if let Some(results) = self.pattern_cache.read().unwrap().get(key) {
+        if let Some(results) = self
+            .pattern_cache
+            .read()
+            .expect("rwlock should not be poisoned")
+            .get(key)
+        {
             stats.hits += 1;
 
-            let mut freq = self.access_frequency.write().unwrap();
+            let mut freq = self
+                .access_frequency
+                .write()
+                .expect("rwlock should not be poisoned");
             *freq.entry(key.to_string()).or_insert(0) += 1;
 
             return Some(results.clone());
@@ -114,12 +130,15 @@ impl StarCache {
     pub fn put(&self, key: String, results: Vec<StarTriple>) {
         // Simple LRU eviction if cache is full
         if self.config.enable_lru {
-            let mut cache = self.triple_cache.write().unwrap();
+            let mut cache = self
+                .triple_cache
+                .write()
+                .expect("rwlock should not be poisoned");
             if cache.len() >= self.config.max_triple_entries {
                 // Remove least frequently used entry
                 if let Some(lfu_key) = self.find_least_frequent_key() {
                     cache.remove(&lfu_key);
-                    let mut stats = self.stats.write().unwrap();
+                    let mut stats = self.stats.write().expect("rwlock should not be poisoned");
                     stats.evictions += 1;
                 }
             }
@@ -128,7 +147,10 @@ impl StarCache {
     }
 
     fn find_least_frequent_key(&self) -> Option<String> {
-        let freq = self.access_frequency.read().unwrap();
+        let freq = self
+            .access_frequency
+            .read()
+            .expect("rwlock should not be poisoned");
         freq.iter()
             .min_by_key(|&(_, &count)| count)
             .map(|(key, _)| key.clone())
@@ -136,13 +158,25 @@ impl StarCache {
 
     /// Get cache statistics
     pub fn get_statistics(&self) -> CacheStatistics {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("rwlock should not be poisoned")
+            .clone()
     }
 
     /// Clear all cache entries
     pub fn clear(&self) {
-        self.triple_cache.write().unwrap().clear();
-        self.pattern_cache.write().unwrap().clear();
-        self.access_frequency.write().unwrap().clear();
+        self.triple_cache
+            .write()
+            .expect("rwlock should not be poisoned")
+            .clear();
+        self.pattern_cache
+            .write()
+            .expect("rwlock should not be poisoned")
+            .clear();
+        self.access_frequency
+            .write()
+            .expect("rwlock should not be poisoned")
+            .clear();
     }
 }

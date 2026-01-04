@@ -417,7 +417,7 @@ impl EntityClustering {
         let mut centroids: Vec<Array1<f32>> = Vec::new();
 
         // K-Means++ initialization for better convergence
-        let first_idx = self.rng.random_range(0, n);
+        let first_idx = self.rng.random_range(0..n);
         centroids.push(entity_embeddings[&entity_list[first_idx]].clone());
 
         for _ in 1..k {
@@ -436,7 +436,7 @@ impl EntityClustering {
 
             // Sample proportional to distance squared
             let sum: f32 = distances.iter().sum();
-            let mut prob = self.rng.random_range(0.0, sum);
+            let mut prob = self.rng.random_range(0.0..sum);
             let mut next_idx = 0;
 
             for (i, &dist) in distances.iter().enumerate() {

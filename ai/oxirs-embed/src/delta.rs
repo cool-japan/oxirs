@@ -206,7 +206,10 @@ impl DeltaManager {
 
     /// Record a change in the system
     pub fn record_change(&self, change: ChangeRecord) -> Result<()> {
-        let mut change_log = self.change_log.write().unwrap();
+        let mut change_log = self
+            .change_log
+            .write()
+            .expect("rwlock should not be poisoned");
 
         // Add to change log
         change_log.push_back(change.clone());
@@ -219,7 +222,10 @@ impl DeltaManager {
         drop(change_log);
 
         // Add to pending changes
-        let mut pending = self.pending_changes.write().unwrap();
+        let mut pending = self
+            .pending_changes
+            .write()
+            .expect("rwlock should not be poisoned");
         pending.push(change);
 
         Ok(())
@@ -284,7 +290,10 @@ impl DeltaManager {
 
         // Get pending changes
         let changes = {
-            let mut pending = self.pending_changes.write().unwrap();
+            let mut pending = self
+                .pending_changes
+                .write()
+                .expect("rwlock should not be poisoned");
             if pending.len() < self.config.min_changes_for_delta {
                 return Err(anyhow!(
                     "Not enough changes for delta computation: {} < {}",
@@ -380,7 +389,10 @@ impl DeltaManager {
 
         // Update last delta timestamp
         {
-            let mut last_timestamp = self.last_delta_timestamp.write().unwrap();
+            let mut last_timestamp = self
+                .last_delta_timestamp
+                .write()
+                .expect("rwlock should not be poisoned");
             *last_timestamp = Some(to_timestamp);
         }
 
@@ -422,7 +434,10 @@ impl DeltaManager {
         entities: &HashSet<String>,
     ) -> Result<HashMap<String, Array1<f32>>> {
         let mut deltas = HashMap::new();
-        let baseline = self.baseline_embeddings.read().unwrap();
+        let baseline = self
+            .baseline_embeddings
+            .read()
+            .expect("rwlock should not be poisoned");
 
         for entity in entities {
             // Get current embedding
@@ -538,7 +553,10 @@ impl DeltaManager {
         model: &dyn EmbeddingModel,
         entities: &HashSet<String>,
     ) -> Result<()> {
-        let mut baseline = self.baseline_embeddings.write().unwrap();
+        let mut baseline = self
+            .baseline_embeddings
+            .write()
+            .expect("rwlock should not be poisoned");
 
         for entity in entities {
             if let Ok(embedding) = model.get_entity_embedding(entity) {
@@ -553,7 +571,10 @@ impl DeltaManager {
     /// Set baseline embeddings from current model state
     pub async fn set_baseline_from_model(&self, model: &dyn EmbeddingModel) -> Result<()> {
         let entities = model.get_entities();
-        let mut baseline = self.baseline_embeddings.write().unwrap();
+        let mut baseline = self
+            .baseline_embeddings
+            .write()
+            .expect("rwlock should not be poisoned");
         baseline.clear();
 
         for entity in entities {
@@ -569,7 +590,10 @@ impl DeltaManager {
 
     /// Get change log within time window
     pub fn get_changes_in_window(&self, window_start: DateTime<Utc>) -> Vec<ChangeRecord> {
-        let change_log = self.change_log.read().unwrap();
+        let change_log = self
+            .change_log
+            .read()
+            .expect("rwlock should not be poisoned");
         change_log
             .iter()
             .filter(|change| change.timestamp >= window_start)
@@ -579,8 +603,14 @@ impl DeltaManager {
 
     /// Get statistics about changes
     pub fn get_change_statistics(&self) -> ChangeStatistics {
-        let change_log = self.change_log.read().unwrap();
-        let pending = self.pending_changes.read().unwrap();
+        let change_log = self
+            .change_log
+            .read()
+            .expect("rwlock should not be poisoned");
+        let pending = self
+            .pending_changes
+            .read()
+            .expect("rwlock should not be poisoned");
 
         let mut stats = ChangeStatistics {
             total_changes: change_log.len(),
@@ -614,8 +644,14 @@ impl DeltaManager {
 
     /// Clear change log
     pub fn clear_change_log(&self) {
-        let mut change_log = self.change_log.write().unwrap();
-        let mut pending = self.pending_changes.write().unwrap();
+        let mut change_log = self
+            .change_log
+            .write()
+            .expect("rwlock should not be poisoned");
+        let mut pending = self
+            .pending_changes
+            .write()
+            .expect("rwlock should not be poisoned");
         change_log.clear();
         pending.clear();
         println!("🗑️  Cleared change log and pending changes");
@@ -628,13 +664,19 @@ impl DeltaManager {
 
     /// Check if delta computation is needed
     pub fn should_compute_delta(&self) -> bool {
-        let pending = self.pending_changes.read().unwrap();
+        let pending = self
+            .pending_changes
+            .read()
+            .expect("rwlock should not be poisoned");
         pending.len() >= self.config.min_changes_for_delta
     }
 
     /// Get last delta timestamp
     pub fn get_last_delta_timestamp(&self) -> Option<DateTime<Utc>> {
-        *self.last_delta_timestamp.read().unwrap()
+        *self
+            .last_delta_timestamp
+            .read()
+            .expect("rwlock should not be poisoned")
     }
 }
 
@@ -762,7 +804,10 @@ mod tests {
         assert_eq!(stats.pending_changes, 1);
 
         // Verify batch ID is assigned
-        let pending = manager.pending_changes.read().unwrap();
+        let pending = manager
+            .pending_changes
+            .read()
+            .expect("rwlock should not be poisoned");
         assert_eq!(pending[0].batch_id, Some(batch_id));
     }
 

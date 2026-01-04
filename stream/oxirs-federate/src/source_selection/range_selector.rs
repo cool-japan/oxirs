@@ -235,7 +235,7 @@ impl RangeBasedSelector {
 
             // Take up to 10 sample values
             let mut sample_values = numeric_values.clone();
-            sample_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sample_values.sort_by(|a, b| a.partial_cmp(b).expect("f64 values should not be NaN"));
             sample_values.truncate(10);
 
             numeric_ranges.insert(
@@ -355,8 +355,14 @@ impl RangeBasedSelector {
         }
 
         if !datetime_values.is_empty() {
-            let earliest = *datetime_values.iter().min().unwrap();
-            let latest = *datetime_values.iter().max().unwrap();
+            let earliest = *datetime_values
+                .iter()
+                .min()
+                .expect("datetime_values is not empty");
+            let latest = *datetime_values
+                .iter()
+                .max()
+                .expect("datetime_values is not empty");
 
             // Determine granularity based on the range
             let range_duration = latest.signed_duration_since(earliest);
@@ -454,8 +460,8 @@ impl RangeBasedSelector {
         let is_periodic = coefficient_of_variation < 0.3;
 
         // Clustered: high variation with some very small intervals
-        let min_interval = *intervals.iter().min().unwrap();
-        let max_interval = *intervals.iter().max().unwrap();
+        let min_interval = *intervals.iter().min().expect("intervals is not empty");
+        let max_interval = *intervals.iter().max().expect("intervals is not empty");
         let is_clustered = max_interval > min_interval * 10 && coefficient_of_variation > 1.0;
 
         if is_sequential {
@@ -527,8 +533,14 @@ impl RangeBasedSelector {
         }
 
         if !year_distribution.is_empty() {
-            let earliest_year = *year_distribution.keys().min().unwrap();
-            let latest_year = *year_distribution.keys().max().unwrap();
+            let earliest_year = *year_distribution
+                .keys()
+                .min()
+                .expect("year_distribution is not empty");
+            let latest_year = *year_distribution
+                .keys()
+                .max()
+                .expect("year_distribution is not empty");
 
             year_ranges.insert(
                 predicate.to_string(),
@@ -544,7 +556,7 @@ impl RangeBasedSelector {
     /// Generalize path by replacing numbers with placeholders
     fn generalize_path(&self, path: &str) -> String {
         use regex::Regex;
-        let re = Regex::new(r"\d+").unwrap();
+        let re = Regex::new(r"\d+").expect("hardcoded regex should be valid");
         re.replace_all(path, "{id}").to_string()
     }
 
@@ -564,7 +576,7 @@ impl RangeBasedSelector {
 
         // Try to find 4-digit year in the string
         use regex::Regex;
-        let re = Regex::new(r"\b(19|20)\d{2}\b").unwrap();
+        let re = Regex::new(r"\b(19|20)\d{2}\b").expect("hardcoded regex should be valid");
         if let Some(captures) = re.find(value) {
             if let Ok(year) = captures.as_str().parse::<i32>() {
                 return Some(year);

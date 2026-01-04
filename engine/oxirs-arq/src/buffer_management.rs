@@ -40,7 +40,7 @@ impl BufferPoolManager {
 
     /// Get a solution from the pool (or create new one)
     pub fn acquire_solution(&self) -> PooledSolution<'_> {
-        let solution = self.solution_pool.lock().unwrap().acquire();
+        let solution = self.solution_pool.lock().expect("lock poisoned").acquire();
         self.update_stats("solution", true);
 
         PooledSolution {
@@ -52,7 +52,7 @@ impl BufferPoolManager {
 
     /// Get a binding from the pool (or create new one)
     pub fn acquire_binding(&self) -> PooledBinding<'_> {
-        let binding = self.binding_pool.lock().unwrap().acquire();
+        let binding = self.binding_pool.lock().expect("lock poisoned").acquire();
         self.update_stats("binding", true);
 
         PooledBinding {
@@ -64,7 +64,7 @@ impl BufferPoolManager {
 
     /// Get a hashmap from the pool (or create new one)
     pub fn acquire_hashmap(&self) -> PooledHashMap<'_> {
-        let hashmap = self.hashmap_pool.lock().unwrap().acquire();
+        let hashmap = self.hashmap_pool.lock().expect("lock poisoned").acquire();
         self.update_stats("hashmap", true);
 
         PooledHashMap {
@@ -76,7 +76,7 @@ impl BufferPoolManager {
 
     /// Get a vector from the pool (or create new one)
     pub fn acquire_vector(&self) -> PooledVector<'_> {
-        let vector = self.vector_pool.lock().unwrap().acquire();
+        let vector = self.vector_pool.lock().expect("lock poisoned").acquire();
         self.update_stats("vector", true);
 
         PooledVector {
@@ -88,7 +88,7 @@ impl BufferPoolManager {
 
     /// Update pool statistics
     fn update_stats(&self, pool_type: &str, is_acquire: bool) {
-        let mut stats = self.stats.lock().unwrap();
+        let mut stats = self.stats.lock().expect("lock poisoned");
 
         let pool_stats = match pool_type {
             "solution" => &mut stats.solution_stats,
@@ -107,26 +107,42 @@ impl BufferPoolManager {
 
     /// Get comprehensive statistics for all pools
     pub fn get_stats(&self) -> BufferPoolStats {
-        self.stats.lock().unwrap().clone()
+        self.stats.lock().expect("lock poisoned").clone()
     }
 
     /// Clear all pools (useful for memory cleanup)
     pub fn clear_all_pools(&self) {
-        self.solution_pool.lock().unwrap().clear();
-        self.binding_pool.lock().unwrap().clear();
-        self.hashmap_pool.lock().unwrap().clear();
-        self.vector_pool.lock().unwrap().clear();
+        self.solution_pool.lock().expect("lock poisoned").clear();
+        self.binding_pool.lock().expect("lock poisoned").clear();
+        self.hashmap_pool.lock().expect("lock poisoned").clear();
+        self.vector_pool.lock().expect("lock poisoned").clear();
     }
 
     /// Get total memory usage estimate for all pools
     pub fn estimate_total_memory_usage(&self) -> usize {
-        let solution_mem = self.solution_pool.lock().unwrap().estimate_memory_usage()
+        let solution_mem = self
+            .solution_pool
+            .lock()
+            .expect("lock poisoned")
+            .estimate_memory_usage()
             * std::mem::size_of::<Solution>();
-        let binding_mem = self.binding_pool.lock().unwrap().estimate_memory_usage()
+        let binding_mem = self
+            .binding_pool
+            .lock()
+            .expect("lock poisoned")
+            .estimate_memory_usage()
             * std::mem::size_of::<Binding>();
-        let hashmap_mem = self.hashmap_pool.lock().unwrap().estimate_memory_usage()
+        let hashmap_mem = self
+            .hashmap_pool
+            .lock()
+            .expect("lock poisoned")
+            .estimate_memory_usage()
             * std::mem::size_of::<HashMap<Variable, Term>>();
-        let vector_mem = self.vector_pool.lock().unwrap().estimate_memory_usage()
+        let vector_mem = self
+            .vector_pool
+            .lock()
+            .expect("lock poisoned")
+            .estimate_memory_usage()
             * std::mem::size_of::<Vec<Binding>>();
 
         solution_mem + binding_mem + hashmap_mem + vector_mem
@@ -268,18 +284,25 @@ pub struct PooledSolution<'a> {
 
 impl<'a> PooledSolution<'a> {
     pub fn get_mut(&mut self) -> &mut Solution {
-        self.solution.as_mut().unwrap()
+        self.solution
+            .as_mut()
+            .expect("pooled solution should exist until drop")
     }
 
     pub fn get(&self) -> &Solution {
-        self.solution.as_ref().unwrap()
+        self.solution
+            .as_ref()
+            .expect("pooled solution should exist until drop")
     }
 }
 
 impl<'a> Drop for PooledSolution<'a> {
     fn drop(&mut self) {
         if let Some(solution) = self.solution.take() {
-            self.pool.lock().unwrap().return_solution(solution);
+            self.pool
+                .lock()
+                .expect("lock poisoned")
+                .return_solution(solution);
             if let Some(manager) = self.manager {
                 manager.update_stats("solution", false);
             }
@@ -296,18 +319,25 @@ pub struct PooledBinding<'a> {
 
 impl<'a> PooledBinding<'a> {
     pub fn get_mut(&mut self) -> &mut Binding {
-        self.binding.as_mut().unwrap()
+        self.binding
+            .as_mut()
+            .expect("pooled binding should exist until drop")
     }
 
     pub fn get(&self) -> &Binding {
-        self.binding.as_ref().unwrap()
+        self.binding
+            .as_ref()
+            .expect("pooled binding should exist until drop")
     }
 }
 
 impl<'a> Drop for PooledBinding<'a> {
     fn drop(&mut self) {
         if let Some(binding) = self.binding.take() {
-            self.pool.lock().unwrap().return_binding(binding);
+            self.pool
+                .lock()
+                .expect("lock poisoned")
+                .return_binding(binding);
             if let Some(manager) = self.manager {
                 manager.update_stats("binding", false);
             }
@@ -324,18 +354,25 @@ pub struct PooledHashMap<'a> {
 
 impl<'a> PooledHashMap<'a> {
     pub fn get_mut(&mut self) -> &mut HashMap<Variable, Term> {
-        self.hashmap.as_mut().unwrap()
+        self.hashmap
+            .as_mut()
+            .expect("pooled hashmap should exist until drop")
     }
 
     pub fn get(&self) -> &HashMap<Variable, Term> {
-        self.hashmap.as_ref().unwrap()
+        self.hashmap
+            .as_ref()
+            .expect("pooled hashmap should exist until drop")
     }
 }
 
 impl<'a> Drop for PooledHashMap<'a> {
     fn drop(&mut self) {
         if let Some(hashmap) = self.hashmap.take() {
-            self.pool.lock().unwrap().return_hashmap(hashmap);
+            self.pool
+                .lock()
+                .expect("lock poisoned")
+                .return_hashmap(hashmap);
             if let Some(manager) = self.manager {
                 manager.update_stats("hashmap", false);
             }
@@ -352,18 +389,25 @@ pub struct PooledVector<'a> {
 
 impl<'a> PooledVector<'a> {
     pub fn get_mut(&mut self) -> &mut Vec<Binding> {
-        self.vector.as_mut().unwrap()
+        self.vector
+            .as_mut()
+            .expect("pooled vector should exist until drop")
     }
 
     pub fn get(&self) -> &Vec<Binding> {
-        self.vector.as_ref().unwrap()
+        self.vector
+            .as_ref()
+            .expect("pooled vector should exist until drop")
     }
 }
 
 impl<'a> Drop for PooledVector<'a> {
     fn drop(&mut self) {
         if let Some(vector) = self.vector.take() {
-            self.pool.lock().unwrap().return_vector(vector);
+            self.pool
+                .lock()
+                .expect("lock poisoned")
+                .return_vector(vector);
             if let Some(manager) = self.manager {
                 manager.update_stats("vector", false);
             }

@@ -447,7 +447,7 @@ impl QueryExecutor {
                                 var.clone(),
                                 crate::algebra::Term::Iri(
                                     oxirs_core::model::NamedNode::new("http://example.org/subject")
-                                        .unwrap(),
+                                        .expect("hardcoded IRI should be valid"),
                                 ),
                             );
                         }
@@ -456,7 +456,7 @@ impl QueryExecutor {
                                 var.clone(),
                                 crate::algebra::Term::Iri(
                                     oxirs_core::model::NamedNode::new("http://example.org/object")
-                                        .unwrap(),
+                                        .expect("hardcoded IRI should be valid"),
                                 ),
                             );
                         }
@@ -1912,7 +1912,8 @@ impl QueryExecutor {
             binding.insert(
                 var.clone(),
                 crate::algebra::Term::Iri(
-                    oxirs_core::model::NamedNode::new("http://example.org/subject").unwrap(),
+                    oxirs_core::model::NamedNode::new("http://example.org/subject")
+                        .expect("hardcoded IRI should be valid"),
                 ),
             );
         }
@@ -1920,7 +1921,8 @@ impl QueryExecutor {
             binding.insert(
                 var.clone(),
                 crate::algebra::Term::Iri(
-                    oxirs_core::model::NamedNode::new("http://example.org/object").unwrap(),
+                    oxirs_core::model::NamedNode::new("http://example.org/object")
+                        .expect("hardcoded IRI should be valid"),
                 ),
             );
         }

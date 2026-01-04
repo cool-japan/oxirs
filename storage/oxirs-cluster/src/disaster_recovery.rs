@@ -818,12 +818,10 @@ impl RecoveryManager {
             let mut active = active_operations.write().await;
             if let Some(operation) = active.get_mut(&operation_id) {
                 operation.status = RecoveryOperationStatus::Completed;
-                operation.completed_at = Some(Utc::now());
+                let completed_time = Utc::now();
+                operation.completed_at = Some(completed_time);
 
-                let duration = operation
-                    .completed_at
-                    .unwrap()
-                    .signed_duration_since(operation.started_at);
+                let duration = completed_time.signed_duration_since(operation.started_at);
                 operation.metrics.actual_rto_seconds = duration.num_seconds() as u64;
                 operation.metrics.success_rate_percent = 100.0;
             }
@@ -870,12 +868,13 @@ impl RecoveryManager {
 
         while let Some(oldest) = history.front() {
             if oldest.created_at < cutoff_time {
-                let removed = history.pop_front().unwrap();
-                tracing::info!(
-                    backup_id = %removed.backup_id,
-                    created_at = %removed.created_at,
-                    "Removing expired backup"
-                );
+                if let Some(removed) = history.pop_front() {
+                    tracing::info!(
+                        backup_id = %removed.backup_id,
+                        created_at = %removed.created_at,
+                        "Removing expired backup"
+                    );
+                }
             } else {
                 break;
             }

@@ -92,7 +92,8 @@ mod cache_stubs {
         }
 
         pub fn cap(&self) -> std::num::NonZeroUsize {
-            std::num::NonZeroUsize::new(1).unwrap()
+            std::num::NonZeroUsize::new(1)
+                .expect("NoOpCache capacity is constant 1, which is non-zero")
         }
     }
 
@@ -219,7 +220,8 @@ impl FederationCache {
     /// Create a new federation cache with custom configuration
     pub fn with_config(config: CacheConfig) -> Self {
         let l1_cache = {
-            let l1_capacity = NonZeroUsize::new(config.l1_capacity).unwrap();
+            let l1_capacity = NonZeroUsize::new(config.l1_capacity)
+                .expect("l1_capacity must be non-zero for cache to function");
             Arc::new(RwLock::new(LruCache::new(l1_capacity)))
         };
 

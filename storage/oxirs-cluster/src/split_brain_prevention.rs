@@ -443,8 +443,10 @@ impl SplitBrainPrevention {
         }
 
         // Find the leader with the highest generation number
-        let (newest_leader, newest_gen) =
-            reported_leaders.iter().max_by_key(|(_, gen)| *gen).unwrap();
+        let (newest_leader, newest_gen) = reported_leaders
+            .iter()
+            .max_by_key(|(_, gen)| *gen)
+            .expect("reported_leaders validated to be non-empty");
 
         tracing::info!(
             "Node {}: Resolving split-brain, newest leader is {} with generation {}",

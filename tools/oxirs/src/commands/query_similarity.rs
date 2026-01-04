@@ -242,7 +242,11 @@ impl QuerySimilarityAnalyzer {
             })
             .collect();
 
-        results.sort_by(|a, b| b.1.overall.partial_cmp(&a.1.overall).unwrap());
+        results.sort_by(|a, b| {
+            b.1.overall
+                .partial_cmp(&a.1.overall)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(top_k);
         results
     }
@@ -339,7 +343,11 @@ impl QuerySimilarityAnalyzer {
                     if idx + 1 < word.len() {
                         let after_colon = &word[idx + 1..];
                         if !after_colon.is_empty()
-                            && after_colon.chars().next().unwrap().is_lowercase()
+                            && after_colon
+                                .chars()
+                                .next()
+                                .expect("string is non-empty")
+                                .is_lowercase()
                         {
                             predicates.insert(word.to_string());
                         }

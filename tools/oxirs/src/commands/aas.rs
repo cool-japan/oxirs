@@ -95,7 +95,8 @@ async fn to_aspect(
     println!("  Converted {} Aspect Model(s)", aspects.len());
 
     // Determine output directory
-    let output_dir = output_directory.unwrap_or_else(|| std::env::current_dir().unwrap());
+    let output_dir = output_directory
+        .unwrap_or_else(|| std::env::current_dir().expect("failed to get current directory"));
 
     // Create output directory if it doesn't exist
     if !output_dir.exists() {

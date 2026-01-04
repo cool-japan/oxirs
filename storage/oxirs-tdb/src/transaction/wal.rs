@@ -1,6 +1,6 @@
 use crate::error::{Result, TdbError};
 use crate::storage::page::PageId;
-use bincode::{Decode, Encode};
+use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -9,9 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 /// Transaction ID
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TxnId(u64);
 
 impl TxnId {
@@ -32,9 +30,7 @@ impl TxnId {
 }
 
 /// Log Sequence Number
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Lsn(u64);
 
 impl Lsn {
@@ -58,7 +54,7 @@ impl Lsn {
 }
 
 /// WAL record type
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LogRecord {
     /// Transaction begin
     Begin {
@@ -94,7 +90,7 @@ pub enum LogRecord {
 }
 
 /// WAL entry with LSN and record
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     /// Log sequence number
     pub lsn: Lsn,
@@ -146,23 +142,23 @@ impl WriteAheadLog {
 
     /// Append a log record and return its LSN
     pub fn append(&self, record: LogRecord) -> Result<Lsn> {
-        let mut next_lsn = self.next_lsn.write().unwrap();
+        let mut next_lsn = self.next_lsn.write().expect("lock poisoned");
         let lsn = *next_lsn;
         *next_lsn = next_lsn.next();
 
         let entry = LogEntry { lsn, record };
 
         // Add to in-memory buffer
-        let mut log_buffer = self.log_buffer.write().unwrap();
+        let mut log_buffer = self.log_buffer.write().expect("lock poisoned");
         log_buffer.insert(lsn, entry.clone());
 
         // Write to disk (WAL protocol: log before data)
-        let serialized = bincode::encode_to_vec(&entry, bincode::config::standard())
+        let serialized = oxicode::serde::encode_to_vec(&entry, oxicode::config::standard())
             .map_err(|e| TdbError::Serialization(e.to_string()))?;
 
         let len = (serialized.len() as u32).to_le_bytes();
 
-        let mut wal_file = self.wal_file.write().unwrap();
+        let mut wal_file = self.wal_file.write().expect("lock poisoned");
         wal_file.write_all(&len).map_err(TdbError::Io)?;
         wal_file.write_all(&serialized).map_err(TdbError::Io)?;
 
@@ -171,12 +167,12 @@ impl WriteAheadLog {
 
     /// Flush WAL to disk (force sync)
     pub fn flush(&self) -> Result<()> {
-        let mut wal_file = self.wal_file.write().unwrap();
+        let mut wal_file = self.wal_file.write().expect("lock poisoned");
         wal_file.flush().map_err(TdbError::Io)?;
         wal_file.sync_all().map_err(TdbError::Io)?;
 
-        let next_lsn = *self.next_lsn.read().unwrap();
-        let mut last_flushed = self.last_flushed_lsn.write().unwrap();
+        let next_lsn = *self.next_lsn.read().expect("lock poisoned");
+        let mut last_flushed = self.last_flushed_lsn.write().expect("lock poisoned");
         *last_flushed = Lsn::new(next_lsn.as_u64().saturating_sub(1));
 
         Ok(())
@@ -184,25 +180,25 @@ impl WriteAheadLog {
 
     /// Get log entry by LSN
     pub fn get(&self, lsn: Lsn) -> Option<LogEntry> {
-        let log_buffer = self.log_buffer.read().unwrap();
+        let log_buffer = self.log_buffer.read().expect("lock poisoned");
         log_buffer.get(&lsn).cloned()
     }
 
     /// Truncate WAL up to LSN (after checkpoint)
     pub fn truncate(&self, up_to_lsn: Lsn) -> Result<()> {
         // Remove old entries from buffer
-        let mut log_buffer = self.log_buffer.write().unwrap();
+        let mut log_buffer = self.log_buffer.write().expect("lock poisoned");
         log_buffer.retain(|lsn, _| lsn.as_u64() > up_to_lsn.as_u64());
 
         // Truncate file (simplified: rewrite entire file)
         let remaining_entries: Vec<_> = log_buffer.values().cloned().collect();
 
-        let mut wal_file = self.wal_file.write().unwrap();
+        let mut wal_file = self.wal_file.write().expect("lock poisoned");
         wal_file.set_len(0).map_err(TdbError::Io)?;
         wal_file.seek(SeekFrom::Start(0)).map_err(TdbError::Io)?;
 
         for entry in remaining_entries {
-            let serialized = bincode::encode_to_vec(&entry, bincode::config::standard())
+            let serialized = oxicode::serde::encode_to_vec(&entry, oxicode::config::standard())
                 .map_err(|e| TdbError::Serialization(e.to_string()))?;
             let len = (serialized.len() as u32).to_le_bytes();
 
@@ -218,7 +214,7 @@ impl WriteAheadLog {
 
     /// Recover from WAL (replay logs)
     pub fn recover(&self) -> Result<Vec<LogEntry>> {
-        let mut wal_file = self.wal_file.write().unwrap();
+        let mut wal_file = self.wal_file.write().expect("lock poisoned");
         wal_file.seek(SeekFrom::Start(0)).map_err(TdbError::Io)?;
 
         let mut entries = Vec::new();
@@ -242,7 +238,7 @@ impl WriteAheadLog {
             wal_file.read_exact(&mut entry_buf).map_err(TdbError::Io)?;
 
             let entry: LogEntry =
-                bincode::decode_from_slice(&entry_buf, bincode::config::standard())
+                oxicode::serde::decode_from_slice(&entry_buf, oxicode::config::standard())
                     .map_err(|e| TdbError::Serialization(e.to_string()))?
                     .0;
 
@@ -253,12 +249,12 @@ impl WriteAheadLog {
             entries.push(entry.clone());
 
             // Add to buffer
-            let mut log_buffer = self.log_buffer.write().unwrap();
+            let mut log_buffer = self.log_buffer.write().expect("lock poisoned");
             log_buffer.insert(entry.lsn, entry);
         }
 
         // Update next LSN
-        let mut next_lsn_guard = self.next_lsn.write().unwrap();
+        let mut next_lsn_guard = self.next_lsn.write().expect("lock poisoned");
         *next_lsn_guard = next_lsn;
 
         Ok(entries)
@@ -266,7 +262,7 @@ impl WriteAheadLog {
 
     /// Get all log entries (for testing)
     pub fn all_entries(&self) -> Vec<LogEntry> {
-        let log_buffer = self.log_buffer.read().unwrap();
+        let log_buffer = self.log_buffer.read().expect("lock poisoned");
         let mut entries: Vec<_> = log_buffer.values().cloned().collect();
         entries.sort_by_key(|e| e.lsn);
         entries

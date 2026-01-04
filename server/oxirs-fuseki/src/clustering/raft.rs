@@ -24,7 +24,7 @@ enum RaftState {
 }
 
 /// Raft log entry
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct LogEntry {
     /// Log index
     pub index: u64,
@@ -37,7 +37,7 @@ pub struct LogEntry {
 }
 
 /// Commands that can be replicated
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub enum Command {
     /// Store a key-value pair
     Set { key: String, value: Vec<u8> },
@@ -50,7 +50,7 @@ pub enum Command {
 }
 
 /// Cluster configuration
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct ClusterConfig {
     /// Current members
     pub members: Vec<String>,
@@ -90,7 +90,7 @@ struct LeaderState {
 }
 
 /// RPC messages
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub enum RpcMessage {
     AppendEntries(AppendEntriesRequest),
     AppendEntriesResponse(AppendEntriesResponse),
@@ -101,7 +101,7 @@ pub enum RpcMessage {
 }
 
 /// AppendEntries RPC request
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct AppendEntriesRequest {
     /// Leader's term
     pub term: u64,
@@ -118,7 +118,7 @@ pub struct AppendEntriesRequest {
 }
 
 /// AppendEntries RPC response
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct AppendEntriesResponse {
     /// Current term for leader to update itself
     pub term: u64,
@@ -129,7 +129,7 @@ pub struct AppendEntriesResponse {
 }
 
 /// RequestVote RPC request
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct RequestVoteRequest {
     /// Candidate's term
     pub term: u64,
@@ -142,7 +142,7 @@ pub struct RequestVoteRequest {
 }
 
 /// RequestVote RPC response
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct RequestVoteResponse {
     /// Current term for candidate to update itself
     pub term: u64,
@@ -151,7 +151,7 @@ pub struct RequestVoteResponse {
 }
 
 /// InstallSnapshot RPC request
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct InstallSnapshotRequest {
     /// Leader's term
     pub term: u64,
@@ -170,7 +170,7 @@ pub struct InstallSnapshotRequest {
 }
 
 /// InstallSnapshot RPC response
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct InstallSnapshotResponse {
     /// Current term for leader to update itself
     pub term: u64,

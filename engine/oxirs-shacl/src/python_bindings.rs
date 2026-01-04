@@ -94,7 +94,7 @@ impl PyShaclValidator {
     /// Load shapes from RDF graph
     #[pyo3(signature = (shapes_graph, format = "turtle", **kwargs))]
     fn load_shapes(&self, shapes_graph: &str, format: &str, kwargs: Option<&PyDict>) -> PyResult<()> {
-        let mut engine = self.engine.write().unwrap();
+        let mut engine = self.engine.write().expect("rwlock should not be poisoned");
 
         // In a real implementation, we'd parse the shapes graph
         engine.load_shapes_from_graph(shapes_graph)
@@ -106,7 +106,7 @@ impl PyShaclValidator {
     /// Load shapes from file
     #[pyo3(signature = (file_path, format = "turtle", **kwargs))]
     fn load_shapes_from_file(&self, file_path: &str, format: &str, kwargs: Option<&PyDict>) -> PyResult<()> {
-        let mut engine = self.engine.write().unwrap();
+        let mut engine = self.engine.write().expect("rwlock should not be poisoned");
 
         engine.load_shapes_from_file(file_path)
             .map_err(|e| PyErr::new::<ShapeParsingError, _>(e.to_string()))?;
@@ -119,13 +119,13 @@ impl PyShaclValidator {
     fn validate(&self, data_graph: &str, format: &str, kwargs: Option<&PyDict>) -> PyResult<PyValidationReport> {
         let start_time = Instant::now();
 
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("rwlock should not be poisoned");
         let result = engine.validate_graph(data_graph)
             .map_err(|e| PyErr::new::<ValidationError, _>(e.to_string()))?;
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("rwlock should not be poisoned");
             stats.total_validations += 1;
             stats.total_execution_time += start_time.elapsed();
             if result.conforms {
@@ -143,13 +143,13 @@ impl PyShaclValidator {
     fn validate_file(&self, data_file: &str, format: &str, kwargs: Option<&PyDict>) -> PyResult<PyValidationReport> {
         let start_time = Instant::now();
 
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("rwlock should not be poisoned");
         let result = engine.validate_file(data_file)
             .map_err(|e| PyErr::new::<ValidationError, _>(e.to_string()))?;
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("rwlock should not be poisoned");
             stats.total_validations += 1;
             stats.total_execution_time += start_time.elapsed();
             if result.conforms {
@@ -164,20 +164,20 @@ impl PyShaclValidator {
 
     /// Get validation statistics
     fn get_statistics(&self) -> PyValidationStatistics {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("rwlock should not be poisoned");
         PyValidationStatistics { stats: stats.clone() }
     }
 
     /// Clear validation statistics
     fn clear_statistics(&self) -> PyResult<()> {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("rwlock should not be poisoned");
         *stats = ValidationStatistics::default();
         Ok(())
     }
 
     /// Get loaded shapes information
     fn get_shapes_info(&self) -> PyShapesInfo {
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("rwlock should not be poisoned");
         // In a real implementation, we'd get actual shape information
         PyShapesInfo {
             info: ShapesInfo {
@@ -192,14 +192,14 @@ impl PyShaclValidator {
 
     /// Set validation timeout
     fn set_timeout(&self, timeout_ms: u64) -> PyResult<()> {
-        let mut engine = self.engine.write().unwrap();
+        let mut engine = self.engine.write().expect("rwlock should not be poisoned");
         // In a real implementation, we'd update the engine timeout
         Ok(())
     }
 
     /// Enable or disable parallel validation
     fn set_parallel_validation(&self, enabled: bool) -> PyResult<()> {
-        let mut engine = self.engine.write().unwrap();
+        let mut engine = self.engine.write().expect("rwlock should not be poisoned");
         // In a real implementation, we'd update the engine config
         Ok(())
     }

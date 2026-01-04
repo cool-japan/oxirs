@@ -445,13 +445,19 @@ impl AdvancedStatisticsCollector {
 
     /// Advanced cardinality estimation using SciRS2 statistics
     pub fn estimate_cardinality_advanced(&self, algebra: &Algebra) -> Result<usize> {
-        self.metrics.get("total_queries").unwrap().increment(1.0);
+        self.metrics
+            .get("total_queries")
+            .expect("total_queries metric should exist")
+            .increment(1.0);
 
         // Try ML estimation first if available
         if let Some(ref ml_estimator) = self.ml_estimator {
             match ml_estimator.predict_cardinality(algebra) {
                 Ok(cardinality) => {
-                    self.metrics.get("cache_hits").unwrap().increment(1.0);
+                    self.metrics
+                        .get("cache_hits")
+                        .expect("cache_hits metric should exist")
+                        .increment(1.0);
                     return Ok(cardinality);
                 }
                 Err(e) => {
@@ -461,7 +467,10 @@ impl AdvancedStatisticsCollector {
         }
 
         // Fall back to statistical estimation
-        self.metrics.get("cache_misses").unwrap().increment(1.0);
+        self.metrics
+            .get("cache_misses")
+            .expect("cache_misses metric should exist")
+            .increment(1.0);
         self.estimate_cardinality_statistical(algebra)
     }
 

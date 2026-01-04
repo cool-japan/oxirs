@@ -586,7 +586,9 @@ impl MultiLevelCompression {
                 return &self.levels[i];
             }
         }
-        self.levels.last().unwrap()
+        self.levels
+            .last()
+            .expect("compression levels should not be empty")
     }
 }
 
@@ -634,7 +636,10 @@ impl AdaptiveCompressor {
 
         // Check cache first
         {
-            let cache = self.stats_cache.read().unwrap();
+            let cache = self
+                .stats_cache
+                .read()
+                .expect("rwlock should not be poisoned");
             if let Some((cached_stats, timestamp)) = cache.get(&stats_key) {
                 if timestamp.elapsed() < self.cache_ttl {
                     return Ok(self.recommend_from_stats(cached_stats));
@@ -644,7 +649,10 @@ impl AdaptiveCompressor {
 
         // Cache the stats
         {
-            let mut cache = self.stats_cache.write().unwrap();
+            let mut cache = self
+                .stats_cache
+                .write()
+                .expect("rwlock should not be poisoned");
             cache.insert(stats_key, (stats.clone(), Instant::now()));
         }
 
@@ -713,7 +721,7 @@ impl AdaptiveCompressor {
 
         // Update metrics
         {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("rwlock should not be poisoned");
             let metric = metrics
                 .entry(method_key)
                 .or_insert_with(|| CompressionMetrics::new(method.clone()));
@@ -763,11 +771,11 @@ impl AdaptiveCompressor {
 
     /// Get best performing compression method based on current metrics
     pub fn get_best_method(&self) -> CompressionMethod {
-        let metrics = self.metrics.read().unwrap();
+        let metrics = self.metrics.read().expect("rwlock should not be poisoned");
         let best = metrics.values().max_by(|a, b| {
             a.avg_performance_score
                 .partial_cmp(&b.avg_performance_score)
-                .unwrap()
+                .expect("performance scores should be comparable")
         });
 
         best.map(|m| m.method.clone())
@@ -776,7 +784,10 @@ impl AdaptiveCompressor {
 
     /// Get compression performance statistics
     pub fn get_performance_stats(&self) -> HashMap<String, CompressionMetrics> {
-        self.metrics.read().unwrap().clone()
+        self.metrics
+            .read()
+            .expect("rwlock should not be poisoned")
+            .clone()
     }
 
     /// Update compression priorities
@@ -784,7 +795,7 @@ impl AdaptiveCompressor {
         self.priorities = priorities;
 
         // Recalculate scores for all metrics
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write().expect("rwlock should not be poisoned");
         for metric in metrics.values_mut() {
             metric.avg_performance_score = metric.calculate_score(&self.priorities);
         }
@@ -792,9 +803,18 @@ impl AdaptiveCompressor {
 
     /// Clear caches and reset learning
     pub fn reset(&mut self) {
-        self.metrics.write().unwrap().clear();
-        self.compressor_cache.write().unwrap().clear();
-        self.stats_cache.write().unwrap().clear();
+        self.metrics
+            .write()
+            .expect("rwlock should not be poisoned")
+            .clear();
+        self.compressor_cache
+            .write()
+            .expect("rwlock should not be poisoned")
+            .clear();
+        self.stats_cache
+            .write()
+            .expect("rwlock should not be poisoned")
+            .clear();
     }
 
     // Private helper methods
@@ -806,7 +826,10 @@ impl AdaptiveCompressor {
         let method_key = format!("{method:?}");
 
         {
-            let cache = self.compressor_cache.read().unwrap();
+            let cache = self
+                .compressor_cache
+                .read()
+                .expect("rwlock should not be poisoned");
             if cache.contains_key(&method_key) {
                 // Note: We can't return a reference here due to trait object limitations
                 // So we create a new instance
@@ -818,7 +841,10 @@ impl AdaptiveCompressor {
 
         // Cache it (though we can't use it directly due to trait object limitations)
         {
-            let _cache = self.compressor_cache.write().unwrap();
+            let _cache = self
+                .compressor_cache
+                .write()
+                .expect("rwlock should not be poisoned");
             // Note: This is a placeholder for caching logic
             // In practice, we might need to redesign this for trait objects
         }

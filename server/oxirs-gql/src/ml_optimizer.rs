@@ -509,7 +509,9 @@ impl NeuralNetworkModel {
         }
 
         // Return activations and final output
-        let output = activations.last().unwrap()[0];
+        let output = activations
+            .last()
+            .expect("activations should not be empty after forward pass")[0];
         (activations, output)
     }
 

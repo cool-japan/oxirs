@@ -111,7 +111,7 @@ spec:
     spec:
       containers:
       - name: oxirs
-        image: oxirs:0.1.0-rc.1
+        image: oxirs:0.1.0-rc.2
         resources:
           requests:
             cpu: "4"
@@ -768,9 +768,9 @@ console.error('WASM error:', error);
 ./scripts/backup.sh
 
 # 2. Update Cargo.toml
-cargo add oxirs-graphrag@0.1.0-rc.1
-cargo add oxirs-did@0.1.0-rc.1
-cargo add oxirs-wasm@0.1.0-rc.1
+cargo add oxirs-graphrag@0.1.0-rc.2
+cargo add oxirs-did@0.1.0-rc.2
+cargo add oxirs-wasm@0.1.0-rc.2
 
 # 3. Update configuration
 cat >> oxirs.toml << EOF

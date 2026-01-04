@@ -107,7 +107,10 @@ impl ConstraintCache {
 
         // First, check if we have a valid cached result
         let result = {
-            let cache = self.cache.read().unwrap();
+            let cache = self
+                .cache
+                .read()
+                .expect("cache lock should not be poisoned");
             if let Some(cached) = cache.get(&key) {
                 // Check if entry is still valid
                 if cached.cached_at.elapsed() <= self.ttl {
@@ -123,13 +126,19 @@ impl ConstraintCache {
         if result.is_some() {
             // Update statistics and hit count
             {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self
+                    .stats
+                    .write()
+                    .expect("stats lock should not be poisoned");
                 stats.hits += 1;
             }
 
             // Increment hit count
             {
-                let mut cache_mut = self.cache.write().unwrap();
+                let mut cache_mut = self
+                    .cache
+                    .write()
+                    .expect("cache lock should not be poisoned");
                 if let Some(entry) = cache_mut.get_mut(&key) {
                     entry.hit_count += 1;
                 }
@@ -139,7 +148,10 @@ impl ConstraintCache {
         }
 
         // Cache miss
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self
+            .stats
+            .write()
+            .expect("stats lock should not be poisoned");
         stats.misses += 1;
         None
     }
@@ -160,7 +172,10 @@ impl ConstraintCache {
         };
 
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self
+                .cache
+                .write()
+                .expect("cache lock should not be poisoned");
 
             // Evict entries if cache is full
             if cache.len() >= self.max_size {
@@ -172,7 +187,10 @@ impl ConstraintCache {
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self
+                .stats
+                .write()
+                .expect("stats lock should not be poisoned");
             stats.evaluations += 1;
             let eval_time_us = evaluation_time.as_micros() as f64;
             if stats.evaluations == 1 {
@@ -275,18 +293,27 @@ impl ConstraintCache {
         }
 
         // Update eviction statistics
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self
+            .stats
+            .write()
+            .expect("stats lock should not be poisoned");
         stats.evictions += evict_count;
     }
 
     /// Get cache statistics
     pub fn stats(&self) -> CacheStats {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("stats lock should not be poisoned")
+            .clone()
     }
 
     /// Clear the cache
     pub fn clear(&self) {
-        self.cache.write().unwrap().clear();
+        self.cache
+            .write()
+            .expect("cache lock should not be poisoned")
+            .clear();
     }
 }
 
@@ -713,7 +740,10 @@ impl ValidationOptimizationEngine {
 
     /// Get current optimization metrics
     pub fn get_metrics(&self) -> OptimizationMetrics {
-        self.metrics.read().unwrap().clone()
+        self.metrics
+            .read()
+            .expect("metrics lock should not be poisoned")
+            .clone()
     }
 
     /// Clear all caches and reset metrics

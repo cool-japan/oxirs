@@ -116,7 +116,7 @@ impl CustomMetricsRegistry {
 
     /// Register a new metric
     pub fn register_metric(&self, metadata: MetricMetadata) -> Result<(), String> {
-        let mut meta_map = self.metadata.write().unwrap();
+        let mut meta_map = self.metadata.write().expect("lock poisoned");
 
         if meta_map.contains_key(&metadata.name) {
             return Err(format!("Metric '{}' already registered", metadata.name));
@@ -134,7 +134,7 @@ impl CustomMetricsRegistry {
     /// Register a computed metric
     pub fn register_computed_metric(&self, computed: ComputedMetric) -> Result<(), String> {
         // Validate source metrics exist
-        let meta_map = self.metadata.read().unwrap();
+        let meta_map = self.metadata.read().expect("lock poisoned");
         for source in &computed.source_metrics {
             if !meta_map.contains_key(source) {
                 return Err(format!("Source metric '{}' not found", source));
@@ -142,7 +142,7 @@ impl CustomMetricsRegistry {
         }
         drop(meta_map);
 
-        let mut computed_metrics = self.computed.write().unwrap();
+        let mut computed_metrics = self.computed.write().expect("lock poisoned");
         computed_metrics.push(computed);
         Ok(())
     }
@@ -154,7 +154,7 @@ impl CustomMetricsRegistry {
         value: MetricValue,
         tags: HashMap<String, String>,
     ) -> Result<(), String> {
-        let meta_map = self.metadata.read().unwrap();
+        let meta_map = self.metadata.read().expect("lock poisoned");
         let metadata = meta_map
             .get(name)
             .ok_or_else(|| format!("Metric '{}' not registered", name))?
@@ -170,7 +170,7 @@ impl CustomMetricsRegistry {
             timestamp: SystemTime::now(),
         };
 
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write().expect("lock poisoned");
         metrics
             .entry(name.to_string())
             .or_default()
@@ -206,7 +206,7 @@ impl CustomMetricsRegistry {
         value: f64,
         tags: HashMap<String, String>,
     ) -> Result<(), String> {
-        let meta_map = self.metadata.read().unwrap();
+        let meta_map = self.metadata.read().expect("lock poisoned");
         let metadata = meta_map
             .get(name)
             .ok_or_else(|| format!("Metric '{}' not registered", name))?;
@@ -236,7 +236,7 @@ impl CustomMetricsRegistry {
         name: &str,
         filter: Option<&MetricFilter>,
     ) -> Vec<MetricDataPoint> {
-        let metrics = self.metrics.read().unwrap();
+        let metrics = self.metrics.read().expect("lock poisoned");
         let data_points = metrics.get(name).cloned().unwrap_or_default();
 
         if let Some(filter) = filter {
@@ -292,7 +292,7 @@ impl CustomMetricsRegistry {
 
     /// Evaluate computed metrics
     pub fn evaluate_computed_metric(&self, name: &str) -> Option<f64> {
-        let computed_metrics = self.computed.read().unwrap();
+        let computed_metrics = self.computed.read().expect("lock poisoned");
         let computed = computed_metrics.iter().find(|c| c.name == name)?;
 
         // Collect values from source metrics
@@ -335,8 +335,8 @@ impl CustomMetricsRegistry {
     /// Export metrics in Prometheus format
     pub fn export_prometheus(&self) -> String {
         let mut output = String::new();
-        let metrics_map = self.metrics.read().unwrap();
-        let metadata_map = self.metadata.read().unwrap();
+        let metrics_map = self.metrics.read().expect("lock poisoned");
+        let metadata_map = self.metadata.read().expect("lock poisoned");
 
         for (name, metadata) in metadata_map.iter() {
             // Write metric help and type
@@ -400,17 +400,26 @@ impl CustomMetricsRegistry {
 
     /// Get all registered metric names
     pub fn list_metrics(&self) -> Vec<String> {
-        self.metadata.read().unwrap().keys().cloned().collect()
+        self.metadata
+            .read()
+            .expect("lock poisoned")
+            .keys()
+            .cloned()
+            .collect()
     }
 
     /// Get metric metadata
     pub fn get_metadata(&self, name: &str) -> Option<MetricMetadata> {
-        self.metadata.read().unwrap().get(name).cloned()
+        self.metadata
+            .read()
+            .expect("lock poisoned")
+            .get(name)
+            .cloned()
     }
 
     /// Clean up old metric data based on retention period
     pub fn cleanup_old_data(&self) {
-        let mut last_cleanup = self.last_cleanup.lock().unwrap();
+        let mut last_cleanup = self.last_cleanup.lock().expect("lock poisoned");
         if last_cleanup.elapsed() < Duration::from_secs(60) {
             return; // Only cleanup every minute
         }
@@ -419,7 +428,7 @@ impl CustomMetricsRegistry {
         drop(last_cleanup);
 
         let cutoff = SystemTime::now() - self.retention_period;
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write().expect("lock poisoned");
 
         for data_points in metrics.values_mut() {
             data_points.retain(|dp| dp.timestamp >= cutoff);
@@ -428,7 +437,12 @@ impl CustomMetricsRegistry {
 
     /// Get total number of data points
     pub fn total_data_points(&self) -> usize {
-        self.metrics.read().unwrap().values().map(|v| v.len()).sum()
+        self.metrics
+            .read()
+            .expect("lock poisoned")
+            .values()
+            .map(|v| v.len())
+            .sum()
     }
 
     // Helper methods

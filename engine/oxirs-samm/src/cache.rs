@@ -88,7 +88,7 @@ where
     ///
     /// Updates access statistics and LRU ordering.
     pub fn get(&self, key: &str) -> Option<Arc<T>> {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
 
         if let Some(entry) = entries.get_mut(key) {
             // Update access statistics
@@ -96,19 +96,19 @@ where
             entry.last_accessed = std::time::Instant::now();
 
             // Update access order
-            let mut access_order = self.access_order.write().unwrap();
+            let mut access_order = self.access_order.write().expect("lock poisoned");
             if let Some(pos) = access_order.iter().position(|k| k == key) {
                 access_order.remove(pos);
             }
             access_order.push(key.to_string());
 
             // Record hit
-            *self.hits.write().unwrap() += 1;
+            *self.hits.write().expect("lock poisoned") += 1;
 
             Some(Arc::clone(&entry.value))
         } else {
             // Record miss
-            *self.misses.write().unwrap() += 1;
+            *self.misses.write().expect("lock poisoned") += 1;
             None
         }
     }
@@ -117,8 +117,8 @@ where
     ///
     /// If the cache is at capacity, evicts the least recently used item.
     pub fn put(&mut self, key: String, value: Arc<T>) {
-        let mut entries = self.entries.write().unwrap();
-        let mut access_order = self.access_order.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut access_order = self.access_order.write().expect("lock poisoned");
 
         // Remove existing entry if present
         if entries.contains_key(&key) {
@@ -149,14 +149,14 @@ where
 
     /// Check if the cache contains a key
     pub fn contains(&self, key: &str) -> bool {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().expect("lock poisoned");
         entries.contains_key(key)
     }
 
     /// Remove an item from the cache
     pub fn remove(&mut self, key: &str) -> Option<Arc<T>> {
-        let mut entries = self.entries.write().unwrap();
-        let mut access_order = self.access_order.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut access_order = self.access_order.write().expect("lock poisoned");
 
         if let Some(pos) = access_order.iter().position(|k| k == key) {
             access_order.remove(pos);
@@ -167,8 +167,8 @@ where
 
     /// Clear all items from the cache
     pub fn clear(&mut self) {
-        let mut entries = self.entries.write().unwrap();
-        let mut access_order = self.access_order.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut access_order = self.access_order.write().expect("lock poisoned");
 
         entries.clear();
         access_order.clear();
@@ -176,7 +176,7 @@ where
 
     /// Get the number of items in the cache
     pub fn len(&self) -> usize {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().expect("lock poisoned");
         entries.len()
     }
 
@@ -196,8 +196,8 @@ where
     pub fn resize(&mut self, new_capacity: usize) {
         self.capacity = new_capacity.max(1);
 
-        let mut entries = self.entries.write().unwrap();
-        let mut access_order = self.access_order.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut access_order = self.access_order.write().expect("lock poisoned");
 
         // Evict items if over capacity
         while entries.len() > self.capacity {
@@ -213,8 +213,8 @@ where
 
     /// Get cache hit rate (0.0 to 1.0)
     pub fn hit_rate(&self) -> f64 {
-        let hits = *self.hits.read().unwrap();
-        let misses = *self.misses.read().unwrap();
+        let hits = *self.hits.read().expect("lock poisoned");
+        let misses = *self.misses.read().expect("lock poisoned");
         let total = hits + misses;
 
         if total == 0 {
@@ -226,23 +226,23 @@ where
 
     /// Get total number of cache hits
     pub fn hits(&self) -> usize {
-        *self.hits.read().unwrap()
+        *self.hits.read().expect("lock poisoned")
     }
 
     /// Get total number of cache misses
     pub fn misses(&self) -> usize {
-        *self.misses.read().unwrap()
+        *self.misses.read().expect("lock poisoned")
     }
 
     /// Reset cache statistics
     pub fn reset_statistics(&mut self) {
-        *self.hits.write().unwrap() = 0;
-        *self.misses.write().unwrap() = 0;
+        *self.hits.write().expect("lock poisoned") = 0;
+        *self.misses.write().expect("lock poisoned") = 0;
     }
 
     /// Get all keys in the cache (in LRU order)
     pub fn keys(&self) -> Vec<String> {
-        let access_order = self.access_order.read().unwrap();
+        let access_order = self.access_order.read().expect("lock poisoned");
         access_order.clone()
     }
 
@@ -402,7 +402,7 @@ where
     ///
     /// Returns None if item is expired or not found.
     pub fn get(&self, key: &str) -> Option<Arc<T>> {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
 
         if let Some(entry) = entries.get_mut(key) {
             let now = std::time::Instant::now();
@@ -411,12 +411,12 @@ where
             if now >= entry.expires_at {
                 // Remove expired entry
                 entries.remove(key);
-                let mut access_order = self.access_order.write().unwrap();
+                let mut access_order = self.access_order.write().expect("lock poisoned");
                 if let Some(pos) = access_order.iter().position(|k| k == key) {
                     access_order.remove(pos);
                 }
-                *self.expirations.write().unwrap() += 1;
-                *self.misses.write().unwrap() += 1;
+                *self.expirations.write().expect("lock poisoned") += 1;
+                *self.misses.write().expect("lock poisoned") += 1;
                 return None;
             }
 
@@ -424,19 +424,19 @@ where
             entry.access_count += 1;
 
             // Update access order
-            let mut access_order = self.access_order.write().unwrap();
+            let mut access_order = self.access_order.write().expect("lock poisoned");
             if let Some(pos) = access_order.iter().position(|k| k == key) {
                 access_order.remove(pos);
             }
             access_order.push(key.to_string());
 
             // Record hit
-            *self.hits.write().unwrap() += 1;
+            *self.hits.write().expect("lock poisoned") += 1;
 
             Some(Arc::clone(&entry.value))
         } else {
             // Record miss
-            *self.misses.write().unwrap() += 1;
+            *self.misses.write().expect("lock poisoned") += 1;
             None
         }
     }
@@ -445,8 +445,8 @@ where
     ///
     /// If the cache is at capacity, evicts the least recently used item.
     pub fn put(&mut self, key: String, value: Arc<T>) {
-        let mut entries = self.entries.write().unwrap();
-        let mut access_order = self.access_order.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut access_order = self.access_order.write().expect("lock poisoned");
 
         // Remove existing entry if present
         if entries.contains_key(&key) {
@@ -481,8 +481,8 @@ where
     ///
     /// Returns the number of entries evicted.
     pub fn evict_expired(&mut self) -> usize {
-        let mut entries = self.entries.write().unwrap();
-        let mut access_order = self.access_order.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut access_order = self.access_order.write().expect("lock poisoned");
         let now = std::time::Instant::now();
 
         let expired_keys: Vec<String> = entries
@@ -500,13 +500,13 @@ where
             }
         }
 
-        *self.expirations.write().unwrap() += count;
+        *self.expirations.write().expect("lock poisoned") += count;
         count
     }
 
     /// Get the number of items in the cache
     pub fn len(&self) -> usize {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().expect("lock poisoned");
         entries.len()
     }
 
@@ -527,8 +527,8 @@ where
 
     /// Clear all items from the cache
     pub fn clear(&mut self) {
-        let mut entries = self.entries.write().unwrap();
-        let mut access_order = self.access_order.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut access_order = self.access_order.write().expect("lock poisoned");
 
         entries.clear();
         access_order.clear();
@@ -536,8 +536,8 @@ where
 
     /// Get cache hit rate (0.0 to 1.0)
     pub fn hit_rate(&self) -> f64 {
-        let hits = *self.hits.read().unwrap();
-        let misses = *self.misses.read().unwrap();
+        let hits = *self.hits.read().expect("lock poisoned");
+        let misses = *self.misses.read().expect("lock poisoned");
         let total = hits + misses;
 
         if total == 0 {
@@ -549,7 +549,7 @@ where
 
     /// Get total number of expirations
     pub fn expirations(&self) -> usize {
-        *self.expirations.read().unwrap()
+        *self.expirations.read().expect("lock poisoned")
     }
 
     /// Get cache statistics including TTL information
@@ -557,8 +557,8 @@ where
         TtlCacheStatistics {
             size: self.len(),
             capacity: self.capacity,
-            hits: *self.hits.read().unwrap(),
-            misses: *self.misses.read().unwrap(),
+            hits: *self.hits.read().expect("lock poisoned"),
+            misses: *self.misses.read().expect("lock poisoned"),
             expirations: self.expirations(),
             hit_rate: self.hit_rate(),
             ttl_seconds: self.ttl.as_secs(),

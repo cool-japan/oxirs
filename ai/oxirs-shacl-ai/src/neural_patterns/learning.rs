@@ -356,7 +356,9 @@ impl NeuralPatternLearner {
     fn apply_batch_normalization(&self, input: &mut Array2<f64>) -> Result<()> {
         // Compute mean and variance across batch dimension
         let batch_size = input.nrows() as f64;
-        let mean = input.mean_axis(Axis(0)).unwrap();
+        let mean = input
+            .mean_axis(Axis(0))
+            .expect("input array should have valid axis");
         let variance = input.var_axis(Axis(0), 1.0);
 
         // Normalize
@@ -544,7 +546,7 @@ impl NeuralPatternLearner {
         let mut replay_correlations = HashMap::new();
 
         for _ in 0..replay_size.min(replay_buffer.len()) {
-            let idx = rng.random_range(0, replay_buffer.len());
+            let idx = rng.random_range(0..replay_buffer.len());
             let (pattern, correlations) = &replay_buffer[idx];
             replay_patterns.push(pattern.clone());
             replay_correlations.extend(correlations.clone());
@@ -727,7 +729,9 @@ impl NeuralPatternLearner {
                         let predicted_type_idx = pred_row
                             .iter()
                             .enumerate()
-                            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                            .max_by(|(_, a), (_, b)| {
+                                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                            })
                             .map(|(idx, _)| idx)
                             .unwrap_or(0);
 
@@ -805,7 +809,9 @@ impl NeuralPatternLearner {
                         let predicted_type_idx = pred_row
                             .iter()
                             .enumerate()
-                            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                            .max_by(|(_, a), (_, b)| {
+                                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                            })
                             .map(|(idx, _)| idx)
                             .unwrap_or(0);
 

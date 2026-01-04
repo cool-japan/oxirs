@@ -376,7 +376,7 @@
 - **Continual Learning**: Memory buffer and plasticity preservation
 - **Ensemble Methods**: Bagging, boosting, and weighted voting
 - **Generative Models**: VAE for synthetic test data generation
-- **Released on crates.io**: `oxirs-shacl-ai = "0.1.0-rc.1"` (experimental)
+- **Released on crates.io**: `oxirs-shacl-ai = "0.1.0-rc.2"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 
@@ -406,7 +406,7 @@
 - [x] Model versioning - **Pre-trained model support in transfer learning**
 - [x] Deployment tools - **Full API for production use**
 
-### Next: RC.1 Targets (v0.1.0-rc.1 - ✅ COMPLETED November 3, 2025)
+### Next: RC.1 Targets (v0.1.0-rc.2 - ✅ COMPLETED November 3, 2025)
 - [x] Transformer-based constraint generation - **✅ COMPLETED November 3, 2025**
   - Multi-head attention architecture for RDF pattern understanding
   - Fine-tuning support for domain-specific constraints
@@ -455,8 +455,8 @@
 ### v0.1.0 Final Release Targets (Q4 2025) - ALL FEATURES
 
 #### Advanced ML Techniques (Target: v0.1.0)
-- [x] Graph neural networks for shape learning - **v0.1.0-rc.1**
-- [x] Transformer-based constraint generation - **v0.1.0-rc.1 (November 2, 2025)**
+- [x] Graph neural networks for shape learning - **v0.1.0-rc.2**
+- [x] Transformer-based constraint generation - **v0.1.0-rc.2 (November 2, 2025)**
 - [x] Reinforcement learning for optimization - **✅ COMPLETED November 3, 2025 (RC.1)**
   - Q-learning with experience replay
   - Epsilon-greedy and softmax policies
@@ -464,10 +464,10 @@
   - Double DQN and prioritized replay
   - Dueling DQN architecture support
   - Full SciRS2 integration
-- [x] Generative models for test data - **VAE implemented in v0.1.0-rc.1**
-- [x] Ensemble methods for robustness - **v0.1.0-rc.1**
-- [x] Meta-learning for few-shot adaptation - **v0.1.0-rc.1** (existing implementation enhanced)
-- [x] Continual learning for evolving schemas - **v0.1.0-rc.1**
+- [x] Generative models for test data - **VAE implemented in v0.1.0-rc.2**
+- [x] Ensemble methods for robustness - **v0.1.0-rc.2**
+- [x] Meta-learning for few-shot adaptation - **v0.1.0-rc.2** (existing implementation enhanced)
+- [x] Continual learning for evolving schemas - **v0.1.0-rc.2**
 - [x] Federated learning for privacy - **✅ COMPLETED November 29, 2025 (Phase 3)**
   - Advanced Byzantine Fault Tolerance with HoneyBadger BFT
   - Differential Privacy with budget tracking
@@ -476,14 +476,14 @@
   - 28 comprehensive tests covering all features
 
 #### Transfer Learning (Target: v0.1.0)
-- [x] Pre-trained models for common domains - **v0.1.0-rc.1**
-- [x] Domain adaptation techniques - **v0.1.0-rc.1**
+- [x] Pre-trained models for common domains - **v0.1.0-rc.2**
+- [x] Domain adaptation techniques - **v0.1.0-rc.2**
 - [x] Cross-lingual shape transfer - **✅ COMPLETED November 20, 2025 (v0.1.0+)**
   - Multilingual transformer-based translation (25+ languages)
   - Semantic preservation during translation
   - Translation quality metrics
   - Language detection and automatic translation
-- [x] Zero-shot constraint prediction - **v0.1.0-rc.1**
+- [x] Zero-shot constraint prediction - **v0.1.0-rc.2**
 - [x] Multi-task learning framework - **✅ COMPLETED November 7, 2025 (RC.1)**
   - Hard and soft parameter sharing
   - Dynamic task weighting (GradNorm)
@@ -496,7 +496,7 @@
   - Attention transfer
   - Progressive and multi-teacher distillation
   - Compression metrics tracking
-- [x] Model fine-tuning strategies - **v0.1.0-rc.1**
+- [x] Model fine-tuning strategies - **v0.1.0-rc.2**
 - [x] Transfer from OWL to SHACL - **✅ COMPLETED November 20, 2025 (v0.1.0+)**
   - Convert OWL classes to SHACL NodeShapes
   - Map property restrictions to SHACL constraints
@@ -504,26 +504,26 @@
   - Semantic equivalence validation
 
 #### Active Learning (Target: v0.1.0)
-- [x] Uncertainty sampling for validation - **v0.1.0-rc.1**
-- [x] Query-by-committee strategies - **v0.1.0-rc.1**
-- [x] Expected model change selection - **v0.1.0-rc.1**
-- [x] Diversity-based sampling - **v0.1.0-rc.1**
+- [x] Uncertainty sampling for validation - **v0.1.0-rc.2**
+- [x] Query-by-committee strategies - **v0.1.0-rc.2**
+- [x] Expected model change selection - **v0.1.0-rc.2**
+- [x] Diversity-based sampling - **v0.1.0-rc.2**
 - [x] Interactive labeling interface - **✅ COMPLETED November 20, 2025 (v0.1.0+)**
   - Uncertainty-driven sample prioritization
   - Multi-annotator support with agreement tracking
   - Quality control and validation
   - Annotation history and versioning
-- [x] Budget-constrained learning - **v0.1.0-rc.1**
-- [x] Human-in-the-loop validation - **v0.1.0-rc.1**
-- [x] Confidence-based feedback - **v0.1.0-rc.1**
+- [x] Budget-constrained learning - **v0.1.0-rc.2**
+- [x] Human-in-the-loop validation - **v0.1.0-rc.2**
+- [x] Confidence-based feedback - **v0.1.0-rc.2**
 
 #### Anomaly Detection (Target: v0.1.0)
-- [x] Outlier detection in RDF data - **v0.1.0-rc.1**
-- [x] Novelty detection for new patterns - **v0.1.0-rc.1**
-- [x] Drift detection in data distributions - **v0.1.0-rc.1**
-- [x] Collective anomaly identification - **v0.1.0-rc.1**
-- [x] Contextual anomaly scoring - **v0.1.0-rc.1**
-- [x] Explainable anomaly reports - **v0.1.0-rc.1 (November 2, 2025) with SHAP, NLG, and Decision Trees**
+- [x] Outlier detection in RDF data - **v0.1.0-rc.2**
+- [x] Novelty detection for new patterns - **v0.1.0-rc.2**
+- [x] Drift detection in data distributions - **v0.1.0-rc.2**
+- [x] Collective anomaly identification - **v0.1.0-rc.2**
+- [x] Contextual anomaly scoring - **v0.1.0-rc.2**
+- [x] Explainable anomaly reports - **v0.1.0-rc.2 (November 2, 2025) with SHAP, NLG, and Decision Trees**
 - [x] Real-time anomaly streams - **✅ COMPLETED November 7, 2025 (RC.2)**
   - Sliding window stream processing
   - Incremental anomaly detection models
@@ -532,7 +532,7 @@
 - [x] Adaptive threshold tuning - **✅ COMPLETED (Integrated into Real-time Anomaly Streams)**
 
 #### Production Hardening (Target: v0.1.0)
-- [x] Model versioning and registry - **v0.1.0-rc.1 (November 2, 2025) with full lifecycle management**
+- [x] Model versioning and registry - **v0.1.0-rc.2 (November 2, 2025) with full lifecycle management**
 - [x] A/B testing framework - **✅ COMPLETED November 20, 2025 (v0.1.0+)**
   - Multi-variant testing with traffic splitting
   - Statistical significance testing
@@ -565,7 +565,7 @@
   - Intersectional bias analysis
   - Pre/in/post-processing mitigation
   - Fairness tracking over time
-- [x] Explainability frameworks - **v0.1.0-rc.1 (November 2, 2025) with SHAP, NLG, Decision Trees**
+- [x] Explainability frameworks - **v0.1.0-rc.2 (November 2, 2025) with SHAP, NLG, Decision Trees**
 - [x] Production monitoring - **✅ COMPLETED November 15, 2025 (v0.1.0)**
   - Real-time performance monitoring
   - SLA compliance checking
@@ -587,7 +587,7 @@
   - A/B testing framework
   - Automatic rollback on degradation
   - Full pipeline orchestration
-- [x] Model drift monitoring - **v0.1.0-rc.1 (November 2, 2025) - KL/PSI/KS tests, alerting**
+- [x] Model drift monitoring - **v0.1.0-rc.2 (November 2, 2025) - KL/PSI/KS tests, alerting**
 - [x] Feature store integration - **✅ COMPLETED November 15, 2025 (v0.1.0)**
   - Online/offline feature serving
   - Feature versioning and lineage tracking
@@ -600,7 +600,7 @@
   - Artifact storage
   - Experiment comparison
   - Search and filtering capabilities
-- [x] Hyperparameter optimization - **v0.1.0-rc.1 (November 2, 2025) - Grid/Random/Bayesian/Hyperband**
+- [x] Hyperparameter optimization - **v0.1.0-rc.2 (November 2, 2025) - Grid/Random/Bayesian/Hyperband**
 - [x] Model compression and quantization - **v0.1.0-RC.2 (November 7, 2025)**
 - [x] Edge deployment support - **✅ COMPLETED November 15, 2025 (v0.1.0)**
   - Device profiling and capability detection

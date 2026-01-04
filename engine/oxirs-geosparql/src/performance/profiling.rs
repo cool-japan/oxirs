@@ -59,7 +59,10 @@ impl Profiler {
     /// profiler.stop("my_operation");
     /// ```
     pub fn start(&mut self, name: &str) {
-        let mut active = self.active.lock().unwrap();
+        let mut active = self
+            .active
+            .lock()
+            .expect("mutex lock should not be poisoned");
         active.insert(name.to_string(), Instant::now());
     }
 
@@ -76,10 +79,16 @@ impl Profiler {
     /// profiler.stop("parsing");
     /// ```
     pub fn stop(&mut self, name: &str) {
-        let mut active = self.active.lock().unwrap();
+        let mut active = self
+            .active
+            .lock()
+            .expect("mutex lock should not be poisoned");
         if let Some(start_time) = active.remove(name) {
             let duration = start_time.elapsed();
-            let mut timings = self.timings.lock().unwrap();
+            let mut timings = self
+                .timings
+                .lock()
+                .expect("mutex lock should not be poisoned");
             timings.entry(name.to_string()).or_default().push(duration);
         }
     }
@@ -96,7 +105,10 @@ impl Profiler {
     /// profiler.record("operation", Duration::from_millis(10));
     /// ```
     pub fn record(&mut self, name: &str, duration: Duration) {
-        let mut timings = self.timings.lock().unwrap();
+        let mut timings = self
+            .timings
+            .lock()
+            .expect("mutex lock should not be poisoned");
         timings.entry(name.to_string()).or_default().push(duration);
     }
 
@@ -104,7 +116,10 @@ impl Profiler {
     ///
     /// Returns (count, total, average, min, max) or None if no data
     pub fn get_stats(&self, name: &str) -> Option<TimingStats> {
-        let timings = self.timings.lock().unwrap();
+        let timings = self
+            .timings
+            .lock()
+            .expect("mutex lock should not be poisoned");
         if let Some(durations) = timings.get(name) {
             if durations.is_empty() {
                 return None;
@@ -113,8 +128,14 @@ impl Profiler {
             let total: Duration = durations.iter().sum();
             let count = durations.len();
             let avg = total / count as u32;
-            let min = *durations.iter().min().unwrap();
-            let max = *durations.iter().max().unwrap();
+            let min = *durations
+                .iter()
+                .min()
+                .expect("durations should not be empty");
+            let max = *durations
+                .iter()
+                .max()
+                .expect("durations should not be empty");
 
             Some(TimingStats {
                 count,
@@ -130,7 +151,10 @@ impl Profiler {
 
     /// Get all timing data
     pub fn get_all_stats(&self) -> HashMap<String, TimingStats> {
-        let timings = self.timings.lock().unwrap();
+        let timings = self
+            .timings
+            .lock()
+            .expect("mutex lock should not be poisoned");
         let mut all_stats = HashMap::new();
 
         for (name, durations) in timings.iter() {
@@ -141,8 +165,14 @@ impl Profiler {
             let total: Duration = durations.iter().sum();
             let count = durations.len();
             let avg = total / count as u32;
-            let min = *durations.iter().min().unwrap();
-            let max = *durations.iter().max().unwrap();
+            let min = *durations
+                .iter()
+                .min()
+                .expect("durations should not be empty");
+            let max = *durations
+                .iter()
+                .max()
+                .expect("durations should not be empty");
 
             all_stats.insert(
                 name.clone(),
@@ -207,9 +237,15 @@ impl Profiler {
 
     /// Clear all collected timing data
     pub fn clear(&mut self) {
-        let mut timings = self.timings.lock().unwrap();
+        let mut timings = self
+            .timings
+            .lock()
+            .expect("mutex lock should not be poisoned");
         timings.clear();
-        let mut active = self.active.lock().unwrap();
+        let mut active = self
+            .active
+            .lock()
+            .expect("mutex lock should not be poisoned");
         active.clear();
     }
 

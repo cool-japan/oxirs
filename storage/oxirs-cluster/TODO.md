@@ -181,11 +181,11 @@
 - **Visualization dashboard** - Real-time web dashboard with REST API ✅
 - **Zero-downtime migrations** - Online schema changes with phased rollout ✅
 - **Disaster recovery** - Automated recovery with RTO/RPO objectives ✅
-- **Ready for release**: All v0.1.0-rc.1 features complete! 🎉
+- **Ready for release**: All v0.1.0-rc.2 features complete! 🎉
 
 ## 🎯 v0.1.0 Complete Feature Roadmap
 
-### v0.1.0-rc.1 Target (December 2025) - ALL FEATURES
+### v0.1.0-rc.2 Target (December 2025) - ALL FEATURES
 
 #### Core Clustering (Target: v0.1.0)
 - [x] Raft consensus optimization (batch processing, compression, parallel replication)

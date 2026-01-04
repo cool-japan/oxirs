@@ -62,7 +62,7 @@ flate2 = "1.1"
 zstd = "0.13"
 lz4_flex = "0.11"
 crc32fast = "1.5"
-bincode = "1.3"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 rmp-serde = "1.3"
 serde_cbor = "0.11"
 
@@ -89,7 +89,7 @@ tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
 
 [dev-dependencies]
 criterion.workspace = true
-tempfile = "3.23"
+tempfile = "3.24"
 proptest = "1.7"
 
 [features]

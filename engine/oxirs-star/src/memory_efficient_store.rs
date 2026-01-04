@@ -220,14 +220,14 @@ impl MemoryEfficientStore {
     /// Serialize triples to bytes
     fn serialize_triples(&self, triples: &[StarTriple]) -> StarResult<Vec<u8>> {
         // Use bincode 2.0 for efficient serialization
-        bincode::serde::encode_to_vec(triples, bincode::config::standard())
+        oxicode::serde::encode_to_vec(&triples, oxicode::config::standard())
             .map_err(|e| StarError::serialization_error(format!("Serialization failed: {}", e)))
     }
 
     /// Deserialize triples from bytes
     #[allow(dead_code)]
     fn deserialize_triples(&self, data: &[u8]) -> StarResult<Vec<StarTriple>> {
-        bincode::serde::decode_from_slice(data, bincode::config::standard())
+        oxicode::serde::decode_from_slice(data, oxicode::config::standard())
             .map(|(triples, _)| triples)
             .map_err(|e| StarError::parse_error(format!("Deserialization failed: {}", e)))
     }

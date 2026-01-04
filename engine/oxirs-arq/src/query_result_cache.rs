@@ -186,8 +186,8 @@ impl QueryResultCache {
             return Ok(()); // Skip caching large results
         }
 
-        let mut entries = self.entries.write().unwrap();
-        let mut lru = self.lru_queue.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut lru = self.lru_queue.write().expect("lock poisoned");
 
         // Check if we need to evict
         if entries.len() >= self.config.max_entries {
@@ -220,7 +220,7 @@ impl QueryResultCache {
 
         // Update statistics
         if self.config.enable_stats {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.puts += 1;
             stats.entry_count = entries.len();
             stats.size_bytes += stored_results.len();
@@ -236,8 +236,8 @@ impl QueryResultCache {
 
     /// Get query results from cache
     pub fn get(&self, fingerprint_hash: &str) -> Option<Vec<u8>> {
-        let mut entries = self.entries.write().unwrap();
-        let mut lru = self.lru_queue.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut lru = self.lru_queue.write().expect("lock poisoned");
 
         if let Some(entry) = entries.get_mut(fingerprint_hash) {
             // Check if entry is expired
@@ -249,7 +249,7 @@ impl QueryResultCache {
 
                     // Update statistics
                     if self.config.enable_stats {
-                        let mut stats = self.stats.write().unwrap();
+                        let mut stats = self.stats.write().expect("lock poisoned");
                         stats.misses += 1;
                         stats.evictions += 1;
                         stats.calculate_hit_rate();
@@ -275,7 +275,7 @@ impl QueryResultCache {
 
             // Update statistics
             if self.config.enable_stats {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write().expect("lock poisoned");
                 stats.hits += 1;
                 stats.calculate_hit_rate();
             }
@@ -284,7 +284,7 @@ impl QueryResultCache {
         } else {
             // Cache miss
             if self.config.enable_stats {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write().expect("lock poisoned");
                 stats.misses += 1;
                 stats.calculate_hit_rate();
             }
@@ -294,14 +294,14 @@ impl QueryResultCache {
 
     /// Invalidate a specific cache entry
     pub fn invalidate(&self, fingerprint_hash: &str) -> Result<()> {
-        let mut entries = self.entries.write().unwrap();
-        let mut lru = self.lru_queue.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut lru = self.lru_queue.write().expect("lock poisoned");
 
         if entries.remove(fingerprint_hash).is_some() {
             lru.retain(|k| k != fingerprint_hash);
 
             if self.config.enable_stats {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write().expect("lock poisoned");
                 stats.invalidations += 1;
                 stats.entry_count = entries.len();
             }
@@ -312,15 +312,15 @@ impl QueryResultCache {
 
     /// Invalidate all cache entries
     pub fn invalidate_all(&self) -> Result<()> {
-        let mut entries = self.entries.write().unwrap();
-        let mut lru = self.lru_queue.write().unwrap();
+        let mut entries = self.entries.write().expect("lock poisoned");
+        let mut lru = self.lru_queue.write().expect("lock poisoned");
 
         let count = entries.len();
         entries.clear();
         lru.clear();
 
         if self.config.enable_stats {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.invalidations += count as u64;
             stats.entry_count = 0;
             stats.size_bytes = 0;
@@ -331,17 +331,20 @@ impl QueryResultCache {
 
     /// Get cache statistics
     pub fn statistics(&self) -> CacheStatistics {
-        self.stats.read().unwrap().clone()
+        self.stats.read().expect("lock poisoned").clone()
     }
 
     /// Get current cache size
     pub fn size(&self) -> usize {
-        self.entries.read().unwrap().len()
+        self.entries.read().expect("lock poisoned").len()
     }
 
     /// Check if cache contains a fingerprint
     pub fn contains(&self, fingerprint_hash: &str) -> bool {
-        self.entries.read().unwrap().contains_key(fingerprint_hash)
+        self.entries
+            .read()
+            .expect("lock poisoned")
+            .contains_key(fingerprint_hash)
     }
 
     /// Evict least recently used entries
@@ -356,7 +359,7 @@ impl QueryResultCache {
             if let Some(oldest) = lru.pop_front() {
                 if let Some(entry) = entries.remove(&oldest) {
                     if self.config.enable_stats {
-                        let mut stats = self.stats.write().unwrap();
+                        let mut stats = self.stats.write().expect("lock poisoned");
                         stats.evictions += 1;
                         stats.size_bytes = stats.size_bytes.saturating_sub(entry.results.len());
                         stats.entry_count = entries.len();

@@ -211,7 +211,7 @@ impl SubscriptionManager {
 
         // Register connection
         {
-            let mut connections = self.connections.write().unwrap();
+            let mut connections = self.connections.write().expect("lock poisoned");
             connections.insert(connection_id.clone(), connection.clone());
         }
 
@@ -298,7 +298,7 @@ impl SubscriptionManager {
             }
             Message::Pong(_) => {
                 // Update last ping time
-                *connection.last_ping.write().unwrap() = Instant::now();
+                *connection.last_ping.write().expect("lock poisoned") = Instant::now();
                 Ok(())
             }
             _ => Ok(()), // Ignore other message types
@@ -334,7 +334,7 @@ impl SubscriptionManager {
                 };
 
                 // Set authentication status
-                *connection.authenticated.write().unwrap() = is_authenticated;
+                *connection.authenticated.write().expect("lock poisoned") = is_authenticated;
 
                 // Send acknowledgment
                 let ack = SubscriptionMessage::ConnectionAck;
@@ -342,7 +342,7 @@ impl SubscriptionManager {
             }
 
             SubscriptionMessage::Start { id, payload } => {
-                if !*connection.authenticated.read().unwrap() {
+                if !*connection.authenticated.read().expect("lock poisoned") {
                     let error = SubscriptionMessage::ConnectionError {
                         payload: Some(serde_json::json!({"message": "Not authenticated"})),
                     };
@@ -379,7 +379,7 @@ impl SubscriptionManager {
     ) -> Result<()> {
         // Check subscription limits
         let connection_sub_count = {
-            let connection_subscriptions = connection.subscriptions.read().unwrap();
+            let connection_subscriptions = connection.subscriptions.read().expect("lock poisoned");
             connection_subscriptions.len()
         };
 
@@ -393,7 +393,7 @@ impl SubscriptionManager {
         }
 
         let total_sub_count = {
-            let active_subscriptions = self.active_subscriptions.read().unwrap();
+            let active_subscriptions = self.active_subscriptions.read().expect("lock poisoned");
             active_subscriptions.len()
         };
 
@@ -441,12 +441,14 @@ impl SubscriptionManager {
 
         // Register subscription
         {
-            let mut connection_subscriptions = connection.subscriptions.write().unwrap();
+            let mut connection_subscriptions =
+                connection.subscriptions.write().expect("lock poisoned");
             connection_subscriptions.insert(subscription_id.to_string(), subscription.clone());
         }
 
         {
-            let mut active_subscriptions = self.active_subscriptions.write().unwrap();
+            let mut active_subscriptions =
+                self.active_subscriptions.write().expect("lock poisoned");
             active_subscriptions.insert(subscription_id.to_string(), subscription.clone());
         }
 
@@ -468,13 +470,15 @@ impl SubscriptionManager {
     ) -> Result<()> {
         // Remove from connection
         {
-            let mut connection_subscriptions = connection.subscriptions.write().unwrap();
+            let mut connection_subscriptions =
+                connection.subscriptions.write().expect("lock poisoned");
             connection_subscriptions.remove(subscription_id);
         }
 
         // Remove from active subscriptions
         {
-            let mut active_subscriptions = self.active_subscriptions.write().unwrap();
+            let mut active_subscriptions =
+                self.active_subscriptions.write().expect("lock poisoned");
             active_subscriptions.remove(subscription_id);
         }
 
@@ -508,7 +512,7 @@ impl SubscriptionManager {
 
         // Find the connection
         let connection = {
-            let connections = self.connections.read().unwrap();
+            let connections = self.connections.read().expect("lock poisoned");
             connections.get(&subscription.connection_id).cloned()
         };
 
@@ -529,7 +533,8 @@ impl SubscriptionManager {
 
             // Update subscription execution info
             {
-                let mut active_subscriptions = self.active_subscriptions.write().unwrap();
+                let mut active_subscriptions =
+                    self.active_subscriptions.write().expect("lock poisoned");
                 if let Some(sub) = active_subscriptions.get_mut(&subscription.id) {
                     sub.last_execution = Some(Instant::now());
                     sub.execution_count += 1;
@@ -547,7 +552,7 @@ impl SubscriptionManager {
         event: &SubscriptionEvent,
     ) -> Result<()> {
         let subscriptions: Vec<ActiveSubscription> = {
-            let connection_subscriptions = connection.subscriptions.read().unwrap();
+            let connection_subscriptions = connection.subscriptions.read().expect("lock poisoned");
             connection_subscriptions.values().cloned().collect()
         };
 
@@ -639,7 +644,7 @@ impl SubscriptionManager {
                 interval.tick().await;
 
                 let connections_to_ping: Vec<Arc<WebSocketConnection>> = {
-                    let connections = connections.read().unwrap();
+                    let connections = connections.read().expect("lock poisoned");
                     connections.values().cloned().collect()
                 };
 
@@ -672,7 +677,7 @@ impl SubscriptionManager {
                 let mut expired_subscriptions = Vec::new();
 
                 {
-                    let subscriptions = active_subscriptions.read().unwrap();
+                    let subscriptions = active_subscriptions.read().expect("lock poisoned");
                     for (id, subscription) in subscriptions.iter() {
                         if now.duration_since(subscription.created_at) > timeout {
                             expired_subscriptions.push(id.clone());
@@ -685,7 +690,8 @@ impl SubscriptionManager {
 
                     // Remove from active subscriptions
                     let connection_id = {
-                        let mut subscriptions = active_subscriptions.write().unwrap();
+                        let mut subscriptions =
+                            active_subscriptions.write().expect("lock poisoned");
                         subscriptions
                             .remove(&subscription_id)
                             .map(|sub| sub.connection_id)
@@ -694,14 +700,14 @@ impl SubscriptionManager {
                     // Remove from connection and send completion message
                     if let Some(connection_id) = connection_id {
                         let connection_opt = {
-                            let connections = connections.read().unwrap();
+                            let connections = connections.read().expect("lock poisoned");
                             connections.get(&connection_id).cloned()
                         };
 
                         if let Some(connection) = connection_opt {
                             {
                                 let mut connection_subscriptions =
-                                    connection.subscriptions.write().unwrap();
+                                    connection.subscriptions.write().expect("lock poisoned");
                                 connection_subscriptions.remove(&subscription_id);
                             }
 
@@ -726,13 +732,13 @@ impl SubscriptionManager {
 
         // Remove connection
         {
-            let mut connections = self.connections.write().unwrap();
+            let mut connections = self.connections.write().expect("lock poisoned");
             connections.remove(connection_id);
         }
 
         // Remove all subscriptions for this connection
         let subscription_ids: Vec<String> = {
-            let active_subscriptions = self.active_subscriptions.read().unwrap();
+            let active_subscriptions = self.active_subscriptions.read().expect("lock poisoned");
             active_subscriptions
                 .iter()
                 .filter(|(_, sub)| sub.connection_id == connection_id)
@@ -741,7 +747,8 @@ impl SubscriptionManager {
         };
 
         {
-            let mut active_subscriptions = self.active_subscriptions.write().unwrap();
+            let mut active_subscriptions =
+                self.active_subscriptions.write().expect("lock poisoned");
             for subscription_id in subscription_ids {
                 active_subscriptions.remove(&subscription_id);
                 info!(
@@ -754,8 +761,8 @@ impl SubscriptionManager {
 
     /// Get subscription statistics
     pub fn get_stats(&self) -> SubscriptionStats {
-        let connections = self.connections.read().unwrap();
-        let active_subscriptions = self.active_subscriptions.read().unwrap();
+        let connections = self.connections.read().expect("lock poisoned");
+        let active_subscriptions = self.active_subscriptions.read().expect("lock poisoned");
 
         SubscriptionStats {
             total_connections: connections.len(),

@@ -11,6 +11,10 @@ keywords = ["geosparql", "spatial", "geometry", "gis", "rdf"]
 categories = ["algorithms", "data-structures", "science"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 oxirs-core.workspace = true
 
@@ -61,7 +65,7 @@ rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
-tempfile = "3.23"
+tempfile = "3.24"
 approx = "0.5"
 proptest = "1.7"
 

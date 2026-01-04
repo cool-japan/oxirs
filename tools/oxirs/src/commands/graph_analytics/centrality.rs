@@ -31,7 +31,7 @@ pub fn execute_betweenness_centrality(
     let centrality = betweenness_centrality(&graph, false);
 
     let mut sorted_centrality: Vec<(usize, f64)> = centrality.into_iter().collect();
-    sorted_centrality.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    sorted_centrality.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     println!(
         "{}",
@@ -93,7 +93,7 @@ pub fn execute_closeness_centrality(rdf_graph: &RdfGraph, config: &AnalyticsConf
     let centrality = closeness_centrality(&graph, true);
 
     let mut sorted_centrality: Vec<(usize, f64)> = centrality.into_iter().collect();
-    sorted_centrality.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    sorted_centrality.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     println!(
         "{}",
@@ -158,7 +158,7 @@ pub fn execute_eigenvector_centrality(
         .context("Failed to compute eigenvector centrality")?;
 
     let mut sorted_centrality: Vec<(usize, f64)> = centrality.into_iter().collect();
-    sorted_centrality.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    sorted_centrality.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     println!(
         "{}",
@@ -225,7 +225,7 @@ pub fn execute_katz_centrality(rdf_graph: &RdfGraph, config: &AnalyticsConfig) -
         .context("Failed to compute Katz centrality")?;
 
     let mut sorted_centrality: Vec<(usize, f64)> = centrality.into_iter().collect();
-    sorted_centrality.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    sorted_centrality.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     println!(
         "{}",
@@ -285,10 +285,10 @@ pub fn execute_hits_algorithm(rdf_graph: &RdfGraph, config: &AnalyticsConfig) ->
         .context("Failed to compute HITS scores")?;
 
     let mut sorted_hubs: Vec<(usize, f64)> = hits.hubs.into_iter().collect();
-    sorted_hubs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    sorted_hubs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     let mut sorted_authorities: Vec<(usize, f64)> = hits.authorities.into_iter().collect();
-    sorted_authorities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    sorted_authorities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     println!(
         "{}",

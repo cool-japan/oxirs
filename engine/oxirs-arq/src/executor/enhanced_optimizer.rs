@@ -147,7 +147,7 @@ impl EnhancedExecutionOptimizer {
 
         // Update execution history
         {
-            let mut history = self.execution_history.write().unwrap();
+            let mut history = self.execution_history.write().expect("lock poisoned");
             history.push(record);
 
             // Keep only recent records
@@ -167,7 +167,7 @@ impl EnhancedExecutionOptimizer {
 
     /// Predict execution performance
     pub fn predict_performance(&self, algebra: &Algebra) -> Result<PerformancePrediction> {
-        let model = self.performance_model.read().unwrap();
+        let model = self.performance_model.read().expect("lock poisoned");
 
         let complexity_score = self.compute_complexity_score(algebra);
         let selectivity_score = self.estimate_selectivity_score(algebra);
@@ -188,8 +188,8 @@ impl EnhancedExecutionOptimizer {
 
     /// Get optimization statistics
     pub fn get_optimization_stats(&self) -> OptimizationStats {
-        let cache = self.pattern_cache.read().unwrap();
-        let history = self.execution_history.read().unwrap();
+        let cache = self.pattern_cache.read().expect("lock poisoned");
+        let history = self.execution_history.read().expect("lock poisoned");
 
         let total_hits = cache.values().map(|c| c.hit_count).sum();
         let total_queries = cache.len() + history.len();
@@ -380,7 +380,7 @@ impl EnhancedExecutionOptimizer {
 
     /// Get cached optimization
     fn get_cached_optimization(&self, query_hash: &str) -> Option<CachedOptimization> {
-        let cache = self.pattern_cache.read().unwrap();
+        let cache = self.pattern_cache.read().expect("lock poisoned");
         cache.get(query_hash).and_then(|cached| {
             // Check if cache entry is still valid
             if cached.timestamp.elapsed() < self.config.cache_ttl {
@@ -393,7 +393,7 @@ impl EnhancedExecutionOptimizer {
 
     /// Cache optimization result
     fn cache_optimization(&self, query_hash: &str, algebra: &Algebra, estimated_cost: f64) {
-        let mut cache = self.pattern_cache.write().unwrap();
+        let mut cache = self.pattern_cache.write().expect("lock poisoned");
 
         // Remove old entries if cache is full
         if cache.len() >= self.config.cache_size {
@@ -421,7 +421,7 @@ impl EnhancedExecutionOptimizer {
 
     /// Update cache hit count
     fn update_cache_hit_count(&self, query_hash: &str) {
-        let mut cache = self.pattern_cache.write().unwrap();
+        let mut cache = self.pattern_cache.write().expect("lock poisoned");
         if let Some(cached) = cache.get_mut(query_hash) {
             cached.hit_count += 1;
         }
@@ -429,7 +429,7 @@ impl EnhancedExecutionOptimizer {
 
     /// Update cache with actual execution cost
     fn update_cache_with_actual_cost(&self, query_hash: &str, actual_cost: f64) {
-        let mut cache = self.pattern_cache.write().unwrap();
+        let mut cache = self.pattern_cache.write().expect("lock poisoned");
         if let Some(cached) = cache.get_mut(query_hash) {
             cached.actual_cost = Some(actual_cost);
         }
@@ -437,7 +437,7 @@ impl EnhancedExecutionOptimizer {
 
     /// Update performance model with new data
     fn update_performance_model(&self, algebra: &Algebra, stats: &ExecutionStats) -> Result<()> {
-        let mut model = self.performance_model.write().unwrap();
+        let mut model = self.performance_model.write().expect("lock poisoned");
 
         let pattern_key = self.extract_pattern_key(algebra);
         let actual_time = stats.execution_time.as_secs_f64();
@@ -520,7 +520,7 @@ impl EnhancedExecutionOptimizer {
 
     /// Estimate operator cost
     fn estimate_operator_cost(&self, algebra: &Algebra) -> f64 {
-        let model = self.performance_model.read().unwrap();
+        let model = self.performance_model.read().expect("lock poisoned");
         let pattern_key = self.extract_pattern_key(algebra);
         model.operator_costs.get(&pattern_key).unwrap_or(&1.0).clone()
     }
@@ -533,7 +533,7 @@ impl EnhancedExecutionOptimizer {
 
     /// Compute average optimization benefit
     fn compute_average_optimization_benefit(&self) -> f64 {
-        let cache = self.pattern_cache.read().unwrap();
+        let cache = self.pattern_cache.read().expect("lock poisoned");
         let total_benefit: f64 = cache
             .values()
             .filter_map(|cached| {

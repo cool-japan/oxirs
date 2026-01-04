@@ -324,7 +324,7 @@ impl CommunityDetector {
             // Randomize node order
             let mut node_order = nodes.clone();
             for i in (1..node_order.len()).rev() {
-                let j = self.rng.random_range(0, i + 1);
+                let j = self.rng.random_range(0..i + 1);
                 node_order.swap(i, j);
             }
 

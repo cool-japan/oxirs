@@ -11,6 +11,10 @@ keywords = ["rag", "chat", "llm", "ai", "semantic-search"]
 categories = ["science", "algorithms", "web-programming"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 oxirs-core.workspace = true
 oxirs-vec.workspace = true
@@ -74,7 +78,7 @@ sha2 = "0.10"
 
 # Session persistence and state management
 sled = "0.34"
-bincode = "2.0"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 zstd = "0.13"
 
 # Encryption
@@ -100,7 +104,7 @@ rust_xlsxwriter = "0.79"
 
 [dev-dependencies]
 criterion.workspace = true
-tempfile = "3.23"
+tempfile = "3.24"
 
 [features]
 default = []

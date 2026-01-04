@@ -1,6 +1,6 @@
 # OxiRS CLI Command Reference Manual
 
-**Version**: 0.1.0-rc.1
+**Version**: 0.1.0-rc.2
 **Last Updated**: November 23, 2025
 **Status**: Production-Ready
 
@@ -1102,4 +1102,4 @@ oxirs serve --config /etc/oxirs/production.toml
 
 ---
 
-**OxiRS CLI v0.1.0-rc.1** - Production-ready command-line interface for semantic web operations with 452 tests passing (100%)
+**OxiRS CLI v0.1.0-rc.2** - Production-ready command-line interface for semantic web operations with 452 tests passing (100%)

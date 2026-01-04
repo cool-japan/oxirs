@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 /// A node in the Vamana graph
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct VamanaNode {
     /// Node ID (internal)
     pub id: NodeId,
@@ -83,7 +83,7 @@ impl VamanaNode {
 }
 
 /// Vamana graph structure
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, oxicode::Encode, oxicode::Decode)]
 pub struct VamanaGraph {
     /// Graph nodes indexed by NodeId
     nodes: HashMap<NodeId, VamanaNode>,

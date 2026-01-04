@@ -11,6 +11,10 @@ keywords = ["shacl", "validation", "rdf", "constraints", "semantic-web"]
 categories = ["data-structures", "parser-implementations", "science"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 oxirs-core.workspace = true
 

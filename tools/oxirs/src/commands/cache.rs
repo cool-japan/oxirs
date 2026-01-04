@@ -95,8 +95,8 @@ impl QueryCache {
     /// Get cached result if available and not expired
     pub fn get(&self, dataset: &str, query: &str) -> Option<String> {
         let key = Self::cache_key(dataset, query);
-        let mut cache = self.cache.write().unwrap();
-        let mut stats = self.stats.write().unwrap();
+        let mut cache = self.cache.write().expect("rwlock should not be poisoned");
+        let mut stats = self.stats.write().expect("rwlock should not be poisoned");
 
         if let Some(entry) = cache.get_mut(&key) {
             if entry.is_expired() {
@@ -123,7 +123,7 @@ impl QueryCache {
     /// Store query result with custom TTL
     pub fn set_with_ttl(&self, dataset: &str, query: &str, result: String, ttl: Duration) {
         let key = Self::cache_key(dataset, query);
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self.cache.write().expect("rwlock should not be poisoned");
 
         // Evict expired entries first
         self.evict_expired(&mut cache);
@@ -135,7 +135,7 @@ impl QueryCache {
 
         cache.insert(key, CacheEntry::new(result, ttl));
 
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("rwlock should not be poisoned");
         stats.total_entries = cache.len();
     }
 
@@ -147,7 +147,7 @@ impl QueryCache {
             .map(|(key, _)| key.clone())
             .collect();
 
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("rwlock should not be poisoned");
         for key in expired_keys {
             cache.remove(&key);
             stats.evictions += 1;
@@ -159,27 +159,33 @@ impl QueryCache {
         if let Some((lru_key, _)) = cache.iter().min_by_key(|(_, entry)| entry.hit_count) {
             let lru_key = lru_key.clone();
             cache.remove(&lru_key);
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("rwlock should not be poisoned");
             stats.evictions += 1;
         }
     }
 
     /// Clear all cache entries
     pub fn clear(&self) {
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self.cache.write().expect("rwlock should not be poisoned");
         cache.clear();
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("rwlock should not be poisoned");
         stats.total_entries = 0;
     }
 
     /// Get cache statistics
     pub fn stats(&self) -> CacheStats {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("rwlock should not be poisoned")
+            .clone()
     }
 
     /// Get number of entries in cache
     pub fn size(&self) -> usize {
-        self.cache.read().unwrap().len()
+        self.cache
+            .read()
+            .expect("rwlock should not be poisoned")
+            .len()
     }
 }
 

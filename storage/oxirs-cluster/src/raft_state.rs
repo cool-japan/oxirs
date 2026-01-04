@@ -461,7 +461,7 @@ impl RaftStateMachine {
             // Generate random values outside the async block
             let delay_ms = {
                 let mut random = Random::default();
-                random.random_range(10, 50)
+                random.random_range(10..50)
             };
             let vote_granted = {
                 let mut random = Random::default();

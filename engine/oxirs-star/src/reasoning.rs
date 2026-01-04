@@ -373,7 +373,10 @@ impl ReasoningEngine {
 
     /// Add a custom inference rule
     pub fn add_rule(&mut self, rule: InferenceRule) -> StarResult<()> {
-        let mut rules = self.rules.write().unwrap();
+        let mut rules = self
+            .rules
+            .write()
+            .expect("rules lock should not be poisoned");
         rules.push(rule);
 
         // Sort by priority
@@ -387,7 +390,10 @@ impl ReasoningEngine {
         info!("Starting reasoning with profile {:?}", self.profile);
 
         if self.config.enable_profiling {
-            let mut profiler = self.profiler.write().unwrap();
+            let mut profiler = self
+                .profiler
+                .write()
+                .expect("profiler lock should not be poisoned");
             profiler.start();
         }
 
@@ -456,14 +462,24 @@ impl ReasoningEngine {
         let elapsed = start.elapsed().as_micros() as u64;
 
         // Update statistics
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self
+            .stats
+            .write()
+            .expect("statistics lock should not be poisoned");
         stats.total_inferences += inferred_triples.len();
         stats.iterations = iteration;
         stats.reasoning_time_us = elapsed;
-        stats.rules_applied = self.rules.read().unwrap().len();
+        stats.rules_applied = self
+            .rules
+            .read()
+            .expect("rules lock should not be poisoned")
+            .len();
 
         if self.config.enable_profiling {
-            let mut profiler = self.profiler.write().unwrap();
+            let mut profiler = self
+                .profiler
+                .write()
+                .expect("profiler lock should not be poisoned");
             profiler.stop();
         }
 
@@ -485,7 +501,10 @@ impl ReasoningEngine {
     /// Apply rules sequentially
     fn apply_rules_sequential(&self, triples: &[StarTriple]) -> StarResult<Vec<StarTriple>> {
         let mut new_triples = Vec::new();
-        let rules = self.rules.read().unwrap();
+        let rules = self
+            .rules
+            .read()
+            .expect("rules lock should not be poisoned");
 
         for rule in rules.iter() {
             let inferred = self.apply_rule(rule, triples)?;
@@ -520,7 +539,10 @@ impl ReasoningEngine {
 
     /// Get statistics
     pub fn get_statistics(&self) -> ReasoningStats {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("statistics lock should not be poisoned")
+            .clone()
     }
 }
 

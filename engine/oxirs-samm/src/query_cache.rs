@@ -200,14 +200,20 @@ impl<'a> CachedModelQuery<'a> {
 
     /// Clear the cache
     pub fn clear_cache(&mut self) {
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self
+            .cache
+            .write()
+            .expect("cache mutex should not be poisoned");
         cache.clear();
     }
 
     /// Get cache statistics
     pub fn cache_statistics(&self) -> CacheStatistics {
-        let hits = *self.hits.read().unwrap();
-        let misses = *self.misses.read().unwrap();
+        let hits = *self.hits.read().expect("hits mutex should not be poisoned");
+        let misses = *self
+            .misses
+            .read()
+            .expect("misses mutex should not be poisoned");
         let total = hits + misses;
         let hit_rate = if total == 0 {
             0.0
@@ -215,7 +221,10 @@ impl<'a> CachedModelQuery<'a> {
             hits as f64 / total as f64
         };
 
-        let cache = self.cache.read().unwrap();
+        let cache = self
+            .cache
+            .read()
+            .expect("cache mutex should not be poisoned");
 
         CacheStatistics {
             size: cache.len(),
@@ -228,7 +237,10 @@ impl<'a> CachedModelQuery<'a> {
 
     /// Get cached value if it exists
     fn get_cached(&self, key: &CacheKey) -> Option<CachedResult> {
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self
+            .cache
+            .write()
+            .expect("cache mutex should not be poisoned");
 
         if let Some(entry) = cache.get_mut(key) {
             entry.access_count += 1;
@@ -243,7 +255,10 @@ impl<'a> CachedModelQuery<'a> {
 
     /// Cache a result
     fn cache_result(&self, key: CacheKey, value: CachedResult) {
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self
+            .cache
+            .write()
+            .expect("cache mutex should not be poisoned");
 
         // Evict LRU if at capacity
         if cache.len() >= self.max_cache_size && !cache.contains_key(&key) {

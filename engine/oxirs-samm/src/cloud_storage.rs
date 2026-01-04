@@ -386,7 +386,10 @@ impl Default for MemoryBackend {
 #[async_trait]
 impl CloudStorageBackend for MemoryBackend {
     async fn upload(&self, key: &str, data: Vec<u8>) -> std::result::Result<(), String> {
-        let mut storage = self.storage.lock().unwrap();
+        let mut storage = self
+            .storage
+            .lock()
+            .expect("storage mutex should not be poisoned");
         storage.insert(key.to_string(), data);
         Ok(())
     }
@@ -405,7 +408,10 @@ impl CloudStorageBackend for MemoryBackend {
     }
 
     async fn delete(&self, key: &str) -> std::result::Result<(), String> {
-        let mut storage = self.storage.lock().unwrap();
+        let mut storage = self
+            .storage
+            .lock()
+            .expect("storage mutex should not be poisoned");
         storage.remove(key);
         Ok(())
     }

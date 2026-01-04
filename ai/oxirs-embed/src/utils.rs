@@ -319,7 +319,7 @@ pub mod dataset_splitter {
         let mut shuffled_triples = triples;
         // Manual Fisher-Yates shuffle
         for i in (1..shuffled_triples.len()).rev() {
-            let j = rng.random_range(0, i + 1);
+            let j = rng.random_range(0..i + 1);
             shuffled_triples.swap(i, j);
         }
 
@@ -531,8 +531,8 @@ pub mod embedding_analysis {
         let mut rng = Random::default();
 
         for _ in 0..sample_size {
-            let i = rng.random_range(0, num_embeddings);
-            let j = rng.random_range(0, num_embeddings);
+            let i = rng.random_range(0..num_embeddings);
+            let j = rng.random_range(0..num_embeddings);
 
             if i != j {
                 let emb_i = embeddings.row(i);
@@ -1264,9 +1264,9 @@ pub mod convenience {
 
         // Generate random triples
         for _ in 0..(num_entities * 2) {
-            let subject = entities[rng.random_range(0, entities.len())].clone();
-            let relation = relations[rng.random_range(0, relations.len())].clone();
-            let object = entities[rng.random_range(0, entities.len())].clone();
+            let subject = entities[rng.random_range(0..entities.len())].clone();
+            let relation = relations[rng.random_range(0..relations.len())].clone();
+            let object = entities[rng.random_range(0..entities.len())].clone();
 
             if subject != object {
                 triples.push((subject, relation, object));

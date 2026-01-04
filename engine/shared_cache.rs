@@ -431,28 +431,28 @@ where
     /// Clear all cache levels
     pub fn clear(&self) {
         {
-            let mut l1 = self.l1_cache.write().unwrap();
+            let mut l1 = self.l1_cache.write().expect("lock poisoned");
             l1.clear();
         }
         {
-            let mut l2 = self.l2_cache.write().unwrap();
+            let mut l2 = self.l2_cache.write().expect("lock poisoned");
             l2.clear();
         }
         {
-            let mut l3 = self.l3_cache.write().unwrap();
+            let mut l3 = self.l3_cache.write().expect("lock poisoned");
             l3.clear();
         }
 
         // Reset statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             *stats = CacheStatistics::default();
         }
     }
 
     /// Get cache statistics
     pub fn statistics(&self) -> CacheStatistics {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("lock poisoned");
         stats.clone()
     }
 
@@ -468,61 +468,61 @@ where
 
     /// Private implementation methods
     fn get_from_l1(&self, key: &K) -> Option<V> {
-        let mut l1 = self.l1_cache.write().unwrap();
+        let mut l1 = self.l1_cache.write().expect("lock poisoned");
         l1.get(key)
     }
 
     fn get_from_l2(&self, key: &K) -> Option<V> {
-        let mut l2 = self.l2_cache.write().unwrap();
+        let mut l2 = self.l2_cache.write().expect("lock poisoned");
         l2.get(key)
     }
 
     fn get_from_l3(&self, key: &K) -> Option<V> {
-        let mut l3 = self.l3_cache.write().unwrap();
+        let mut l3 = self.l3_cache.write().expect("lock poisoned");
         l3.get(key)
     }
 
     fn promote_to_l1(&self, key: &K, value: &V) {
-        let mut l1 = self.l1_cache.write().unwrap();
+        let mut l1 = self.l1_cache.write().expect("lock poisoned");
         l1.put(key.clone(), value.clone());
     }
 
     fn promote_from_l3(&self, key: &K, value: &V) {
         // Move to L2, and potentially L1 based on access frequency
-        let mut l2 = self.l2_cache.write().unwrap();
+        let mut l2 = self.l2_cache.write().expect("lock poisoned");
         l2.put(key.clone(), value.clone());
     }
 
     fn put_in_l1(&self, key: K, value: V) -> Result<()> {
-        let mut l1 = self.l1_cache.write().unwrap();
+        let mut l1 = self.l1_cache.write().expect("lock poisoned");
         l1.put(key, value);
         Ok(())
     }
 
     fn put_in_l2(&self, key: K, value: V) -> Result<()> {
-        let mut l2 = self.l2_cache.write().unwrap();
+        let mut l2 = self.l2_cache.write().expect("lock poisoned");
         l2.put(key, value);
         Ok(())
     }
 
     fn put_in_l3(&self, key: K, value: V) -> Result<()> {
-        let mut l3 = self.l3_cache.write().unwrap();
+        let mut l3 = self.l3_cache.write().expect("lock poisoned");
         l3.put(key, value)?;
         Ok(())
     }
 
     fn remove_from_l1(&self, key: &K) -> Option<V> {
-        let mut l1 = self.l1_cache.write().unwrap();
+        let mut l1 = self.l1_cache.write().expect("lock poisoned");
         l1.remove(key)
     }
 
     fn remove_from_l2(&self, key: &K) -> Option<V> {
-        let mut l2 = self.l2_cache.write().unwrap();
+        let mut l2 = self.l2_cache.write().expect("lock poisoned");
         l2.remove(key)
     }
 
     fn remove_from_l3(&self, key: &K) -> Option<V> {
-        let mut l3 = self.l3_cache.write().unwrap();
+        let mut l3 = self.l3_cache.write().expect("lock poisoned");
         l3.remove(key)
     }
 
@@ -532,12 +532,12 @@ where
     }
 
     fn track_access(&self, key: &K, access_type: AccessType) {
-        let mut tracker = self.access_tracker.write().unwrap();
+        let mut tracker = self.access_tracker.write().expect("lock poisoned");
         tracker.track_access(key.clone(), access_type);
     }
 
     fn record_cache_hit(&self, level: usize, access_time: Duration) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         match level {
             1 => stats.l1_hits += 1,
             2 => stats.l2_hits += 1,
@@ -548,13 +548,13 @@ where
     }
 
     fn record_cache_miss(&self, access_time: Duration) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         stats.misses += 1;
         self.update_avg_access_time(&mut stats, access_time);
     }
 
     fn record_cache_put(&self, _put_time: Duration) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         stats.entries_cached += 1;
     }
 
@@ -572,7 +572,7 @@ where
     }
 
     fn check_memory_pressure(&self) -> bool {
-        let monitor = self.memory_monitor.read().unwrap();
+        let monitor = self.memory_monitor.read().expect("lock poisoned");
         let total_usage: usize = monitor.current_usage.values().sum();
         total_usage > self.config.memory_pressure_threshold * 1024 * 1024 // Convert MB to bytes
     }
@@ -581,11 +581,11 @@ where
         // Implement cleanup logic based on eviction policy
         // This is a simplified implementation
         {
-            let mut l3 = self.l3_cache.write().unwrap();
+            let mut l3 = self.l3_cache.write().expect("lock poisoned");
             l3.evict_least_recently_used(l3.entries.len() / 10); // Evict 10%
         }
 
-        let mut monitor = self.memory_monitor.write().unwrap();
+        let mut monitor = self.memory_monitor.write().expect("lock poisoned");
         monitor.last_cleanup = Some(Instant::now());
         monitor.pressure_alerts += 1;
 

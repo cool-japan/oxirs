@@ -30,18 +30,18 @@ docker-compose down -v
 
 ```bash
 # Build image
-docker build -t oxirs/fuseki:0.1.0-rc.1 .
+docker build -t oxirs/fuseki:0.1.0-rc.2 .
 
 # Run with default config
 docker run -p 3030:3030 \
   -v oxirs-data:/data \
-  oxirs/fuseki:0.1.0-rc.1
+  oxirs/fuseki:0.1.0-rc.2
 
 # Run with custom config
 docker run -p 3030:3030 \
   -v $(pwd)/server/oxirs-fuseki/oxirs-digital-twin.toml:/data/config/oxirs.toml:ro \
   -v oxirs-data:/data \
-  oxirs/fuseki:0.1.0-rc.1
+  oxirs/fuseki:0.1.0-rc.2
 ```
 
 ---

@@ -256,7 +256,7 @@ impl CostModelCalibrator {
 
     /// Record an execution sample
     pub fn record_sample(&self, sample: ExecutionSample) {
-        let mut samples = self.samples.write().unwrap();
+        let mut samples = self.samples.write().expect("lock poisoned");
         let queue = samples.entry(sample.operation).or_default();
 
         // Add sample
@@ -440,12 +440,12 @@ impl CostModelCalibrator {
             timestamp: Instant::now(),
             operations_calibrated: Vec::new(),
             total_samples_used: 0,
-            old_parameters: self.parameters.read().unwrap().clone(),
+            old_parameters: self.parameters.read().expect("lock poisoned").clone(),
             new_parameters: CostModelParameters::default(),
             warnings: Vec::new(),
         };
 
-        let samples = self.samples.read().unwrap();
+        let samples = self.samples.read().expect("lock poisoned");
 
         for (&op_type, queue) in samples.iter() {
             if queue.len() >= self.config.min_samples {
@@ -455,7 +455,7 @@ impl CostModelCalibrator {
                         report.total_samples_used += stats.sample_count as usize;
 
                         // Update stats
-                        let mut all_stats = self.stats.write().unwrap();
+                        let mut all_stats = self.stats.write().expect("lock poisoned");
                         all_stats.insert(op_type, stats);
                     }
                     Err(e) => {
@@ -475,7 +475,7 @@ impl CostModelCalibrator {
         }
 
         // Store new parameters
-        report.new_parameters = self.parameters.read().unwrap().clone();
+        report.new_parameters = self.parameters.read().expect("lock poisoned").clone();
 
         self.calibration_count.fetch_add(1, Ordering::Relaxed);
         self.samples_since_calibration.store(0, Ordering::Relaxed);
@@ -668,7 +668,7 @@ impl CostModelCalibrator {
 
     /// Update a specific cost model parameter
     fn update_parameter(&self, op_type: OperationType, coefficient: f64) {
-        let mut params = self.parameters.write().unwrap();
+        let mut params = self.parameters.write().expect("lock poisoned");
 
         // Convert coefficient from microseconds back to relative cost units
         // We use a base of 1 microsecond = 0.001 cost units
@@ -695,69 +695,73 @@ impl CostModelCalibrator {
 
     /// Estimate scan cost for given cardinality
     pub fn estimate_scan_cost(&self, cardinality: u64) -> f64 {
-        let params = self.parameters.read().unwrap();
+        let params = self.parameters.read().expect("lock poisoned");
         cardinality as f64 * params.seq_scan_cost
     }
 
     /// Estimate index scan cost
     pub fn estimate_index_scan_cost(&self, index_cardinality: u64, selectivity: f64) -> f64 {
-        let params = self.parameters.read().unwrap();
+        let params = self.parameters.read().expect("lock poisoned");
         let result_rows = (index_cardinality as f64 * selectivity).max(1.0);
         result_rows * params.index_scan_cost
     }
 
     /// Estimate hash join cost
     pub fn estimate_hash_join_cost(&self, build_size: u64, probe_size: u64) -> f64 {
-        let params = self.parameters.read().unwrap();
+        let params = self.parameters.read().expect("lock poisoned");
         (build_size as f64 * params.hash_build_cost) + (probe_size as f64 * params.hash_probe_cost)
     }
 
     /// Estimate merge join cost
     pub fn estimate_merge_join_cost(&self, left_size: u64, right_size: u64) -> f64 {
-        let params = self.parameters.read().unwrap();
+        let params = self.parameters.read().expect("lock poisoned");
         (left_size + right_size) as f64 * params.merge_join_cost
     }
 
     /// Estimate nested loop join cost
     pub fn estimate_nested_loop_cost(&self, outer_size: u64, inner_size: u64) -> f64 {
-        let params = self.parameters.read().unwrap();
+        let params = self.parameters.read().expect("lock poisoned");
         (outer_size as f64 * inner_size as f64) * params.nested_loop_cost
     }
 
     /// Estimate sort cost (n log n)
     pub fn estimate_sort_cost(&self, cardinality: u64) -> f64 {
-        let params = self.parameters.read().unwrap();
+        let params = self.parameters.read().expect("lock poisoned");
         let n = cardinality as f64;
         n * (n.max(1.0)).ln() * params.sort_cost
     }
 
     /// Estimate filter cost
     pub fn estimate_filter_cost(&self, input_cardinality: u64) -> f64 {
-        let params = self.parameters.read().unwrap();
+        let params = self.parameters.read().expect("lock poisoned");
         input_cardinality as f64 * params.filter_cost
     }
 
     /// Estimate aggregate cost
     pub fn estimate_aggregate_cost(&self, input_cardinality: u64) -> f64 {
-        let params = self.parameters.read().unwrap();
+        let params = self.parameters.read().expect("lock poisoned");
         input_cardinality as f64 * params.aggregate_cost
     }
 
     /// Get current cost model parameters
     pub fn parameters(&self) -> CostModelParameters {
-        self.parameters.read().unwrap().clone()
+        self.parameters.read().expect("lock poisoned").clone()
     }
 
     /// Get calibration statistics for an operation
     pub fn get_operation_stats(&self, op_type: OperationType) -> Option<OperationCalibrationStats> {
-        self.stats.read().unwrap().get(&op_type).cloned()
+        self.stats
+            .read()
+            .expect("lock poisoned")
+            .get(&op_type)
+            .cloned()
     }
 
     /// Get sample count for an operation
     pub fn sample_count(&self, op_type: OperationType) -> usize {
         self.samples
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .get(&op_type)
             .map(|q| q.len())
             .unwrap_or(0)
@@ -770,8 +774,8 @@ impl CostModelCalibrator {
 
     /// Get comprehensive statistics
     pub fn statistics(&self) -> CalibratorStatistics {
-        let samples = self.samples.read().unwrap();
-        let stats = self.stats.read().unwrap();
+        let samples = self.samples.read().expect("lock poisoned");
+        let stats = self.stats.read().expect("lock poisoned");
 
         let mut operation_stats = HashMap::new();
         let mut total_samples = 0;
@@ -794,15 +798,15 @@ impl CostModelCalibrator {
             calibration_count: self.calibration_count.load(Ordering::Relaxed),
             samples_since_last_calibration: self.samples_since_calibration.load(Ordering::Relaxed),
             operation_stats,
-            current_parameters: self.parameters.read().unwrap().clone(),
+            current_parameters: self.parameters.read().expect("lock poisoned").clone(),
         }
     }
 
     /// Reset calibration data
     pub fn reset(&self) {
-        self.samples.write().unwrap().clear();
-        self.stats.write().unwrap().clear();
-        *self.parameters.write().unwrap() = CostModelParameters::default();
+        self.samples.write().expect("lock poisoned").clear();
+        self.stats.write().expect("lock poisoned").clear();
+        *self.parameters.write().expect("lock poisoned") = CostModelParameters::default();
         self.calibration_count.store(0, Ordering::Relaxed);
         self.samples_since_calibration.store(0, Ordering::Relaxed);
     }
@@ -810,11 +814,11 @@ impl CostModelCalibrator {
     /// Export calibration data for persistence
     pub fn export(&self) -> CalibrationExport {
         CalibrationExport {
-            parameters: self.parameters.read().unwrap().clone(),
+            parameters: self.parameters.read().expect("lock poisoned").clone(),
             stats: self
                 .stats
                 .read()
-                .unwrap()
+                .expect("lock poisoned")
                 .iter()
                 .map(|(&k, v)| {
                     (
@@ -834,9 +838,9 @@ impl CostModelCalibrator {
 
     /// Import calibration data
     pub fn import(&self, data: CalibrationExport) {
-        *self.parameters.write().unwrap() = data.parameters;
+        *self.parameters.write().expect("lock poisoned") = data.parameters;
 
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         for (op_type, export) in data.stats {
             stats.insert(
                 op_type,

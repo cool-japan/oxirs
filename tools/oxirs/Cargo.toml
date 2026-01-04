@@ -40,7 +40,7 @@ reqwest.workspace = true  # HTTP client for triplestore migrations
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 uuid = "1.19"       # UUID generation
 sysinfo = { workspace = true }    # System information
-tempfile = "3.23"    # Temporary file handling
+tempfile = "3.24"    # Temporary file handling
 
 # Enhanced CLI features
 indicatif = "0.18"  # Progress bars

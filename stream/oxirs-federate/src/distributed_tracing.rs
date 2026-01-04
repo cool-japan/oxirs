@@ -611,7 +611,10 @@ impl DistributedTracingManager {
 
         let export_data = serde_json::json!({
             "traces": exported_traces,
-            "exportedAt": SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+            "exportedAt": SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("SystemTime should be after UNIX_EPOCH")
+                .as_secs()
         });
 
         Ok(serde_json::to_string_pretty(&export_data)?)

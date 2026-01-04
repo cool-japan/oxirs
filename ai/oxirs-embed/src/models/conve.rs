@@ -370,7 +370,7 @@ impl ConvE {
         // Shuffle triples
         let mut indices: Vec<usize> = (0..self.triples.len()).collect();
         for i in (1..indices.len()).rev() {
-            let j = local_rng.random_range(0, i + 1);
+            let j = local_rng.random_range(0..i + 1);
             indices.swap(i, j);
         }
 
@@ -391,7 +391,7 @@ impl ConvE {
             // Generate negative samples
             let entity_list: Vec<String> = self.entity_embeddings.keys().cloned().collect();
             for _ in 0..self.config.num_negatives {
-                let neg_tail_id = entity_list[local_rng.random_range(0, entity_list.len())].clone();
+                let neg_tail_id = entity_list[local_rng.random_range(0..entity_list.len())].clone();
                 let neg_tail_emb = self.entity_embeddings[&neg_tail_id].clone();
 
                 let neg_score = self.score_triple_internal(&head_emb, &rel_emb, &neg_tail_emb);
@@ -700,7 +700,7 @@ impl EmbeddingModel for ConvE {
 
         let file = File::create(path)?;
         let writer = BufWriter::new(file);
-        bincode::serialize_into(writer, &serializable)
+        oxicode::serde::encode_into_std_write(&serializable, writer, oxicode::config::standard())
             .map_err(|e| anyhow!("Failed to serialize model: {}", e))?;
 
         info!("Model saved successfully");
@@ -716,8 +716,9 @@ impl EmbeddingModel for ConvE {
 
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        let serializable: ConvESerializable = bincode::deserialize_from(reader)
-            .map_err(|e| anyhow!("Failed to deserialize model: {}", e))?;
+        let (serializable, _): (ConvESerializable, _) =
+            oxicode::serde::decode_from_std_read(reader, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize model: {}", e))?;
 
         // Convert Vec back to Array1
         let entity_embeddings: HashMap<String, Array1<f32>> = serializable

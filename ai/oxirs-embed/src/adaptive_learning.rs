@@ -232,7 +232,7 @@ impl AdaptiveLearningSystem {
         let mut receiver = self
             .feedback_receiver
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .take()
             .ok_or_else(|| anyhow::anyhow!("Learning already started"))?;
 
@@ -269,8 +269,8 @@ impl AdaptiveLearningSystem {
 
                 // Check if we should perform adaptation
                 let should_adapt = {
-                    let buffer_guard = buffer.read().unwrap();
-                    let _metrics_guard = metrics.read().unwrap();
+                    let buffer_guard = buffer.read().expect("lock poisoned");
+                    let _metrics_guard = metrics.read().expect("lock poisoned");
 
                     buffer_guard.len() >= config.min_samples_for_adaptation
                         && last_adaptation.elapsed().as_secs_f64()
@@ -324,7 +324,7 @@ impl AdaptiveLearningSystem {
 
             // Add to buffer
             {
-                let mut buffer_guard = buffer.write().unwrap();
+                let mut buffer_guard = buffer.write().expect("lock poisoned");
                 buffer_guard.push_back(sample);
 
                 // Maintain buffer size
@@ -335,8 +335,8 @@ impl AdaptiveLearningSystem {
 
             // Update metrics
             {
-                let mut metrics_guard = metrics.write().unwrap();
-                let buffer_guard = buffer.read().unwrap();
+                let mut metrics_guard = metrics.write().expect("lock poisoned");
+                let buffer_guard = buffer.read().expect("lock poisoned");
                 metrics_guard.buffer_utilization =
                     buffer_guard.len() as f64 / config.buffer_size as f64;
             }
@@ -360,7 +360,7 @@ impl AdaptiveLearningSystem {
         strategy: &AdaptationStrategy,
     ) -> Result<()> {
         let samples = {
-            let buffer_guard = buffer.read().unwrap();
+            let buffer_guard = buffer.read().expect("lock poisoned");
             buffer_guard
                 .iter()
                 .take(config.adaptation_batch_size)
@@ -433,7 +433,7 @@ impl AdaptiveLearningSystem {
 
         // Update metrics
         {
-            let mut metrics_guard = metrics.write().unwrap();
+            let mut metrics_guard = metrics.write().expect("lock poisoned");
             metrics_guard.adaptations_count += 1;
             let improvement = quality_after - quality_before;
             metrics_guard.avg_quality_improvement = (metrics_guard.avg_quality_improvement
@@ -445,7 +445,7 @@ impl AdaptiveLearningSystem {
 
         // Update learning state
         {
-            let mut state_guard = learning_state.write().unwrap();
+            let mut state_guard = learning_state.write().expect("lock poisoned");
             state_guard.adaptation_history.push_back(AdaptationRecord {
                 timestamp: Utc::now(),
                 quality_before,
@@ -525,8 +525,8 @@ impl AdaptiveLearningSystem {
         // In a real implementation, this would compute gradients based on the loss
         // between current embeddings and target embeddings
 
-        let mut params_guard = parameters.write().unwrap();
-        let mut state_guard = learning_state.write().unwrap();
+        let mut params_guard = parameters.write().expect("lock poisoned");
+        let mut state_guard = learning_state.write().expect("lock poisoned");
 
         for (param_name, param_matrix) in params_guard.iter_mut() {
             // Compute pseudo-gradient (simplified for demonstration)
@@ -582,7 +582,7 @@ impl AdaptiveLearningSystem {
         inner_steps: usize,
         outer_learning_rate: f64,
     ) -> Result<()> {
-        let mut params_guard = parameters.write().unwrap();
+        let mut params_guard = parameters.write().expect("lock poisoned");
 
         // MAML inner loop
         for _ in 0..inner_steps {
@@ -602,7 +602,7 @@ impl AdaptiveLearningSystem {
         mutation_rate: f64,
         population_size: usize,
     ) -> Result<()> {
-        let mut params_guard = parameters.write().unwrap();
+        let mut params_guard = parameters.write().expect("lock poisoned");
 
         // Simple evolutionary strategy
         for (_, param_matrix) in params_guard.iter_mut() {
@@ -666,7 +666,7 @@ impl AdaptiveLearningSystem {
         exploration_factor: f64,
         _kernel_bandwidth: f64,
     ) -> Result<()> {
-        let mut params_guard = parameters.write().unwrap();
+        let mut params_guard = parameters.write().expect("lock poisoned");
 
         // Simplified Bayesian optimization
         for (_, param_matrix) in params_guard.iter_mut() {
@@ -716,7 +716,7 @@ impl AdaptiveLearningSystem {
 
     /// Get current metrics
     pub fn get_metrics(&self) -> AdaptationMetrics {
-        self.metrics.read().unwrap().clone()
+        self.metrics.read().expect("lock poisoned").clone()
     }
 
     /// Get feedback sender for external use
@@ -731,7 +731,7 @@ impl AdaptiveLearningSystem {
 
     /// Reset learning state
     pub fn reset_learning_state(&self) {
-        let mut state_guard = self.learning_state.write().unwrap();
+        let mut state_guard = self.learning_state.write().expect("lock poisoned");
         state_guard.momentum.clear();
         state_guard.adaptation_history.clear();
         state_guard.current_learning_rate = self.config.learning_rate;

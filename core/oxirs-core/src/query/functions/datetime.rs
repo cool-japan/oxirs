@@ -9,7 +9,8 @@ pub(super) fn fn_now(_args: &[Term]) -> Result<Term, OxirsError> {
     let now = Utc::now();
     Ok(Term::Literal(Literal::new_typed(
         now.to_rfc3339(),
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#dateTime")
+            .expect("W3C XSD schema IRI should be valid"),
     )))
 }
 
@@ -27,7 +28,8 @@ pub(super) fn fn_year(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
                 dt.year().to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -50,7 +52,8 @@ pub(super) fn fn_month(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
                 dt.month().to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -73,7 +76,8 @@ pub(super) fn fn_day(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
                 dt.day().to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -96,7 +100,8 @@ pub(super) fn fn_hours(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
                 dt.hour().to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -119,7 +124,8 @@ pub(super) fn fn_minutes(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
                 dt.minute().to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -142,7 +148,8 @@ pub(super) fn fn_seconds(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
                 format!("{}.{:09}", dt.second(), dt.nanosecond()),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -175,7 +182,8 @@ pub(super) fn fn_timezone(args: &[Term]) -> Result<Term, OxirsError> {
 
             Ok(Term::Literal(Literal::new_typed(
                 &duration,
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#dayTimeDuration").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#dayTimeDuration")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(

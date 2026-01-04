@@ -837,7 +837,10 @@ impl AdvancedPerformanceOptimizer {
 
     /// Get current optimization statistics
     pub fn get_statistics(&self) -> OptimizationStatistics {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("statistics lock should not be poisoned")
+            .clone()
     }
 
     /// Clone for task spawning

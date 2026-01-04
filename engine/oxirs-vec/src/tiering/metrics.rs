@@ -43,7 +43,7 @@ impl TierMetrics {
 
     /// Record a query to a tier
     pub fn record_query(&self, tier: StorageTier, latency_us: u64, hit: bool) {
-        let mut stats = self.tier_stats.lock().unwrap();
+        let mut stats = self.tier_stats.lock().expect("lock poisoned");
         if let Some(tier_stat) = stats.get_mut(&tier) {
             tier_stat.total_queries += 1;
 
@@ -72,11 +72,11 @@ impl TierMetrics {
         let from_tier = transition.from_tier;
         let to_tier = transition.to_tier;
 
-        let mut history = self.transition_history.lock().unwrap();
+        let mut history = self.transition_history.lock().expect("lock poisoned");
         history.push(transition);
 
         // Update tier statistics
-        let mut stats = self.tier_stats.lock().unwrap();
+        let mut stats = self.tier_stats.lock().expect("lock poisoned");
         if let Some(from_tier_stats) = stats.get_mut(&from_tier) {
             from_tier_stats.promotions += 1;
         }
@@ -87,7 +87,7 @@ impl TierMetrics {
 
     /// Update tier capacity and usage
     pub fn update_tier_usage(&self, tier: StorageTier, used_bytes: u64, capacity_bytes: u64) {
-        let mut stats = self.tier_stats.lock().unwrap();
+        let mut stats = self.tier_stats.lock().expect("lock poisoned");
         if let Some(tier_stat) = stats.get_mut(&tier) {
             tier_stat.used_bytes = used_bytes;
             tier_stat.capacity_bytes = capacity_bytes;
@@ -97,7 +97,7 @@ impl TierMetrics {
 
     /// Update index count for a tier
     pub fn update_index_count(&self, tier: StorageTier, count: usize) {
-        let mut stats = self.tier_stats.lock().unwrap();
+        let mut stats = self.tier_stats.lock().expect("lock poisoned");
         if let Some(tier_stat) = stats.get_mut(&tier) {
             tier_stat.index_count = count;
         }
@@ -105,7 +105,7 @@ impl TierMetrics {
 
     /// Record bytes read from a tier
     pub fn record_bytes_read(&self, tier: StorageTier, bytes: u64) {
-        let mut stats = self.tier_stats.lock().unwrap();
+        let mut stats = self.tier_stats.lock().expect("lock poisoned");
         if let Some(tier_stat) = stats.get_mut(&tier) {
             tier_stat.bytes_read += bytes;
         }
@@ -113,7 +113,7 @@ impl TierMetrics {
 
     /// Record bytes written to a tier
     pub fn record_bytes_written(&self, tier: StorageTier, bytes: u64) {
-        let mut stats = self.tier_stats.lock().unwrap();
+        let mut stats = self.tier_stats.lock().expect("lock poisoned");
         if let Some(tier_stat) = stats.get_mut(&tier) {
             tier_stat.bytes_written += bytes;
         }
@@ -121,18 +121,18 @@ impl TierMetrics {
 
     /// Get statistics for a tier
     pub fn get_tier_statistics(&self, tier: StorageTier) -> TierStatistics {
-        let stats = self.tier_stats.lock().unwrap();
+        let stats = self.tier_stats.lock().expect("lock poisoned");
         stats.get(&tier).cloned().unwrap_or_default()
     }
 
     /// Get all tier statistics
     pub fn get_all_tier_statistics(&self) -> HashMap<StorageTier, TierStatistics> {
-        self.tier_stats.lock().unwrap().clone()
+        self.tier_stats.lock().expect("lock poisoned").clone()
     }
 
     /// Get transition history
     pub fn get_transition_history(&self, limit: Option<usize>) -> Vec<TierTransition> {
-        let history = self.transition_history.lock().unwrap();
+        let history = self.transition_history.lock().expect("lock poisoned");
         if let Some(lim) = limit {
             history.iter().rev().take(lim).cloned().collect()
         } else {
@@ -142,7 +142,10 @@ impl TierMetrics {
 
     /// Get performance metrics
     pub fn get_performance_metrics(&self) -> PerformanceMetrics {
-        self.performance_metrics.lock().unwrap().clone()
+        self.performance_metrics
+            .lock()
+            .expect("lock poisoned")
+            .clone()
     }
 
     /// Update performance metrics
@@ -150,13 +153,13 @@ impl TierMetrics {
     where
         F: FnOnce(&mut PerformanceMetrics),
     {
-        let mut metrics = self.performance_metrics.lock().unwrap();
+        let mut metrics = self.performance_metrics.lock().expect("lock poisoned");
         update_fn(&mut metrics);
     }
 
     /// Get cost metrics
     pub fn get_cost_metrics(&self) -> CostMetrics {
-        self.cost_metrics.lock().unwrap().clone()
+        self.cost_metrics.lock().expect("lock poisoned").clone()
     }
 
     /// Update cost metrics
@@ -164,20 +167,26 @@ impl TierMetrics {
     where
         F: FnOnce(&mut CostMetrics),
     {
-        let mut metrics = self.cost_metrics.lock().unwrap();
+        let mut metrics = self.cost_metrics.lock().expect("lock poisoned");
         update_fn(&mut metrics);
     }
 
     /// Calculate overall system efficiency
     pub fn calculate_efficiency(&self) -> TieringEfficiency {
-        let stats = self.tier_stats.lock().unwrap();
-        let perf = self.performance_metrics.lock().unwrap();
-        let cost = self.cost_metrics.lock().unwrap();
+        let stats = self.tier_stats.lock().expect("lock poisoned");
+        let perf = self.performance_metrics.lock().expect("lock poisoned");
+        let cost = self.cost_metrics.lock().expect("lock poisoned");
 
         // Overall hit rate (weighted by tier)
-        let hot_stat = stats.get(&StorageTier::Hot).unwrap();
-        let warm_stat = stats.get(&StorageTier::Warm).unwrap();
-        let cold_stat = stats.get(&StorageTier::Cold).unwrap();
+        let hot_stat = stats
+            .get(&StorageTier::Hot)
+            .expect("Hot tier should exist in stats");
+        let warm_stat = stats
+            .get(&StorageTier::Warm)
+            .expect("Warm tier should exist in stats");
+        let cold_stat = stats
+            .get(&StorageTier::Cold)
+            .expect("Cold tier should exist in stats");
 
         let total_queries =
             hot_stat.total_queries + warm_stat.total_queries + cold_stat.total_queries;
@@ -223,18 +232,18 @@ impl TierMetrics {
 
     /// Reset all metrics
     pub fn reset(&self) {
-        let mut stats = self.tier_stats.lock().unwrap();
+        let mut stats = self.tier_stats.lock().expect("lock poisoned");
         for tier_stat in stats.values_mut() {
             *tier_stat = TierStatistics::default();
         }
 
-        let mut history = self.transition_history.lock().unwrap();
+        let mut history = self.transition_history.lock().expect("lock poisoned");
         history.clear();
 
-        let mut perf = self.performance_metrics.lock().unwrap();
+        let mut perf = self.performance_metrics.lock().expect("lock poisoned");
         *perf = PerformanceMetrics::default();
 
-        let mut cost = self.cost_metrics.lock().unwrap();
+        let mut cost = self.cost_metrics.lock().expect("lock poisoned");
         *cost = CostMetrics::default();
     }
 }

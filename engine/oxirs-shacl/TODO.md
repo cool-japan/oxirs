@@ -2,7 +2,7 @@
 
 *Last Updated: December 9, 2025*
 
-## ✅ Current Status: v0.1.0-rc.1+ - Production-Ready SHACL with Cross-Module Integration
+## ✅ Current Status: v0.1.0-rc.2+ - Production-Ready SHACL with Cross-Module Integration
 
 ### 🎉 RC.1+ Status (December 9, 2025) - **Cross-Module Integration Complete!**
 
@@ -119,7 +119,7 @@
 
 ---
 
-## ✅ Previous Status: v0.1.0-rc.1 - SHACL-AF Alpha
+## ✅ Previous Status: v0.1.0-rc.2 - SHACL-AF Alpha
 
 **oxirs-shacl** provides SHACL (Shapes Constraint Language) validation for RDF data with advanced features.
 
@@ -167,7 +167,7 @@
 - **Property path support** with streaming validation enhancements
 - **Validation engine** integrated with CLI import/export workflows
 - **Metrics & tracing** surfaced through SciRS2 for slow-shape analysis
-- **Released on crates.io**: `oxirs-shacl = "0.1.0-rc.1"`
+- **Released on crates.io**: `oxirs-shacl = "0.1.0-rc.2"`
 
 ## 🚀 RC.1 Achievements
 
@@ -208,7 +208,7 @@
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Release Targets (v0.1.0-rc.1 - December 2025)
+### Release Targets (v0.1.0-rc.2 - December 2025)
 
 #### W3C Compliance (🎉 100% Complete for RC!)
 - [x] Complete W3C SHACL test suite infrastructure ✅ (Enhanced runner with RDF parsing)

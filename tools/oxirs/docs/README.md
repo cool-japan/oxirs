@@ -1,6 +1,6 @@
 # OxiRS CLI Documentation
 
-**Version**: 0.1.0-rc.1
+**Version**: 0.1.0-rc.2
 **Last Updated**: December 26, 2025
 **Status**: Production-Ready
 
@@ -197,7 +197,7 @@ Found an issue or want to improve the documentation?
 
 ## Version History
 
-- **v0.1.0-rc.1** (December 2025) - Initial complete documentation
+- **v0.1.0-rc.2** (December 2025) - Initial complete documentation
   - Command reference manual
   - Interactive mode guide
   - Configuration reference
@@ -264,6 +264,6 @@ oxirs query --help
 
 ---
 
-**OxiRS CLI v0.1.0-rc.1** - Production-ready semantic web toolkit with comprehensive documentation
+**OxiRS CLI v0.1.0-rc.2** - Production-ready semantic web toolkit with comprehensive documentation
 
 **Last Updated**: December 26, 2025

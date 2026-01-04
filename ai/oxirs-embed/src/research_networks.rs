@@ -447,7 +447,10 @@ impl ResearchNetworkAnalyzer {
     pub async fn generate_author_embedding(&self, author_id: &str) -> Result<AuthorEmbedding> {
         // Check if already computed
         {
-            let embeddings = self.author_embeddings.read().unwrap();
+            let embeddings = self
+                .author_embeddings
+                .read()
+                .expect("rwlock should not be poisoned");
             if let Some(existing) = embeddings.get(author_id) {
                 return Ok(existing.clone());
             }
@@ -503,7 +506,10 @@ impl ResearchNetworkAnalyzer {
 
         // Cache the result
         {
-            let mut embeddings = self.author_embeddings.write().unwrap();
+            let mut embeddings = self
+                .author_embeddings
+                .write()
+                .expect("rwlock should not be poisoned");
             embeddings.insert(author_id.to_string(), author_embedding.clone());
         }
 
@@ -521,7 +527,10 @@ impl ResearchNetworkAnalyzer {
     ) -> Result<PublicationEmbedding> {
         // Check if already computed
         {
-            let embeddings = self.publication_embeddings.read().unwrap();
+            let embeddings = self
+                .publication_embeddings
+                .read()
+                .expect("rwlock should not be poisoned");
             if let Some(existing) = embeddings.get(publication_id) {
                 return Ok(existing.clone());
             }
@@ -573,7 +582,10 @@ impl ResearchNetworkAnalyzer {
 
         // Cache the result
         {
-            let mut embeddings = self.publication_embeddings.write().unwrap();
+            let mut embeddings = self
+                .publication_embeddings
+                .write()
+                .expect("rwlock should not be poisoned");
             embeddings.insert(publication_id.to_string(), publication_embedding.clone());
         }
 
@@ -586,7 +598,10 @@ impl ResearchNetworkAnalyzer {
 
     /// Analyze citation patterns and relationships
     pub async fn analyze_citation_patterns(&self, publication_id: &str) -> Result<Vec<Citation>> {
-        let network = self.citation_network.read().unwrap();
+        let network = self
+            .citation_network
+            .read()
+            .expect("rwlock should not be poisoned");
 
         if let Some(citations) = network.citations.get(publication_id) {
             Ok(citations.clone())
@@ -603,7 +618,10 @@ impl ResearchNetworkAnalyzer {
     ) -> Result<Vec<(String, f64)>> {
         let target_embedding = self.generate_author_embedding(author_id).await?;
         let embeddings_data: Vec<(String, AuthorEmbedding)> = {
-            let embeddings = self.author_embeddings.read().unwrap();
+            let embeddings = self
+                .author_embeddings
+                .read()
+                .expect("rwlock should not be poisoned");
             embeddings
                 .iter()
                 .filter(|(other_id, _)| *other_id != author_id)
@@ -621,7 +639,10 @@ impl ResearchNetworkAnalyzer {
         }
 
         // Sort by similarity and take top k
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("similarity scores should be comparable")
+        });
         similarities.truncate(k);
 
         Ok(similarities)
@@ -639,7 +660,10 @@ impl ResearchNetworkAnalyzer {
         topic: &str,
         years: u32,
     ) -> Result<Vec<TopicTrend>> {
-        let topics = self.topic_models.read().unwrap();
+        let topics = self
+            .topic_models
+            .read()
+            .expect("rwlock should not be poisoned");
 
         if let Some(topic_model) = topics.get(topic) {
             // Filter trends for the specified time period
@@ -659,13 +683,19 @@ impl ResearchNetworkAnalyzer {
 
     /// Get research communities/clusters
     pub async fn get_research_communities(&self) -> Result<Vec<ResearchCommunity>> {
-        let network = self.collaboration_network.read().unwrap();
+        let network = self
+            .collaboration_network
+            .read()
+            .expect("rwlock should not be poisoned");
         Ok(network.research_communities.clone())
     }
 
     /// Update citation network with new citation
     pub async fn add_citation(&self, citation: Citation) -> Result<()> {
-        let mut network = self.citation_network.write().unwrap();
+        let mut network = self
+            .citation_network
+            .write()
+            .expect("rwlock should not be poisoned");
 
         network
             .citations
@@ -986,7 +1016,7 @@ impl ResearchNetworkAnalyzer {
                 };
 
                 {
-                    let mut models = topic_models.write().unwrap();
+                    let mut models = topic_models.write().expect("rwlock should not be poisoned");
                     models.insert("machine_learning".to_string(), topic_model);
                 }
 
@@ -1022,8 +1052,14 @@ pub struct NetworkMetrics {
 impl ResearchNetworkAnalyzer {
     /// Get comprehensive network metrics
     pub async fn get_network_metrics(&self) -> Result<NetworkMetrics> {
-        let author_embeddings = self.author_embeddings.read().unwrap();
-        let publication_embeddings = self.publication_embeddings.read().unwrap();
+        let author_embeddings = self
+            .author_embeddings
+            .read()
+            .expect("rwlock should not be poisoned");
+        let publication_embeddings = self
+            .publication_embeddings
+            .read()
+            .expect("rwlock should not be poisoned");
 
         let total_authors = author_embeddings.len();
         let total_publications = publication_embeddings.len();
@@ -1043,7 +1079,10 @@ impl ResearchNetworkAnalyzer {
             .iter()
             .map(|(id, embedding)| (id.clone(), embedding.impact_score))
             .collect();
-        author_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        author_scores.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("similarity scores should be comparable")
+        });
         let top_authors: Vec<String> = author_scores
             .into_iter()
             .take(10)
@@ -1074,8 +1113,22 @@ mod tests {
         let analyzer = ResearchNetworkAnalyzer::new(config);
 
         // Test that analyzer is created successfully
-        assert_eq!(analyzer.author_embeddings.read().unwrap().len(), 0);
-        assert_eq!(analyzer.publication_embeddings.read().unwrap().len(), 0);
+        assert_eq!(
+            analyzer
+                .author_embeddings
+                .read()
+                .expect("rwlock should not be poisoned")
+                .len(),
+            0
+        );
+        assert_eq!(
+            analyzer
+                .publication_embeddings
+                .read()
+                .expect("rwlock should not be poisoned")
+                .len(),
+            0
+        );
     }
 
     #[tokio::test]

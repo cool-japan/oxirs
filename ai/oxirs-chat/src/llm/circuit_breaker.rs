@@ -54,7 +54,7 @@ impl CircuitBreaker {
                 // Check if timeout has passed
                 let now = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .unwrap()
+                    .expect("SystemTime should be after UNIX_EPOCH")
                     .as_secs();
                 let last_failure = self.last_failure_time.load(Ordering::Relaxed);
 
@@ -114,7 +114,7 @@ impl CircuitBreaker {
             self.last_failure_time.store(
                 SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .unwrap()
+                    .expect("SystemTime should be after UNIX_EPOCH")
                     .as_secs(),
                 Ordering::Relaxed,
             );

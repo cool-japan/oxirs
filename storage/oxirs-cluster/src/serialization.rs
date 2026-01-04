@@ -208,13 +208,15 @@ impl MessageSerializer {
         let serialized_data = match self.config.format {
             SerializationFormat::MessagePack => rmp_serde::to_vec(message)
                 .map_err(|e| anyhow!("MessagePack serialization failed: {}", e))?,
-            SerializationFormat::Bincode => bincode::serialize(message)
-                .map_err(|e| anyhow!("Bincode serialization failed: {}", e))?,
+            SerializationFormat::Bincode => {
+                oxicode::serde::encode_to_vec(&message, oxicode::config::standard())
+                    .map_err(|e| anyhow!("Bincode serialization failed: {}", e))?
+            }
             SerializationFormat::Json => serde_json::to_vec(message)
                 .map_err(|e| anyhow!("JSON serialization failed: {}", e))?,
             SerializationFormat::ProtocolBuffers => {
                 // For now, fall back to bincode for protobuf
-                bincode::serialize(message)
+                oxicode::serde::encode_to_vec(&message, oxicode::config::standard())
                     .map_err(|e| anyhow!("ProtocolBuffers serialization failed: {}", e))?
             }
         };
@@ -367,13 +369,17 @@ impl MessageSerializer {
         let deserialized: T = match message.format {
             SerializationFormat::MessagePack => rmp_serde::from_slice(&decompressed_data)
                 .map_err(|e| anyhow!("MessagePack deserialization failed: {}", e))?,
-            SerializationFormat::Bincode => bincode::deserialize(&decompressed_data)
-                .map_err(|e| anyhow!("Bincode deserialization failed: {}", e))?,
+            SerializationFormat::Bincode => {
+                oxicode::serde::decode_from_slice(&decompressed_data, oxicode::config::standard())
+                    .map(|(v, _)| v)
+                    .map_err(|e| anyhow!("Bincode deserialization failed: {}", e))?
+            }
             SerializationFormat::Json => serde_json::from_slice(&decompressed_data)
                 .map_err(|e| anyhow!("JSON deserialization failed: {}", e))?,
             SerializationFormat::ProtocolBuffers => {
                 // For now, fall back to bincode for protobuf
-                bincode::deserialize(&decompressed_data)
+                oxicode::serde::decode_from_slice(&decompressed_data, oxicode::config::standard())
+                    .map(|(v, _)| v)
                     .map_err(|e| anyhow!("ProtocolBuffers deserialization failed: {}", e))?
             }
         };
@@ -566,7 +572,10 @@ impl AdaptiveCompression {
                     .push(score);
 
                 // Keep only recent samples
-                let history = self.performance_history.get_mut(&algorithm).unwrap();
+                let history = self
+                    .performance_history
+                    .get_mut(&algorithm)
+                    .expect("algorithm key just inserted via entry().or_default()");
                 if history.len() > self.sample_size {
                     history.remove(0);
                 }

@@ -1417,7 +1417,7 @@ impl<'a> QueryExecutor<'a> {
                 Ok(results)
             }
             StorageBackend::Memory(storage) => {
-                let storage = storage.read().unwrap();
+                let storage = storage.read().expect("storage lock should not be poisoned");
                 let mut results = Vec::new();
 
                 for quad in &storage.quads {
@@ -1449,7 +1449,7 @@ impl<'a> QueryExecutor<'a> {
                 Ok(results)
             }
             StorageBackend::Persistent(storage, _) => {
-                let storage = storage.read().unwrap();
+                let storage = storage.read().expect("storage lock should not be poisoned");
                 let mut results = Vec::new();
 
                 for quad in &storage.quads {
@@ -1505,11 +1505,11 @@ impl<'a> QueryExecutor<'a> {
                 Ok(index.find_quads(subject, predicate, object, graph_name))
             }
             StorageBackend::Memory(storage) => {
-                let storage = storage.read().unwrap();
+                let storage = storage.read().expect("storage lock should not be poisoned");
                 Ok(storage.query_quads(subject, predicate, object, graph_name))
             }
             StorageBackend::Persistent(storage, _) => {
-                let storage = storage.read().unwrap();
+                let storage = storage.read().expect("storage lock should not be poisoned");
                 Ok(storage.query_quads(subject, predicate, object, graph_name))
             }
         }

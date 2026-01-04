@@ -11,6 +11,10 @@ keywords = ["time-series", "iot", "compression", "rdf", "sparql"]
 categories = ["database", "compression", "algorithms"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 oxirs-core.workspace = true
 oxirs-tdb.workspace = true
@@ -23,7 +27,7 @@ serde_json.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 arrow = { workspace = true, optional = true }
 bit-vec = "0.6"
-lz4 = "1.24"
+lz4 = "1.28"
 lru = "0.12"
 humantime-serde = "1.1"
 

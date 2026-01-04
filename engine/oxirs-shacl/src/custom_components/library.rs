@@ -149,23 +149,23 @@ impl ConstraintLibrary {
 
         // UUID Validator
         self.register(category, Arc::new(UuidValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // IRI/URI Validator
         self.register(category, Arc::new(IriValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // ISBN Validator
         self.register(category, Arc::new(IsbnValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // DOI Validator
         self.register(category, Arc::new(DoiValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // ORCID Validator
         self.register(category, Arc::new(OrcidValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
     }
 
     // ========== Temporal Components ==========
@@ -175,19 +175,19 @@ impl ConstraintLibrary {
 
         // Date Range Validator
         self.register(category, Arc::new(DateRangeValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Duration Validator
         self.register(category, Arc::new(DurationValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Timezone Validator
         self.register(category, Arc::new(TimezoneValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Business Hours Validator
         self.register(category, Arc::new(BusinessHoursValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
     }
 
     // ========== Geospatial Components ==========
@@ -197,19 +197,19 @@ impl ConstraintLibrary {
 
         // Coordinates Validator
         self.register(category, Arc::new(CoordinatesValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Bounding Box Validator
         self.register(category, Arc::new(BoundingBoxValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Country Code Validator
         self.register(category, Arc::new(CountryCodeValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // GeoJSON Validator
         self.register(category, Arc::new(GeoJsonValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
     }
 
     // ========== Financial Components ==========
@@ -219,19 +219,19 @@ impl ConstraintLibrary {
 
         // Currency Validator
         self.register(category, Arc::new(CurrencyValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // IBAN Validator
         self.register(category, Arc::new(IbanValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // BIC/SWIFT Validator
         self.register(category, Arc::new(BicValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Credit Card Validator
         self.register(category, Arc::new(CreditCardValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
     }
 
     // ========== Personal Components ==========
@@ -241,19 +241,19 @@ impl ConstraintLibrary {
 
         // Phone Number Validator
         self.register(category, Arc::new(PhoneNumberValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Postal Code Validator
         self.register(category, Arc::new(PostalCodeValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Name Pattern Validator
         self.register(category, Arc::new(NamePatternValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Age Range Validator
         self.register(category, Arc::new(AgeRangeValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
     }
 
     // ========== Scientific Components ==========
@@ -263,15 +263,15 @@ impl ConstraintLibrary {
 
         // Unit Validator
         self.register(category, Arc::new(UnitValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Chemical Formula Validator
         self.register(category, Arc::new(ChemicalFormulaValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Scientific Notation Validator
         self.register(category, Arc::new(ScientificNotationValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
     }
 
     // ========== Semantic Components ==========
@@ -281,15 +281,15 @@ impl ConstraintLibrary {
 
         // Class Hierarchy Validator
         self.register(category, Arc::new(ClassHierarchyValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Property Domain/Range Validator
         self.register(category, Arc::new(PropertyDomainRangeValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
 
         // Ontology Consistency Validator
         self.register(category, Arc::new(OntologyConsistencyValidator::new()))
-            .unwrap();
+            .expect("component registration should not fail");
     }
 }
 

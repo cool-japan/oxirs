@@ -149,11 +149,11 @@ impl TransactionManager {
 
     /// Begin a new transaction
     pub fn begin_transaction(&self, isolation_level: IsolationLevel) -> Result<TransactionId> {
-        let mut next_id = self.next_id.lock().unwrap();
+        let mut next_id = self.next_id.lock().expect("lock poisoned");
         let tx_id = *next_id;
         *next_id += 1;
 
-        let mut timestamp = self.timestamp.lock().unwrap();
+        let mut timestamp = self.timestamp.lock().expect("lock poisoned");
         *timestamp += 1;
         let start_time = *timestamp;
 
@@ -166,7 +166,7 @@ impl TransactionManager {
             end_time: None,
         };
 
-        let mut transactions = self.transactions.lock().unwrap();
+        let mut transactions = self.transactions.lock().expect("lock poisoned");
         transactions.insert(tx_id, transaction);
 
         info!(
@@ -179,7 +179,7 @@ impl TransactionManager {
 
     /// Add a fact within a transaction
     pub fn add_fact(&self, tx_id: TransactionId, fact: RuleAtom) -> Result<()> {
-        let mut transactions = self.transactions.lock().unwrap();
+        let mut transactions = self.transactions.lock().expect("lock poisoned");
 
         let transaction = transactions
             .get_mut(&tx_id)
@@ -203,7 +203,7 @@ impl TransactionManager {
 
     /// Remove a fact within a transaction
     pub fn remove_fact(&self, tx_id: TransactionId, fact: RuleAtom) -> Result<()> {
-        let mut transactions = self.transactions.lock().unwrap();
+        let mut transactions = self.transactions.lock().expect("lock poisoned");
 
         let transaction = transactions
             .get_mut(&tx_id)
@@ -221,7 +221,7 @@ impl TransactionManager {
 
     /// Add multiple facts within a transaction
     pub fn add_facts(&self, tx_id: TransactionId, facts: Vec<RuleAtom>) -> Result<()> {
-        let mut transactions = self.transactions.lock().unwrap();
+        let mut transactions = self.transactions.lock().expect("lock poisoned");
 
         let transaction = transactions
             .get_mut(&tx_id)
@@ -241,7 +241,7 @@ impl TransactionManager {
 
     /// Commit a transaction
     pub fn commit(&self, tx_id: TransactionId) -> Result<()> {
-        let mut transactions = self.transactions.lock().unwrap();
+        let mut transactions = self.transactions.lock().expect("lock poisoned");
 
         let transaction = transactions
             .get_mut(&tx_id)
@@ -259,7 +259,7 @@ impl TransactionManager {
         transaction.state = TransactionState::Committing;
 
         // Apply operations to committed facts
-        let mut committed_facts = self.committed_facts.lock().unwrap();
+        let mut committed_facts = self.committed_facts.lock().expect("lock poisoned");
 
         for operation in &transaction.operations {
             match operation {
@@ -285,7 +285,7 @@ impl TransactionManager {
         }
 
         // Update transaction state
-        let mut timestamp = self.timestamp.lock().unwrap();
+        let mut timestamp = self.timestamp.lock().expect("lock poisoned");
         *timestamp += 1;
         transaction.end_time = Some(*timestamp);
         transaction.state = TransactionState::Committed;
@@ -296,7 +296,7 @@ impl TransactionManager {
 
     /// Rollback a transaction
     pub fn rollback(&self, tx_id: TransactionId) -> Result<()> {
-        let mut transactions = self.transactions.lock().unwrap();
+        let mut transactions = self.transactions.lock().expect("lock poisoned");
 
         let transaction = transactions
             .get_mut(&tx_id)
@@ -317,7 +317,7 @@ impl TransactionManager {
         transaction.operations.clear();
 
         // Update transaction state
-        let mut timestamp = self.timestamp.lock().unwrap();
+        let mut timestamp = self.timestamp.lock().expect("lock poisoned");
         *timestamp += 1;
         transaction.end_time = Some(*timestamp);
         transaction.state = TransactionState::Aborted;
@@ -328,13 +328,13 @@ impl TransactionManager {
 
     /// Get committed facts
     pub fn get_committed_facts(&self) -> Vec<RuleAtom> {
-        let committed_facts = self.committed_facts.lock().unwrap();
+        let committed_facts = self.committed_facts.lock().expect("lock poisoned");
         committed_facts.clone()
     }
 
     /// Get transaction state
     pub fn get_transaction_state(&self, tx_id: TransactionId) -> Option<TransactionState> {
-        let transactions = self.transactions.lock().unwrap();
+        let transactions = self.transactions.lock().expect("lock poisoned");
         transactions.get(&tx_id).map(|tx| tx.state.clone())
     }
 
@@ -348,8 +348,8 @@ impl TransactionManager {
 
     /// Log an operation for durability
     fn log_operation(&self, tx_id: TransactionId, operation: Operation) -> Result<()> {
-        let mut log = self.log.lock().unwrap();
-        let mut timestamp = self.timestamp.lock().unwrap();
+        let mut log = self.log.lock().expect("lock poisoned");
+        let mut timestamp = self.timestamp.lock().expect("lock poisoned");
         *timestamp += 1;
 
         let entry = LogEntry {
@@ -370,9 +370,9 @@ impl TransactionManager {
 
     /// Get statistics
     pub fn get_stats(&self) -> TransactionStats {
-        let transactions = self.transactions.lock().unwrap();
-        let committed_facts = self.committed_facts.lock().unwrap();
-        let log = self.log.lock().unwrap();
+        let transactions = self.transactions.lock().expect("lock poisoned");
+        let committed_facts = self.committed_facts.lock().expect("lock poisoned");
+        let log = self.log.lock().expect("lock poisoned");
 
         let active_count = transactions
             .values()
@@ -401,7 +401,7 @@ impl TransactionManager {
 
     /// Clear completed transactions
     pub fn gc_completed_transactions(&self) {
-        let mut transactions = self.transactions.lock().unwrap();
+        let mut transactions = self.transactions.lock().expect("lock poisoned");
         transactions.retain(|_, tx| {
             tx.state == TransactionState::Active || tx.state == TransactionState::Committing
         });

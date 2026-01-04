@@ -464,7 +464,10 @@ impl PQIndex {
 
     /// Train residual quantizers for improved accuracy
     fn train_residual_quantizers(&mut self, training_data: &[Vec<f32>]) -> Result<()> {
-        let subdim = self.dimensions.unwrap() / self.config.n_subquantizers;
+        let subdim = self
+            .dimensions
+            .expect("dimensions must be set after training")
+            / self.config.n_subquantizers;
 
         // Start with residuals from the primary quantizers
         let mut current_residuals = training_data.to_vec();
@@ -529,7 +532,10 @@ impl PQIndex {
 
     /// Train multi-codebook quantizers for better coverage
     fn train_multi_codebook_quantizers(&mut self, training_data: &[Vec<f32>]) -> Result<()> {
-        let subdim = self.dimensions.unwrap() / self.config.n_subquantizers;
+        let subdim = self
+            .dimensions
+            .expect("dimensions must be set after training")
+            / self.config.n_subquantizers;
 
         for codebook_idx in 0..self.config.num_codebooks {
             // Initialize subquantizers for this codebook
@@ -972,7 +978,7 @@ impl VectorIndex for PQIndex {
             .collect();
 
         // Sort by distance
-        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         distances.truncate(k);
 
         // Convert distances to similarities
@@ -999,7 +1005,7 @@ impl VectorIndex for PQIndex {
         }
 
         // Sort by similarity
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(results)
     }

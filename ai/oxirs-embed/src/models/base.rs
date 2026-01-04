@@ -166,17 +166,17 @@ impl BaseModel {
         while negative_samples.len() < num_samples {
             // Choose a random positive triple
             if !self.triples.is_empty() {
-                let idx = rng.random_range(0, self.triples.len());
+                let idx = rng.random_range(0..self.triples.len());
                 let &(s, p, o) = &self.triples[idx];
 
                 // Corrupt either subject or object
                 let corrupt_subject = rng.random_bool_with_chance(0.5);
 
                 let negative_triple = if corrupt_subject {
-                    let new_subject = rng.random_range(0, num_entities);
+                    let new_subject = rng.random_range(0..num_entities);
                     (new_subject, p, o)
                 } else {
-                    let new_object = rng.random_range(0, num_entities);
+                    let new_object = rng.random_range(0..num_entities);
                     (s, p, new_object)
                 };
 

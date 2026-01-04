@@ -126,7 +126,7 @@ impl MemoryTracker {
     }
 
     pub fn allocate(&self, size: usize) -> Result<bool> {
-        let mut current = self.current_usage.lock().unwrap();
+        let mut current = self.current_usage.lock().expect("lock poisoned");
         let new_usage = *current + size;
 
         // Record allocation attempt
@@ -138,7 +138,7 @@ impl MemoryTracker {
 
         *current = new_usage;
 
-        let mut peak = self.peak_usage.lock().unwrap();
+        let mut peak = self.peak_usage.lock().expect("lock poisoned");
         if new_usage > *peak {
             *peak = new_usage;
         }
@@ -147,7 +147,7 @@ impl MemoryTracker {
     }
 
     pub fn deallocate(&self, size: usize) {
-        let mut current = self.current_usage.lock().unwrap();
+        let mut current = self.current_usage.lock().expect("lock poisoned");
         *current = current.saturating_sub(size);
 
         // Record deallocation
@@ -156,7 +156,7 @@ impl MemoryTracker {
 
     /// Record allocation event for pattern analysis
     fn record_allocation_event(&self, size: usize, operation: AllocationType) {
-        let mut history = self.allocation_history.lock().unwrap();
+        let mut history = self.allocation_history.lock().expect("lock poisoned");
 
         history.push(AllocationEvent {
             timestamp: std::time::Instant::now(),
@@ -172,11 +172,11 @@ impl MemoryTracker {
     }
 
     pub fn current_usage(&self) -> usize {
-        *self.current_usage.lock().unwrap()
+        *self.current_usage.lock().expect("lock poisoned")
     }
 
     pub fn peak_usage(&self) -> usize {
-        *self.peak_usage.lock().unwrap()
+        *self.peak_usage.lock().expect("lock poisoned")
     }
 
     pub fn should_spill(&self) -> bool {
@@ -207,7 +207,7 @@ impl MemoryTracker {
 
     /// Calculate recent allocation velocity (bytes per second)
     fn calculate_allocation_velocity(&self) -> f64 {
-        let history = self.allocation_history.lock().unwrap();
+        let history = self.allocation_history.lock().expect("lock poisoned");
 
         if history.len() < 2 {
             return 0.0;
@@ -250,7 +250,7 @@ impl MemoryTracker {
 
     /// Get detailed memory statistics
     pub fn get_detailed_stats(&self) -> MemoryStats {
-        let history = self.allocation_history.lock().unwrap();
+        let history = self.allocation_history.lock().expect("lock poisoned");
 
         let total_allocations = history
             .iter()
@@ -424,7 +424,7 @@ impl StreamingSolution {
         let data = if self.config.compress_spills {
             self.compress_data(&serialized_solutions)?
         } else {
-            bincode::serialize(&serialized_solutions)?
+            oxicode::serde::encode_to_vec(&serialized_solutions, oxicode::config::standard())?
         };
 
         {
@@ -461,7 +461,7 @@ impl StreamingSolution {
 
     /// Compress data using configured compression algorithm
     fn compress_data(&self, data: &[SerializableSolution]) -> Result<Vec<u8>> {
-        let serialized = bincode::serialize(data)?;
+        let serialized = oxicode::serde::encode_to_vec(&data, oxicode::config::standard())?;
 
         match self.config.compression_algorithm {
             CompressionAlgorithm::None => Ok(serialized),
@@ -512,7 +512,10 @@ impl StreamingSolution {
             }
         };
 
-        Ok(bincode::deserialize(&decompressed)?)
+        Ok(
+            oxicode::serde::decode_from_slice(&decompressed, oxicode::config::standard())
+                .map(|(v, _)| v)?,
+        )
     }
 
     /// Load solutions from next spill file
@@ -531,7 +534,7 @@ impl StreamingSolution {
         let serialized_solutions = if spill_file.compressed {
             self.decompress_data(&data)?
         } else {
-            bincode::deserialize(&data)?
+            oxicode::serde::decode_from_slice(&data, oxicode::config::standard()).map(|(v, _)| v)?
         };
 
         // Convert back to solutions
@@ -650,7 +653,7 @@ impl SerializableSolution {
 
         for binding in &self.bindings {
             current_binding.insert(
-                Variable::new(&binding.variable).unwrap(),
+                Variable::new(&binding.variable).expect("variable name should be valid"),
                 binding.term.to_term(),
             );
         }
@@ -698,7 +701,7 @@ impl SerializableTerm {
 
     fn to_term(&self) -> Term {
         match self {
-            Self::Iri(iri) => Term::Iri(NamedNode::new(iri).unwrap()),
+            Self::Iri(iri) => Term::Iri(NamedNode::new(iri).expect("IRI should be valid")),
             Self::Literal {
                 value,
                 language,
@@ -706,10 +709,14 @@ impl SerializableTerm {
             } => Term::Literal(crate::algebra::Literal {
                 value: value.clone(),
                 language: language.clone(),
-                datatype: datatype.as_ref().map(|dt| NamedNode::new(dt).unwrap()),
+                datatype: datatype
+                    .as_ref()
+                    .map(|dt| NamedNode::new(dt).expect("datatype IRI should be valid")),
             }),
             Self::BlankNode(bn) => Term::BlankNode(bn.clone()),
-            Self::Variable(var) => Term::Variable(Variable::new(var).unwrap()),
+            Self::Variable(var) => {
+                Term::Variable(Variable::new(var).expect("variable name should be valid"))
+            }
         }
     }
 }
@@ -884,7 +891,8 @@ impl SpillableHashJoin {
             .map(SerializableSolution::from_solution)
             .collect();
 
-        let data = bincode::serialize(&serialized_solutions)?;
+        let data =
+            oxicode::serde::encode_to_vec(&serialized_solutions, oxicode::config::standard())?;
         writer.write_all(&data)?;
         writer.flush()?;
 
@@ -938,7 +946,9 @@ impl SpillableHashJoin {
         let mut data = Vec::new();
         reader.read_to_end(&mut data)?;
 
-        let serialized_solutions: Vec<SerializableSolution> = bincode::deserialize(&data)?;
+        let serialized_solutions: Vec<SerializableSolution> =
+            oxicode::serde::decode_from_slice(&data, oxicode::config::standard())
+                .map(|(v, _)| v)?;
 
         Ok(serialized_solutions
             .into_iter()

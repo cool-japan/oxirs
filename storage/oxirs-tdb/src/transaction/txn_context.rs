@@ -81,7 +81,10 @@ impl Transaction {
 
     /// Get transaction state
     pub fn state(&self) -> TxnState {
-        *self.state.read().unwrap()
+        *self
+            .state
+            .read()
+            .expect("transaction state lock should not be poisoned")
     }
 
     /// Get begin LSN
@@ -162,7 +165,10 @@ impl Transaction {
 
     /// Commit the transaction
     pub fn commit(&self) -> Result<Lsn> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self
+            .state
+            .write()
+            .expect("transaction state lock should not be poisoned");
 
         if *state != TxnState::Active {
             return Err(TdbError::TransactionNotActive {
@@ -196,7 +202,10 @@ impl Transaction {
 
     /// Abort the transaction
     pub fn abort(&self) -> Result<Lsn> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self
+            .state
+            .write()
+            .expect("transaction state lock should not be poisoned");
 
         if *state != TxnState::Active {
             return Err(TdbError::TransactionNotActive {
@@ -251,7 +260,10 @@ impl TransactionManager {
 
     /// Begin a new transaction
     pub fn begin(&self) -> Result<Transaction> {
-        let mut next_txn_id = self.next_txn_id.write().unwrap();
+        let mut next_txn_id = self
+            .next_txn_id
+            .write()
+            .expect("next_txn_id lock should not be poisoned");
         let txn_id = *next_txn_id;
         *next_txn_id = next_txn_id.next();
 
@@ -264,7 +276,10 @@ impl TransactionManager {
 
     /// Begin a new read-only transaction
     pub fn begin_read(&self) -> Result<Transaction> {
-        let mut next_txn_id = self.next_txn_id.write().unwrap();
+        let mut next_txn_id = self
+            .next_txn_id
+            .write()
+            .expect("next_txn_id lock should not be poisoned");
         let txn_id = *next_txn_id;
         *next_txn_id = next_txn_id.next();
 

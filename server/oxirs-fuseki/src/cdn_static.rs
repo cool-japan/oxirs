@@ -567,8 +567,12 @@ impl CdnStaticManager {
             .unwrap_or(false);
 
         // Prepare response
-        let (content, is_compressed) = if accepts_gzip && asset.compressed_content.is_some() {
-            (asset.compressed_content.as_ref().unwrap().clone(), true)
+        let (content, is_compressed) = if accepts_gzip {
+            if let Some(compressed) = &asset.compressed_content {
+                (compressed.clone(), true)
+            } else {
+                (asset.content.clone(), false)
+            }
         } else {
             (asset.content.clone(), false)
         };

@@ -692,9 +692,9 @@ fn generate_training_data(samples: usize, dimensions: usize) -> Vec<TrainingTrip
 
     (0..samples)
         .map(|_| TrainingTriple {
-            head: rng.random_range(0, dimensions),
-            relation: rng.random_range(0, dimensions) % 100, // Limit relations
-            tail: rng.random_range(0, dimensions),
+            head: rng.random_range(0..dimensions),
+            relation: rng.random_range(0..dimensions) % 100, // Limit relations
+            tail: rng.random_range(0..dimensions),
         })
         .collect()
 }
@@ -980,7 +980,7 @@ fn shuffle_scirs2<T>(items: &mut [T]) {
 
     // Fisher-Yates shuffle with scirs2 RNG
     for i in (1..items.len()).rev() {
-        let j = rng.random_range(0, i + 1);
+        let j = rng.random_range(0..i + 1);
         if i != j {
             items.swap(i, j);
         }

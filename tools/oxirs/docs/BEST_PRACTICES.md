@@ -1,6 +1,6 @@
 # OxiRS Best Practices Guide
 
-**Version**: 0.1.0-rc.1
+**Version**: 0.1.0-rc.2
 **Last Updated**: December 21, 2025
 **Status**: Production-Ready
 
@@ -839,4 +839,4 @@ done
 
 ---
 
-**OxiRS v0.1.0-rc.1** - Production-ready best practices for semantic web operations
+**OxiRS v0.1.0-rc.2** - Production-ready best practices for semantic web operations

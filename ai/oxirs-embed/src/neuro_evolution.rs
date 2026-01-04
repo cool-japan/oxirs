@@ -154,7 +154,7 @@ impl NeuralArchitecture {
     /// Create a new random architecture
     pub fn random(config: &NeuroEvolutionConfig, rng: &mut Random) -> Self {
         let mut layers = Vec::new();
-        let depth = rng.random_range(1, config.max_depth + 1);
+        let depth = rng.random_range(1..config.max_depth + 1);
 
         for i in 0..depth {
             let layer = ArchitectureLayer::random(config, i, rng);
@@ -232,7 +232,7 @@ impl NeuralArchitecture {
     /// Mutate the architecture
     pub fn mutate(&mut self, config: &NeuroEvolutionConfig, rng: &mut Random) {
         if rng.random_bool_with_chance(config.mutation_rate) {
-            match rng.random_range(0, 4) {
+            match rng.random_range(0..4) {
                 0 => self.mutate_layers(config, rng),
                 1 => self.mutate_skip_connections(rng),
                 2 => self.mutate_hyperparameters(rng),
@@ -247,11 +247,11 @@ impl NeuralArchitecture {
 
     /// Mutate layers
     fn mutate_layers(&mut self, config: &NeuroEvolutionConfig, rng: &mut Random) {
-        match rng.random_range(0, 3) {
+        match rng.random_range(0..3) {
             0 => {
                 // Add layer
                 if self.layers.len() < config.max_depth {
-                    let position = rng.random_range(0, self.layers.len() + 1);
+                    let position = rng.random_range(0..self.layers.len() + 1);
                     let layer = ArchitectureLayer::random(config, position, rng);
                     self.layers.insert(position, layer);
                 }
@@ -259,14 +259,14 @@ impl NeuralArchitecture {
             1 => {
                 // Remove layer
                 if self.layers.len() > 1 {
-                    let position = rng.random_range(0, self.layers.len());
+                    let position = rng.random_range(0..self.layers.len());
                     self.layers.remove(position);
                 }
             }
             2 => {
                 // Modify existing layer
                 if !self.layers.is_empty() {
-                    let position = rng.random_range(0, self.layers.len());
+                    let position = rng.random_range(0..self.layers.len());
                     self.layers[position].mutate(config, rng);
                 }
             }
@@ -276,12 +276,12 @@ impl NeuralArchitecture {
 
     /// Mutate skip connections
     fn mutate_skip_connections(&mut self, rng: &mut Random) {
-        match rng.random_range(0, 3) {
+        match rng.random_range(0..3) {
             0 => {
                 // Add skip connection
                 if self.layers.len() >= 3 {
-                    let from = rng.random_range(0, self.layers.len() - 2);
-                    let to = rng.random_range(from + 2, self.layers.len());
+                    let from = rng.random_range(0..self.layers.len() - 2);
+                    let to = rng.random_range(from + 2..self.layers.len());
                     let connection = SkipConnection {
                         from_layer: from,
                         to_layer: to,
@@ -293,14 +293,14 @@ impl NeuralArchitecture {
             1 => {
                 // Remove skip connection
                 if !self.skip_connections.is_empty() {
-                    let position = rng.random_range(0, self.skip_connections.len());
+                    let position = rng.random_range(0..self.skip_connections.len());
                     self.skip_connections.remove(position);
                 }
             }
             2 => {
                 // Modify skip connection
                 if !self.skip_connections.is_empty() {
-                    let position = rng.random_range(0, self.skip_connections.len());
+                    let position = rng.random_range(0..self.skip_connections.len());
                     self.skip_connections[position].connection_type =
                         SkipConnectionType::random(rng);
                 }
@@ -317,7 +317,7 @@ impl NeuralArchitecture {
     /// Mutate layer parameters
     fn mutate_layer_parameters(&mut self, rng: &mut Random) {
         if !self.layers.is_empty() {
-            let layer_idx = rng.random_range(0, self.layers.len());
+            let layer_idx = rng.random_range(0..self.layers.len());
             self.layers[layer_idx].mutate_parameters(rng);
         }
     }
@@ -328,7 +328,7 @@ impl NeuralArchitecture {
         let crossover_point = if min_layers <= 1 {
             0 // No crossover possible with 0 or 1 layers
         } else {
-            rng.random_range(1, min_layers)
+            rng.random_range(1..min_layers)
         };
 
         let mut child1_layers = self.layers[..crossover_point].to_vec();
@@ -436,7 +436,7 @@ impl ArchitectureLayer {
     /// Create a random layer
     pub fn random(config: &NeuroEvolutionConfig, layer_index: usize, rng: &mut Random) -> Self {
         let layer_type = LayerType::random(rng);
-        let output_size = rng.random_range(16, config.max_width + 1);
+        let output_size = rng.random_range(16..config.max_width + 1);
         let input_size = if layer_index == 0 {
             128
         } else {
@@ -454,9 +454,9 @@ impl ArchitectureLayer {
 
     /// Mutate the layer
     pub fn mutate(&mut self, config: &NeuroEvolutionConfig, rng: &mut Random) {
-        match rng.random_range(0, 3) {
+        match rng.random_range(0..3) {
             0 => self.layer_type = LayerType::random(rng),
-            1 => self.output_size = rng.random_range(16, config.max_width + 1),
+            1 => self.output_size = rng.random_range(16..config.max_width + 1),
             2 => self.parameters.mutate(rng),
             _ => unreachable!(),
         }
@@ -532,7 +532,7 @@ pub enum LayerType {
 impl LayerType {
     /// Generate random layer type
     pub fn random(rng: &mut Random) -> Self {
-        match rng.random_range(0, 7) {
+        match rng.random_range(0..7) {
             0 => LayerType::Dense,
             1 => LayerType::Attention,
             2 => LayerType::Convolution,
@@ -568,12 +568,12 @@ impl LayerParameters {
 
         match layer_type {
             LayerType::Attention => {
-                settings.insert("num_heads".to_string(), rng.random_range(1, 16) as f64);
-                settings.insert("head_dim".to_string(), rng.random_range(32, 128) as f64);
+                settings.insert("num_heads".to_string(), rng.random_range(1..16) as f64);
+                settings.insert("head_dim".to_string(), rng.random_range(32..128) as f64);
             }
             LayerType::Convolution => {
-                settings.insert("kernel_size".to_string(), rng.random_range(1, 7) as f64);
-                settings.insert("stride".to_string(), rng.random_range(1, 3) as f64);
+                settings.insert("kernel_size".to_string(), rng.random_range(1..7) as f64);
+                settings.insert("stride".to_string(), rng.random_range(1..3) as f64);
             }
             LayerType::LSTM => {
                 settings.insert(
@@ -598,7 +598,7 @@ impl LayerParameters {
 
     /// Mutate parameters
     pub fn mutate(&mut self, rng: &mut Random) {
-        match rng.random_range(0, 4) {
+        match rng.random_range(0..4) {
             0 => self.activation = ActivationFunction::random(rng),
             1 => self.dropout = rng.gen_range(0.0..0.5),
             2 => self.normalization = NormalizationType::random(rng),
@@ -629,7 +629,7 @@ pub enum ActivationFunction {
 
 impl ActivationFunction {
     pub fn random(rng: &mut Random) -> Self {
-        match rng.random_range(0, 7) {
+        match rng.random_range(0..7) {
             0 => ActivationFunction::ReLU,
             1 => ActivationFunction::GELU,
             2 => ActivationFunction::Swish,
@@ -654,7 +654,7 @@ pub enum NormalizationType {
 
 impl NormalizationType {
     pub fn random(rng: &mut Random) -> Self {
-        match rng.random_range(0, 5) {
+        match rng.random_range(0..5) {
             0 => NormalizationType::None,
             1 => NormalizationType::LayerNorm,
             2 => NormalizationType::BatchNorm,
@@ -683,7 +683,7 @@ pub enum SkipConnectionType {
 
 impl SkipConnectionType {
     pub fn random(rng: &mut Random) -> Self {
-        match rng.random_range(0, 4) {
+        match rng.random_range(0..4) {
             0 => SkipConnectionType::Add,
             1 => SkipConnectionType::Concat,
             2 => SkipConnectionType::Multiply,
@@ -710,7 +710,7 @@ impl ArchitectureHyperparameters {
             learning_rate: rng.random_f64() * (1e-2 - 1e-5) + 1e-5,
             batch_size: {
                 let options = [16, 32, 64, 128, 256];
-                let idx = rng.random_range(0, options.len());
+                let idx = rng.random_range(0..options.len());
                 options[idx]
             },
             weight_decay: rng.random_f64() * (1e-3 - 1e-6) + 1e-6,
@@ -721,11 +721,11 @@ impl ArchitectureHyperparameters {
     }
 
     pub fn mutate(&mut self, rng: &mut Random) {
-        match rng.random_range(0, 6) {
+        match rng.random_range(0..6) {
             0 => self.learning_rate *= rng.random_f64() * (2.0 - 0.5) + 0.5,
             1 => {
                 let options = [16, 32, 64, 128, 256];
-                let idx = rng.random_range(0, options.len());
+                let idx = rng.random_range(0..options.len());
                 self.batch_size = options[idx];
             }
             2 => self.weight_decay *= rng.random_f64() * (2.0 - 0.5) + 0.5,
@@ -794,7 +794,7 @@ pub enum OptimizerType {
 
 impl OptimizerType {
     pub fn random(rng: &mut Random) -> Self {
-        match rng.random_range(0, 5) {
+        match rng.random_range(0..5) {
             0 => OptimizerType::Adam,
             1 => OptimizerType::AdamW,
             2 => OptimizerType::SGD,
@@ -816,7 +816,7 @@ pub enum SchedulerType {
 
 impl SchedulerType {
     pub fn random(rng: &mut Random) -> Self {
-        match rng.random_range(0, 5) {
+        match rng.random_range(0..5) {
             0 => SchedulerType::Constant,
             1 => SchedulerType::Linear,
             2 => SchedulerType::Cosine,
@@ -955,14 +955,16 @@ impl Population {
             let fitness_a = a
                 .performance
                 .as_ref()
-                .unwrap()
+                .expect("performance should be evaluated before evolve")
                 .calculate_fitness(&config.objective_weights, config.complexity_penalty);
             let fitness_b = b
                 .performance
                 .as_ref()
-                .unwrap()
+                .expect("performance should be evaluated before evolve")
                 .calculate_fitness(&config.objective_weights, config.complexity_penalty);
-            fitness_b.partial_cmp(&fitness_a).unwrap()
+            fitness_b
+                .partial_cmp(&fitness_a)
+                .expect("fitness values should be finite")
         });
 
         let mut new_population = Vec::new();
@@ -1015,7 +1017,7 @@ impl Population {
         let mut best_fitness = 0.0;
 
         for _ in 0..config.tournament_size {
-            let candidate_idx = rng.random_range(0, self.individuals.len());
+            let candidate_idx = rng.random_range(0..self.individuals.len());
             let candidate = &self.individuals[candidate_idx];
 
             if let Some(ref performance) = candidate.performance {

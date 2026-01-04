@@ -77,7 +77,7 @@ impl SecurityPolicyManager {
         };
 
         {
-            let mut contexts = self.contexts.write().unwrap();
+            let mut contexts = self.contexts.write().expect("lock poisoned");
             contexts.insert(context_id.clone(), context);
         }
 
@@ -204,14 +204,16 @@ impl SecurityPolicyManager {
 
     /// Validate security context and check permissions
     fn validate_security_context(&self, context_id: &str) -> Result<SecurityContext> {
-        let contexts = self.contexts.read().unwrap();
+        let contexts = self.contexts.read().expect("lock poisoned");
         let context = contexts
             .get(context_id)
             .ok_or_else(|| ShaclError::SecurityViolation("Invalid security context".to_string()))?;
 
         // Check if context is still valid (not expired)
         let max_age = Duration::from_secs(24 * 3600); // 24 hour sessions
-        if context.created_at + chrono::Duration::from_std(max_age).unwrap() < Utc::now() {
+        if context.created_at + chrono::Duration::from_std(max_age).expect("duration conversion")
+            < Utc::now()
+        {
             return Err(ShaclError::SecurityViolation(
                 "Security context expired".to_string(),
             ));
@@ -226,7 +228,7 @@ impl SecurityPolicyManager {
         query: &str,
         context: &SecurityContext,
     ) -> Result<PolicyAuthorizationResult> {
-        let policies = self.policies.read().unwrap();
+        let policies = self.policies.read().expect("lock poisoned");
 
         // Check if user has any policies applied
         let applicable_policies: Vec<_> = policies
@@ -322,7 +324,7 @@ impl SecurityPolicyManager {
 
     /// Update context statistics
     fn update_context_stats(&self, context_id: &str, execution_time: Duration) -> Result<()> {
-        let mut contexts = self.contexts.write().unwrap();
+        let mut contexts = self.contexts.write().expect("lock poisoned");
         if let Some(context) = contexts.get_mut(context_id) {
             context.last_used = Utc::now();
             context.queries_executed += 1;
@@ -336,7 +338,7 @@ impl SecurityPolicyManager {
         let policy_id = policy.id.clone();
 
         {
-            let mut policies = self.policies.write().unwrap();
+            let mut policies = self.policies.write().expect("lock poisoned");
             policies.insert(policy_id.clone(), policy);
         }
 
@@ -355,7 +357,7 @@ impl SecurityPolicyManager {
 
     /// Get security metrics
     pub fn get_security_metrics(&self) -> SecurityMetrics {
-        let contexts = self.contexts.read().unwrap();
+        let contexts = self.contexts.read().expect("lock poisoned");
         let total_contexts = contexts.len();
         let active_contexts = contexts
             .values()
@@ -611,14 +613,14 @@ impl AuditLogger {
     }
 
     fn log_event(&self, event: SecurityEvent) -> Result<()> {
-        let mut events = self.events.write().unwrap();
+        let mut events = self.events.write().expect("lock poisoned");
         events.push(event);
         // In practice, would also write to persistent storage
         Ok(())
     }
 
     pub fn get_events(&self, filter: Option<SecurityEventFilter>) -> Vec<SecurityEvent> {
-        let events = self.events.read().unwrap();
+        let events = self.events.read().expect("lock poisoned");
         if let Some(filter) = filter {
             events
                 .iter()
@@ -732,13 +734,13 @@ impl RateLimiter {
     fn check_rate_limit(&self, user_id: &str, context_id: &str) -> Result<()> {
         // Check user-level rate limit
         {
-            let mut buckets = self.user_buckets.write().unwrap();
+            let mut buckets = self.user_buckets.write().expect("lock poisoned");
             let bucket = buckets.entry(user_id.to_string()).or_insert_with(|| {
                 TokenBucket::new(100, Duration::from_secs(3600)) // 100 queries per hour
             });
 
             if !bucket.try_consume(1) {
-                let mut violations = self.violation_count.write().unwrap();
+                let mut violations = self.violation_count.write().expect("lock poisoned");
                 *violations += 1;
                 return Err(ShaclError::SecurityViolation(
                     "User rate limit exceeded".to_string(),
@@ -748,13 +750,13 @@ impl RateLimiter {
 
         // Check context-level rate limit
         {
-            let mut buckets = self.context_buckets.write().unwrap();
+            let mut buckets = self.context_buckets.write().expect("lock poisoned");
             let bucket = buckets.entry(context_id.to_string()).or_insert_with(|| {
                 TokenBucket::new(50, Duration::from_secs(60)) // 50 queries per minute per context
             });
 
             if !bucket.try_consume(1) {
-                let mut violations = self.violation_count.write().unwrap();
+                let mut violations = self.violation_count.write().expect("lock poisoned");
                 *violations += 1;
                 return Err(ShaclError::SecurityViolation(
                     "Context rate limit exceeded".to_string(),
@@ -766,7 +768,7 @@ impl RateLimiter {
     }
 
     fn get_violation_count(&self) -> u64 {
-        *self.violation_count.read().unwrap()
+        *self.violation_count.read().expect("lock poisoned")
     }
 }
 
@@ -1000,7 +1002,7 @@ impl SecurityEventMonitor {
     }
 
     fn record_violation(&self, user_id: &str, violation_type: SecurityViolationType) {
-        let mut violations = self.user_violations.write().unwrap();
+        let mut violations = self.user_violations.write().expect("lock poisoned");
         let tracker = violations
             .entry(user_id.to_string())
             .or_insert_with(ViolationTracker::new);
@@ -1008,7 +1010,7 @@ impl SecurityEventMonitor {
     }
 
     fn should_block_user(&self, user_id: &str) -> bool {
-        let violations = self.user_violations.read().unwrap();
+        let violations = self.user_violations.read().expect("lock poisoned");
         if let Some(tracker) = violations.get(user_id) {
             tracker.should_block()
         } else {
@@ -1017,12 +1019,12 @@ impl SecurityEventMonitor {
     }
 
     fn get_total_violations(&self) -> usize {
-        let violations = self.user_violations.read().unwrap();
+        let violations = self.user_violations.read().expect("lock poisoned");
         violations.values().map(|t| t.total_violations()).sum()
     }
 
     fn get_blocked_users(&self) -> Vec<String> {
-        let blocked = self.blocked_users.read().unwrap();
+        let blocked = self.blocked_users.read().expect("lock poisoned");
         blocked.iter().cloned().collect()
     }
 }

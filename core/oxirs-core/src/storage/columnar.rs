@@ -167,7 +167,7 @@ impl ColumnarStorage {
 
         // Register existing parquet files
         let pattern = config.path.join("*.parquet");
-        if let Ok(paths) = glob::glob(pattern.to_str().unwrap()) {
+        if let Ok(paths) = glob::glob(pattern.to_str().expect("path should be valid UTF-8")) {
             for path in paths.flatten() {
                 let table_name = path
                     .file_stem()
@@ -176,7 +176,7 @@ impl ColumnarStorage {
 
                 ctx.register_parquet(
                     table_name,
-                    path.to_str().unwrap(),
+                    path.to_str().expect("path should be valid UTF-8"),
                     ParquetReadOptions::default(),
                 )
                 .await?;
@@ -202,7 +202,7 @@ impl ColumnarStorage {
             *writer_guard = Some(BatchWriter::new());
         }
 
-        let writer = writer_guard.as_mut().unwrap();
+        let writer = writer_guard.as_mut().expect("writer should be initialized after is_none check");
 
         // Get IDs from dictionary
         let mut dict = self.uri_dictionary.write().await;
@@ -270,7 +270,7 @@ impl ColumnarStorage {
         writer.timestamp_builder.append_value(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX epoch")
                 .as_secs(),
         );
 
@@ -413,7 +413,7 @@ impl ColumnarStorage {
                         .column(0)
                         .as_any()
                         .downcast_ref::<UInt64Array>()
-                        .unwrap();
+                        .expect("predicate_id column should be UInt64Array");
                     // COUNT(*) returns Int64, not UInt64
                     let count_values = batch
                         .column(1)
@@ -458,7 +458,7 @@ impl ColumnarStorage {
                         .column(0)
                         .as_any()
                         .downcast_ref::<UInt64Array>()
-                        .unwrap();
+                        .expect("subject_id column should be UInt64Array");
                     // COUNT(*) returns Int64, not UInt64
                     let count_values = batch
                         .column(1)
@@ -526,7 +526,7 @@ impl ColumnarStorage {
             let ctx = self.ctx.write().await;
             ctx.register_parquet(
                 &partition,
-                path.to_str().unwrap(),
+                path.to_str().expect("path should be valid UTF-8"),
                 ParquetReadOptions::default(),
             )
             .await?;
@@ -554,7 +554,7 @@ impl ColumnarStorage {
                     chrono::Utc::now().format("%Y%m%d_%H%M%S"),
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("system time should be after UNIX epoch")
                         .as_nanos()
                 )
             }
@@ -593,13 +593,13 @@ impl ColumnarStorage {
 
         // Find all tables that are triple partitions
         for catalog in tables {
-            let schemas = ctx.catalog(&catalog).unwrap().schema_names();
+            let schemas = ctx.catalog(&catalog).expect("catalog should exist").schema_names();
             for schema in schemas {
                 let tables = ctx
                     .catalog(&catalog)
-                    .unwrap()
+                    .expect("catalog should exist")
                     .schema(&schema)
-                    .unwrap()
+                    .expect("schema should exist")
                     .table_names();
                 for table in tables {
                     // Skip the view itself to avoid circular reference

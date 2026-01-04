@@ -11,6 +11,10 @@ keywords = ["sparql", "query-engine", "optimization", "rdf", "jena"]
 categories = ["database", "algorithms", "data-structures"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 oxirs-core.workspace = true
 
@@ -47,7 +51,7 @@ rust_decimal = "1.39"
 hex = "0.4"
 base64 = "0.22"
 # lazy_static removed - using std::sync::OnceLock instead (Rust 1.70+)
-bincode = "1.3"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 tempfile.workspace = true
 flate2 = "1.1"
 lz4_flex = "0.11"
@@ -82,5 +86,12 @@ harness = false
 [[bench]]
 name = "sparql_star_bench"
 harness = false
-required-features = ["star"]
+
+[[bench]]
+name = "simple_optimizer_bench"
+harness = false
+
+[[bench]]
+name = "production_profiles_bench"
+harness = false
 

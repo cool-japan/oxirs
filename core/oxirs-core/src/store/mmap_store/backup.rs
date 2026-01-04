@@ -29,7 +29,7 @@ impl MmapStore {
         let timestamp = std::time::SystemTime::now();
         let timestamp_secs = timestamp
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         let backup_filename = format!("full_backup_{timestamp_secs}.oxirs");
         let backup_path = backup_dir.join(&backup_filename);
@@ -94,7 +94,7 @@ impl MmapStore {
         let timestamp = std::time::SystemTime::now();
         let timestamp_secs = timestamp
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         let backup_filename = format!("incr_backup_{timestamp_secs}.oxirs");
         let backup_path = backup_dir.join(&backup_filename);

@@ -201,7 +201,8 @@ pub struct MigrationBatch {
 
 impl MigrationBatch {
     pub fn new(migration_id: String, sequence: u64, triples: Vec<Triple>) -> Self {
-        let serialized = bincode::serialize(&triples).unwrap_or_default();
+        let serialized = oxicode::serde::encode_to_vec(&triples, oxicode::config::standard())
+            .unwrap_or_default();
         let checksum = crc32fast::hash(&serialized);
 
         Self {
@@ -218,7 +219,8 @@ impl MigrationBatch {
     }
 
     pub fn verify_integrity(&self) -> bool {
-        let serialized = bincode::serialize(&self.triples).unwrap_or_default();
+        let serialized = oxicode::serde::encode_to_vec(&self.triples, oxicode::config::standard())
+            .unwrap_or_default();
         let computed_checksum = crc32fast::hash(&serialized);
         computed_checksum == self.checksum
     }

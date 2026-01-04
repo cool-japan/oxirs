@@ -122,8 +122,8 @@ pub struct CacheStatistics {
 impl QueryPlanCache {
     /// Create a new query plan cache
     pub fn new(config: CacheConfig) -> Self {
-        let capacity =
-            NonZeroUsize::new(config.max_size).unwrap_or(NonZeroUsize::new(1000).unwrap());
+        let capacity = NonZeroUsize::new(config.max_size)
+            .unwrap_or(NonZeroUsize::new(1000).expect("1000 is non-zero"));
 
         Self {
             cache: Arc::new(RwLock::new(LruCache::new(capacity))),

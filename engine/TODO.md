@@ -2,7 +2,7 @@
 
 *Last Updated: November 15, 2025*
 
-## ✅ Current Status: v0.1.0-rc.1 Released
+## ✅ Current Status: v0.1.0-rc.2 Released
 
 **Overall Achievement**: ✅ **ENGINE MODULES BETA.1 RELEASE** (4,421+ unit & integration tests passing, zero compile warnings with `-D warnings`)
 

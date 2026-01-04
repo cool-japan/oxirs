@@ -1,10 +1,10 @@
 # OxiRS Cluster
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Status**: Release Candidate (v0.1.0-rc.1) - Released December 26, 2025
+**Status**: Release Candidate (v0.1.0-rc.2) - Released December 26, 2025
 
 ✨ **Release Candidate**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -58,7 +58,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-cluster = "0.1.0-rc.1"
+oxirs-cluster = "0.1.0-rc.2"
 ```
 
 ### Basic Usage

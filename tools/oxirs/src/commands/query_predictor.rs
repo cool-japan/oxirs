@@ -318,9 +318,11 @@ impl QueryPerformancePredictor {
         // Calculate feature importance
         let feature_names = QueryFeatures::feature_names();
         self.feature_importance.clear();
-        for (i, name) in feature_names.iter().enumerate() {
-            let importance = self.coefficients.as_ref().unwrap()[i].abs();
-            self.feature_importance.insert(name.to_string(), importance);
+        if let Some(coefficients) = self.coefficients.as_ref() {
+            for (i, name) in feature_names.iter().enumerate() {
+                let importance = coefficients[i].abs();
+                self.feature_importance.insert(name.to_string(), importance);
+            }
         }
 
         self.ctx.success(&format!(
@@ -342,8 +344,13 @@ impl QueryPerformancePredictor {
         let features = QueryFeatures::extract_from_query(query);
         let feature_array = features.to_array();
 
-        let coefficients = self.coefficients.as_ref().unwrap();
-        let intercept = self.intercept.unwrap();
+        let coefficients = self
+            .coefficients
+            .as_ref()
+            .expect("coefficients should be present after is_none check");
+        let intercept = self
+            .intercept
+            .expect("intercept should be present after is_none check");
 
         // Calculate prediction: y = X * beta + intercept
         let mut predicted_time_ms = intercept;
@@ -383,7 +390,11 @@ impl QueryPerformancePredictor {
         }
 
         // Sort by absolute contribution
-        contributing_factors.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+        contributing_factors.sort_by(|a, b| {
+            b.1.abs()
+                .partial_cmp(&a.1.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(PerformancePrediction {
             predicted_time_ms,
@@ -462,7 +473,11 @@ impl QueryPerformancePredictor {
             ("Subqueries".to_string(), features.subquery_count * 30.0),
         ];
         contributing_factors.retain(|(_, contrib)| contrib.abs() > 5.0);
-        contributing_factors.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+        contributing_factors.sort_by(|a, b| {
+            b.1.abs()
+                .partial_cmp(&a.1.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(PerformancePrediction {
             predicted_time_ms,

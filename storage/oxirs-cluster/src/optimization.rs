@@ -73,7 +73,9 @@ impl BinarySerializer {
             SerializationFormat::Json => serde_json::to_vec(data)?,
             SerializationFormat::MessagePack => rmp_serde::to_vec(data)?,
             SerializationFormat::Cbor => serde_cbor::to_vec(data)?,
-            SerializationFormat::Bincode => bincode::serialize(data)?,
+            SerializationFormat::Bincode => {
+                oxicode::serde::encode_to_vec(data, oxicode::config::standard())?
+            }
         };
 
         // Apply compression if enabled
@@ -136,7 +138,10 @@ impl BinarySerializer {
             SerializationFormat::Json => serde_json::from_slice(&decompressed_data)?,
             SerializationFormat::MessagePack => rmp_serde::from_slice(&decompressed_data)?,
             SerializationFormat::Cbor => serde_cbor::from_slice(&decompressed_data)?,
-            SerializationFormat::Bincode => bincode::deserialize(&decompressed_data)?,
+            SerializationFormat::Bincode => {
+                oxicode::serde::decode_from_slice(&decompressed_data, oxicode::config::standard())
+                    .map(|(v, _)| v)?
+            }
         };
 
         Ok(result)
@@ -486,9 +491,10 @@ mod tests {
 
         assert!(detector.validate_file(&file_path).await.unwrap());
 
-        // Corrupt the file
-        let mut corrupted = serialized;
-        corrupted[20] = !corrupted[20]; // Flip a bit
+        // Corrupt the file - flip a bit in the middle of the data
+        let mut corrupted = serialized.clone();
+        let corrupt_idx = corrupted.len() / 2; // Use middle of actual data
+        corrupted[corrupt_idx] = !corrupted[corrupt_idx]; // Flip a bit
         tokio::fs::write(&file_path, &corrupted).await.unwrap();
 
         assert!(!detector.validate_file(&file_path).await.unwrap());

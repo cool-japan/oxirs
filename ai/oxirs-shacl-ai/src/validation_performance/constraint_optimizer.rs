@@ -199,8 +199,8 @@ impl ConstraintOrderOptimizer {
         for _ in 0..100 {
             let mut candidate = best_order.clone();
             if candidate.len() >= 2 {
-                let i = rng.random_range(0, candidate.len());
-                let j = rng.random_range(0, candidate.len());
+                let i = rng.random_range(0..candidate.len());
+                let j = rng.random_range(0..candidate.len());
                 candidate.swap(i, j);
 
                 let score = self.evaluate_constraint_order(&candidate)?;

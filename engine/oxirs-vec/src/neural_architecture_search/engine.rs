@@ -134,28 +134,28 @@ impl NeuralArchitectureSearch {
             let layer_type = if search_space.layer_types.is_empty() {
                 return Err(anyhow::anyhow!("No layer types available"));
             } else {
-                let idx = rng.random_range(0, search_space.layer_types.len());
+                let idx = rng.random_range(0..search_space.layer_types.len());
                 search_space.layer_types[idx].clone()
             };
 
             let activation = if search_space.activations.is_empty() {
                 return Err(anyhow::anyhow!("No activation functions available"));
             } else {
-                let idx = rng.random_range(0, search_space.activations.len());
+                let idx = rng.random_range(0..search_space.activations.len());
                 search_space.activations[idx].clone()
             };
 
             let normalization = if search_space.normalizations.is_empty() {
                 return Err(anyhow::anyhow!("No normalization types available"));
             } else {
-                let idx = rng.random_range(0, search_space.normalizations.len());
+                let idx = rng.random_range(0..search_space.normalizations.len());
                 search_space.normalizations[idx].clone()
             };
 
             let skip_pattern = if search_space.skip_patterns.is_empty() {
                 return Err(anyhow::anyhow!("No skip patterns available"));
             } else {
-                let idx = rng.random_range(0, search_space.skip_patterns.len());
+                let idx = rng.random_range(0..search_space.skip_patterns.len());
                 search_space.skip_patterns[idx].clone()
             };
 
@@ -180,12 +180,12 @@ impl NeuralArchitectureSearch {
         let embedding_dim = if search_space.embedding_dims.is_empty() {
             return Err(anyhow::anyhow!("No embedding dimensions available"));
         } else {
-            let idx = rng.random_range(0, search_space.embedding_dims.len());
+            let idx = rng.random_range(0..search_space.embedding_dims.len());
             &search_space.embedding_dims[idx]
         };
 
         let global_config = GlobalArchConfig {
-            input_dim: rng.random_range(128, 2048),
+            input_dim: rng.random_range(128..2048),
             output_dim: *embedding_dim,
             learning_rate: rng.random_range(1e-5, 1e-2),
             optimizer: OptimizerType::Adam {
@@ -198,15 +198,15 @@ impl NeuralArchitectureSearch {
                 l2_weight: rng.gen_range(0.0..1e-2),
                 dropout_rate: rng.gen_range(0.0..0.5),
                 label_smoothing: rng.gen_range(0.0..0.1),
-                early_stopping_patience: rng.random_range(5, 20),
+                early_stopping_patience: rng.random_range(5..20),
             },
             training_config: TrainingConfig {
                 batch_size: {
                     let batch_sizes = [16, 32, 64, 128, 256];
-                    let idx = rng.random_range(0, batch_sizes.len());
+                    let idx = rng.random_range(0..batch_sizes.len());
                     batch_sizes[idx]
                 },
-                epochs: rng.random_range(10, 100),
+                epochs: rng.random_range(10..100),
                 validation_split: rng.gen_range(0.1..0.3),
                 lr_schedule: LRScheduleType::CosineAnnealingLR { t_max: 50 },
                 loss_function: LossFunction::CosineSimilarity,

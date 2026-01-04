@@ -163,7 +163,7 @@ impl NSWGraph {
         let mut indices: Vec<usize> = (0..self.data.len()).collect();
         // Manually shuffle using Fisher-Yates algorithm
         for i in (1..indices.len()).rev() {
-            let j = rng.random_range(0, i + 1);
+            let j = rng.random_range(0..i + 1);
             indices.swap(i, j);
         }
 
@@ -240,7 +240,7 @@ impl NSWGraph {
                     index: other_idx,
                     distance,
                 });
-            } else if distance < heap.peek().unwrap().distance {
+            } else if distance < heap.peek().expect("heap should have k elements").distance {
                 heap.pop();
                 heap.push(SearchResult {
                     index: other_idx,
@@ -281,14 +281,25 @@ impl NSWGraph {
 
         while let Some(std::cmp::Reverse(current)) = candidates.pop() {
             // Only apply early termination if we have k results
-            if results.len() >= k && current.distance > results.peek().unwrap().distance {
+            if results.len() >= k
+                && current.distance
+                    > results
+                        .peek()
+                        .expect("results should have k elements")
+                        .distance
+            {
                 break;
             }
 
             // Update results
             if results.len() < k {
                 results.push(current.clone());
-            } else if current.distance < results.peek().unwrap().distance {
+            } else if current.distance
+                < results
+                    .peek()
+                    .expect("results should have k elements")
+                    .distance
+            {
                 results.pop();
                 results.push(current.clone());
             }
@@ -309,7 +320,12 @@ impl NSWGraph {
                     .distance(query, &self.data[neighbor_idx].1.as_f32());
 
                 if candidates.len() < max_candidates
-                    || distance < candidates.peek().unwrap().0.distance
+                    || distance
+                        < candidates
+                            .peek()
+                            .expect("candidates should have elements")
+                            .0
+                            .distance
                 {
                     candidates.push(std::cmp::Reverse(SearchResult {
                         index: neighbor_idx,
@@ -488,7 +504,7 @@ impl ONNGGraph {
         // Note: Using manual random selection instead of SliceRandom
         // Manually shuffle using Fisher-Yates algorithm
         for i in (1..indices.len()).rev() {
-            let j = rng.random_range(0, i + 1);
+            let j = rng.random_range(0..i + 1);
             indices.swap(i, j);
         }
         indices.truncate(num_points.max(1));
@@ -567,7 +583,7 @@ impl PANNGGraph {
                     index: other_idx,
                     distance,
                 });
-            } else if distance < heap.peek().unwrap().distance {
+            } else if distance < heap.peek().expect("heap should have k elements").distance {
                 heap.pop();
                 heap.push(SearchResult {
                     index: other_idx,
@@ -1053,21 +1069,61 @@ impl GraphIndex {
 
     fn build(&mut self) -> Result<()> {
         match self.graph_type {
-            GraphType::NSW => self.nsw.as_mut().unwrap().build(),
-            GraphType::ONNG => self.onng.as_mut().unwrap().build(),
-            GraphType::PANNG => self.panng.as_mut().unwrap().build(),
-            GraphType::Delaunay => self.delaunay.as_mut().unwrap().build(),
-            GraphType::RNG => self.rng.as_mut().unwrap().build(),
+            GraphType::NSW => self
+                .nsw
+                .as_mut()
+                .expect("nsw should be initialized for NSW type")
+                .build(),
+            GraphType::ONNG => self
+                .onng
+                .as_mut()
+                .expect("onng should be initialized for ONNG type")
+                .build(),
+            GraphType::PANNG => self
+                .panng
+                .as_mut()
+                .expect("panng should be initialized for PANNG type")
+                .build(),
+            GraphType::Delaunay => self
+                .delaunay
+                .as_mut()
+                .expect("delaunay should be initialized for Delaunay type")
+                .build(),
+            GraphType::RNG => self
+                .rng
+                .as_mut()
+                .expect("rng should be initialized for RNG type")
+                .build(),
         }
     }
 
     fn search_internal(&self, query: &[f32], k: usize) -> Vec<(usize, f32)> {
         match self.graph_type {
-            GraphType::NSW => self.nsw.as_ref().unwrap().search(query, k),
-            GraphType::ONNG => self.onng.as_ref().unwrap().search(query, k),
-            GraphType::PANNG => self.panng.as_ref().unwrap().search(query, k),
-            GraphType::Delaunay => self.delaunay.as_ref().unwrap().search(query, k),
-            GraphType::RNG => self.rng.as_ref().unwrap().search(query, k),
+            GraphType::NSW => self
+                .nsw
+                .as_ref()
+                .expect("nsw should be initialized for NSW type")
+                .search(query, k),
+            GraphType::ONNG => self
+                .onng
+                .as_ref()
+                .expect("onng should be initialized for ONNG type")
+                .search(query, k),
+            GraphType::PANNG => self
+                .panng
+                .as_ref()
+                .expect("panng should be initialized for PANNG type")
+                .search(query, k),
+            GraphType::Delaunay => self
+                .delaunay
+                .as_ref()
+                .expect("delaunay should be initialized for Delaunay type")
+                .search(query, k),
+            GraphType::RNG => self
+                .rng
+                .as_ref()
+                .expect("rng should be initialized for RNG type")
+                .search(query, k),
         }
     }
 }
@@ -1075,11 +1131,41 @@ impl GraphIndex {
 impl VectorIndex for GraphIndex {
     fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
         let data = match self.graph_type {
-            GraphType::NSW => &mut self.nsw.as_mut().unwrap().data,
-            GraphType::ONNG => &mut self.onng.as_mut().unwrap().data,
-            GraphType::PANNG => &mut self.panng.as_mut().unwrap().data,
-            GraphType::Delaunay => &mut self.delaunay.as_mut().unwrap().data,
-            GraphType::RNG => &mut self.rng.as_mut().unwrap().data,
+            GraphType::NSW => {
+                &mut self
+                    .nsw
+                    .as_mut()
+                    .expect("nsw should be initialized for NSW type")
+                    .data
+            }
+            GraphType::ONNG => {
+                &mut self
+                    .onng
+                    .as_mut()
+                    .expect("onng should be initialized for ONNG type")
+                    .data
+            }
+            GraphType::PANNG => {
+                &mut self
+                    .panng
+                    .as_mut()
+                    .expect("panng should be initialized for PANNG type")
+                    .data
+            }
+            GraphType::Delaunay => {
+                &mut self
+                    .delaunay
+                    .as_mut()
+                    .expect("delaunay should be initialized for Delaunay type")
+                    .data
+            }
+            GraphType::RNG => {
+                &mut self
+                    .rng
+                    .as_mut()
+                    .expect("rng should be initialized for RNG type")
+                    .data
+            }
         };
 
         data.push((uri, vector));
@@ -1091,11 +1177,41 @@ impl VectorIndex for GraphIndex {
         let results = self.search_internal(&query_f32, k);
 
         let data = match self.graph_type {
-            GraphType::NSW => &self.nsw.as_ref().unwrap().data,
-            GraphType::ONNG => &self.onng.as_ref().unwrap().data,
-            GraphType::PANNG => &self.panng.as_ref().unwrap().data,
-            GraphType::Delaunay => &self.delaunay.as_ref().unwrap().data,
-            GraphType::RNG => &self.rng.as_ref().unwrap().data,
+            GraphType::NSW => {
+                &self
+                    .nsw
+                    .as_ref()
+                    .expect("nsw should be initialized for NSW type")
+                    .data
+            }
+            GraphType::ONNG => {
+                &self
+                    .onng
+                    .as_ref()
+                    .expect("onng should be initialized for ONNG type")
+                    .data
+            }
+            GraphType::PANNG => {
+                &self
+                    .panng
+                    .as_ref()
+                    .expect("panng should be initialized for PANNG type")
+                    .data
+            }
+            GraphType::Delaunay => {
+                &self
+                    .delaunay
+                    .as_ref()
+                    .expect("delaunay should be initialized for Delaunay type")
+                    .data
+            }
+            GraphType::RNG => {
+                &self
+                    .rng
+                    .as_ref()
+                    .expect("rng should be initialized for RNG type")
+                    .data
+            }
         };
 
         Ok(results
@@ -1109,11 +1225,41 @@ impl VectorIndex for GraphIndex {
         let all_results = self.search_internal(&query_f32, 1000);
 
         let data = match self.graph_type {
-            GraphType::NSW => &self.nsw.as_ref().unwrap().data,
-            GraphType::ONNG => &self.onng.as_ref().unwrap().data,
-            GraphType::PANNG => &self.panng.as_ref().unwrap().data,
-            GraphType::Delaunay => &self.delaunay.as_ref().unwrap().data,
-            GraphType::RNG => &self.rng.as_ref().unwrap().data,
+            GraphType::NSW => {
+                &self
+                    .nsw
+                    .as_ref()
+                    .expect("nsw should be initialized for NSW type")
+                    .data
+            }
+            GraphType::ONNG => {
+                &self
+                    .onng
+                    .as_ref()
+                    .expect("onng should be initialized for ONNG type")
+                    .data
+            }
+            GraphType::PANNG => {
+                &self
+                    .panng
+                    .as_ref()
+                    .expect("panng should be initialized for PANNG type")
+                    .data
+            }
+            GraphType::Delaunay => {
+                &self
+                    .delaunay
+                    .as_ref()
+                    .expect("delaunay should be initialized for Delaunay type")
+                    .data
+            }
+            GraphType::RNG => {
+                &self
+                    .rng
+                    .as_ref()
+                    .expect("rng should be initialized for RNG type")
+                    .data
+            }
         };
 
         Ok(all_results
@@ -1125,11 +1271,41 @@ impl VectorIndex for GraphIndex {
 
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
         let data = match self.graph_type {
-            GraphType::NSW => &self.nsw.as_ref().unwrap().data,
-            GraphType::ONNG => &self.onng.as_ref().unwrap().data,
-            GraphType::PANNG => &self.panng.as_ref().unwrap().data,
-            GraphType::Delaunay => &self.delaunay.as_ref().unwrap().data,
-            GraphType::RNG => &self.rng.as_ref().unwrap().data,
+            GraphType::NSW => {
+                &self
+                    .nsw
+                    .as_ref()
+                    .expect("nsw should be initialized for NSW type")
+                    .data
+            }
+            GraphType::ONNG => {
+                &self
+                    .onng
+                    .as_ref()
+                    .expect("onng should be initialized for ONNG type")
+                    .data
+            }
+            GraphType::PANNG => {
+                &self
+                    .panng
+                    .as_ref()
+                    .expect("panng should be initialized for PANNG type")
+                    .data
+            }
+            GraphType::Delaunay => {
+                &self
+                    .delaunay
+                    .as_ref()
+                    .expect("delaunay should be initialized for Delaunay type")
+                    .data
+            }
+            GraphType::RNG => {
+                &self
+                    .rng
+                    .as_ref()
+                    .expect("rng should be initialized for RNG type")
+                    .data
+            }
         };
 
         data.iter().find(|(u, _)| u == uri).map(|(_, v)| v)

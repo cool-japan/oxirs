@@ -207,25 +207,28 @@ impl GraphvizExporter {
             "digraph \"{}\" {{",
             escape_dot_string(&self.options.title)
         )
-        .unwrap();
-        writeln!(&mut output, "  rankdir=LR;").unwrap();
-        writeln!(&mut output, "  node [style=filled];").unwrap();
-        writeln!(&mut output).unwrap();
+        .expect("writing to String should not fail");
+        writeln!(&mut output, "  rankdir=LR;").expect("writing to String should not fail");
+        writeln!(&mut output, "  node [style=filled];").expect("writing to String should not fail");
+        writeln!(&mut output).expect("writing to String should not fail");
 
         // Clustering by namespace
         if self.options.cluster_by_namespace {
             let namespaces = self.extract_namespaces();
             for (idx, (ns, nodes)) in namespaces.iter().enumerate() {
-                writeln!(&mut output, "  subgraph cluster_{} {{", idx).unwrap();
-                writeln!(&mut output, "    label=\"{}\";", escape_dot_string(ns)).unwrap();
-                writeln!(&mut output, "    style=dashed;").unwrap();
+                writeln!(&mut output, "  subgraph cluster_{} {{", idx)
+                    .expect("writing to String should not fail");
+                writeln!(&mut output, "    label=\"{}\";", escape_dot_string(ns))
+                    .expect("writing to String should not fail");
+                writeln!(&mut output, "    style=dashed;")
+                    .expect("writing to String should not fail");
 
                 for node in nodes {
                     self.write_node(&mut output, node);
                 }
 
-                writeln!(&mut output, "  }}").unwrap();
-                writeln!(&mut output).unwrap();
+                writeln!(&mut output, "  }}").expect("writing to String should not fail");
+                writeln!(&mut output).expect("writing to String should not fail");
             }
 
             // Nodes without namespace
@@ -241,7 +244,7 @@ impl GraphvizExporter {
             }
         }
 
-        writeln!(&mut output).unwrap();
+        writeln!(&mut output).expect("writing to String should not fail");
 
         // Edges
         for (subj, pred, obj) in &self.edges {
@@ -261,13 +264,14 @@ impl GraphvizExporter {
                     obj_id,
                     escape_dot_string(&pred_label)
                 )
-                .unwrap();
+                .expect("writing to String should not fail");
             } else {
-                writeln!(&mut output, "  {} -> {};", subj_id, obj_id).unwrap();
+                writeln!(&mut output, "  {} -> {};", subj_id, obj_id)
+                    .expect("writing to String should not fail");
             }
         }
 
-        writeln!(&mut output, "}}").unwrap();
+        writeln!(&mut output, "}}").expect("writing to String should not fail");
         output
     }
 
@@ -317,7 +321,7 @@ impl GraphvizExporter {
             style.color,
             style.fontcolor
         )
-        .unwrap();
+        .expect("writing to String should not fail");
     }
 
     /// Extract namespaces from nodes
@@ -465,10 +469,11 @@ impl QueryPlanExporter {
             "digraph \"{}\" {{",
             escape_dot_string(&self.options.title)
         )
-        .unwrap();
-        writeln!(&mut output, "  rankdir=TB;").unwrap();
-        writeln!(&mut output, "  node [style=filled, shape=box];").unwrap();
-        writeln!(&mut output).unwrap();
+        .expect("writing to String should not fail");
+        writeln!(&mut output, "  rankdir=TB;").expect("writing to String should not fail");
+        writeln!(&mut output, "  node [style=filled, shape=box];")
+            .expect("writing to String should not fail");
+        writeln!(&mut output).expect("writing to String should not fail");
 
         // Nodes
         for node in &self.nodes {
@@ -498,10 +503,10 @@ impl QueryPlanExporter {
                 escape_dot_string(&label),
                 color
             )
-            .unwrap();
+            .expect("writing to String should not fail");
         }
 
-        writeln!(&mut output).unwrap();
+        writeln!(&mut output).expect("writing to String should not fail");
 
         // Edges
         for (from, to, label) in &self.edges {
@@ -512,10 +517,10 @@ impl QueryPlanExporter {
                 to,
                 escape_dot_string(label)
             )
-            .unwrap();
+            .expect("writing to String should not fail");
         }
 
-        writeln!(&mut output, "}}").unwrap();
+        writeln!(&mut output, "}}").expect("writing to String should not fail");
         output
     }
 

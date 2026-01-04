@@ -49,11 +49,13 @@ impl QueryResult {
     }
 
     fn to_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
+        oxicode::serde::encode_to_vec(self, oxicode::config::standard()).unwrap()
     }
 
     fn from_bytes(bytes: &[u8]) -> Self {
-        bincode::deserialize(bytes).unwrap()
+        oxicode::serde::decode_from_slice(bytes, oxicode::config::standard())
+            .map(|(v, _)| v)
+            .unwrap()
     }
 }
 

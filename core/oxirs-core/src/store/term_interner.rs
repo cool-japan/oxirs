@@ -101,9 +101,9 @@ impl TermInterner {
 
         // Try to find existing ID
         {
-            let subjects = self.subjects.read().unwrap();
+            let subjects = self.subjects.read().expect("subjects lock poisoned");
             if let Some(&id) = subjects.get_by_right(&term) {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write().expect("stats lock poisoned");
                 stats.total_lookups += 1;
                 stats.cache_hits += 1;
                 return id;
@@ -111,22 +111,25 @@ impl TermInterner {
         }
 
         // Create new ID
-        let mut subjects = self.subjects.write().unwrap();
+        let mut subjects = self.subjects.write().expect("subjects lock poisoned");
         // Double-check in case another thread added it
         if let Some(&id) = subjects.get_by_right(&term) {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("stats lock poisoned");
             stats.total_lookups += 1;
             stats.cache_hits += 1;
             return id;
         }
 
-        let mut next_id = self.next_subject_id.write().unwrap();
+        let mut next_id = self
+            .next_subject_id
+            .write()
+            .expect("next_subject_id lock poisoned");
         let id = *next_id;
         *next_id += 1;
         subjects.insert(id, term.clone());
 
         // Update stats
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("stats lock poisoned");
         stats.total_lookups += 1;
         stats.subject_count += 1;
         stats.memory_bytes += estimate_subject_memory(&term);
@@ -145,9 +148,9 @@ impl TermInterner {
 
         // Try to find existing ID
         {
-            let predicates = self.predicates.read().unwrap();
+            let predicates = self.predicates.read().expect("predicates lock poisoned");
             if let Some(&id) = predicates.get_by_right(&iri) {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write().expect("stats lock poisoned");
                 stats.total_lookups += 1;
                 stats.cache_hits += 1;
                 return id;
@@ -155,22 +158,25 @@ impl TermInterner {
         }
 
         // Create new ID
-        let mut predicates = self.predicates.write().unwrap();
+        let mut predicates = self.predicates.write().expect("predicates lock poisoned");
         // Double-check
         if let Some(&id) = predicates.get_by_right(&iri) {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("stats lock poisoned");
             stats.total_lookups += 1;
             stats.cache_hits += 1;
             return id;
         }
 
-        let mut next_id = self.next_predicate_id.write().unwrap();
+        let mut next_id = self
+            .next_predicate_id
+            .write()
+            .expect("next_predicate_id lock poisoned");
         let id = *next_id;
         *next_id += 1;
         predicates.insert(id, iri.clone());
 
         // Update stats
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("stats lock poisoned");
         stats.total_lookups += 1;
         stats.predicate_count += 1;
         stats.memory_bytes += iri.len() + 4; // String + ID
@@ -195,9 +201,9 @@ impl TermInterner {
 
         // Try to find existing ID
         {
-            let objects = self.objects.read().unwrap();
+            let objects = self.objects.read().expect("objects lock poisoned");
             if let Some(&id) = objects.get_by_right(&term) {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write().expect("stats lock poisoned");
                 stats.total_lookups += 1;
                 stats.cache_hits += 1;
                 return id;
@@ -205,22 +211,25 @@ impl TermInterner {
         }
 
         // Create new ID
-        let mut objects = self.objects.write().unwrap();
+        let mut objects = self.objects.write().expect("objects lock poisoned");
         // Double-check
         if let Some(&id) = objects.get_by_right(&term) {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("stats lock poisoned");
             stats.total_lookups += 1;
             stats.cache_hits += 1;
             return id;
         }
 
-        let mut next_id = self.next_object_id.write().unwrap();
+        let mut next_id = self
+            .next_object_id
+            .write()
+            .expect("next_object_id lock poisoned");
         let id = *next_id;
         *next_id += 1;
         objects.insert(id, term.clone());
 
         // Update stats
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("stats lock poisoned");
         stats.total_lookups += 1;
         stats.object_count += 1;
         stats.memory_bytes += estimate_object_memory(&term);
@@ -230,12 +239,14 @@ impl TermInterner {
 
     /// Get subject by ID
     pub fn get_subject(&self, id: u32) -> Option<Subject> {
-        let subjects = self.subjects.read().unwrap();
+        let subjects = self.subjects.read().expect("subjects lock poisoned");
         subjects.get_by_left(&id).map(|term| match term {
-            SubjectTerm::NamedNode(iri) => Subject::NamedNode(NamedNode::new(iri).unwrap()),
-            SubjectTerm::BlankNode(blank_id) => {
-                Subject::BlankNode(BlankNode::new(blank_id).unwrap())
+            SubjectTerm::NamedNode(iri) => {
+                Subject::NamedNode(NamedNode::new(iri).expect("interned IRI should be valid"))
             }
+            SubjectTerm::BlankNode(blank_id) => Subject::BlankNode(
+                BlankNode::new(blank_id).expect("interned blank node ID should be valid"),
+            ),
         })
     }
 
@@ -248,16 +259,16 @@ impl TermInterner {
                 panic!("Variables and quoted triples cannot be interned in storage")
             }
         };
-        let subjects = self.subjects.read().unwrap();
+        let subjects = self.subjects.read().expect("subjects lock poisoned");
         subjects.get_by_right(&term).copied()
     }
 
     /// Get predicate by ID
     pub fn get_predicate(&self, id: u32) -> Option<Predicate> {
-        let predicates = self.predicates.read().unwrap();
-        predicates
-            .get_by_left(&id)
-            .map(|iri| Predicate::NamedNode(NamedNode::new(iri).unwrap()))
+        let predicates = self.predicates.read().expect("predicates lock poisoned");
+        predicates.get_by_left(&id).map(|iri| {
+            Predicate::NamedNode(NamedNode::new(iri).expect("interned IRI should be valid"))
+        })
     }
 
     /// Get predicate ID without interning (returns None if not found)
@@ -268,25 +279,33 @@ impl TermInterner {
                 panic!("Variables cannot be interned as predicates in storage")
             }
         };
-        let predicates = self.predicates.read().unwrap();
+        let predicates = self.predicates.read().expect("predicates lock poisoned");
         predicates.get_by_right(&iri).copied()
     }
 
     /// Get object by ID
     pub fn get_object(&self, id: u32) -> Option<Object> {
-        let objects = self.objects.read().unwrap();
+        let objects = self.objects.read().expect("objects lock poisoned");
         objects.get_by_left(&id).map(|term| match term {
-            ObjectTerm::NamedNode(iri) => Object::NamedNode(NamedNode::new(iri).unwrap()),
-            ObjectTerm::BlankNode(id) => Object::BlankNode(BlankNode::new(id).unwrap()),
+            ObjectTerm::NamedNode(iri) => {
+                Object::NamedNode(NamedNode::new(iri).expect("interned IRI should be valid"))
+            }
+            ObjectTerm::BlankNode(id) => Object::BlankNode(
+                BlankNode::new(id).expect("interned blank node ID should be valid"),
+            ),
             ObjectTerm::Literal {
                 value,
                 datatype,
                 language,
             } => {
                 let literal = if let Some(lang) = language {
-                    Literal::new_language_tagged_literal(value, lang).unwrap()
+                    Literal::new_language_tagged_literal(value, lang)
+                        .expect("interned language tag should be valid")
                 } else if let Some(dt) = datatype {
-                    Literal::new_typed(value, NamedNode::new(dt).unwrap())
+                    Literal::new_typed(
+                        value,
+                        NamedNode::new(dt).expect("interned datatype IRI should be valid"),
+                    )
                 } else {
                     Literal::new(value)
                 };
@@ -309,36 +328,45 @@ impl TermInterner {
                 panic!("Variables and quoted triples cannot be interned in storage")
             }
         };
-        let objects = self.objects.read().unwrap();
+        let objects = self.objects.read().expect("objects lock poisoned");
         objects.get_by_right(&term).copied()
     }
 
     /// Get current statistics
     pub fn stats(&self) -> InternerStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().expect("stats lock poisoned").clone()
     }
 
     /// Clear all interned terms (useful for memory management)
     pub fn clear(&self) {
-        let mut subjects = self.subjects.write().unwrap();
-        let mut predicates = self.predicates.write().unwrap();
-        let mut objects = self.objects.write().unwrap();
+        let mut subjects = self.subjects.write().expect("subjects lock poisoned");
+        let mut predicates = self.predicates.write().expect("predicates lock poisoned");
+        let mut objects = self.objects.write().expect("objects lock poisoned");
 
         subjects.clear();
         predicates.clear();
         objects.clear();
 
-        *self.next_subject_id.write().unwrap() = 0;
-        *self.next_predicate_id.write().unwrap() = 0;
-        *self.next_object_id.write().unwrap() = 0;
+        *self
+            .next_subject_id
+            .write()
+            .expect("next_subject_id lock poisoned") = 0;
+        *self
+            .next_predicate_id
+            .write()
+            .expect("next_predicate_id lock poisoned") = 0;
+        *self
+            .next_object_id
+            .write()
+            .expect("next_object_id lock poisoned") = 0;
 
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("stats lock poisoned");
         *stats = InternerStats::default();
     }
 
     /// Get memory usage estimate
     pub fn memory_usage(&self) -> usize {
-        self.stats.read().unwrap().memory_bytes
+        self.stats.read().expect("stats lock poisoned").memory_bytes
     }
 
     /// Intern a named node and return its ID (for compatibility with mmap_store)
@@ -387,68 +415,77 @@ impl TermInterner {
 
         // Save subjects
         {
-            let subjects = self.subjects.read().unwrap();
+            let subjects = self.subjects.read().expect("subjects lock poisoned");
             let subject_data: Vec<(u32, SubjectTerm)> = subjects
                 .iter()
                 .map(|(id, term)| (*id, term.clone()))
                 .collect();
-            bincode::serde::encode_into_std_write(
+            oxicode::serde::encode_into_std_write(
                 &subject_data,
                 &mut writer,
-                bincode::config::standard(),
+                oxicode::config::standard(),
             )
             .map_err(|e| anyhow::anyhow!("Failed to serialize subjects: {}", e))?;
         }
 
         // Save predicates
         {
-            let predicates = self.predicates.read().unwrap();
+            let predicates = self.predicates.read().expect("predicates lock poisoned");
             let predicate_data: Vec<(u32, String)> = predicates
                 .iter()
                 .map(|(id, iri)| (*id, iri.clone()))
                 .collect();
-            bincode::serde::encode_into_std_write(
+            oxicode::serde::encode_into_std_write(
                 &predicate_data,
                 &mut writer,
-                bincode::config::standard(),
+                oxicode::config::standard(),
             )
             .map_err(|e| anyhow::anyhow!("Failed to serialize predicates: {}", e))?;
         }
 
         // Save objects
         {
-            let objects = self.objects.read().unwrap();
+            let objects = self.objects.read().expect("objects lock poisoned");
             let object_data: Vec<(u32, ObjectTerm)> = objects
                 .iter()
                 .map(|(id, term)| (*id, term.clone()))
                 .collect();
-            bincode::serde::encode_into_std_write(
+            oxicode::serde::encode_into_std_write(
                 &object_data,
                 &mut writer,
-                bincode::config::standard(),
+                oxicode::config::standard(),
             )
             .map_err(|e| anyhow::anyhow!("Failed to serialize objects: {}", e))?;
         }
 
         // Save next IDs
-        let next_subject_id = *self.next_subject_id.read().unwrap();
-        let next_predicate_id = *self.next_predicate_id.read().unwrap();
-        let next_object_id = *self.next_object_id.read().unwrap();
+        let next_subject_id = *self
+            .next_subject_id
+            .read()
+            .expect("next_subject_id lock poisoned");
+        let next_predicate_id = *self
+            .next_predicate_id
+            .read()
+            .expect("next_predicate_id lock poisoned");
+        let next_object_id = *self
+            .next_object_id
+            .read()
+            .expect("next_object_id lock poisoned");
 
-        bincode::serde::encode_into_std_write(
-            next_subject_id,
+        oxicode::serde::encode_into_std_write(
+            &next_subject_id,
             &mut writer,
-            bincode::config::standard(),
+            oxicode::config::standard(),
         )?;
-        bincode::serde::encode_into_std_write(
-            next_predicate_id,
+        oxicode::serde::encode_into_std_write(
+            &next_predicate_id,
             &mut writer,
-            bincode::config::standard(),
+            oxicode::config::standard(),
         )?;
-        bincode::serde::encode_into_std_write(
-            next_object_id,
+        oxicode::serde::encode_into_std_write(
+            &next_object_id,
             &mut writer,
-            bincode::config::standard(),
+            oxicode::config::standard(),
         )?;
 
         writer.flush()?;
@@ -461,8 +498,8 @@ impl TermInterner {
         let mut reader = BufReader::new(file);
 
         // Load subjects
-        let subject_data: Vec<(u32, SubjectTerm)> =
-            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())
+        let (subject_data, _): (Vec<(u32, SubjectTerm)>, _) =
+            oxicode::serde::decode_from_std_read(&mut reader, oxicode::config::standard())
                 .map_err(|e| anyhow::anyhow!("Failed to deserialize subjects: {}", e))?;
         let mut subjects = BiMap::new();
         for (id, term) in subject_data {
@@ -470,8 +507,8 @@ impl TermInterner {
         }
 
         // Load predicates
-        let predicate_data: Vec<(u32, String)> =
-            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())
+        let (predicate_data, _): (Vec<(u32, String)>, _) =
+            oxicode::serde::decode_from_std_read(&mut reader, oxicode::config::standard())
                 .map_err(|e| anyhow::anyhow!("Failed to deserialize predicates: {}", e))?;
         let mut predicates = BiMap::new();
         for (id, iri) in predicate_data {
@@ -479,8 +516,8 @@ impl TermInterner {
         }
 
         // Load objects
-        let object_data: Vec<(u32, ObjectTerm)> =
-            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())
+        let (object_data, _): (Vec<(u32, ObjectTerm)>, _) =
+            oxicode::serde::decode_from_std_read(&mut reader, oxicode::config::standard())
                 .map_err(|e| anyhow::anyhow!("Failed to deserialize objects: {}", e))?;
         let mut objects = BiMap::new();
         for (id, term) in object_data {
@@ -488,12 +525,12 @@ impl TermInterner {
         }
 
         // Load next IDs
-        let next_subject_id: u32 =
-            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())?;
-        let next_predicate_id: u32 =
-            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())?;
-        let next_object_id: u32 =
-            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())?;
+        let (next_subject_id, _): (u32, _) =
+            oxicode::serde::decode_from_std_read(&mut reader, oxicode::config::standard())?;
+        let (next_predicate_id, _): (u32, _) =
+            oxicode::serde::decode_from_std_read(&mut reader, oxicode::config::standard())?;
+        let (next_object_id, _): (u32, _) =
+            oxicode::serde::decode_from_std_read(&mut reader, oxicode::config::standard())?;
 
         // Calculate stats
         let stats = InternerStats {

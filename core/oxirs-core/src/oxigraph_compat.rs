@@ -599,7 +599,7 @@ impl Store {
 
 impl Default for Store {
     fn default() -> Self {
-        Store::new().unwrap()
+        Store::new().expect("Store::new() should not fail")
     }
 }
 

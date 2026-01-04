@@ -25,12 +25,12 @@ pub fn execute_degree_distribution(graph: &RdfGraph, config: &AnalyticsConfig) -
     let max = degrees
         .iter()
         .copied()
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(0.0);
     let min = degrees
         .iter()
         .copied()
-        .min_by(|a, b| a.partial_cmp(b).unwrap())
+        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(0.0);
 
     println!("{}", "Degree Statistics:".yellow().bold());
@@ -41,7 +41,7 @@ pub fn execute_degree_distribution(graph: &RdfGraph, config: &AnalyticsConfig) -
     println!();
 
     let mut degree_pairs: Vec<(usize, f64)> = degrees.iter().copied().enumerate().collect();
-    degree_pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    degree_pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     println!(
         "{}",
@@ -128,12 +128,12 @@ pub fn execute_graph_stats(graph: &RdfGraph) -> Result<()> {
     let max = degrees
         .iter()
         .copied()
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(0.0);
     let min = degrees
         .iter()
         .copied()
-        .min_by(|a, b| a.partial_cmp(b).unwrap())
+        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(0.0);
 
     println!();
@@ -144,7 +144,7 @@ pub fn execute_graph_stats(graph: &RdfGraph) -> Result<()> {
     println!("  Min degree:    {}", format!("{:.0}", min).green());
 
     let mut degree_pairs: Vec<(usize, f64)> = degrees.iter().copied().enumerate().collect();
-    degree_pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    degree_pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     println!();
     println!("{}", "Top Hub Nodes (by degree):".yellow().bold());

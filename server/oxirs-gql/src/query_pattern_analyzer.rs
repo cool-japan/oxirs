@@ -238,7 +238,9 @@ impl PatternAnalyzer {
     /// Record temporal pattern
     fn record_temporal_pattern(&mut self, timestamp: SystemTime) {
         // This is simplified - in production, use chrono for proper time handling
-        let elapsed = timestamp.duration_since(SystemTime::UNIX_EPOCH).unwrap();
+        let elapsed = timestamp
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("SystemTime should be after UNIX_EPOCH");
         let hours = (elapsed.as_secs() / 3600) % 24;
         let days = (elapsed.as_secs() / 86400) % 7;
 

@@ -77,7 +77,8 @@ struct RandomProjectionHash {
 impl RandomProjectionHash {
     fn new(dimensions: usize, num_projections: usize, seed: u64) -> Self {
         let mut rng = Random::seed(seed);
-        let normal = Normal::new(0.0, 1.0).unwrap();
+        let normal =
+            Normal::new(0.0, 1.0).expect("standard normal distribution parameters are valid");
 
         let mut projections = Vec::with_capacity(num_projections);
         for _ in 0..num_projections {
@@ -124,10 +125,10 @@ impl MinHashFunction {
         let prime = 4294967311u64; // Large prime
 
         let a: Vec<u64> = (0..num_hashes)
-            .map(|_| rng.random_range(1, prime))
+            .map(|_| rng.random_range(1..prime))
             .collect();
         let b: Vec<u64> = (0..num_hashes)
-            .map(|_| rng.random_range(0, prime))
+            .map(|_| rng.random_range(0..prime))
             .collect();
 
         Self { a, b, prime }
@@ -178,7 +179,8 @@ struct SimHashFunction {
 impl SimHashFunction {
     fn new(dimensions: usize, seed: u64) -> Self {
         let mut rng = Random::seed(seed);
-        let normal = Normal::new(0.0, 1.0).unwrap();
+        let normal =
+            Normal::new(0.0, 1.0).expect("standard normal distribution parameters are valid");
 
         let random_vectors: Vec<Vec<f32>> = (0..64)
             .map(|_| (0..dimensions).map(|_| normal.sample(&mut rng)).collect())
@@ -238,13 +240,15 @@ impl PStableHash {
                 .collect()
         } else if (p - 2.0).abs() < 0.1 {
             // L2 distance - use Normal distribution
-            let normal = Normal::new(0.0, 1.0).unwrap();
+            let normal =
+                Normal::new(0.0, 1.0).expect("standard normal distribution parameters are valid");
             (0..num_projections)
                 .map(|_| (0..dimensions).map(|_| normal.sample(&mut rng)).collect())
                 .collect()
         } else {
             // General case - approximate with Normal
-            let normal = Normal::new(0.0, 1.0).unwrap();
+            let normal =
+                Normal::new(0.0, 1.0).expect("standard normal distribution parameters are valid");
             (0..num_projections)
                 .map(|_| (0..dimensions).map(|_| normal.sample(&mut rng)).collect())
                 .collect()
@@ -571,7 +575,7 @@ impl VectorIndex for LshIndex {
             .collect();
 
         // Sort by distance and take top k
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(k);
 
         // Convert to final result format
@@ -651,7 +655,7 @@ impl VectorIndex for LshIndex {
             })
             .collect();
 
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(results)
     }
 

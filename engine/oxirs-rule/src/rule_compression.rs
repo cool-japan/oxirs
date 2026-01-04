@@ -105,7 +105,7 @@ impl RuleCompressor {
         };
 
         // Serialize rules using serde
-        let serialized_data = bincode::serialize(rules)?;
+        let serialized_data = oxicode::serde::encode_to_vec(&rules, oxicode::config::standard())?;
         let original_size = serialized_data.len();
 
         // Compress the serialized data
@@ -153,7 +153,8 @@ impl RuleCompressor {
         };
 
         // Deserialize rules using serde
-        let rules: Vec<Rule> = bincode::deserialize(&serialized_data)?;
+        let (rules, _): (Vec<Rule>, _) =
+            oxicode::serde::decode_from_slice(&serialized_data, oxicode::config::standard())?;
 
         // Record metrics
         let elapsed = start_time.elapsed();
@@ -324,7 +325,8 @@ impl RuleCompressor {
 
     /// Select adaptive compression mode based on rule set characteristics
     fn select_adaptive_mode(&self, rules: &[Rule]) -> CompressionMode {
-        let serialized = bincode::serialize(rules).unwrap_or_default();
+        let serialized =
+            oxicode::serde::encode_to_vec(&rules, oxicode::config::standard()).unwrap_or_default();
         let total_size = serialized.len();
         let complexity = self.estimate_complexity(rules);
 

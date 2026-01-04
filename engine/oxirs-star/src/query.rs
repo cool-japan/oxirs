@@ -439,7 +439,9 @@ impl QueryExecutor {
         patterns.sort_by(|a, b| {
             let a_selectivity = self.estimate_pattern_selectivity(a);
             let b_selectivity = self.estimate_pattern_selectivity(b);
-            a_selectivity.partial_cmp(&b_selectivity).unwrap()
+            a_selectivity
+                .partial_cmp(&b_selectivity)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         Ok(patterns)
@@ -453,7 +455,9 @@ impl QueryExecutor {
         patterns.sort_by(|a, b| {
             let a_cost = self.estimate_pattern_cost(a);
             let b_cost = self.estimate_pattern_cost(b);
-            a_cost.partial_cmp(&b_cost).unwrap()
+            a_cost
+                .partial_cmp(&b_cost)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         Ok(patterns)
@@ -1341,7 +1345,7 @@ mod tests {
         let stats = executor.statistics();
         assert!(stats.pattern_evaluations >= 2); // At least 2 patterns evaluated
         assert!(stats.join_operations >= 1); // At least 1 join performed
-        // Note: execution_time_us may be 0 on fast systems (sub-microsecond execution)
+                                             // Note: execution_time_us may be 0 on fast systems (sub-microsecond execution)
         assert!(stats.intermediate_results > 0);
     }
 

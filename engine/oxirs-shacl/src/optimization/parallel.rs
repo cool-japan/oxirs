@@ -363,7 +363,10 @@ impl ParallelValidationEngine {
                 .map_err(|_| ShaclError::ValidationEngine("Worker thread panicked".to_string()))?;
         }
 
-        let final_results = results.lock().unwrap().clone();
+        let final_results = results
+            .lock()
+            .expect("results mutex should not be poisoned")
+            .clone();
         Ok(final_results)
     }
 
@@ -495,7 +498,10 @@ impl ParallelValidationEngine {
 
     /// Get current worker pool statistics
     pub fn get_stats(&self) -> WorkerPoolStats {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("stats lock should not be poisoned")
+            .clone()
     }
 
     /// Get number of active workers

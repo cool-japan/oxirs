@@ -317,7 +317,7 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let weight =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale..scale));
 
         let bias = Some(Array2::zeros((1, output_dim)));
 
@@ -335,11 +335,11 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let weight = Array2::from_shape_fn((input_dim, output_dim * num_heads), |_| {
-            rng.random_range(-scale, scale)
+            rng.random_range(-scale..scale)
         });
 
         let attention_weight = Array2::from_shape_fn((2 * output_dim, num_heads), |_| {
-            rng.random_range(-scale, scale)
+            rng.random_range(-scale..scale)
         });
 
         let bias = Some(Array2::zeros((1, output_dim * num_heads)));
@@ -378,10 +378,10 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let weight_self =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale..scale));
 
         let weight_neighbor =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale..scale));
 
         let bias = Some(Array2::zeros((1, output_dim)));
 
@@ -427,10 +427,10 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let entity_encoder =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale..scale));
 
         let relation_encoder =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale..scale));
 
         GraphCompletionLayerState {
             entity_encoder,
@@ -450,13 +450,13 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let entity_embedding =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale..scale));
 
         let context_encoder =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale..scale));
 
         let completion_head = Array2::from_shape_fn((output_dim, output_dim), |_| {
-            rng.random_range(-scale, scale)
+            rng.random_range(-scale..scale)
         });
 
         EntityCompletionLayerState {
@@ -477,13 +477,13 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let relation_embedding =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale..scale));
 
         let pattern_encoder =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale..scale));
 
         let completion_head = Array2::from_shape_fn((output_dim, output_dim), |_| {
-            rng.random_range(-scale, scale)
+            rng.random_range(-scale..scale)
         });
 
         RelationCompletionLayerState {
@@ -816,7 +816,9 @@ impl GraphNeuralNetwork {
 
     /// Batch normalization (simplified)
     fn batch_normalize(&self, features: &Array2<f64>, _layer_idx: usize) -> Array2<f64> {
-        let mean = features.mean_axis(Axis(0)).unwrap();
+        let mean = features
+            .mean_axis(Axis(0))
+            .expect("features array should have valid axis");
         let var = features.var_axis(Axis(0), 0.0);
         let std = var.mapv(|v| (v + 1e-5).sqrt());
 

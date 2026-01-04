@@ -165,7 +165,7 @@ impl TransE {
         // Initialize entity embeddings
         for entity in &self.entities {
             let values: Vec<f32> = (0..self.config.dimensions)
-                .map(|_| rng.random_range(range_min, range_max))
+                .map(|_| rng.random_range(range_min..range_max))
                 .collect();
             let mut embedding = DVector::from_vec(values);
 
@@ -181,7 +181,7 @@ impl TransE {
         // Initialize relation embeddings
         for relation in &self.relations {
             let values: Vec<f32> = (0..self.config.dimensions)
-                .map(|_| rng.random_range(range_min, range_max))
+                .map(|_| rng.random_range(range_min..range_max))
                 .collect();
             let embedding = DVector::from_vec(values);
 
@@ -228,9 +228,18 @@ impl TransE {
 
     /// Calculate distance for a triple
     fn distance(&self, triple: &Triple) -> f32 {
-        let h = self.entity_embeddings.get(&triple.subject).unwrap();
-        let r = self.relation_embeddings.get(&triple.predicate).unwrap();
-        let t = self.entity_embeddings.get(&triple.object).unwrap();
+        let h = self
+            .entity_embeddings
+            .get(&triple.subject)
+            .expect("subject entity should have embedding");
+        let r = self
+            .relation_embeddings
+            .get(&triple.predicate)
+            .expect("predicate relation should have embedding");
+        let t = self
+            .entity_embeddings
+            .get(&triple.object)
+            .expect("object entity should have embedding");
 
         let translation = h + r - t;
 
@@ -254,28 +263,28 @@ impl TransE {
                 let h_pos = self
                     .entity_embeddings
                     .get(&positive.subject)
-                    .unwrap()
+                    .expect("positive subject entity should have embedding")
                     .clone();
                 let r = self
                     .relation_embeddings
                     .get(&positive.predicate)
-                    .unwrap()
+                    .expect("positive predicate relation should have embedding")
                     .clone();
                 let t_pos = self
                     .entity_embeddings
                     .get(&positive.object)
-                    .unwrap()
+                    .expect("positive object entity should have embedding")
                     .clone();
 
                 let h_neg = self
                     .entity_embeddings
                     .get(&negative.subject)
-                    .unwrap()
+                    .expect("negative subject entity should have embedding")
                     .clone();
                 let t_neg = self
                     .entity_embeddings
                     .get(&negative.object)
-                    .unwrap()
+                    .expect("negative object entity should have embedding")
                     .clone();
 
                 let pos_grad = &h_pos + &r - &t_pos;
@@ -374,7 +383,7 @@ impl KGEmbeddingModel for TransE {
             // Note: Using manual random selection instead of SliceRandom
             // Manually shuffle using Fisher-Yates algorithm
             for i in (1..shuffled_triples.len()).rev() {
-                let j = rng.random_range(0, i + 1);
+                let j = rng.random_range(0..i + 1);
                 shuffled_triples.swap(i, j);
             }
 
@@ -554,7 +563,8 @@ impl ComplEx {
         };
 
         let std_dev = (2.0 / self.config.dimensions as f32).sqrt();
-        let normal = Normal::new(0.0, std_dev).unwrap();
+        let normal =
+            Normal::new(0.0, std_dev).expect("normal distribution parameters should be valid");
 
         // Initialize entity embeddings
         for entity in &self.entities {
@@ -589,18 +599,30 @@ impl ComplEx {
 
     /// Hermitian dot product for scoring
     fn hermitian_dot(&self, triple: &Triple) -> f32 {
-        let h_real = self.entity_embeddings_real.get(&triple.subject).unwrap();
-        let h_imag = self.entity_embeddings_imag.get(&triple.subject).unwrap();
+        let h_real = self
+            .entity_embeddings_real
+            .get(&triple.subject)
+            .expect("subject entity should have real embedding");
+        let h_imag = self
+            .entity_embeddings_imag
+            .get(&triple.subject)
+            .expect("subject entity should have imag embedding");
         let r_real = self
             .relation_embeddings_real
             .get(&triple.predicate)
-            .unwrap();
+            .expect("predicate relation should have real embedding");
         let r_imag = self
             .relation_embeddings_imag
             .get(&triple.predicate)
-            .unwrap();
-        let t_real = self.entity_embeddings_real.get(&triple.object).unwrap();
-        let t_imag = self.entity_embeddings_imag.get(&triple.object).unwrap();
+            .expect("predicate relation should have imag embedding");
+        let t_real = self
+            .entity_embeddings_real
+            .get(&triple.object)
+            .expect("object entity should have real embedding");
+        let t_imag = self
+            .entity_embeddings_imag
+            .get(&triple.object)
+            .expect("object entity should have imag embedding");
 
         // ComplEx scoring function: Re(<h, r, t̄>)
         // = Re(∑ h_i * r_i * conj(t_i))
@@ -781,9 +803,18 @@ impl RotatE {
 
     /// Calculate distance for RotatE
     fn distance(&self, triple: &Triple) -> f32 {
-        let h = self.entity_embeddings.get(&triple.subject).unwrap();
-        let r_phases = self.relation_embeddings.get(&triple.predicate).unwrap();
-        let t = self.entity_embeddings.get(&triple.object).unwrap();
+        let h = self
+            .entity_embeddings
+            .get(&triple.subject)
+            .expect("subject entity should have embedding");
+        let r_phases = self
+            .relation_embeddings
+            .get(&triple.predicate)
+            .expect("predicate relation should have embedding");
+        let t = self
+            .entity_embeddings
+            .get(&triple.object)
+            .expect("object entity should have embedding");
 
         // Convert relation phases to complex numbers
         let r: DVector<Complex<f32>> = DVector::from_iterator(

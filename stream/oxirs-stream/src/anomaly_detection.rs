@@ -239,7 +239,10 @@ impl RunningStats {
 
         if self.needs_sort {
             self.sorted_values = self.recent_values.iter().copied().collect();
-            self.sorted_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            self.sorted_values.sort_by(|a, b| {
+                a.partial_cmp(b)
+                    .expect("anomaly detection values should not be NaN")
+            });
             self.needs_sort = false;
         }
 
@@ -259,7 +262,10 @@ impl RunningStats {
             .iter()
             .map(|&x| (x - median).abs())
             .collect();
-        abs_deviations.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        abs_deviations.sort_by(|a, b| {
+            a.partial_cmp(b)
+                .expect("absolute deviations should not be NaN")
+        });
 
         if abs_deviations.is_empty() {
             0.0
@@ -743,7 +749,7 @@ impl AnomalyDetector {
 
             // Calculate percentile of scores
             let mut sorted: Vec<f64> = recent_scores.iter().copied().collect();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.partial_cmp(b).expect("anomaly scores should not be NaN"));
 
             // Set threshold at contamination percentile
             let idx = ((1.0 - self.config.contamination) * sorted.len() as f64) as usize;

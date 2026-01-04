@@ -234,7 +234,7 @@ impl NodeStatus {
     pub fn new(node_id: OxirsNodeId, address: SocketAddr, metadata: NodeMetadata) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time should be after UNIX_EPOCH")
             .as_secs();
 
         Self {
@@ -255,7 +255,7 @@ impl NodeStatus {
     pub fn update_state(&mut self, new_state: NodeState, reason: String) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time should be after UNIX_EPOCH")
             .as_secs();
 
         // Add to history
@@ -280,7 +280,7 @@ impl NodeStatus {
         self.health = health;
         self.last_seen = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time should be after UNIX_EPOCH")
             .as_secs();
 
         // Calculate performance score based on health metrics
@@ -326,7 +326,7 @@ impl NodeStatus {
     pub fn is_stale(&self, timeout: Duration) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time should be after UNIX_EPOCH")
             .as_secs();
         now.saturating_sub(self.last_seen) > timeout.as_secs()
     }
@@ -462,7 +462,7 @@ impl NodeLifecycleManager {
                     node_id,
                     timestamp: SystemTime::now()
                         .duration_since(UNIX_EPOCH)
-                        .unwrap()
+                        .expect("system time should be after UNIX_EPOCH")
                         .as_secs(),
                 })
                 .await;
@@ -578,7 +578,7 @@ impl NodeLifecycleManager {
             node_id,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
         })
         .await;
@@ -657,7 +657,7 @@ impl NodeLifecycleManager {
             reason: reason.clone(),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
         })
         .await;
@@ -805,7 +805,7 @@ impl NodeLifecycleManager {
                             reason: "Health check state change".to_string(),
                             timestamp: SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
-                                .unwrap()
+                                .expect("system time should be after UNIX_EPOCH")
                                 .as_secs(),
                         })
                         .await;
@@ -853,7 +853,7 @@ impl NodeLifecycleManager {
                         reason: "Node failure detected".to_string(),
                         timestamp: SystemTime::now()
                             .duration_since(UNIX_EPOCH)
-                            .unwrap()
+                            .expect("system time should be after UNIX_EPOCH")
                             .as_secs(),
                     })
                     .await;
@@ -926,7 +926,7 @@ impl NodeLifecycleManager {
                         reason: "Byzantine behavior detected".to_string(),
                         timestamp: SystemTime::now()
                             .duration_since(UNIX_EPOCH)
-                            .unwrap()
+                            .expect("system time should be after UNIX_EPOCH")
                             .as_secs(),
                     })
                     .await;
@@ -1126,7 +1126,7 @@ mod tests {
         let mut old_status = status;
         old_status.last_seen = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time should be after UNIX_EPOCH")
             .as_secs()
             - 120; // 2 minutes ago
 

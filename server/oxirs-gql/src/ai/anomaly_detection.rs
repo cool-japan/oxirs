@@ -1,4 +1,4 @@
-// Copyright (c) 2025 OxiRS Contributors
+// Copyright (c) 2025-2026 COOLJAPAN OU (Team KitaSan)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Query Anomaly Detection

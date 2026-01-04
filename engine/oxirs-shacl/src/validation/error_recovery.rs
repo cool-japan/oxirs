@@ -457,7 +457,10 @@ impl ErrorRecoveryManager {
 
     /// Check recursion depth limit
     fn check_recursion_limit(&self, context: &ConstraintContext) -> Result<()> {
-        let stack = self.validation_stack.lock().unwrap();
+        let stack = self
+            .validation_stack
+            .lock()
+            .expect("mutex lock should not be poisoned");
         if stack.len() >= self.config.max_recursion_depth {
             return Err(ShaclError::RecursionLimit(format!(
                 "Maximum recursion depth {} exceeded while validating shape {} for node {}",
@@ -480,7 +483,10 @@ impl ErrorRecoveryManager {
 
     /// Push validation context onto recursion stack
     fn push_validation_context(&self, context: &ConstraintContext) {
-        let mut stack = self.validation_stack.lock().unwrap();
+        let mut stack = self
+            .validation_stack
+            .lock()
+            .expect("mutex lock should not be poisoned");
         let frame = ValidationStackFrame {
             focus_node: context.focus_node.clone(),
             shape_id: context.shape_id.to_string(),
@@ -492,7 +498,10 @@ impl ErrorRecoveryManager {
 
     /// Pop validation context from recursion stack
     fn pop_validation_context(&self) {
-        let mut stack = self.validation_stack.lock().unwrap();
+        let mut stack = self
+            .validation_stack
+            .lock()
+            .expect("mutex lock should not be poisoned");
         stack.pop();
     }
 
@@ -627,7 +636,10 @@ impl ErrorRecoveryManager {
         constraint: &Constraint,
         _context: &ConstraintContext,
     ) -> bool {
-        let cache = self.failed_constraint_cache.lock().unwrap();
+        let cache = self
+            .failed_constraint_cache
+            .lock()
+            .expect("mutex lock should not be poisoned");
         let constraint_key = format!("{:?}", constraint.component_id());
         if let Some(failure_info) = cache.get(&constraint_key) {
             failure_info.should_skip && failure_info.failure_count > 3
@@ -638,7 +650,10 @@ impl ErrorRecoveryManager {
 
     /// Record constraint failure for future reference
     fn record_constraint_failure(&self, constraint: &Constraint, error: &ShaclError) {
-        let mut cache = self.failed_constraint_cache.lock().unwrap();
+        let mut cache = self
+            .failed_constraint_cache
+            .lock()
+            .expect("mutex lock should not be poisoned");
         let constraint_key = format!("{:?}", constraint.component_id());
 
         let failure_info = cache
@@ -683,7 +698,10 @@ impl ErrorRecoveryManager {
     }
 
     fn update_error_stats(&self, error_type: &ErrorType) {
-        let mut stats = self.error_stats.lock().unwrap();
+        let mut stats = self
+            .error_stats
+            .lock()
+            .expect("mutex lock should not be poisoned");
         match error_type {
             ErrorType::ConstraintEvaluation => stats.constraint_errors += 1,
             ErrorType::ShapeParsing => stats.shape_errors += 1,
@@ -699,7 +717,10 @@ impl ErrorRecoveryManager {
         _recovered_error: &RecoveredError,
         result: &ErrorRecoveryResult,
     ) {
-        let mut stats = self.error_stats.lock().unwrap();
+        let mut stats = self
+            .error_stats
+            .lock()
+            .expect("mutex lock should not be poisoned");
         match result {
             ErrorRecoveryResult::Recovered { .. } | ErrorRecoveryResult::Degraded { .. } => {
                 stats.successful_recoveries += 1;
@@ -711,34 +732,53 @@ impl ErrorRecoveryManager {
     }
 
     fn increment_skipped_constraints(&self) {
-        let mut stats = self.error_stats.lock().unwrap();
+        let mut stats = self
+            .error_stats
+            .lock()
+            .expect("mutex lock should not be poisoned");
         stats.skipped_constraints += 1;
     }
 
     fn clear_caches(&self) {
-        let mut cache = self.failed_constraint_cache.lock().unwrap();
+        let mut cache = self
+            .failed_constraint_cache
+            .lock()
+            .expect("mutex lock should not be poisoned");
         cache.clear();
     }
 
     /// Get error recovery statistics
     pub fn get_statistics(&self) -> ErrorStatistics {
-        self.error_stats.lock().unwrap().clone()
+        self.error_stats
+            .lock()
+            .expect("mutex lock should not be poisoned")
+            .clone()
     }
 
     /// Reset error recovery statistics
     pub fn reset_statistics(&self) {
-        let mut stats = self.error_stats.lock().unwrap();
+        let mut stats = self
+            .error_stats
+            .lock()
+            .expect("mutex lock should not be poisoned");
         *stats = ErrorStatistics::default();
     }
 
     /// Get current validation stack depth
     pub fn get_current_depth(&self) -> usize {
-        self.validation_stack.lock().unwrap().len()
+        self.validation_stack
+            .lock()
+            .expect("mutex lock should not be poisoned")
+            .len()
     }
 
     /// Check if validation is currently in progress
     pub fn is_validation_active(&self) -> bool {
-        !self.validation_stack.lock().unwrap().is_empty()
+        !self
+            .validation_stack
+            .lock()
+            .expect("mutex lock should not be poisoned")
+            .is_empty()
     }
 
     /// Get memory usage information

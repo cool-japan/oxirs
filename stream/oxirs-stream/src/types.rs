@@ -3,7 +3,7 @@
 //! Common types used throughout the streaming module.
 
 use crate::event;
-use bincode::{Decode, Encode};
+use oxicode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -92,7 +92,7 @@ pub enum StreamPosition {
 }
 
 /// Enhanced event metadata for tracking and provenance with advanced features
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventMetadata {
     /// Source system or component
     pub source: String,
@@ -109,7 +109,6 @@ pub struct EventMetadata {
 
     // Enhanced metadata fields (TODO items)
     /// Event timestamp with high precision
-    #[bincode(with_serde)]
     pub timestamp: chrono::DateTime<chrono::Utc>,
     /// Operation context with request details
     pub operation_context: Option<OperationContext>,
@@ -192,7 +191,7 @@ impl From<event::EventMetadata> for EventMetadata {
 }
 
 /// Operation context for enhanced tracking
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperationContext {
     /// Operation type (INSERT, DELETE, UPDATE, etc.)
     pub operation_type: String,
@@ -256,7 +255,7 @@ pub struct PerformanceMetrics {
 }
 
 /// Authentication context
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthContext {
     /// Authenticated user ID
     pub user_id: String,
@@ -267,7 +266,6 @@ pub struct AuthContext {
     /// Authentication method used
     pub auth_method: String,
     /// Token expiration time
-    #[bincode(with_serde)]
     pub token_expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -443,7 +441,7 @@ pub mod serialization {
                 serde_cbor::to_vec(metadata).map_err(|e| anyhow!("CBOR serialization failed: {e}"))
             }
             SerializationFormat::Bincode => {
-                bincode::encode_to_vec(metadata, bincode::config::standard())
+                oxicode::serde::encode_to_vec(metadata, oxicode::config::standard())
                     .map_err(|e| anyhow!("Bincode serialization failed: {e}"))
             }
             SerializationFormat::Protobuf | SerializationFormat::Avro => {
@@ -465,7 +463,7 @@ pub mod serialization {
             SerializationFormat::Cbor => serde_cbor::from_slice(data)
                 .map_err(|e| anyhow!("CBOR deserialization failed: {e}")),
             SerializationFormat::Bincode => {
-                bincode::decode_from_slice(data, bincode::config::standard())
+                oxicode::serde::decode_from_slice(data, oxicode::config::standard())
                     .map(|(v, _)| v)
                     .map_err(|e| anyhow!("Bincode deserialization failed: {e}"))
             }

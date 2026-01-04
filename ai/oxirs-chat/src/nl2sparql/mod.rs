@@ -1465,27 +1465,27 @@ impl SPARQLValidator {
         syntax_patterns.insert(
             "select_pattern".to_string(),
             Regex::new(r"(?i)^\s*SELECT\s+(?:DISTINCT\s+)?(?:\*|\?\w+(?:\s+\?\w+)*)\s+WHERE\s*\{")
-                .unwrap(),
+                .expect("hardcoded regex should be valid"),
         );
         syntax_patterns.insert(
             "construct_pattern".to_string(),
-            Regex::new(r"(?i)^\s*CONSTRUCT\s*\{").unwrap(),
+            Regex::new(r"(?i)^\s*CONSTRUCT\s*\{").expect("hardcoded regex should be valid"),
         );
         syntax_patterns.insert(
             "ask_pattern".to_string(),
-            Regex::new(r"(?i)^\s*ASK\s*\{").unwrap(),
+            Regex::new(r"(?i)^\s*ASK\s*\{").expect("hardcoded regex should be valid"),
         );
         syntax_patterns.insert(
             "describe_pattern".to_string(),
-            Regex::new(r"(?i)^\s*DESCRIBE\s+").unwrap(),
+            Regex::new(r"(?i)^\s*DESCRIBE\s+").expect("hardcoded regex should be valid"),
         );
         syntax_patterns.insert(
             "variable_pattern".to_string(),
-            Regex::new(r"\?[a-zA-Z][a-zA-Z0-9_]*").unwrap(),
+            Regex::new(r"\?[a-zA-Z][a-zA-Z0-9_]*").expect("hardcoded regex should be valid"),
         );
         syntax_patterns.insert(
             "iri_pattern".to_string(),
-            Regex::new(r"<[^<>\s]+>").unwrap(),
+            Regex::new(r"<[^<>\s]+>").expect("hardcoded regex should be valid"),
         );
 
         // Common SPARQL prefixes
@@ -1663,8 +1663,8 @@ impl SPARQLValidator {
             .collect();
 
         // Extract declared prefixes
-        let prefix_declaration_pattern =
-            Regex::new(r"(?i)PREFIX\s+(\w+):").unwrap_or_else(|_| Regex::new(r"PREFIX").unwrap());
+        let prefix_declaration_pattern = Regex::new(r"(?i)PREFIX\s+(\w+):")
+            .unwrap_or_else(|_| Regex::new(r"PREFIX").expect("fallback regex should be valid"));
         let declared_prefixes: HashSet<&str> = prefix_declaration_pattern
             .captures_iter(query)
             .filter_map(|cap| cap.get(1))
@@ -1677,7 +1677,9 @@ impl SPARQLValidator {
                 suggestions.push(format!(
                     "Add prefix declaration: PREFIX {}: <{}>",
                     prefix,
-                    self.common_prefixes.get(*prefix).unwrap()
+                    self.common_prefixes
+                        .get(*prefix)
+                        .expect("prefix exists in common_prefixes")
                 ));
             } else if !declared_prefixes.contains(prefix) {
                 syntax_errors.push(SyntaxError {
@@ -1754,7 +1756,8 @@ impl SPARQLOptimizer {
             // Add DISTINCT optimization
             OptimizationRule {
                 name: "redundant_distinct".to_string(),
-                pattern: Regex::new(r"(?i)SELECT\s+DISTINCT\s+DISTINCT").unwrap(),
+                pattern: Regex::new(r"(?i)SELECT\s+DISTINCT\s+DISTINCT")
+                    .expect("hardcoded regex should be valid"),
                 replacement: "SELECT DISTINCT".to_string(),
                 description: "Remove redundant DISTINCT clauses".to_string(),
                 estimated_improvement: 0.1,
@@ -1762,7 +1765,8 @@ impl SPARQLOptimizer {
             // Add LIMIT pushdown optimization
             OptimizationRule {
                 name: "limit_optimization".to_string(),
-                pattern: Regex::new(r"(?i)ORDER\s+BY\s+[^}]+}\s*$").unwrap(),
+                pattern: Regex::new(r"(?i)ORDER\s+BY\s+[^}]+}\s*$")
+                    .expect("hardcoded regex should be valid"),
                 replacement: "$0 LIMIT 1000".to_string(),
                 description: "Add default LIMIT for safety".to_string(),
                 estimated_improvement: 0.3,

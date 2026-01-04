@@ -65,7 +65,7 @@ impl GeneticOptimizer {
             if let Some(best_chromosome) = self
                 .population
                 .iter()
-                .max_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap())
+                .max_by(|a, b| a.fitness.partial_cmp(&b.fitness).expect("fitness values should be comparable"))
             {
                 if best_chromosome.fitness > best_fitness {
                     best_fitness = best_chromosome.fitness;
@@ -142,7 +142,7 @@ impl GeneticOptimizer {
     async fn evolve_population(&mut self) -> Result<()> {
         // Sort by fitness (descending)
         self.population
-            .sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+            .sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).expect("fitness values should be comparable"));
 
         let elite_count = (self.population_size as f64 * self.elite_ratio) as usize;
         let mut new_population = Vec::new();
@@ -313,8 +313,8 @@ impl SimulatedAnnealingOptimizer {
         let mut iteration = 0;
 
         while temperature > self.final_temperature && iteration < self.max_iterations {
-            let neighbor = self.generate_neighbor(self.current_solution.as_ref().unwrap())?;
-            let current_energy = self.calculate_energy(self.current_solution.as_ref().unwrap())?;
+            let neighbor = self.generate_neighbor(self.current_solution.as_ref().expect("current_solution should be initialized"))?;
+            let current_energy = self.calculate_energy(self.current_solution.as_ref().expect("current_solution should be initialized"))?;
             let neighbor_energy = self.calculate_energy(&neighbor)?;
 
             let delta_energy = neighbor_energy - current_energy;
@@ -342,7 +342,7 @@ impl SimulatedAnnealingOptimizer {
                     "SA Iteration {}: Temperature = {:.2}, Energy = {:.4}",
                     iteration,
                     temperature,
-                    self.calculate_energy(self.current_solution.as_ref().unwrap())?
+                    self.calculate_energy(self.current_solution.as_ref().expect("current_solution should be initialized"))?
                 );
             }
         }
@@ -463,7 +463,7 @@ impl ParticleSwarmOptimizer {
 
                 // Update global best
                 if self.global_best.is_none()
-                    || particle.fitness > self.global_best.as_ref().unwrap().fitness
+                    || particle.fitness > self.global_best.as_ref().expect("global_best should be initialized").fitness
                 {
                     self.global_best = Some(particle.clone());
                 }
@@ -733,7 +733,7 @@ impl BayesianOptimizer {
         let (best_point, _) = self
             .observed_points
             .iter()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).expect("values should be comparable"))
             .cloned()
             .ok_or_else(|| ShaclAiError::ShapeManagement("No points evaluated".to_string()))?;
 
@@ -1245,7 +1245,7 @@ impl MultiObjectiveOptimizer {
             .collect();
 
         // Sort by crowding distance (descending)
-        solutions_with_distance.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        solutions_with_distance.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("distance values should be comparable"));
 
         Ok(solutions_with_distance
             .into_iter()
@@ -1271,21 +1271,21 @@ impl MultiObjectiveOptimizer {
             sorted_front.sort_by(|a, b| {
                 a.objective_values[obj_idx]
                     .partial_cmp(&b.objective_values[obj_idx])
-                    .unwrap()
+                    .expect("objective values should be comparable")
             });
 
             let solution_idx = sorted_front
                 .iter()
                 .position(|s| std::ptr::eq(*s, solution))
-                .unwrap();
+                .expect("solution should be in sorted front");
 
             if solution_idx == 0 || solution_idx == sorted_front.len() - 1 {
                 distance = f64::INFINITY;
                 break;
             }
 
-            let obj_range = sorted_front.last().unwrap().objective_values[obj_idx]
-                - sorted_front.first().unwrap().objective_values[obj_idx];
+            let obj_range = sorted_front.last().expect("sorted_front should not be empty").objective_values[obj_idx]
+                - sorted_front.first().expect("sorted_front should not be empty").objective_values[obj_idx];
 
             if obj_range > 0.0 {
                 distance += (sorted_front[solution_idx + 1].objective_values[obj_idx]

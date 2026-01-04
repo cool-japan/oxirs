@@ -275,7 +275,7 @@ impl DistMult {
         let mut shuffled_triples = self.base.triples.clone();
         // Manual Fisher-Yates shuffle using scirs2-core
         for i in (1..shuffled_triples.len()).rev() {
-            let j = rng.random_range(0, i + 1);
+            let j = rng.random_range(0..i + 1);
             shuffled_triples.swap(i, j);
         }
 

@@ -773,7 +773,7 @@ impl EnterpriseKnowledgeAnalyzer {
     pub async fn generate_product_embedding(&self, product_id: &str) -> Result<ProductEmbedding> {
         // Check if already computed
         {
-            let embeddings = self.product_embeddings.read().unwrap();
+            let embeddings = self.product_embeddings.read().expect("lock poisoned");
             if let Some(existing) = embeddings.get(product_id) {
                 return Ok(existing.clone());
             }
@@ -863,7 +863,7 @@ impl EnterpriseKnowledgeAnalyzer {
 
         // Cache the result
         {
-            let mut embeddings = self.product_embeddings.write().unwrap();
+            let mut embeddings = self.product_embeddings.write().expect("lock poisoned");
             embeddings.insert(product_id.to_string(), product_embedding.clone());
         }
 
@@ -881,7 +881,7 @@ impl EnterpriseKnowledgeAnalyzer {
     ) -> Result<EmployeeEmbedding> {
         // Check if already computed
         {
-            let embeddings = self.employee_embeddings.read().unwrap();
+            let embeddings = self.employee_embeddings.read().expect("lock poisoned");
             if let Some(existing) = embeddings.get(employee_id) {
                 return Ok(existing.clone());
             }
@@ -968,7 +968,7 @@ impl EnterpriseKnowledgeAnalyzer {
 
         // Cache the result
         {
-            let mut embeddings = self.employee_embeddings.write().unwrap();
+            let mut embeddings = self.employee_embeddings.write().expect("lock poisoned");
             embeddings.insert(employee_id.to_string(), employee_embedding.clone());
         }
 
@@ -986,7 +986,7 @@ impl EnterpriseKnowledgeAnalyzer {
     ) -> Result<CustomerEmbedding> {
         // Check if already computed
         {
-            let embeddings = self.customer_embeddings.read().unwrap();
+            let embeddings = self.customer_embeddings.read().expect("lock poisoned");
             if let Some(existing) = embeddings.get(customer_id) {
                 return Ok(existing.clone());
             }
@@ -1082,7 +1082,7 @@ impl EnterpriseKnowledgeAnalyzer {
 
         // Cache the result
         {
-            let mut embeddings = self.customer_embeddings.write().unwrap();
+            let mut embeddings = self.customer_embeddings.write().expect("lock poisoned");
             embeddings.insert(customer_id.to_string(), customer_embedding.clone());
         }
 
@@ -1125,7 +1125,7 @@ impl EnterpriseKnowledgeAnalyzer {
     ) -> Result<Vec<(String, f64)>> {
         let target_embedding = self.generate_employee_embedding(employee_id).await?;
         let embeddings = {
-            let guard = self.employee_embeddings.read().unwrap();
+            let guard = self.employee_embeddings.read().expect("lock poisoned");
             guard.clone()
         };
 
@@ -1141,7 +1141,10 @@ impl EnterpriseKnowledgeAnalyzer {
         }
 
         // Sort by similarity and take top k
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("similarity scores should be finite")
+        });
         similarities.truncate(k);
 
         Ok(similarities)
@@ -1154,7 +1157,7 @@ impl EnterpriseKnowledgeAnalyzer {
         required_skills: &[String],
     ) -> Result<Vec<String>> {
         let employees = {
-            let guard = self.employee_embeddings.read().unwrap();
+            let guard = self.employee_embeddings.read().expect("lock poisoned");
             guard.clone()
         };
         let mut candidates = Vec::new();
@@ -1168,7 +1171,10 @@ impl EnterpriseKnowledgeAnalyzer {
         }
 
         // Sort by skill match and take top candidates
-        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        candidates.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("candidate scores should be finite")
+        });
 
         // Select optimal team (considering diversity, collaboration history, etc.)
         let optimal_team = self.select_optimal_team(candidates, 5).await?;
@@ -1179,11 +1185,11 @@ impl EnterpriseKnowledgeAnalyzer {
     /// Analyze market trends and opportunities
     pub async fn analyze_market_trends(&self) -> Result<MarketAnalysis> {
         let products = {
-            let guard = self.product_embeddings.read().unwrap();
+            let guard = self.product_embeddings.read().expect("lock poisoned");
             guard.clone()
         };
         let customers = {
-            let guard = self.customer_embeddings.read().unwrap();
+            let guard = self.customer_embeddings.read().expect("lock poisoned");
             guard.clone()
         };
 
@@ -1648,9 +1654,9 @@ pub struct EnterpriseMetrics {
 impl EnterpriseKnowledgeAnalyzer {
     /// Get comprehensive enterprise metrics
     pub async fn get_enterprise_metrics(&self) -> Result<EnterpriseMetrics> {
-        let product_embeddings = self.product_embeddings.read().unwrap();
-        let employee_embeddings = self.employee_embeddings.read().unwrap();
-        let customer_embeddings = self.customer_embeddings.read().unwrap();
+        let product_embeddings = self.product_embeddings.read().expect("lock poisoned");
+        let employee_embeddings = self.employee_embeddings.read().expect("lock poisoned");
+        let customer_embeddings = self.customer_embeddings.read().expect("lock poisoned");
 
         let total_products = product_embeddings.len();
         let total_employees = employee_embeddings.len();
@@ -1681,7 +1687,10 @@ impl EnterpriseKnowledgeAnalyzer {
             .iter()
             .map(|(id, p)| (id.clone(), p.market_position))
             .collect();
-        product_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        product_scores.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("product scores should be finite")
+        });
         let top_products: Vec<String> = product_scores
             .into_iter()
             .take(10)
@@ -1692,7 +1701,10 @@ impl EnterpriseKnowledgeAnalyzer {
             .iter()
             .map(|(id, e)| (id.clone(), e.performance_metrics.overall_score))
             .collect();
-        employee_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        employee_scores.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("employee scores should be finite")
+        });
         let top_employees: Vec<String> = employee_scores
             .into_iter()
             .take(10)
@@ -1703,7 +1715,10 @@ impl EnterpriseKnowledgeAnalyzer {
             .iter()
             .map(|(id, c)| (id.clone(), c.predicted_ltv))
             .collect();
-        customer_values.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        customer_values.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("customer values should be finite")
+        });
         let high_value_customers: Vec<String> = customer_values
             .into_iter()
             .take(10)

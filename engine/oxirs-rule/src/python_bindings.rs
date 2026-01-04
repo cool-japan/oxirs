@@ -132,7 +132,7 @@ impl PyRuleEngine {
     /// Add a rule to the engine
     #[pyo3(signature = (rule_text, rule_format = "datalog", **kwargs))]
     fn add_rule(&self, rule_text: &str, rule_format: &str, kwargs: Option<&PyDict>) -> PyResult<()> {
-        let mut engine = self.engine.write().unwrap();
+        let mut engine = self.engine.write().expect("lock poisoned");
 
         engine.add_rule_from_text(rule_text, rule_format)
             .map_err(|e| PyErr::new::<RuleParsingError, _>(e.to_string()))?;
@@ -143,7 +143,7 @@ impl PyRuleEngine {
     /// Add multiple rules from a file
     #[pyo3(signature = (file_path, rule_format = "datalog", **kwargs))]
     fn add_rules_from_file(&self, file_path: &str, rule_format: &str, kwargs: Option<&PyDict>) -> PyResult<usize> {
-        let mut engine = self.engine.write().unwrap();
+        let mut engine = self.engine.write().expect("lock poisoned");
 
         let rules_count = engine.load_rules_from_file(file_path, rule_format)
             .map_err(|e| PyErr::new::<RuleParsingError, _>(e.to_string()))?;
@@ -154,7 +154,7 @@ impl PyRuleEngine {
     /// Add facts to the knowledge base
     #[pyo3(signature = (facts, **kwargs))]
     fn add_facts(&self, facts: Vec<&str>, kwargs: Option<&PyDict>) -> PyResult<()> {
-        let mut engine = self.engine.write().unwrap();
+        let mut engine = self.engine.write().expect("lock poisoned");
 
         for fact_text in facts {
             engine.add_fact_from_text(fact_text)
@@ -168,7 +168,7 @@ impl PyRuleEngine {
     #[pyo3(signature = (**kwargs))]
     fn forward_chain(&self, kwargs: Option<&PyDict>) -> PyResult<PyForwardChainResult> {
         let start_time = Instant::now();
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("lock poisoned");
 
         if !self.config.enable_forward_chaining {
             return Err(PyErr::new::<ReasoningError, _>("Forward chaining is disabled"));
@@ -179,7 +179,7 @@ impl PyRuleEngine {
 
         // Update performance monitoring
         if self.config.enable_performance_monitoring {
-            let mut monitor = self.performance_monitor.write().unwrap();
+            let mut monitor = self.performance_monitor.write().expect("lock poisoned");
             monitor.record_forward_chaining(start_time.elapsed(), result.derived_facts.len());
         }
 
@@ -190,7 +190,7 @@ impl PyRuleEngine {
     #[pyo3(signature = (query, **kwargs))]
     fn backward_chain(&self, query: &str, kwargs: Option<&PyDict>) -> PyResult<PyBackwardChainResult> {
         let start_time = Instant::now();
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("lock poisoned");
 
         if !self.config.enable_backward_chaining {
             return Err(PyErr::new::<ReasoningError, _>("Backward chaining is disabled"));
@@ -201,7 +201,7 @@ impl PyRuleEngine {
 
         // Update performance monitoring
         if self.config.enable_performance_monitoring {
-            let mut monitor = self.performance_monitor.write().unwrap();
+            let mut monitor = self.performance_monitor.write().expect("lock poisoned");
             monitor.record_backward_chaining(start_time.elapsed(), result.proofs.len());
         }
 
@@ -212,7 +212,7 @@ impl PyRuleEngine {
     #[pyo3(signature = (**kwargs))]
     fn rdfs_reasoning(&self, kwargs: Option<&PyDict>) -> PyResult<PyRdfsInferenceResult> {
         let start_time = Instant::now();
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("lock poisoned");
 
         if !self.config.enable_rdfs_reasoning {
             return Err(PyErr::new::<ReasoningError, _>("RDFS reasoning is disabled"));
@@ -223,7 +223,7 @@ impl PyRuleEngine {
 
         // Update performance monitoring
         if self.config.enable_performance_monitoring {
-            let mut monitor = self.performance_monitor.write().unwrap();
+            let mut monitor = self.performance_monitor.write().expect("lock poisoned");
             monitor.record_rdfs_reasoning(start_time.elapsed(), result.inferred_triples.len());
         }
 
@@ -234,7 +234,7 @@ impl PyRuleEngine {
     #[pyo3(signature = (**kwargs))]
     fn owl_reasoning(&self, kwargs: Option<&PyDict>) -> PyResult<PyOwlInferenceResult> {
         let start_time = Instant::now();
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("lock poisoned");
 
         if !self.config.enable_owl_reasoning {
             return Err(PyErr::new::<ReasoningError, _>("OWL reasoning is disabled"));
@@ -245,7 +245,7 @@ impl PyRuleEngine {
 
         // Update performance monitoring
         if self.config.enable_performance_monitoring {
-            let mut monitor = self.performance_monitor.write().unwrap();
+            let mut monitor = self.performance_monitor.write().expect("lock poisoned");
             monitor.record_owl_reasoning(start_time.elapsed(), result.inferred_axioms.len());
         }
 
@@ -256,14 +256,14 @@ impl PyRuleEngine {
     #[pyo3(signature = (**kwargs))]
     fn check_consistency(&self, kwargs: Option<&PyDict>) -> PyResult<PyConsistencyResult> {
         let start_time = Instant::now();
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("lock poisoned");
 
         let result = engine.check_consistency()
             .map_err(|e| PyErr::new::<ConsistencyError, _>(e.to_string()))?;
 
         // Update performance monitoring
         if self.config.enable_performance_monitoring {
-            let mut monitor = self.performance_monitor.write().unwrap();
+            let mut monitor = self.performance_monitor.write().expect("lock poisoned");
             monitor.record_consistency_check(start_time.elapsed(), result.is_consistent);
         }
 
@@ -274,7 +274,7 @@ impl PyRuleEngine {
     #[pyo3(signature = (query, reasoning_type = "forward", **kwargs))]
     fn query(&self, query: &str, reasoning_type: &str, kwargs: Option<&PyDict>) -> PyResult<PyQueryResult> {
         let start_time = Instant::now();
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("lock poisoned");
 
         let result = match reasoning_type {
             "forward" => engine.query_forward(query),
@@ -285,7 +285,7 @@ impl PyRuleEngine {
 
         // Update performance monitoring
         if self.config.enable_performance_monitoring {
-            let mut monitor = self.performance_monitor.write().unwrap();
+            let mut monitor = self.performance_monitor.write().expect("lock poisoned");
             monitor.record_query(start_time.elapsed(), result.bindings.len());
         }
 
@@ -294,14 +294,14 @@ impl PyRuleEngine {
 
     /// Get performance statistics
     fn get_performance_stats(&self) -> PyPerformanceStats {
-        let monitor = self.performance_monitor.read().unwrap();
+        let monitor = self.performance_monitor.read().expect("lock poisoned");
         let stats = monitor.get_stats();
         PyPerformanceStats::from_reasoning_stats(stats)
     }
 
     /// Clear all rules and facts
     fn clear(&self) -> PyResult<()> {
-        let mut engine = self.engine.write().unwrap();
+        let mut engine = self.engine.write().expect("lock poisoned");
         engine.clear()
             .map_err(|e| PyErr::new::<ReasoningError, _>(e.to_string()))?;
 
@@ -311,7 +311,7 @@ impl PyRuleEngine {
     /// Export derived facts
     #[pyo3(signature = (format = "ntriples", **kwargs))]
     fn export_facts(&self, format: &str, kwargs: Option<&PyDict>) -> PyResult<String> {
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("lock poisoned");
 
         let facts = engine.export_facts(format)
             .map_err(|e| PyErr::new::<ReasoningError, _>(e.to_string()))?;
@@ -321,7 +321,7 @@ impl PyRuleEngine {
 
     /// Get rule statistics
     fn get_rule_stats(&self) -> HashMap<String, usize> {
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("lock poisoned");
         engine.get_rule_statistics()
     }
 
@@ -337,7 +337,7 @@ impl PyRuleEngine {
             return Err(PyErr::new::<ReasoningError, _>("Debugging is not enabled"));
         }
 
-        let engine = self.engine.read().unwrap();
+        let engine = self.engine.read().expect("lock poisoned");
         let debug_session = engine.start_debug_session()
             .map_err(|e| PyErr::new::<ReasoningError, _>(e.to_string()))?;
 

@@ -1481,7 +1481,7 @@ impl MLOptimizer {
 
         // Fisher-Yates shuffle with scirs2-optimized random number generation
         for i in (1..items.len()).rev() {
-            let j = rng.random_range(0, i + 1);
+            let j = rng.random_range(0..i + 1);
             if i != j {
                 items.swap(i, j);
             }

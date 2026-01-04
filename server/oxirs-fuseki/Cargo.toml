@@ -109,7 +109,7 @@ validator = { version = "0.19", features = ["derive"] }
 regex = "1.12"
 
 # Serialization and encoding
-bincode = "2.0"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 hex = "0.4"
 
 # Additional dependencies for MFA and authentication
@@ -152,11 +152,11 @@ async-trait = "0.1"
 
 # GraphQL
 async-graphql = "7.0"
-async-graphql-axum = "7.0"
+async-graphql-axum = "7.1"
 
 # OpenAPI
 utoipa = { version = "4.2", features = ["chrono"] }
-utoipa-swagger-ui = { version = "7.0", features = ["axum"] }
+utoipa-swagger-ui = { version = "7.0", features = ["axum", "vendored"] }
 
 # DNS resolution for service discovery
 trust-dns-resolver = "0.23"
@@ -188,10 +188,10 @@ axum-test = "14.10"
 http = { workspace = true }
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
-tempfile = "3.23"
+tempfile = "3.24"
 rstest = "0.26"
 proptest = "1.7"
-insta = "1.45"
+insta = "1.46"
 serial_test = "3.2"
 wiremock = "0.6"
 

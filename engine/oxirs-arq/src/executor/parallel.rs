@@ -91,20 +91,20 @@ impl WorkStealingQueue {
     }
 
     fn push_work(&self, item: WorkItem) {
-        let mut items = self.items.lock().unwrap();
+        let mut items = self.items.lock().expect("lock poisoned");
         items.push(item);
         // Sort by priority (highest first)
         items.sort_by(|a, b| b.priority.cmp(&a.priority));
     }
 
     fn steal_work(&self) -> Option<WorkItem> {
-        let mut items = self.items.lock().unwrap();
+        let mut items = self.items.lock().expect("lock poisoned");
         if items.is_empty() {
             None
         } else {
             // Update stats
             {
-                let mut stats = self.stats.lock().unwrap();
+                let mut stats = self.stats.lock().expect("lock poisoned");
                 stats.work_stealing_events += 1;
             }
             Some(items.remove(0))
@@ -112,12 +112,12 @@ impl WorkStealingQueue {
     }
 
     fn add_result(&self, solutions: Vec<Solution>) {
-        let mut completed = self.completed.lock().unwrap();
+        let mut completed = self.completed.lock().expect("lock poisoned");
         completed.extend(solutions);
     }
 
     fn get_results(&self) -> Vec<Solution> {
-        let mut completed = self.completed.lock().unwrap();
+        let mut completed = self.completed.lock().expect("lock poisoned");
         std::mem::take(&mut *completed)
     }
 }
@@ -279,11 +279,11 @@ impl ParallelExecutor {
 
                     // Add results to shared collection
                     {
-                        let mut results = results_ref.lock().unwrap();
+                        let mut results = results_ref.lock().expect("lock poisoned");
                         results.extend(local_results);
                     }
                     {
-                        let mut steals = steals_ref.lock().unwrap();
+                        let mut steals = steals_ref.lock().expect("lock poisoned");
                         *steals += local_steals;
                     }
                 });
@@ -292,11 +292,11 @@ impl ParallelExecutor {
 
         // Collect final results
         let all_results = {
-            let results = shared_results.lock().unwrap();
+            let results = shared_results.lock().expect("lock poisoned");
             results.clone()
         };
         let steal_events = {
-            let steals = shared_steals.lock().unwrap();
+            let steals = shared_steals.lock().expect("lock poisoned");
             *steals
         };
 
@@ -522,7 +522,7 @@ impl ParallelExecutor {
 
         let results = work_queue.get_results();
         let stats = {
-            let s = work_queue.stats.lock().unwrap();
+            let s = work_queue.stats.lock().expect("lock poisoned");
             s.clone()
         };
 
@@ -645,21 +645,27 @@ impl ParallelExecutor {
 
                     let (left_task, right_task) = tokio::join!(
                         task::spawn(async move {
-                            let _permit = sem_left.acquire().await.unwrap();
+                            let _permit = sem_left
+                                .acquire()
+                                .await
+                                .expect("semaphore should not be closed");
                             // Simulate execution - in real implementation, call appropriate executor
                             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                             solutions_left
                         }),
                         task::spawn(async move {
-                            let _permit = sem_right.acquire().await.unwrap();
+                            let _permit = sem_right
+                                .acquire()
+                                .await
+                                .expect("semaphore should not be closed");
                             // Simulate execution
                             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                             solutions_right
                         })
                     );
 
-                    let left_results = left_task.unwrap();
-                    let right_results = right_task.unwrap();
+                    let left_results = left_task.expect("left task should not panic");
+                    let right_results = right_task.expect("right task should not panic");
 
                     // Combine results (simplified)
                     let mut combined = left_results;
@@ -737,7 +743,7 @@ impl ParallelExecutor {
 
             // Update thread utilization stats
             {
-                let mut stats = queue.stats.lock().unwrap();
+                let mut stats = queue.stats.lock().expect("lock poisoned");
                 if thread_id == 0 {
                     stats.threads_used = self.config.max_threads;
                     stats.total_work_items = processed;

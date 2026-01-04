@@ -1117,7 +1117,7 @@ fn extract_query_variables(query: &str) -> Vec<String> {
             let mut var_name = String::new();
             while let Some(&nc) = chars.peek() {
                 if nc.is_alphanumeric() || nc == '_' {
-                    var_name.push(chars.next().unwrap());
+                    var_name.push(chars.next().expect("char should exist after peek"));
                 } else {
                     break;
                 }
@@ -1134,7 +1134,8 @@ fn extract_query_variables(query: &str) -> Vec<String> {
 /// Extract prefix declarations from query
 fn extract_prefixes(query: &str) -> Vec<PrefixMapping> {
     let mut prefixes = Vec::new();
-    let prefix_regex = regex::Regex::new(r"(?i)PREFIX\s+(\w*):\s*<([^>]+)>").unwrap();
+    let prefix_regex =
+        regex::Regex::new(r"(?i)PREFIX\s+(\w*):\s*<([^>]+)>").expect("valid regex pattern");
 
     for cap in prefix_regex.captures_iter(query) {
         prefixes.push(PrefixMapping {
@@ -1172,16 +1173,19 @@ fn format_query(query: &str) -> String {
 
     for keyword in keywords {
         let pattern = format!(r"(?i)\b{}\b", keyword);
-        let re = regex::Regex::new(&pattern).unwrap();
+        let re = regex::Regex::new(&pattern).expect("valid regex pattern");
         formatted = re
             .replace_all(&formatted, |caps: &regex::Captures| {
-                format!("\n{}", caps.get(0).unwrap().as_str())
+                format!(
+                    "\n{}",
+                    caps.get(0).expect("capture group 0 should exist").as_str()
+                )
             })
             .to_string();
     }
 
     // Clean up multiple newlines
-    let multi_newline = regex::Regex::new(r"\n\s*\n").unwrap();
+    let multi_newline = regex::Regex::new(r"\n\s*\n").expect("valid regex pattern");
     formatted = multi_newline.replace_all(&formatted, "\n").to_string();
 
     formatted.trim().to_string()
@@ -1198,15 +1202,18 @@ fn format_update(update: &str) -> String {
 
     for keyword in keywords {
         let pattern = format!(r"(?i)\b{}\b", keyword);
-        let re = regex::Regex::new(&pattern).unwrap();
+        let re = regex::Regex::new(&pattern).expect("valid regex pattern");
         formatted = re
             .replace_all(&formatted, |caps: &regex::Captures| {
-                format!("\n{}", caps.get(0).unwrap().as_str())
+                format!(
+                    "\n{}",
+                    caps.get(0).expect("capture group 0 should exist").as_str()
+                )
             })
             .to_string();
     }
 
-    let multi_newline = regex::Regex::new(r"\n\s*\n").unwrap();
+    let multi_newline = regex::Regex::new(r"\n\s*\n").expect("valid regex pattern");
     formatted = multi_newline.replace_all(&formatted, "\n").to_string();
 
     formatted.trim().to_string()
@@ -1226,7 +1233,7 @@ fn generate_algebra_representation(query: &str) -> String {
         .join(" ");
 
     // Extract basic triple patterns
-    let triple_pattern_re = regex::Regex::new(r"\{([^{}]+)\}").unwrap();
+    let triple_pattern_re = regex::Regex::new(r"\{([^{}]+)\}").expect("valid regex pattern");
     let patterns: Vec<String> = triple_pattern_re
         .captures_iter(query)
         .filter_map(|cap| cap.get(1).map(|m| m.as_str().trim().to_string()))
@@ -1289,7 +1296,7 @@ fn extract_affected_graphs(update: &str) -> Vec<String> {
     let mut graphs = Vec::new();
 
     // Look for GRAPH <uri> patterns
-    let graph_re = regex::Regex::new(r"(?i)GRAPH\s*<([^>]+)>").unwrap();
+    let graph_re = regex::Regex::new(r"(?i)GRAPH\s*<([^>]+)>").expect("valid regex pattern");
     for cap in graph_re.captures_iter(update) {
         if let Some(g) = cap.get(1) {
             let graph_uri = g.as_str().to_string();
@@ -1315,8 +1322,8 @@ fn extract_affected_graphs(update: &str) -> Vec<String> {
 /// Extract error location from error message
 fn extract_error_location(error: &str) -> (Option<usize>, Option<usize>) {
     // Try to extract line and column from error message
-    let line_re = regex::Regex::new(r"line\s*(\d+)").unwrap();
-    let col_re = regex::Regex::new(r"col(?:umn)?\s*(\d+)").unwrap();
+    let line_re = regex::Regex::new(r"line\s*(\d+)").expect("valid regex pattern");
+    let col_re = regex::Regex::new(r"col(?:umn)?\s*(\d+)").expect("valid regex pattern");
 
     let line = line_re
         .captures(error)
@@ -1505,7 +1512,10 @@ fn parse_language_tag(tag: &str) -> Result<ParsedLanguageTag, String> {
         // Capitalize first letter, lowercase rest
         script = Some(format!(
             "{}{}",
-            s.chars().next().unwrap().to_uppercase(),
+            s.chars()
+                .next()
+                .expect("script subtag should have at least one char")
+                .to_uppercase(),
             s[1..].to_lowercase()
         ));
         i += 1;

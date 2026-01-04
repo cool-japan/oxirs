@@ -401,7 +401,9 @@ impl StarCli {
 
     /// Validate RDF-star files
     fn validate_command(&self, matches: &ArgMatches) -> Result<()> {
-        let input_path = matches.get_one::<String>("input").unwrap();
+        let input_path = matches
+            .get_one::<String>("input")
+            .expect("required argument");
         let format = matches.get_one::<String>("format");
         let strict = matches.get_flag("strict");
         let report_path = matches.get_one::<String>("report");
@@ -430,10 +432,14 @@ impl StarCli {
 
     /// Convert between RDF-star formats
     fn convert_command(&self, matches: &ArgMatches) -> Result<()> {
-        let input_path = matches.get_one::<String>("input").unwrap();
-        let output_path = matches.get_one::<String>("output").unwrap();
+        let input_path = matches
+            .get_one::<String>("input")
+            .expect("required argument");
+        let output_path = matches
+            .get_one::<String>("output")
+            .expect("required argument");
         let from_format = matches.get_one::<String>("from");
-        let to_format = matches.get_one::<String>("to").unwrap();
+        let to_format = matches.get_one::<String>("to").expect("required argument");
         let pretty = matches.get_flag("pretty");
 
         info!("Converting {} to {}", input_path, output_path);
@@ -451,7 +457,9 @@ impl StarCli {
 
     /// Analyze RDF-star data structure
     fn analyze_command(&self, matches: &ArgMatches) -> Result<()> {
-        let input_path = matches.get_one::<String>("input").unwrap();
+        let input_path = matches
+            .get_one::<String>("input")
+            .expect("required argument");
         let output_path = matches.get_one::<String>("output");
         let json_output = matches.get_flag("json");
 
@@ -484,13 +492,15 @@ impl StarCli {
 
     /// Debug parsing issues
     fn debug_command(&self, matches: &ArgMatches) -> Result<()> {
-        let input_path = matches.get_one::<String>("input").unwrap();
+        let input_path = matches
+            .get_one::<String>("input")
+            .expect("required argument");
         let target_line = matches
             .get_one::<String>("line")
             .map(|s| s.parse::<usize>().unwrap_or(0));
         let context_lines: usize = matches
             .get_one::<String>("context")
-            .unwrap()
+            .expect("required argument")
             .parse()
             .unwrap_or(3);
 
@@ -503,15 +513,17 @@ impl StarCli {
 
     /// Benchmark performance
     fn benchmark_command(&self, matches: &ArgMatches) -> Result<()> {
-        let input_path = matches.get_one::<String>("input").unwrap();
+        let input_path = matches
+            .get_one::<String>("input")
+            .expect("required argument");
         let iterations: usize = matches
             .get_one::<String>("iterations")
-            .unwrap()
+            .expect("required argument")
             .parse()
             .unwrap_or(10);
         let warmup: usize = matches
             .get_one::<String>("warmup")
-            .unwrap()
+            .expect("required argument")
             .parse()
             .unwrap_or(3);
 
@@ -525,9 +537,15 @@ impl StarCli {
 
     /// Execute SPARQL-star queries
     fn query_command(&self, matches: &ArgMatches) -> Result<()> {
-        let data_path = matches.get_one::<String>("data").unwrap();
-        let query_input = matches.get_one::<String>("query").unwrap();
-        let output_format = matches.get_one::<String>("format").unwrap();
+        let data_path = matches
+            .get_one::<String>("data")
+            .expect("required argument");
+        let query_input = matches
+            .get_one::<String>("query")
+            .expect("required argument");
+        let output_format = matches
+            .get_one::<String>("format")
+            .expect("required argument");
 
         info!("Executing SPARQL-star query on: {}", data_path);
 
@@ -1033,7 +1051,9 @@ impl StarCli {
 
     /// Run troubleshooting diagnostics
     fn troubleshoot_command(&self, matches: &ArgMatches) -> Result<()> {
-        let error_input = matches.get_one::<String>("error").unwrap();
+        let error_input = matches
+            .get_one::<String>("error")
+            .expect("required argument");
         let output_path = matches.get_one::<String>("output");
 
         let _guide = TroubleshootingGuide::new();
@@ -1098,9 +1118,15 @@ impl StarCli {
     }
 
     fn migrate_command(&self, matches: &ArgMatches) -> Result<()> {
-        let source_file = matches.get_one::<String>("source").unwrap();
-        let output_file = matches.get_one::<String>("output").unwrap();
-        let source_format = matches.get_one::<String>("source-format").unwrap();
+        let source_file = matches
+            .get_one::<String>("source")
+            .expect("required argument");
+        let output_file = matches
+            .get_one::<String>("output")
+            .expect("required argument");
+        let source_format = matches
+            .get_one::<String>("source-format")
+            .expect("required argument");
         let plan_only = matches.get_flag("plan");
 
         info!(
@@ -1169,7 +1195,9 @@ impl StarCli {
     }
 
     fn doctor_command(&self, matches: &ArgMatches) -> Result<()> {
-        let input_file = matches.get_one::<String>("input").unwrap();
+        let input_file = matches
+            .get_one::<String>("input")
+            .expect("required argument");
         let report_path = matches.get_one::<String>("report");
         let auto_fix = matches.get_flag("fix");
 
@@ -1329,9 +1357,16 @@ impl StarCli {
 
     /// Profile RDF-star operations with advanced analytics
     fn profile_command(&self, matches: &ArgMatches) -> Result<()> {
-        let input_path = matches.get_one::<String>("input").unwrap();
-        let operations = matches.get_one::<String>("operations").unwrap();
-        let iterations: usize = matches.get_one::<String>("iterations").unwrap().parse()?;
+        let input_path = matches
+            .get_one::<String>("input")
+            .expect("required argument");
+        let operations = matches
+            .get_one::<String>("operations")
+            .expect("required argument");
+        let iterations: usize = matches
+            .get_one::<String>("iterations")
+            .expect("required argument")
+            .parse()?;
         let report_path = matches.get_one::<String>("output");
 
         info!(
@@ -1411,9 +1446,13 @@ impl StarCli {
 
     /// Generate comprehensive profiling reports from collected data
     fn profile_report_command(&self, matches: &ArgMatches) -> Result<()> {
-        let data_path = matches.get_one::<String>("data").unwrap();
+        let data_path = matches
+            .get_one::<String>("data")
+            .expect("required argument");
         let output_path = matches.get_one::<String>("output");
-        let format = matches.get_one::<String>("format").unwrap();
+        let format = matches
+            .get_one::<String>("format")
+            .expect("required argument");
 
         info!("Generating profiling report from: {}", data_path);
 
@@ -1687,19 +1726,21 @@ mod tests {
 
         // Test file extension detection
         assert_eq!(
-            cli.detect_format("test.ttls", "").unwrap(),
+            cli.detect_format("test.ttls", "")
+                .expect("required argument"),
             StarFormat::TurtleStar
         );
 
         assert_eq!(
-            cli.detect_format("test.nts", "").unwrap(),
+            cli.detect_format("test.nts", "")
+                .expect("required argument"),
             StarFormat::NTriplesStar
         );
 
         // Test content-based detection
         assert_eq!(
             cli.detect_format("test.txt", "<< :s :p :o >> :meta :value .")
-                .unwrap(),
+                .expect("required argument"),
             StarFormat::TurtleStar
         );
     }

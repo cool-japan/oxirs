@@ -1090,7 +1090,12 @@ impl TransactionManager {
         }
 
         // Check timeout
-        if transaction.start_time.elapsed().unwrap() > transaction.timeout {
+        if transaction
+            .start_time
+            .elapsed()
+            .expect("SystemTime should not go backwards")
+            > transaction.timeout
+        {
             transaction.status = TransactionStatus::Aborted;
             return Err(anyhow!("Transaction timeout"));
         }
@@ -1278,7 +1283,10 @@ impl WriteAheadLog {
 
     fn should_checkpoint(&self) -> bool {
         let last_checkpoint = *self.last_checkpoint.read();
-        last_checkpoint.elapsed().unwrap() > self.checkpoint_interval
+        last_checkpoint
+            .elapsed()
+            .expect("SystemTime should not go backwards")
+            > self.checkpoint_interval
     }
 
     fn checkpoint(&self) -> Result<()> {

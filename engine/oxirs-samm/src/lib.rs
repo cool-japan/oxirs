@@ -1,6 +1,6 @@
 //! # OxiRS SAMM - Semantic Aspect Meta Model Implementation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
 //! **Status**: Beta.1 Release (v0.1.0-rc.1)
 //! ✅ All public APIs documented. API stability guarantees in place.

@@ -83,7 +83,7 @@ where
     T: Serialize,
 {
     pub fn new(data: T) -> Result<Self> {
-        let data_bytes = bincode::serialize(&data)?;
+        let data_bytes = oxicode::serde::encode_to_vec(&data, oxicode::config::standard())?;
         let mut hasher = Sha256::new();
         hasher.update(&data_bytes);
         let checksum = format!("{:x}", hasher.finalize());
@@ -101,7 +101,7 @@ where
     }
 
     pub fn verify(&self) -> Result<bool> {
-        let data_bytes = bincode::serialize(&self.data)?;
+        let data_bytes = oxicode::serde::encode_to_vec(&self.data, oxicode::config::standard())?;
         let mut hasher = Sha256::new();
         hasher.update(&data_bytes);
         let computed_checksum = format!("{:x}", hasher.finalize());

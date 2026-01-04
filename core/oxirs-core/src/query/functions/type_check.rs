@@ -48,7 +48,9 @@ pub(super) fn fn_datatype(args: &[Term]) -> Result<Term, OxirsError> {
     match &args[0] {
         Term::Literal(lit) => {
             let dt = lit.datatype();
-            Ok(Term::NamedNode(NamedNode::new(dt.as_str()).unwrap()))
+            Ok(Term::NamedNode(
+                NamedNode::new(dt.as_str()).expect("datatype IRI should be valid"),
+            ))
         }
         _ => Err(OxirsError::Query("DATATYPE requires literal".to_string())),
     }
@@ -161,7 +163,8 @@ pub(super) fn fn_not(args: &[Term]) -> Result<Term, OxirsError> {
             let value = lit.value() == "true";
             Ok(Term::Literal(Literal::new_typed(
                 if !value { "true" } else { "false" },
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -197,7 +200,8 @@ pub(super) fn fn_bound(args: &[Term]) -> Result<Term, OxirsError> {
     let is_bound = !matches!(&args[0], Term::Variable(_));
     Ok(Term::Literal(Literal::new_typed(
         if is_bound { "true" } else { "false" },
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+            .expect("W3C XSD schema IRI should be valid"),
     )))
 }
 
@@ -250,7 +254,8 @@ pub(super) fn fn_is_iri(args: &[Term]) -> Result<Term, OxirsError> {
     let result = matches!(&args[0], Term::NamedNode(_));
     Ok(Term::Literal(Literal::new_typed(
         if result { "true" } else { "false" },
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+            .expect("W3C XSD schema IRI should be valid"),
     )))
 }
 
@@ -266,7 +271,8 @@ pub(super) fn fn_is_blank(args: &[Term]) -> Result<Term, OxirsError> {
     let result = matches!(&args[0], Term::BlankNode(_));
     Ok(Term::Literal(Literal::new_typed(
         if result { "true" } else { "false" },
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+            .expect("W3C XSD schema IRI should be valid"),
     )))
 }
 
@@ -282,7 +288,8 @@ pub(super) fn fn_is_literal(args: &[Term]) -> Result<Term, OxirsError> {
     let result = matches!(&args[0], Term::Literal(_));
     Ok(Term::Literal(Literal::new_typed(
         if result { "true" } else { "false" },
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+            .expect("W3C XSD schema IRI should be valid"),
     )))
 }
 
@@ -320,7 +327,8 @@ pub(super) fn fn_is_numeric(args: &[Term]) -> Result<Term, OxirsError> {
 
     Ok(Term::Literal(Literal::new_typed(
         if result { "true" } else { "false" },
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+            .expect("W3C XSD schema IRI should be valid"),
     )))
 }
 
@@ -336,7 +344,8 @@ pub(super) fn fn_same_term(args: &[Term]) -> Result<Term, OxirsError> {
     let result = args[0] == args[1];
     Ok(Term::Literal(Literal::new_typed(
         if result { "true" } else { "false" },
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+            .expect("W3C XSD schema IRI should be valid"),
     )))
 }
 
@@ -362,7 +371,8 @@ pub(super) fn fn_langmatches(args: &[Term]) -> Result<Term, OxirsError> {
 
             Ok(Term::Literal(Literal::new_typed(
                 if result { "true" } else { "false" },
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -386,14 +396,16 @@ pub(super) fn fn_in(args: &[Term]) -> Result<Term, OxirsError> {
         if value == item {
             return Ok(Term::Literal(Literal::new_typed(
                 "true",
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+                    .expect("W3C XSD schema IRI should be valid"),
             )));
         }
     }
 
     Ok(Term::Literal(Literal::new_typed(
         "false",
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+            .expect("W3C XSD schema IRI should be valid"),
     )))
 }
 
@@ -404,7 +416,8 @@ pub(super) fn fn_not_in(args: &[Term]) -> Result<Term, OxirsError> {
             let value = lit.value() == "true";
             Ok(Term::Literal(Literal::new_typed(
                 if !value { "true" } else { "false" },
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")
+                    .expect("W3C XSD schema IRI should be valid"),
             )))
         }
         _ => unreachable!(),

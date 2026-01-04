@@ -111,9 +111,9 @@ impl IndexedGraph {
 
     /// Insert an already interned triple
     fn insert_interned(&self, triple: InternedTriple) -> bool {
-        let mut spo = self.spo_index.write().unwrap();
-        let mut pos = self.pos_index.write().unwrap();
-        let mut osp = self.osp_index.write().unwrap();
+        let mut spo = self.spo_index.write().expect("spo_index lock poisoned");
+        let mut pos = self.pos_index.write().expect("pos_index lock poisoned");
+        let mut osp = self.osp_index.write().expect("osp_index lock poisoned");
 
         // Check if triple already exists in SPO index
         if let Some(po_map) = spo.get(&triple.subject_id) {
@@ -146,8 +146,14 @@ impl IndexedGraph {
             .insert(triple.predicate_id);
 
         // Update counts
-        *self.triple_count.write().unwrap() += 1;
-        self.stats.write().unwrap().total_insertions += 1;
+        *self
+            .triple_count
+            .write()
+            .expect("triple_count lock poisoned") += 1;
+        self.stats
+            .write()
+            .expect("stats lock poisoned")
+            .total_insertions += 1;
 
         true
     }
@@ -165,11 +171,14 @@ impl IndexedGraph {
             .collect();
 
         // Batch insert with single lock acquisition
-        let mut spo = self.spo_index.write().unwrap();
-        let mut pos = self.pos_index.write().unwrap();
-        let mut osp = self.osp_index.write().unwrap();
-        let mut count = self.triple_count.write().unwrap();
-        let mut stats = self.stats.write().unwrap();
+        let mut spo = self.spo_index.write().expect("spo_index lock poisoned");
+        let mut pos = self.pos_index.write().expect("pos_index lock poisoned");
+        let mut osp = self.osp_index.write().expect("osp_index lock poisoned");
+        let mut count = self
+            .triple_count
+            .write()
+            .expect("triple_count lock poisoned");
+        let mut stats = self.stats.write().expect("stats lock poisoned");
 
         let mut results = Vec::with_capacity(triples.len());
         let mut inserted_count = 0;
@@ -235,9 +244,9 @@ impl IndexedGraph {
 
     /// Remove an interned triple
     fn remove_interned(&self, s_id: u32, p_id: u32, o_id: u32) -> bool {
-        let mut spo = self.spo_index.write().unwrap();
-        let mut pos = self.pos_index.write().unwrap();
-        let mut osp = self.osp_index.write().unwrap();
+        let mut spo = self.spo_index.write().expect("spo_index lock poisoned");
+        let mut pos = self.pos_index.write().expect("pos_index lock poisoned");
+        let mut osp = self.osp_index.write().expect("osp_index lock poisoned");
 
         let mut removed = false;
 
@@ -281,8 +290,14 @@ impl IndexedGraph {
                 }
             }
 
-            *self.triple_count.write().unwrap() -= 1;
-            self.stats.write().unwrap().total_deletions += 1;
+            *self
+                .triple_count
+                .write()
+                .expect("triple_count lock poisoned") -= 1;
+            self.stats
+                .write()
+                .expect("stats lock poisoned")
+                .total_deletions += 1;
         }
 
         removed
@@ -301,9 +316,9 @@ impl IndexedGraph {
 
         // Update stats
         match index_type {
-            IndexType::SPO => self.stats.write().unwrap().spo_lookups += 1,
-            IndexType::POS => self.stats.write().unwrap().pos_lookups += 1,
-            IndexType::OSP => self.stats.write().unwrap().osp_lookups += 1,
+            IndexType::SPO => self.stats.write().expect("stats lock poisoned").spo_lookups += 1,
+            IndexType::POS => self.stats.write().expect("stats lock poisoned").pos_lookups += 1,
+            IndexType::OSP => self.stats.write().expect("stats lock poisoned").osp_lookups += 1,
         }
 
         // Convert terms to IDs if provided
@@ -353,7 +368,7 @@ impl IndexedGraph {
         p_id: Option<u32>,
         o_id: Option<u32>,
     ) -> Vec<InternedTriple> {
-        let spo = self.spo_index.read().unwrap();
+        let spo = self.spo_index.read().expect("spo_index lock poisoned");
         let mut results = Vec::new();
 
         match (s_id, p_id, o_id) {
@@ -446,7 +461,7 @@ impl IndexedGraph {
         o_id: Option<u32>,
         s_id: Option<u32>,
     ) -> Vec<InternedTriple> {
-        let pos = self.pos_index.read().unwrap();
+        let pos = self.pos_index.read().expect("pos_index lock poisoned");
         let mut results = Vec::new();
 
         match (p_id, o_id) {
@@ -498,7 +513,7 @@ impl IndexedGraph {
         s_id: Option<u32>,
         p_id: Option<u32>,
     ) -> Vec<InternedTriple> {
-        let osp = self.osp_index.read().unwrap();
+        let osp = self.osp_index.read().expect("osp_index lock poisoned");
         let mut results = Vec::new();
 
         match (o_id, s_id) {
@@ -553,7 +568,10 @@ impl IndexedGraph {
 
     /// Get the number of triples in the graph
     pub fn len(&self) -> usize {
-        *self.triple_count.read().unwrap()
+        *self
+            .triple_count
+            .read()
+            .expect("triple_count lock poisoned")
     }
 
     /// Check if the graph is empty
@@ -563,9 +581,9 @@ impl IndexedGraph {
 
     /// Get memory usage statistics
     pub fn memory_usage(&self) -> MemoryUsage {
-        let spo = self.spo_index.read().unwrap();
-        let pos = self.pos_index.read().unwrap();
-        let osp = self.osp_index.read().unwrap();
+        let spo = self.spo_index.read().expect("spo_index lock poisoned");
+        let pos = self.pos_index.read().expect("pos_index lock poisoned");
+        let osp = self.osp_index.read().expect("osp_index lock poisoned");
 
         let spo_entries = count_index_entries(&spo);
         let pos_entries = count_index_entries(&pos);
@@ -583,15 +601,27 @@ impl IndexedGraph {
 
     /// Get index statistics
     pub fn index_stats(&self) -> IndexStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().expect("stats lock poisoned").clone()
     }
 
     /// Clear all data from the graph
     pub fn clear(&self) {
-        self.spo_index.write().unwrap().clear();
-        self.pos_index.write().unwrap().clear();
-        self.osp_index.write().unwrap().clear();
-        *self.triple_count.write().unwrap() = 0;
+        self.spo_index
+            .write()
+            .expect("spo_index lock poisoned")
+            .clear();
+        self.pos_index
+            .write()
+            .expect("pos_index lock poisoned")
+            .clear();
+        self.osp_index
+            .write()
+            .expect("osp_index lock poisoned")
+            .clear();
+        *self
+            .triple_count
+            .write()
+            .expect("triple_count lock poisoned") = 0;
         self.interner.clear();
     }
 

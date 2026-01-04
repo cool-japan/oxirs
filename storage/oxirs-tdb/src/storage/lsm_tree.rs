@@ -41,7 +41,7 @@
 
 use crate::compression::BloomFilter;
 use crate::error::{Result, TdbError};
-use bincode::{Decode, Encode};
+use oxicode::Decode;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -96,7 +96,7 @@ pub enum CompactionStrategy {
 }
 
 /// Entry in the LSM-tree (key-value pair with metadata)
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Entry {
     /// Key
     key: Vec<u8>,
@@ -220,7 +220,7 @@ impl SsTable {
                 value: value.clone(),
                 sequence: *sequence,
             };
-            let encoded = bincode::encode_to_vec(&entry, bincode::config::standard())
+            let encoded = oxicode::serde::encode_to_vec(&entry, oxicode::config::standard())
                 .map_err(|e| TdbError::Other(format!("Serialization error: {}", e)))?;
 
             // Write length prefix + entry
@@ -286,9 +286,10 @@ impl SsTable {
             let mut entry_buf = vec![0u8; len];
             reader.read_exact(&mut entry_buf).map_err(TdbError::Io)?;
 
-            let entry: Entry = bincode::decode_from_slice(&entry_buf, bincode::config::standard())
-                .map_err(|e| TdbError::Other(format!("Deserialization error: {}", e)))?
-                .0;
+            let entry: Entry =
+                oxicode::serde::decode_from_slice(&entry_buf, oxicode::config::standard())
+                    .map_err(|e| TdbError::Other(format!("Deserialization error: {}", e)))?
+                    .0;
 
             if entry.key == key {
                 return Ok(Some((entry.value, entry.sequence)));
@@ -319,9 +320,10 @@ impl SsTable {
             let mut entry_buf = vec![0u8; len];
             reader.read_exact(&mut entry_buf).map_err(TdbError::Io)?;
 
-            let entry: Entry = bincode::decode_from_slice(&entry_buf, bincode::config::standard())
-                .map_err(|e| TdbError::Other(format!("Deserialization error: {}", e)))?
-                .0;
+            let entry: Entry =
+                oxicode::serde::decode_from_slice(&entry_buf, oxicode::config::standard())
+                    .map_err(|e| TdbError::Other(format!("Deserialization error: {}", e)))?
+                    .0;
 
             if entry.key.as_slice() >= start && entry.key.as_slice() < end {
                 results.push((entry.key, entry.value, entry.sequence));

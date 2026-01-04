@@ -239,7 +239,7 @@ impl VectorQueryOptimizer {
 
     /// Register a vector index for use in query optimization
     pub fn register_vector_index(&self, name: String, index_info: VectorIndexInfo) -> Result<()> {
-        let mut indexes = self.vector_indexes.lock().unwrap();
+        let mut indexes = self.vector_indexes.lock().expect("lock poisoned");
         let size = index_info.size;
         indexes.insert(name.clone(), index_info);
 
@@ -595,7 +595,7 @@ impl VectorQueryOptimizer {
 
     /// Select the optimal vector index for the strategy
     fn select_vector_index(&self, strategy: &VectorSearchStrategy) -> Result<Option<String>> {
-        let indexes = self.vector_indexes.lock().unwrap();
+        let indexes = self.vector_indexes.lock().expect("lock poisoned");
 
         if indexes.is_empty() {
             return Ok(None);
@@ -671,7 +671,7 @@ impl VectorQueryOptimizer {
         let mut estimate = VectorPerformanceEstimate::default();
 
         if let Some(name) = index_name {
-            let indexes = self.vector_indexes.lock().unwrap();
+            let indexes = self.vector_indexes.lock().expect("lock poisoned");
             if let Some(info) = indexes.get(name) {
                 estimate.estimated_query_time = info.performance_stats.average_query_time;
                 estimate.estimated_memory_usage = info.performance_stats.memory_usage;
@@ -723,7 +723,7 @@ impl VectorQueryOptimizer {
 
     /// Update optimization performance metrics
     fn update_optimization_metrics(&self, strategy: &VectorSearchStrategy) {
-        let mut metrics = self.performance_metrics.lock().unwrap();
+        let mut metrics = self.performance_metrics.lock().expect("lock poisoned");
 
         match strategy {
             VectorSearchStrategy::PureVector { .. } => {
@@ -741,7 +741,10 @@ impl VectorQueryOptimizer {
 
     /// Get current performance metrics
     pub fn get_performance_metrics(&self) -> VectorPerformanceMetrics {
-        self.performance_metrics.lock().unwrap().clone()
+        self.performance_metrics
+            .lock()
+            .expect("lock poisoned")
+            .clone()
     }
 
     /// Update execution feedback for vector operations
@@ -754,7 +757,7 @@ impl VectorQueryOptimizer {
         success: bool,
     ) -> Result<()> {
         // Update performance metrics and adaptive thresholds based on execution feedback
-        let mut metrics = self.performance_metrics.lock().unwrap();
+        let mut metrics = self.performance_metrics.lock().expect("lock poisoned");
 
         if success {
             // Update average speedup calculation

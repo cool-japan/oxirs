@@ -637,13 +637,19 @@ impl FederatedVectorSearch {
 
         // Register the federation
         {
-            let mut federations = self.federations.write().unwrap();
+            let mut federations = self
+                .federations
+                .write()
+                .expect("rwlock should not be poisoned");
             federations.insert(endpoint.federation_id.clone(), endpoint.clone());
         }
 
         // Initialize trust tracking
         {
-            let mut trust_manager = self.trust_manager.write().unwrap();
+            let mut trust_manager = self
+                .trust_manager
+                .write()
+                .expect("rwlock should not be poisoned");
             trust_manager
                 .initialize_federation_trust(&endpoint.federation_id, endpoint.trust_level);
         }
@@ -707,12 +713,18 @@ impl FederatedVectorSearch {
 
     /// Get federation health status
     pub fn get_federation_health(&self) -> HashMap<String, NodeHealthStatus> {
-        let federations = self.federations.read().unwrap();
+        let federations = self
+            .federations
+            .read()
+            .expect("rwlock should not be poisoned");
         federations
             .keys()
             .map(|id| {
                 // Determine health based on trust scores and recent performance
-                let trust_manager = self.trust_manager.read().unwrap();
+                let trust_manager = self
+                    .trust_manager
+                    .read()
+                    .expect("rwlock should not be poisoned");
                 let trust_score = trust_manager.get_trust_score(id).unwrap_or(0.0);
 
                 let health = if trust_score >= 0.8 {
@@ -732,7 +744,7 @@ impl FederatedVectorSearch {
 
     /// Get federation performance metrics
     pub fn get_federation_metrics(&self) -> FederationMetrics {
-        (*self.metrics.read().unwrap()).clone()
+        (*self.metrics.read().expect("rwlock should not be poisoned")).clone()
     }
 
     // Private implementation methods
@@ -778,8 +790,14 @@ impl FederatedVectorSearch {
             return Ok(query.target_federations.clone());
         }
 
-        let federations = self.federations.read().unwrap();
-        let trust_manager = self.trust_manager.read().unwrap();
+        let federations = self
+            .federations
+            .read()
+            .expect("rwlock should not be poisoned");
+        let trust_manager = self
+            .trust_manager
+            .read()
+            .expect("rwlock should not be poisoned");
 
         let mut eligible_federations = Vec::new();
 
@@ -823,7 +841,12 @@ impl FederatedVectorSearch {
         // In a real implementation, this would involve HTTP requests to federation endpoints
 
         for federation_id in target_federations {
-            if let Some(endpoint) = self.federations.read().unwrap().get(federation_id) {
+            if let Some(endpoint) = self
+                .federations
+                .read()
+                .expect("rwlock should not be poisoned")
+                .get(federation_id)
+            {
                 // Simulate query execution with some example results
                 let similarity_result = SimilarityResult {
                     id: format!(
@@ -892,7 +915,9 @@ impl FederatedVectorSearch {
         aggregated_results.sort_by(|a, b| {
             let score_a = a.result.similarity * a.trust_score * a.confidence;
             let score_b = b.result.similarity * b.trust_score * b.confidence;
-            score_b.partial_cmp(&score_a).unwrap()
+            score_b
+                .partial_cmp(&score_a)
+                .expect("scores should be comparable")
         });
 
         // Limit to requested k
@@ -932,16 +957,23 @@ impl FederatedVectorSearch {
     }
 
     fn get_cached_response(&self, query_id: &str) -> Option<FederatedSearchResponse> {
-        self.query_cache.read().unwrap().get(query_id).cloned()
+        self.query_cache
+            .read()
+            .expect("rwlock should not be poisoned")
+            .get(query_id)
+            .cloned()
     }
 
     async fn cache_response(&self, response: &FederatedSearchResponse) {
-        let mut cache = self.query_cache.write().unwrap();
+        let mut cache = self
+            .query_cache
+            .write()
+            .expect("rwlock should not be poisoned");
         cache.insert(response.query_id.clone(), response.clone());
     }
 
     async fn update_metrics(&self, response: &FederatedSearchResponse, elapsed: Duration) {
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write().expect("rwlock should not be poisoned");
         metrics.total_queries += 1;
 
         if !response.results.is_empty() {

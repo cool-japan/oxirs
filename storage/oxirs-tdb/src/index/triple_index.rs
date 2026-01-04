@@ -5,32 +5,20 @@ use crate::btree::BTree;
 use crate::dictionary::NodeId;
 use crate::error::Result;
 use crate::storage::BufferPool;
-use bincode::{Decode, Encode};
+use oxicode::Decode;
 use std::sync::Arc;
 
 /// Triple index for one specific ordering
 pub struct TripleIndex<K>
 where
-    K: Ord
-        + Clone
-        + serde::Serialize
-        + for<'de> serde::Deserialize<'de>
-        + std::fmt::Debug
-        + Encode
-        + bincode::Decode<()>,
+    K: Ord + Clone + serde::Serialize + for<'de> serde::Deserialize<'de> + std::fmt::Debug,
 {
     btree: BTree<K, EmptyValue>,
 }
 
 impl<K> TripleIndex<K>
 where
-    K: Ord
-        + Clone
-        + serde::Serialize
-        + for<'de> serde::Deserialize<'de>
-        + std::fmt::Debug
-        + Encode
-        + bincode::Decode<()>,
+    K: Ord + Clone + serde::Serialize + for<'de> serde::Deserialize<'de> + std::fmt::Debug,
 {
     /// Create a new triple index
     pub fn new(buffer_pool: Arc<BufferPool>) -> Self {

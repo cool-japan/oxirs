@@ -430,7 +430,7 @@ impl IntegratedQueryPlanner {
 
         // Update execution history
         {
-            let mut history = self.execution_history.lock().unwrap();
+            let mut history = self.execution_history.lock().expect("lock poisoned");
             history.add_execution(execution_record.clone());
         }
 
@@ -448,7 +448,7 @@ impl IntegratedQueryPlanner {
     pub fn get_index_recommendations(&self) -> Result<Vec<IndexRecommendation>> {
         let _span = span!(Level::INFO, "index_recommendations").entered();
 
-        let history = self.execution_history.lock().unwrap();
+        let history = self.execution_history.lock().expect("lock poisoned");
         let recommendations = self.analyze_index_opportunities(&history)?;
 
         info!("Generated {} index recommendations", recommendations.len());
@@ -617,13 +617,13 @@ impl IntegratedQueryPlanner {
 
     /// Get cached plan if available and valid
     fn get_cached_plan(&self, query_hash: u64) -> Option<CachedPlan> {
-        let cache = self.plan_cache.lock().unwrap();
+        let cache = self.plan_cache.lock().expect("lock poisoned");
         cache.get_plan(query_hash)
     }
 
     /// Cache execution plan
     fn cache_plan(&self, query_hash: u64, plan: IntegratedExecutionPlan) -> Result<()> {
-        let mut cache = self.plan_cache.lock().unwrap();
+        let mut cache = self.plan_cache.lock().expect("lock poisoned");
         cache.insert_plan(query_hash, plan);
         Ok(())
     }
@@ -999,7 +999,7 @@ impl IntegratedQueryPlanner {
 
     fn update_cost_model(&mut self, record: &ExecutionRecord) -> Result<()> {
         // Update cost model with actual vs. estimated performance
-        let _cost_model = self.cost_model.lock().unwrap();
+        let _cost_model = self.cost_model.lock().expect("lock poisoned");
 
         // Calculate estimation error
         let duration_error = if record.estimated_duration.as_millis() > 0 {

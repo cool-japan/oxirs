@@ -138,7 +138,7 @@ impl MmapTripleStore {
     /// Write triples to memory-mapped storage
     pub fn write_triples(&mut self, triples: &[Triple]) -> Result<()> {
         if let Some(ref mut mmap) = self.mmap_mut {
-            let serialized = bincode::serialize(triples)?;
+            let serialized = oxicode::serde::encode_to_vec(&triples, oxicode::config::standard())?;
 
             if serialized.len() > mmap.len() {
                 return Err(anyhow!(
@@ -161,7 +161,9 @@ impl MmapTripleStore {
     /// Read triples from memory-mapped storage (zero-copy)
     pub fn read_triples(&self) -> Result<Vec<Triple>> {
         if let Some(ref mmap) = self.mmap {
-            let triples: Vec<Triple> = bincode::deserialize(mmap)?;
+            let triples: Vec<Triple> =
+                oxicode::serde::decode_from_slice(mmap, oxicode::config::standard())
+                    .map(|(v, _)| v)?;
             Ok(triples)
         } else {
             Ok(Vec::new())
@@ -181,8 +183,9 @@ impl MmapTripleStore {
 
         // Try to deserialize the full vector to get its length
         // In production, we'd store count separately in the header
-        match bincode::deserialize::<Vec<Triple>>(mmap) {
-            Ok(triples) => Ok(triples.len()),
+        match oxicode::serde::decode_from_slice::<Vec<Triple>, _>(mmap, oxicode::config::standard())
+        {
+            Ok((triples, _)) => Ok(triples.len()),
             Err(_) => Ok(0),
         }
     }
@@ -339,7 +342,10 @@ impl NetworkBufferPool {
     pub fn acquire(&mut self, size: usize) -> Result<Vec<u8>> {
         // Use local pool for u8 buffers
         let buffer = {
-            let mut pool = self.local_pool.lock().unwrap();
+            let mut pool = self
+                .local_pool
+                .lock()
+                .expect("local_pool lock should not be poisoned");
             pool.acquire_vec(size)
         };
 

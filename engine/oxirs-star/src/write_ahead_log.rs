@@ -245,7 +245,7 @@ impl WalSegment {
     /// Append an entry to the segment
     fn append(&mut self, entry: &WalEntry, enable_fsync: bool) -> StarResult<()> {
         // Serialize entry
-        let entry_bytes = bincode::serde::encode_to_vec(entry, bincode::config::standard())
+        let entry_bytes = oxicode::serde::encode_to_vec(entry, oxicode::config::standard())
             .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
 
         // Write length prefix
@@ -309,7 +309,7 @@ impl WalSegment {
                 .map_err(|e| crate::StarError::parse_error(e.to_string()))?;
 
             let entry: WalEntry =
-                bincode::serde::decode_from_slice(&entry_bytes, bincode::config::standard())
+                oxicode::serde::decode_from_slice(&entry_bytes, oxicode::config::standard())
                     .map_err(|e| crate::StarError::parse_error(e.to_string()))?
                     .0;
 

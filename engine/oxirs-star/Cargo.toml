@@ -11,6 +11,10 @@ keywords = ["rdf-star", "sparql-star", "quoted-triples", "rdf", "semantic-web"]
 categories = ["data-structures", "parser-implementations", "database"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 oxirs-core.workspace = true
 serde.workspace = true
@@ -32,7 +36,7 @@ num_cpus = "1.17"
 chrono = { version = "0.4", features = ["serde"] }
 lru = "0.16"
 rayon.workspace = true  # For parallel operations
-bincode = "2.0"  # For efficient serialization
+oxicode.workspace = true  # For efficient serialization (replaces bincode per COOLJAPAN Policy)
 
 # Compression dependencies
 flate2.workspace = true

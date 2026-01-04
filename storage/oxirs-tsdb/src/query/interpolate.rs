@@ -141,8 +141,18 @@ impl Interpolator {
             return Ok(Vec::new());
         }
 
-        let actual_start = start.unwrap_or_else(|| points.first().unwrap().timestamp);
-        let actual_end = end.unwrap_or_else(|| points.last().unwrap().timestamp);
+        let actual_start = start.unwrap_or_else(|| {
+            points
+                .first()
+                .expect("points should not be empty for interpolation")
+                .timestamp
+        });
+        let actual_end = end.unwrap_or_else(|| {
+            points
+                .last()
+                .expect("points should not be empty for interpolation")
+                .timestamp
+        });
 
         let mut result = Vec::new();
         let mut current = actual_start;

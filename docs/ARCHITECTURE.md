@@ -1,6 +1,6 @@
 # OxiRS Architecture Guide
 
-**Version**: 0.1.0-rc.1
+**Version**: 0.1.0-rc.2
 **Date**: December 21, 2025
 **Status**: Production Architecture
 
@@ -730,4 +730,4 @@ impl EmbeddingStore {
 ---
 
 *Architecture Guide - October 12, 2025*
-*Production-ready architecture for v0.1.0-rc.1*
+*Production-ready architecture for v0.1.0-rc.2*

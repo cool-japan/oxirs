@@ -11,6 +11,10 @@ keywords = ["modbus", "industrial-iot", "plc", "rdf", "semantic-web"]
 categories = ["network-programming", "embedded", "database"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 oxirs-core.workspace = true
 oxirs-stream.workspace = true
@@ -18,7 +22,7 @@ scirs2-core.workspace = true
 
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync", "rt-multi-thread"] }
 tokio-serial = { version = "5.4", optional = true }
-bytes = "1.5"
+bytes = "1.11"
 
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

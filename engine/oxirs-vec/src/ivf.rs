@@ -288,7 +288,7 @@ impl InvertedList {
             distances.push((uri.clone(), distance));
         }
 
-        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         distances.truncate(k);
 
         // Convert distances to similarities (1 / (1 + distance))
@@ -822,7 +822,7 @@ impl IvfIndex {
             })
             .collect();
 
-        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(distances
             .into_iter()
@@ -848,7 +848,9 @@ impl IvfIndex {
         let mut non_empty_clusters = 0;
 
         for list in &self.inverted_lists {
-            let list_guard = list.read().unwrap();
+            let list_guard = list
+                .read()
+                .expect("inverted list lock should not be poisoned");
             let stats = list_guard.stats();
 
             total_list_stats.total_vectors += stats.total_vectors;

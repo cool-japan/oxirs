@@ -964,7 +964,10 @@ impl TurtleSerializer {
             return true; // Empty local name is valid
         }
 
-        let first_char = name.chars().next().unwrap();
+        let first_char = name
+            .chars()
+            .next()
+            .expect("non-empty name should have first char");
         if !first_char.is_alphabetic() && first_char != '_' {
             return false;
         }

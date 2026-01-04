@@ -2,7 +2,7 @@
 
 *Last Updated: December 25, 2025*
 
-## ✅ Current Status: v0.1.0-rc.1 (December 2025)
+## ✅ Current Status: v0.1.0-rc.2 (December 2025)
 
 **Status**: 🚧 **Implementing all future work items for rc.1 release** 🚧
 
@@ -323,7 +323,7 @@
 - Full Z/M parsing from WKT will be implemented in future version
 - Performance impact minimal as Z/M storage is optional
 
-## v0.1.0-rc.1 - Implementation (December 2025)
+## v0.1.0-rc.2 - Implementation (December 2025)
 
 **Status**: ✅ **4 OUT OF 5 PRIORITIES COMPLETED FOR BETA.1 RELEASE** ✅
 

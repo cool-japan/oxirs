@@ -215,8 +215,8 @@ impl PageCursor {
 
     /// Encode cursor to string
     pub fn encode(&self, encoding: CursorEncoding) -> Result<String> {
-        let bytes =
-            bincode::serialize(self).map_err(|e| anyhow!("Failed to serialize cursor: {}", e))?;
+        let bytes = oxicode::serde::encode_to_vec(self, oxicode::config::standard())
+            .map_err(|e| anyhow!("Failed to serialize cursor: {}", e))?;
 
         Ok(match encoding {
             CursorEncoding::Base64 => {
@@ -251,7 +251,9 @@ impl PageCursor {
             }
         };
 
-        bincode::deserialize(&bytes).map_err(|e| anyhow!("Failed to deserialize cursor: {}", e))
+        oxicode::serde::decode_from_slice(&bytes, oxicode::config::standard())
+            .map(|(v, _)| v)
+            .map_err(|e| anyhow!("Failed to deserialize cursor: {}", e))
     }
 }
 

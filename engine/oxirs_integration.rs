@@ -238,25 +238,53 @@ impl OxirsOrchestrator {
 
         if self.config.enable_reasoning && query.reasoning_rules.is_some() {
             let component_start = std::time::Instant::now();
-            reasoning_results = Some(self.execute_reasoning_component(&query.reasoning_rules.unwrap()).await?);
+            reasoning_results = Some(
+                self.execute_reasoning_component(
+                    &query
+                        .reasoning_rules
+                        .expect("reasoning_rules is Some (checked above)"),
+                )
+                .await?,
+            );
             component_times.insert("reasoning".to_string(), component_start.elapsed());
         }
 
         if self.config.enable_validation && query.validation_shapes.is_some() {
             let component_start = std::time::Instant::now();
-            validation_results = Some(self.execute_validation_component(&query.validation_shapes.unwrap()).await?);
+            validation_results = Some(
+                self.execute_validation_component(
+                    &query
+                        .validation_shapes
+                        .expect("validation_shapes is Some (checked above)"),
+                )
+                .await?,
+            );
             component_times.insert("validation".to_string(), component_start.elapsed());
         }
 
         if self.config.enable_vector_search && query.vector_query.is_some() {
             let component_start = std::time::Instant::now();
-            vector_results = Some(self.execute_vector_component(&query.vector_query.unwrap()).await?);
+            vector_results = Some(
+                self.execute_vector_component(
+                    &query
+                        .vector_query
+                        .expect("vector_query is Some (checked above)"),
+                )
+                .await?,
+            );
             component_times.insert("vector".to_string(), component_start.elapsed());
         }
 
         if self.config.enable_neural_symbolic && query.hybrid_query.is_some() {
             let component_start = std::time::Instant::now();
-            hybrid_results = Some(self.execute_hybrid_component(&query.hybrid_query.unwrap()).await?);
+            hybrid_results = Some(
+                self.execute_hybrid_component(
+                    &query
+                        .hybrid_query
+                        .expect("hybrid_query is Some (checked above)"),
+                )
+                .await?,
+            );
             component_times.insert("hybrid".to_string(), component_start.elapsed());
         }
 
@@ -878,7 +906,10 @@ impl OxirsOrchestrator {
 
     /// Get performance metrics
     pub fn get_performance_metrics(&self) -> PerformanceMonitor {
-        self.performance_monitor.read().unwrap().clone()
+        self.performance_monitor
+            .read()
+            .expect("performance_monitor mutex should not be poisoned")
+            .clone()
     }
 
     /// Reset performance metrics

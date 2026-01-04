@@ -87,33 +87,40 @@ pub fn to_turtle(geom: &Geometry, subject_uri: &str) -> Result<String> {
         output,
         "@prefix geo: <http://www.opengis.net/ont/geosparql#> ."
     )
-    .unwrap();
-    writeln!(output, "@prefix sf: <http://www.opengis.net/ont/sf#> .").unwrap();
-    writeln!(output, "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .").unwrap();
-    writeln!(output).unwrap();
+    .expect("writing to String should not fail");
+    writeln!(output, "@prefix sf: <http://www.opengis.net/ont/sf#> .")
+        .expect("writing to String should not fail");
+    writeln!(output, "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .")
+        .expect("writing to String should not fail");
+    writeln!(output).expect("writing to String should not fail");
 
     // Write geometry resource
-    writeln!(output, "{} ", subject_uri).unwrap();
-    writeln!(output, "    a {} ;", geometry_type_to_sf(geom)).unwrap();
+    writeln!(output, "{} ", subject_uri).expect("writing to String should not fail");
+    writeln!(output, "    a {} ;", geometry_type_to_sf(geom))
+        .expect("writing to String should not fail");
     writeln!(
         output,
         "    geo:asWKT \"{}\"^^geo:wktLiteral ;",
         geom.to_wkt()
     )
-    .unwrap();
+    .expect("writing to String should not fail");
     writeln!(
         output,
         "    geo:coordinateDimension {} ;",
         geom.coordinate_dimension()
     )
-    .unwrap();
-    writeln!(output, "    geo:dimension {} ;", geom.spatial_dimension()).unwrap();
-    writeln!(output, "    geo:isEmpty {} ;", geom.is_empty()).unwrap();
-    writeln!(output, "    geo:isSimple {} .", geom.is_simple()).unwrap();
+    .expect("writing to String should not fail");
+    writeln!(output, "    geo:dimension {} ;", geom.spatial_dimension())
+        .expect("writing to String should not fail");
+    writeln!(output, "    geo:isEmpty {} ;", geom.is_empty())
+        .expect("writing to String should not fail");
+    writeln!(output, "    geo:isSimple {} .", geom.is_simple())
+        .expect("writing to String should not fail");
 
     // Add CRS information if not default
     if !geom.crs.is_default() {
-        writeln!(output, "    geo:hasSerialization \"{}\" .", geom.crs.uri).unwrap();
+        writeln!(output, "    geo:hasSerialization \"{}\" .", geom.crs.uri)
+            .expect("writing to String should not fail");
     }
 
     Ok(output)
@@ -147,7 +154,8 @@ pub fn to_ntriples(geom: &Geometry, subject_uri: &str) -> Result<String> {
     let sf_type = geometry_type_to_sf_uri(geom);
 
     // Type triple
-    writeln!(output, "<{}> <{}> <{}> .", subject_uri, rdf_type, sf_type).unwrap();
+    writeln!(output, "<{}> <{}> <{}> .", subject_uri, rdf_type, sf_type)
+        .expect("writing to String should not fail");
 
     // WKT literal triple
     writeln!(
@@ -158,7 +166,7 @@ pub fn to_ntriples(geom: &Geometry, subject_uri: &str) -> Result<String> {
         geom.to_wkt(),
         geo_wkt_literal
     )
-    .unwrap();
+    .expect("writing to String should not fail");
 
     // Coordinate dimension triple
     writeln!(
@@ -169,7 +177,7 @@ pub fn to_ntriples(geom: &Geometry, subject_uri: &str) -> Result<String> {
         geom.coordinate_dimension(),
         xsd_integer
     )
-    .unwrap();
+    .expect("writing to String should not fail");
 
     // Spatial dimension triple
     writeln!(
@@ -180,7 +188,7 @@ pub fn to_ntriples(geom: &Geometry, subject_uri: &str) -> Result<String> {
         geom.spatial_dimension(),
         xsd_integer
     )
-    .unwrap();
+    .expect("writing to String should not fail");
 
     // isEmpty triple
     writeln!(
@@ -191,7 +199,7 @@ pub fn to_ntriples(geom: &Geometry, subject_uri: &str) -> Result<String> {
         geom.is_empty(),
         xsd_boolean
     )
-    .unwrap();
+    .expect("writing to String should not fail");
 
     // isSimple triple
     writeln!(
@@ -202,7 +210,7 @@ pub fn to_ntriples(geom: &Geometry, subject_uri: &str) -> Result<String> {
         geom.is_simple(),
         xsd_boolean
     )
-    .unwrap();
+    .expect("writing to String should not fail");
 
     Ok(output)
 }
@@ -235,7 +243,7 @@ pub fn to_nquads(geom: &Geometry, subject_uri: &str, graph_uri: Option<&str>) ->
         "<{}> <{}> <{}> {} .",
         subject_uri, rdf_type, sf_type, graph_suffix
     )
-    .unwrap();
+    .expect("writing to String should not fail");
 
     // WKT literal quad
     writeln!(
@@ -247,7 +255,7 @@ pub fn to_nquads(geom: &Geometry, subject_uri: &str, graph_uri: Option<&str>) ->
         geo_wkt_literal,
         graph_suffix
     )
-    .unwrap();
+    .expect("writing to String should not fail");
 
     Ok(output)
 }

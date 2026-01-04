@@ -69,11 +69,17 @@ impl ConflictManager {
 
     /// Begin a transaction and assign timestamp
     pub fn begin_transaction(&self, txn_id: TxnId) -> Result<()> {
-        let mut counter = self.timestamp_counter.write().unwrap();
+        let mut counter = self
+            .timestamp_counter
+            .write()
+            .expect("rwlock should not be poisoned");
         let timestamp = *counter;
         *counter += 1;
 
-        let mut timestamps = self.txn_timestamps.write().unwrap();
+        let mut timestamps = self
+            .txn_timestamps
+            .write()
+            .expect("rwlock should not be poisoned");
         timestamps.insert(txn_id, timestamp);
 
         Ok(())
@@ -82,11 +88,17 @@ impl ConflictManager {
     /// End a transaction and clean up
     pub fn end_transaction(&self, txn_id: TxnId) -> Result<()> {
         // Remove from wait-for graph
-        let mut wait_for = self.wait_for_graph.write().unwrap();
+        let mut wait_for = self
+            .wait_for_graph
+            .write()
+            .expect("rwlock should not be poisoned");
         wait_for.remove(&txn_id);
 
         // Remove from timestamps
-        let mut timestamps = self.txn_timestamps.write().unwrap();
+        let mut timestamps = self
+            .txn_timestamps
+            .write()
+            .expect("rwlock should not be poisoned");
         timestamps.remove(&txn_id);
 
         Ok(())
@@ -135,7 +147,7 @@ impl ConflictManager {
         let my_timestamp = self
             .txn_timestamps
             .read()
-            .unwrap()
+            .expect("rwlock should not be poisoned")
             .get(&txn_id)
             .copied()
             .unwrap_or(u64::MAX);
@@ -144,7 +156,10 @@ impl ConflictManager {
         let holders = self.lock_manager.get_lock_holders(page_id);
 
         // Check if I'm older than any holder
-        let timestamps = self.txn_timestamps.read().unwrap();
+        let timestamps = self
+            .txn_timestamps
+            .read()
+            .expect("rwlock should not be poisoned");
         let should_wound = holders.iter().any(|(holder_txn, _)| {
             let holder_timestamp = timestamps.get(holder_txn).copied().unwrap_or(0);
             my_timestamp < holder_timestamp // I'm older
@@ -188,7 +203,7 @@ impl ConflictManager {
         let my_timestamp = self
             .txn_timestamps
             .read()
-            .unwrap()
+            .expect("rwlock should not be poisoned")
             .get(&txn_id)
             .copied()
             .unwrap_or(u64::MAX);
@@ -202,7 +217,10 @@ impl ConflictManager {
         }
 
         // Check if I'm older than all holders
-        let timestamps = self.txn_timestamps.read().unwrap();
+        let timestamps = self
+            .txn_timestamps
+            .read()
+            .expect("rwlock should not be poisoned");
         let i_am_older = holders.iter().all(|(holder_txn, _)| {
             let holder_timestamp = timestamps.get(holder_txn).copied().unwrap_or(u64::MAX);
             my_timestamp < holder_timestamp // I'm older
@@ -253,7 +271,10 @@ impl ConflictManager {
 
     /// Detect cycles in wait-for graph
     fn detect_deadlock_cycles(&self) -> Result<Vec<DeadlockCycle>> {
-        let wait_for = self.wait_for_graph.read().unwrap();
+        let wait_for = self
+            .wait_for_graph
+            .read()
+            .expect("rwlock should not be poisoned");
         let mut cycles = Vec::new();
 
         // Use DFS to detect cycles
@@ -307,14 +328,20 @@ impl ConflictManager {
 
     /// Add a wait-for edge to the graph
     pub fn add_wait_for(&self, waiter: TxnId, holder: TxnId) -> Result<()> {
-        let mut wait_for = self.wait_for_graph.write().unwrap();
+        let mut wait_for = self
+            .wait_for_graph
+            .write()
+            .expect("rwlock should not be poisoned");
         wait_for.entry(waiter).or_default().insert(holder);
         Ok(())
     }
 
     /// Remove a wait-for edge from the graph
     pub fn remove_wait_for(&self, waiter: TxnId, holder: TxnId) -> Result<()> {
-        let mut wait_for = self.wait_for_graph.write().unwrap();
+        let mut wait_for = self
+            .wait_for_graph
+            .write()
+            .expect("rwlock should not be poisoned");
         if let Some(holders) = wait_for.get_mut(&waiter) {
             holders.remove(&holder);
             if holders.is_empty() {
@@ -326,12 +353,19 @@ impl ConflictManager {
 
     /// Get statistics about conflicts
     pub fn conflict_stats(&self) -> ConflictStats {
-        let wait_for = self.wait_for_graph.read().unwrap();
+        let wait_for = self
+            .wait_for_graph
+            .read()
+            .expect("rwlock should not be poisoned");
 
         ConflictStats {
             waiting_transactions: wait_for.len(),
             total_wait_edges: wait_for.values().map(|s| s.len()).sum(),
-            active_transactions: self.txn_timestamps.read().unwrap().len(),
+            active_transactions: self
+                .txn_timestamps
+                .read()
+                .expect("rwlock should not be poisoned")
+                .len(),
         }
     }
 }
@@ -401,7 +435,10 @@ mod tests {
         conflict.begin_transaction(txn1).unwrap();
         conflict.begin_transaction(txn2).unwrap();
 
-        let timestamps = conflict.txn_timestamps.read().unwrap();
+        let timestamps = conflict
+            .txn_timestamps
+            .read()
+            .expect("rwlock should not be poisoned");
         let ts1 = timestamps.get(&txn1).copied().unwrap();
         let ts2 = timestamps.get(&txn2).copied().unwrap();
 

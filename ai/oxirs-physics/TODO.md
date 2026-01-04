@@ -2,7 +2,7 @@
 
 Development roadmap for physics-informed digital twin simulation bridge.
 
-## Current Status (0.1.0-rc.1)
+## Current Status (0.1.0-rc.2)
 
 **Lines of Code:** 906 total (725 code, 161 blank, 20 comments)
 

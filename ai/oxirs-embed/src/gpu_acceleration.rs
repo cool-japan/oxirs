@@ -109,14 +109,16 @@ impl GpuMemoryPool {
 
     /// Allocate GPU memory block
     pub fn allocate(&self, size_bytes: usize, device_id: usize) -> Result<usize> {
-        let mut free_blocks = self.free_blocks.lock().unwrap();
-        let mut allocated_blocks = self.allocated_blocks.lock().unwrap();
-        let mut stats = self.allocation_stats.lock().unwrap();
+        let mut free_blocks = self.free_blocks.lock().expect("lock poisoned");
+        let mut allocated_blocks = self.allocated_blocks.lock().expect("lock poisoned");
+        let mut stats = self.allocation_stats.lock().expect("lock poisoned");
 
         // Try to find a suitable free block first
         for (i, block) in free_blocks.iter().enumerate() {
             if block.size_bytes >= size_bytes && block.device_id == device_id {
-                let block = free_blocks.remove(i).unwrap();
+                let block = free_blocks
+                    .remove(i)
+                    .expect("index i should be valid from enumerate");
                 let block_id = block.ptr;
 
                 let mut reused_block = block;
@@ -150,7 +152,7 @@ impl GpuMemoryPool {
 
         allocated_blocks.insert(block_id, block);
 
-        let mut total_allocated = self.total_allocated.lock().unwrap();
+        let mut total_allocated = self.total_allocated.lock().expect("lock poisoned");
         *total_allocated += size_bytes;
         stats.current_memory_usage += size_bytes;
 
@@ -167,9 +169,9 @@ impl GpuMemoryPool {
 
     /// Deallocate GPU memory block
     pub fn deallocate(&self, block_id: usize) -> Result<()> {
-        let mut allocated_blocks = self.allocated_blocks.lock().unwrap();
-        let mut free_blocks = self.free_blocks.lock().unwrap();
-        let mut stats = self.allocation_stats.lock().unwrap();
+        let mut allocated_blocks = self.allocated_blocks.lock().expect("lock poisoned");
+        let mut free_blocks = self.free_blocks.lock().expect("lock poisoned");
+        let mut stats = self.allocation_stats.lock().expect("lock poisoned");
 
         if let Some(block) = allocated_blocks.remove(&block_id) {
             stats.total_deallocations += 1;
@@ -192,12 +194,12 @@ impl GpuMemoryPool {
 
     /// Get allocation statistics
     pub fn get_stats(&self) -> AllocationStats {
-        (*self.allocation_stats.lock().unwrap()).clone()
+        (*self.allocation_stats.lock().expect("lock poisoned")).clone()
     }
 
     /// Defragment memory by consolidating free blocks
     pub fn defragment(&self) -> Result<()> {
-        let mut free_blocks = self.free_blocks.lock().unwrap();
+        let mut free_blocks = self.free_blocks.lock().expect("lock poisoned");
 
         // Sort free blocks by device and size
         let mut blocks: Vec<_> = free_blocks.drain(..).collect();
@@ -277,8 +279,8 @@ impl TensorCache {
 
     /// Cache entity tensor
     pub fn cache_entity_tensor(&self, entity: &str, tensor: Array2<f32>, device_id: usize) {
-        let mut cache = self.entity_tensors.lock().unwrap();
-        let mut stats = self.cache_stats.lock().unwrap();
+        let mut cache = self.entity_tensors.lock().expect("lock poisoned");
+        let mut stats = self.cache_stats.lock().expect("lock poisoned");
 
         let size_bytes = tensor.len() * std::mem::size_of::<f32>();
 
@@ -301,8 +303,8 @@ impl TensorCache {
 
     /// Get cached entity tensor
     pub fn get_entity_tensor(&self, entity: &str) -> Option<Array2<f32>> {
-        let mut cache = self.entity_tensors.lock().unwrap();
-        let mut stats = self.cache_stats.lock().unwrap();
+        let mut cache = self.entity_tensors.lock().expect("lock poisoned");
+        let mut stats = self.cache_stats.lock().expect("lock poisoned");
 
         if let Some(cached) = cache.get_mut(entity) {
             cached.last_accessed = Instant::now();
@@ -320,8 +322,8 @@ impl TensorCache {
 
     /// Cache attention weights
     pub fn cache_attention_weights(&self, key: &str, weights: Array2<f32>, device_id: usize) {
-        let mut cache = self.attention_weights.lock().unwrap();
-        let mut stats = self.cache_stats.lock().unwrap();
+        let mut cache = self.attention_weights.lock().expect("lock poisoned");
+        let mut stats = self.cache_stats.lock().expect("lock poisoned");
 
         let size_bytes = weights.len() * std::mem::size_of::<f32>();
 
@@ -343,8 +345,8 @@ impl TensorCache {
 
     /// Get cached attention weights
     pub fn get_attention_weights(&self, key: &str) -> Option<Array2<f32>> {
-        let mut cache = self.attention_weights.lock().unwrap();
-        let mut stats = self.cache_stats.lock().unwrap();
+        let mut cache = self.attention_weights.lock().expect("lock poisoned");
+        let mut stats = self.cache_stats.lock().expect("lock poisoned");
 
         if let Some(cached) = cache.get_mut(key) {
             cached.last_accessed = Instant::now();
@@ -375,16 +377,22 @@ impl TensorCache {
 
     /// Get cache statistics
     pub fn get_stats(&self) -> CacheStats {
-        (*self.cache_stats.lock().unwrap()).clone()
+        (*self.cache_stats.lock().expect("lock poisoned")).clone()
     }
 
     /// Clear all caches
     pub fn clear_all(&self) {
-        self.entity_tensors.lock().unwrap().clear();
-        self.attention_weights.lock().unwrap().clear();
-        self.intermediate_activations.lock().unwrap().clear();
+        self.entity_tensors.lock().expect("lock poisoned").clear();
+        self.attention_weights
+            .lock()
+            .expect("lock poisoned")
+            .clear();
+        self.intermediate_activations
+            .lock()
+            .expect("lock poisoned")
+            .clear();
 
-        let mut stats = self.cache_stats.lock().unwrap();
+        let mut stats = self.cache_stats.lock().expect("lock poisoned");
         stats.total_memory_usage = 0;
 
         info!("Cleared all tensor caches");

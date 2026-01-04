@@ -88,7 +88,7 @@ pub fn execute_shortest_paths(graph: &RdfGraph, config: &AnalyticsConfig) -> Res
             .map(|(id, &dist)| (id, dist))
             .collect();
 
-        reachable.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        reachable.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         println!(
             "{}",

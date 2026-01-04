@@ -53,54 +53,15 @@ impl Quad {
 }
 
 /// GSPO index key (Graph, Subject, Predicate, Object)
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-    bincode::Encode,
-    bincode::Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct GspoKey(pub NodeId, pub NodeId, pub NodeId, pub NodeId);
 
 /// GPOS index key (Graph, Predicate, Object, Subject)
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-    bincode::Encode,
-    bincode::Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct GposKey(pub NodeId, pub NodeId, pub NodeId, pub NodeId);
 
 /// GOSP index key (Graph, Object, Subject, Predicate)
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-    bincode::Encode,
-    bincode::Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct GospKey(pub NodeId, pub NodeId, pub NodeId, pub NodeId);
 
 /// Quad indexes for named graph support

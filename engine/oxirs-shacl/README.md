@@ -1,10 +1,10 @@
 # OxiRS SHACL 🔍
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: Release Candidate (v0.1.0-rc.1) - Released December 26, 2025
+**Status**: Release Candidate (v0.1.0-rc.2) - Released December 26, 2025
 
 ✨ **Release Candidate**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -38,8 +38,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-shacl = "0.1.0-rc.1"
-oxirs-core = "0.1.0-rc.1"
+oxirs-shacl = "0.1.0-rc.2"
+oxirs-core = "0.1.0-rc.2"
 ```
 
 ### Basic Usage

@@ -11,6 +11,10 @@ keywords = ["canbus", "automotive", "j1939", "rdf", "dbc"]
 categories = ["network-programming", "embedded", "database"]
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 oxirs-core.workspace = true
 oxirs-stream.workspace = true
@@ -30,7 +34,7 @@ tokio-test = "0.4"
 criterion.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-socketcan = "3.3"
+socketcan = "3.5"
 
 [features]
 default = []

@@ -436,11 +436,11 @@ fn generate_typed_literal<R: scirs2_core::RngCore>(
             rng.gen_range(min..=max).to_string()
         }
         dt if dt == format!("{}decimal", XSD_NS) || dt == format!("{}double", XSD_NS) => {
-            let val = rng.random_range(0, 10000) as f64 / 10.0;
+            let val = rng.random_range(0..10000) as f64 / 10.0;
             format!("{:.2}", val)
         }
         dt if dt == format!("{}boolean", XSD_NS) => {
-            if rng.random_range(0, 2) == 0 {
+            if rng.random_range(0..2) == 0 {
                 "true".to_string()
             } else {
                 "false".to_string()

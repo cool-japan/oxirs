@@ -243,7 +243,7 @@ impl QueryCircuitBreaker {
     }
 
     pub fn is_request_allowed(&self) -> bool {
-        let state = self.state.read().unwrap();
+        let state = self.state.read().expect("lock poisoned");
         match *state {
             CircuitState::Closed => true,
             CircuitState::Open => false,
@@ -255,7 +255,7 @@ impl QueryCircuitBreaker {
     }
 
     pub fn record_success(&self) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().expect("lock poisoned");
         match *state {
             CircuitState::Closed => {
                 self.failures.store(0, Ordering::Relaxed);
@@ -273,7 +273,7 @@ impl QueryCircuitBreaker {
     }
 
     pub fn record_failure(&self) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().expect("lock poisoned");
         let failures = self.failures.fetch_add(1, Ordering::Relaxed) + 1;
 
         if failures >= self.config.failure_threshold {
@@ -283,7 +283,7 @@ impl QueryCircuitBreaker {
     }
 
     pub fn try_half_open(&self) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().expect("lock poisoned");
         if *state == CircuitState::Open {
             *state = CircuitState::HalfOpen;
             self.successes.store(0, Ordering::Relaxed);
@@ -291,7 +291,7 @@ impl QueryCircuitBreaker {
     }
 
     pub fn state(&self) -> String {
-        format!("{:?}", *self.state.read().unwrap())
+        format!("{:?}", *self.state.read().expect("lock poisoned"))
     }
 }
 
@@ -335,7 +335,7 @@ impl SparqlPerformanceMonitor {
         // Record latency
         self.query_latencies
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .entry(query_type.to_string())
             .or_default()
             .push(latency);
@@ -343,7 +343,7 @@ impl SparqlPerformanceMonitor {
         // Increment count
         self.query_counts
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .entry(query_type.to_string())
             .or_insert_with(|| AtomicU64::new(0))
             .fetch_add(1, Ordering::Relaxed);
@@ -351,7 +351,7 @@ impl SparqlPerformanceMonitor {
         // Record pattern complexity
         self.pattern_complexities
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .entry(query_type.to_string())
             .or_default()
             .push(pattern_count);
@@ -359,7 +359,7 @@ impl SparqlPerformanceMonitor {
         // Record result size
         self.result_sizes
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .entry(query_type.to_string())
             .or_default()
             .push(result_count);
@@ -374,10 +374,10 @@ impl SparqlPerformanceMonitor {
     }
 
     pub fn get_statistics(&self, query_type: &str) -> QueryStatistics {
-        let latencies = self.query_latencies.read().unwrap();
-        let counts = self.query_counts.read().unwrap();
-        let complexities = self.pattern_complexities.read().unwrap();
-        let sizes = self.result_sizes.read().unwrap();
+        let latencies = self.query_latencies.read().expect("lock poisoned");
+        let counts = self.query_counts.read().expect("lock poisoned");
+        let complexities = self.pattern_complexities.read().expect("lock poisoned");
+        let sizes = self.result_sizes.read().expect("lock poisoned");
 
         let latency_data = latencies.get(query_type);
         let count = counts
@@ -465,7 +465,7 @@ impl SparqlPerformanceMonitor {
             total_queries: self
                 .query_counts
                 .read()
-                .unwrap()
+                .expect("lock poisoned")
                 .values()
                 .map(|c| c.load(Ordering::Relaxed))
                 .sum(),
@@ -475,10 +475,13 @@ impl SparqlPerformanceMonitor {
     }
 
     pub fn reset(&self) {
-        self.query_latencies.write().unwrap().clear();
-        self.query_counts.write().unwrap().clear();
-        self.pattern_complexities.write().unwrap().clear();
-        self.result_sizes.write().unwrap().clear();
+        self.query_latencies.write().expect("lock poisoned").clear();
+        self.query_counts.write().expect("lock poisoned").clear();
+        self.pattern_complexities
+            .write()
+            .expect("lock poisoned")
+            .clear();
+        self.result_sizes.write().expect("lock poisoned").clear();
         self.timeouts.store(0, Ordering::Relaxed);
         self.errors.store(0, Ordering::Relaxed);
     }
@@ -544,7 +547,7 @@ impl QueryResourceQuota {
             return Ok(());
         }
 
-        let max = *self.max_query_time.read().unwrap();
+        let max = *self.max_query_time.read().expect("lock poisoned");
         if elapsed > max {
             return Err(anyhow!(
                 "Query time {:?} exceeds quota of {:?}",
@@ -578,7 +581,7 @@ impl QueryResourceQuota {
     }
 
     pub fn set_time_limit(&self, limit: Duration) {
-        *self.max_query_time.write().unwrap() = limit;
+        *self.max_query_time.write().expect("lock poisoned") = limit;
     }
 
     pub fn set_complexity_limit(&self, limit: usize) {
@@ -633,7 +636,7 @@ impl QueryEngineHealth {
     }
 
     pub fn register_check(&self, name: &str) {
-        self.checks.write().unwrap().insert(
+        self.checks.write().expect("lock poisoned").insert(
             name.to_string(),
             HealthCheck {
                 name: name.to_string(),
@@ -645,7 +648,7 @@ impl QueryEngineHealth {
     }
 
     pub fn update_check(&self, name: &str, status: HealthStatus, message: String) {
-        if let Some(check) = self.checks.write().unwrap().get_mut(name) {
+        if let Some(check) = self.checks.write().expect("lock poisoned").get_mut(name) {
             check.status = status;
             check.last_check = SystemTime::now();
             check.message = message;
@@ -674,7 +677,7 @@ impl QueryEngineHealth {
     }
 
     pub fn get_overall_status(&self) -> HealthStatus {
-        let checks = self.checks.read().unwrap();
+        let checks = self.checks.read().expect("lock poisoned");
 
         if checks.is_empty() {
             return HealthStatus::Unknown;
@@ -701,7 +704,12 @@ impl QueryEngineHealth {
     }
 
     pub fn get_checks(&self) -> Vec<HealthCheck> {
-        self.checks.read().unwrap().values().cloned().collect()
+        self.checks
+            .read()
+            .expect("lock poisoned")
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub fn perform_all_checks(&self) {
@@ -764,11 +772,11 @@ impl QueryCancellationToken {
     /// Request cancellation with an optional reason
     pub fn cancel(&self, reason: Option<String>) {
         if !self.cancelled.swap(true, Ordering::SeqCst) {
-            *self.cancel_time.write().unwrap() = Some(Instant::now());
-            *self.reason.write().unwrap() = reason;
+            *self.cancel_time.write().expect("lock poisoned") = Some(Instant::now());
+            *self.reason.write().expect("lock poisoned") = reason;
 
             // Execute callbacks
-            let callbacks = self.callbacks.read().unwrap();
+            let callbacks = self.callbacks.read().expect("lock poisoned");
             for callback in callbacks.iter() {
                 callback();
             }
@@ -777,12 +785,12 @@ impl QueryCancellationToken {
 
     /// Get the cancellation reason if available
     pub fn get_reason(&self) -> Option<String> {
-        self.reason.read().unwrap().clone()
+        self.reason.read().expect("lock poisoned").clone()
     }
 
     /// Get the time when cancellation was requested
     pub fn cancel_time(&self) -> Option<Instant> {
-        *self.cancel_time.read().unwrap()
+        *self.cancel_time.read().expect("lock poisoned")
     }
 
     /// Register a callback to be executed when cancelled
@@ -790,7 +798,10 @@ impl QueryCancellationToken {
     where
         F: Fn() + Send + Sync + 'static,
     {
-        self.callbacks.write().unwrap().push(Box::new(callback));
+        self.callbacks
+            .write()
+            .expect("lock poisoned")
+            .push(Box::new(callback));
     }
 
     /// Check for cancellation and return an error if cancelled
@@ -897,7 +908,10 @@ impl QueryTimeoutManager {
             warnings_triggered: Vec::new(),
         };
 
-        self.active_queries.write().unwrap().insert(query_id, state);
+        self.active_queries
+            .write()
+            .expect("lock poisoned")
+            .insert(query_id, state);
         query_id
     }
 
@@ -905,18 +919,22 @@ impl QueryTimeoutManager {
     pub fn end_query(&self, query_id: u64) -> Option<Duration> {
         self.active_queries
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .remove(&query_id)
             .map(|state| state.start_time.elapsed())
     }
 
     /// Check if a query has exceeded its timeout
     pub fn check_timeout(&self, query_id: u64) -> TimeoutCheckResult {
-        let hard = *self.hard_timeout.read().unwrap();
-        let soft = *self.soft_timeout.read().unwrap();
-        let thresholds = self.warning_thresholds.read().unwrap().clone();
+        let hard = *self.hard_timeout.read().expect("lock poisoned");
+        let soft = *self.soft_timeout.read().expect("lock poisoned");
+        let thresholds = self
+            .warning_thresholds
+            .read()
+            .expect("lock poisoned")
+            .clone();
 
-        let mut queries = self.active_queries.write().unwrap();
+        let mut queries = self.active_queries.write().expect("lock poisoned");
 
         if let Some(state) = queries.get_mut(&query_id) {
             let elapsed = state.start_time.elapsed();
@@ -959,42 +977,42 @@ impl QueryTimeoutManager {
 
     /// Get remaining time for a query
     pub fn remaining_time(&self, query_id: u64) -> Option<Duration> {
-        let hard = *self.hard_timeout.read().unwrap();
+        let hard = *self.hard_timeout.read().expect("lock poisoned");
 
         self.active_queries
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .get(&query_id)
             .map(|state| hard.saturating_sub(state.start_time.elapsed()))
     }
 
     /// Set timeouts
     pub fn set_soft_timeout(&self, timeout: Duration) {
-        *self.soft_timeout.write().unwrap() = timeout;
+        *self.soft_timeout.write().expect("lock poisoned") = timeout;
     }
 
     pub fn set_hard_timeout(&self, timeout: Duration) {
-        *self.hard_timeout.write().unwrap() = timeout;
+        *self.hard_timeout.write().expect("lock poisoned") = timeout;
     }
 
     pub fn set_warning_thresholds(&self, thresholds: Vec<f64>) {
-        *self.warning_thresholds.write().unwrap() = thresholds;
+        *self.warning_thresholds.write().expect("lock poisoned") = thresholds;
     }
 
     pub fn set_timeout_action(&self, action: TimeoutAction) {
-        *self.timeout_action.write().unwrap() = action;
+        *self.timeout_action.write().expect("lock poisoned") = action;
     }
 
     /// Get count of active queries
     pub fn active_query_count(&self) -> usize {
-        self.active_queries.read().unwrap().len()
+        self.active_queries.read().expect("lock poisoned").len()
     }
 
     /// Get all active query states
     pub fn get_active_queries(&self) -> Vec<QueryTimeoutState> {
         self.active_queries
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .values()
             .cloned()
             .collect()
@@ -1059,7 +1077,7 @@ impl QueryMemoryTracker {
         let per_query_limit = self.per_query_limit.load(Ordering::Relaxed);
         let memory_limit = self.memory_limit.load(Ordering::Relaxed);
 
-        let mut allocations = self.query_allocations.write().unwrap();
+        let mut allocations = self.query_allocations.write().expect("lock poisoned");
         let current_query_usage = allocations.get(&query_id).copied().unwrap_or(0);
 
         // Check per-query limit
@@ -1106,7 +1124,7 @@ impl QueryMemoryTracker {
 
     /// Deallocate memory for a query
     pub fn deallocate(&self, query_id: u64, bytes: usize) {
-        let mut allocations = self.query_allocations.write().unwrap();
+        let mut allocations = self.query_allocations.write().expect("lock poisoned");
 
         if let Some(query_usage) = allocations.get_mut(&query_id) {
             let to_free = bytes.min(*query_usage);
@@ -1121,7 +1139,7 @@ impl QueryMemoryTracker {
 
     /// Free all memory for a completed query
     pub fn free_query(&self, query_id: u64) -> usize {
-        let mut allocations = self.query_allocations.write().unwrap();
+        let mut allocations = self.query_allocations.write().expect("lock poisoned");
 
         if let Some(freed) = allocations.remove(&query_id) {
             self.current_usage.fetch_sub(freed, Ordering::SeqCst);
@@ -1135,7 +1153,7 @@ impl QueryMemoryTracker {
     pub fn is_under_pressure(&self) -> bool {
         let current = self.current_usage.load(Ordering::Relaxed);
         let limit = self.memory_limit.load(Ordering::Relaxed);
-        let threshold = *self.pressure_threshold.read().unwrap();
+        let threshold = *self.pressure_threshold.read().expect("lock poisoned");
 
         (current as f64 / limit as f64) > threshold
     }
@@ -1154,7 +1172,7 @@ impl QueryMemoryTracker {
     pub fn query_usage(&self, query_id: u64) -> usize {
         self.query_allocations
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .get(&query_id)
             .copied()
             .unwrap_or(0)
@@ -1182,7 +1200,7 @@ impl QueryMemoryTracker {
     }
 
     pub fn set_pressure_threshold(&self, threshold: f64) {
-        *self.pressure_threshold.write().unwrap() = threshold.clamp(0.0, 1.0);
+        *self.pressure_threshold.write().expect("lock poisoned") = threshold.clamp(0.0, 1.0);
     }
 
     /// Reset statistics
@@ -1199,7 +1217,7 @@ impl QueryMemoryTracker {
             current_usage: self.current_usage.load(Ordering::Relaxed),
             peak_usage: self.peak_usage.load(Ordering::Relaxed),
             memory_limit: self.memory_limit.load(Ordering::Relaxed),
-            active_queries: self.query_allocations.read().unwrap().len(),
+            active_queries: self.query_allocations.read().expect("lock poisoned").len(),
             pressure_percentage: self.pressure_percentage(),
         }
     }
@@ -1332,7 +1350,7 @@ impl QuerySessionManager {
         let session = Arc::new(session);
         self.sessions
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .insert(session_id, session.clone());
 
         // Log audit event
@@ -1353,7 +1371,11 @@ impl QuerySessionManager {
 
     /// Complete a query session
     pub fn complete_session(&self, session_id: u64, result_count: usize) -> Result<Duration> {
-        let session = self.sessions.write().unwrap().remove(&session_id);
+        let session = self
+            .sessions
+            .write()
+            .expect("lock poisoned")
+            .remove(&session_id);
 
         if let Some(session) = session {
             let duration = self.timeout_manager.end_query(session.query_id);
@@ -1380,7 +1402,11 @@ impl QuerySessionManager {
 
     /// Fail a query session
     pub fn fail_session(&self, session_id: u64, error: &str) -> Result<()> {
-        let session = self.sessions.write().unwrap().remove(&session_id);
+        let session = self
+            .sessions
+            .write()
+            .expect("lock poisoned")
+            .remove(&session_id);
 
         if let Some(session) = session {
             let duration = self.timeout_manager.end_query(session.query_id);
@@ -1407,7 +1433,7 @@ impl QuerySessionManager {
 
     /// Check session timeout
     pub fn check_timeout(&self, session_id: u64) -> Result<TimeoutCheckResult> {
-        let sessions = self.sessions.read().unwrap();
+        let sessions = self.sessions.read().expect("lock poisoned");
         if let Some(session) = sessions.get(&session_id) {
             Ok(self.timeout_manager.check_timeout(session.query_id))
         } else {
@@ -1417,7 +1443,7 @@ impl QuerySessionManager {
 
     /// Allocate memory for a session
     pub fn allocate_memory(&self, session_id: u64, bytes: usize) -> Result<()> {
-        let sessions = self.sessions.read().unwrap();
+        let sessions = self.sessions.read().expect("lock poisoned");
         if let Some(session) = sessions.get(&session_id) {
             self.memory_tracker.allocate(session.query_id, bytes)
         } else {
@@ -1427,12 +1453,16 @@ impl QuerySessionManager {
 
     /// Get session by ID
     pub fn get_session(&self, session_id: u64) -> Option<Arc<QuerySession>> {
-        self.sessions.read().unwrap().get(&session_id).cloned()
+        self.sessions
+            .read()
+            .expect("lock poisoned")
+            .get(&session_id)
+            .cloned()
     }
 
     /// Get active session count
     pub fn active_session_count(&self) -> usize {
-        self.sessions.read().unwrap().len()
+        self.sessions.read().expect("lock poisoned").len()
     }
 
     /// Get memory stats
@@ -1501,7 +1531,7 @@ impl QueryRateLimiter {
         let rate = self.requests_per_second.load(Ordering::Relaxed) as f64;
         let burst = self.burst_size.load(Ordering::Relaxed) as f64;
 
-        let mut buckets = self.buckets.write().unwrap();
+        let mut buckets = self.buckets.write().expect("lock poisoned");
         let bucket = buckets
             .entry(key.to_string())
             .or_insert_with(|| TokenBucket {
@@ -1538,12 +1568,16 @@ impl QueryRateLimiter {
 
     /// Get current rate limit stats for a key
     pub fn get_stats(&self, key: &str) -> Option<f64> {
-        self.buckets.read().unwrap().get(key).map(|b| b.tokens)
+        self.buckets
+            .read()
+            .expect("lock poisoned")
+            .get(key)
+            .map(|b| b.tokens)
     }
 
     /// Clear rate limit state for all keys
     pub fn clear(&self) {
-        self.buckets.write().unwrap().clear();
+        self.buckets.write().expect("lock poisoned").clear();
     }
 }
 
@@ -1599,7 +1633,7 @@ impl QueryAuditTrail {
             return;
         }
 
-        let mut events = self.events.write().unwrap();
+        let mut events = self.events.write().expect("lock poisoned");
 
         // Circular buffer behavior
         if events.len() >= self.max_events {
@@ -1611,7 +1645,7 @@ impl QueryAuditTrail {
 
     /// Get recent events
     pub fn get_recent(&self, limit: usize) -> Vec<QueryAuditEvent> {
-        let events = self.events.read().unwrap();
+        let events = self.events.read().expect("lock poisoned");
         let start = if events.len() > limit {
             events.len() - limit
         } else {
@@ -1624,7 +1658,7 @@ impl QueryAuditTrail {
     pub fn get_by_user(&self, user_id: &str, limit: usize) -> Vec<QueryAuditEvent> {
         self.events
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .iter()
             .filter(|e| e.user_id.as_deref() == Some(user_id))
             .take(limit)
@@ -1636,7 +1670,7 @@ impl QueryAuditTrail {
     pub fn get_by_type(&self, event_type: AuditEventType, limit: usize) -> Vec<QueryAuditEvent> {
         self.events
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .iter()
             .filter(|e| e.event_type == event_type)
             .take(limit)
@@ -1651,12 +1685,12 @@ impl QueryAuditTrail {
 
     /// Get total event count
     pub fn event_count(&self) -> usize {
-        self.events.read().unwrap().len()
+        self.events.read().expect("lock poisoned").len()
     }
 
     /// Clear all events
     pub fn clear(&self) {
-        self.events.write().unwrap().clear();
+        self.events.write().expect("lock poisoned").clear();
     }
 
     /// Enable/disable audit logging
@@ -1783,14 +1817,16 @@ impl QueryPriorityScheduler {
             estimated_cost,
         };
 
-        let mut queues = self.queues.write().unwrap();
+        let mut queues = self.queues.write().expect("lock poisoned");
         let total_queued: usize = queues.values().map(|q| q.len()).sum();
 
         if total_queued >= self.config.max_total_queued {
             return Err(anyhow!("Query queue is full"));
         }
 
-        let priority_queue = queues.get_mut(&priority).unwrap();
+        let priority_queue = queues
+            .get_mut(&priority)
+            .expect("priority queue should exist for all priority levels");
         if priority_queue.len() >= self.config.max_per_priority {
             return Err(anyhow!("Priority queue {:?} is full", priority));
         }
@@ -1801,7 +1837,7 @@ impl QueryPriorityScheduler {
 
     /// Get next query to execute based on priority
     pub fn next_query(&self) -> Option<PrioritizedQuery> {
-        let mut queues = self.queues.write().unwrap();
+        let mut queues = self.queues.write().expect("lock poisoned");
 
         // Process aging if enabled
         if self.config.enable_aging {
@@ -1816,7 +1852,7 @@ impl QueryPriorityScheduler {
             QueryPriority::Low,
             QueryPriority::Batch,
         ] {
-            let active = self.active_queries.read().unwrap();
+            let active = self.active_queries.read().expect("lock poisoned");
             let concurrent_count = active.values().filter(|&&p| p == priority).count();
 
             if let Some(&max_concurrent) = self.config.max_concurrent_per_priority.get(&priority) {
@@ -1831,7 +1867,7 @@ impl QueryPriorityScheduler {
                     drop(active); // Release read lock before acquiring write lock
                     self.active_queries
                         .write()
-                        .unwrap()
+                        .expect("lock poisoned")
                         .insert(query.query_id, priority);
                     return Some(query);
                 }
@@ -1888,12 +1924,15 @@ impl QueryPriorityScheduler {
 
     /// Mark query as completed
     pub fn complete_query(&self, query_id: u64) {
-        self.active_queries.write().unwrap().remove(&query_id);
+        self.active_queries
+            .write()
+            .expect("lock poisoned")
+            .remove(&query_id);
     }
 
     /// Cancel a queued query
     pub fn cancel_query(&self, query_id: u64) -> bool {
-        let mut queues = self.queues.write().unwrap();
+        let mut queues = self.queues.write().expect("lock poisoned");
         for queue in queues.values_mut() {
             if let Some(pos) = queue.iter().position(|q| q.query_id == query_id) {
                 queue.remove(pos);
@@ -1905,8 +1944,8 @@ impl QueryPriorityScheduler {
 
     /// Get queue statistics
     pub fn get_stats(&self) -> PrioritySchedulerStats {
-        let queues = self.queues.read().unwrap();
-        let active = self.active_queries.read().unwrap();
+        let queues = self.queues.read().expect("lock poisoned");
+        let active = self.active_queries.read().expect("lock poisoned");
 
         let mut queued_per_priority = HashMap::new();
         for (priority, queue) in queues.iter() {
@@ -2118,13 +2157,13 @@ impl QueryCostEstimator {
 
     /// Record actual query cost for learning
     pub fn record_actual_cost(&self, features: QueryFeatures, actual_duration_ms: f64) {
-        let mut stats = self.stats_collector.write().unwrap();
+        let mut stats = self.stats_collector.write().expect("lock poisoned");
         stats.add_sample(features, actual_duration_ms);
     }
 
     /// Get historical statistics
     pub fn get_statistics(&self) -> CostEstimatorStatistics {
-        let stats = self.stats_collector.read().unwrap();
+        let stats = self.stats_collector.read().expect("lock poisoned");
         let sample_count = stats.historical_costs.len();
 
         if sample_count == 0 {
@@ -2227,7 +2266,7 @@ impl PerformanceBaselineTracker {
         memory_mb: f64,
         result_count: usize,
     ) {
-        let mut baselines = self.baselines.write().unwrap();
+        let mut baselines = self.baselines.write().expect("lock poisoned");
 
         let baseline =
             baselines
@@ -2271,7 +2310,7 @@ impl PerformanceBaselineTracker {
         query_pattern: &str,
         current_duration_ms: f64,
     ) -> Option<RegressionReport> {
-        let baselines = self.baselines.read().unwrap();
+        let baselines = self.baselines.read().expect("lock poisoned");
 
         if let Some(baseline) = baselines.get(query_pattern) {
             if baseline.samples.len() < self.config.min_samples {
@@ -2304,7 +2343,7 @@ impl PerformanceBaselineTracker {
 
     /// Get performance trend for a query pattern
     pub fn get_trend(&self, query_pattern: &str) -> Option<PerformanceTrend> {
-        let baselines = self.baselines.read().unwrap();
+        let baselines = self.baselines.read().expect("lock poisoned");
 
         if let Some(baseline) = baselines.get(query_pattern) {
             if baseline.samples.is_empty() {
@@ -2341,12 +2380,17 @@ impl PerformanceBaselineTracker {
 
     /// Get all tracked patterns
     pub fn get_tracked_patterns(&self) -> Vec<String> {
-        self.baselines.read().unwrap().keys().cloned().collect()
+        self.baselines
+            .read()
+            .expect("lock poisoned")
+            .keys()
+            .cloned()
+            .collect()
     }
 
     /// Clear baselines
     pub fn clear(&self) {
-        self.baselines.write().unwrap().clear();
+        self.baselines.write().expect("lock poisoned").clear();
     }
 }
 
@@ -2588,7 +2632,7 @@ mod tests {
         // Start a session
         let session = manager
             .start_session("SELECT * WHERE { ?s ?p ?o }", Some("user1"))
-            .unwrap();
+            .expect("lock poisoned");
 
         assert_eq!(manager.active_session_count(), 1);
         assert!(!session.is_cancelled());
@@ -2611,11 +2655,11 @@ mod tests {
 
         let session = manager
             .start_session("SELECT * WHERE { ?s ?p ?o }", None)
-            .unwrap();
+            .expect("lock poisoned");
 
         manager
             .fail_session(session.session_id, "Test error")
-            .unwrap();
+            .expect("lock poisoned");
 
         let events = manager.get_audit_events(10);
         assert_eq!(events.len(), 2);
@@ -2736,7 +2780,7 @@ mod tests {
 
         let session = manager
             .start_session("SELECT * WHERE { ?s ?p ?o }", None)
-            .unwrap();
+            .expect("lock poisoned");
 
         // Allocate memory
         assert!(manager.allocate_memory(session.session_id, 200).is_ok());
@@ -2762,7 +2806,7 @@ mod tests {
                 Some("user1".to_string()),
                 Some(100.0),
             )
-            .unwrap();
+            .expect("lock poisoned");
 
         let normal_id = scheduler
             .submit_query(
@@ -2771,7 +2815,7 @@ mod tests {
                 Some("user2".to_string()),
                 Some(50.0),
             )
-            .unwrap();
+            .expect("lock poisoned");
 
         let batch_id = scheduler
             .submit_query(
@@ -2780,7 +2824,7 @@ mod tests {
                 None,
                 None,
             )
-            .unwrap();
+            .expect("lock poisoned");
 
         // Stats should show 3 queued queries
         let stats = scheduler.get_stats();
@@ -2827,7 +2871,7 @@ mod tests {
                 None,
                 None,
             )
-            .unwrap();
+            .expect("lock poisoned");
 
         // Wait for aging
         std::thread::sleep(Duration::from_millis(20));
@@ -2840,7 +2884,7 @@ mod tests {
                 None,
                 None,
             )
-            .unwrap();
+            .expect("lock poisoned");
 
         // The aged low priority query should now be normal priority
         // and compete equally
@@ -2861,7 +2905,7 @@ mod tests {
                 None,
                 None,
             )
-            .unwrap();
+            .expect("lock poisoned");
 
         assert_eq!(scheduler.get_stats().total_queued, 1);
 

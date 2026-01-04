@@ -38,19 +38,31 @@ impl CompactionMetrics {
 
     /// Update state
     pub fn update_state(&self, state: CompactionState) {
-        let mut s = self.state.lock().unwrap();
+        let mut s = self
+            .state
+            .lock()
+            .expect("mutex lock should not be poisoned");
         *s = state;
     }
 
     /// Get current state
     pub fn get_state(&self) -> CompactionState {
-        *self.state.lock().unwrap()
+        *self
+            .state
+            .lock()
+            .expect("mutex lock should not be poisoned")
     }
 
     /// Record compaction result
     pub fn record_compaction(&self, result: CompactionResult) {
-        let mut stats = self.statistics.lock().unwrap();
-        let mut history = self.history.lock().unwrap();
+        let mut stats = self
+            .statistics
+            .lock()
+            .expect("mutex lock should not be poisoned");
+        let mut history = self
+            .history
+            .lock()
+            .expect("mutex lock should not be poisoned");
 
         // Update statistics
         stats.total_compactions += 1;
@@ -87,18 +99,27 @@ impl CompactionMetrics {
 
     /// Update fragmentation
     pub fn update_fragmentation(&self, fragmentation: f64) {
-        let mut stats = self.statistics.lock().unwrap();
+        let mut stats = self
+            .statistics
+            .lock()
+            .expect("mutex lock should not be poisoned");
         stats.current_fragmentation = fragmentation;
     }
 
     /// Get statistics
     pub fn get_statistics(&self) -> CompactionStatistics {
-        self.statistics.lock().unwrap().clone()
+        self.statistics
+            .lock()
+            .expect("mutex lock should not be poisoned")
+            .clone()
     }
 
     /// Get compaction history
     pub fn get_history(&self, limit: Option<usize>) -> Vec<CompactionResult> {
-        let history = self.history.lock().unwrap();
+        let history = self
+            .history
+            .lock()
+            .expect("mutex lock should not be poisoned");
         if let Some(lim) = limit {
             history.iter().rev().take(lim).cloned().collect()
         } else {
@@ -108,7 +129,10 @@ impl CompactionMetrics {
 
     /// Calculate compaction efficiency
     pub fn calculate_efficiency(&self) -> CompactionEfficiency {
-        let stats = self.statistics.lock().unwrap();
+        let stats = self
+            .statistics
+            .lock()
+            .expect("mutex lock should not be poisoned");
 
         let success_rate = if stats.total_compactions > 0 {
             stats.successful_compactions as f64 / stats.total_compactions as f64
@@ -139,13 +163,22 @@ impl CompactionMetrics {
 
     /// Reset metrics
     pub fn reset(&self) {
-        let mut stats = self.statistics.lock().unwrap();
+        let mut stats = self
+            .statistics
+            .lock()
+            .expect("mutex lock should not be poisoned");
         *stats = CompactionStatistics::default();
 
-        let mut history = self.history.lock().unwrap();
+        let mut history = self
+            .history
+            .lock()
+            .expect("mutex lock should not be poisoned");
         history.clear();
 
-        let mut state = self.state.lock().unwrap();
+        let mut state = self
+            .state
+            .lock()
+            .expect("mutex lock should not be poisoned");
         *state = CompactionState::Idle;
     }
 }

@@ -191,7 +191,7 @@ impl QuatD {
             use std::time::{SystemTime, UNIX_EPOCH};
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs()
         }));
 
@@ -217,7 +217,8 @@ impl QuatD {
     fn normalize_all_quaternions(&mut self) {
         // Normalize entity embeddings
         for mut row in self.entity_embeddings.rows_mut() {
-            let mut quat = Quaternion::from_array(row.as_slice().unwrap());
+            let mut quat =
+                Quaternion::from_array(row.as_slice().expect("row should be contiguous"));
             quat.normalize();
             let normalized = quat.to_array();
             for (i, &val) in normalized.iter().enumerate() {
@@ -227,7 +228,8 @@ impl QuatD {
 
         // Normalize relation embeddings
         for mut row in self.relation_embeddings.rows_mut() {
-            let mut quat = Quaternion::from_array(row.as_slice().unwrap());
+            let mut quat =
+                Quaternion::from_array(row.as_slice().expect("row should be contiguous"));
             quat.normalize();
             let normalized = quat.to_array();
             for (i, &val) in normalized.iter().enumerate() {
@@ -239,13 +241,13 @@ impl QuatD {
     /// Get quaternion from entity embeddings
     fn get_entity_quaternion(&self, entity_id: usize) -> Quaternion {
         let row = self.entity_embeddings.row(entity_id);
-        Quaternion::from_array(row.as_slice().unwrap())
+        Quaternion::from_array(row.as_slice().expect("row should be contiguous"))
     }
 
     /// Get quaternion from relation embeddings
     fn get_relation_quaternion(&self, relation_id: usize) -> Quaternion {
         let row = self.relation_embeddings.row(relation_id);
-        Quaternion::from_array(row.as_slice().unwrap())
+        Quaternion::from_array(row.as_slice().expect("row should be contiguous"))
     }
 
     /// Score a triple using QuatD scoring function
@@ -439,7 +441,7 @@ impl QuatD {
             use std::time::{SystemTime, UNIX_EPOCH};
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs()
         }));
 
@@ -650,11 +652,15 @@ impl EmbeddingModel for QuatD {
 
         for object_id in 0..self.base.num_entities() {
             let score = self.score_triple_ids(subject_id, predicate_id, object_id)?;
-            let object_name = self.base.get_entity(object_id).unwrap().clone();
+            let object_name = self
+                .base
+                .get_entity(object_id)
+                .expect("entity should exist in index")
+                .clone();
             scores.push((object_name, score));
         }
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("scores should be comparable"));
         scores.truncate(k);
 
         Ok(scores)
@@ -683,11 +689,15 @@ impl EmbeddingModel for QuatD {
 
         for subject_id in 0..self.base.num_entities() {
             let score = self.score_triple_ids(subject_id, predicate_id, object_id)?;
-            let subject_name = self.base.get_entity(subject_id).unwrap().clone();
+            let subject_name = self
+                .base
+                .get_entity(subject_id)
+                .expect("entity should exist in index")
+                .clone();
             scores.push((subject_name, score));
         }
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("scores should be comparable"));
         scores.truncate(k);
 
         Ok(scores)
@@ -716,11 +726,15 @@ impl EmbeddingModel for QuatD {
 
         for predicate_id in 0..self.base.num_relations() {
             let score = self.score_triple_ids(subject_id, predicate_id, object_id)?;
-            let predicate_name = self.base.get_relation(predicate_id).unwrap().clone();
+            let predicate_name = self
+                .base
+                .get_relation(predicate_id)
+                .expect("relation should exist in index")
+                .clone();
             scores.push((predicate_name, score));
         }
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("scores should be comparable"));
         scores.truncate(k);
 
         Ok(scores)

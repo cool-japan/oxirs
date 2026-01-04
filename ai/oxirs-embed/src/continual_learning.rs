@@ -707,7 +707,7 @@ impl ContinualLearningModel {
             }
             MemoryUpdateStrategy::Random => {
                 if self.episodic_memory.len() >= self.config.memory_config.memory_capacity {
-                    let idx = random.random_range(0, self.episodic_memory.len());
+                    let idx = random.random_range(0..self.episodic_memory.len());
                     self.episodic_memory.remove(idx);
                 }
                 self.episodic_memory.push_back(entry);
@@ -717,7 +717,7 @@ impl ContinualLearningModel {
                     self.episodic_memory.push_back(entry);
                 } else {
                     let k = self.episodic_memory.len();
-                    let j = random.random_range(0, self.examples_seen + 1);
+                    let j = random.random_range(0..self.examples_seen + 1);
                     if j < k {
                         self.episodic_memory[j] = entry;
                     }
@@ -1060,7 +1060,7 @@ impl ContinualLearningModel {
         let batch_size = replay_batch_size.min(self.episodic_memory.len());
 
         for _ in 0..batch_size {
-            let idx = random.random_range(0, self.episodic_memory.len());
+            let idx = random.random_range(0..self.episodic_memory.len());
 
             // Extract data before modifying entry to avoid borrow conflicts
             let (data, target) = {
@@ -1215,7 +1215,7 @@ impl ContinualLearningModel {
         let consolidation_steps = 100;
         for _ in 0..consolidation_steps {
             if !self.episodic_memory.is_empty() {
-                let idx = random.random_range(0, self.episodic_memory.len());
+                let idx = random.random_range(0..self.episodic_memory.len());
                 let entry = &self.episodic_memory[idx];
 
                 // Weak replay for consolidation

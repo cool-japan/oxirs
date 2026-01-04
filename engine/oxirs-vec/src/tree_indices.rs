@@ -321,14 +321,17 @@ impl BallTree {
         }
 
         let mut heap: BinaryHeap<SearchResult> = BinaryHeap::new();
-        let mut stack: Vec<&BallNode> = vec![self.root.as_ref().unwrap()];
+        let mut stack: Vec<&BallNode> = vec![self
+            .root
+            .as_ref()
+            .expect("tree should have root after build")];
 
         while let Some(node) = stack.pop() {
             // Check if we need to explore this node
             let dist_to_center = self.config.distance_metric.distance(query, &node.center);
 
             if heap.len() >= k {
-                let worst_dist = heap.peek().unwrap().distance;
+                let worst_dist = heap.peek().expect("heap should have k elements").distance;
                 if dist_to_center - node.radius > worst_dist {
                     continue; // Prune this branch
                 }
@@ -360,7 +363,7 @@ impl BallTree {
                             index: idx,
                             distance: dist,
                         });
-                    } else if dist < heap.peek().unwrap().distance {
+                    } else if dist < heap.peek().expect("heap should have k elements").distance {
                         heap.pop();
                         heap.push(SearchResult {
                             index: idx,
@@ -494,7 +497,14 @@ impl KdTree {
         }
 
         let mut heap = BinaryHeap::new();
-        self.search_node(self.root.as_ref().unwrap(), query, k, &mut heap);
+        self.search_node(
+            self.root
+                .as_ref()
+                .expect("tree should have root after build"),
+            query,
+            k,
+            &mut heap,
+        );
 
         let mut results: Vec<(usize, f32)> =
             heap.into_iter().map(|r| (r.index, r.distance)).collect();
@@ -521,7 +531,7 @@ impl KdTree {
                         index: idx,
                         distance: dist,
                     });
-                } else if dist < heap.peek().unwrap().distance {
+                } else if dist < heap.peek().expect("heap should have k elements").distance {
                     heap.pop();
                     heap.push(SearchResult {
                         index: idx,
@@ -549,7 +559,7 @@ impl KdTree {
         // Check if we need to search the other side
         if heap.len() < k || {
             let split_dist = (query[node.split_dim] - node.split_value).abs();
-            split_dist < heap.peek().unwrap().distance
+            split_dist < heap.peek().expect("heap should have k elements").distance
         } {
             if let Some(child) = second {
                 self.search_node(child, query, k, heap);
@@ -707,7 +717,9 @@ impl VpTree {
 
         let mut heap = BinaryHeap::new();
         self.search_node(
-            self.root.as_ref().unwrap(),
+            self.root
+                .as_ref()
+                .expect("tree should have root after build"),
             query,
             k,
             &mut heap,
@@ -743,7 +755,7 @@ impl VpTree {
                             index: idx,
                             distance: dist,
                         });
-                    } else if dist < heap.peek().unwrap().distance {
+                    } else if dist < heap.peek().expect("heap should have k elements").distance {
                         heap.pop();
                         heap.push(SearchResult {
                             index: idx,
@@ -752,7 +764,7 @@ impl VpTree {
                     }
 
                     if heap.len() >= k {
-                        tau = heap.peek().unwrap().distance;
+                        tau = heap.peek().expect("heap should have k elements").distance;
                     }
                 }
             }
@@ -770,7 +782,7 @@ impl VpTree {
                     index: node.vantage_point,
                     distance: dist_to_vp,
                 });
-            } else if dist_to_vp < heap.peek().unwrap().distance {
+            } else if dist_to_vp < heap.peek().expect("heap should have k elements").distance {
                 heap.pop();
                 heap.push(SearchResult {
                     index: node.vantage_point,
@@ -779,7 +791,7 @@ impl VpTree {
             }
 
             if heap.len() >= k {
-                tau = heap.peek().unwrap().distance;
+                tau = heap.peek().expect("heap should have k elements").distance;
             }
         }
 
@@ -887,7 +899,14 @@ impl CoverTree {
         }
 
         let mut results = Vec::new();
-        self.search_node(self.root.as_ref().unwrap(), query, k, &mut results);
+        self.search_node(
+            self.root
+                .as_ref()
+                .expect("tree should have root after build"),
+            query,
+            k,
+            &mut results,
+        );
 
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
         results.truncate(k);
@@ -1070,7 +1089,14 @@ impl RandomProjectionTree {
         }
 
         let mut heap = BinaryHeap::new();
-        self.search_node(self.root.as_ref().unwrap(), query, k, &mut heap);
+        self.search_node(
+            self.root
+                .as_ref()
+                .expect("tree should have root after build"),
+            query,
+            k,
+            &mut heap,
+        );
 
         let mut results: Vec<(usize, f32)> =
             heap.into_iter().map(|r| (r.index, r.distance)).collect();
@@ -1097,7 +1123,7 @@ impl RandomProjectionTree {
                         index: idx,
                         distance: dist,
                     });
-                } else if dist < heap.peek().unwrap().distance {
+                } else if dist < heap.peek().expect("heap should have k elements").distance {
                     heap.pop();
                     heap.push(SearchResult {
                         index: idx,
@@ -1171,21 +1197,61 @@ impl TreeIndex {
 
     pub fn build(&mut self) -> Result<()> {
         match self.tree_type {
-            TreeType::BallTree => self.ball_tree.as_mut().unwrap().build(),
-            TreeType::KdTree => self.kd_tree.as_mut().unwrap().build(),
-            TreeType::VpTree => self.vp_tree.as_mut().unwrap().build(),
-            TreeType::CoverTree => self.cover_tree.as_mut().unwrap().build(),
-            TreeType::RandomProjectionTree => self.rp_tree.as_mut().unwrap().build(),
+            TreeType::BallTree => self
+                .ball_tree
+                .as_mut()
+                .expect("ball_tree should be initialized for BallTree type")
+                .build(),
+            TreeType::KdTree => self
+                .kd_tree
+                .as_mut()
+                .expect("kd_tree should be initialized for KdTree type")
+                .build(),
+            TreeType::VpTree => self
+                .vp_tree
+                .as_mut()
+                .expect("vp_tree should be initialized for VpTree type")
+                .build(),
+            TreeType::CoverTree => self
+                .cover_tree
+                .as_mut()
+                .expect("cover_tree should be initialized for CoverTree type")
+                .build(),
+            TreeType::RandomProjectionTree => self
+                .rp_tree
+                .as_mut()
+                .expect("rp_tree should be initialized for RandomProjectionTree type")
+                .build(),
         }
     }
 
     fn search_internal(&self, query: &[f32], k: usize) -> Vec<(usize, f32)> {
         match self.tree_type {
-            TreeType::BallTree => self.ball_tree.as_ref().unwrap().search(query, k),
-            TreeType::KdTree => self.kd_tree.as_ref().unwrap().search(query, k),
-            TreeType::VpTree => self.vp_tree.as_ref().unwrap().search(query, k),
-            TreeType::CoverTree => self.cover_tree.as_ref().unwrap().search(query, k),
-            TreeType::RandomProjectionTree => self.rp_tree.as_ref().unwrap().search(query, k),
+            TreeType::BallTree => self
+                .ball_tree
+                .as_ref()
+                .expect("ball_tree should be initialized for BallTree type")
+                .search(query, k),
+            TreeType::KdTree => self
+                .kd_tree
+                .as_ref()
+                .expect("kd_tree should be initialized for KdTree type")
+                .search(query, k),
+            TreeType::VpTree => self
+                .vp_tree
+                .as_ref()
+                .expect("vp_tree should be initialized for VpTree type")
+                .search(query, k),
+            TreeType::CoverTree => self
+                .cover_tree
+                .as_ref()
+                .expect("cover_tree should be initialized for CoverTree type")
+                .search(query, k),
+            TreeType::RandomProjectionTree => self
+                .rp_tree
+                .as_ref()
+                .expect("rp_tree should be initialized for RandomProjectionTree type")
+                .search(query, k),
         }
     }
 }
@@ -1193,11 +1259,41 @@ impl TreeIndex {
 impl VectorIndex for TreeIndex {
     fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
         let data = match self.tree_type {
-            TreeType::BallTree => &mut self.ball_tree.as_mut().unwrap().data,
-            TreeType::KdTree => &mut self.kd_tree.as_mut().unwrap().data,
-            TreeType::VpTree => &mut self.vp_tree.as_mut().unwrap().data,
-            TreeType::CoverTree => &mut self.cover_tree.as_mut().unwrap().data,
-            TreeType::RandomProjectionTree => &mut self.rp_tree.as_mut().unwrap().data,
+            TreeType::BallTree => {
+                &mut self
+                    .ball_tree
+                    .as_mut()
+                    .expect("ball_tree should be initialized for BallTree type")
+                    .data
+            }
+            TreeType::KdTree => {
+                &mut self
+                    .kd_tree
+                    .as_mut()
+                    .expect("kd_tree should be initialized for KdTree type")
+                    .data
+            }
+            TreeType::VpTree => {
+                &mut self
+                    .vp_tree
+                    .as_mut()
+                    .expect("vp_tree should be initialized for VpTree type")
+                    .data
+            }
+            TreeType::CoverTree => {
+                &mut self
+                    .cover_tree
+                    .as_mut()
+                    .expect("cover_tree should be initialized for CoverTree type")
+                    .data
+            }
+            TreeType::RandomProjectionTree => {
+                &mut self
+                    .rp_tree
+                    .as_mut()
+                    .expect("rp_tree should be initialized for RandomProjectionTree type")
+                    .data
+            }
         };
 
         data.push((uri, vector));
@@ -1209,11 +1305,41 @@ impl VectorIndex for TreeIndex {
         let results = self.search_internal(&query_f32, k);
 
         let data = match self.tree_type {
-            TreeType::BallTree => &self.ball_tree.as_ref().unwrap().data,
-            TreeType::KdTree => &self.kd_tree.as_ref().unwrap().data,
-            TreeType::VpTree => &self.vp_tree.as_ref().unwrap().data,
-            TreeType::CoverTree => &self.cover_tree.as_ref().unwrap().data,
-            TreeType::RandomProjectionTree => &self.rp_tree.as_ref().unwrap().data,
+            TreeType::BallTree => {
+                &self
+                    .ball_tree
+                    .as_ref()
+                    .expect("ball_tree should be initialized for BallTree type")
+                    .data
+            }
+            TreeType::KdTree => {
+                &self
+                    .kd_tree
+                    .as_ref()
+                    .expect("kd_tree should be initialized for KdTree type")
+                    .data
+            }
+            TreeType::VpTree => {
+                &self
+                    .vp_tree
+                    .as_ref()
+                    .expect("vp_tree should be initialized for VpTree type")
+                    .data
+            }
+            TreeType::CoverTree => {
+                &self
+                    .cover_tree
+                    .as_ref()
+                    .expect("cover_tree should be initialized for CoverTree type")
+                    .data
+            }
+            TreeType::RandomProjectionTree => {
+                &self
+                    .rp_tree
+                    .as_ref()
+                    .expect("rp_tree should be initialized for RandomProjectionTree type")
+                    .data
+            }
         };
 
         Ok(results
@@ -1227,11 +1353,41 @@ impl VectorIndex for TreeIndex {
         let all_results = self.search_internal(&query_f32, 1000); // Search more broadly
 
         let data = match self.tree_type {
-            TreeType::BallTree => &self.ball_tree.as_ref().unwrap().data,
-            TreeType::KdTree => &self.kd_tree.as_ref().unwrap().data,
-            TreeType::VpTree => &self.vp_tree.as_ref().unwrap().data,
-            TreeType::CoverTree => &self.cover_tree.as_ref().unwrap().data,
-            TreeType::RandomProjectionTree => &self.rp_tree.as_ref().unwrap().data,
+            TreeType::BallTree => {
+                &self
+                    .ball_tree
+                    .as_ref()
+                    .expect("ball_tree should be initialized for BallTree type")
+                    .data
+            }
+            TreeType::KdTree => {
+                &self
+                    .kd_tree
+                    .as_ref()
+                    .expect("kd_tree should be initialized for KdTree type")
+                    .data
+            }
+            TreeType::VpTree => {
+                &self
+                    .vp_tree
+                    .as_ref()
+                    .expect("vp_tree should be initialized for VpTree type")
+                    .data
+            }
+            TreeType::CoverTree => {
+                &self
+                    .cover_tree
+                    .as_ref()
+                    .expect("cover_tree should be initialized for CoverTree type")
+                    .data
+            }
+            TreeType::RandomProjectionTree => {
+                &self
+                    .rp_tree
+                    .as_ref()
+                    .expect("rp_tree should be initialized for RandomProjectionTree type")
+                    .data
+            }
         };
 
         Ok(all_results
@@ -1243,11 +1399,41 @@ impl VectorIndex for TreeIndex {
 
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
         let data = match self.tree_type {
-            TreeType::BallTree => &self.ball_tree.as_ref().unwrap().data,
-            TreeType::KdTree => &self.kd_tree.as_ref().unwrap().data,
-            TreeType::VpTree => &self.vp_tree.as_ref().unwrap().data,
-            TreeType::CoverTree => &self.cover_tree.as_ref().unwrap().data,
-            TreeType::RandomProjectionTree => &self.rp_tree.as_ref().unwrap().data,
+            TreeType::BallTree => {
+                &self
+                    .ball_tree
+                    .as_ref()
+                    .expect("ball_tree should be initialized for BallTree type")
+                    .data
+            }
+            TreeType::KdTree => {
+                &self
+                    .kd_tree
+                    .as_ref()
+                    .expect("kd_tree should be initialized for KdTree type")
+                    .data
+            }
+            TreeType::VpTree => {
+                &self
+                    .vp_tree
+                    .as_ref()
+                    .expect("vp_tree should be initialized for VpTree type")
+                    .data
+            }
+            TreeType::CoverTree => {
+                &self
+                    .cover_tree
+                    .as_ref()
+                    .expect("cover_tree should be initialized for CoverTree type")
+                    .data
+            }
+            TreeType::RandomProjectionTree => {
+                &self
+                    .rp_tree
+                    .as_ref()
+                    .expect("rp_tree should be initialized for RandomProjectionTree type")
+                    .data
+            }
         };
 
         data.iter().find(|(u, _)| u == uri).map(|(_, v)| v)

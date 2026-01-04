@@ -316,7 +316,12 @@ impl PersistentStorage {
                     let mut entry_bytes = vec![0u8; length as usize];
                     match reader.read_exact(&mut entry_bytes) {
                         Ok(_) => {
-                            if let Ok(entry) = bincode::deserialize::<WalEntry>(&entry_bytes) {
+                            if let Ok(entry) = oxicode::serde::decode_from_slice(
+                                &entry_bytes,
+                                oxicode::config::standard(),
+                            )
+                            .map(|(v, _): (WalEntry, _)| v)
+                            {
                                 last_sequence = entry.sequence;
                             }
                         }
@@ -354,7 +359,10 @@ impl PersistentStorage {
                     let mut entry_bytes = vec![0u8; length as usize];
                     reader.read_exact(&mut entry_bytes)?;
 
-                    if let Ok(entry) = bincode::deserialize::<WalEntry>(&entry_bytes) {
+                    if let Ok(entry) =
+                        oxicode::serde::decode_from_slice(&entry_bytes, oxicode::config::standard())
+                            .map(|(v, _): (WalEntry, _)| v)
+                    {
                         // Verify checksum
                         if self.verify_wal_entry_checksum(&entry)? {
                             match &entry.operation {
@@ -396,7 +404,8 @@ impl PersistentStorage {
 
     /// Verify WAL entry checksum
     fn verify_wal_entry_checksum(&self, entry: &WalEntry) -> Result<bool> {
-        let op_bytes = bincode::serialize(&entry.operation)?;
+        let op_bytes =
+            oxicode::serde::encode_to_vec(&entry.operation, oxicode::config::standard())?;
         let mut hasher = Sha256::new();
         hasher.update(&op_bytes);
         hasher.update(entry.sequence.to_le_bytes());
@@ -567,7 +576,7 @@ impl PersistentStorage {
             configuration: vec![self.node_id], // Simplified - would include all cluster members
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             size: snapshot_data.len() as u64,
             checksum,
@@ -656,11 +665,11 @@ impl PersistentStorage {
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         // Create checksum
-        let op_bytes = bincode::serialize(&operation)?;
+        let op_bytes = oxicode::serde::encode_to_vec(&operation, oxicode::config::standard())?;
         let mut hasher = Sha256::new();
         hasher.update(&op_bytes);
         hasher.update(sequence.to_le_bytes());
@@ -675,7 +684,7 @@ impl PersistentStorage {
         };
 
         // Serialize WAL entry
-        let entry_bytes = bincode::serialize(&wal_entry)?;
+        let entry_bytes = oxicode::serde::encode_to_vec(&wal_entry, oxicode::config::standard())?;
         let length = entry_bytes.len() as u64;
 
         // Write to WAL file
@@ -715,7 +724,8 @@ impl PersistentStorage {
         };
 
         // Write to temporary file first
-        let serialized = bincode::serialize(&checksummed_data)?;
+        let serialized =
+            oxicode::serde::encode_to_vec(&checksummed_data, oxicode::config::standard())?;
 
         {
             let temp_file = OpenOptions::new()
@@ -808,7 +818,8 @@ impl PersistentStorage {
         T: for<'de> Deserialize<'de> + Serialize,
     {
         let data = std::fs::read(path)?;
-        let checksummed_data: ChecksummedData<T> = bincode::deserialize(&data)?;
+        let (checksummed_data, _): (ChecksummedData<T>, _) =
+            oxicode::serde::decode_from_slice(&data, oxicode::config::standard())?;
 
         // Verify checksum if corruption detection is enabled
         if self.config.enable_corruption_detection && !checksummed_data.verify()? {
@@ -882,12 +893,12 @@ impl PersistentStorage {
     pub async fn backup(&self) -> Result<PathBuf> {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         let backup_dir = self
             .data_dir
             .parent()
-            .unwrap()
+            .expect("data_dir should have a parent directory")
             .join(format!("backup-{}-{}", self.node_id, timestamp));
 
         fs::create_dir_all(&backup_dir)?;
@@ -928,7 +939,7 @@ impl PersistentStorage {
         // Move current WAL to archive
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         let archive_path = self.data_dir.join(format!("wal-{timestamp}.log"));
         std::fs::rename(&wal_path, &archive_path)?;
@@ -969,7 +980,10 @@ impl PersistentStorage {
                     let mut entry_bytes = vec![0u8; length as usize];
                     reader.read_exact(&mut entry_bytes)?;
 
-                    if let Ok(entry) = bincode::deserialize::<WalEntry>(&entry_bytes) {
+                    if let Ok(entry) =
+                        oxicode::serde::decode_from_slice(&entry_bytes, oxicode::config::standard())
+                            .map(|(v, _): (WalEntry, _)| v)
+                    {
                         if let WalOperation::Commit(seq) = &entry.operation {
                             last_commit_sequence = *seq;
                         }
@@ -999,7 +1013,8 @@ impl PersistentStorage {
             let mut writer = BufWriter::new(temp_file);
 
             for entry in &uncommitted {
-                let entry_bytes = bincode::serialize(entry)?;
+                let entry_bytes =
+                    oxicode::serde::encode_to_vec(entry, oxicode::config::standard())?;
                 let length = entry_bytes.len() as u64;
                 writer.write_all(&length.to_le_bytes())?;
                 writer.write_all(&entry_bytes)?;
@@ -1089,7 +1104,10 @@ impl PersistentStorage {
                     let mut entry_bytes = vec![0u8; length as usize];
                     reader.read_exact(&mut entry_bytes)?;
 
-                    if let Ok(entry) = bincode::deserialize::<WalEntry>(&entry_bytes) {
+                    if let Ok(entry) =
+                        oxicode::serde::decode_from_slice(&entry_bytes, oxicode::config::standard())
+                            .map(|(v, _): (WalEntry, _)| v)
+                    {
                         if self.verify_wal_entry_checksum(&entry)? {
                             valid_entries += 1;
                         } else {
@@ -1111,7 +1129,10 @@ impl PersistentStorage {
 
     /// Clean old backups
     pub async fn cleanup_old_backups(&self) -> Result<()> {
-        let parent_dir = self.data_dir.parent().unwrap();
+        let parent_dir = self
+            .data_dir
+            .parent()
+            .expect("data_dir should have a parent directory");
         let backup_prefix = format!("backup-{}-", self.node_id);
 
         let mut backups = Vec::new();
@@ -1291,8 +1312,14 @@ impl PersistentStorage {
     /// Recover corrupted file from backup
     async fn recover_corrupted_file(&self, file_path: &Path) -> Result<bool> {
         // Try to find the most recent backup
-        let filename = file_path.file_name().unwrap().to_string_lossy();
-        let parent_dir = self.data_dir.parent().unwrap();
+        let filename = file_path
+            .file_name()
+            .expect("file_path should have a file name")
+            .to_string_lossy();
+        let parent_dir = self
+            .data_dir
+            .parent()
+            .expect("data_dir should have a parent directory");
         let backup_prefix = format!("backup-{}-", self.node_id);
 
         let mut backups = Vec::new();

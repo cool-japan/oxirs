@@ -1,6 +1,6 @@
 # OxiRS Federate - Deployment Guide
 
-**Version**: 0.1.0-rc.1
+**Version**: 0.1.0-rc.2
 **Last Updated**: December 6, 2025
 **Status**: Production-Ready
 
@@ -29,7 +29,7 @@ This comprehensive guide covers deploying oxirs-federate in production environme
 ```bash
 # 1. Add dependency to Cargo.toml
 [dependencies]
-oxirs-federate = { version = "0.1.0-rc.1", features = ["default"] }
+oxirs-federate = { version = "0.1.0-rc.2", features = ["default"] }
 
 # 2. Basic server setup
 use oxirs_federate::FederationEngine;

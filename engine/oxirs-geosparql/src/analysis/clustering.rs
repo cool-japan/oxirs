@@ -301,7 +301,7 @@ pub fn kmeans_clustering(points: &[Point<f64>], params: KmeansParams) -> Result<
         }
     }
 
-    Ok(best_result.unwrap())
+    Ok(best_result.expect("best_result must be Some after n_init iterations"))
 }
 
 /// Single run of k-means algorithm
@@ -497,7 +497,10 @@ fn compute_compactness(points: &[Point<f64>], centroid: &Point<f64>) -> f64 {
 
 /// Compute inertia (sum of squared distances to nearest center)
 fn compute_inertia(points: &[Point<f64>], result: &ClusteringResult) -> f64 {
-    let centers = result.centers.as_ref().unwrap();
+    let centers = result
+        .centers
+        .as_ref()
+        .expect("clustering result must have centers after kmeans");
     let mut inertia = 0.0;
 
     for (i, point) in points.iter().enumerate() {

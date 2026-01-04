@@ -367,10 +367,10 @@ impl RotatE {
         while negatives.len() < num_samples {
             let corrupt_head = rng.random_f64() < 0.5;
             let negative_triple = if corrupt_head {
-                let new_head = rng.random_range(0, num_entities);
+                let new_head = rng.random_range(0..num_entities);
                 (new_head, positive_triple.1, positive_triple.2)
             } else {
-                let new_tail = rng.random_range(0, num_entities);
+                let new_tail = rng.random_range(0..num_entities);
                 (positive_triple.0, positive_triple.1, new_tail)
             };
 
@@ -396,7 +396,7 @@ impl RotatE {
         let mut shuffled_triples = self.base.triples.clone();
         // Manual Fisher-Yates shuffle using scirs2-core
         for i in (1..shuffled_triples.len()).rev() {
-            let j = rng.random_range(0, i + 1);
+            let j = rng.random_range(0..i + 1);
             shuffled_triples.swap(i, j);
         }
 

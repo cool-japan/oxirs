@@ -118,7 +118,7 @@ impl ComplEx {
             if entities.len() >= 2 {
                 let corrupt_idx = {
                     let mut rng = Random::default();
-                    rng.random_range(0, entities.len())
+                    rng.random_range(0..entities.len())
                 };
                 let corrupt_entity = &entities[corrupt_idx];
 
@@ -228,7 +228,7 @@ impl KnowledgeGraphEmbedding for ComplEx {
             }
         }
 
-        predictions.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap());
+        predictions.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
         Ok(predictions)
     }
 

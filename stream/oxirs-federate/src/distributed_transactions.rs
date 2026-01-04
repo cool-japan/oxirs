@@ -480,7 +480,7 @@ impl DistributedTransactionCoordinator {
     async fn prepare_phase(&self, transaction_id: &str) -> bool {
         let participants = {
             let txns = self.transactions.read().await;
-            let txn = txns.get(transaction_id).unwrap();
+            let txn = txns.get(transaction_id).expect("transaction should exist");
             txn.participants.clone()
         };
 
@@ -499,7 +499,7 @@ impl DistributedTransactionCoordinator {
     async fn commit_phase(&self, transaction_id: &str) -> bool {
         let participants = {
             let txns = self.transactions.read().await;
-            let txn = txns.get(transaction_id).unwrap();
+            let txn = txns.get(transaction_id).expect("transaction should exist");
             txn.participants.clone()
         };
 
@@ -549,13 +549,13 @@ impl DistributedTransactionCoordinator {
     async fn execute_saga_step(&self, transaction_id: &str, step_idx: usize) -> Result<()> {
         let operation = {
             let txns = self.transactions.read().await;
-            let txn = txns.get(transaction_id).unwrap();
+            let txn = txns.get(transaction_id).expect("transaction should exist");
             txn.saga_log
                 .as_ref()
-                .unwrap()
+                .expect("saga log should exist")
                 .steps
                 .get(step_idx)
-                .unwrap()
+                .expect("saga step should exist")
                 .operation
                 .clone()
         };
@@ -569,7 +569,9 @@ impl DistributedTransactionCoordinator {
 
         // Update step state
         let mut txns = self.transactions.write().await;
-        let txn = txns.get_mut(transaction_id).unwrap();
+        let txn = txns
+            .get_mut(transaction_id)
+            .expect("transaction should exist");
         if let Some(saga_log) = &mut txn.saga_log {
             saga_log.steps[step_idx].state = SagaStepState::Completed;
             saga_log.current_step = step_idx + 1;
@@ -626,13 +628,13 @@ impl DistributedTransactionCoordinator {
     async fn compensate_saga_step(&self, transaction_id: &str, step_idx: usize) -> Result<()> {
         let compensation = {
             let txns = self.transactions.read().await;
-            let txn = txns.get(transaction_id).unwrap();
+            let txn = txns.get(transaction_id).expect("transaction should exist");
             txn.saga_log
                 .as_ref()
-                .unwrap()
+                .expect("saga log should exist")
                 .steps
                 .get(step_idx)
-                .unwrap()
+                .expect("saga step should exist")
                 .compensation
                 .clone()
         };
@@ -647,7 +649,9 @@ impl DistributedTransactionCoordinator {
 
             // Update step state
             let mut txns = self.transactions.write().await;
-            let txn = txns.get_mut(transaction_id).unwrap();
+            let txn = txns
+                .get_mut(transaction_id)
+                .expect("transaction should exist");
             if let Some(saga_log) = &mut txn.saga_log {
                 saga_log.steps[step_idx].state = SagaStepState::Compensated;
             }
@@ -690,7 +694,7 @@ impl DistributedTransactionCoordinator {
 
         let participants = {
             let txns = self.transactions.read().await;
-            let txn = txns.get(transaction_id).unwrap();
+            let txn = txns.get(transaction_id).expect("transaction should exist");
             txn.participants.clone()
         };
 

@@ -570,7 +570,7 @@ impl NsgIndex {
     fn select_temp_entry_point(&self) -> usize {
         if let Some(seed) = self.config.random_seed {
             let mut rng = Random::seed(seed);
-            rng.random_range(0, self.data.len())
+            rng.random_range(0..self.data.len())
         } else {
             // Use centroid as entry point
             self.find_centroid()

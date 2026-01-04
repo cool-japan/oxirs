@@ -293,8 +293,14 @@ impl OwlSchemaGenerator {
         if let Ok(QueryResults::Solutions(solutions)) = store.query(characteristics_query) {
             for solution in solutions {
                 if let (Some(prop_term), Some(char_term)) = (
-                    solution.get(&oxirs_core::model::Variable::new("property").unwrap()),
-                    solution.get(&oxirs_core::model::Variable::new("characteristic").unwrap()),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("property")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("characteristic")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
                 ) {
                     let prop_uri = prop_term.to_string();
                     if let Some(characteristic) = self.extract_literal_value(&char_term.to_string())
@@ -327,8 +333,14 @@ impl OwlSchemaGenerator {
         if let Ok(QueryResults::Solutions(solutions)) = store.query(inverse_query) {
             for solution in solutions {
                 if let (Some(prop_term), Some(inv_term)) = (
-                    solution.get(&oxirs_core::model::Variable::new("property").unwrap()),
-                    solution.get(&oxirs_core::model::Variable::new("inverse").unwrap()),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("property")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("inverse")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
                 ) {
                     let prop_uri = prop_term.to_string();
                     let inv_uri = inv_term.to_string();
@@ -366,9 +378,18 @@ impl OwlSchemaGenerator {
         if let Ok(QueryResults::Solutions(solutions)) = store.query(some_values_query) {
             for solution in solutions {
                 if let (Some(class_term), Some(prop_term), Some(value_term)) = (
-                    solution.get(&oxirs_core::model::Variable::new("class").unwrap()),
-                    solution.get(&oxirs_core::model::Variable::new("property").unwrap()),
-                    solution.get(&oxirs_core::model::Variable::new("valueClass").unwrap()),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("class")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("property")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("valueClass")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
                 ) {
                     let class_uri = class_term.to_string();
                     let prop_uri = prop_term.to_string();
@@ -403,17 +424,24 @@ impl OwlSchemaGenerator {
         if let Ok(QueryResults::Solutions(solutions)) = store.query(cardinality_query) {
             for solution in solutions {
                 if let (Some(class_term), Some(prop_term)) = (
-                    solution.get(&oxirs_core::model::Variable::new("class").unwrap()),
-                    solution.get(&oxirs_core::model::Variable::new("property").unwrap()),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("class")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("property")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
                 ) {
                     let class_uri = class_term.to_string();
                     let prop_uri = prop_term.to_string();
 
                     if let Some(owl_class) = vocab.classes.get_mut(&class_uri) {
                         // Check for exact cardinality
-                        if let Some(exact_term) =
-                            solution.get(&oxirs_core::model::Variable::new("exactCard").unwrap())
-                        {
+                        if let Some(exact_term) = solution.get(
+                            &oxirs_core::model::Variable::new("exactCard")
+                                .expect("hardcoded variable name should be valid"),
+                        ) {
                             if let Some(card_str) =
                                 self.extract_literal_value(&exact_term.to_string())
                             {
@@ -430,9 +458,10 @@ impl OwlSchemaGenerator {
                         }
 
                         // Check for min cardinality
-                        if let Some(min_term) =
-                            solution.get(&oxirs_core::model::Variable::new("minCard").unwrap())
-                        {
+                        if let Some(min_term) = solution.get(
+                            &oxirs_core::model::Variable::new("minCard")
+                                .expect("hardcoded variable name should be valid"),
+                        ) {
                             if let Some(card_str) =
                                 self.extract_literal_value(&min_term.to_string())
                             {
@@ -447,9 +476,10 @@ impl OwlSchemaGenerator {
                         }
 
                         // Check for max cardinality
-                        if let Some(max_term) =
-                            solution.get(&oxirs_core::model::Variable::new("maxCard").unwrap())
-                        {
+                        if let Some(max_term) = solution.get(
+                            &oxirs_core::model::Variable::new("maxCard")
+                                .expect("hardcoded variable name should be valid"),
+                        ) {
                             if let Some(card_str) =
                                 self.extract_literal_value(&max_term.to_string())
                             {
@@ -489,8 +519,14 @@ impl OwlSchemaGenerator {
         if let Ok(QueryResults::Solutions(solutions)) = store.query(equiv_query) {
             for solution in solutions {
                 if let (Some(c1_term), Some(c2_term)) = (
-                    solution.get(&oxirs_core::model::Variable::new("class1").unwrap()),
-                    solution.get(&oxirs_core::model::Variable::new("class2").unwrap()),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("class1")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("class2")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
                 ) {
                     let c1_uri = c1_term.to_string();
                     let c2_uri = c2_term.to_string();
@@ -522,8 +558,14 @@ impl OwlSchemaGenerator {
         if let Ok(QueryResults::Solutions(solutions)) = store.query(disjoint_query) {
             for solution in solutions {
                 if let (Some(c1_term), Some(c2_term)) = (
-                    solution.get(&oxirs_core::model::Variable::new("class1").unwrap()),
-                    solution.get(&oxirs_core::model::Variable::new("class2").unwrap()),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("class1")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
+                    solution.get(
+                        &oxirs_core::model::Variable::new("class2")
+                            .expect("hardcoded variable name should be valid"),
+                    ),
                 ) {
                     let c1_uri = c1_term.to_string();
                     let c2_uri = c2_term.to_string();
@@ -786,21 +828,31 @@ impl OwlSchemaGenerator {
     ) -> Result<()> {
         if let QueryResults::Solutions(solutions) = results {
             for solution in solutions {
-                if let Some(class_term) =
-                    solution.get(&oxirs_core::model::Variable::new("class").unwrap())
-                {
+                if let Some(class_term) = solution.get(
+                    &oxirs_core::model::Variable::new("class")
+                        .expect("hardcoded variable name should be valid"),
+                ) {
                     let class_uri = class_term.to_string();
 
                     let label = solution
-                        .get(&oxirs_core::model::Variable::new("label").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("label")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
                     let comment = solution
-                        .get(&oxirs_core::model::Variable::new("comment").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("comment")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
                     let super_class = solution
-                        .get(&oxirs_core::model::Variable::new("superClass").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("superClass")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .map(|t| t.to_string());
 
                     let rdf_class = classes
@@ -839,29 +891,45 @@ impl OwlSchemaGenerator {
     ) -> Result<()> {
         if let QueryResults::Solutions(solutions) = results {
             for solution in solutions {
-                if let Some(property_term) =
-                    solution.get(&oxirs_core::model::Variable::new("property").unwrap())
-                {
+                if let Some(property_term) = solution.get(
+                    &oxirs_core::model::Variable::new("property")
+                        .expect("hardcoded variable name should be valid"),
+                ) {
                     let property_uri = property_term.to_string();
 
                     let label = solution
-                        .get(&oxirs_core::model::Variable::new("label").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("label")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
                     let comment = solution
-                        .get(&oxirs_core::model::Variable::new("comment").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("comment")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
                     let domain = solution
-                        .get(&oxirs_core::model::Variable::new("domain").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("domain")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .map(|t| t.to_string());
 
                     let range = solution
-                        .get(&oxirs_core::model::Variable::new("range").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("range")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .map(|t| t.to_string());
 
                     let property_type = solution
-                        .get(&oxirs_core::model::Variable::new("type").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("type")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .and_then(|t| self.extract_literal_value(&t.to_string()))
                         .unwrap_or_else(|| "AnnotationProperty".to_string());
 
@@ -872,11 +940,17 @@ impl OwlSchemaGenerator {
                     };
 
                     let functional = solution
-                        .get(&oxirs_core::model::Variable::new("functional").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("functional")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .is_some();
 
                     let inverse_functional = solution
-                        .get(&oxirs_core::model::Variable::new("inverseFunctional").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("inverseFunctional")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .is_some();
 
                     let rdf_property =

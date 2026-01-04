@@ -483,13 +483,13 @@ impl EnhancedSubscriptionManager {
 
         // Add to subscriptions map
         {
-            let mut subscriptions = self.subscriptions.write().unwrap();
+            let mut subscriptions = self.subscriptions.write().expect("lock poisoned");
             subscriptions.insert(base_subscription.id.clone(), final_subscription);
         }
 
         // Add to priority queue
         {
-            let mut priority_queues = self.priority_queues.write().unwrap();
+            let mut priority_queues = self.priority_queues.write().expect("lock poisoned");
             priority_queues
                 .entry(priority)
                 .or_insert_with(Vec::new)
@@ -510,7 +510,7 @@ impl EnhancedSubscriptionManager {
     /// Remove a subscription
     pub fn remove_subscription(&self, subscription_id: &str) -> Result<()> {
         let removed_subscription = {
-            let mut subscriptions = self.subscriptions.write().unwrap();
+            let mut subscriptions = self.subscriptions.write().expect("lock poisoned");
             subscriptions.remove(subscription_id)
         };
 
@@ -522,7 +522,7 @@ impl EnhancedSubscriptionManager {
 
             // Remove from priority queue
             {
-                let mut priority_queues = self.priority_queues.write().unwrap();
+                let mut priority_queues = self.priority_queues.write().expect("lock poisoned");
                 if let Some(queue) = priority_queues.get_mut(&subscription.priority) {
                     queue.retain(|id| id != subscription_id);
                 }
@@ -543,7 +543,7 @@ impl EnhancedSubscriptionManager {
         
         // Update event metrics
         {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("lock poisoned");
             metrics.total_events_processed += 1;
         }
 
@@ -551,7 +551,7 @@ impl EnhancedSubscriptionManager {
         let triggered_subscriptions = self.get_triggered_subscriptions(&event);
         
         if triggered_subscriptions.is_empty() {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("lock poisoned");
             metrics.events_filtered_out += 1;
             return Ok(());
         }
@@ -561,7 +561,7 @@ impl EnhancedSubscriptionManager {
         
         for subscription_id in triggered_subscriptions {
             let priority = {
-                let subscriptions = self.subscriptions.read().unwrap();
+                let subscriptions = self.subscriptions.read().expect("lock poisoned");
                 subscriptions.get(&subscription_id)
                     .map(|s| s.priority)
                     .unwrap_or(SubscriptionPriority::Normal)
@@ -597,11 +597,11 @@ impl EnhancedSubscriptionManager {
 
     /// Get comprehensive metrics
     pub fn get_enhanced_metrics(&self) -> EnhancedSubscriptionMetrics {
-        let mut metrics = self.metrics.read().unwrap().clone();
+        let mut metrics = self.metrics.read().expect("lock poisoned").clone();
         
         // Update real-time metrics
-        let subscriptions = self.subscriptions.read().unwrap();
-        let groups = self.subscription_groups.read().unwrap();
+        let subscriptions = self.subscriptions.read().expect("lock poisoned");
+        let groups = self.subscription_groups.read().expect("lock poisoned");
         
         metrics.total_subscriptions = subscriptions.len();
         metrics.total_groups = groups.len();
@@ -683,7 +683,7 @@ impl EnhancedSubscriptionManager {
     }
 
     fn add_to_group(&self, subscription: &EnhancedSubscription) -> Result<Option<String>> {
-        let mut groups = self.subscription_groups.write().unwrap();
+        let mut groups = self.subscription_groups.write().expect("lock poisoned");
         
         // Find existing group with same filter hash
         let existing_group = groups
@@ -711,7 +711,7 @@ impl EnhancedSubscriptionManager {
     }
 
     fn remove_from_group(&self, group_id: &str, subscription_id: &str) -> Result<()> {
-        let mut groups = self.subscription_groups.write().unwrap();
+        let mut groups = self.subscription_groups.write().expect("lock poisoned");
         
         if let Some(group) = groups.get_mut(group_id) {
             group.remove_subscription(subscription_id);
@@ -726,7 +726,7 @@ impl EnhancedSubscriptionManager {
     }
 
     fn get_triggered_subscriptions(&self, event: &SubscriptionEvent) -> Vec<String> {
-        let subscriptions = self.subscriptions.read().unwrap();
+        let subscriptions = self.subscriptions.read().expect("lock poisoned");
         let mut triggered = Vec::new();
         
         for (id, subscription) in subscriptions.iter() {
@@ -784,7 +784,7 @@ impl EnhancedSubscriptionManager {
         
         // Update subscription metrics
         {
-            let mut subscriptions = self.subscriptions.write().unwrap();
+            let mut subscriptions = self.subscriptions.write().expect("lock poisoned");
             if let Some(subscription) = subscriptions.get_mut(&subscription_id) {
                 subscription.performance_metrics.record_execution(
                     execution_time,
@@ -798,12 +798,12 @@ impl EnhancedSubscriptionManager {
     }
 
     fn update_metrics_on_add(&self, priority: SubscriptionPriority) {
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write().expect("lock poisoned");
         *metrics.subscriptions_by_priority.entry(priority).or_insert(0) += 1;
     }
 
     fn update_metrics_on_remove(&self, priority: SubscriptionPriority) {
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write().expect("lock poisoned");
         if let Some(count) = metrics.subscriptions_by_priority.get_mut(&priority) {
             *count = count.saturating_sub(1);
         }

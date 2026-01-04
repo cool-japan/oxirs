@@ -20,9 +20,9 @@ fn generate_test_triples(count: usize) -> Vec<Triple> {
     (0..count)
         .map(|_| {
             create_triple(
-                &format!("http://example.org/s{}", random.random_range(0, 1000)),
-                &format!("http://example.org/p{}", random.random_range(0, 10)),
-                &format!("object{}", random.random_range(0, 10000)),
+                &format!("http://example.org/s{}", random.random_range(0..1000)),
+                &format!("http://example.org/p{}", random.random_range(0..10)),
+                &format!("object{}", random.random_range(0..10000)),
             )
         })
         .collect()

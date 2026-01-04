@@ -295,7 +295,7 @@
 
 ## 🔧 New Modules Created
 
-### v0.1.0-rc.1 (Previously Completed)
+### v0.1.0-rc.2 (Previously Completed)
 1. **k8s_operator.rs** - Kubernetes operator for managing Fuseki instances
 2. **auth/mfa_storage.rs** - Persistent MFA storage
 3. **tls_rotation.rs** - TLS certificate rotation
@@ -306,7 +306,7 @@
 8. **ddos_protection.rs** - DDoS protection and traffic analysis
 9. **disaster_recovery.rs** - Disaster recovery and failover management
 
-### v0.1.0-rc.1 (November 3, 2025) ✨
+### v0.1.0-rc.2 (November 3, 2025) ✨
 10. **concurrent.rs** - Advanced concurrent request handling (780 lines)
     - Work-stealing scheduler with configurable worker threads
     - Priority-based request queuing (Low, Normal, High, Critical)
@@ -352,7 +352,7 @@
     - Progress tracking for long-running operations
     - Concurrent operation limiting
 
-### v0.1.0-rc.1 (November 6, 2025) ✨
+### v0.1.0-rc.2 (November 6, 2025) ✨
 15. **realtime_notifications.rs** - Real-time update notifications (620 lines)
     - WebSocket-based notification system
     - Event types: dataset updates, query completions, system status, metrics, backups

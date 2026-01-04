@@ -60,7 +60,10 @@ impl EvictionPolicy for LRUEvictionPolicy {
     fn on_access(&mut self, key: &CacheKey, _access_time: Instant) {
         // Move to back (most recently used)
         if let Some(pos) = self.access_order.iter().position(|k| k == key) {
-            let key = self.access_order.remove(pos).unwrap();
+            let key = self
+                .access_order
+                .remove(pos)
+                .expect("position was just found, so remove must succeed");
             self.access_order.push_back(key);
         }
     }

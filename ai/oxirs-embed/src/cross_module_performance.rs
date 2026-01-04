@@ -376,7 +376,7 @@ impl CrossModulePerformanceCoordinator {
         let monitor = ModulePerformanceMonitor::new(module_name.clone());
 
         {
-            let mut monitors = self.module_monitors.write().unwrap();
+            let mut monitors = self.module_monitors.write().expect("lock poisoned");
             monitors.insert(module_name.clone(), monitor);
         }
 
@@ -394,7 +394,7 @@ impl CrossModulePerformanceCoordinator {
         metrics: ModuleMetrics,
     ) -> Result<()> {
         let monitor = {
-            let monitors = self.module_monitors.read().unwrap();
+            let monitors = self.module_monitors.read().expect("lock poisoned");
             monitors.get(module_name).cloned()
         };
         if let Some(monitor) = monitor {
@@ -451,7 +451,7 @@ impl CrossModulePerformanceCoordinator {
     /// Collect performance data from all modules
     async fn collect_performance_data(&self) -> Result<HashMap<String, ModuleMetrics>> {
         let monitor_list = {
-            let monitors = self.module_monitors.read().unwrap();
+            let monitors = self.module_monitors.read().expect("lock poisoned");
             monitors
                 .iter()
                 .map(|(name, monitor)| (name.clone(), monitor.clone()))
@@ -787,7 +787,7 @@ impl CrossModulePerformanceCoordinator {
 
     /// Update global metrics
     async fn update_global_metrics(&self, results: &OptimizationResults) -> Result<()> {
-        let mut global_metrics = self.global_metrics.write().unwrap();
+        let mut global_metrics = self.global_metrics.write().expect("lock poisoned");
         global_metrics.update(results);
         Ok(())
     }
@@ -868,7 +868,7 @@ impl CrossModulePerformanceCoordinator {
 
     async fn get_current_module_metrics(&self, module_name: &str) -> Result<ModuleMetrics> {
         let monitor = {
-            let monitors = self.module_monitors.read().unwrap();
+            let monitors = self.module_monitors.read().expect("lock poisoned");
             monitors.get(module_name).cloned()
         };
         if let Some(monitor) = monitor {
@@ -973,19 +973,19 @@ impl GlobalPerformanceMetrics {
         self.total_optimizations.fetch_add(1, Ordering::SeqCst);
 
         {
-            let mut gain = self.avg_performance_gain.write().unwrap();
+            let mut gain = self.avg_performance_gain.write().expect("lock poisoned");
             *gain = (*gain + results.total_performance_gain) / 2.0;
         }
 
         {
-            let mut rate = self.success_rate.write().unwrap();
+            let mut rate = self.success_rate.write().expect("lock poisoned");
             let success = results.optimizations_applied as f64
                 / (results.optimizations_applied + results.optimization_failures).max(1) as f64;
             *rate = (*rate + success) / 2.0;
         }
 
         {
-            let mut last = self.last_optimization.write().unwrap();
+            let mut last = self.last_optimization.write().expect("lock poisoned");
             *last = Some(Utc::now());
         }
     }
@@ -1070,7 +1070,7 @@ impl ResourceAllocator {
     }
 
     async fn get_current_allocation(&self, module_name: &str) -> Result<ResourceAllocation> {
-        let allocations = self.current_allocations.read().unwrap();
+        let allocations = self.current_allocations.read().expect("lock poisoned");
         if let Some(allocation) = allocations.get(module_name) {
             Ok(allocation.clone())
         } else {
@@ -1130,7 +1130,7 @@ impl ResourceAllocator {
         allocation: ResourceAllocation,
     ) -> Result<()> {
         {
-            let mut allocations = self.current_allocations.write().unwrap();
+            let mut allocations = self.current_allocations.write().expect("lock poisoned");
             allocations.insert(module_name.to_string(), allocation.clone());
         }
 
@@ -1144,7 +1144,7 @@ impl ResourceAllocator {
         };
 
         {
-            let mut history = self.allocation_history.write().unwrap();
+            let mut history = self.allocation_history.write().expect("lock poisoned");
             history.push_back(event);
 
             // Keep only last 1000 events
@@ -1212,7 +1212,7 @@ impl LearningEngine {
         };
 
         {
-            let mut samples = self.training_samples.write().unwrap();
+            let mut samples = self.training_samples.write().expect("lock poisoned");
             samples.push_back(sample);
 
             // Keep only last 10000 samples
@@ -1298,7 +1298,7 @@ impl AnomalyDetector {
 
         // Store anomalies in history
         {
-            let mut history = self.anomaly_history.write().unwrap();
+            let mut history = self.anomaly_history.write().expect("lock poisoned");
             for anomaly in &anomalies {
                 history.push_back(anomaly.clone());
             }
@@ -1338,7 +1338,7 @@ impl ModulePerformanceMonitor {
 
     async fn update_metrics(&self, new_metrics: ModuleMetrics) -> Result<()> {
         {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("lock poisoned");
             *metrics = new_metrics.clone();
         }
 
@@ -1349,7 +1349,7 @@ impl ModulePerformanceMonitor {
         };
 
         {
-            let mut history = self.history.write().unwrap();
+            let mut history = self.history.write().expect("lock poisoned");
             history.push_back(snapshot);
 
             // Keep only last 1000 snapshots
@@ -1362,7 +1362,7 @@ impl ModulePerformanceMonitor {
     }
 
     async fn get_current_metrics(&self) -> Result<ModuleMetrics> {
-        let metrics = self.metrics.read().unwrap();
+        let metrics = self.metrics.read().expect("lock poisoned");
         Ok(metrics.clone())
     }
 }

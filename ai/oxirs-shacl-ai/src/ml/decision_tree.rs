@@ -239,7 +239,7 @@ impl DecisionTreeLearner {
             let mut random = Random::default();
             // Fisher-Yates shuffle
             for i in (1..indices.len()).rev() {
-                let j = random.random_range(0, i + 1);
+                let j = random.random_range(0..i + 1);
                 indices.swap(i, j);
             }
             indices.into_iter().take(max_features).collect()
@@ -250,7 +250,7 @@ impl DecisionTreeLearner {
         for &feature_idx in &features_to_consider {
             // Get unique values for this feature
             let mut values: Vec<f64> = data.iter().map(|fv| fv.features[feature_idx]).collect();
-            values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             values.dedup();
 
             // Try different thresholds
@@ -460,7 +460,7 @@ impl DecisionTreeLearner {
             .values()
             .map(|&c| c as f64 / graph_data.nodes.len() as f64)
             .collect();
-        type_freqs.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        type_freqs.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
         type_freqs.resize(5, 0.0);
         features.extend(type_freqs);
 
@@ -474,7 +474,7 @@ impl DecisionTreeLearner {
             .values()
             .map(|&c| c as f64 / graph_data.edges.len().max(1) as f64)
             .collect();
-        property_freqs.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        property_freqs.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
         property_freqs.resize(10, 0.0);
         features.extend(property_freqs);
 

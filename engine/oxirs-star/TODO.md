@@ -721,7 +721,7 @@ Quantum annealing and variational quantum algorithms for complex join order opti
 - **Memory-efficient storage** - Support for datasets larger than RAM via memory-mapping
 - **Performance validated** - 122-257% throughput improvements (benchmarked)
 - **Interoperability testing** - 17 comprehensive tests for Apache Jena, RDF4J, Virtuoso compatibility
-- **Released on crates.io**: `oxirs-star = "0.1.0-rc.1"` (experimental)
+- **Released on crates.io**: `oxirs-star = "0.1.0-rc.2"` (experimental)
 
 ## ✅ Recently Completed (November 6, 2025 - Session 5)
 
@@ -799,7 +799,7 @@ Quantum annealing and variational quantum algorithms for complex join order opti
 
 ## ✅ Previously Completed (October 30, 2025 - Session 3)
 
-### Release Implementation (v0.1.0-rc.1)
+### Release Implementation (v0.1.0-rc.2)
 - **Storage Backend Integration** - Multi-backend storage system (src/storage_integration.rs)
   - Memory backend for in-memory RDF-star storage
   - Persistent backend with auto-save and disk serialization
@@ -892,7 +892,7 @@ See `../../docs/oxirs_star_scirs2_integration_summary.md` for detailed technical
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Release Targets (v0.1.0-rc.1 - December 2025)
+### Release Targets (v0.1.0-rc.2 - December 2025)
 
 #### Specification Compliance
 - [ ] Complete RDF-star specification

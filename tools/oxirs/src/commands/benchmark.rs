@@ -400,8 +400,12 @@ fn run_benchmark_suite(
             (execution_times.iter().map(|d| d.as_nanos()).sum::<u128>() / iterations as u128)
                 as u64,
         );
-        let min_time = *execution_times.first().unwrap();
-        let max_time = *execution_times.last().unwrap();
+        let min_time = *execution_times
+            .first()
+            .expect("execution_times should have at least one entry");
+        let max_time = *execution_times
+            .last()
+            .expect("execution_times should have at least one entry");
         let median_time = execution_times[iterations / 2];
         let p95_time = execution_times[(iterations as f64 * 0.95) as usize];
         let p99_time = execution_times[(iterations as f64 * 0.99) as usize];

@@ -8,19 +8,20 @@
 
 use crate::Vector;
 use anyhow::{anyhow, Result};
-use bincode::config::Configuration;
-use bincode::{Decode, Encode};
+use oxicode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-/// Returns a bincode configuration with fixed-int encoding.
+/// Returns an oxicode configuration with fixed-int encoding.
 /// This ensures header sizes are consistent regardless of the values stored.
-fn bincode_config(
-) -> Configuration<bincode::config::LittleEndian, bincode::config::Fixint, bincode::config::NoLimit>
-{
-    bincode::config::standard().with_fixed_int_encoding()
+fn bincode_config() -> oxicode::config::Configuration<
+    oxicode::config::LittleEndian,
+    oxicode::config::Fixint,
+    oxicode::config::NoLimit,
+> {
+    oxicode::config::standard().with_fixed_int_encoding()
 }
 
 /// Compression methods for vector storage
@@ -186,7 +187,7 @@ impl VectorWriter {
         };
 
         // Write a placeholder header first to reserve space
-        let placeholder_header_bytes = bincode::encode_to_vec(&header, bincode_config())
+        let placeholder_header_bytes = oxicode::serde::encode_to_vec(&header, bincode_config())
             .map_err(|e| anyhow!("Failed to serialize placeholder header: {}", e))?;
         let _header_size = (4 + placeholder_header_bytes.len()) as u64;
 
@@ -350,16 +351,15 @@ impl VectorWriter {
 
         // The data offset is fixed at the position after the placeholder header
         // We need to calculate this the same way it was calculated in new()
-        let placeholder_header = VectorFileHeader {
-            compression: self.config.compression,
-            compression_level: self.config.compression_level,
-            block_size: self.config.block_size,
-            ..Default::default()
-        };
-        let placeholder_header_bytes =
-            bincode::encode_to_vec(&placeholder_header, bincode_config())
-                .map_err(|e| anyhow!("Failed to serialize placeholder header: {}", e))?;
-        self.header.data_offset = 4 + placeholder_header_bytes.len() as u64;
+        // First, serialize the header with correct vector_count to get actual size
+        let mut temp_header = self.header.clone();
+        temp_header.calculate_checksum();
+
+        let temp_header_bytes = oxicode::serde::encode_to_vec(&temp_header, bincode_config())
+            .map_err(|e| anyhow!("Failed to serialize header for size calculation: {}", e))?;
+
+        // Calculate actual data_offset based on real header size
+        self.header.data_offset = 4 + temp_header_bytes.len() as u64;
         self.header.calculate_checksum();
 
         // Flush before seeking to ensure all data is written
@@ -368,7 +368,7 @@ impl VectorWriter {
         // Seek to beginning and write header
         self.writer.get_mut().seek(SeekFrom::Start(0))?;
 
-        let header_bytes = bincode::encode_to_vec(&self.header, bincode_config())
+        let header_bytes = oxicode::serde::encode_to_vec(&self.header, bincode_config())
             .map_err(|e| anyhow!("Failed to serialize header: {}", e))?;
 
         // Write header size first, then header data
@@ -427,7 +427,7 @@ impl VectorReader {
         reader.read_exact(&mut header_data)?;
 
         let (header, _): (VectorFileHeader, _) =
-            bincode::decode_from_slice(&header_data, bincode_config())
+            oxicode::serde::decode_from_slice(&header_data, bincode_config())
                 .map_err(|e| anyhow!("Failed to deserialize header: {}", e))?;
 
         // Verify magic number
@@ -527,7 +527,7 @@ impl MmapVectorFile {
         }
         let header_bytes = &mmap[4..4 + header_size];
         let (header, _): (VectorFileHeader, _) =
-            bincode::decode_from_slice(header_bytes, bincode_config())
+            oxicode::serde::decode_from_slice(header_bytes, bincode_config())
                 .map_err(|e| anyhow!("Failed to deserialize header: {}", e))?;
 
         // Verify header

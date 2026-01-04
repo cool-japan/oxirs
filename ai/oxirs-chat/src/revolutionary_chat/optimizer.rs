@@ -92,7 +92,7 @@ impl RevolutionaryChatOptimizer {
 
         // Stage 1: Unified coordination analysis
         let coordination_analysis = {
-            let coordinator = self.unified_coordinator.read().unwrap();
+            let coordinator = self.unified_coordinator.read().expect("rwlock should not be poisoned");
             coordinator
                 .analyze_processing_requirements(messages, context)
                 .await?
@@ -100,13 +100,13 @@ impl RevolutionaryChatOptimizer {
 
         // Stage 2: Advanced statistics collection
         if self.config.enable_advanced_statistics {
-            let mut collector = self.statistics_collector.write().unwrap();
+            let mut collector = self.statistics_collector.write().expect("rwlock should not be poisoned");
             collector.collect_message_statistics(messages).await?;
         }
 
         // Stage 3: AI-powered conversation analysis
         let conversation_insights = if self.config.enable_ai_conversation_analysis {
-            let analyzer = self.conversation_analyzer.read().unwrap();
+            let analyzer = self.conversation_analyzer.read().expect("rwlock should not be poisoned");
             Some(analyzer.analyze_conversation(messages).await?)
         } else {
             None
@@ -121,7 +121,7 @@ impl RevolutionaryChatOptimizer {
 
         // Stage 5: Performance prediction
         let performance_prediction = {
-            let predictor = self.performance_predictor.lock().unwrap();
+            let predictor = self.performance_predictor.lock().expect("mutex lock should not be poisoned");
             predictor
                 .predict_processing_performance(messages, context, &coordination_analysis)
                 .await?
@@ -129,7 +129,7 @@ impl RevolutionaryChatOptimizer {
 
         // Stage 6: Adaptive optimization strategy
         let optimization_strategy = {
-            let engine = self.optimization_engine.read().unwrap();
+            let engine = self.optimization_engine.read().expect("rwlock should not be poisoned");
             engine
                 .determine_optimization_strategy(
                     &coordination_analysis,
@@ -146,14 +146,14 @@ impl RevolutionaryChatOptimizer {
 
         // Stage 8: Memory optimization
         if self.config.enable_advanced_memory_management {
-            let memory_manager = self.memory_manager.read().unwrap();
+            let memory_manager = self.memory_manager.read().expect("rwlock should not be poisoned");
             memory_manager.optimize_chat_memory(messages).await?;
         }
 
         // Stage 9: Update optimization statistics
         let optimization_time = start_time.elapsed();
         {
-            let mut stats = self.optimization_stats.write().unwrap();
+            let mut stats = self.optimization_stats.write().expect("rwlock should not be poisoned");
             stats.record_optimization(
                 messages.len(),
                 optimization_time,
@@ -186,14 +186,14 @@ impl RevolutionaryChatOptimizer {
 
         // Apply unified coordination optimization
         if strategy.use_unified_coordination {
-            let coordinator = self.unified_coordinator.read().unwrap();
+            let coordinator = self.unified_coordinator.read().expect("rwlock should not be poisoned");
             let coordination_result = coordinator.optimize_cross_component_coordination(messages, context).await?;
             applied.coordination_optimization = Some(coordination_result);
         }
 
         // Apply conversation flow optimization
         if strategy.use_conversation_flow_optimization {
-            let analyzer = self.conversation_analyzer.read().unwrap();
+            let analyzer = self.conversation_analyzer.read().expect("rwlock should not be poisoned");
             let flow_optimization = analyzer.optimize_conversation_flow(messages).await?;
             applied.conversation_flow_optimization = Some(flow_optimization);
         }
@@ -208,7 +208,7 @@ impl RevolutionaryChatOptimizer {
 
         // Apply memory optimization
         if strategy.use_memory_optimization {
-            let memory_manager = self.memory_manager.read().unwrap();
+            let memory_manager = self.memory_manager.read().expect("rwlock should not be poisoned");
             let memory_optimization = memory_manager.apply_memory_optimizations(messages).await?;
             applied.memory_optimization = Some(memory_optimization);
         }
@@ -280,7 +280,7 @@ impl RevolutionaryChatOptimizer {
 
     /// Get advanced conversation statistics
     pub async fn get_conversation_statistics(&self) -> ConversationStatistics {
-        let collector = self.statistics_collector.read().unwrap();
+        let collector = self.statistics_collector.read().expect("rwlock should not be poisoned");
         collector.get_statistics().await
     }
 
@@ -291,7 +291,7 @@ impl RevolutionaryChatOptimizer {
 
     /// Get AI conversation insights
     pub async fn get_conversation_insights(&self, messages: &[Message]) -> Result<ConversationInsights> {
-        let analyzer = self.conversation_analyzer.read().unwrap();
+        let analyzer = self.conversation_analyzer.read().expect("rwlock should not be poisoned");
         analyzer.get_detailed_insights(messages).await
     }
 
@@ -301,7 +301,7 @@ impl RevolutionaryChatOptimizer {
         messages: &[Message],
         context: &ChatProcessingContext,
     ) -> Result<ConversationPrediction> {
-        let predictor = self.performance_predictor.lock().unwrap();
+        let predictor = self.performance_predictor.lock().expect("mutex lock should not be poisoned");
         predictor.predict_conversation_outcomes(messages, context).await
     }
 }

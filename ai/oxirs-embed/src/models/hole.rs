@@ -198,7 +198,7 @@ impl HoLE {
             if local_rng.gen_range(0.0..1.0) < 0.5 {
                 // Corrupt subject
                 let random_subject =
-                    entity_list[local_rng.random_range(0, entity_list.len())].clone();
+                    entity_list[local_rng.random_range(0..entity_list.len())].clone();
                 negatives.push(Triple {
                     subject: NamedNode::new(&random_subject).unwrap(),
                     predicate: triple.predicate.clone(),
@@ -207,7 +207,7 @@ impl HoLE {
             } else {
                 // Corrupt object
                 let random_object =
-                    entity_list[local_rng.random_range(0, entity_list.len())].clone();
+                    entity_list[local_rng.random_range(0..entity_list.len())].clone();
                 negatives.push(Triple {
                     subject: triple.subject.clone(),
                     predicate: triple.predicate.clone(),
@@ -227,7 +227,7 @@ impl HoLE {
         // Shuffle triples for stochastic gradient descent
         let mut indices: Vec<usize> = (0..self.triples.len()).collect();
         for i in (1..indices.len()).rev() {
-            let j = local_rng.random_range(0, i + 1);
+            let j = local_rng.random_range(0..i + 1);
             indices.swap(i, j);
         }
 
@@ -550,7 +550,7 @@ impl EmbeddingModel for HoLE {
 
         let file = File::create(path)?;
         let writer = BufWriter::new(file);
-        bincode::serialize_into(writer, &serializable)
+        oxicode::serde::encode_into_std_write(&serializable, writer, oxicode::config::standard())
             .map_err(|e| anyhow!("Failed to serialize model: {}", e))?;
 
         info!("Model saved successfully");
@@ -566,8 +566,9 @@ impl EmbeddingModel for HoLE {
 
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        let serializable: HoLESerializable = bincode::deserialize_from(reader)
-            .map_err(|e| anyhow!("Failed to deserialize model: {}", e))?;
+        let (serializable, _): (HoLESerializable, _) =
+            oxicode::serde::decode_from_std_read(reader, oxicode::config::standard())
+                .map_err(|e| anyhow!("Failed to deserialize model: {}", e))?;
 
         // Convert Vec back to Array1
         let entity_embeddings: HashMap<String, Array1<f32>> = serializable

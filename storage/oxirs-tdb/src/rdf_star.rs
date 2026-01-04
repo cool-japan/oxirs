@@ -19,15 +19,13 @@
 //! quoted triple table that stores the actual (subject, predicate, object) tuple.
 
 use crate::dictionary::NodeId;
-use bincode::{Decode, Encode};
+use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 
 /// A quoted triple that can be used as a subject or object in RDF-star
 ///
 /// Represents `<<subject predicate object>>` in Turtle* syntax
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord, Encode, Decode,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct QuotedTriple {
     /// Subject of the quoted triple
     pub subject: NodeId,
@@ -224,7 +222,7 @@ impl std::fmt::Display for RdfStarError {
 impl std::error::Error for RdfStarError {}
 
 /// Statistics about RDF-star usage
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RdfStarStats {
     /// Total number of quoted triples
     pub total_quoted_triples: usize,
@@ -450,9 +448,10 @@ mod tests {
     fn test_quoted_triple_serialization() {
         let triple = QuotedTriple::new(NodeId::from(1), NodeId::from(2), NodeId::from(3));
 
-        let serialized = bincode::encode_to_vec(triple, bincode::config::standard()).unwrap();
+        let serialized =
+            oxicode::serde::encode_to_vec(&triple, oxicode::config::standard()).unwrap();
         let deserialized: QuotedTriple =
-            bincode::decode_from_slice(&serialized, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&serialized, oxicode::config::standard())
                 .unwrap()
                 .0;
 

@@ -252,9 +252,9 @@ impl MigrationTool {
             }
 
             if let Some(captures) = rule_regex.captures(trimmed) {
-                let rule_name = captures.get(1).unwrap().as_str();
-                let body_str = captures.get(2).unwrap().as_str();
-                let head_str = captures.get(3).unwrap().as_str();
+                let rule_name = captures.get(1).expect("regex capture group 1").as_str();
+                let body_str = captures.get(2).expect("regex capture group 2").as_str();
+                let head_str = captures.get(3).expect("regex capture group 3").as_str();
 
                 match self.parse_jena_atoms(body_str, head_str, rule_name) {
                     Ok(rule) => rules.push(rule),
@@ -356,9 +356,9 @@ impl MigrationTool {
             .context("Failed to compile Drools rule regex")?;
 
         for (line_num, captures) in rule_regex.captures_iter(source).enumerate() {
-            let rule_name = captures.get(1).unwrap().as_str();
-            let when_clause = captures.get(2).unwrap().as_str();
-            let then_clause = captures.get(3).unwrap().as_str();
+            let rule_name = captures.get(1).expect("regex capture group 1").as_str();
+            let when_clause = captures.get(2).expect("regex capture group 2").as_str();
+            let then_clause = captures.get(3).expect("regex capture group 3").as_str();
 
             // Create enhanced rule
             match self.parse_drools_rule(rule_name, when_clause, then_clause) {
@@ -429,8 +429,8 @@ impl MigrationTool {
             Regex::new(r"(\w+)\s*\((.*?)\)").context("Failed to compile Drools pattern regex")?;
 
         for captures in pattern_regex.captures_iter(when_clause) {
-            let class_name = captures.get(1).unwrap().as_str();
-            let conditions = captures.get(2).unwrap().as_str();
+            let class_name = captures.get(1).expect("regex capture group 1").as_str();
+            let conditions = captures.get(2).expect("regex capture group 2").as_str();
 
             // Parse conditions
             for condition in conditions.split(',') {
@@ -470,8 +470,8 @@ impl MigrationTool {
             .context("Failed to compile Drools insert regex")?;
 
         for captures in insert_regex.captures_iter(then_clause) {
-            let class_name = captures.get(1).unwrap().as_str();
-            let params = captures.get(2).unwrap().as_str();
+            let class_name = captures.get(1).expect("regex capture group 1").as_str();
+            let params = captures.get(2).expect("regex capture group 2").as_str();
 
             // Add type assertion
             atoms.push(RuleAtom::Triple {
@@ -502,12 +502,19 @@ impl MigrationTool {
             Regex::new(r"set(\w+)\s*\(([^)]+)\)").context("Failed to compile setter regex")?;
 
         for captures in modify_regex.captures_iter(then_clause) {
-            let var_name = captures.get(1).unwrap().as_str();
-            let modifications = captures.get(2).unwrap().as_str();
+            let var_name = captures.get(1).expect("regex capture group 1").as_str();
+            let modifications = captures.get(2).expect("regex capture group 2").as_str();
 
             for setter_captures in setter_regex.captures_iter(modifications) {
-                let field_name = setter_captures.get(1).unwrap().as_str();
-                let value = setter_captures.get(2).unwrap().as_str().trim();
+                let field_name = setter_captures
+                    .get(1)
+                    .expect("regex capture group 1")
+                    .as_str();
+                let value = setter_captures
+                    .get(2)
+                    .expect("regex capture group 2")
+                    .as_str()
+                    .trim();
 
                 atoms.push(RuleAtom::Triple {
                     subject: Term::Variable(var_name.to_string()),
@@ -579,9 +586,9 @@ impl MigrationTool {
             .context("Failed to compile CLIPS rule regex")?;
 
         for (line_num, captures) in rule_regex.captures_iter(source).enumerate() {
-            let rule_name = captures.get(1).unwrap().as_str();
-            let pattern_clause = captures.get(2).unwrap().as_str();
-            let action_clause = captures.get(3).unwrap().as_str();
+            let rule_name = captures.get(1).expect("regex capture group 1").as_str();
+            let pattern_clause = captures.get(2).expect("regex capture group 2").as_str();
+            let action_clause = captures.get(3).expect("regex capture group 3").as_str();
 
             match self.parse_clips_rule(rule_name, pattern_clause, action_clause) {
                 Ok(rule) => {
@@ -653,7 +660,7 @@ impl MigrationTool {
             .context("Failed to compile CLIPS pattern regex")?;
 
         for captures in pattern_regex.captures_iter(patterns) {
-            let template_name = captures.get(1).unwrap().as_str();
+            let template_name = captures.get(1).expect("regex capture group 1").as_str();
 
             // Skip control patterns
             if template_name == "test"
@@ -702,7 +709,7 @@ impl MigrationTool {
             .context("Failed to compile CLIPS assert regex")?;
 
         for captures in assert_regex.captures_iter(actions) {
-            let template_name = captures.get(1).unwrap().as_str();
+            let template_name = captures.get(1).expect("regex capture group 1").as_str();
 
             // Create type assertion
             atoms.push(RuleAtom::Triple {
@@ -734,9 +741,9 @@ impl MigrationTool {
             .context("Failed to compile CLIPS modify regex")?;
 
         for captures in modify_regex.captures_iter(actions) {
-            let var_name = captures.get(1).unwrap().as_str();
-            let slot_name = captures.get(2).unwrap().as_str();
-            let slot_value = captures.get(3).unwrap().as_str();
+            let var_name = captures.get(1).expect("regex capture group 1").as_str();
+            let slot_name = captures.get(2).expect("regex capture group 2").as_str();
+            let slot_value = captures.get(3).expect("regex capture group 3").as_str();
 
             atoms.push(RuleAtom::Triple {
                 subject: Term::Variable(var_name.to_string()),

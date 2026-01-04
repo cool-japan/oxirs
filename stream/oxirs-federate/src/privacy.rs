@@ -305,7 +305,10 @@ impl PrivacyBudgetTracker {
     /// Check if budget is available
     pub fn check_budget(&self, user_id: &str, requested: f64) -> Result<(), PrivacyError> {
         let current_time = SystemTime::now();
-        let mut budget_map = self.used_budget.write().unwrap();
+        let mut budget_map = self
+            .used_budget
+            .write()
+            .expect("rwlock should not be poisoned");
 
         // Clean expired entries
         budget_map.retain(|_, (_, timestamp)| {
@@ -336,7 +339,10 @@ impl PrivacyBudgetTracker {
         self.check_budget(user_id, amount)?;
 
         let current_time = SystemTime::now();
-        let mut budget_map = self.used_budget.write().unwrap();
+        let mut budget_map = self
+            .used_budget
+            .write()
+            .expect("rwlock should not be poisoned");
 
         budget_map
             .entry(user_id.to_string())
@@ -351,7 +357,10 @@ impl PrivacyBudgetTracker {
 
     /// Get remaining budget for user
     pub fn remaining_budget(&self, user_id: &str) -> f64 {
-        let budget_map = self.used_budget.read().unwrap();
+        let budget_map = self
+            .used_budget
+            .read()
+            .expect("rwlock should not be poisoned");
         let used = budget_map
             .get(user_id)
             .map(|(budget, _)| *budget)
@@ -948,13 +957,15 @@ impl SensitiveDataDetector {
     pub fn new() -> Self {
         let patterns = vec![
             // Email patterns
-            regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap(),
+            regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+                .expect("hardcoded regex should be valid"),
             // Phone number patterns
-            regex::Regex::new(r"\b\d{3}-\d{3}-\d{4}\b").unwrap(),
+            regex::Regex::new(r"\b\d{3}-\d{3}-\d{4}\b").expect("hardcoded regex should be valid"),
             // SSN patterns
-            regex::Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap(),
+            regex::Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").expect("hardcoded regex should be valid"),
             // Credit card patterns
-            regex::Regex::new(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b").unwrap(),
+            regex::Regex::new(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b")
+                .expect("hardcoded regex should be valid"),
         ];
 
         Self { patterns }
@@ -1078,13 +1089,19 @@ impl GdprComplianceChecker {
 
     /// Log GDPR audit entry
     pub fn log_audit_entry(&self, entry: GdprAuditEntry) {
-        let mut log = self.audit_log.write().unwrap();
+        let mut log = self
+            .audit_log
+            .write()
+            .expect("rwlock should not be poisoned");
         log.push(entry);
     }
 
     /// Get audit log
     pub fn get_audit_log(&self) -> Vec<GdprAuditEntry> {
-        self.audit_log.read().unwrap().clone()
+        self.audit_log
+            .read()
+            .expect("rwlock should not be poisoned")
+            .clone()
     }
 }
 
@@ -1267,13 +1284,13 @@ fn perturb_string(value: &str) -> String {
     // Randomly change one character
     let mut result = chars.clone();
     if !result.is_empty() {
-        let idx = random.random_range(0, result.len());
+        let idx = random.random_range(0..result.len());
         if result[idx].is_ascii_alphabetic() {
             // Replace with a random letter
             let replacement = if result[idx].is_ascii_uppercase() {
-                char::from(random.random_range(b'A', b'Z' + 1))
+                char::from(random.random_range(b'A'..b'Z' + 1))
             } else {
-                char::from(random.random_range(b'a', b'z' + 1))
+                char::from(random.random_range(b'a'..b'z' + 1))
             };
             result[idx] = replacement;
         }
@@ -1296,7 +1313,7 @@ fn substitute_value(value: &str) -> String {
         let mut random = Random::default();
         let len = value.len();
         (0..len)
-            .map(|_| char::from(random.random_range(b'0', b'9' + 1)))
+            .map(|_| char::from(random.random_range(b'0'..b'9' + 1)))
             .collect()
     } else if value.chars().all(|c| c.is_ascii_alphabetic()) {
         // Text substitution

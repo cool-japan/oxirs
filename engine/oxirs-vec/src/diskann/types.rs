@@ -57,16 +57,8 @@ impl From<std::io::Error> for DiskAnnError {
     }
 }
 
-impl From<bincode::error::EncodeError> for DiskAnnError {
-    fn from(err: bincode::error::EncodeError) -> Self {
-        DiskAnnError::SerializationError {
-            message: err.to_string(),
-        }
-    }
-}
-
-impl From<bincode::error::DecodeError> for DiskAnnError {
-    fn from(err: bincode::error::DecodeError) -> Self {
+impl From<oxicode::Error> for DiskAnnError {
+    fn from(err: oxicode::Error) -> Self {
         DiskAnnError::SerializationError {
             message: err.to_string(),
         }

@@ -239,7 +239,10 @@ impl ClusterManager {
 
     /// Initialize partition map
     fn initialize_partitions(&self) {
-        let mut partitions = self.partitions.lock().unwrap();
+        let mut partitions = self
+            .partitions
+            .lock()
+            .expect("mutex lock should not be poisoned");
 
         for partition_id in 0..self.config.partition_count {
             partitions.insert(
@@ -259,7 +262,10 @@ impl ClusterManager {
     pub fn register_node(&mut self, node: ClusterNode) -> Result<(), ClusterError> {
         info!("Registering node: {:?}", node.id);
 
-        let mut nodes = self.nodes.lock().unwrap();
+        let mut nodes = self
+            .nodes
+            .lock()
+            .expect("mutex lock should not be poisoned");
         nodes.insert(node.id.clone(), node);
 
         // Trigger rebalancing if enabled
@@ -275,7 +281,10 @@ impl ClusterManager {
     pub fn unregister_node(&mut self, node_id: &NodeId) -> Result<(), ClusterError> {
         info!("Unregistering node: {:?}", node_id);
 
-        let mut nodes = self.nodes.lock().unwrap();
+        let mut nodes = self
+            .nodes
+            .lock()
+            .expect("mutex lock should not be poisoned");
         nodes.remove(node_id);
 
         drop(nodes);
@@ -319,7 +328,10 @@ impl ClusterManager {
 
     /// Get node for partition
     pub fn get_node_for_partition(&self, partition_id: u32) -> Option<NodeId> {
-        let partitions = self.partitions.lock().unwrap();
+        let partitions = self
+            .partitions
+            .lock()
+            .expect("mutex lock should not be poisoned");
         partitions
             .get(&partition_id)
             .map(|p| p.primary_node.clone())
@@ -330,7 +342,10 @@ impl ClusterManager {
         info!("Rebalancing partitions");
 
         let active_node_ids: Vec<NodeId> = {
-            let nodes = self.nodes.lock().unwrap();
+            let nodes = self
+                .nodes
+                .lock()
+                .expect("mutex lock should not be poisoned");
             if nodes.is_empty() {
                 return Err(ClusterError::InvalidConfiguration(
                     "No nodes available for rebalancing".to_string(),
@@ -350,7 +365,10 @@ impl ClusterManager {
             ));
         }
 
-        let mut partitions = self.partitions.lock().unwrap();
+        let mut partitions = self
+            .partitions
+            .lock()
+            .expect("mutex lock should not be poisoned");
 
         // Simple round-robin assignment
         let node_count = active_node_ids.len();
@@ -381,7 +399,10 @@ impl ClusterManager {
         );
 
         let active_node_id: NodeId = {
-            let nodes = self.nodes.lock().unwrap();
+            let nodes = self
+                .nodes
+                .lock()
+                .expect("mutex lock should not be poisoned");
             let active_nodes: Vec<_> = nodes
                 .values()
                 .filter(|n| n.status == NodeStatus::Active && n.id != *removed_node)
@@ -396,7 +417,10 @@ impl ClusterManager {
             active_nodes[0].id.clone()
         };
 
-        let mut partitions = self.partitions.lock().unwrap();
+        let mut partitions = self
+            .partitions
+            .lock()
+            .expect("mutex lock should not be poisoned");
 
         for partition in partitions.values_mut() {
             if partition.primary_node == *removed_node {
@@ -473,8 +497,14 @@ impl ClusterManager {
 
     /// Get cluster statistics
     pub fn get_cluster_stats(&self) -> ClusterStatistics {
-        let nodes = self.nodes.lock().unwrap();
-        let partitions = self.partitions.lock().unwrap();
+        let nodes = self
+            .nodes
+            .lock()
+            .expect("mutex lock should not be poisoned");
+        let partitions = self
+            .partitions
+            .lock()
+            .expect("mutex lock should not be poisoned");
 
         let total_nodes = nodes.len();
         let active_nodes = nodes
@@ -514,12 +544,18 @@ impl ClusterManager {
 
     /// Get node count
     pub fn node_count(&self) -> usize {
-        self.nodes.lock().unwrap().len()
+        self.nodes
+            .lock()
+            .expect("mutex lock should not be poisoned")
+            .len()
     }
 
     /// Get partition count
     pub fn partition_count(&self) -> usize {
-        self.partitions.lock().unwrap().len()
+        self.partitions
+            .lock()
+            .expect("mutex lock should not be poisoned")
+            .len()
     }
 }
 

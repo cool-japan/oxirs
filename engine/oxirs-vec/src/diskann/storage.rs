@@ -53,14 +53,12 @@ pub trait StorageBackend: Send + Sync {
 }
 
 /// Storage metadata
-#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageMetadata {
     pub version: String,
     pub config: DiskAnnConfig,
     pub num_vectors: usize,
-    #[bincode(with_serde)]
     pub created_at: chrono::DateTime<chrono::Utc>,
-    #[bincode(with_serde)]
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -289,7 +287,7 @@ impl StorageBackend for DiskStorage {
             })?;
 
             let mut writer = BufWriter::new(file);
-            bincode::encode_into_std_write(graph, &mut writer, bincode::config::standard())?;
+            oxicode::serde::encode_into_std_write(graph, &mut writer, oxicode::config::standard())?;
         }
         Ok(())
     }
@@ -307,7 +305,8 @@ impl StorageBackend for DiskStorage {
             })?;
 
             let mut reader = BufReader::new(file);
-            let graph = bincode::decode_from_std_read(&mut reader, bincode::config::standard())?;
+            let (graph, _) =
+                oxicode::serde::decode_from_std_read(&mut reader, oxicode::config::standard())?;
             Ok(graph)
         } else {
             Err(DiskAnnError::StorageError {

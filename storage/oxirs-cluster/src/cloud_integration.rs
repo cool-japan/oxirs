@@ -482,7 +482,7 @@ impl CloudStorageProvider for S3Backend {
             size: data.len() as u64,
             last_modified: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
             content_type: "application/octet-stream".to_string(),
             storage_tier: tier,
@@ -651,7 +651,7 @@ impl CloudStorageProvider for S3Backend {
             error_rate: 0.0,
             last_check: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
             message: "S3 backend healthy".to_string(),
         })
@@ -730,7 +730,7 @@ impl CloudStorageProvider for GCSBackend {
             size: data.len() as u64,
             last_modified: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
             content_type: "application/octet-stream".to_string(),
             storage_tier: tier,
@@ -874,7 +874,7 @@ impl CloudStorageProvider for GCSBackend {
             error_rate: 0.0,
             last_check: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
             message: "GCS backend healthy".to_string(),
         })
@@ -953,7 +953,7 @@ impl CloudStorageProvider for AzureBlobBackend {
             size: data.len() as u64,
             last_modified: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
             content_type: "application/octet-stream".to_string(),
             storage_tier: tier,
@@ -1097,7 +1097,7 @@ impl CloudStorageProvider for AzureBlobBackend {
             error_rate: 0.0,
             last_check: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
             message: "Azure Blob backend healthy".to_string(),
         })
@@ -1263,7 +1263,7 @@ impl DisasterRecoveryManager {
                             error_rate: 1.0,
                             last_check: SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
-                                .unwrap()
+                                .expect("system time should be after UNIX_EPOCH")
                                 .as_secs(),
                             message: e.to_string(),
                         },
@@ -1415,7 +1415,7 @@ impl DisasterRecoveryManager {
     async fn record_event(&self, event: DREvent) {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time should be after UNIX_EPOCH")
             .as_secs();
 
         let mut history = self.event_history.write().await;
@@ -1761,7 +1761,7 @@ impl ElasticScalingManager {
                         is_spot: *use_spot,
                         launch_time: SystemTime::now()
                             .duration_since(UNIX_EPOCH)
-                            .unwrap()
+                            .expect("system time should be after UNIX_EPOCH")
                             .as_secs(),
                         cpu_utilization: 0.0,
                         memory_utilization: 0.0,
@@ -1797,7 +1797,7 @@ impl ElasticScalingManager {
         let event = ScalingEvent {
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
             decision,
             success: true,
@@ -1824,7 +1824,7 @@ impl ElasticScalingManager {
             return ScalingPrediction {
                 timestamp: SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .unwrap()
+                    .expect("system time should be after UNIX_EPOCH")
                     .as_secs(),
                 horizon_minutes,
                 predicted_cpu: 0.5,
@@ -1867,7 +1867,7 @@ impl ElasticScalingManager {
         ScalingPrediction {
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
             horizon_minutes,
             predicted_cpu,
@@ -2305,7 +2305,7 @@ impl MLCostOptimizer {
             estimated_monthly_savings,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after UNIX_EPOCH")
                 .as_secs(),
         }
     }

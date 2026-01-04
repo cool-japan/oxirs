@@ -112,14 +112,20 @@ impl SammGenerator {
     fn write_prefixes(&self, output: &mut String, device_id: &str) {
         let aspect_ns = self.aspect_namespace(device_id);
 
-        writeln!(output, "@prefix : <{}> .", aspect_ns).unwrap();
-        writeln!(output, "@prefix samm: <{}> .", SAMM_PREFIX).unwrap();
-        writeln!(output, "@prefix samm-c: <{}> .", SAMM_C_PREFIX).unwrap();
-        writeln!(output, "@prefix samm-e: <{}> .", SAMM_E_PREFIX).unwrap();
-        writeln!(output, "@prefix unit: <{}> .", SAMM_U_PREFIX).unwrap();
-        writeln!(output, "@prefix xsd: <{}> .", XSD_PREFIX).unwrap();
-        writeln!(output, "@prefix rdfs: <{}> .", RDFS_PREFIX).unwrap();
-        writeln!(output).unwrap();
+        writeln!(output, "@prefix : <{}> .", aspect_ns).expect("writing to String should not fail");
+        writeln!(output, "@prefix samm: <{}> .", SAMM_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix samm-c: <{}> .", SAMM_C_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix samm-e: <{}> .", SAMM_E_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix unit: <{}> .", SAMM_U_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix xsd: <{}> .", XSD_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix rdfs: <{}> .", RDFS_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Write the main Aspect definition
@@ -132,19 +138,21 @@ impl SammGenerator {
                 "# Aspect Model for Modbus device: {}",
                 register_map.device_id
             )
-            .unwrap();
+            .expect("writing to String should not fail");
             writeln!(
                 output,
                 "# Auto-generated from Modbus register map with {} registers",
                 register_map.registers.len()
             )
-            .unwrap();
-            writeln!(output).unwrap();
+            .expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
 
         // Aspect definition
-        writeln!(output, ":{}Aspect a samm:Aspect ;", aspect_name).unwrap();
-        writeln!(output, "    samm:preferredName \"{}\"@en ;", aspect_name).unwrap();
+        writeln!(output, ":{}Aspect a samm:Aspect ;", aspect_name)
+            .expect("writing to String should not fail");
+        writeln!(output, "    samm:preferredName \"{}\"@en ;", aspect_name)
+            .expect("writing to String should not fail");
 
         // Description
         writeln!(
@@ -153,7 +161,7 @@ impl SammGenerator {
             register_map.device_id,
             register_map.registers.len()
         )
-        .unwrap();
+        .expect("writing to String should not fail");
 
         // Properties list
         let properties: Vec<String> = register_map
@@ -163,11 +171,11 @@ impl SammGenerator {
             .collect();
 
         if !properties.is_empty() {
-            writeln!(output, "    samm:properties (").unwrap();
+            writeln!(output, "    samm:properties (").expect("writing to String should not fail");
             for prop in &properties {
-                writeln!(output, "        {}", prop).unwrap();
+                writeln!(output, "        {}", prop).expect("writing to String should not fail");
             }
-            writeln!(output, "    ) ;").unwrap();
+            writeln!(output, "    ) ;").expect("writing to String should not fail");
         }
 
         // Operations (writable registers)
@@ -184,30 +192,31 @@ impl SammGenerator {
                     .map(|r| format!(":write{}Operation", self.property_name(r)))
                     .collect();
 
-                writeln!(output, "    samm:operations (").unwrap();
+                writeln!(output, "    samm:operations (")
+                    .expect("writing to String should not fail");
                 for op in &operations {
-                    writeln!(output, "        {}", op).unwrap();
+                    writeln!(output, "        {}", op).expect("writing to String should not fail");
                 }
-                writeln!(output, "    ) .").unwrap();
+                writeln!(output, "    ) .").expect("writing to String should not fail");
             } else {
                 // No operations, close with period
                 output.truncate(output.len() - 2); // Remove trailing " ;\n"
-                writeln!(output, " .").unwrap();
+                writeln!(output, " .").expect("writing to String should not fail");
             }
         } else {
             // No operations, close with period
             output.truncate(output.len() - 2); // Remove trailing " ;\n"
-            writeln!(output, " .").unwrap();
+            writeln!(output, " .").expect("writing to String should not fail");
         }
 
-        writeln!(output).unwrap();
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Write property definitions
     fn write_properties(&self, output: &mut String, registers: &[RegisterMapping]) {
         if self.include_comments {
-            writeln!(output, "# Properties").unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, "# Properties").expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
 
         for mapping in registers {
@@ -220,11 +229,13 @@ impl SammGenerator {
         let prop_name = self.property_name(mapping);
         let char_name = self.characteristic_name(mapping);
 
-        writeln!(output, ":{}Property a samm:Property ;", prop_name).unwrap();
+        writeln!(output, ":{}Property a samm:Property ;", prop_name)
+            .expect("writing to String should not fail");
 
         // Preferred name
         let display_name = mapping.name.as_deref().unwrap_or(&prop_name);
-        writeln!(output, "    samm:preferredName \"{}\"@en ;", display_name).unwrap();
+        writeln!(output, "    samm:preferredName \"{}\"@en ;", display_name)
+            .expect("writing to String should not fail");
 
         // Description
         if self.include_comments {
@@ -234,7 +245,7 @@ impl SammGenerator {
                 "    samm:description \"Modbus {} register at address {} (type: {:?})\"@en ;",
                 reg_type_str, mapping.address, mapping.data_type
             )
-            .unwrap();
+            .expect("writing to String should not fail");
         }
 
         // Characteristic reference
@@ -243,15 +254,15 @@ impl SammGenerator {
             "    samm:characteristic :{}Characteristic .",
             char_name
         )
-        .unwrap();
-        writeln!(output).unwrap();
+        .expect("writing to String should not fail");
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Write characteristic definitions
     fn write_characteristics(&self, output: &mut String, registers: &[RegisterMapping]) {
         if self.include_comments {
-            writeln!(output, "# Characteristics").unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, "# Characteristics").expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
 
         // Track unique characteristics to avoid duplicates
@@ -273,23 +284,26 @@ impl SammGenerator {
         let char_name = self.characteristic_name(mapping);
         let (samm_type, xsd_type) = self.data_type_mapping(mapping.data_type);
 
-        writeln!(output, ":{}Characteristic a {} ;", char_name, samm_type).unwrap();
-        writeln!(output, "    samm:dataType {} ", xsd_type).unwrap();
+        writeln!(output, ":{}Characteristic a {} ;", char_name, samm_type)
+            .expect("writing to String should not fail");
+        writeln!(output, "    samm:dataType {} ", xsd_type)
+            .expect("writing to String should not fail");
 
         // Add unit if present
         if let Some(ref unit) = mapping.unit {
             let samm_unit = self.map_unit(unit);
             // Remove the period we just wrote
             output.truncate(output.len() - 2); // Remove " \n"
-            writeln!(output, ";").unwrap();
-            writeln!(output, "    samm-c:unit unit:{} .", samm_unit).unwrap();
+            writeln!(output, ";").expect("writing to String should not fail");
+            writeln!(output, "    samm-c:unit unit:{} .", samm_unit)
+                .expect("writing to String should not fail");
         } else {
             // Complete with period
             output.truncate(output.len() - 2);
-            writeln!(output, ".").unwrap();
+            writeln!(output, ".").expect("writing to String should not fail");
         }
 
-        writeln!(output).unwrap();
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Write operation definitions for writable registers
@@ -304,8 +318,8 @@ impl SammGenerator {
         }
 
         if self.include_comments {
-            writeln!(output, "# Operations").unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, "# Operations").expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
 
         for mapping in writable {
@@ -317,25 +331,27 @@ impl SammGenerator {
     fn write_operation(&self, output: &mut String, mapping: &RegisterMapping) {
         let prop_name = self.property_name(mapping);
 
-        writeln!(output, ":write{}Operation a samm:Operation ;", prop_name).unwrap();
+        writeln!(output, ":write{}Operation a samm:Operation ;", prop_name)
+            .expect("writing to String should not fail");
         let display_name = mapping.name.as_deref().unwrap_or(&prop_name);
         writeln!(
             output,
             "    samm:preferredName \"Write {}\"@en ;",
             display_name
         )
-        .unwrap();
+        .expect("writing to String should not fail");
         let reg_type_str = format!("{:?}", mapping.register_type).to_lowercase();
         writeln!(
             output,
             "    samm:description \"Write value to Modbus {} register at address {}\"@en ;",
             reg_type_str, mapping.address
         )
-        .unwrap();
+        .expect("writing to String should not fail");
 
         // Input property
-        writeln!(output, "    samm:input ( :{}Property ) .", prop_name).unwrap();
-        writeln!(output).unwrap();
+        writeln!(output, "    samm:input ( :{}Property ) .", prop_name)
+            .expect("writing to String should not fail");
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Get namespace for the aspect

@@ -151,7 +151,7 @@ impl QueryHistory {
                 .entries
                 .iter()
                 .filter(|e| e.success && e.execution_time_ms.is_some())
-                .map(|e| e.execution_time_ms.unwrap())
+                .filter_map(|e| e.execution_time_ms)
                 .sum();
             sum / successful as f64
         } else {
@@ -167,15 +167,17 @@ impl QueryHistory {
         sorted_by_time.sort_by(|a, b| {
             b.execution_time_ms
                 .partial_cmp(&a.execution_time_ms)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         let slowest_queries: Vec<SlowQuery> = sorted_by_time
             .iter()
             .take(10)
-            .map(|e| SlowQuery {
-                query: e.query.clone(),
-                execution_time_ms: e.execution_time_ms.unwrap(),
-                result_count: e.result_count,
+            .filter_map(|e| {
+                e.execution_time_ms.map(|time| SlowQuery {
+                    query: e.query.clone(),
+                    execution_time_ms: time,
+                    result_count: e.result_count,
+                })
             })
             .collect();
 

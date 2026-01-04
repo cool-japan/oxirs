@@ -422,7 +422,7 @@ impl QueryBus {
     where
         Q: Query + 'static,
         Q::Result:
-            Clone + Serialize + for<'de> Deserialize<'de> + bincode::Encode + bincode::Decode<()>,
+            Clone + Serialize + for<'de> Deserialize<'de> + oxicode::Encode + oxicode::Decode,
     {
         let start_time = Instant::now();
         let query_id = query.query_id();
@@ -497,7 +497,7 @@ impl QueryBus {
     where
         Q: Query + 'static,
         Q::Result:
-            Clone + Serialize + for<'de> Deserialize<'de> + bincode::Encode + bincode::Decode<()>,
+            Clone + Serialize + for<'de> Deserialize<'de> + oxicode::Encode + oxicode::Decode,
     {
         // Validate query
         query.validate()?;
@@ -679,7 +679,7 @@ impl QueryCache {
 
     fn get<T>(&self, key: &str) -> Option<T>
     where
-        T: for<'de> Deserialize<'de> + bincode::Decode<()>,
+        T: for<'de> Deserialize<'de> + oxicode::Decode,
     {
         if !self.config.enabled {
             return None;
@@ -689,7 +689,7 @@ impl QueryCache {
             let age = Utc::now().signed_duration_since(entry.created_at);
             if age.num_seconds() < self.config.ttl_seconds as i64 {
                 if let Ok((value, _)) =
-                    bincode::decode_from_slice(&entry.data, bincode::config::standard())
+                    oxicode::serde::decode_from_slice(&entry.data, oxicode::config::standard())
                 {
                     return Some(value);
                 }
@@ -701,13 +701,13 @@ impl QueryCache {
 
     fn set<T>(&mut self, key: String, value: T)
     where
-        T: Serialize + bincode::Encode,
+        T: Serialize + oxicode::Encode,
     {
         if !self.config.enabled {
             return;
         }
 
-        if let Ok(data) = bincode::encode_to_vec(&value, bincode::config::standard()) {
+        if let Ok(data) = oxicode::serde::encode_to_vec(&value, oxicode::config::standard()) {
             let entry = CacheEntry {
                 size_bytes: data.len(),
                 data,

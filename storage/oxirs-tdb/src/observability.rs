@@ -164,7 +164,7 @@ impl ObservabilityManager {
         use std::time::SystemTime;
         let seed = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_nanos() as u64;
         let mut rng = Random::seed(seed);
         if rng.random::<f64>() > self.config.trace_sample_rate {
@@ -381,7 +381,7 @@ impl TraceSpanId {
         use std::time::SystemTime;
         let seed = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_nanos() as u64;
         let mut rng = Random::seed(seed);
         Self(rng.random::<u64>())

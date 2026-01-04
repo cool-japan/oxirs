@@ -1,5 +1,5 @@
 use crate::error::Result;
-use bincode::{Decode, Encode};
+use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 ///
 /// Provides probabilistic membership testing with configurable
 /// false positive rate and no false negatives.
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BloomFilter {
     /// Bit array
     bits: Vec<bool>,
@@ -281,9 +281,10 @@ mod tests {
         let mut filter = BloomFilter::new(1000, 0.01);
         filter.insert(&"test");
 
-        let serialized = bincode::encode_to_vec(&filter, bincode::config::standard()).unwrap();
+        let serialized =
+            oxicode::serde::encode_to_vec(&filter, oxicode::config::standard()).unwrap();
         let deserialized: BloomFilter =
-            bincode::decode_from_slice(&serialized, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&serialized, oxicode::config::standard())
                 .unwrap()
                 .0;
 

@@ -348,7 +348,7 @@ impl ArqCacheManager {
         let result = self.query_plan_cache.get(key);
 
         {
-            let mut stats = self.cache_stats.write().unwrap();
+            let mut stats = self.cache_stats.write().expect("lock poisoned");
             if result.is_some() {
                 stats.plan_cache_hits += 1;
             } else {
@@ -378,7 +378,7 @@ impl ArqCacheManager {
         let result = self.query_result_cache.get(key);
 
         {
-            let mut stats = self.cache_stats.write().unwrap();
+            let mut stats = self.cache_stats.write().expect("lock poisoned");
             if let Some(ref cached_result) = result {
                 stats.result_cache_hits += 1;
                 stats.time_saved_ms += cached_result.metadata.execution_time.as_millis() as u64;
@@ -412,7 +412,7 @@ impl ArqCacheManager {
         let result = self.bgp_cache.get(key);
 
         {
-            let mut stats = self.cache_stats.write().unwrap();
+            let mut stats = self.cache_stats.write().expect("lock poisoned");
             if result.is_some() {
                 stats.bgp_cache_hits += 1;
             } else {
@@ -482,7 +482,7 @@ impl ArqCacheManager {
 
     /// Get cache statistics
     pub fn get_statistics(&self) -> ArqCacheStatistics {
-        let stats = self.cache_stats.read().unwrap();
+        let stats = self.cache_stats.read().expect("lock poisoned");
         stats.clone()
     }
 
@@ -509,7 +509,7 @@ impl ArqCacheManager {
 
         // Reset statistics
         {
-            let mut stats = self.cache_stats.write().unwrap();
+            let mut stats = self.cache_stats.write().expect("lock poisoned");
             *stats = ArqCacheStatistics::default();
         }
     }

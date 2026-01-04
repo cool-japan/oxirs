@@ -1,6 +1,6 @@
 # Cloud Deployment Guide for OxiRS Cluster
 
-**Version:** 0.1.0-rc.1
+**Version:** 0.1.0-rc.2
 **Last Updated:** December 4, 2025
 
 ## Overview

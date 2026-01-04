@@ -223,7 +223,10 @@ impl AdvancedBatchValidator {
         &self,
         constraints: Vec<(Constraint, ConstraintContext)>,
     ) -> Result<HashMap<ConstraintGroupKey, Vec<ConstraintBatchItem>>> {
-        let _grouping = self.grouping_strategy.write().unwrap();
+        let _grouping = self
+            .grouping_strategy
+            .write()
+            .expect("rwlock should not be poisoned");
         let mut grouped = HashMap::new();
 
         for (constraint, context) in constraints {
@@ -252,7 +255,7 @@ impl AdvancedBatchValidator {
                 a.priority.cmp(&b.priority).then(
                     b.compatibility_score
                         .partial_cmp(&a.compatibility_score)
-                        .unwrap(),
+                        .expect("f64 values should not be NaN"),
                 )
             });
         }
@@ -266,7 +269,10 @@ impl AdvancedBatchValidator {
         grouped_constraints: HashMap<ConstraintGroupKey, Vec<ConstraintBatchItem>>,
     ) -> Result<Vec<Vec<ConstraintBatchItem>>> {
         let mut optimized_batches = Vec::new();
-        let memory_monitor = self.memory_monitor.read().unwrap();
+        let memory_monitor = self
+            .memory_monitor
+            .read()
+            .expect("rwlock should not be poisoned");
 
         // Calculate available memory for batching
         let available_memory =
@@ -342,7 +348,11 @@ impl AdvancedBatchValidator {
             a.avg_priority
                 .cmp(&b.avg_priority)
                 .then(a.dependencies.len().cmp(&b.dependencies.len()))
-                .then(a.total_cost.partial_cmp(&b.total_cost).unwrap())
+                .then(
+                    a.total_cost
+                        .partial_cmp(&b.total_cost)
+                        .expect("f64 values should not be NaN"),
+                )
         });
 
         Ok(scheduled)
@@ -385,7 +395,7 @@ impl AdvancedBatchValidator {
 
                 // Thread-safe result collection
                 {
-                    let mut results_guard = results.lock().unwrap();
+                    let mut results_guard = results.lock().expect("mutex should not be poisoned");
                     results_guard.push(execution_result);
                 }
 
@@ -393,7 +403,10 @@ impl AdvancedBatchValidator {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let final_results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
+        let final_results = Arc::try_unwrap(results)
+            .expect("Arc should have no other references")
+            .into_inner()
+            .expect("mutex should not be poisoned");
         Ok(final_results)
     }
 
@@ -443,7 +456,7 @@ impl AdvancedBatchValidator {
             (available_memory_mb as f64 / self.config.memory_pressure_threshold as f64).min(2.0);
 
         // Get recent performance statistics
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("rwlock should not be poisoned");
         let performance_factor = if stats.avg_batch_execution_time.as_millis() > 1000 {
             0.8 // Reduce batch size if execution is slow
         } else {
@@ -577,7 +590,11 @@ impl AdvancedBatchValidator {
                 ), // Placeholder
             },
             total_execution_time: total_time,
-            memory_usage: self.memory_monitor.read().unwrap().clone(),
+            memory_usage: self
+                .memory_monitor
+                .read()
+                .expect("rwlock should not be poisoned")
+                .clone(),
             cache_effectiveness,
         })
     }

@@ -166,14 +166,14 @@ impl HdtStarHeader {
 
     /// Serialize header to bytes
     pub fn to_bytes(&self) -> StarResult<Vec<u8>> {
-        let encoded = bincode::serde::encode_to_vec(self, bincode::config::standard())
+        let encoded = oxicode::serde::encode_to_vec(self, oxicode::config::standard())
             .map_err(|e| StarError::serialization_error(format!("Header encoding failed: {e}")))?;
         Ok(encoded)
     }
 
     /// Deserialize header from bytes
     pub fn from_bytes(bytes: &[u8]) -> StarResult<Self> {
-        let (decoded, _) = bincode::serde::decode_from_slice(bytes, bincode::config::standard())
+        let (decoded, _) = oxicode::serde::decode_from_slice(bytes, oxicode::config::standard())
             .map_err(|e| StarError::parse_error(format!("Header decoding failed: {e}")))?;
         Ok(decoded)
     }
@@ -379,7 +379,7 @@ impl HdtStarDictionary {
     /// Serialize dictionary to bytes
     pub fn to_bytes(&self) -> StarResult<Vec<u8>> {
         let encoded =
-            bincode::serde::encode_to_vec(self, bincode::config::standard()).map_err(|e| {
+            oxicode::serde::encode_to_vec(self, oxicode::config::standard()).map_err(|e| {
                 StarError::serialization_error(format!("Dictionary encoding failed: {e}"))
             })?;
         Ok(encoded)
@@ -387,7 +387,7 @@ impl HdtStarDictionary {
 
     /// Deserialize dictionary from bytes
     pub fn from_bytes(bytes: &[u8]) -> StarResult<Self> {
-        let (decoded, _) = bincode::serde::decode_from_slice(bytes, bincode::config::standard())
+        let (decoded, _) = oxicode::serde::decode_from_slice(bytes, oxicode::config::standard())
             .map_err(|e| StarError::parse_error(format!("Dictionary decoding failed: {e}")))?;
         Ok(decoded)
     }
@@ -516,14 +516,14 @@ impl HdtStarTriples {
 
     /// Serialize triples to bytes
     pub fn to_bytes(&self) -> StarResult<Vec<u8>> {
-        let encoded = bincode::serde::encode_to_vec(self, bincode::config::standard())
+        let encoded = oxicode::serde::encode_to_vec(self, oxicode::config::standard())
             .map_err(|e| StarError::serialization_error(format!("Triples encoding failed: {e}")))?;
         Ok(encoded)
     }
 
     /// Deserialize triples from bytes
     pub fn from_bytes(bytes: &[u8]) -> StarResult<Self> {
-        let (decoded, _) = bincode::serde::decode_from_slice(bytes, bincode::config::standard())
+        let (decoded, _) = oxicode::serde::decode_from_slice(bytes, oxicode::config::standard())
             .map_err(|e| StarError::parse_error(format!("Triples decoding failed: {e}")))?;
         Ok(decoded)
     }

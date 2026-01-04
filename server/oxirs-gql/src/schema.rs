@@ -356,21 +356,31 @@ impl SchemaGenerator {
 
         if let QueryResults::Solutions(solutions) = results {
             for solution in solutions {
-                if let Some(class_term) =
-                    solution.get(&oxirs_core::model::Variable::new("class").unwrap())
-                {
+                if let Some(class_term) = solution.get(
+                    &oxirs_core::model::Variable::new("class")
+                        .expect("hardcoded variable name should be valid"),
+                ) {
                     let class_uri = class_term.to_string();
 
                     let label = solution
-                        .get(&oxirs_core::model::Variable::new("label").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("label")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
                     let comment = solution
-                        .get(&oxirs_core::model::Variable::new("comment").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("comment")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
                     let super_class = solution
-                        .get(&oxirs_core::model::Variable::new("superClass").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("superClass")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .map(|t| t.to_string());
 
                     // Get or create class entry
@@ -412,29 +422,45 @@ impl SchemaGenerator {
 
         if let QueryResults::Solutions(solutions) = results {
             for solution in solutions {
-                if let Some(property_term) =
-                    solution.get(&oxirs_core::model::Variable::new("property").unwrap())
-                {
+                if let Some(property_term) = solution.get(
+                    &oxirs_core::model::Variable::new("property")
+                        .expect("hardcoded variable name should be valid"),
+                ) {
                     let property_uri = property_term.to_string();
 
                     let label = solution
-                        .get(&oxirs_core::model::Variable::new("label").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("label")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
                     let comment = solution
-                        .get(&oxirs_core::model::Variable::new("comment").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("comment")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
                     let domain = solution
-                        .get(&oxirs_core::model::Variable::new("domain").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("domain")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .map(|t| t.to_string());
 
                     let range = solution
-                        .get(&oxirs_core::model::Variable::new("range").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("range")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .map(|t| t.to_string());
 
                     let property_type = solution
-                        .get(&oxirs_core::model::Variable::new("type").unwrap())
+                        .get(
+                            &oxirs_core::model::Variable::new("type")
+                                .expect("hardcoded variable name should be valid"),
+                        )
                         .map(|t| t.to_string())
                         .and_then(|s| self.extract_literal_value(&s))
                         .unwrap_or_else(|| "AnnotationProperty".to_string());
@@ -1085,18 +1111,19 @@ impl SchemaGenerator {
         let mut sdl = String::new();
 
         // Write schema definition
-        writeln!(sdl, "schema {{").unwrap();
+        writeln!(sdl, "schema {{").expect("writing to String should not fail");
         if let Some(ref query) = schema.query_type {
-            writeln!(sdl, "  query: {query}").unwrap();
+            writeln!(sdl, "  query: {query}").expect("writing to String should not fail");
         }
         if let Some(ref mutation) = schema.mutation_type {
-            writeln!(sdl, "  mutation: {mutation}").unwrap();
+            writeln!(sdl, "  mutation: {mutation}").expect("writing to String should not fail");
         }
         if let Some(ref subscription) = schema.subscription_type {
-            writeln!(sdl, "  subscription: {subscription}").unwrap();
+            writeln!(sdl, "  subscription: {subscription}")
+                .expect("writing to String should not fail");
         }
-        writeln!(sdl, "}}").unwrap();
-        writeln!(sdl).unwrap();
+        writeln!(sdl, "}}").expect("writing to String should not fail");
+        writeln!(sdl).expect("writing to String should not fail");
 
         // Write type definitions
         for graphql_type in schema.types.values() {
@@ -1128,88 +1155,95 @@ impl SchemaGenerator {
 
     fn write_object_type_sdl(&self, sdl: &mut String, obj: &ObjectType) {
         if let Some(ref description) = obj.description {
-            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"")
+                .expect("writing to String should not fail");
         }
 
-        write!(sdl, "type {}", obj.name).unwrap();
+        write!(sdl, "type {}", obj.name).expect("writing to String should not fail");
 
         if !obj.interfaces.is_empty() {
-            write!(sdl, " implements {}", obj.interfaces.join(" & ")).unwrap();
+            write!(sdl, " implements {}", obj.interfaces.join(" & "))
+                .expect("writing to String should not fail");
         }
 
-        writeln!(sdl, " {{").unwrap();
+        writeln!(sdl, " {{").expect("writing to String should not fail");
 
         for field in obj.fields.values() {
             self.write_field_sdl(sdl, field);
         }
 
-        writeln!(sdl, "}}").unwrap();
-        writeln!(sdl).unwrap();
+        writeln!(sdl, "}}").expect("writing to String should not fail");
+        writeln!(sdl).expect("writing to String should not fail");
     }
 
     fn write_field_sdl(&self, sdl: &mut String, field: &FieldType) {
         if let Some(ref description) = field.description {
-            writeln!(sdl, "  \"{description}\"").unwrap();
+            writeln!(sdl, "  \"{description}\"").expect("writing to String should not fail");
         }
 
-        write!(sdl, "  {}", field.name).unwrap();
+        write!(sdl, "  {}", field.name).expect("writing to String should not fail");
 
         if !field.arguments.is_empty() {
-            write!(sdl, "(").unwrap();
+            write!(sdl, "(").expect("writing to String should not fail");
             let args: Vec<String> = field
                 .arguments
                 .values()
                 .map(|arg| format!("{}: {}", arg.name, arg.argument_type))
                 .collect();
-            write!(sdl, "{}", args.join(", ")).unwrap();
-            write!(sdl, ")").unwrap();
+            write!(sdl, "{}", args.join(", ")).expect("writing to String should not fail");
+            write!(sdl, ")").expect("writing to String should not fail");
         }
 
-        writeln!(sdl, ": {}", field.field_type).unwrap();
+        writeln!(sdl, ": {}", field.field_type).expect("writing to String should not fail");
     }
 
     fn write_scalar_type_sdl(&self, sdl: &mut String, scalar: &ScalarType) {
         if let Some(ref description) = scalar.description {
-            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"")
+                .expect("writing to String should not fail");
         }
-        writeln!(sdl, "scalar {}", scalar.name).unwrap();
-        writeln!(sdl).unwrap();
+        writeln!(sdl, "scalar {}", scalar.name).expect("writing to String should not fail");
+        writeln!(sdl).expect("writing to String should not fail");
     }
 
     fn write_enum_type_sdl(&self, sdl: &mut String, enum_type: &EnumType) {
         if let Some(ref description) = enum_type.description {
-            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"")
+                .expect("writing to String should not fail");
         }
-        writeln!(sdl, "enum {} {{", enum_type.name).unwrap();
+        writeln!(sdl, "enum {} {{", enum_type.name).expect("writing to String should not fail");
 
         for value in enum_type.values.values() {
             if let Some(ref description) = value.description {
-                writeln!(sdl, "  \"{description}\"").unwrap();
+                writeln!(sdl, "  \"{description}\"").expect("writing to String should not fail");
             }
-            writeln!(sdl, "  {}", value.name).unwrap();
+            writeln!(sdl, "  {}", value.name).expect("writing to String should not fail");
         }
 
-        writeln!(sdl, "}}").unwrap();
-        writeln!(sdl).unwrap();
+        writeln!(sdl, "}}").expect("writing to String should not fail");
+        writeln!(sdl).expect("writing to String should not fail");
     }
 
     fn write_interface_type_sdl(&self, sdl: &mut String, interface: &InterfaceType) {
         if let Some(ref description) = interface.description {
-            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"")
+                .expect("writing to String should not fail");
         }
-        writeln!(sdl, "interface {} {{", interface.name).unwrap();
+        writeln!(sdl, "interface {} {{", interface.name)
+            .expect("writing to String should not fail");
 
         for field in interface.fields.values() {
             self.write_field_sdl(sdl, field);
         }
 
-        writeln!(sdl, "}}").unwrap();
-        writeln!(sdl).unwrap();
+        writeln!(sdl, "}}").expect("writing to String should not fail");
+        writeln!(sdl).expect("writing to String should not fail");
     }
 
     fn write_union_type_sdl(&self, sdl: &mut String, union_type: &UnionType) {
         if let Some(ref description) = union_type.description {
-            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"")
+                .expect("writing to String should not fail");
         }
         writeln!(
             sdl,
@@ -1217,8 +1251,8 @@ impl SchemaGenerator {
             union_type.name,
             union_type.types.join(" | ")
         )
-        .unwrap();
-        writeln!(sdl).unwrap();
+        .expect("writing to String should not fail");
+        writeln!(sdl).expect("writing to String should not fail");
     }
 
     /// Load and parse RDF ontology from URI

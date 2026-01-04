@@ -50,7 +50,10 @@ impl AdvancedStatisticsCollector {
         self.update_histograms(pattern, actual_cardinality);
 
         // Record in execution history
-        let mut history = self.execution_history.write().unwrap();
+        let mut history = self
+            .execution_history
+            .write()
+            .expect("execution_history lock poisoned");
         history.record(PatternExecution {
             pattern: pattern.clone(),
             cardinality: actual_cardinality,
@@ -65,19 +68,28 @@ impl AdvancedStatisticsCollector {
     fn update_histograms(&self, pattern: &AlgebraTriplePattern, cardinality: usize) {
         // Update subject histogram if bound
         if let TermPattern::NamedNode(node) = &pattern.subject {
-            let mut hist = self.subject_histogram.write().unwrap();
+            let mut hist = self
+                .subject_histogram
+                .write()
+                .expect("subject_histogram lock poisoned");
             hist.record(node.as_str(), cardinality);
         }
 
         // Update predicate histogram if bound
         if let TermPattern::NamedNode(node) = &pattern.predicate {
-            let mut hist = self.predicate_histogram.write().unwrap();
+            let mut hist = self
+                .predicate_histogram
+                .write()
+                .expect("predicate_histogram lock poisoned");
             hist.record(node.as_str(), cardinality);
         }
 
         // Update object histogram if bound
         if let TermPattern::NamedNode(node) = &pattern.object {
-            let mut hist = self.object_histogram.write().unwrap();
+            let mut hist = self
+                .object_histogram
+                .write()
+                .expect("object_histogram lock poisoned");
             hist.record(node.as_str(), cardinality);
         }
     }
@@ -88,7 +100,7 @@ impl AdvancedStatisticsCollector {
         let subject_est = if let TermPattern::NamedNode(node) = &pattern.subject {
             self.subject_histogram
                 .read()
-                .unwrap()
+                .expect("subject_histogram lock poisoned")
                 .estimate(node.as_str())
         } else {
             None
@@ -97,7 +109,7 @@ impl AdvancedStatisticsCollector {
         let predicate_est = if let TermPattern::NamedNode(node) = &pattern.predicate {
             self.predicate_histogram
                 .read()
-                .unwrap()
+                .expect("predicate_histogram lock poisoned")
                 .estimate(node.as_str())
         } else {
             None
@@ -106,7 +118,7 @@ impl AdvancedStatisticsCollector {
         let object_est = if let TermPattern::NamedNode(node) = &pattern.object {
             self.object_histogram
                 .read()
-                .unwrap()
+                .expect("object_histogram lock poisoned")
                 .estimate(node.as_str())
         } else {
             None
@@ -128,7 +140,10 @@ impl AdvancedStatisticsCollector {
         right_cardinality: usize,
         result_cardinality: usize,
     ) {
-        let mut estimator = self.join_selectivity.write().unwrap();
+        let mut estimator = self
+            .join_selectivity
+            .write()
+            .expect("join_selectivity lock poisoned");
         estimator.record_join(left_cardinality, right_cardinality, result_cardinality);
     }
 
@@ -136,7 +151,7 @@ impl AdvancedStatisticsCollector {
     pub fn estimate_join_selectivity(&self, left_card: usize, right_card: usize) -> f64 {
         self.join_selectivity
             .read()
-            .unwrap()
+            .expect("join_selectivity lock poisoned")
             .estimate(left_card, right_card)
     }
 
@@ -144,7 +159,7 @@ impl AdvancedStatisticsCollector {
     pub fn get_pattern_history(&self, pattern: &AlgebraTriplePattern) -> Vec<PatternExecution> {
         self.execution_history
             .read()
-            .unwrap()
+            .expect("execution_history lock poisoned")
             .get_similar_patterns(pattern)
     }
 
@@ -152,21 +167,56 @@ impl AdvancedStatisticsCollector {
     pub fn get_statistics(&self) -> AdvancedStatistics {
         AdvancedStatistics {
             queries_analyzed: self.queries_analyzed.load(Ordering::Relaxed),
-            subject_histogram_size: self.subject_histogram.read().unwrap().size(),
-            predicate_histogram_size: self.predicate_histogram.read().unwrap().size(),
-            object_histogram_size: self.object_histogram.read().unwrap().size(),
-            join_samples: self.join_selectivity.read().unwrap().sample_count(),
-            history_size: self.execution_history.read().unwrap().size(),
+            subject_histogram_size: self
+                .subject_histogram
+                .read()
+                .expect("subject_histogram lock poisoned")
+                .size(),
+            predicate_histogram_size: self
+                .predicate_histogram
+                .read()
+                .expect("predicate_histogram lock poisoned")
+                .size(),
+            object_histogram_size: self
+                .object_histogram
+                .read()
+                .expect("object_histogram lock poisoned")
+                .size(),
+            join_samples: self
+                .join_selectivity
+                .read()
+                .expect("join_selectivity lock poisoned")
+                .sample_count(),
+            history_size: self
+                .execution_history
+                .read()
+                .expect("execution_history lock poisoned")
+                .size(),
         }
     }
 
     /// Clear all statistics (useful for testing)
     pub fn clear(&self) {
-        self.subject_histogram.write().unwrap().clear();
-        self.predicate_histogram.write().unwrap().clear();
-        self.object_histogram.write().unwrap().clear();
-        self.join_selectivity.write().unwrap().clear();
-        self.execution_history.write().unwrap().clear();
+        self.subject_histogram
+            .write()
+            .expect("subject_histogram lock poisoned")
+            .clear();
+        self.predicate_histogram
+            .write()
+            .expect("predicate_histogram lock poisoned")
+            .clear();
+        self.object_histogram
+            .write()
+            .expect("object_histogram lock poisoned")
+            .clear();
+        self.join_selectivity
+            .write()
+            .expect("join_selectivity lock poisoned")
+            .clear();
+        self.execution_history
+            .write()
+            .expect("execution_history lock poisoned")
+            .clear();
         self.queries_analyzed.store(0, Ordering::Relaxed);
     }
 }

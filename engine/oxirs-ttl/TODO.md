@@ -4,7 +4,7 @@
 
 **Overall Progress**: **220%** - RC.1 + RC.1 complete + N3 Reasoning + Documentation + Developer Tools + IRI Normalization + N3 Serializer + Benchmarks + Integration + Convenience API + **W3C RDF 1.2 Full Cross-Format Support** + **RDF Graph Utilities** + **Format Conversion** + **Pattern Matching**
 **Total Tests**: **672 tests passing** (594 integration/unit + 78 doc tests, 11 ignored for future work, 36+ test suites)
-**Status**: **🎉 v0.1.0-rc.1+++++++ PRODUCTION-READY WITH COMPLETE RDF UTILITIES ECOSYSTEM - QUALITY VERIFIED 🎉**
+**Status**: **🎉 v0.1.0-rc.2+++++++ PRODUCTION-READY WITH COMPLETE RDF UTILITIES ECOSYSTEM - QUALITY VERIFIED 🎉**
 **Latest**: ✅ **Final Quality Assurance Verification** - All tests passing, zero warnings, SCIRS2 compliant (Dec 9, 2025)
 **Compliance**: ✅ SCIRS2 Policy compliant - No direct rand/ndarray dependencies - VERIFIED
 **New Achievement**: ✅ **Complete RDF Utilities Ecosystem** - Graph operations, format conversion, and pattern matching in one package
@@ -647,7 +647,7 @@
 
 **Overall Progress**: **100%** - All RC.1 priorities complete
 **Total Tests**: **324 tests passing** (14 test suites including performance regression + W3C compliance)
-**Status**: **🎉 v0.1.0-rc.1 RELEASED 🎉**
+**Status**: **🎉 v0.1.0-rc.2 RELEASED 🎉**
 **Latest**: ✅ **All 6 Major Features COMPLETE** + Performance regression tests + W3C compliance suite + Showcase example + Documentation
 
 ### ✅ Completed RC.1 Features:
@@ -725,7 +725,7 @@
 - ✅ **Unicode Escape Sequences**: Complete (\uXXXX + \UXXXXXXXX)
 - ⚠️ **TriG Parser**: 43% complete, needs full Turtle syntax support
 
-## v0.1.0-rc.1 Core Features
+## v0.1.0-rc.2 Core Features
 
 ### ✅ Completed Tasks
 
@@ -795,7 +795,7 @@
 
 - [ ] ~~**TriG Parser - Multi-line Statement Handling**~~ → **MOVED TO BETA.1 IMPLEMENTATION** (See below)
 
-## v0.1.0-rc.1 - Implementation (December 2025)
+## v0.1.0-rc.2 - Implementation (December 2025)
 
 **Status**: 🚧 **ALL ITEMS BEING IMPLEMENTED FOR BETA.1 RELEASE** 🚧
 

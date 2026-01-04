@@ -446,7 +446,7 @@ Enable production features in `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-samm = { version = "0.1.0-rc.1", features = ["graphviz", "aasx-thumbnails"] }
+oxirs-samm = { version = "0.1.0-rc.2", features = ["graphviz", "aasx-thumbnails"] }
 ```
 
 ### 6. Profile Performance

@@ -397,7 +397,7 @@ impl RealTimeFinetuningModel {
         // Sample with importance-based probability
         for _ in 0..batch_size {
             let mut random = Random::default();
-            let idx = random.random_range(0, self.replay_buffer.len());
+            let idx = random.random_range(0..self.replay_buffer.len());
             batch.push(self.replay_buffer[idx].clone());
         }
 

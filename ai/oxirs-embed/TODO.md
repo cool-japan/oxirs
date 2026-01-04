@@ -2,7 +2,7 @@
 
 *Last Updated: December 3, 2025*
 
-## ✅ Current Status: v0.1.0-rc.1+ (Production Ready Enhanced)
+## ✅ Current Status: v0.1.0-rc.2+ (Production Ready Enhanced)
 
 **oxirs-embed** provides vector embeddings for knowledge graphs (experimental feature).
 
@@ -21,7 +21,7 @@
 
 ## 🎯 v0.1.0 Complete Feature Roadmap
 
-### v0.1.0-rc.1 Target (December 2025) - MAJOR PROGRESS
+### v0.1.0-rc.2 Target (December 2025) - MAJOR PROGRESS
 
 #### Embedding Models (Target: v0.1.0)
 - [x] **HolE (Holographic Embeddings)** ✅ Implemented with circular correlation
@@ -302,7 +302,7 @@ cargo test --features conve conve:: --lib
   - `DEPLOYMENT_GUIDE.md` - Complete deployment documentation
   - `/tmp/oxirs-embed-beta2-summary.md` - Feature summary
 
-## 🎉 Production Ready - v0.1.0-rc.1+ (Enhanced & Extended)
+## 🎉 Production Ready - v0.1.0-rc.2+ (Enhanced & Extended)
 
 **All high, medium, AND low priority items completed!** 🎊
 
@@ -533,7 +533,7 @@ The oxirs-embed crate is now production-ready with:
 
 ### Ready for v0.1.0 Release ✅
 
-**oxirs-embed v0.1.0-rc.1+** is feature-complete and production-ready with:
+**oxirs-embed v0.1.0-rc.2+** is feature-complete and production-ready with:
 - ✅ All planned v0.1.0 features implemented + early v0.2.0 additions
 - ✅ **408 tests passing (100%)** ✅
 - ✅ **Zero compiler warnings** ✅

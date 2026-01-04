@@ -595,7 +595,7 @@ impl StreamingValidationEngine {
     ) {
         let start_time = Instant::now();
         let batch_id = {
-            let mut counter = batch_counter.lock().unwrap();
+            let mut counter = batch_counter.lock().expect("lock poisoned");
             *counter += 1;
             *counter
         };
@@ -650,7 +650,7 @@ impl StreamingValidationEngine {
         batch: &[StreamEvent],
         buffer_store: &Arc<Mutex<dyn Store>>,
     ) -> usize {
-        let store = buffer_store.lock().unwrap();
+        let store = buffer_store.lock().expect("lock poisoned");
         let mut count = 0;
 
         for event in batch {
@@ -692,8 +692,8 @@ impl StreamingValidationEngine {
         triples_processed: usize,
         start_time: Instant,
     ) -> Result<StreamingValidationResult> {
-        let shapes_guard = shapes.read().unwrap();
-        let store = buffer_store.lock().unwrap();
+        let shapes_guard = shapes.read().expect("lock poisoned");
+        let store = buffer_store.lock().expect("lock poisoned");
 
         // Create validation configuration
         let validation_config = ValidationConfig {
@@ -708,7 +708,7 @@ impl StreamingValidationEngine {
 
         // Calculate differences if incremental validation is enabled
         let (new_violations, resolved_violations) = if config.incremental {
-            let mut previous = previous_state.write().unwrap();
+            let mut previous = previous_state.write().expect("lock poisoned");
             let (new, resolved) =
                 Self::calculate_violation_diff(&previous.current_report, &current_report);
 
@@ -782,7 +782,7 @@ impl StreamingValidationEngine {
 
     /// Update streaming statistics
     async fn update_statistics(stats: &Arc<Mutex<StreamingStats>>, batch_stats: &BatchStats) {
-        let mut stats_guard = stats.lock().unwrap();
+        let mut stats_guard = stats.lock().expect("lock poisoned");
         stats_guard.total_batches += 1;
         stats_guard.total_triples += batch_stats.triples_processed;
         stats_guard.total_processing_time += batch_stats.processing_duration;
@@ -808,7 +808,7 @@ impl StreamingValidationEngine {
 
     /// Get current streaming statistics
     pub fn get_statistics(&self) -> StreamingStats {
-        self.stats.lock().unwrap().clone()
+        self.stats.lock().expect("lock poisoned").clone()
     }
 
     /// Subscribe to validation alerts
@@ -818,7 +818,7 @@ impl StreamingValidationEngine {
 
     /// Update shapes during streaming (hot-swappable shapes)
     pub fn update_shapes(&self, new_shapes: IndexMap<ShapeId, Shape>) -> Result<()> {
-        let mut shapes = self.shapes.write().unwrap();
+        let mut shapes = self.shapes.write().expect("lock poisoned");
         *shapes = new_shapes;
         Ok(())
     }
@@ -871,7 +871,7 @@ impl StreamingBufferStore {
 
     /// Update indexes when a quad is added
     fn update_indexes_add(&self, quad: &oxirs_core::model::Quad) {
-        let mut indexes = self.indexes.write().unwrap();
+        let mut indexes = self.indexes.write().expect("lock poisoned");
 
         indexes
             .by_subject
@@ -894,7 +894,7 @@ impl StreamingBufferStore {
 
     /// Update indexes when a quad is removed
     fn update_indexes_remove(&self, quad: &oxirs_core::model::Quad) {
-        let mut indexes = self.indexes.write().unwrap();
+        let mut indexes = self.indexes.write().expect("lock poisoned");
 
         if let Some(quads) = indexes.by_subject.get_mut(quad.subject()) {
             quads.retain(|q| q != quad);
@@ -921,7 +921,7 @@ impl StreamingBufferStore {
 
 impl Store for StreamingBufferStore {
     fn insert_quad(&self, quad: oxirs_core::model::Quad) -> OxirsResult<bool> {
-        let mut quads = self.quads.write().unwrap();
+        let mut quads = self.quads.write().expect("lock poisoned");
         let inserted = quads.insert(quad.clone());
         if inserted {
             drop(quads); // Release lock before updating indexes
@@ -931,7 +931,7 @@ impl Store for StreamingBufferStore {
     }
 
     fn remove_quad(&self, quad: &oxirs_core::model::Quad) -> OxirsResult<bool> {
-        let mut quads = self.quads.write().unwrap();
+        let mut quads = self.quads.write().expect("lock poisoned");
         let removed = quads.remove(quad);
         if removed {
             drop(quads); // Release lock before updating indexes
@@ -947,7 +947,7 @@ impl Store for StreamingBufferStore {
         object: Option<&oxirs_core::model::Object>,
         _graph_name: Option<&oxirs_core::model::GraphName>,
     ) -> OxirsResult<Vec<oxirs_core::model::Quad>> {
-        let indexes = self.indexes.read().unwrap();
+        let indexes = self.indexes.read().expect("lock poisoned");
 
         // Use indexes for efficient pattern matching
         let mut candidates: Vec<oxirs_core::model::Quad> = if let Some(s) = subject {
@@ -958,7 +958,7 @@ impl Store for StreamingBufferStore {
             indexes.by_object.get(o).cloned().unwrap_or_default()
         } else {
             // No specific pattern, return all quads
-            let quads = self.quads.read().unwrap();
+            let quads = self.quads.read().expect("lock poisoned");
             return Ok(quads.iter().cloned().collect());
         };
 
@@ -977,12 +977,12 @@ impl Store for StreamingBufferStore {
     }
 
     fn len(&self) -> OxirsResult<usize> {
-        let quads = self.quads.read().unwrap();
+        let quads = self.quads.read().expect("lock poisoned");
         Ok(quads.len())
     }
 
     fn is_empty(&self) -> OxirsResult<bool> {
-        let quads = self.quads.read().unwrap();
+        let quads = self.quads.read().expect("lock poisoned");
         Ok(quads.is_empty())
     }
 
@@ -991,7 +991,7 @@ impl Store for StreamingBufferStore {
         // Supports simple SELECT, ASK, and CONSTRUCT patterns commonly used in SHACL
 
         let sparql = sparql.trim();
-        let quads = self.quads.read().unwrap();
+        let quads = self.quads.read().expect("lock poisoned");
 
         // Handle ASK queries
         if sparql.to_uppercase().starts_with("ASK") {

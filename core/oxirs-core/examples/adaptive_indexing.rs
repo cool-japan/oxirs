@@ -164,7 +164,7 @@ fn example_index_creation() -> Result<(), Box<dyn std::error::Error>> {
     // Sparse random queries
     println!("  Executing random queries...");
     for _ in 0..5 {
-        let random_id = random.random_range(0, 200);
+        let random_id = random.random_range(0..200);
         let subject = Subject::NamedNode(NamedNode::new(format!(
             "http://example.org/resource{random_id}"
         ))?);

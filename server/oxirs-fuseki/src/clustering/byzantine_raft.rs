@@ -188,7 +188,7 @@ impl BftNodeState {
             .map_err(|e| FusekiError::internal(format!("Failed to generate nonce: {e:?}")))?;
 
         // Serialize message for signing
-        let message_bytes = bincode::encode_to_vec(message, bincode::config::standard())
+        let message_bytes = oxicode::serde::encode_to_vec(message, oxicode::config::standard())
             .map_err(|e| FusekiError::internal(format!("Failed to serialize message: {e}")))?;
 
         // Create message hash including timestamp and nonce
@@ -244,8 +244,9 @@ impl BftNodeState {
         let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
 
         // Recreate message hash
-        let message_bytes = bincode::encode_to_vec(&bft_message.inner, bincode::config::standard())
-            .map_err(|e| FusekiError::internal(format!("Failed to serialize message: {e}")))?;
+        let message_bytes =
+            oxicode::serde::encode_to_vec(&bft_message.inner, oxicode::config::standard())
+                .map_err(|e| FusekiError::internal(format!("Failed to serialize message: {e}")))?;
 
         let mut context = Context::new(&SHA256);
         context.update(&message_bytes);

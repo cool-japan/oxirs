@@ -195,12 +195,12 @@ impl DatasetManager {
 
         // Generate triples with realistic DBpedia patterns
         for i in 0..triple_count {
-            let subject = format!("dbr:{}", entities[rng.random_range(0, entities.len())]);
-            let predicate = format!("dbo:{}", predicates[rng.random_range(0, predicates.len())]);
+            let subject = format!("dbr:{}", entities[rng.random_range(0..entities.len())]);
+            let predicate = format!("dbo:{}", predicates[rng.random_range(0..predicates.len())]);
 
             let object = if rng.random_bool() {
                 // Object property (another entity)
-                format!("dbr:{}", entities[rng.random_range(0, entities.len())])
+                format!("dbr:{}", entities[rng.random_range(0..entities.len())])
             } else {
                 // Data property (literal)
                 self.generate_dbpedia_literal(&mut rng)
@@ -256,11 +256,11 @@ impl DatasetManager {
         let p_properties = self.generate_wikidata_properties();
 
         for i in 0..triple_count {
-            let subject = format!("wd:{}", q_entities[rng.random_range(0, q_entities.len())]);
-            let predicate = format!("wdt:{}", p_properties[rng.random_range(0, p_properties.len())]);
+            let subject = format!("wd:{}", q_entities[rng.random_range(0..q_entities.len())]);
+            let predicate = format!("wdt:{}", p_properties[rng.random_range(0..p_properties.len())]);
 
             let object = if rng.random_bool() {
-                format!("wd:{}", q_entities[rng.random_range(0, q_entities.len())])
+                format!("wd:{}", q_entities[rng.random_range(0..q_entities.len())])
             } else {
                 self.generate_wikidata_literal(&mut rng)
             };
@@ -314,9 +314,9 @@ impl DatasetManager {
         let all_entities = [&diseases[..], &drugs[..], &genes[..], &proteins[..]].concat();
 
         for i in 0..triple_count {
-            let subject = format!("bio:{}", all_entities[rng.random_range(0, all_entities.len())]);
-            let predicate = format!("bioprop:{}", predicates[rng.random_range(0, predicates.len())]);
-            let object = format!("bio:{}", all_entities[rng.random_range(0, all_entities.len())]);
+            let subject = format!("bio:{}", all_entities[rng.random_range(0..all_entities.len())]);
+            let predicate = format!("bioprop:{}", predicates[rng.random_range(0..predicates.len())]);
+            let object = format!("bio:{}", all_entities[rng.random_range(0..all_entities.len())]);
 
             triples.push(Triple {
                 subject,
@@ -369,9 +369,9 @@ impl DatasetManager {
             .collect::<Vec<_>>();
 
         for i in 0..triple_count {
-            let subject = format!("synth:{}", subjects[rng.random_range(0, subjects.len())]);
-            let predicate = format!("synthprop:{}", predicates[rng.random_range(0, predicates.len())]);
-            let object = format!("synth:{}", objects[rng.random_range(0, objects.len())]);
+            let subject = format!("synth:{}", subjects[rng.random_range(0..subjects.len())]);
+            let predicate = format!("synthprop:{}", predicates[rng.random_range(0..predicates.len())]);
+            let object = format!("synth:{}", objects[rng.random_range(0..objects.len())]);
 
             triples.push(Triple {
                 subject,
@@ -422,7 +422,7 @@ impl DatasetManager {
 
         let mut entities = Vec::with_capacity(count);
         for i in 0..count {
-            let entity_type = &entity_types[rng.random_range(0, entity_types.len())];
+            let entity_type = &entity_types[rng.random_range(0..entity_types.len())];
             entities.push(format!("{}_{}", entity_type, i));
         }
         entities
@@ -456,12 +456,12 @@ impl DatasetManager {
     fn generate_dbpedia_literal<R: rand::Rng>(&self, rng: &mut Random<R>) -> String {
         let literal_types = vec![
             format!("\"{}\"^^xsd:string", self.generate_random_string(rng, 20)),
-            format!("\"{}\"^^xsd:int", rng.random_range(1, 10000)),
+            format!("\"{}\"^^xsd:int", rng.random_range(1..10000)),
             format!("\"{}\"^^xsd:date", self.generate_random_date(rng)),
             format!("\"{}\"@en", self.generate_random_text(rng, 50)),
         ];
 
-        literal_types[rng.random_range(0, literal_types.len())].clone()
+        literal_types[rng.random_range(0..literal_types.len())].clone()
     }
 
     fn generate_wikidata_properties(&self) -> Vec<String> {
@@ -492,18 +492,18 @@ impl DatasetManager {
     fn generate_wikidata_literal<R: rand::Rng>(&self, rng: &mut Random<R>) -> String {
         let literal_types = vec![
             format!("\"{}\"", self.generate_random_string(rng, 30)),
-            format!("{}", rng.random_range(1, 1000000)),
+            format!("{}", rng.random_range(1..1000000)),
             format!("\"{}-{:02}-{:02}T00:00:00Z\"",
-                     rng.random_range(1900, 2024),
-                     rng.random_range(1, 13),
-                     rng.random_range(1, 29)),
+                     rng.random_range(1900..2024),
+                     rng.random_range(1..13),
+                     rng.random_range(1..29)),
             format!("+{}.{}/{}",
                      rng.random_range(-90, 91),
                      rng.random_range(-180, 181),
                      "WGS84"),
         ];
 
-        literal_types[rng.random_range(0, literal_types.len())].clone()
+        literal_types[rng.random_range(0..literal_types.len())].clone()
     }
 
     fn generate_disease_entities<R: rand::Rng>(&self, rng: &mut Random<R>, count: usize) -> Vec<String> {
@@ -514,7 +514,7 @@ impl DatasetManager {
 
         (0..count)
             .map(|i| {
-                let prefix = &disease_prefixes[rng.random_range(0, disease_prefixes.len())];
+                let prefix = &disease_prefixes[rng.random_range(0..disease_prefixes.len())];
                 format!("{}_{}", prefix, i)
             })
             .collect()
@@ -527,7 +527,7 @@ impl DatasetManager {
 
         (0..count)
             .map(|i| {
-                let suffix = &drug_suffixes[rng.random_range(0, drug_suffixes.len())];
+                let suffix = &drug_suffixes[rng.random_range(0..drug_suffixes.len())];
                 format!("drug{}_{}", i, suffix)
             })
             .collect()
@@ -540,7 +540,7 @@ impl DatasetManager {
 
         (0..count)
             .map(|i| {
-                let prefix = &gene_prefixes[rng.random_range(0, gene_prefixes.len())];
+                let prefix = &gene_prefixes[rng.random_range(0..gene_prefixes.len())];
                 format!("{}{}", prefix, i)
             })
             .collect()
@@ -554,7 +554,7 @@ impl DatasetManager {
 
         (0..count)
             .map(|i| {
-                let ptype = &protein_types[rng.random_range(0, protein_types.len())];
+                let ptype = &protein_types[rng.random_range(0..protein_types.len())];
                 format!("{}_{}", ptype, i)
             })
             .collect()
@@ -823,10 +823,10 @@ impl DatasetManager {
 
     fn generate_random_string<R: rand::Rng>(&self, rng: &mut Random<R>, max_len: usize) -> String {
         let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        let len = rng.random_range(5, max_len + 1);
+        let len = rng.random_range(5..max_len + 1);
         (0..len)
             .map(|_| {
-                let idx = rng.random_range(0, chars.len());
+                let idx = rng.random_range(0..chars.len());
                 chars.chars().nth(idx).unwrap()
             })
             .collect()
@@ -840,18 +840,18 @@ impl DatasetManager {
             "way", "time", "year", "day", "week", "month", "hour", "minute", "second",
         ];
 
-        let word_count = rng.random_range(3, 12);
+        let word_count = rng.random_range(3..12);
         let text_words: Vec<&str> = (0..word_count)
-            .map(|_| words[rng.random_range(0, words.len())])
+            .map(|_| words[rng.random_range(0..words.len())])
             .collect();
 
         text_words.join(" ")
     }
 
     fn generate_random_date<R: rand::Rng>(&self, rng: &mut Random<R>) -> String {
-        let year = rng.random_range(1900, 2024);
-        let month = rng.random_range(1, 13);
-        let day = rng.random_range(1, 29);
+        let year = rng.random_range(1900..2024);
+        let month = rng.random_range(1..13);
+        let day = rng.random_range(1..29);
         format!("{}-{:02}-{:02}", year, month, day)
     }
 

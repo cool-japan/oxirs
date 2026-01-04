@@ -1,6 +1,6 @@
 # OxiRS-Vec Migration Guide: From FAISS/Annoy to OxiRS-Vec
 
-**Version**: 0.1.0-rc.1
+**Version**: 0.1.0-rc.2
 **Last Updated**: December 9, 2025
 **Status**: Production-Ready
 
@@ -154,7 +154,7 @@ Storage Backends (RDF Store, Disk, Cloud)
    ```bash
    # Add to Cargo.toml
    [dependencies]
-   oxirs-vec = "0.1.0-rc.1"
+   oxirs-vec = "0.1.0-rc.2"
    scirs2-core = "0.7"  # Required for scientific computing
    ```
 

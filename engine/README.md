@@ -1,11 +1,11 @@
 # OxiRS Engine 🚀
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: Release Candidate (v0.1.0-rc.1) - Released December 26, 2025
+**Status**: Release Candidate (v0.1.0-rc.2) - Released December 26, 2025
 
 ⚠️ **Release Candidate**: This is a release candidate. Some features are experimental. APIs may change without notice.
 
@@ -198,13 +198,13 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # Individual modules (stable features)
-oxirs-arq = "0.1.0-rc.1"
-oxirs-shacl = "0.1.0-rc.1"
+oxirs-arq = "0.1.0-rc.2"
+oxirs-shacl = "0.1.0-rc.2"
 
 # Individual modules (experimental features)
-oxirs-vec = "0.1.0-rc.1"
-oxirs-rule = "0.1.0-rc.1"
-oxirs-star = "0.1.0-rc.1"
+oxirs-vec = "0.1.0-rc.2"
+oxirs-rule = "0.1.0-rc.2"
+oxirs-star = "0.1.0-rc.2"
 ```
 
 Note: There is no single `oxirs-engine` crate. Use individual modules as needed.

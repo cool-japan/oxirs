@@ -217,7 +217,11 @@ impl DeepOntologyMatcher {
         }
 
         // Sort by similarity
-        matches.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap());
+        matches.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         info!("Found {} ontology matches", matches.len());
         Ok(matches)

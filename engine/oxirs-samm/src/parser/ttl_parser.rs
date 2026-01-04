@@ -196,7 +196,9 @@ impl SammTurtleParser {
         if self.samm_ns.is_none() {
             self.detect_and_set_namespaces();
         }
-        self.samm_ns.as_ref().unwrap()
+        self.samm_ns
+            .as_ref()
+            .expect("SAMM namespace not initialized")
     }
 
     /// Find and parse the Aspect from the graph
@@ -267,9 +269,13 @@ impl SammTurtleParser {
         self.parse_element_metadata(&subject, &mut aspect.metadata)?;
 
         // Parse properties
-        let properties_pred =
-            NamedNode::new(format!("{}properties", self.samm_ns.as_ref().unwrap()))
-                .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let properties_pred = NamedNode::new(format!(
+            "{}properties",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(props_list) = self.get_object(&subject, &properties_pred) {
             let property_urns = self.parse_rdf_list(&props_list)?;
@@ -280,9 +286,13 @@ impl SammTurtleParser {
         }
 
         // Parse operations
-        let operations_pred =
-            NamedNode::new(format!("{}operations", self.samm_ns.as_ref().unwrap()))
-                .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let operations_pred = NamedNode::new(format!(
+            "{}operations",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(ops_list) = self.get_object(&subject, &operations_pred) {
             let operation_urns = self.parse_rdf_list(&ops_list)?;
@@ -293,8 +303,13 @@ impl SammTurtleParser {
         }
 
         // Parse events
-        let events_pred = NamedNode::new(format!("{}events", self.samm_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let events_pred = NamedNode::new(format!(
+            "{}events",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(events_list) = self.get_object(&subject, &events_pred) {
             let event_urns = self.parse_rdf_list(&events_list)?;
@@ -323,8 +338,13 @@ impl SammTurtleParser {
         self.parse_element_metadata(&subject, &mut property.metadata)?;
 
         // Parse characteristic
-        let char_pred = NamedNode::new(format!("{}characteristic", self.samm_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let char_pred = NamedNode::new(format!(
+            "{}characteristic",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(char_term) = self.get_object(&subject, &char_pred) {
             let char_urn = self.term_to_string(&char_term)?;
@@ -333,8 +353,13 @@ impl SammTurtleParser {
         }
 
         // Parse optional flag
-        let optional_pred = NamedNode::new(format!("{}optional", self.samm_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let optional_pred = NamedNode::new(format!(
+            "{}optional",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(Term::Literal(lit)) = self.get_object(&subject, &optional_pred) {
             property.optional = lit.value() == "true";
@@ -418,8 +443,13 @@ impl SammTurtleParser {
         self.parse_element_metadata(&subject, &mut characteristic.metadata)?;
 
         // Parse dataType
-        let datatype_pred = NamedNode::new(format!("{}dataType", self.samm_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let datatype_pred = NamedNode::new(format!(
+            "{}dataType",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(datatype_term) = self.get_object(&subject, &datatype_pred) {
             characteristic.data_type = Some(self.term_to_string(&datatype_term)?);
@@ -492,10 +522,20 @@ impl SammTurtleParser {
     /// Parse unit from a Measurement characteristic
     fn parse_unit_from_characteristic(&self, subject: &NamedNode) -> Result<Option<String>> {
         // Try both samm-c:unit and samm:unit predicates
-        let unit_pred_c = NamedNode::new(format!("{}unit", self.samm_c_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
-        let unit_pred = NamedNode::new(format!("{}unit", self.samm_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let unit_pred_c = NamedNode::new(format!(
+            "{}unit",
+            self.samm_c_ns
+                .as_ref()
+                .expect("SAMM-C namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let unit_pred = NamedNode::new(format!(
+            "{}unit",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         // Try samm-c:unit first
         if let Some(unit_term) = self.get_object(subject, &unit_pred_c) {
@@ -513,8 +553,13 @@ impl SammTurtleParser {
     /// Parse enumeration values from the graph
     fn parse_enumeration_values(&self, subject: &NamedNode) -> Result<Vec<String>> {
         // Parse samm-c:values predicate (RDF list of values)
-        let values_pred = NamedNode::new(format!("{}values", self.samm_c_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let values_pred = NamedNode::new(format!(
+            "{}values",
+            self.samm_c_ns
+                .as_ref()
+                .expect("SAMM-C namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(values_term) = self.get_object(subject, &values_pred) {
             // Parse the RDF list
@@ -526,9 +571,13 @@ impl SammTurtleParser {
 
     /// Parse default value from a State characteristic
     fn parse_default_value(&self, subject: &NamedNode) -> Result<Option<String>> {
-        let default_pred =
-            NamedNode::new(format!("{}defaultValue", self.samm_c_ns.as_ref().unwrap()))
-                .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let default_pred = NamedNode::new(format!(
+            "{}defaultValue",
+            self.samm_c_ns
+                .as_ref()
+                .expect("SAMM-C namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(default_term) = self.get_object(subject, &default_pred) {
             return Ok(Some(self.term_to_string(&default_term)?));
@@ -548,8 +597,13 @@ impl SammTurtleParser {
         self.parse_element_metadata(&subject, &mut operation.metadata)?;
 
         // Parse input parameters (RDF list)
-        let input_pred = NamedNode::new(format!("{}input", self.samm_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let input_pred = NamedNode::new(format!(
+            "{}input",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(input_term) = self.get_object(&subject, &input_pred) {
             let input_urns = self.parse_rdf_list(&input_term)?;
@@ -564,8 +618,13 @@ impl SammTurtleParser {
         }
 
         // Parse output (single property)
-        let output_pred = NamedNode::new(format!("{}output", self.samm_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let output_pred = NamedNode::new(format!(
+            "{}output",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(output_term) = self.get_object(&subject, &output_pred) {
             let output_urn = self.term_to_string(&output_term)?;
@@ -593,9 +652,13 @@ impl SammTurtleParser {
         self.parse_element_metadata(&subject, &mut event.metadata)?;
 
         // Parse parameters (RDF list)
-        let parameters_pred =
-            NamedNode::new(format!("{}parameters", self.samm_ns.as_ref().unwrap()))
-                .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let parameters_pred = NamedNode::new(format!(
+            "{}parameters",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         if let Some(parameters_term) = self.get_object(&subject, &parameters_pred) {
             let parameter_urns = self.parse_rdf_list(&parameters_term)?;
@@ -619,9 +682,13 @@ impl SammTurtleParser {
         metadata: &mut ElementMetadata,
     ) -> Result<()> {
         // Parse preferredName
-        let pref_name_pred =
-            NamedNode::new(format!("{}preferredName", self.samm_ns.as_ref().unwrap()))
-                .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let pref_name_pred = NamedNode::new(format!(
+            "{}preferredName",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         for triple in self.graph.iter().filter(|t| {
             if let NamedOrBlankNodeRef::NamedNode(s) = t.subject {
@@ -637,8 +704,13 @@ impl SammTurtleParser {
         }
 
         // Parse description
-        let desc_pred = NamedNode::new(format!("{}description", self.samm_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let desc_pred = NamedNode::new(format!(
+            "{}description",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         for triple in self.graph.iter().filter(|t| {
             if let NamedOrBlankNodeRef::NamedNode(s) = t.subject {
@@ -654,8 +726,13 @@ impl SammTurtleParser {
         }
 
         // Parse see
-        let see_pred = NamedNode::new(format!("{}see", self.samm_ns.as_ref().unwrap()))
-            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let see_pred = NamedNode::new(format!(
+            "{}see",
+            self.samm_ns
+                .as_ref()
+                .expect("SAMM namespace not initialized")
+        ))
+        .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         for triple in self.graph.iter().filter(|t| {
             if let NamedOrBlankNodeRef::NamedNode(s) = t.subject {

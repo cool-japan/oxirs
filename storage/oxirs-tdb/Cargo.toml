@@ -12,6 +12,10 @@ description = "Apache Jena TDB/TDB2 compatible RDF storage engine with B+Tree in
 keywords = ["rdf", "sparql", "storage", "database", "tdb"]
 categories = ["database", "data-structures"]
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 # Core
 oxirs-core = { workspace = true }
@@ -29,7 +33,7 @@ dashmap = "6.1"
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-bincode = "2.0"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 
 # Utilities
 log = "0.4"
@@ -70,7 +74,7 @@ tokio-uring = { version = "0.5", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-tempfile = "3.23"
+tempfile = "3.24"
 proptest = "1.7"
 env_logger = "0.10"
 # Use scirs2-core::random instead of rand (see CLAUDE.md)

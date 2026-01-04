@@ -374,7 +374,8 @@ impl MonitorCommand {
                 }
             }
         } else {
-            let duration = Duration::from_secs(self.duration.unwrap());
+            let duration_secs = self.duration.unwrap_or(60); // Default to 60 seconds
+            let duration = Duration::from_secs(duration_secs);
             info!("Monitoring for {} seconds", duration.as_secs());
 
             tokio::time::sleep(duration).await;

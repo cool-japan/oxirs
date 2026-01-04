@@ -4,7 +4,6 @@
 //! automatic expiration handling, and concurrent session management.
 
 use anyhow::{anyhow, Context, Result};
-use bincode::{Decode, Encode};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -43,21 +42,19 @@ use crate::{
 };
 
 // Define PersistentChatSession for persistence - different from the main ChatSession
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistentChatSession {
     pub session_id: String,
     pub config: ChatConfig,
-    #[bincode(with_serde)]
     pub messages: Vec<Message>,
     pub created_at: SystemTime,
     pub last_accessed: SystemTime,
     pub metrics: SessionMetrics,
-    #[bincode(with_serde)]
     pub user_preferences: HashMap<String, serde_json::Value>,
 }
 
 /// Configuration for session persistence
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistenceConfig {
     pub enabled: bool,
     pub storage_path: PathBuf,
@@ -91,17 +88,15 @@ impl Default for PersistenceConfig {
 }
 
 /// Serializable session data for persistence
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedSession {
     pub session_id: String,
     pub config: ChatConfig,
-    #[bincode(with_serde)]
     pub messages: Vec<Message>,
     pub created_at: SystemTime,
     pub last_accessed: SystemTime,
     pub metrics: SessionMetrics,
     pub analytics: Option<ConversationAnalytics>,
-    #[bincode(with_serde)]
     pub user_preferences: HashMap<String, serde_json::Value>,
     pub conversation_state: ConversationState,
     pub checksum: String,
@@ -116,7 +111,7 @@ pub struct SessionWithDirtyFlag {
 }
 
 /// Conversation state for advanced context management
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConversationState {
     pub current_topic: Option<String>,
     pub context_window: Vec<String>, // Message IDs in current context
@@ -127,7 +122,7 @@ pub struct ConversationState {
 }
 
 /// Entity reference for tracking
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityReference {
     pub entity_uri: String,
     pub entity_label: String,
@@ -137,7 +132,7 @@ pub struct EntityReference {
 }
 
 /// Query context for tracking
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryContext {
     pub sparql_query: String,
     pub natural_language: String,
@@ -148,7 +143,7 @@ pub struct QueryContext {
 }
 
 /// Conversation flow tracking
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationFlow {
     pub current_phase: ConversationPhase,
     pub topic_transitions: Vec<TopicTransition>,
@@ -168,7 +163,7 @@ impl Default for ConversationFlow {
 }
 
 /// Conversation phases
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConversationPhase {
     Introduction,
     Exploration,
@@ -179,7 +174,7 @@ pub enum ConversationPhase {
 }
 
 /// Topic transitions
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopicTransition {
     pub from_topic: Option<String>,
     pub to_topic: String,
@@ -189,7 +184,7 @@ pub struct TopicTransition {
 }
 
 /// Transition types
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransitionType {
     Natural,       // Logical progression
     UserInitiated, // User changed topic
@@ -199,7 +194,7 @@ pub enum TransitionType {
 }
 
 /// Interaction patterns
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InteractionPattern {
     pub pattern_type: InteractionType,
     pub frequency: usize,
@@ -208,7 +203,7 @@ pub struct InteractionPattern {
 }
 
 /// Interaction types
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InteractionType {
     QuestionAnswer,
     ExploratorySearch,
@@ -219,7 +214,7 @@ pub enum InteractionType {
 }
 
 /// Session recovery information
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecoveryInfo {
     pub session_id: String,
     pub last_checkpoint: SystemTime,
@@ -229,7 +224,7 @@ pub struct RecoveryInfo {
 }
 
 /// Recovery strategies
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RecoveryStrategy {
     LoadFromCheckpoint,
     LoadFromBackup,
@@ -245,7 +240,7 @@ pub struct SessionPersistenceManager {
 }
 
 /// Persistence statistics
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct PersistenceStats {
     pub total_sessions_saved: usize,
     pub total_sessions_loaded: usize,
@@ -314,7 +309,7 @@ impl SessionPersistenceManager {
         let serialized = if self.config.compression_enabled {
             self.compress_session(&persisted).await?
         } else {
-            bincode::encode_to_vec(&persisted, bincode::config::standard())
+            oxicode::serde::encode_to_vec(&persisted, oxicode::config::standard())
                 .map_err(|e| anyhow!("Bincode encoding failed: {}", e))?
         };
 
@@ -389,7 +384,7 @@ impl SessionPersistenceManager {
         let persisted: PersistedSession = if self.config.compression_enabled {
             self.decompress_session(&data).await?
         } else {
-            bincode::decode_from_slice(&data, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&data, oxicode::config::standard())
                 .map_err(|e| anyhow!("Bincode decoding failed: {}", e))?
                 .0
         };
@@ -668,7 +663,14 @@ impl SessionPersistenceManager {
 
             // Extract entities (simple approach - capitalized words and known patterns)
             for word in content.split_whitespace() {
-                if word.len() > 2 && word.chars().next().unwrap().is_uppercase() {
+                if word.len() > 2 {
+                    if let Some(first_char) = word.chars().next() {
+                        if !first_char.is_uppercase() {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
                     let entity_key = word.to_lowercase();
                     let entry =
                         entities
@@ -816,8 +818,8 @@ impl SessionPersistenceManager {
     /// Extract SPARQL query patterns from message content
     fn extract_sparql_from_content(&self, content: &str) -> String {
         // Simple regex to extract SPARQL-like patterns
-        let sparql_pattern =
-            regex::Regex::new(r"(?i)(select|construct|ask|describe)[^.]*\.").unwrap();
+        let sparql_pattern = regex::Regex::new(r"(?i)(select|construct|ask|describe)[^.]*\.")
+            .expect("SPARQL regex pattern should be valid");
         if let Some(captures) = sparql_pattern.find(content) {
             captures.as_str().to_string()
         } else {
@@ -854,7 +856,7 @@ impl SessionPersistenceManager {
 
     async fn compress_session(&self, session: &PersistedSession) -> Result<Vec<u8>> {
         // First serialize with bincode
-        let serialized = bincode::encode_to_vec(session, bincode::config::standard())
+        let serialized = oxicode::serde::encode_to_vec(session, oxicode::config::standard())
             .map_err(|e| anyhow!("Bincode encoding failed: {}", e))?;
 
         // Apply compression if enabled
@@ -895,7 +897,7 @@ impl SessionPersistenceManager {
         };
 
         // Finally deserialize with bincode
-        bincode::decode_from_slice(&decompressed, bincode::config::standard())
+        oxicode::serde::decode_from_slice(&decompressed, oxicode::config::standard())
             .map(|(session, _)| session)
             .map_err(|e| anyhow!("Bincode decoding failed: {}", e))
     }
@@ -1165,7 +1167,7 @@ impl SessionPersistenceManager {
         let serialized = if self.config.compression_enabled {
             self.compress_session(&checkpoint_session).await?
         } else {
-            bincode::encode_to_vec(&checkpoint_session, bincode::config::standard())
+            oxicode::serde::encode_to_vec(&checkpoint_session, oxicode::config::standard())
                 .map_err(|e| anyhow!("Bincode encoding failed: {}", e))?
         };
 
@@ -1266,7 +1268,7 @@ impl SessionPersistenceManager {
                 .await
                 .context("Failed to decompress checkpoint session")?
         } else {
-            bincode::decode_from_slice(&data, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&data, oxicode::config::standard())
                 .map(|(session, _)| session)
                 .context("Failed to deserialize checkpoint session")?
         };
@@ -1309,7 +1311,7 @@ impl SessionPersistenceManager {
         let persisted: PersistedSession = if self.config.compression_enabled {
             self.decompress_session(&data).await?
         } else {
-            bincode::decode_from_slice(&data, bincode::config::standard())
+            oxicode::serde::decode_from_slice(&data, oxicode::config::standard())
                 .map_err(|e| anyhow!("Bincode decoding failed: {}", e))?
                 .0
         };
@@ -1419,9 +1421,9 @@ impl SessionPersistenceManager {
                 Ok(session) => session,
                 Err(_) => {
                     // Fallback to direct deserialization if decompression fails
-                    match bincode::decode_from_slice::<PersistedSession, _>(
+                    match oxicode::serde::decode_from_slice::<PersistedSession, _>(
                         &data,
-                        bincode::config::standard(),
+                        oxicode::config::standard(),
                     ) {
                         Ok((session, _)) => session,
                         Err(e) => {
@@ -1432,9 +1434,9 @@ impl SessionPersistenceManager {
                 }
             }
         } else {
-            match bincode::decode_from_slice::<PersistedSession, _>(
+            match oxicode::serde::decode_from_slice::<PersistedSession, _>(
                 &data,
-                bincode::config::standard(),
+                oxicode::config::standard(),
             ) {
                 Ok((session, _)) => session,
                 Err(e) => {

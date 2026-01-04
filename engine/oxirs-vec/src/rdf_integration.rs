@@ -186,7 +186,11 @@ impl RdfVectorIntegration {
         vector: Vector,
         graph_context: Option<GraphName>,
     ) -> Result<VectorId> {
-        let vector_id = self.vector_store.write().unwrap().add_vector(vector)?;
+        let vector_id = self
+            .vector_store
+            .write()
+            .expect("lock poisoned")
+            .add_vector(vector)?;
         let metadata = self.extract_term_metadata(&term)?;
 
         let mapping = RdfTermMapping {
@@ -200,18 +204,18 @@ impl RdfVectorIntegration {
 
         // Update mappings
         {
-            let mut term_mappings = self.term_mappings.write().unwrap();
+            let mut term_mappings = self.term_mappings.write().expect("lock poisoned");
             term_mappings.insert(term_hash, mapping.clone());
         }
 
         {
-            let mut vector_mappings = self.vector_mappings.write().unwrap();
+            let mut vector_mappings = self.vector_mappings.write().expect("lock poisoned");
             vector_mappings.insert(vector_id.clone(), mapping);
         }
 
         // Update graph cache if applicable
         if let Some(graph) = graph_context {
-            let mut graph_cache = self.graph_cache.write().unwrap();
+            let mut graph_cache = self.graph_cache.write().expect("lock poisoned");
             graph_cache
                 .entry(graph)
                 .or_default()
@@ -239,20 +243,23 @@ impl RdfVectorIntegration {
         let query_vector = self
             .vector_store
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .get_vector(&query_vector_id)?
             .ok_or_else(|| anyhow!("Query vector not found"))?;
 
         // Filter by graph context if specified
         let candidate_vectors = if let Some(graph) = graph_context {
-            let graph_cache = self.graph_cache.read().unwrap();
+            let graph_cache = self.graph_cache.read().expect("lock poisoned");
             graph_cache
                 .get(graph)
                 .map(|set| set.iter().cloned().collect::<Vec<_>>())
                 .unwrap_or_default()
         } else {
             // Use all vectors if no graph context specified
-            self.vector_store.read().unwrap().get_all_vector_ids()?
+            self.vector_store
+                .read()
+                .expect("lock poisoned")
+                .get_all_vector_ids()?
         };
 
         // Perform similarity search
@@ -262,7 +269,12 @@ impl RdfVectorIntegration {
                 continue; // Skip self
             }
 
-            if let Ok(Some(vector)) = self.vector_store.read().unwrap().get_vector(&vector_id) {
+            if let Ok(Some(vector)) = self
+                .vector_store
+                .read()
+                .expect("lock poisoned")
+                .get_vector(&vector_id)
+            {
                 let similarity = self.config.default_metric.compute(&query_vector, &vector)?;
 
                 // Apply threshold filtering
@@ -273,7 +285,7 @@ impl RdfVectorIntegration {
                 }
 
                 // Get term mapping
-                let vector_mappings = self.vector_mappings.read().unwrap();
+                let vector_mappings = self.vector_mappings.read().expect("lock poisoned");
                 if let Some(mapping) = vector_mappings.get(&vector_id) {
                     let processing_time = start_time.elapsed().as_micros() as u64;
 
@@ -326,25 +338,33 @@ impl RdfVectorIntegration {
         let temp_vector_id = self
             .vector_store
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .add_vector(query_vector.clone())?;
 
         // Perform similarity search against all terms
         let candidate_vectors = if let Some(graph) = graph_context {
-            let graph_cache = self.graph_cache.read().unwrap();
+            let graph_cache = self.graph_cache.read().expect("lock poisoned");
             graph_cache
                 .get(graph)
                 .map(|set| set.iter().cloned().collect::<Vec<_>>())
                 .unwrap_or_default()
         } else {
-            self.vector_store.read().unwrap().get_all_vector_ids()?
+            self.vector_store
+                .read()
+                .expect("lock poisoned")
+                .get_all_vector_ids()?
         };
 
         let mut results = Vec::new();
         let start_time = std::time::Instant::now();
 
         for vector_id in candidate_vectors {
-            if let Ok(Some(vector)) = self.vector_store.read().unwrap().get_vector(&vector_id) {
+            if let Ok(Some(vector)) = self
+                .vector_store
+                .read()
+                .expect("lock poisoned")
+                .get_vector(&vector_id)
+            {
                 let similarity = self.config.default_metric.compute(&query_vector, &vector)?;
 
                 if let Some(thresh) = threshold {
@@ -353,7 +373,7 @@ impl RdfVectorIntegration {
                     }
                 }
 
-                let vector_mappings = self.vector_mappings.read().unwrap();
+                let vector_mappings = self.vector_mappings.read().expect("lock poisoned");
                 if let Some(mapping) = vector_mappings.get(&vector_id) {
                     let processing_time = start_time.elapsed().as_micros() as u64;
 
@@ -377,7 +397,7 @@ impl RdfVectorIntegration {
         let _ = self
             .vector_store
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .remove_vector(&temp_vector_id);
 
         // Sort and limit results
@@ -394,7 +414,7 @@ impl RdfVectorIntegration {
     /// Get vector ID for an RDF term
     pub fn get_vector_id(&self, term: &Term) -> Result<Option<VectorId>> {
         let term_hash = TermHash::from_term(term);
-        let term_mappings = self.term_mappings.read().unwrap();
+        let term_mappings = self.term_mappings.read().expect("lock poisoned");
         Ok(term_mappings
             .get(&term_hash)
             .map(|mapping| mapping.vector_id.clone()))
@@ -402,7 +422,7 @@ impl RdfVectorIntegration {
 
     /// Get RDF term for a vector ID
     pub fn get_term(&self, vector_id: VectorId) -> Result<Option<Term>> {
-        let vector_mappings = self.vector_mappings.read().unwrap();
+        let vector_mappings = self.vector_mappings.read().expect("lock poisoned");
         Ok(vector_mappings
             .get(&vector_id)
             .map(|mapping| mapping.term.clone()))
@@ -410,7 +430,7 @@ impl RdfVectorIntegration {
 
     /// Register a namespace prefix
     pub fn register_namespace(&self, prefix: String, uri: String) -> Result<()> {
-        let mut registry = self.namespace_registry.write().unwrap();
+        let mut registry = self.namespace_registry.write().expect("lock poisoned");
         registry.insert(prefix, uri);
         Ok(())
     }
@@ -591,9 +611,9 @@ impl RdfVectorIntegration {
 
     /// Get statistics about the RDF-vector integration
     pub fn get_statistics(&self) -> RdfIntegrationStats {
-        let term_mappings = self.term_mappings.read().unwrap();
-        let graph_cache = self.graph_cache.read().unwrap();
-        let namespace_registry = self.namespace_registry.read().unwrap();
+        let term_mappings = self.term_mappings.read().expect("lock poisoned");
+        let graph_cache = self.graph_cache.read().expect("lock poisoned");
+        let namespace_registry = self.namespace_registry.read().expect("lock poisoned");
 
         let mut type_counts = HashMap::new();
         for mapping in term_mappings.values() {

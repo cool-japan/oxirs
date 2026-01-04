@@ -456,13 +456,13 @@ impl EngineIntegrationHub {
     /// Register a module with the integration hub
     pub fn register_module(&self, metadata: ModuleMetadata) -> Result<()> {
         {
-            let mut modules = self.modules.write().unwrap();
+            let mut modules = self.modules.write().expect("rwlock should not be poisoned");
             modules.insert(metadata.id, metadata.clone());
         }
 
         // Register module services
         {
-            let mut services = self.services.write().unwrap();
+            let mut services = self.services.write().expect("rwlock should not be poisoned");
             for endpoint in &metadata.service_endpoints {
                 services.register_service(endpoint.clone())?;
             }
@@ -479,7 +479,7 @@ impl EngineIntegrationHub {
     /// Unregister a module
     pub fn unregister_module(&self, module_id: ModuleId) -> Result<()> {
         {
-            let mut modules = self.modules.write().unwrap();
+            let mut modules = self.modules.write().expect("rwlock should not be poisoned");
             modules.remove(&module_id);
         }
 
@@ -500,7 +500,7 @@ impl EngineIntegrationHub {
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("rwlock should not be poisoned");
             stats.events_processed += 1;
         }
 
@@ -509,19 +509,19 @@ impl EngineIntegrationHub {
 
     /// Discover services by type
     pub fn discover_services(&self, service_type: ServiceType) -> Vec<ServiceEndpoint> {
-        let services = self.services.read().unwrap();
+        let services = self.services.read().expect("rwlock should not be poisoned");
         services.get_services_by_type(&service_type)
     }
 
     /// Get module performance metrics
     pub fn get_module_metrics(&self, module_id: ModuleId) -> Option<ModulePerformanceMetrics> {
-        let modules = self.modules.read().unwrap();
+        let modules = self.modules.read().expect("rwlock should not be poisoned");
         modules.get(&module_id).map(|m| m.performance_metrics.clone())
     }
 
     /// Get integration statistics
     pub fn get_statistics(&self) -> IntegrationStatistics {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("rwlock should not be poisoned");
         stats.clone()
     }
 
@@ -539,7 +539,7 @@ impl EngineIntegrationHub {
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("rwlock should not be poisoned");
             stats.optimizations_applied += 1;
         }
 
@@ -548,7 +548,7 @@ impl EngineIntegrationHub {
 
     /// Health check for all modules
     pub async fn health_check_all_modules(&self) -> HashMap<ModuleId, HealthStatus> {
-        let modules = self.modules.read().unwrap();
+        let modules = self.modules.read().expect("rwlock should not be poisoned");
         let mut health_status = HashMap::new();
 
         for (module_id, metadata) in modules.iter() {
@@ -656,7 +656,7 @@ impl PerformanceMonitor {
     }
 
     async fn analyze_performance(&self) -> Result<CrossModuleMetrics> {
-        let metrics = self.cross_module_metrics.read().unwrap();
+        let metrics = self.cross_module_metrics.read().expect("rwlock should not be poisoned");
         Ok(metrics.clone())
     }
 }

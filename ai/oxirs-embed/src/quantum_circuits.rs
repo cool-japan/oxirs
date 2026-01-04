@@ -154,7 +154,7 @@ impl QuantumCircuit {
                     Complex::new(1.0, 0.0),
                 ],
             )
-            .unwrap(),
+            .expect("2x2 matrix shape should match 4-element vector"),
             QuantumGate::X => Array2::from_shape_vec(
                 (2, 2),
                 vec![
@@ -164,7 +164,7 @@ impl QuantumCircuit {
                     Complex::new(0.0, 0.0),
                 ],
             )
-            .unwrap(),
+            .expect("2x2 matrix shape should match 4-element vector"),
             QuantumGate::Y => Array2::from_shape_vec(
                 (2, 2),
                 vec![
@@ -174,7 +174,7 @@ impl QuantumCircuit {
                     Complex::new(0.0, 0.0),
                 ],
             )
-            .unwrap(),
+            .expect("2x2 matrix shape should match 4-element vector"),
             QuantumGate::Z => Array2::from_shape_vec(
                 (2, 2),
                 vec![
@@ -184,7 +184,7 @@ impl QuantumCircuit {
                     Complex::new(-1.0, 0.0),
                 ],
             )
-            .unwrap(),
+            .expect("2x2 matrix shape should match 4-element vector"),
             QuantumGate::H => {
                 let inv_sqrt2 = 1.0 / (2.0_f64).sqrt();
                 Array2::from_shape_vec(
@@ -196,7 +196,7 @@ impl QuantumCircuit {
                         Complex::new(-inv_sqrt2, 0.0),
                     ],
                 )
-                .unwrap()
+                .expect("2x2 matrix shape should match 4-element vector")
             }
             QuantumGate::S => Array2::from_shape_vec(
                 (2, 2),
@@ -207,7 +207,7 @@ impl QuantumCircuit {
                     Complex::new(0.0, 1.0),
                 ],
             )
-            .unwrap(),
+            .expect("2x2 matrix shape should match 4-element vector"),
             QuantumGate::T => {
                 let phase = Complex::new((PI / 4.0).cos(), (PI / 4.0).sin());
                 Array2::from_shape_vec(
@@ -219,7 +219,7 @@ impl QuantumCircuit {
                         phase,
                     ],
                 )
-                .unwrap()
+                .expect("2x2 matrix shape should match 4-element vector")
             }
             QuantumGate::RX(theta) => {
                 let cos_half = (theta / 2.0).cos();
@@ -233,7 +233,7 @@ impl QuantumCircuit {
                         Complex::new(cos_half, 0.0),
                     ],
                 )
-                .unwrap()
+                .expect("2x2 matrix shape should match 4-element vector")
             }
             QuantumGate::RY(theta) => {
                 let cos_half = (theta / 2.0).cos();
@@ -247,7 +247,7 @@ impl QuantumCircuit {
                         Complex::new(cos_half, 0.0),
                     ],
                 )
-                .unwrap()
+                .expect("2x2 matrix shape should match 4-element vector")
             }
             QuantumGate::RZ(theta) => {
                 let exp_neg = Complex::new((theta / 2.0).cos(), -(theta / 2.0).sin());
@@ -261,7 +261,7 @@ impl QuantumCircuit {
                         exp_pos,
                     ],
                 )
-                .unwrap()
+                .expect("2x2 matrix shape should match 4-element vector")
             }
             QuantumGate::Unitary(matrix) => matrix.clone(),
             _ => panic!("Not a single-qubit gate"),
@@ -558,7 +558,7 @@ impl VariationalQuantumEigensolver {
                                 Complex::new(0.0, -1.0),
                             ],
                         )
-                        .unwrap();
+                        .expect("2x2 matrix shape should match 4-element vector");
                         let h_matrix = circuit.get_single_qubit_matrix(&QuantumGate::H);
                         sim_copy.apply_single_qubit_gate(&s_dag, qubit);
                         sim_copy.apply_single_qubit_gate(&h_matrix, qubit);
@@ -1501,7 +1501,9 @@ impl QuantumNeuralNetwork {
                 println!(
                     "Epoch {}: Average Loss = {:.6}",
                     epoch,
-                    self.loss_history.last().unwrap()
+                    self.loss_history
+                        .last()
+                        .expect("loss_history should not be empty after training")
                 );
             }
         }

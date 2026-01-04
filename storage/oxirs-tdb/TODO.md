@@ -2,7 +2,7 @@
 
 *Last Updated: December 6, 2025*
 
-## ✅ Current Status: v0.1.0-rc.1 (Distributed Systems + Jena TDB2 Features - December 6, 2025)
+## ✅ Current Status: v0.1.0-rc.2 (Distributed Systems + Jena TDB2 Features - December 6, 2025)
 
 **oxirs-tdb** provides high-performance RDF storage with MVCC, ACID transactions, and comprehensive distributed systems support.
 
@@ -71,7 +71,7 @@
 - **SciRS2-Core Integration** - Using crates.io v0.1.0-rc.2, compatible with published version
 - **TDB2 Feature Parity** - Quad indexes, inline values optimization, RDF-star support, prefix compression
 - **Production Features** - Statistics collection, corruption detection, crash recovery
-- **Released on crates.io**: `oxirs-tdb = "0.1.0-rc.1"`
+- **Released on crates.io**: `oxirs-tdb = "0.1.0-rc.2"`
 
 ### ✨ NEW: RC.1 Features Implemented (November 21-29, 2025)
 - **Columnar Analytics Storage** ✅ **NEW (November 25, 2025)** (`src/storage/columnar_analytics.rs`) - OLAP-optimized storage
@@ -337,7 +337,7 @@
 
 ## 🎯 Post-Alpha Development Roadmap
 
-### Release Targets (v0.1.0-rc.1 - December 2025)
+### Release Targets (v0.1.0-rc.2 - December 2025)
 
 #### Testing & Quality ✅ (Completed November 15, 2025)
 - [x] **Stress Testing Suite** - 10 comprehensive stress tests
@@ -430,7 +430,7 @@
   - Cost estimation calculator for monthly storage costs
   - Five storage classes: Standard, InfrequentAccess, Archive, Glacier, DeepArchive
 
-## 🎯 Post-RC.1 Development Roadmap (v0.1.0-rc.1 / rc.1)
+## 🎯 Post-RC.1 Development Roadmap (v0.1.0-rc.2 / rc.1)
 
 ### ✅ SciRS2-Core API Compatibility (COMPLETED - November 20, 2025)
 

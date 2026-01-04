@@ -396,16 +396,28 @@ impl DistributedDeadlockDetector {
         match self.config.victim_selection {
             VictimSelectionStrategy::YoungestTransaction => {
                 // Find transaction with latest start time (youngest)
-                Ok(cycle.transactions.last().unwrap().clone())
+                Ok(cycle
+                    .transactions
+                    .last()
+                    .expect("deadlock cycle must contain at least 2 transactions")
+                    .clone())
             }
             VictimSelectionStrategy::OldestTransaction => {
                 // Find transaction with earliest start time (oldest)
-                Ok(cycle.transactions.first().unwrap().clone())
+                Ok(cycle
+                    .transactions
+                    .first()
+                    .expect("deadlock cycle must contain at least 2 transactions")
+                    .clone())
             }
             VictimSelectionStrategy::LeastWork => {
                 // For now, default to youngest
                 // TODO: Implement actual work tracking
-                Ok(cycle.transactions.last().unwrap().clone())
+                Ok(cycle
+                    .transactions
+                    .last()
+                    .expect("deadlock cycle must contain at least 2 transactions")
+                    .clone())
             }
             VictimSelectionStrategy::Random => {
                 // Use scirs2-core's random for selection

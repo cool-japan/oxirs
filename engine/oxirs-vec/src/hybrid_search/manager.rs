@@ -59,19 +59,19 @@ impl HybridSearchManager {
         // Add to keyword index
         self.keyword_searcher
             .write()
-            .unwrap()
+            .expect("rwlock should not be poisoned")
             .add_document(doc_id, content)?;
 
         // Store vector
         self.doc_vectors
             .write()
-            .unwrap()
+            .expect("rwlock should not be poisoned")
             .insert(doc_id.to_string(), vector);
 
         // Store metadata
         self.doc_metadata
             .write()
-            .unwrap()
+            .expect("rwlock should not be poisoned")
             .insert(doc_id.to_string(), metadata);
 
         Ok(())
@@ -99,7 +99,7 @@ impl HybridSearchManager {
         let keyword_results = self
             .keyword_searcher
             .read()
-            .unwrap()
+            .expect("rwlock should not be poisoned")
             .search(&query_text, query.top_k)?;
 
         let results: Vec<HybridResult> = keyword_results
@@ -109,7 +109,7 @@ impl HybridSearchManager {
                 let metadata = self
                     .doc_metadata
                     .read()
-                    .unwrap()
+                    .expect("rwlock should not be poisoned")
                     .get(&m.doc_id)
                     .cloned()
                     .unwrap_or_default();
@@ -139,7 +139,10 @@ impl HybridSearchManager {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Query vector required for semantic search"))?;
 
-        let doc_vectors = self.doc_vectors.read().unwrap();
+        let doc_vectors = self
+            .doc_vectors
+            .read()
+            .expect("rwlock should not be poisoned");
         let mut semantic_results: Vec<DocumentScore> = doc_vectors
             .iter()
             .map(|(doc_id, doc_vec)| {
@@ -152,7 +155,11 @@ impl HybridSearchManager {
             })
             .collect();
 
-        semantic_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        semantic_results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .expect("scores should be comparable")
+        });
         semantic_results.truncate(query.top_k);
 
         // Update ranks
@@ -167,7 +174,7 @@ impl HybridSearchManager {
                 let metadata = self
                     .doc_metadata
                     .read()
-                    .unwrap()
+                    .expect("rwlock should not be poisoned")
                     .get(&r.doc_id)
                     .cloned()
                     .unwrap_or_default();
@@ -203,7 +210,7 @@ impl HybridSearchManager {
         let keyword_matches = self
             .keyword_searcher
             .read()
-            .unwrap()
+            .expect("rwlock should not be poisoned")
             .search(&query_text, query.top_k * 2)?; // Get more candidates
 
         let keyword_results: Vec<DocumentScore> = keyword_matches
@@ -223,7 +230,10 @@ impl HybridSearchManager {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Query vector required for hybrid search"))?;
 
-        let doc_vectors = self.doc_vectors.read().unwrap();
+        let doc_vectors = self
+            .doc_vectors
+            .read()
+            .expect("rwlock should not be poisoned");
         let mut semantic_results: Vec<DocumentScore> = doc_vectors
             .iter()
             .map(|(doc_id, doc_vec)| {
@@ -237,7 +247,11 @@ impl HybridSearchManager {
             .filter(|r| r.score >= self.config.min_semantic_score)
             .collect();
 
-        semantic_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        semantic_results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .expect("scores should be comparable")
+        });
         semantic_results.truncate(query.top_k * 2);
 
         for (rank, result) in semantic_results.iter_mut().enumerate() {
@@ -250,7 +264,10 @@ impl HybridSearchManager {
             .fuse(keyword_results, semantic_results, &query.weights);
 
         // Add metadata
-        let metadata_map = self.doc_metadata.read().unwrap();
+        let metadata_map = self
+            .doc_metadata
+            .read()
+            .expect("rwlock should not be poisoned");
         for result in &mut fused_results {
             if let Some(metadata) = metadata_map.get(&result.doc_id) {
                 result.metadata = metadata.clone();
@@ -299,7 +316,10 @@ impl HybridSearchManager {
 
     /// Get document count
     pub fn document_count(&self) -> usize {
-        self.doc_vectors.read().unwrap().len()
+        self.doc_vectors
+            .read()
+            .expect("rwlock should not be poisoned")
+            .len()
     }
 
     /// Get configuration

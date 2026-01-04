@@ -322,7 +322,7 @@ impl SecurityAuditLogger {
         }
 
         // Set previous hash for chain integrity
-        let mut last_hash = self.last_hash.lock().unwrap();
+        let mut last_hash = self.last_hash.lock().expect("mutex should not be poisoned");
         event.previous_hash = last_hash.clone();
 
         // Sign event if enabled
@@ -338,7 +338,10 @@ impl SecurityAuditLogger {
         drop(last_hash);
 
         // Add to buffer
-        let mut buffer = self.event_buffer.lock().unwrap();
+        let mut buffer = self
+            .event_buffer
+            .lock()
+            .expect("mutex should not be poisoned");
         if buffer.len() >= self.config.buffer_size {
             buffer.pop_front();
         }
@@ -347,7 +350,10 @@ impl SecurityAuditLogger {
 
         // Anomaly detection
         if self.config.enable_anomaly_detection {
-            let mut detector = self.anomaly_detector.lock().unwrap();
+            let mut detector = self
+                .anomaly_detector
+                .lock()
+                .expect("mutex should not be poisoned");
             if let Some(anomaly) = detector.check_event(&event) {
                 warn!("Anomaly detected: {}", anomaly);
             }
@@ -366,7 +372,10 @@ impl SecurityAuditLogger {
 
     /// Write event to file
     fn write_event(&self, event: &SecurityEvent) -> Result<(), AuditError> {
-        let mut file_guard = self.current_file.lock().unwrap();
+        let mut file_guard = self
+            .current_file
+            .lock()
+            .expect("mutex should not be poisoned");
 
         if let Some(ref mut writer) = *file_guard {
             let json = serde_json::to_string(event)
@@ -394,10 +403,16 @@ impl SecurityAuditLogger {
             .append(true)
             .open(&log_path)?;
 
-        let mut current_file = self.current_file.lock().unwrap();
+        let mut current_file = self
+            .current_file
+            .lock()
+            .expect("mutex should not be poisoned");
         *current_file = Some(BufWriter::new(file));
 
-        let mut current_path = self.current_path.lock().unwrap();
+        let mut current_path = self
+            .current_path
+            .lock()
+            .expect("mutex should not be poisoned");
         *current_path = log_path.clone();
 
         info!("Rotated audit log to {:?}", log_path);
@@ -410,7 +425,10 @@ impl SecurityAuditLogger {
 
     /// Check if log rotation is needed
     fn check_rotation(&self) -> Result<(), AuditError> {
-        let current_path = self.current_path.lock().unwrap();
+        let current_path = self
+            .current_path
+            .lock()
+            .expect("mutex should not be poisoned");
 
         if let Ok(metadata) = std::fs::metadata(&*current_path) {
             if metadata.len() >= self.config.max_file_size {
@@ -455,7 +473,10 @@ impl SecurityAuditLogger {
         category: Option<SecurityCategory>,
         min_severity: Option<SecuritySeverity>,
     ) -> Vec<SecurityEvent> {
-        let buffer = self.event_buffer.lock().unwrap();
+        let buffer = self
+            .event_buffer
+            .lock()
+            .expect("mutex should not be poisoned");
 
         buffer
             .iter()
@@ -480,7 +501,10 @@ impl SecurityAuditLogger {
 
     /// Generate security report
     pub fn generate_report(&self, since: DateTime<Utc>) -> SecurityReport {
-        let buffer = self.event_buffer.lock().unwrap();
+        let buffer = self
+            .event_buffer
+            .lock()
+            .expect("mutex should not be poisoned");
 
         let events_in_period: Vec<_> = buffer
             .iter()
@@ -533,7 +557,10 @@ impl SecurityAuditLogger {
 
     /// Verify log chain integrity
     pub fn verify_chain(&self) -> Result<bool, AuditError> {
-        let buffer = self.event_buffer.lock().unwrap();
+        let buffer = self
+            .event_buffer
+            .lock()
+            .expect("mutex should not be poisoned");
 
         for i in 1..buffer.len() {
             let prev = &buffer[i - 1];

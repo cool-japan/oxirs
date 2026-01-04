@@ -1,8 +1,8 @@
 # OxiRS Embed - Knowledge Graph Embeddings
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Release Candidate (v0.1.0-rc.1) - Released December 2025
+**Status**: Release Candidate (v0.1.0-rc.2) - Released December 2025
 
 ⚡ **Release Candidate**: Feature-complete release candidate with comprehensive testing. APIs are stabilizing. Production-ready for experimental use.
 
@@ -15,12 +15,12 @@ Generate vector embeddings for RDF knowledge graphs enabling semantic similarity
 - **DistMult** - Bilinear diagonal models for symmetric relations
 - **ComplEx** - Complex-valued embeddings for asymmetric relations
 - **RotatE** - Rotation-based models in complex space
-- **HolE** - Holographic embeddings using circular correlation (NEW in v0.1.0-rc.1)
-- **ConvE** - Convolutional 2D neural network embeddings (NEW in v0.1.0-rc.1)
+- **HolE** - Holographic embeddings using circular correlation (NEW in v0.1.0-rc.2)
+- **ConvE** - Convolutional 2D neural network embeddings (NEW in v0.1.0-rc.2)
 - **TuckER** - Tucker decomposition for multi-relational learning
 - **QuatE** - Quaternion embeddings for complex patterns
 
-### Advanced Features (NEW in v0.1.0-rc.1)
+### Advanced Features (NEW in v0.1.0-rc.2)
 - **Link Prediction** - Predict missing triples (head/tail/relation)
   - Filtered ranking to remove known triples
   - Batch prediction for efficiency
@@ -75,10 +75,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-embed = "0.1.0-rc.1"
+oxirs-embed = "0.1.0-rc.2"
 
 # Enable specific providers
-oxirs-embed = { version = "0.1.0-rc.1", features = ["openai", "sentence-transformers"] }
+oxirs-embed = { version = "0.1.0-rc.2", features = ["openai", "sentence-transformers"] }
 ```
 
 ## Quick Start
@@ -161,7 +161,7 @@ for (entity, score) in similar_entities {
 }
 ```
 
-## New Models (v0.1.0-rc.1)
+## New Models (v0.1.0-rc.2)
 
 ### HolE (Holographic Embeddings)
 
@@ -625,7 +625,7 @@ let model = EmbeddingModel::builder()
 
 ## Status
 
-### Release Candidate (v0.1.0-rc.1)
+### Release Candidate (v0.1.0-rc.2)
 - ✅ Sentence Transformers integration with batch streaming + persistence
 - ✅ OpenAI embeddings support with provider failover and caching
 - ✅ Entity/graph embeddings wired into CLI ingest/export pipelines

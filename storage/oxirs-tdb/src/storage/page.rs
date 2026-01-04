@@ -4,8 +4,8 @@
 //! Pages are the fundamental unit of storage in TDB.
 
 use crate::error::{Result, TdbError};
-use bincode::{Decode, Encode};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use oxicode::Decode;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -22,7 +22,7 @@ pub const PAGE_USABLE_SIZE: usize = PAGE_SIZE - PAGE_HEADER_SIZE;
 pub type PageId = u64;
 
 /// Page type indicator
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum PageType {
     /// Free page (not in use)
@@ -40,7 +40,7 @@ pub enum PageType {
 }
 
 /// Page header (32 bytes)
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageHeader {
     /// Page ID
     pub page_id: PageId,
@@ -68,13 +68,13 @@ impl PageHeader {
 
     /// Serialize header to bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        bincode::encode_to_vec(self, bincode::config::standard())
+        oxicode::serde::encode_to_vec(&self, oxicode::config::standard())
             .expect("Failed to serialize page header")
     }
 
     /// Deserialize header from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        bincode::decode_from_slice(bytes, bincode::config::standard())
+        oxicode::serde::decode_from_slice(bytes, oxicode::config::standard())
             .map(|(header, _)| header)
             .map_err(|e| TdbError::Deserialization(e.to_string()))
     }

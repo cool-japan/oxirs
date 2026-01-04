@@ -130,7 +130,7 @@ impl TransE {
             // Randomly corrupt head or tail
             let positive_idx = {
                 let mut rng = Random::default();
-                rng.random_range(0, positive_triples.len())
+                rng.random_range(0..positive_triples.len())
             };
             let (h, r, t) = &positive_triples[positive_idx];
 
@@ -142,7 +142,7 @@ impl TransE {
                 // Corrupt head
                 let new_head_idx = {
                     let mut rng = Random::default();
-                    rng.random_range(0, entities.len())
+                    rng.random_range(0..entities.len())
                 };
                 let new_head = &entities[new_head_idx];
                 if new_head != h {
@@ -152,7 +152,7 @@ impl TransE {
                 // Corrupt tail
                 let new_tail_idx = {
                     let mut rng = Random::default();
-                    rng.random_range(0, entities.len())
+                    rng.random_range(0..entities.len())
                 };
                 let new_tail = &entities[new_tail_idx];
                 if new_tail != t {
@@ -181,7 +181,7 @@ impl TransE {
             if entities.len() >= 2 {
                 let corrupt_idx = {
                     let mut rng = Random::default();
-                    rng.random_range(0, entities.len())
+                    rng.random_range(0..entities.len())
                 };
                 let corrupt_entity = &entities[corrupt_idx];
 
@@ -261,7 +261,7 @@ impl KnowledgeGraphEmbedding for TransE {
         }
 
         // Sort by score (lower is better for TransE)
-        predictions.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap());
+        predictions.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(predictions)
     }
@@ -344,7 +344,7 @@ impl KnowledgeGraphEmbedding for TransE {
                 use scirs2_core::random::Random;
                 let mut rng = Random::default();
                 for i in (1..shuffled_indices.len()).rev() {
-                    let j = rng.random_range(0, i + 1);
+                    let j = rng.random_range(0..i + 1);
                     shuffled_indices.swap(i, j);
                 }
             } // RNG dropped here before any await points

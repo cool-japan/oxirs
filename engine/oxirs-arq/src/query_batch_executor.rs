@@ -36,6 +36,7 @@
 
 use crate::executor::Dataset;
 use crate::query_fingerprinting::{FingerprintConfig, QueryFingerprint, QueryFingerprinter};
+use crate::system_load_monitor::AdaptiveConcurrencyController;
 use anyhow::Result;
 use scirs2_core::metrics::{Counter, Gauge, Timer};
 use std::collections::{HashMap, VecDeque};
@@ -345,7 +346,7 @@ impl QueryBatchExecutor {
             completed_at: None,
         };
 
-        let mut queue = self.queue.lock().unwrap();
+        let mut queue = self.queue.lock().expect("lock poisoned");
 
         // Insert based on priority (maintain priority order)
         if self.config.fair_scheduling {
@@ -378,17 +379,17 @@ impl QueryBatchExecutor {
 
     /// Get number of queued queries
     pub fn queue_size(&self) -> usize {
-        self.queue.lock().unwrap().len()
+        self.queue.lock().expect("lock poisoned").len()
     }
 
     /// Clear the queue
     pub fn clear_queue(&self) {
-        self.queue.lock().unwrap().clear();
+        self.queue.lock().expect("lock poisoned").clear();
     }
 
     /// Get batch statistics
     pub fn statistics(&self) -> BatchStatistics {
-        self.stats.read().unwrap().clone()
+        self.stats.read().expect("lock poisoned").clone()
     }
 
     /// Execute the batch (async version)
@@ -400,7 +401,7 @@ impl QueryBatchExecutor {
 
         // Get all queries from queue
         let queries: Vec<BatchQuery> = {
-            let mut queue = self.queue.lock().unwrap();
+            let mut queue = self.queue.lock().expect("lock poisoned");
             queue.drain(..).collect()
         };
 
@@ -410,7 +411,7 @@ impl QueryBatchExecutor {
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.total_queries = queries.len();
         }
 
@@ -425,7 +426,7 @@ impl QueryBatchExecutor {
         // Calculate final statistics
         let duration = start_time.elapsed();
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.total_duration = duration;
             stats.calculate_derived();
         }
@@ -541,7 +542,7 @@ impl QueryBatchExecutor {
 
         // Update group count
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.query_groups = groups.len();
         }
 
@@ -556,15 +557,92 @@ impl QueryBatchExecutor {
         Ok(all_results)
     }
 
-    /// Execute with adaptive concurrency
+    /// Execute with adaptive concurrency based on system load
     async fn execute_adaptive<D: Dataset + Send + Sync + 'static>(
         &self,
         queries: Vec<BatchQuery>,
         dataset: Arc<D>,
     ) -> Result<Vec<BatchQueryResult>> {
-        // Start with optimized mode
-        // TODO: Monitor system load and adjust concurrency dynamically
-        self.execute_optimized(queries, dataset).await
+        use tokio::sync::Semaphore;
+
+        // Create adaptive concurrency controller
+        let controller = Arc::new(
+            AdaptiveConcurrencyController::new(self.config.max_concurrent)
+                .with_thresholds(0.75, 0.40) // High load: 75%, Low load: 40%
+                .with_adjustment_interval(Duration::from_secs(5)),
+        );
+
+        // Create semaphore for concurrency control
+        let initial_permits = controller.current_concurrency();
+        let semaphore = Arc::new(Semaphore::new(initial_permits));
+
+        // Spawn background task to adjust semaphore permits based on load
+        let controller_clone = Arc::clone(&controller);
+        let semaphore_clone = Arc::clone(&semaphore);
+        let adjustment_task = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+
+                // Update concurrency based on system load
+                controller_clone.update_concurrency();
+                let new_concurrency = controller_clone.current_concurrency();
+
+                // Adjust semaphore permits (add or remove as needed)
+                let current_permits = semaphore_clone.available_permits();
+                if new_concurrency > current_permits {
+                    // Add permits
+                    semaphore_clone.add_permits(new_concurrency - current_permits);
+                }
+                // Note: Can't easily remove permits, but new queries will naturally throttle
+            }
+        });
+
+        // Execute all queries with adaptive concurrency control
+        let mut tasks = Vec::new();
+
+        for query in queries {
+            let dataset_clone = Arc::clone(&dataset);
+            let cache_clone = Arc::clone(&self.cache);
+            let timeout = self.config.query_timeout;
+            let enable_caching = self.config.enable_caching;
+            let fingerprint = query.fingerprint.clone();
+            let semaphore_clone = Arc::clone(&semaphore);
+
+            let task = tokio::spawn(async move {
+                // Acquire permit (adaptive concurrency control)
+                let _permit = semaphore_clone.acquire().await.expect("Semaphore closed");
+
+                // Execute query
+                Self::execute_single_query(
+                    query,
+                    dataset_clone,
+                    timeout,
+                    cache_clone,
+                    enable_caching,
+                    fingerprint,
+                )
+                .await
+            });
+
+            tasks.push(task);
+        }
+
+        // Wait for all queries to complete
+        let mut results = Vec::with_capacity(tasks.len());
+        for task in tasks {
+            match task.await {
+                Ok(result) => results.push(result),
+                Err(e) => {
+                    // Task panicked or was cancelled
+                    eprintln!("Task execution error: {}", e);
+                }
+            }
+        }
+
+        // Stop adjustment task
+        adjustment_task.abort();
+
+        Ok(results)
     }
 
     /// Execute a single query
@@ -582,7 +660,7 @@ impl QueryBatchExecutor {
         // Check cache
         if enable_caching {
             if let Some(fp) = &query.fingerprint {
-                if let Some(cached) = cache.read().unwrap().get(&fp.hash) {
+                if let Some(cached) = cache.read().expect("lock poisoned").get(&fp.hash) {
                     query.completed_at = Some(Instant::now());
                     return BatchQueryResult {
                         id: query.id,
@@ -615,7 +693,7 @@ impl QueryBatchExecutor {
                     if let Some(fp) = &query.fingerprint {
                         cache
                             .write()
-                            .unwrap()
+                            .expect("lock poisoned")
                             .insert(fp.hash.clone(), results.clone());
                     }
                 }
@@ -650,7 +728,7 @@ impl QueryBatchExecutor {
 
     /// Update statistics with query result
     fn update_stats(&self, result: &BatchQueryResult) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
 
         if result.success {
             stats.successful_queries += 1;

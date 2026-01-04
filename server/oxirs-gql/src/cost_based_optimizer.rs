@@ -635,8 +635,12 @@ impl CostBasedOptimizer {
         // Find plan with minimum cost
         let best = plans
             .into_iter()
-            .min_by(|a, b| a.total_cost.partial_cmp(&b.total_cost).unwrap())
-            .unwrap();
+            .min_by(|a, b| {
+                a.total_cost
+                    .partial_cmp(&b.total_cost)
+                    .expect("cost values should not be NaN")
+            })
+            .expect("plans is not empty (checked above)");
 
         Ok(best)
     }

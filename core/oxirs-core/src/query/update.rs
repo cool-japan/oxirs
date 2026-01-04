@@ -979,8 +979,10 @@ impl UpdateParser {
             ));
         }
 
-        let delete_start = update_str[delete_pos.unwrap()..].find('{');
-        let delete_end = update_str[delete_pos.unwrap()..].find('}');
+        let delete_start =
+            update_str[delete_pos.expect("delete_pos validated as Some above")..].find('{');
+        let delete_end =
+            update_str[delete_pos.expect("delete_pos validated as Some above")..].find('}');
 
         if delete_start.is_none() || delete_end.is_none() {
             return Err(OxirsError::Parse(
@@ -988,16 +990,21 @@ impl UpdateParser {
             ));
         }
 
-        let template_start = delete_pos.unwrap() + delete_start.unwrap() + 1;
-        let template_end = delete_pos.unwrap() + delete_end.unwrap();
+        let template_start = delete_pos.expect("delete_pos validated as Some above")
+            + delete_start.expect("delete_start validated as Some above")
+            + 1;
+        let template_end = delete_pos.expect("delete_pos validated as Some above")
+            + delete_end.expect("delete_end validated as Some above");
         let template_block = update_str[template_start..template_end].trim();
 
         // Parse delete template as template patterns (can contain variables)
         let delete_patterns = self.parse_template_patterns(template_block, &prefixes)?;
 
         // Extract WHERE clause
-        let where_start = update_str[where_pos.unwrap()..].find('{');
-        let where_end = update_str[where_pos.unwrap()..].rfind('}');
+        let where_start =
+            update_str[where_pos.expect("where_pos validated as Some above")..].find('{');
+        let where_end =
+            update_str[where_pos.expect("where_pos validated as Some above")..].rfind('}');
 
         if where_start.is_none() || where_end.is_none() {
             return Err(OxirsError::Parse(
@@ -1005,8 +1012,11 @@ impl UpdateParser {
             ));
         }
 
-        let where_pattern_start = where_pos.unwrap() + where_start.unwrap() + 1;
-        let where_pattern_end = where_pos.unwrap() + where_end.unwrap();
+        let where_pattern_start = where_pos.expect("where_pos validated as Some above")
+            + where_start.expect("where_start validated as Some above")
+            + 1;
+        let where_pattern_end = where_pos.expect("where_pos validated as Some above")
+            + where_end.expect("where_end validated as Some above");
         let where_block = update_str[where_pattern_start..where_pattern_end].trim();
 
         // Parse WHERE clause as graph pattern
@@ -1075,8 +1085,10 @@ impl UpdateParser {
             ));
         }
 
-        let insert_start = update_str[insert_pos.unwrap()..].find('{');
-        let insert_end = update_str[insert_pos.unwrap()..].find('}');
+        let insert_start =
+            update_str[insert_pos.expect("insert_pos validated as Some above")..].find('{');
+        let insert_end =
+            update_str[insert_pos.expect("insert_pos validated as Some above")..].find('}');
 
         if insert_start.is_none() || insert_end.is_none() {
             return Err(OxirsError::Parse(
@@ -1084,16 +1096,21 @@ impl UpdateParser {
             ));
         }
 
-        let template_start = insert_pos.unwrap() + insert_start.unwrap() + 1;
-        let template_end = insert_pos.unwrap() + insert_end.unwrap();
+        let template_start = insert_pos.expect("insert_pos validated as Some above")
+            + insert_start.expect("insert_start validated as Some above")
+            + 1;
+        let template_end = insert_pos.expect("insert_pos validated as Some above")
+            + insert_end.expect("insert_end validated as Some above");
         let template_block = update_str[template_start..template_end].trim();
 
         // Parse insert template as template patterns (can contain variables)
         let insert_patterns = self.parse_template_patterns(template_block, &prefixes)?;
 
         // Extract WHERE clause
-        let where_start = update_str[where_pos.unwrap()..].find('{');
-        let where_end = update_str[where_pos.unwrap()..].rfind('}');
+        let where_start =
+            update_str[where_pos.expect("where_pos validated as Some above")..].find('{');
+        let where_end =
+            update_str[where_pos.expect("where_pos validated as Some above")..].rfind('}');
 
         if where_start.is_none() || where_end.is_none() {
             return Err(OxirsError::Parse(
@@ -1101,8 +1118,11 @@ impl UpdateParser {
             ));
         }
 
-        let where_pattern_start = where_pos.unwrap() + where_start.unwrap() + 1;
-        let where_pattern_end = where_pos.unwrap() + where_end.unwrap();
+        let where_pattern_start = where_pos.expect("where_pos validated as Some above")
+            + where_start.expect("where_start validated as Some above")
+            + 1;
+        let where_pattern_end = where_pos.expect("where_pos validated as Some above")
+            + where_end.expect("where_end validated as Some above");
         let where_block = update_str[where_pattern_start..where_pattern_end].trim();
 
         // Parse WHERE clause as graph pattern

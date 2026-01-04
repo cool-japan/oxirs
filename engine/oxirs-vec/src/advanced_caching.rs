@@ -290,7 +290,12 @@ impl MemoryCache {
             Ok(())
         } else if !self.entries.is_empty() {
             // Fallback: remove first entry
-            let key = self.entries.keys().next().unwrap().clone();
+            let key = self
+                .entries
+                .keys()
+                .next()
+                .expect("entries should not be empty when at capacity")
+                .clone();
             self.remove(&key);
             Ok(())
         } else {
@@ -905,7 +910,7 @@ impl MultiLevelCache {
 
         // Insert into memory cache
         {
-            let mut memory = self.memory_cache.write().unwrap();
+            let mut memory = self.memory_cache.write().expect("lock poisoned");
             memory.insert(key.clone(), entry.clone())?;
         }
 
@@ -923,7 +928,7 @@ impl MultiLevelCache {
 
         // Try memory cache first
         {
-            let mut memory = self.memory_cache.write().unwrap();
+            let mut memory = self.memory_cache.write().expect("lock poisoned");
             if let Some(data) = memory.get(key) {
                 self.update_stats_memory_hit();
                 return Some(data.clone());
@@ -956,7 +961,7 @@ impl MultiLevelCache {
     pub fn remove(&self, key: &CacheKey) -> Result<()> {
         // Remove from memory cache
         {
-            let mut memory = self.memory_cache.write().unwrap();
+            let mut memory = self.memory_cache.write().expect("lock poisoned");
             memory.remove(key);
         }
 
@@ -972,7 +977,7 @@ impl MultiLevelCache {
     pub fn clear(&self) -> Result<()> {
         // Clear memory cache
         {
-            let mut memory = self.memory_cache.write().unwrap();
+            let mut memory = self.memory_cache.write().expect("lock poisoned");
             memory.clear();
         }
 
@@ -983,7 +988,7 @@ impl MultiLevelCache {
 
         // Reset stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             *stats = MultiLevelCacheStats::default();
         }
 
@@ -992,38 +997,38 @@ impl MultiLevelCache {
 
     /// Get cache statistics
     pub fn get_stats(&self) -> MultiLevelCacheStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().expect("lock poisoned").clone()
     }
 
     /// Get memory cache statistics
     pub fn get_memory_stats(&self) -> CacheStats {
-        let memory = self.memory_cache.read().unwrap();
+        let memory = self.memory_cache.read().expect("lock poisoned");
         memory.stats()
     }
 
     // Stats update methods
     fn update_stats_total(&self) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         stats.total_requests += 1;
     }
 
     fn update_stats_memory_hit(&self) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         stats.memory_hits += 1;
     }
 
     fn update_stats_memory_miss(&self) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         stats.memory_misses += 1;
     }
 
     fn update_stats_persistent_hit(&self) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         stats.persistent_hits += 1;
     }
 
     fn update_stats_persistent_miss(&self) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         stats.persistent_misses += 1;
     }
 }
@@ -1048,7 +1053,7 @@ impl CacheInvalidator {
     pub fn register_entry(&self, key: &CacheKey, tags: &HashMap<String, String>) {
         // Index by namespace
         {
-            let mut ns_index = self.namespace_index.write().unwrap();
+            let mut ns_index = self.namespace_index.write().expect("lock poisoned");
             ns_index
                 .entry(key.namespace.clone())
                 .or_default()
@@ -1057,7 +1062,7 @@ impl CacheInvalidator {
 
         // Index by tags
         {
-            let mut tag_idx = self.tag_index.write().unwrap();
+            let mut tag_idx = self.tag_index.write().expect("lock poisoned");
             for (tag_key, tag_value) in tags {
                 tag_idx
                     .entry(tag_key.clone())
@@ -1073,7 +1078,7 @@ impl CacheInvalidator {
     pub fn unregister_entry(&self, key: &CacheKey) {
         // Remove from namespace index
         {
-            let mut ns_index = self.namespace_index.write().unwrap();
+            let mut ns_index = self.namespace_index.write().expect("lock poisoned");
             if let Some(keys) = ns_index.get_mut(&key.namespace) {
                 keys.retain(|k| k != key);
                 if keys.is_empty() {
@@ -1084,7 +1089,7 @@ impl CacheInvalidator {
 
         // Remove from tag index
         {
-            let mut tag_idx = self.tag_index.write().unwrap();
+            let mut tag_idx = self.tag_index.write().expect("lock poisoned");
             let mut tags_to_remove = Vec::new();
 
             for (tag_key, tag_values) in tag_idx.iter_mut() {
@@ -1115,7 +1120,7 @@ impl CacheInvalidator {
     /// Invalidate entries by tag
     pub fn invalidate_by_tag(&self, tag_key: &str, tag_value: &str) -> Result<usize> {
         let keys_to_invalidate = {
-            let tag_idx = self.tag_index.read().unwrap();
+            let tag_idx = self.tag_index.read().expect("lock poisoned");
             tag_idx
                 .get(tag_key)
                 .and_then(|values| values.get(tag_value))
@@ -1137,7 +1142,7 @@ impl CacheInvalidator {
     /// Invalidate entries by namespace
     pub fn invalidate_namespace(&self, namespace: &str) -> Result<usize> {
         let keys_to_invalidate = {
-            let ns_index = self.namespace_index.read().unwrap();
+            let ns_index = self.namespace_index.read().expect("lock poisoned");
             ns_index.get(namespace).cloned().unwrap_or_default()
         };
 
@@ -1223,8 +1228,8 @@ impl CacheInvalidator {
 
     /// Get invalidation statistics
     pub fn get_stats(&self) -> InvalidationStats {
-        let tag_idx = self.tag_index.read().unwrap();
-        let ns_index = self.namespace_index.read().unwrap();
+        let tag_idx = self.tag_index.read().expect("lock poisoned");
+        let ns_index = self.namespace_index.read().expect("lock poisoned");
 
         let total_tag_entries = tag_idx
             .values()
@@ -1313,7 +1318,7 @@ impl BackgroundCacheWorker {
     pub fn stop(&mut self) -> Result<()> {
         // Signal shutdown
         {
-            let mut signal = self.shutdown_signal.write().unwrap();
+            let mut signal = self.shutdown_signal.write().expect("lock poisoned");
             *signal = true;
         }
 

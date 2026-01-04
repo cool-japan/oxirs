@@ -109,14 +109,12 @@ pub async fn login_handler(
             }
 
             // Generate authentication token/session
-            let (token, expires_at) = if _state.config.security.jwt.is_some() {
+            let (token, expires_at) = if let Some(jwt_config) = &_state.config.security.jwt {
                 #[cfg(feature = "auth")]
                 {
                     let token = auth_service.create_jwt_token(&user)?;
                     let expires_at = chrono::Utc::now()
-                        + chrono::Duration::seconds(
-                            _state.config.security.jwt.as_ref().unwrap().expiration_secs as i64,
-                        );
+                        + chrono::Duration::seconds(jwt_config.expiration_secs as i64);
                     (Some(token), Some(expires_at))
                 }
                 #[cfg(not(feature = "auth"))]

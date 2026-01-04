@@ -240,22 +240,23 @@ pub struct ExportStats {
 impl ExportStats {
     pub fn display(&self) -> String {
         let mut output = String::new();
-        writeln!(&mut output, "Export Statistics:").unwrap();
+        writeln!(&mut output, "Export Statistics:").expect("string formatting never fails");
         writeln!(
             &mut output,
             "  Total relationships: {}",
             self.total_relationships
         )
-        .unwrap();
+        .expect("string formatting never fails");
         writeln!(
             &mut output,
             "  Conditional relationships: {}",
             self.conditional_relationships
         )
-        .unwrap();
-        writeln!(&mut output, "  By relation type:").unwrap();
+        .expect("string formatting never fails");
+        writeln!(&mut output, "  By relation type:").expect("string formatting never fails");
         for (relation, count) in &self.by_relation {
-            writeln!(&mut output, "    {}: {}", relation, count).unwrap();
+            writeln!(&mut output, "    {}: {}", relation, count)
+                .expect("string formatting never fails");
         }
         output
     }
@@ -480,10 +481,13 @@ pub struct MigrationVerification {
 impl MigrationVerification {
     pub fn display(&self) -> String {
         let mut output = String::new();
-        writeln!(&mut output, "Migration Verification:").unwrap();
-        writeln!(&mut output, "  Source count: {}", self.source_count).unwrap();
-        writeln!(&mut output, "  Target count: {}", self.target_count).unwrap();
-        writeln!(&mut output, "  Matched: {}", self.matched).unwrap();
+        writeln!(&mut output, "Migration Verification:").expect("string formatting never fails");
+        writeln!(&mut output, "  Source count: {}", self.source_count)
+            .expect("string formatting never fails");
+        writeln!(&mut output, "  Target count: {}", self.target_count)
+            .expect("string formatting never fails");
+        writeln!(&mut output, "  Matched: {}", self.matched)
+            .expect("string formatting never fails");
 
         if !self.missing_in_target.is_empty() {
             writeln!(
@@ -491,9 +495,9 @@ impl MigrationVerification {
                 "  Missing in target: {}",
                 self.missing_in_target.len()
             )
-            .unwrap();
+            .expect("string formatting never fails");
             for item in &self.missing_in_target {
-                writeln!(&mut output, "    - {}", item).unwrap();
+                writeln!(&mut output, "    - {}", item).expect("string formatting never fails");
             }
         }
 
@@ -503,9 +507,9 @@ impl MigrationVerification {
                 "  Extra in target: {}",
                 self.extra_in_target.len()
             )
-            .unwrap();
+            .expect("string formatting never fails");
             for item in &self.extra_in_target {
-                writeln!(&mut output, "    - {}", item).unwrap();
+                writeln!(&mut output, "    - {}", item).expect("string formatting never fails");
             }
         }
 
@@ -518,7 +522,7 @@ impl MigrationVerification {
                 "❌ FAILED"
             }
         )
-        .unwrap();
+        .expect("string formatting never fails");
 
         output
     }

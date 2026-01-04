@@ -204,37 +204,37 @@ impl InputValidator {
 
     fn build_sql_patterns() -> Vec<Regex> {
         vec![
-            Regex::new(r"(?i)(union\s+select)").unwrap(),
-            Regex::new(r"(?i)(drop\s+table)").unwrap(),
-            Regex::new(r"(?i)(delete\s+from)").unwrap(),
-            Regex::new(r"(?i)(insert\s+into)").unwrap(),
-            Regex::new(r"(?i)(--\s*$)").unwrap(),
-            Regex::new(r"(?i)(;\s*drop)").unwrap(),
+            Regex::new(r"(?i)(union\s+select)").expect("valid regex pattern"),
+            Regex::new(r"(?i)(drop\s+table)").expect("valid regex pattern"),
+            Regex::new(r"(?i)(delete\s+from)").expect("valid regex pattern"),
+            Regex::new(r"(?i)(insert\s+into)").expect("valid regex pattern"),
+            Regex::new(r"(?i)(--\s*$)").expect("valid regex pattern"),
+            Regex::new(r"(?i)(;\s*drop)").expect("valid regex pattern"),
         ]
     }
 
     fn build_xss_patterns() -> Vec<Regex> {
         vec![
-            Regex::new(r"(?i)(<script.*?>)").unwrap(),
-            Regex::new(r"(?i)(javascript:)").unwrap(),
-            Regex::new(r"(?i)(onerror\s*=)").unwrap(),
-            Regex::new(r"(?i)(onload\s*=)").unwrap(),
+            Regex::new(r"(?i)(<script.*?>)").expect("valid regex pattern"),
+            Regex::new(r"(?i)(javascript:)").expect("valid regex pattern"),
+            Regex::new(r"(?i)(onerror\s*=)").expect("valid regex pattern"),
+            Regex::new(r"(?i)(onload\s*=)").expect("valid regex pattern"),
         ]
     }
 
     fn build_command_patterns() -> Vec<Regex> {
         vec![
-            Regex::new(r"[;&|`$]").unwrap(),
-            Regex::new(r"(?i)(rm\s+-rf)").unwrap(),
-            Regex::new(r"(?i)(wget|curl)\s+http").unwrap(),
+            Regex::new(r"[;&|`$]").expect("valid regex pattern"),
+            Regex::new(r"(?i)(rm\s+-rf)").expect("valid regex pattern"),
+            Regex::new(r"(?i)(wget|curl)\s+http").expect("valid regex pattern"),
         ]
     }
 
     fn build_path_patterns() -> Vec<Regex> {
         vec![
-            Regex::new(r"\.\.\/").unwrap(),
-            Regex::new(r"\.\.\\").unwrap(),
-            Regex::new(r"(?i)(\/etc\/passwd)").unwrap(),
+            Regex::new(r"\.\.\/").expect("valid regex pattern"),
+            Regex::new(r"\.\.\\").expect("valid regex pattern"),
+            Regex::new(r"(?i)(\/etc\/passwd)").expect("valid regex pattern"),
         ]
     }
 }

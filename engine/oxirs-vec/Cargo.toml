@@ -42,7 +42,7 @@ nalgebra = "0.33"
 petgraph = "0.8"
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1.47", features = ["rt", "time"] }
-bincode = "2.0"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 regex = "1.12"
 pdf-extract = { version = "0.10", optional = true }
 zip = { version = "1.1", optional = true }
@@ -69,7 +69,7 @@ hf-hub = { version = "0.4", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
-tempfile = "3.23"
+tempfile = "3.24"
 
 [features]
 default = []

@@ -36,7 +36,7 @@ impl HybridLogicalClock {
     pub fn new(node_id: u64) -> Self {
         let physical_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_millis() as u64;
 
         Self {
@@ -50,7 +50,7 @@ impl HybridLogicalClock {
     pub fn now(&self) -> HLCTimestamp {
         let current_physical = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_millis() as u64;
 
         let last_physical = self.physical_time.load(AtomicOrdering::SeqCst);
@@ -78,7 +78,7 @@ impl HybridLogicalClock {
     pub fn update(&self, received: &HLCTimestamp) -> HLCTimestamp {
         let current_physical = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_millis() as u64;
 
         let last_physical = self.physical_time.load(AtomicOrdering::SeqCst);

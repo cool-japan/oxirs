@@ -1,6 +1,6 @@
 //! # OxiRS Rule Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-rule/badge.svg)](https://docs.rs/oxirs-rule)
 //!
 //! **Status**: Beta Release (v0.1.0-rc.1)

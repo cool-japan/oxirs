@@ -1,6 +1,6 @@
 //! # OxiRS ARQ - SPARQL Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-arq/badge.svg)](https://docs.rs/oxirs-arq)
 //!
 //! **Status**: Beta Release (v0.1.0-rc.1)
@@ -88,6 +88,7 @@ pub mod simd_query_ops; // SIMD-accelerated query operations (v0.1.0)
 pub mod statistics_collector;
 pub mod streaming;
 pub mod string_functions_ext;
+pub mod system_load_monitor; // System load monitoring for adaptive execution (NEW)
 pub mod term;
 pub mod triple_functions;
 pub mod update;
@@ -113,6 +114,7 @@ pub mod query_templates; // SPARQL query template system (Beta.2+++) // Query re
 // RDF-star / SPARQL-star integration
 #[cfg(feature = "star")]
 pub mod star_integration;
+pub mod statistics; // Advanced statistics and cardinality estimation
 
 // Advanced modules
 pub mod advanced_optimizer;

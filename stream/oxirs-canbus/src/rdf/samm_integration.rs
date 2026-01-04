@@ -131,14 +131,21 @@ impl DbcSammGenerator {
 
     /// Write Turtle prefixes
     fn write_prefixes(&self, output: &mut String) {
-        writeln!(output, "@prefix : <{}> .", self.config.namespace).unwrap();
-        writeln!(output, "@prefix samm: <{}> .", SAMM_PREFIX).unwrap();
-        writeln!(output, "@prefix samm-c: <{}> .", SAMM_C_PREFIX).unwrap();
-        writeln!(output, "@prefix samm-e: <{}> .", SAMM_E_PREFIX).unwrap();
-        writeln!(output, "@prefix unit: <{}> .", SAMM_U_PREFIX).unwrap();
-        writeln!(output, "@prefix xsd: <{}> .", XSD_PREFIX).unwrap();
-        writeln!(output, "@prefix rdfs: <{}> .", RDFS_PREFIX).unwrap();
-        writeln!(output).unwrap();
+        writeln!(output, "@prefix : <{}> .", self.config.namespace)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix samm: <{}> .", SAMM_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix samm-c: <{}> .", SAMM_C_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix samm-e: <{}> .", SAMM_E_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix unit: <{}> .", SAMM_U_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix xsd: <{}> .", XSD_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output, "@prefix rdfs: <{}> .", RDFS_PREFIX)
+            .expect("writing to String should not fail");
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Write a complete Aspect for a CAN message
@@ -146,20 +153,25 @@ impl DbcSammGenerator {
         let aspect_name = self.sanitize_name(&message.name);
 
         if self.config.include_comments {
-            writeln!(output, "# ========================================").unwrap();
-            writeln!(output, "# Aspect Model for CAN Message: {}", message.name).unwrap();
+            writeln!(output, "# ========================================")
+                .expect("writing to String should not fail");
+            writeln!(output, "# Aspect Model for CAN Message: {}", message.name)
+                .expect("writing to String should not fail");
             writeln!(
                 output,
                 "# CAN ID: {:#X} ({} bytes)",
                 message.id, message.dlc
             )
-            .unwrap();
+            .expect("writing to String should not fail");
             if !message.transmitter.is_empty() {
-                writeln!(output, "# Transmitter: {}", message.transmitter).unwrap();
+                writeln!(output, "# Transmitter: {}", message.transmitter)
+                    .expect("writing to String should not fail");
             }
-            writeln!(output, "# Signals: {}", message.signals.len()).unwrap();
-            writeln!(output, "# ========================================").unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, "# Signals: {}", message.signals.len())
+                .expect("writing to String should not fail");
+            writeln!(output, "# ========================================")
+                .expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
 
         // Write Aspect definition
@@ -181,7 +193,7 @@ impl DbcSammGenerator {
             self.write_constraints(output, message, &aspect_name);
         }
 
-        writeln!(output).unwrap();
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Write the Aspect definition
@@ -191,8 +203,10 @@ impl DbcSammGenerator {
         message: &DbcMessage,
         aspect_name: &str,
     ) {
-        writeln!(output, ":{}Aspect a samm:Aspect ;", aspect_name).unwrap();
-        writeln!(output, "    samm:preferredName \"{}\"@en ;", message.name).unwrap();
+        writeln!(output, ":{}Aspect a samm:Aspect ;", aspect_name)
+            .expect("writing to String should not fail");
+        writeln!(output, "    samm:preferredName \"{}\"@en ;", message.name)
+            .expect("writing to String should not fail");
 
         // Description
         let default_desc = format!(
@@ -207,30 +221,32 @@ impl DbcSammGenerator {
             "    samm:description \"{}\"@en ;",
             escape_string(desc)
         )
-        .unwrap();
+        .expect("writing to String should not fail");
 
         // Properties list
         if !message.signals.is_empty() {
-            writeln!(output, "    samm:properties (").unwrap();
+            writeln!(output, "    samm:properties (").expect("writing to String should not fail");
             for signal in &message.signals {
                 let prop_name = self.sanitize_name(&signal.name);
-                writeln!(output, "        :{}Property", prop_name).unwrap();
+                writeln!(output, "        :{}Property", prop_name)
+                    .expect("writing to String should not fail");
             }
-            writeln!(output, "    ) .").unwrap();
+            writeln!(output, "    ) .").expect("writing to String should not fail");
         } else {
             // Close with empty properties
             output.truncate(output.len() - 2);
-            writeln!(output, " .").unwrap();
+            writeln!(output, " .").expect("writing to String should not fail");
         }
 
-        writeln!(output).unwrap();
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Write Property definitions
     fn write_properties(&self, output: &mut String, message: &DbcMessage, aspect_name: &str) {
         if self.config.include_comments && !message.signals.is_empty() {
-            writeln!(output, "# Properties for {}", message.name).unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, "# Properties for {}", message.name)
+                .expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
 
         for signal in &message.signals {
@@ -243,8 +259,10 @@ impl DbcSammGenerator {
         let prop_name = self.sanitize_name(&signal.name);
         let char_name = self.characteristic_name(signal);
 
-        writeln!(output, ":{}Property a samm:Property ;", prop_name).unwrap();
-        writeln!(output, "    samm:preferredName \"{}\"@en ;", signal.name).unwrap();
+        writeln!(output, ":{}Property a samm:Property ;", prop_name)
+            .expect("writing to String should not fail");
+        writeln!(output, "    samm:preferredName \"{}\"@en ;", signal.name)
+            .expect("writing to String should not fail");
 
         // Description
         if let Some(ref comment) = signal.comment {
@@ -253,7 +271,7 @@ impl DbcSammGenerator {
                 "    samm:description \"{}\"@en ;",
                 escape_string(comment)
             )
-            .unwrap();
+            .expect("writing to String should not fail");
         } else if self.config.include_comments {
             let desc = format!(
                 "Signal at bit {} ({} bits, {} byte order)",
@@ -265,7 +283,8 @@ impl DbcSammGenerator {
                     "Motorola"
                 }
             );
-            writeln!(output, "    samm:description \"{}\"@en ;", desc).unwrap();
+            writeln!(output, "    samm:description \"{}\"@en ;", desc)
+                .expect("writing to String should not fail");
         }
 
         // Characteristic reference
@@ -274,15 +293,16 @@ impl DbcSammGenerator {
             "    samm:characteristic :{}Characteristic .",
             char_name
         )
-        .unwrap();
-        writeln!(output).unwrap();
+        .expect("writing to String should not fail");
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Write Characteristic definitions
     fn write_characteristics(&self, output: &mut String, message: &DbcMessage, aspect_name: &str) {
         if self.config.include_comments && !message.signals.is_empty() {
-            writeln!(output, "# Characteristics for {}", message.name).unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, "# Characteristics for {}", message.name)
+                .expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
 
         // Track unique characteristics to avoid duplicates
@@ -314,23 +334,27 @@ impl DbcSammGenerator {
                 ":{}Characteristic a samm-c:Enumeration ;",
                 char_name
             )
-            .unwrap();
-            writeln!(output, "    samm:dataType :{}Enumeration .", enum_name).unwrap();
+            .expect("writing to String should not fail");
+            writeln!(output, "    samm:dataType :{}Enumeration .", enum_name)
+                .expect("writing to String should not fail");
         } else {
-            writeln!(output, ":{}Characteristic a {} ;", char_name, samm_type).unwrap();
-            write!(output, "    samm:dataType {} ", xsd_type).unwrap();
+            writeln!(output, ":{}Characteristic a {} ;", char_name, samm_type)
+                .expect("writing to String should not fail");
+            write!(output, "    samm:dataType {} ", xsd_type)
+                .expect("writing to String should not fail");
 
             // Add unit if present
             if !signal.unit.is_empty() {
                 let samm_unit = self.map_unit(&signal.unit);
-                writeln!(output, ";").unwrap();
-                writeln!(output, "    samm-c:unit unit:{} .", samm_unit).unwrap();
+                writeln!(output, ";").expect("writing to String should not fail");
+                writeln!(output, "    samm-c:unit unit:{} .", samm_unit)
+                    .expect("writing to String should not fail");
             } else {
-                writeln!(output, ".").unwrap();
+                writeln!(output, ".").expect("writing to String should not fail");
             }
         }
 
-        writeln!(output).unwrap();
+        writeln!(output).expect("writing to String should not fail");
     }
 
     /// Write Enumeration definitions for signals with value descriptions
@@ -346,27 +370,31 @@ impl DbcSammGenerator {
         }
 
         if self.config.include_comments {
-            writeln!(output, "# Enumerations for {}", message.name).unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, "# Enumerations for {}", message.name)
+                .expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
 
         for signal in signals_with_enums {
             let enum_name = self.sanitize_name(&signal.name);
 
             // Write enumeration entity
-            writeln!(output, ":{}Enumeration a rdfs:Datatype ;", enum_name).unwrap();
-            writeln!(output, "    samm:preferredName \"{}\"@en ;", signal.name).unwrap();
+            writeln!(output, ":{}Enumeration a rdfs:Datatype ;", enum_name)
+                .expect("writing to String should not fail");
+            writeln!(output, "    samm:preferredName \"{}\"@en ;", signal.name)
+                .expect("writing to String should not fail");
 
             // Write values
             let mut values: Vec<_> = signal.value_descriptions.iter().collect();
             values.sort_by_key(|(k, _)| *k);
 
-            writeln!(output, "    owl:oneOf (").unwrap();
+            writeln!(output, "    owl:oneOf (").expect("writing to String should not fail");
             for (raw, desc) in &values {
-                writeln!(output, "        \"{}\" # raw value: {}", desc, raw).unwrap();
+                writeln!(output, "        \"{}\" # raw value: {}", desc, raw)
+                    .expect("writing to String should not fail");
             }
-            writeln!(output, "    ) .").unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, "    ) .").expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
     }
 
@@ -384,8 +412,9 @@ impl DbcSammGenerator {
         }
 
         if self.config.include_comments {
-            writeln!(output, "# Constraints for {}", message.name).unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, "# Constraints for {}", message.name)
+                .expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
 
         for signal in signals_with_constraints {
@@ -396,7 +425,7 @@ impl DbcSammGenerator {
                 ":{}RangeConstraint a samm-c:RangeConstraint ;",
                 constraint_name
             )
-            .unwrap();
+            .expect("writing to String should not fail");
 
             if signal.min != 0.0 {
                 writeln!(
@@ -404,7 +433,7 @@ impl DbcSammGenerator {
                     "    samm-c:minValue \"{}\"^^xsd:decimal ;",
                     signal.min
                 )
-                .unwrap();
+                .expect("writing to String should not fail");
             }
 
             if signal.max != 0.0 {
@@ -413,15 +442,15 @@ impl DbcSammGenerator {
                     "    samm-c:maxValue \"{}\"^^xsd:decimal ",
                     signal.max
                 )
-                .unwrap();
+                .expect("writing to String should not fail");
             } else {
                 // Remove trailing " ;\n"
                 output.truncate(output.len() - 2);
-                write!(output, " ").unwrap();
+                write!(output, " ").expect("writing to String should not fail");
             }
 
-            writeln!(output, ".").unwrap();
-            writeln!(output).unwrap();
+            writeln!(output, ".").expect("writing to String should not fail");
+            writeln!(output).expect("writing to String should not fail");
         }
     }
 

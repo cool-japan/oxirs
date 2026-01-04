@@ -103,13 +103,13 @@ impl PySparqlQueryExecutor {
             }
         }
 
-        let executor = self.executor.read().unwrap();
+        let executor = self.executor.read().expect("lock poisoned");
         let result = executor.execute_query(query)
             .map_err(|e| PyErr::new::<QueryExecutionError, _>(e.to_string()))?;
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.total_queries += 1;
             stats.successful_queries += 1;
             let execution_time = start_time.elapsed().as_millis() as f64;
@@ -125,13 +125,13 @@ impl PySparqlQueryExecutor {
     fn execute_construct(&self, query: &str, bindings: Option<&PyDict>, kwargs: Option<&PyDict>) -> PyResult<PyGraphResult> {
         let start_time = Instant::now();
 
-        let executor = self.executor.read().unwrap();
+        let executor = self.executor.read().expect("lock poisoned");
         let result = executor.execute_query(query)
             .map_err(|e| PyErr::new::<QueryExecutionError, _>(e.to_string()))?;
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.total_queries += 1;
             stats.successful_queries += 1;
             let execution_time = start_time.elapsed().as_millis() as f64;
@@ -147,13 +147,13 @@ impl PySparqlQueryExecutor {
     fn execute_ask(&self, query: &str, bindings: Option<&PyDict>, kwargs: Option<&PyDict>) -> PyResult<bool> {
         let start_time = Instant::now();
 
-        let executor = self.executor.read().unwrap();
+        let executor = self.executor.read().expect("lock poisoned");
         let result = executor.execute_query(query)
             .map_err(|e| PyErr::new::<QueryExecutionError, _>(e.to_string()))?;
 
         // Update statistics
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().expect("lock poisoned");
             stats.total_queries += 1;
             stats.successful_queries += 1;
             let execution_time = start_time.elapsed().as_millis() as f64;
@@ -168,7 +168,7 @@ impl PySparqlQueryExecutor {
     /// Explain query execution plan
     #[pyo3(signature = (query, **kwargs))]
     fn explain_query(&self, query: &str, kwargs: Option<&PyDict>) -> PyResult<PyQueryPlan> {
-        let executor = self.executor.read().unwrap();
+        let executor = self.executor.read().expect("lock poisoned");
 
         // In a real implementation, we'd generate the actual execution plan
         let plan = QueryPlan {
@@ -192,13 +192,13 @@ impl PySparqlQueryExecutor {
 
     /// Get query execution statistics
     fn get_statistics(&self) -> PyQueryExecutionStats {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("lock poisoned");
         PyQueryExecutionStats { stats: stats.clone() }
     }
 
     /// Clear execution statistics
     fn clear_statistics(&self) -> PyResult<()> {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock poisoned");
         *stats = QueryExecutionStats::default();
         Ok(())
     }
@@ -212,14 +212,14 @@ impl PySparqlQueryExecutor {
 
     /// Set query timeout
     fn set_timeout(&self, timeout_ms: u64) -> PyResult<()> {
-        let mut executor = self.executor.write().unwrap();
+        let mut executor = self.executor.write().expect("lock poisoned");
         // In a real implementation, we'd update the executor timeout
         Ok(())
     }
 
     /// Enable or disable parallel execution
     fn set_parallel_execution(&self, enabled: bool) -> PyResult<()> {
-        let mut executor = self.executor.write().unwrap();
+        let mut executor = self.executor.write().expect("lock poisoned");
         // In a real implementation, we'd update the executor config
         Ok(())
     }

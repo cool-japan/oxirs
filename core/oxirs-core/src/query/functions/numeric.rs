@@ -24,12 +24,14 @@ pub(super) fn fn_abs(args: &[Term]) -> Result<Term, OxirsError> {
             if dt.as_str() == "http://www.w3.org/2001/XMLSchema#integer" {
                 Ok(Term::Literal(Literal::new_typed(
                     (result as i64).to_string(),
-                    NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                        .expect("XSD integer datatype IRI should be valid"),
                 )))
             } else {
                 Ok(Term::Literal(Literal::new_typed(
                     result.to_string(),
-                    NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                        .expect("XSD double datatype IRI should be valid"),
                 )))
             }
         }
@@ -56,7 +58,8 @@ pub(super) fn fn_ceil(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.ceil() as i64;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -82,7 +85,8 @@ pub(super) fn fn_floor(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.floor() as i64;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -108,7 +112,8 @@ pub(super) fn fn_round(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.round() as i64;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -124,7 +129,8 @@ pub(super) fn fn_rand(_args: &[Term]) -> Result<Term, OxirsError> {
     let value: f64 = random.random();
     Ok(Term::Literal(Literal::new_typed(
         value.to_string(),
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+            .expect("XSD double datatype IRI should be valid"),
     )))
 }
 
@@ -148,7 +154,8 @@ pub(super) fn fn_sqrt(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.sqrt();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -174,7 +181,8 @@ pub(super) fn fn_sin(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.sin();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -200,7 +208,8 @@ pub(super) fn fn_cos(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.cos();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -226,7 +235,8 @@ pub(super) fn fn_tan(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.tan();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -257,7 +267,8 @@ pub(super) fn fn_asin(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.asin();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -288,7 +299,8 @@ pub(super) fn fn_acos(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.acos();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -314,7 +326,8 @@ pub(super) fn fn_atan(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.atan();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -344,7 +357,8 @@ pub(super) fn fn_atan2(args: &[Term]) -> Result<Term, OxirsError> {
             let result = y.atan2(x);
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -370,7 +384,8 @@ pub(super) fn fn_exp(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.exp();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -399,7 +414,8 @@ pub(super) fn fn_log(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.ln();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -430,7 +446,8 @@ pub(super) fn fn_log10(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.log10();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -460,7 +477,8 @@ pub(super) fn fn_pow(args: &[Term]) -> Result<Term, OxirsError> {
             let result = base.powf(exp);
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -486,7 +504,8 @@ pub(super) fn fn_sinh(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num.sinh();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -512,7 +531,8 @@ pub(super) fn fn_cosh(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num.cosh();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -538,7 +558,8 @@ pub(super) fn fn_tanh(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num.tanh();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -564,7 +585,8 @@ pub(super) fn fn_asinh(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num.asinh();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -596,7 +618,8 @@ pub(super) fn fn_acosh(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num.acosh();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -628,7 +651,8 @@ pub(super) fn fn_atanh(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num.atanh();
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                    .expect("XSD double datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -641,7 +665,8 @@ pub(super) fn fn_atanh(args: &[Term]) -> Result<Term, OxirsError> {
 pub(super) fn fn_pi(_args: &[Term]) -> Result<Term, OxirsError> {
     Ok(Term::Literal(Literal::new_typed(
         std::f64::consts::PI.to_string(),
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+            .expect("XSD double datatype IRI should be valid"),
     )))
 }
 
@@ -649,7 +674,8 @@ pub(super) fn fn_pi(_args: &[Term]) -> Result<Term, OxirsError> {
 pub(super) fn fn_e(_args: &[Term]) -> Result<Term, OxirsError> {
     Ok(Term::Literal(Literal::new_typed(
         std::f64::consts::E.to_string(),
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+            .expect("XSD double datatype IRI should be valid"),
     )))
 }
 
@@ -657,7 +683,8 @@ pub(super) fn fn_e(_args: &[Term]) -> Result<Term, OxirsError> {
 pub(super) fn fn_tau(_args: &[Term]) -> Result<Term, OxirsError> {
     Ok(Term::Literal(Literal::new_typed(
         std::f64::consts::TAU.to_string(),
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+            .expect("XSD double datatype IRI should be valid"),
     )))
 }
 
@@ -686,7 +713,8 @@ pub(super) fn fn_sign(args: &[Term]) -> Result<Term, OxirsError> {
 
             Ok(Term::Literal(Literal::new_typed(
                 sign.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -721,7 +749,8 @@ pub(super) fn fn_mod(args: &[Term]) -> Result<Term, OxirsError> {
             let result = a % b;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -747,7 +776,8 @@ pub(super) fn fn_trunc(args: &[Term]) -> Result<Term, OxirsError> {
             let result = value.trunc() as i64;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -786,7 +816,8 @@ pub(super) fn fn_gcd(args: &[Term]) -> Result<Term, OxirsError> {
 
             Ok(Term::Literal(Literal::new_typed(
                 a.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -819,7 +850,8 @@ pub(super) fn fn_lcm(args: &[Term]) -> Result<Term, OxirsError> {
             if a == 0 || b == 0 {
                 return Ok(Term::Literal(Literal::new_typed(
                     "0",
-                    NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                        .expect("XSD integer datatype IRI should be valid"),
                 )));
             }
 
@@ -837,7 +869,8 @@ pub(super) fn fn_lcm(args: &[Term]) -> Result<Term, OxirsError> {
 
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer datatype IRI should be valid"),
             )))
         }
         _ => Err(OxirsError::Query(

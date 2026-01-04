@@ -955,7 +955,14 @@ impl VectorStore for InMemoryVectorStore {
         // Add to index if it exists
         if let Some(index) = self.index.write().await.as_mut() {
             index
-                .add(id, self.vectors.get(&id_for_lookup).unwrap().vector.clone())
+                .add(
+                    id,
+                    self.vectors
+                        .get(&id_for_lookup)
+                        .expect("vector should exist after insert")
+                        .vector
+                        .clone(),
+                )
                 .await?;
         }
 

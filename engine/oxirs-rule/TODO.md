@@ -2,7 +2,7 @@
 
 *Last Updated: December 9, 2025*
 
-## ✅ Current Status: v0.1.0-rc.1+ (Production Ready - December 9, 2025)
+## ✅ Current Status: v0.1.0-rc.2+ (Production Ready - December 9, 2025)
 
 **oxirs-rule** provides rule-based reasoning engine for RDF data with production-ready performance.
 

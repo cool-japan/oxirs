@@ -33,7 +33,7 @@
 //! ```
 
 use anyhow::{anyhow, Result};
-use bincode::{Decode, Encode};
+use oxicode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -168,7 +168,10 @@ impl WalManager {
     /// Append an entry to the WAL
     pub fn append(&self, entry: WalEntry) -> Result<u64> {
         let seq = {
-            let mut seq_guard = self.sequence_number.lock().unwrap();
+            let mut seq_guard = self
+                .sequence_number
+                .lock()
+                .expect("mutex lock should not be poisoned");
             let seq = *seq_guard;
             *seq_guard += 1;
             seq
@@ -176,12 +179,16 @@ impl WalManager {
 
         // Write to file
         let needs_checkpoint = {
-            let mut file_guard = self.current_file.lock().unwrap();
+            let mut file_guard = self
+                .current_file
+                .lock()
+                .expect("mutex lock should not be poisoned");
 
             if let Some(ref mut writer) = *file_guard {
                 // Serialize the entry
-                let entry_bytes = bincode::encode_to_vec(&entry, bincode::config::standard())
-                    .map_err(|e| anyhow!("Failed to serialize WAL entry: {}", e))?;
+                let entry_bytes =
+                    oxicode::serde::encode_to_vec(&entry, oxicode::config::standard())
+                        .map_err(|e| anyhow!("Failed to serialize WAL entry: {}", e))?;
                 let entry_len = entry_bytes.len() as u32;
 
                 // Write sequence number, length, and data
@@ -207,7 +214,10 @@ impl WalManager {
                 }
 
                 // Check if checkpoint is needed
-                let last_checkpoint = *self.last_checkpoint.lock().unwrap();
+                let last_checkpoint = *self
+                    .last_checkpoint
+                    .lock()
+                    .expect("mutex lock should not be poisoned");
                 seq - last_checkpoint >= self.config.checkpoint_interval
             } else {
                 return Err(anyhow!("WAL file not open"));
@@ -228,7 +238,7 @@ impl WalManager {
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time should be after UNIX_EPOCH")
             .as_secs();
 
         let checkpoint_entry = WalEntry::Checkpoint {
@@ -238,17 +248,23 @@ impl WalManager {
 
         // Write checkpoint directly without going through append() to avoid recursion
         let seq = {
-            let mut seq_guard = self.sequence_number.lock().unwrap();
+            let mut seq_guard = self
+                .sequence_number
+                .lock()
+                .expect("mutex lock should not be poisoned");
             let seq = *seq_guard;
             *seq_guard += 1;
             seq
         };
 
         {
-            let mut file_guard = self.current_file.lock().unwrap();
+            let mut file_guard = self
+                .current_file
+                .lock()
+                .expect("mutex lock should not be poisoned");
             if let Some(ref mut writer) = *file_guard {
                 let entry_bytes =
-                    bincode::encode_to_vec(&checkpoint_entry, bincode::config::standard())
+                    oxicode::serde::encode_to_vec(&checkpoint_entry, oxicode::config::standard())
                         .map_err(|e| anyhow!("Failed to serialize checkpoint entry: {}", e))?;
                 let entry_len = entry_bytes.len() as u32;
 
@@ -263,7 +279,10 @@ impl WalManager {
             }
         }
 
-        let mut last_checkpoint = self.last_checkpoint.lock().unwrap();
+        let mut last_checkpoint = self
+            .last_checkpoint
+            .lock()
+            .expect("mutex lock should not be poisoned");
         *last_checkpoint = sequence_number;
 
         // Cleanup old WAL files
@@ -276,7 +295,7 @@ impl WalManager {
     fn rotate_wal_file(&self) -> Result<()> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time should be after UNIX_EPOCH")
             .as_secs();
 
         let filename = format!("wal-{:016x}.log", timestamp);
@@ -301,8 +320,14 @@ impl WalManager {
             writer.get_ref().sync_all()?;
         }
 
-        let mut file_guard = self.current_file.lock().unwrap();
-        let mut path_guard = self.current_file_path.lock().unwrap();
+        let mut file_guard = self
+            .current_file
+            .lock()
+            .expect("mutex lock should not be poisoned");
+        let mut path_guard = self
+            .current_file_path
+            .lock()
+            .expect("mutex lock should not be poisoned");
 
         // Flush and close old file
         if let Some(mut old_writer) = file_guard.take() {
@@ -450,18 +475,20 @@ impl WalManager {
                 }
 
                 // Deserialize entry
-                let entry: WalEntry =
-                    match bincode::decode_from_slice(&entry_bytes, bincode::config::standard()) {
-                        Ok((e, _)) => e,
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to deserialize entry at sequence {}: {}. Skipping entry.",
-                                seq,
-                                e
-                            );
-                            continue; // Skip corrupted entry but continue reading
-                        }
-                    };
+                let entry: WalEntry = match oxicode::serde::decode_from_slice(
+                    &entry_bytes,
+                    oxicode::config::standard(),
+                ) {
+                    Ok((e, _)) => e,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to deserialize entry at sequence {}: {}. Skipping entry.",
+                            seq,
+                            e
+                        );
+                        continue; // Skip corrupted entry but continue reading
+                    }
+                };
 
                 // Track last checkpoint
                 if let WalEntry::Checkpoint {
@@ -498,7 +525,10 @@ impl WalManager {
 
         // Update sequence number based on the maximum sequence number seen
         if let Some((max_seq, _)) = all_entries.iter().max_by_key(|(seq, _)| seq) {
-            let mut seq = self.sequence_number.lock().unwrap();
+            let mut seq = self
+                .sequence_number
+                .lock()
+                .expect("mutex lock should not be poisoned");
             *seq = max_seq + 1;
         }
 
@@ -507,7 +537,10 @@ impl WalManager {
 
     /// Flush all pending writes to disk
     pub fn flush(&self) -> Result<()> {
-        let mut file_guard = self.current_file.lock().unwrap();
+        let mut file_guard = self
+            .current_file
+            .lock()
+            .expect("mutex lock should not be poisoned");
         if let Some(ref mut writer) = *file_guard {
             writer.flush()?;
             writer.get_ref().sync_all()?;
@@ -517,12 +550,18 @@ impl WalManager {
 
     /// Get current sequence number
     pub fn current_sequence(&self) -> u64 {
-        *self.sequence_number.lock().unwrap()
+        *self
+            .sequence_number
+            .lock()
+            .expect("mutex lock should not be poisoned")
     }
 
     /// Get last checkpoint sequence number
     pub fn last_checkpoint_sequence(&self) -> u64 {
-        *self.last_checkpoint.lock().unwrap()
+        *self
+            .last_checkpoint
+            .lock()
+            .expect("mutex lock should not be poisoned")
     }
 }
 

@@ -100,8 +100,8 @@ impl FederationCache {
 
     /// Get cached result for a query
     pub fn get(&self, query_key: &str) -> Option<serde_json::Value> {
-        let mut cache = self.cache.write().unwrap();
-        let mut stats = self.stats.write().unwrap();
+        let mut cache = self.cache.write().expect("rwlock should not be poisoned");
+        let mut stats = self.stats.write().expect("rwlock should not be poisoned");
         stats.total_requests += 1;
 
         if let Some(entry) = cache.get_mut(query_key) {
@@ -109,7 +109,7 @@ impl FederationCache {
                 // Remove expired entry
                 let size = entry.size_bytes;
                 cache.remove(query_key);
-                let mut current_size = self.current_size_bytes.write().unwrap();
+                let mut current_size = self.current_size_bytes.write().expect("rwlock should not be poisoned");
                 *current_size = current_size.saturating_sub(size);
                 stats.misses += 1;
                 None
@@ -134,8 +134,8 @@ impl FederationCache {
         let entry = CachedResult::new(data, ttl);
         let entry_size = entry.size_bytes;
 
-        let mut cache = self.cache.write().unwrap();
-        let mut current_size = self.current_size_bytes.write().unwrap();
+        let mut cache = self.cache.write().expect("rwlock should not be poisoned");
+        let mut current_size = self.current_size_bytes.write().expect("rwlock should not be poisoned");
 
         // Evict entries if necessary
         while *current_size + entry_size > self.max_size_bytes && !cache.is_empty() {
@@ -163,7 +163,7 @@ impl FederationCache {
         if let Some(key) = lru_key {
             if let Some(removed) = cache.remove(&key) {
                 *current_size = current_size.saturating_sub(removed.size_bytes);
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write().expect("rwlock should not be poisoned");
                 stats.evictions += 1;
             }
         }
@@ -171,20 +171,20 @@ impl FederationCache {
 
     /// Clear all cached entries
     pub fn clear(&self) {
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self.cache.write().expect("rwlock should not be poisoned");
         cache.clear();
-        let mut current_size = self.current_size_bytes.write().unwrap();
+        let mut current_size = self.current_size_bytes.write().expect("rwlock should not be poisoned");
         *current_size = 0;
     }
 
     /// Get cache statistics
     pub fn stats(&self) -> CacheStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().expect("rwlock should not be poisoned").clone()
     }
 
     /// Get current cache size in bytes
     pub fn size_bytes(&self) -> usize {
-        *self.current_size_bytes.read().unwrap()
+        *self.current_size_bytes.read().expect("rwlock should not be poisoned")
     }
 }
 

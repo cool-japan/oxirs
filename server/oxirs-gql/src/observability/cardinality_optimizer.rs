@@ -138,7 +138,7 @@ impl CardinalityOptimizer {
 
         // Track cardinality - explicitly drop locks to avoid deadlock
         {
-            let mut label_values = self.label_values.write().unwrap();
+            let mut label_values = self.label_values.write().expect("lock poisoned");
             let metric_labels = label_values.entry(metric.to_string()).or_default();
 
             for (label_name, label_value) in &normalized_labels {
@@ -149,7 +149,7 @@ impl CardinalityOptimizer {
 
         // Update series count
         {
-            let mut series_counts = self.series_counts.write().unwrap();
+            let mut series_counts = self.series_counts.write().expect("lock poisoned");
             *series_counts.entry(metric.to_string()).or_insert(0) += 1;
         } // Drop series_counts lock
 
@@ -168,7 +168,7 @@ impl CardinalityOptimizer {
         metric: &str,
         labels: &HashMap<String, String>,
     ) -> HashMap<String, String> {
-        let filters = self.filters.read().unwrap();
+        let filters = self.filters.read().expect("lock poisoned");
         let metric_filters = filters.get(metric);
 
         let mut normalized = HashMap::new();
@@ -253,7 +253,7 @@ impl CardinalityOptimizer {
 
     /// Register a label filter for a metric
     pub fn register_filter(&self, metric: &str, label: &str, filter: LabelFilter) {
-        let mut filters = self.filters.write().unwrap();
+        let mut filters = self.filters.write().expect("lock poisoned");
         filters
             .entry(metric.to_string())
             .or_default()
@@ -262,8 +262,8 @@ impl CardinalityOptimizer {
 
     /// Get cardinality report for a metric
     pub fn get_metric_cardinality(&self, metric: &str) -> Option<MetricCardinality> {
-        let label_values = self.label_values.read().unwrap();
-        let series_counts = self.series_counts.read().unwrap();
+        let label_values = self.label_values.read().expect("lock poisoned");
+        let series_counts = self.series_counts.read().expect("lock poisoned");
 
         let metric_labels = label_values.get(metric)?;
         let total_series = *series_counts.get(metric).unwrap_or(&0);
@@ -306,7 +306,7 @@ impl CardinalityOptimizer {
 
     /// Get all metrics with cardinality information
     pub fn get_all_cardinalities(&self) -> Vec<MetricCardinality> {
-        let series_counts = self.series_counts.read().unwrap();
+        let series_counts = self.series_counts.read().expect("lock poisoned");
         let metrics: Vec<_> = series_counts.keys().cloned().collect();
         drop(series_counts);
 
@@ -326,7 +326,7 @@ impl CardinalityOptimizer {
 
     /// Check cardinality limits and generate warnings
     fn check_cardinality_limits(&self, metric: &str) {
-        let series_counts = self.series_counts.read().unwrap();
+        let series_counts = self.series_counts.read().expect("lock poisoned");
         let series_count = *series_counts.get(metric).unwrap_or(&0);
         drop(series_counts);
 
@@ -335,7 +335,7 @@ impl CardinalityOptimizer {
                 "Metric '{}' has {} series, exceeding limit of {}",
                 metric, series_count, self.config.max_cardinality
             );
-            let mut warnings = self.warnings.write().unwrap();
+            let mut warnings = self.warnings.write().expect("lock poisoned");
             warnings.push(warning);
 
             // Auto-prune if enabled
@@ -346,7 +346,7 @@ impl CardinalityOptimizer {
 
         // Check per-label cardinality
         let should_prune_labels = {
-            let label_values = self.label_values.read().unwrap();
+            let label_values = self.label_values.read().expect("lock poisoned");
             let mut should_prune = false;
             if let Some(metric_labels) = label_values.get(metric) {
                 for (label_name, values) in metric_labels {
@@ -358,7 +358,7 @@ impl CardinalityOptimizer {
                             values.len(),
                             self.config.max_label_values
                         );
-                        let mut warnings = self.warnings.write().unwrap();
+                        let mut warnings = self.warnings.write().expect("lock poisoned");
                         warnings.push(warning);
                         should_prune = true;
                     }
@@ -375,7 +375,7 @@ impl CardinalityOptimizer {
 
     /// Prune least frequently used label values
     fn prune_metric(&self, metric: &str) {
-        let mut label_values = self.label_values.write().unwrap();
+        let mut label_values = self.label_values.write().expect("lock poisoned");
         if let Some(metric_labels) = label_values.get_mut(metric) {
             for values in metric_labels.values_mut() {
                 if values.len() > self.config.max_label_values {
@@ -397,25 +397,25 @@ impl CardinalityOptimizer {
 
     /// Get all warnings
     pub fn get_warnings(&self) -> Vec<String> {
-        self.warnings.read().unwrap().clone()
+        self.warnings.read().expect("lock poisoned").clone()
     }
 
     /// Clear warnings
     pub fn clear_warnings(&self) {
-        self.warnings.write().unwrap().clear();
+        self.warnings.write().expect("lock poisoned").clear();
     }
 
     /// Reset all cardinality data
     pub fn reset(&self) {
-        self.label_values.write().unwrap().clear();
-        self.series_counts.write().unwrap().clear();
-        self.warnings.write().unwrap().clear();
-        *self.last_reset.write().unwrap() = Instant::now();
+        self.label_values.write().expect("lock poisoned").clear();
+        self.series_counts.write().expect("lock poisoned").clear();
+        self.warnings.write().expect("lock poisoned").clear();
+        *self.last_reset.write().expect("lock poisoned") = Instant::now();
     }
 
     /// Check if auto-reset is needed
     fn check_auto_reset(&self) {
-        let last_reset = self.last_reset.read().unwrap();
+        let last_reset = self.last_reset.read().expect("lock poisoned");
         if last_reset.elapsed() >= self.reset_interval {
             drop(last_reset);
             self.reset();
@@ -424,12 +424,16 @@ impl CardinalityOptimizer {
 
     /// Get total unique series across all metrics
     pub fn total_series(&self) -> usize {
-        self.series_counts.read().unwrap().values().sum()
+        self.series_counts
+            .read()
+            .expect("lock poisoned")
+            .values()
+            .sum()
     }
 
     /// Get number of tracked metrics
     pub fn metric_count(&self) -> usize {
-        self.series_counts.read().unwrap().len()
+        self.series_counts.read().expect("lock poisoned").len()
     }
 
     /// Generate cardinality report as text

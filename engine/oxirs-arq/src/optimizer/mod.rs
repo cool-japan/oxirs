@@ -3,14 +3,18 @@
 //! This module provides query optimization capabilities including
 //! rule-based and cost-based optimization passes.
 
+pub mod cardinality_integration;
 pub mod config;
 pub mod execution_tracking;
 pub mod index_types;
+pub mod production_tuning;
 pub mod statistics;
 
+pub use cardinality_integration::*;
 pub use config::*;
 pub use execution_tracking::*;
 pub use index_types::*;
+pub use production_tuning::*;
 pub use statistics::*;
 
 use crate::algebra::{Algebra, Expression, TriplePattern, Variable};
@@ -19,6 +23,21 @@ use anyhow::Result;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+
+/// Query complexity metrics for adaptive optimization
+#[derive(Debug, Clone, Default)]
+struct QueryComplexity {
+    /// Number of triple patterns in the query
+    triple_patterns: usize,
+    /// Number of joins
+    joins: usize,
+    /// Number of filters
+    filters: usize,
+    /// Whether query has ordering
+    ordering: bool,
+    /// Whether query has grouping
+    grouping: bool,
+}
 
 /// Main query optimizer
 pub struct Optimizer {
@@ -51,11 +70,29 @@ impl Optimizer {
 
     /// Optimize a query algebra
     pub fn optimize(&mut self, algebra: Algebra) -> Result<Algebra> {
+        // Adaptive optimization: use fast path for simple queries
+        let complexity = self.estimate_query_complexity(&algebra);
+
+        // For simple queries (≤5 triple patterns), skip cost-based optimization
+        // to avoid optimization overhead exceeding benefits
+        let use_cost_based = if complexity.triple_patterns <= 5 {
+            false // Fast path: simple heuristics only
+        } else {
+            self.config.cost_based // Complex queries benefit from cost model
+        };
+
         let mut optimized = algebra;
         let mut pass = 0;
 
+        // Limit passes for simple queries to minimize overhead
+        let effective_max_passes = if complexity.triple_patterns <= 5 {
+            2.min(self.config.max_passes) // Maximum 2 passes for simple queries
+        } else {
+            self.config.max_passes
+        };
+
         // Apply optimization passes
-        while pass < self.config.max_passes {
+        while pass < effective_max_passes {
             let before = optimized.clone();
 
             if self.config.filter_pushdown {
@@ -63,7 +100,7 @@ impl Optimizer {
             }
 
             if self.config.join_reordering {
-                optimized = if self.config.cost_based {
+                optimized = if use_cost_based {
                     self.apply_cost_based_join_reordering(optimized)?
                 } else {
                     self.apply_join_reordering(optimized)?
@@ -764,6 +801,52 @@ impl Optimizer {
         let mut hasher = DefaultHasher::new();
         format!("{algebra:?}").hash(&mut hasher);
         hasher.finish()
+    }
+
+    /// Estimate query complexity for adaptive optimization
+    fn estimate_query_complexity(&self, algebra: &Algebra) -> QueryComplexity {
+        let mut complexity = QueryComplexity::default();
+        self.analyze_complexity(algebra, &mut complexity);
+        complexity
+    }
+
+    /// Recursively analyze query complexity
+    fn analyze_complexity(&self, algebra: &Algebra, complexity: &mut QueryComplexity) {
+        match algebra {
+            Algebra::Bgp(patterns) => {
+                complexity.triple_patterns += patterns.len();
+            }
+            Algebra::Join { left, right } | Algebra::Union { left, right } => {
+                complexity.joins += 1;
+                self.analyze_complexity(left, complexity);
+                self.analyze_complexity(right, complexity);
+            }
+            Algebra::Filter { pattern, .. } => {
+                complexity.filters += 1;
+                self.analyze_complexity(pattern, complexity);
+            }
+            Algebra::Extend { pattern, .. } => {
+                self.analyze_complexity(pattern, complexity);
+            }
+            Algebra::Project { pattern, .. } => {
+                self.analyze_complexity(pattern, complexity);
+            }
+            Algebra::Distinct { pattern } | Algebra::Reduced { pattern } => {
+                self.analyze_complexity(pattern, complexity);
+            }
+            Algebra::OrderBy { pattern, .. } => {
+                complexity.ordering = true;
+                self.analyze_complexity(pattern, complexity);
+            }
+            Algebra::Slice { pattern, .. } => {
+                self.analyze_complexity(pattern, complexity);
+            }
+            Algebra::Group { pattern, .. } => {
+                complexity.grouping = true;
+                self.analyze_complexity(pattern, complexity);
+            }
+            _ => {}
+        }
     }
 }
 

@@ -104,7 +104,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-physics = { version = "0.1.0-rc.1", features = ["simulation"] }
+oxirs-physics = { version = "0.1.0-rc.2", features = ["simulation"] }
 ```
 
 ### Feature Flags
@@ -401,6 +401,6 @@ Same as OxiRS parent project (see repository root).
 
 ## Version
 
-Current version: `0.1.0-rc.1`
+Current version: `0.1.0-rc.2`
 
 Part of the OxiRS semantic web platform.

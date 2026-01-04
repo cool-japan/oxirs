@@ -33,7 +33,7 @@ impl GpuMemoryPool {
     pub fn get_buffer(&mut self, size: usize) -> Result<GpuBuffer> {
         // Try to reuse an existing buffer first
         {
-            let mut buffers = self.available_buffers.lock().unwrap();
+            let mut buffers = self.available_buffers.lock().expect("mutex should not be poisoned");
             if let Some(buffer) = buffers.pop() {
                 if buffer.size() >= size {
                     return Ok(buffer);
@@ -48,9 +48,9 @@ impl GpuMemoryPool {
 
         // Update statistics
         {
-            let mut total = self.total_allocated.lock().unwrap();
+            let mut total = self.total_allocated.lock().expect("mutex should not be poisoned");
             *total += size;
-            let mut peak = self.peak_usage.lock().unwrap();
+            let mut peak = self.peak_usage.lock().expect("mutex should not be poisoned");
             if *total > *peak {
                 *peak = *total;
             }
@@ -61,15 +61,15 @@ impl GpuMemoryPool {
 
     /// Return a buffer to the pool
     pub fn return_buffer(&mut self, buffer: GpuBuffer) {
-        let mut buffers = self.available_buffers.lock().unwrap();
+        let mut buffers = self.available_buffers.lock().expect("mutex should not be poisoned");
         buffers.push(buffer);
     }
 
     /// Get current pool statistics
     pub fn statistics(&self) -> PoolStatistics {
-        let total = *self.total_allocated.lock().unwrap();
-        let peak = *self.peak_usage.lock().unwrap();
-        let available_count = self.available_buffers.lock().unwrap().len();
+        let total = *self.total_allocated.lock().expect("mutex should not be poisoned");
+        let peak = *self.peak_usage.lock().expect("mutex should not be poisoned");
+        let available_count = self.available_buffers.lock().expect("mutex should not be poisoned").len();
 
         PoolStatistics {
             total_allocated: total,
@@ -82,10 +82,10 @@ impl GpuMemoryPool {
 
     /// Clear the pool and free all buffers
     pub fn clear(&mut self) {
-        let mut buffers = self.available_buffers.lock().unwrap();
+        let mut buffers = self.available_buffers.lock().expect("mutex should not be poisoned");
         buffers.clear();
 
-        let mut total = self.total_allocated.lock().unwrap();
+        let mut total = self.total_allocated.lock().expect("mutex should not be poisoned");
         *total = 0;
 
         self.current_usage = 0;

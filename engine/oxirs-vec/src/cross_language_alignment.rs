@@ -441,7 +441,10 @@ impl CrossLanguageAligner {
 
         // Check cache first
         {
-            let cache = self.translation_cache.read().unwrap();
+            let cache = self
+                .translation_cache
+                .read()
+                .expect("translation cache lock should not be poisoned");
             if let Some(cached_translation) = cache.get(&cache_key) {
                 return Ok(cached_translation.clone());
             }
@@ -463,7 +466,10 @@ impl CrossLanguageAligner {
 
         // Cache the translation
         {
-            let mut cache = self.translation_cache.write().unwrap();
+            let mut cache = self
+                .translation_cache
+                .write()
+                .expect("translation cache lock should not be poisoned");
             if cache.len()
                 >= self
                     .config
@@ -509,7 +515,10 @@ impl CrossLanguageAligner {
         target_lang: &str,
     ) -> Result<Vector> {
         let mapping_key = format!("{source_lang}:{target_lang}");
-        let mappings = self.alignment_mappings.read().unwrap();
+        let mappings = self
+            .alignment_mappings
+            .read()
+            .expect("alignment mappings lock should not be poisoned");
 
         if let Some(mapping) = mappings.get(&mapping_key) {
             if let Some(ref matrix) = mapping.transformation_matrix {
@@ -595,7 +604,11 @@ impl CrossLanguageAligner {
         }
 
         // Sort by similarity (descending)
-        results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+        results.sort_by(|a, b| {
+            b.similarity
+                .partial_cmp(&a.similarity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(k);
 
         Ok(results)
@@ -646,7 +659,10 @@ impl CrossLanguageAligner {
         };
 
         let mapping_key = format!("{source_language}:{target_language}");
-        let mut mappings = self.alignment_mappings.write().unwrap();
+        let mut mappings = self
+            .alignment_mappings
+            .write()
+            .expect("alignment mappings lock should not be poisoned");
         mappings.insert(mapping_key, mapping);
 
         info!(
@@ -715,7 +731,10 @@ impl CrossLanguageAligner {
 
     /// Get language statistics
     pub fn get_language_statistics(&self) -> HashMap<String, usize> {
-        let embeddings = self.multilingual_embeddings.read().unwrap();
+        let embeddings = self
+            .multilingual_embeddings
+            .read()
+            .expect("multilingual embeddings lock should not be poisoned");
         let mut stats = HashMap::new();
 
         for lang in &self.config.supported_languages {

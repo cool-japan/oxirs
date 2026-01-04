@@ -103,7 +103,7 @@ impl Default for SystemMetrics {
             error_rate: 0.0,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
         }
     }
@@ -139,7 +139,7 @@ impl Default for RaftMetrics {
             heartbeat_variance_ms: 0,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
         }
     }
@@ -170,7 +170,7 @@ impl NodeHealthStatus {
     pub fn new(node_id: OxirsNodeId) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_millis() as u64;
 
         Self {
@@ -194,7 +194,7 @@ impl NodeHealthStatus {
     pub fn update_health(&mut self) -> NodeHealth {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_millis() as u64;
         let heartbeat_age = Duration::from_millis(now.saturating_sub(self.last_heartbeat));
 
@@ -373,7 +373,7 @@ impl HealthMonitor {
             let old_health = status.health.clone();
             status.last_heartbeat = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_millis() as u64;
             status.failure_count = 0;
             let new_health = status.update_health();

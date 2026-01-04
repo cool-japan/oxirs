@@ -259,7 +259,11 @@ impl DataStream for StreamingSortMergeJoin {
                     while !self.left_buffer.is_empty() {
                         let current_left = &self.left_buffer[0];
                         if self.extract_join_key(current_left) == left_key {
-                            matching_left.push(self.left_buffer.pop_front().unwrap());
+                            matching_left.push(
+                                self.left_buffer
+                                    .pop_front()
+                                    .expect("buffer should not be empty after is_empty check"),
+                            );
                         } else {
                             break;
                         }
@@ -270,7 +274,11 @@ impl DataStream for StreamingSortMergeJoin {
                     while !self.right_buffer.is_empty() {
                         let current_right = &self.right_buffer[0];
                         if self.extract_join_key(current_right) == left_key {
-                            matching_right.push(self.right_buffer.pop_front().unwrap());
+                            matching_right.push(
+                                self.right_buffer
+                                    .pop_front()
+                                    .expect("buffer should not be empty after is_empty check"),
+                            );
                         } else {
                             break;
                         }
@@ -898,7 +906,10 @@ impl StreamingExecutor {
     /// Clean up temporary files and resources
     pub fn cleanup(&mut self) -> Result<()> {
         self.active_streams.clear();
-        self.spill_manager.lock().unwrap().cleanup_all()?;
+        self.spill_manager
+            .lock()
+            .expect("lock poisoned")
+            .cleanup_all()?;
         Ok(())
     }
 }
@@ -917,7 +928,7 @@ impl MemoryMonitor {
     }
 
     fn allocate(&self, size: usize, operation: &str) -> bool {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().expect("lock poisoned");
         if inner.current_usage + size > inner.max_allowed {
             return false;
         }
@@ -941,24 +952,24 @@ impl MemoryMonitor {
     }
 
     fn deallocate(&self, size: usize) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().expect("lock poisoned");
         inner.current_usage = inner.current_usage.saturating_sub(size);
     }
 
     #[allow(dead_code)]
     fn should_spill(&self, threshold: f64) -> bool {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().expect("lock poisoned");
         inner.current_usage as f64 > inner.max_allowed as f64 * threshold
     }
 
     #[allow(dead_code)]
     fn get_usage_percentage(&self) -> f64 {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().expect("lock poisoned");
         inner.current_usage as f64 / inner.max_allowed as f64
     }
 
     fn get_current_usage(&self) -> usize {
-        let inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().expect("lock poisoned");
         inner.current_usage
     }
 }
@@ -991,7 +1002,7 @@ impl SpillManager {
         let file_path = self.spill_directory.join(format!("{spill_id}.bin"));
 
         let start_time = Instant::now();
-        let serialized = bincode::serialize(data)?;
+        let serialized = oxicode::serde::encode_to_vec(&data, oxicode::config::standard())?;
         let original_size = serialized.len();
 
         let final_data = if self.compression_enabled {
@@ -1032,7 +1043,9 @@ impl SpillManager {
             data
         };
 
-        let deserialized = bincode::deserialize(&decompressed)?;
+        let deserialized =
+            oxicode::serde::decode_from_slice(&decompressed, oxicode::config::standard())
+                .map(|(v, _)| v)?;
         Ok(deserialized)
     }
 
@@ -1249,7 +1262,7 @@ impl StreamingHashJoin {
         let spill_id = self
             .spill_manager
             .lock()
-            .unwrap()
+            .expect("lock poisoned")
             .spill_data(&self.hash_table, SpillDataType::HashTable)?;
 
         self.spilled_partitions.push(spill_id);
@@ -1272,8 +1285,11 @@ impl StreamingHashJoin {
     /// Load spilled hash table partition back into memory
     #[allow(dead_code)]
     fn load_spilled_partition(&mut self, spill_id: &str) -> Result<HashMap<String, Vec<Solution>>> {
-        let partition: HashMap<String, Vec<Solution>> =
-            self.spill_manager.lock().unwrap().read_spill(spill_id)?;
+        let partition: HashMap<String, Vec<Solution>> = self
+            .spill_manager
+            .lock()
+            .expect("lock poisoned")
+            .read_spill(spill_id)?;
         Ok(partition)
     }
 }
@@ -1739,7 +1755,7 @@ impl DataStream for StreamingSort {
                     let spill_id = self
                         .spill_manager
                         .lock()
-                        .unwrap()
+                        .expect("lock poisoned")
                         .spill_data(&all_data, SpillDataType::SortBuffer)?;
                     self.sorted_batches.push(spill_id);
                     all_data.clear();
@@ -1752,7 +1768,7 @@ impl DataStream for StreamingSort {
                 let spill_id = self
                     .spill_manager
                     .lock()
-                    .unwrap()
+                    .expect("lock poisoned")
                     .spill_data(&all_data, SpillDataType::SortBuffer)?;
                 self.sorted_batches.push(spill_id);
             }
@@ -1763,7 +1779,11 @@ impl DataStream for StreamingSort {
         // Return sorted batches
         if self.current_batch_index < self.sorted_batches.len() {
             let spill_id = &self.sorted_batches[self.current_batch_index];
-            let batch: Vec<Solution> = self.spill_manager.lock().unwrap().read_spill(spill_id)?;
+            let batch: Vec<Solution> = self
+                .spill_manager
+                .lock()
+                .expect("lock poisoned")
+                .read_spill(spill_id)?;
             self.current_batch_index += 1;
             Ok(Some(batch))
         } else {
@@ -1786,7 +1806,10 @@ impl DataStream for StreamingSort {
     fn reset(&mut self) -> Result<()> {
         self.input.reset()?;
         for spill_id in &self.sorted_batches {
-            self.spill_manager.lock().unwrap().delete_spill(spill_id)?;
+            self.spill_manager
+                .lock()
+                .expect("lock poisoned")
+                .delete_spill(spill_id)?;
         }
         self.sorted_batches.clear();
         self.current_batch_index = 0;
@@ -1915,8 +1938,10 @@ impl StreamingPatternScan {
             let mut binding = Binding::new();
 
             for var in self.pattern.variables() {
-                let value =
-                    Term::Iri(NamedNode::new(format!("http://example.org/resource_{i}")).unwrap());
+                let value = Term::Iri(
+                    NamedNode::new(format!("http://example.org/resource_{i}"))
+                        .expect("generated URL should be valid"),
+                );
                 binding.insert(var, value);
             }
 
@@ -1931,7 +1956,12 @@ impl StreamingPatternScan {
     /// Check if spilling is needed based on memory pressure
     fn should_spill(&self) -> bool {
         let current_usage = self.memory_monitor.get_current_usage();
-        let max_usage = self.memory_monitor.inner.lock().unwrap().max_allowed;
+        let max_usage = self
+            .memory_monitor
+            .inner
+            .lock()
+            .expect("lock poisoned")
+            .max_allowed;
         (current_usage as f64 / max_usage as f64) > self.config.spill_threshold
     }
 
@@ -1941,7 +1971,7 @@ impl StreamingPatternScan {
             let spill_id = self
                 .spill_manager
                 .lock()
-                .unwrap()
+                .expect("lock poisoned")
                 .spill_data(&self.current_batch, SpillDataType::Solutions)?;
             self.spilled_batches.push(spill_id);
             self.current_batch.clear();
@@ -1957,8 +1987,11 @@ impl DataStream for StreamingPatternScan {
         // First, try to return any spilled batches
         if !self.spilled_batches.is_empty() {
             let spill_id = self.spilled_batches.remove(0);
-            let spilled_solutions: Vec<Solution> =
-                self.spill_manager.lock().unwrap().read_spill(&spill_id)?;
+            let spilled_solutions: Vec<Solution> = self
+                .spill_manager
+                .lock()
+                .expect("lock poisoned")
+                .read_spill(&spill_id)?;
             return Ok(Some(spilled_solutions));
         }
 
@@ -2059,8 +2092,10 @@ impl BufferedPatternScan {
             let mut binding = Binding::new();
 
             for var in self.pattern.variables() {
-                let value =
-                    Term::Iri(NamedNode::new(format!("http://example.org/item_{i}")).unwrap());
+                let value = Term::Iri(
+                    NamedNode::new(format!("http://example.org/item_{i}"))
+                        .expect("generated URL should be valid"),
+                );
                 binding.insert(var, value);
             }
 

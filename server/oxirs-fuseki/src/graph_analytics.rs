@@ -614,7 +614,10 @@ impl GraphAnalyticsEngine {
                                 new_path.push(neighbor.clone());
                                 additional_paths.push(new_path);
                             }
-                            paths.get_mut(neighbor).unwrap().extend(additional_paths);
+                            paths
+                                .get_mut(neighbor)
+                                .expect("neighbor must exist in paths when it exists in distances")
+                                .extend(additional_paths);
                         }
                         // If new_distance > existing_distance, ignore (longer path)
                     }

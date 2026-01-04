@@ -831,7 +831,7 @@ impl AdvancedBenchmarkSuite {
             return Err(anyhow!("No distances computed"));
         }
 
-        distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        distances.sort_by(|a, b| a.partial_cmp(b).expect("f32 values should not be NaN"));
 
         let mean_distance = distances.iter().sum::<f32>() / distances.len() as f32;
         let variance = distances
@@ -876,7 +876,7 @@ impl AdvancedBenchmarkSuite {
                 }
             }
 
-            distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            distances.sort_by(|a, b| a.partial_cmp(b).expect("f32 values should not be NaN"));
             if !distances.is_empty() {
                 nn_distances.push(distances[0]); // Nearest neighbor distance
             }
@@ -951,7 +951,7 @@ impl AdvancedBenchmarkSuite {
         }
 
         // Sort variances and compute effective dimensionality
-        variance_ratios.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        variance_ratios.sort_by(|a, b| b.partial_cmp(a).expect("f32 values should not be NaN"));
         let total_variance: f32 = variance_ratios.iter().sum();
 
         if total_variance <= 0.0 {
@@ -1029,7 +1029,7 @@ impl AdvancedBenchmarkSuite {
 
         // Find outliers using IQR method
         let mut sorted_distances = distances_to_centroid.clone();
-        sorted_distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_distances.sort_by(|a, b| a.partial_cmp(b).expect("f32 values should not be NaN"));
 
         let q1 = sorted_distances[sorted_distances.len() / 4];
         let q3 = sorted_distances[sorted_distances.len() * 3 / 4];
@@ -1111,7 +1111,8 @@ impl AdvancedBenchmarkSuite {
                 }
             }
 
-            distances_with_indices.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            distances_with_indices
+                .sort_by(|a, b| a.0.partial_cmp(&b.0).expect("f32 values should not be NaN"));
             let neighbors: Vec<usize> = distances_with_indices
                 .iter()
                 .take(k)
@@ -1131,7 +1132,8 @@ impl AdvancedBenchmarkSuite {
                     }
                 }
 
-                neighbor_distances.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                neighbor_distances
+                    .sort_by(|a, b| a.0.partial_cmp(&b.0).expect("f32 values should not be NaN"));
                 let neighbor_neighbors: Vec<usize> = neighbor_distances
                     .iter()
                     .take(k)
@@ -1181,7 +1183,8 @@ impl AdvancedBenchmarkSuite {
                 }
             }
 
-            distances_with_indices.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            distances_with_indices
+                .sort_by(|a, b| a.0.partial_cmp(&b.0).expect("f32 values should not be NaN"));
             let neighbors: Vec<usize> = distances_with_indices
                 .iter()
                 .take(k)
@@ -1243,7 +1246,8 @@ impl AdvancedBenchmarkSuite {
                 }
             }
 
-            distances_with_indices.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            distances_with_indices
+                .sort_by(|a, b| a.0.partial_cmp(&b.0).expect("f32 values should not be NaN"));
 
             // Count appearances as neighbors
             for (_, neighbor_idx) in distances_with_indices.iter().take(k) {
@@ -1289,7 +1293,7 @@ impl AdvancedBenchmarkSuite {
                 }
             }
 
-            distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            distances.sort_by(|a, b| a.partial_cmp(b).expect("f32 values should not be NaN"));
 
             // Take first 20 neighbors for local analysis
             let k = distances.len().min(20);
@@ -1485,7 +1489,7 @@ impl AdvancedBenchmarkSuite {
         let std_ms = variance.sqrt();
 
         let mut sorted_latencies = latencies.to_vec();
-        sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_latencies.sort_by(|a, b| a.partial_cmp(b).expect("f32 values should not be NaN"));
 
         let mut percentiles = HashMap::new();
         percentiles.insert(

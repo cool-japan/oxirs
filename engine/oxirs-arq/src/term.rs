@@ -371,10 +371,14 @@ impl NumericValue {
     /// Convert back to term
     pub fn to_term(&self) -> Term {
         match self {
-            NumericValue::Integer(i) => Term::typed_literal(&i.to_string(), xsd::INTEGER).unwrap(),
-            NumericValue::Decimal(d) => Term::typed_literal(&d.to_string(), xsd::DECIMAL).unwrap(),
-            NumericValue::Float(f) => Term::typed_literal(&f.to_string(), xsd::FLOAT).unwrap(),
-            NumericValue::Double(d) => Term::typed_literal(&d.to_string(), xsd::DOUBLE).unwrap(),
+            NumericValue::Integer(i) => Term::typed_literal(&i.to_string(), xsd::INTEGER)
+                .expect("integer to xsd:integer literal should always succeed"),
+            NumericValue::Decimal(d) => Term::typed_literal(&d.to_string(), xsd::DECIMAL)
+                .expect("decimal to xsd:decimal literal should always succeed"),
+            NumericValue::Float(f) => Term::typed_literal(&f.to_string(), xsd::FLOAT)
+                .expect("float to xsd:float literal should always succeed"),
+            NumericValue::Double(d) => Term::typed_literal(&d.to_string(), xsd::DOUBLE)
+                .expect("double to xsd:double literal should always succeed"),
         }
     }
 }
@@ -648,7 +652,9 @@ impl Term {
                     None
                 },
             }),
-            Term::Variable(var) => AlgebraTerm::Variable(Variable::new(var).unwrap()),
+            Term::Variable(var) => AlgebraTerm::Variable(
+                Variable::new(var).expect("variable name should be valid for algebra conversion"),
+            ),
             Term::QuotedTriple(triple) => AlgebraTerm::QuotedTriple(Box::new(TriplePattern {
                 subject: triple.subject.to_algebra_term(),
                 predicate: triple.predicate.to_algebra_term(),

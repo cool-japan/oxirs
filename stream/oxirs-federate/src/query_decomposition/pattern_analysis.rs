@@ -325,7 +325,11 @@ impl QueryDecomposer {
         }
 
         // Sort by affinity score (descending)
-        affinities.sort_by(|a, b| b.affinity_score.partial_cmp(&a.affinity_score).unwrap());
+        affinities.sort_by(|a, b| {
+            b.affinity_score
+                .partial_cmp(&a.affinity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         affinities
     }
@@ -355,8 +359,11 @@ impl QueryDecomposer {
             }
 
             // Sort by coverage score (descending)
-            service_coverage
-                .sort_by(|a, b| b.coverage_score.partial_cmp(&a.coverage_score).unwrap());
+            service_coverage.sort_by(|a, b| {
+                b.coverage_score
+                    .partial_cmp(&a.coverage_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
 
             coverage_analysis.push(PatternCoverage {
                 pattern_index: *pattern_idx,
@@ -609,7 +616,11 @@ impl QueryDecomposer {
         }
 
         // Sort by overlap score (descending)
-        matches.sort_by(|a, b| b.overlap_score.partial_cmp(&a.overlap_score).unwrap());
+        matches.sort_by(|a, b| {
+            b.overlap_score
+                .partial_cmp(&a.overlap_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         matches
     }
@@ -787,7 +798,11 @@ impl QueryDecomposer {
         }
 
         // Sort by confidence (descending)
-        predictions.sort_by(|a, b| b.confidence_score.partial_cmp(&a.confidence_score).unwrap());
+        predictions.sort_by(|a, b| {
+            b.confidence_score
+                .partial_cmp(&a.confidence_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         predictions
     }

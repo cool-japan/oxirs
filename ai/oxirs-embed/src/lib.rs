@@ -1,6 +1,6 @@
 //! # OxiRS Embed: Advanced Knowledge Graph Embeddings
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed)
 //!
 //! **Status**: Beta Release (v0.1.0-rc.1)
@@ -863,9 +863,9 @@ pub mod quick_start {
 
         // Generate random triples (avoid self-loops)
         for _ in 0..(num_entities * 2) {
-            let subject_idx = random.random_range(0, entities.len());
-            let relation_idx = random.random_range(0, relations.len());
-            let object_idx = random.random_range(0, entities.len());
+            let subject_idx = random.random_range(0..entities.len());
+            let relation_idx = random.random_range(0..relations.len());
+            let object_idx = random.random_range(0..entities.len());
 
             let subject = entities[subject_idx].clone();
             let relation = relations[relation_idx].clone();

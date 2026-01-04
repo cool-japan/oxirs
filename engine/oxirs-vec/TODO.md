@@ -17,7 +17,7 @@ See [docs/README.md](docs/README.md) for complete documentation index.
 
 ---
 
-## ✅ Current Status: v0.1.0-rc.1 (Production-Ready RC)
+## ✅ Current Status: v0.1.0-rc.2 (Production-Ready RC)
 
 **oxirs-vec** provides comprehensive vector search infrastructure for semantic similarity with full SPARQL integration.
 
@@ -41,7 +41,7 @@ See [docs/README.md](docs/README.md) for complete documentation index.
 - **126 KB of comprehensive documentation**: 6 production guides including FAISS/Annoy migration
 - **Ready for production**: All RC.1 targets completed ✅
 
-## ✅ RC Release Targets - COMPLETED (v0.1.0-rc.1 - December 2025)
+## ✅ RC Release Targets - COMPLETED (v0.1.0-rc.2 - December 2025)
 
 ### Performance ✅
 - [x] HNSW index optimization (configurable M, ef_construction, ef_search)

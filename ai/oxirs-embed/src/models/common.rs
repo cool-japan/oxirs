@@ -253,7 +253,7 @@ pub fn shuffle_batch<T>(batch: &mut [T], rng: &mut Random) {
     }
 
     for i in (1..batch.len()).rev() {
-        let j = rng.random_range(0, i + 1);
+        let j = rng.random_range(0..i + 1);
         if i != j {
             batch.swap(i, j);
         }

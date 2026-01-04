@@ -232,12 +232,16 @@ impl BatchProcessor {
         model: Arc<RwLock<Box<dyn EmbeddingModel>>>,
         entities: Vec<String>,
     ) -> Result<Vec<(String, Result<Vector>)>> {
-        let _permit = self.semaphore.acquire().await.unwrap();
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
+            .expect("semaphore should not be closed");
 
         let mut results = Vec::new();
 
         for chunk in entities.chunks(self.batch_size) {
-            let model_guard = model.read().unwrap();
+            let model_guard = model.read().expect("rwlock should not be poisoned");
             for entity in chunk {
                 let result = model_guard.get_entity_embedding(entity);
                 results.push((entity.clone(), result));
@@ -252,12 +256,16 @@ impl BatchProcessor {
         model: Arc<RwLock<Box<dyn EmbeddingModel>>>,
         relations: Vec<String>,
     ) -> Result<Vec<(String, Result<Vector>)>> {
-        let _permit = self.semaphore.acquire().await.unwrap();
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
+            .expect("semaphore should not be closed");
 
         let mut results = Vec::new();
 
         for chunk in relations.chunks(self.batch_size) {
-            let model_guard = model.read().unwrap();
+            let model_guard = model.read().expect("rwlock should not be poisoned");
             for relation in chunk {
                 let result = model_guard.get_relation_embedding(relation);
                 results.push((relation.clone(), result));
@@ -300,7 +308,7 @@ impl InferenceEngine {
 
         // Get from model
         let embedding = {
-            let model_guard = self.model.read().unwrap();
+            let model_guard = self.model.read().expect("rwlock should not be poisoned");
             model_guard.get_entity_embedding(entity)?
         };
 
@@ -328,7 +336,7 @@ impl InferenceEngine {
 
         // Get from model
         let embedding = {
-            let model_guard = self.model.read().unwrap();
+            let model_guard = self.model.read().expect("rwlock should not be poisoned");
             model_guard.get_relation_embedding(relation)?
         };
 
@@ -358,7 +366,7 @@ impl InferenceEngine {
 
         // Get from model
         let score = {
-            let model_guard = self.model.read().unwrap();
+            let model_guard = self.model.read().expect("rwlock should not be poisoned");
             model_guard.score_triple(subject, predicate, object)?
         };
 
@@ -401,7 +409,7 @@ impl InferenceEngine {
         info!("Warming up inference cache...");
 
         let (entities, relations) = {
-            let model_guard = self.model.read().unwrap();
+            let model_guard = self.model.read().expect("rwlock should not be poisoned");
             (model_guard.get_entities(), model_guard.get_relations())
         };
 
@@ -421,13 +429,13 @@ impl InferenceEngine {
 
     /// Get cache statistics
     pub fn cache_stats(&self) -> Result<CacheStats> {
-        let cache_guard = self.cache.read().unwrap();
+        let cache_guard = self.cache.read().expect("rwlock should not be poisoned");
         Ok(cache_guard.stats())
     }
 
     /// Clear cache
     pub fn clear_cache(&self) -> Result<()> {
-        let mut cache_guard = self.cache.write().unwrap();
+        let mut cache_guard = self.cache.write().expect("rwlock should not be poisoned");
         cache_guard.clear();
         info!("Inference cache cleared");
         Ok(())
@@ -435,7 +443,7 @@ impl InferenceEngine {
 
     /// Get model statistics
     pub fn model_stats(&self) -> Result<ModelStats> {
-        let model_guard = self.model.read().unwrap();
+        let model_guard = self.model.read().expect("rwlock should not be poisoned");
         Ok(model_guard.get_stats())
     }
 }

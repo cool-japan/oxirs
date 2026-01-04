@@ -611,12 +611,12 @@ impl DynamicArchitectureOptimizer {
             // Random mutations
             let mut random = Random::default();
             config.embedding_dim =
-                (64..=512).step_by(32).collect::<Vec<_>>()[random.random_range(0, 15)];
-            config.num_layers = (1..=6).collect::<Vec<_>>()[random.random_range(0, 6)];
+                (64..=512).step_by(32).collect::<Vec<_>>()[random.random_range(0..15)];
+            config.num_layers = (1..=6).collect::<Vec<_>>()[random.random_range(0..6)];
 
             // Generate random hidden dimensions
             config.hidden_dims = (0..config.num_layers)
-                .map(|_| (32..=1024).step_by(32).collect::<Vec<_>>()[random.random_range(0, 31)])
+                .map(|_| (32..=1024).step_by(32).collect::<Vec<_>>()[random.random_range(0..31)])
                 .collect();
 
             population.push(config);

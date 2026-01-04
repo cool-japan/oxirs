@@ -208,7 +208,7 @@ impl MetricsCollector {
 
     /// Get or create a counter
     fn get_or_create_counter(&self, name: &str) -> Arc<Counter> {
-        let mut counters = self.counters.write().unwrap();
+        let mut counters = self.counters.write().expect("lock poisoned");
         counters
             .entry(name.to_string())
             .or_insert_with(|| Arc::new(Counter::new(name.to_string())))
@@ -217,7 +217,7 @@ impl MetricsCollector {
 
     /// Get or create a gauge
     fn get_or_create_gauge(&self, name: &str) -> Arc<Gauge> {
-        let mut gauges = self.gauges.write().unwrap();
+        let mut gauges = self.gauges.write().expect("lock poisoned");
         gauges
             .entry(name.to_string())
             .or_insert_with(|| Arc::new(Gauge::new(name.to_string())))
@@ -226,7 +226,7 @@ impl MetricsCollector {
 
     /// Get or create a histogram
     fn get_or_create_histogram(&self, name: &str) -> Arc<Histogram> {
-        let mut histograms = self.histograms.write().unwrap();
+        let mut histograms = self.histograms.write().expect("lock poisoned");
         histograms
             .entry(name.to_string())
             .or_insert_with(|| Arc::new(Histogram::new(name.to_string())))
@@ -277,7 +277,7 @@ impl MetricsCollector {
             tags,
         };
 
-        let mut time_series = self.time_series.write().unwrap();
+        let mut time_series = self.time_series.write().expect("lock poisoned");
         let series = time_series.entry(name.to_string()).or_default();
 
         series.push_back(data_point);
@@ -288,7 +288,7 @@ impl MetricsCollector {
         }
 
         // Update statistics
-        self.stats.write().unwrap().metrics_collected += 1;
+        self.stats.write().expect("lock poisoned").metrics_collected += 1;
 
         // Check alerts
         self.check_alerts_for_metric(name, value);
@@ -297,12 +297,12 @@ impl MetricsCollector {
     /// Add an alert
     pub fn add_alert(&self, alert: Alert) {
         debug!("Added alert: {}", alert.name);
-        self.alerts.write().unwrap().push(alert);
+        self.alerts.write().expect("lock poisoned").push(alert);
     }
 
     /// Check alerts for a metric
     fn check_alerts_for_metric(&self, metric_name: &str, value: f64) {
-        let mut alerts = self.alerts.write().unwrap();
+        let mut alerts = self.alerts.write().expect("lock poisoned");
 
         for alert in alerts.iter_mut() {
             if alert.metric_name != metric_name {
@@ -324,7 +324,7 @@ impl MetricsCollector {
                     alert.name, metric_name, alert.condition, alert.threshold, value
                 );
 
-                self.stats.write().unwrap().alerts_triggered += 1;
+                self.stats.write().expect("lock poisoned").alerts_triggered += 1;
             }
         }
     }
@@ -346,19 +346,25 @@ impl MetricsCollector {
 
         self.health_checks
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .insert(component.to_string(), health_check);
 
-        self.stats.write().unwrap().health_checks_performed += 1;
+        self.stats
+            .write()
+            .expect("lock poisoned")
+            .health_checks_performed += 1;
 
         if status != HealthStatus::Healthy {
-            self.stats.write().unwrap().failed_health_checks += 1;
+            self.stats
+                .write()
+                .expect("lock poisoned")
+                .failed_health_checks += 1;
         }
     }
 
     /// Get overall health status
     pub fn overall_health(&self) -> HealthStatus {
-        let health_checks = self.health_checks.read().unwrap();
+        let health_checks = self.health_checks.read().expect("lock poisoned");
 
         if health_checks.is_empty() {
             return HealthStatus::Healthy;
@@ -385,7 +391,7 @@ impl MetricsCollector {
     pub fn get_time_series(&self, name: &str) -> Vec<MetricDataPoint> {
         self.time_series
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .get(name)
             .map(|series| series.iter().cloned().collect())
             .unwrap_or_default()
@@ -410,7 +416,7 @@ impl MetricsCollector {
 
         // Calculate percentiles
         let mut sorted = values.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).expect("f64 comparison"));
 
         let p50 = sorted[count / 2];
         let p95 = sorted[(count as f64 * 0.95) as usize];
@@ -433,7 +439,7 @@ impl MetricsCollector {
     pub fn export_prometheus(&self) -> String {
         let mut output = String::new();
 
-        for (name, series) in self.time_series.read().unwrap().iter() {
+        for (name, series) in self.time_series.read().expect("lock poisoned").iter() {
             if let Some(latest) = series.back() {
                 output.push_str(&format!("# TYPE {} gauge\n", name));
                 output.push_str(&format!("{} {}\n", name, latest.value));
@@ -445,12 +451,12 @@ impl MetricsCollector {
 
     /// Get statistics
     pub fn statistics(&self) -> MonitoringStatistics {
-        self.stats.read().unwrap().clone()
+        self.stats.read().expect("lock poisoned").clone()
     }
 
     /// Clear time series data
     pub fn clear_time_series(&self) {
-        self.time_series.write().unwrap().clear();
+        self.time_series.write().expect("lock poisoned").clear();
     }
 }
 

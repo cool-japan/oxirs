@@ -838,13 +838,13 @@ impl MaterializedViewManager {
 
         // Store the view
         {
-            let mut views = self.views.write().unwrap();
+            let mut views = self.views.write().expect("lock poisoned");
             views.insert(view_id.clone(), view);
         }
 
         // Store the data
         {
-            let mut storage = self.view_storage.write().unwrap();
+            let mut storage = self.view_storage.write().expect("lock poisoned");
             storage.store_view_data(view_id.clone(), view_data)?;
         }
 
@@ -880,7 +880,7 @@ impl MaterializedViewManager {
 
     /// Get view usage statistics
     pub fn get_usage_statistics(&self, view_id: &str) -> Result<Option<ViewUsageStats>> {
-        let stats = self.usage_statistics.read().unwrap();
+        let stats = self.usage_statistics.read().expect("lock poisoned");
 
         Ok(stats
             .access_counts
@@ -911,7 +911,7 @@ impl MaterializedViewManager {
 
         // Get view definition
         let _definition = {
-            let views = self.views.read().unwrap();
+            let views = self.views.read().expect("lock poisoned");
             let view = views
                 .get(view_id)
                 .ok_or_else(|| anyhow!("View not found: {}", view_id))?;
@@ -920,8 +920,10 @@ impl MaterializedViewManager {
 
         // Check if incremental update is possible
         let use_incremental = {
-            let views = self.views.read().unwrap();
-            let view = views.get(view_id).unwrap();
+            let views = self.views.read().expect("lock poisoned");
+            let view = views
+                .get(view_id)
+                .expect("view should exist for given view_id");
             self.config.incremental_maintenance
                 && view.maintenance_info.incremental_state.is_some()
                 && self.can_update_incrementally(&view.dependencies)
@@ -937,7 +939,7 @@ impl MaterializedViewManager {
 
         // Update maintenance info
         {
-            let mut views = self.views.write().unwrap();
+            let mut views = self.views.write().expect("lock poisoned");
             if let Some(view) = views.get_mut(view_id) {
                 view.maintenance_info.last_updated = SystemTime::now();
                 view.maintenance_info.update_count += 1;
@@ -960,7 +962,7 @@ impl MaterializedViewManager {
         time_saved: Duration,
         cost_benefit: f64,
     ) -> Result<()> {
-        let mut stats = self.usage_statistics.write().unwrap();
+        let mut stats = self.usage_statistics.write().expect("lock poisoned");
 
         // Update access count
         *stats.access_counts.entry(view_id.to_string()).or_insert(0) += 1;
@@ -1249,7 +1251,7 @@ impl MaterializedViewManager {
 
         // Get view definition
         let definition = {
-            let views = self.views.read().unwrap();
+            let views = self.views.read().expect("lock poisoned");
             let view = views
                 .get(view_id)
                 .ok_or_else(|| anyhow!("View not found: {}", view_id))?;
@@ -1273,7 +1275,7 @@ impl MaterializedViewManager {
 
         // Update view data
         {
-            let mut views = self.views.write().unwrap();
+            let mut views = self.views.write().expect("lock poisoned");
             if let Some(view) = views.get_mut(view_id) {
                 view.data = new_data.clone();
             }
@@ -1281,7 +1283,7 @@ impl MaterializedViewManager {
 
         // Update storage
         {
-            let mut storage = self.view_storage.write().unwrap();
+            let mut storage = self.view_storage.write().expect("lock poisoned");
             storage.store_view_data(view_id.to_string(), new_data)?;
         }
 
@@ -1340,7 +1342,7 @@ impl QueryRewriter {
         _cost_model: &Arc<Mutex<CostModel>>,
     ) -> Result<(Algebra, Vec<String>)> {
         // Simplified rewrite logic
-        let _views_guard = views.read().unwrap();
+        let _views_guard = views.read().expect("lock poisoned");
         let used_views = Vec::new();
 
         // For now, return original query
@@ -1425,7 +1427,7 @@ impl MaintenanceScheduler {
             },
         };
 
-        let mut scheduled = self.scheduled_tasks.write().unwrap();
+        let mut scheduled = self.scheduled_tasks.write().expect("lock poisoned");
         scheduled.push_back(task);
 
         Ok(())
