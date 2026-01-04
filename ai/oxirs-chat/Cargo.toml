@@ -62,7 +62,7 @@ toml = "0.9"
 serde_yaml = "0.9"
 
 # Metrics and Monitoring
-metrics = "0.23"
+metrics = "0.24"
 metrics-exporter-prometheus = "0.15"
 
 # Template Engine for SPARQL

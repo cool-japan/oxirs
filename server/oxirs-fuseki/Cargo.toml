@@ -80,7 +80,7 @@ http-body-util = "0.1"
 # Metrics and monitoring
 prometheus = { version = "0.13", optional = true }
 axum-prometheus = { version = "0.7", optional = true }
-metrics = "0.23"
+metrics = "0.24"
 metrics-exporter-prometheus = "0.15"
 
 # Caching
