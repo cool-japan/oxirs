@@ -34,7 +34,7 @@ tower-http = { version = "0.6", features = ["cors", "trace", "timeout", "compres
 rustls = { version = "0.23", optional = true }
 tokio-rustls = { version = "0.26", optional = true }
 rustls-pemfile = { version = "2.2", optional = true }
-axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
+axum-server = { version = "0.8", features = ["tls-rustls"], optional = true }
 
 # CLI and configuration
 clap = { version = "4.4", features = ["derive", "env"] }
