@@ -258,7 +258,7 @@ petgraph = "0.6"
 # Phase D: Industrial Connectivity Dependencies
 tokio-serial = "5.4"      # Modbus RTU serial port support
 socketcan = "3.5"         # Linux CAN interface
-bit-vec = "0.6"           # Bit manipulation for Gorilla compression
+bit-vec = "0.8"           # Bit manipulation for Gorilla compression
 arrow = "57"              # Apache Arrow for zero-copy Python integration
 deadpool = "0.12"         # Generic async connection pooling
 humantime-serde = "1.1"   # Human-readable duration serialization
