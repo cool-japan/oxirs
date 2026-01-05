@@ -61,7 +61,7 @@ hex = "0.4"
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 prost = "0.13"
 prost-types = "0.13"
-apache-avro = "0.16"
+apache-avro = "0.21"
 tokio-stream = "0.1"
 lz4_flex = "0.11"
 snap = "1.1"
