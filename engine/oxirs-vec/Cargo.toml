@@ -58,7 +58,7 @@ cudarc = { version = "0.18", features = ["cuda-12000"], optional = true }
 candle-core = { version = "0.9", optional = true }
 # Python bindings
 pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
-numpy = { version = "0.25", optional = true }
+numpy = { version = "0.27", optional = true }
 uuid = { version = "1.19", features = ["v4"] }
 num_cpus = "1.17"
 humantime = "2.3"
