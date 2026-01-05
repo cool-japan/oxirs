@@ -54,7 +54,7 @@ base64 = "0.22"
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 tempfile.workspace = true
 flate2 = "1.1"
-lz4_flex = "0.11"
+lz4_flex = "0.12"
 zstd = "0.13"
 
 [dev-dependencies]

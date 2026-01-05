@@ -229,7 +229,7 @@ fastrand = "2.3.0"
 # Compression libraries
 flate2 = "1.1"     # Gzip compression
 zstd = "0.13"      # Zstandard compression
-lz4_flex = "0.11"  # LZ4 compression
+lz4_flex = "0.12"  # LZ4 compression
 snap = "1.1"       # Snappy compression
 brotli = "8.0"     # Brotli compression
 

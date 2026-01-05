@@ -60,7 +60,7 @@ base64 = "0.22"
 # Compression and serialization dependencies
 flate2 = "1.1"
 zstd = "0.13"
-lz4_flex = "0.11"
+lz4_flex = "0.12"
 crc32fast = "1.5"
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 rmp-serde = "1.3"
