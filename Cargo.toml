@@ -253,7 +253,7 @@ multibase = "0.9"
 bs58 = "0.5"
 
 # Graph algorithms (GraphRAG)
-petgraph = "0.6"
+petgraph = "0.8"
 
 # Phase D: Industrial Connectivity Dependencies
 tokio-serial = "5.4"      # Modbus RTU serial port support
