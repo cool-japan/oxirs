@@ -63,7 +63,7 @@ serde_yaml = "0.9"
 
 # Metrics and Monitoring
 metrics = "0.23"
-metrics-exporter-prometheus = "0.15"
+metrics-exporter-prometheus = "0.18"
 
 # Template Engine for SPARQL
 handlebars = "5.1"
