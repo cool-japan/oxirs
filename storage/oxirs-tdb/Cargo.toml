@@ -1,0 +1,97 @@
+[package]
+name = "oxirs-tdb"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+description = "Apache Jena TDB/TDB2 compatible RDF storage engine with B+Tree indexes"
+keywords = ["rdf", "sparql", "storage", "database", "tdb"]
+categories = ["database", "data-structures"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+# Core
+oxirs-core = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# SciRS2 Integration
+scirs2-core = { workspace = true, features = ["profiling", "parallel"] }
+
+# Storage
+memmap2 = "0.9"
+parking_lot = "0.12"
+dashmap = "6.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
+
+# Utilities
+log = "0.4"
+bytes = { workspace = true }
+byteorder = "1.5"
+crc32fast = "1.5"
+chrono = "0.4"
+
+# Async I/O
+tokio = { version = "1.47", features = ["fs", "io-util", "rt", "sync"] }
+futures = "0.3"
+geo = "0.29"
+rstar = "0.12"
+geojson = "0.24"
+wkt = "0.14"
+lz4_flex.workspace = true
+zstd = "0.13"
+snap = "1.1"
+brotli = "8.0"
+
+flate2 = "1.1"
+
+# Encryption
+aes-gcm = "0.10"
+pbkdf2 = { version = "0.12", features = ["simple"] }
+sha2 = "0.10"
+
+# UUID generation
+uuid = { version = "1.19", features = ["v4"] }
+
+# Unix system calls (for madvise, mlock)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Optional: io_uring support (Linux only)
+[target.'cfg(target_os = "linux")'.dependencies]
+tokio-uring = { version = "0.5", optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3.24"
+proptest = "1.7"
+env_logger = "0.10"
+# Use scirs2-core::random instead of rand (see CLAUDE.md)
+
+[[bench]]
+name = "bloom_filter_benchmark"
+harness = false
+
+# Future benchmarks
+# [[bench]]
+# name = "btree_bench"
+# harness = false
+#
+# [[bench]]
+# name = "index_bench"
+# harness = false
+#
+# [[bench]]
+# name = "query_bench"
+# harness = false

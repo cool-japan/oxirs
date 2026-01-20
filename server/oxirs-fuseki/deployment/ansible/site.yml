@@ -1,0 +1,116 @@
+---
+# OxiRS Fuseki - Main Ansible Playbook
+# This playbook deploys and configures OxiRS Fuseki SPARQL servers
+#
+# Usage:
+#   ansible-playbook -i inventory/production site.yml
+#   ansible-playbook -i inventory/staging site.yml --tags=config
+#   ansible-playbook -i inventory/production site.yml --limit web01
+
+- name: Deploy OxiRS Fuseki SPARQL Server
+  hosts: fuseki_servers
+  become: true
+  gather_facts: true
+
+  vars:
+    # Default configuration (can be overridden in group_vars or host_vars)
+    oxirs_version: "0.1.0-beta.2"
+    oxirs_install_dir: "/opt/oxirs-fuseki"
+    oxirs_data_dir: "/var/lib/oxirs-fuseki"
+    oxirs_log_dir: "/var/log/oxirs-fuseki"
+    oxirs_config_dir: "/etc/oxirs-fuseki"
+    oxirs_user: "oxirs"
+    oxirs_group: "oxirs"
+    oxirs_http_port: 3030
+    oxirs_https_port: 3031
+    enable_tls: true
+    enable_metrics: true
+    enable_auth: true
+
+  pre_tasks:
+    - name: Check OS compatibility
+      ansible.builtin.assert:
+        that:
+          - ansible_os_family in ['Debian', 'RedHat', 'Darwin']
+        fail_msg: "Unsupported OS: {{ ansible_os_family }}"
+        success_msg: "OS {{ ansible_os_family }} is supported"
+      tags: [always]
+
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg: |
+          Deploying OxiRS Fuseki {{ oxirs_version }}
+          Target: {{ inventory_hostname }}
+          Environment: {{ environment | default('unknown') }}
+          Install directory: {{ oxirs_install_dir }}
+      tags: [always]
+
+  roles:
+    - role: common
+      tags: [common, base]
+
+    - role: security
+      tags: [security, hardening]
+
+    - role: oxirs-fuseki
+      tags: [oxirs, install, config]
+
+    - role: monitoring
+      tags: [monitoring, observability]
+      when: enable_metrics | default(true)
+
+  post_tasks:
+    - name: Verify OxiRS Fuseki service is running
+      ansible.builtin.service:
+        name: oxirs-fuseki
+        state: started
+        enabled: true
+      register: service_status
+      tags: [verify]
+
+    - name: Wait for HTTP endpoint to be available
+      ansible.builtin.uri:
+        url: "http://localhost:{{ oxirs_http_port }}/$/ping"
+        status_code: 200
+        timeout: 30
+      register: health_check
+      retries: 5
+      delay: 5
+      until: health_check is succeeded
+      tags: [verify]
+
+    - name: Display service status
+      ansible.builtin.debug:
+        msg: |
+          OxiRS Fuseki deployment completed successfully!
+          Service status: {{ service_status.state }}
+          HTTP endpoint: http://{{ ansible_default_ipv4.address }}:{{ oxirs_http_port }}
+          {% if enable_tls %}
+          HTTPS endpoint: https://{{ ansible_default_ipv4.address }}:{{ oxirs_https_port }}
+          {% endif %}
+          Health check: {{ health_check.status }}
+      tags: [verify]
+
+- name: Configure Load Balancer
+  hosts: load_balancers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: nginx
+      tags: [lb, nginx]
+      when: load_balancer_type == 'nginx'
+
+- name: Setup Monitoring Stack
+  hosts: monitoring_servers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: prometheus
+      tags: [prometheus, monitoring]
+      when: enable_prometheus | default(true)
+
+    - role: grafana
+      tags: [grafana, monitoring]
+      when: enable_grafana | default(true)

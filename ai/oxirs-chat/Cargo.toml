@@ -1,0 +1,115 @@
+[package]
+name = "oxirs-chat"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "RAG chat API with LLM integration and natural language to SPARQL translation"
+keywords = ["rag", "chat", "llm", "ai", "semantic-search"]
+categories = ["science", "algorithms", "web-programming"]
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+oxirs-core.workspace = true
+oxirs-vec.workspace = true
+oxirs-embed.workspace = true
+
+# SciRS2 dependencies for AI chat and NLP
+scirs2-core = { workspace = true, features = ["random"] }
+scirs2-text = { workspace = true }
+scirs2-neural = { workspace = true }
+scirs2-stats = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-stream = "0.1"
+hyper = { workspace = true, features = ["full"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap = { version = "4.4", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP Server and WebSocket
+axum = { version = "0.7", features = ["ws"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tokio-tungstenite = "0.28"
+futures-util = "0.3"
+
+# LLM Integration
+reqwest = { workspace = true, features = ["stream"] }
+async-openai = "0.27"
+async-stream = "0.3"
+# anthropic-sdk = "0.1" # Add when available
+
+# Storage and Caching
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+uuid = { version = "1.19", features = ["v4", "serde"] }
+
+# Configuration
+config = "0.14"
+toml = "0.9"
+serde_yaml = "0.9"
+
+# Metrics and Monitoring
+metrics = "0.23"
+metrics-exporter-prometheus = "0.18"
+
+# Template Engine for SPARQL
+handlebars = "5.1"
+regex = "1.12"
+
+# Async traits
+async-trait = "0.1"
+
+# Cryptographic functions for webhooks
+hmac = "0.12"
+sha2 = "0.10"
+
+# Session persistence and state management
+sled = "0.34"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
+zstd = "0.13"
+
+# Encryption
+aes-gcm = "0.10"
+argon2 = "0.5"
+base64 = "0.22"
+
+# Natural Language Processing
+tokenizers = "0.22"
+
+# OpenTelemetry for monitoring
+opentelemetry = { workspace = true }
+opentelemetry-prometheus = "0.27"
+
+# Rate limiting
+governor = "0.10"
+
+# Random number generation removed - use scirs2-core::random instead
+fastrand = "2.3"
+
+# Excel export
+rust_xlsxwriter = "0.79"
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile = "3.24"
+
+[features]
+default = []
+llm-integration = []
+nl2sparql = []
+
+[[bin]]
+name = "oxirs-chat"
+path = "src/main.rs"

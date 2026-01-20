@@ -1,0 +1,137 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'Cargo.toml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'docs/**'
+      - 'README.md'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Build and deploy documentation
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-docs-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build documentation
+        run: |
+          cargo doc --all-features --no-deps
+          echo '<meta http-equiv="refresh" content="0; url=oxirs_ttl">' > target/doc/index.html
+        env:
+          RUSTDOCFLAGS: --cfg docsrs -D warnings
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          cname: oxirs-ttl.docs.example.com  # Optional: Set your custom domain
+
+  # Check documentation for broken links
+  check-links:
+    name: Check Documentation Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install markdown-link-check
+        run: npm install -g markdown-link-check
+
+      - name: Check README links
+        run: markdown-link-check README.md --config .github/markdown-link-check-config.json || true
+
+      - name: Check documentation links
+        run: |
+          find docs -name "*.md" -exec markdown-link-check {} --config .github/markdown-link-check-config.json \; || true
+
+  # Verify all doc tests pass
+  doc-tests:
+    name: Documentation Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run doc tests
+        run: cargo test --doc --all-features
+
+  # Check documentation coverage
+  doc-coverage:
+    name: Documentation Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check documentation coverage
+        run: |
+          cargo +nightly rustdoc --all-features -- -Z unstable-options --show-coverage
+        continue-on-error: true  # Don't fail on missing docs, just report
+
+  # Spell check documentation
+  spell-check:
+    name: Spell Check Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install codespell
+        run: pip install codespell
+
+      - name: Run spell check
+        run: |
+          codespell --skip="*.lock,target,*.git" \
+                   --ignore-words=.github/codespell-ignore.txt \
+                   README.md docs/ src/ || true
+        continue-on-error: true  # Don't fail on typos, just report

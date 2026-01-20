@@ -1,0 +1,227 @@
+[package]
+name = "oxirs-fuseki"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SPARQL 1.1/1.2 HTTP protocol server with Fuseki-compatible configuration"
+keywords = ["sparql", "http-server", "fuseki", "rdf-server", "semantic-web"]
+categories = ["web-programming", "database", "network-programming"]
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Core dependencies
+scirs2-core = { workspace = true }
+oxirs-core.workspace = true
+oxirs-arq.workspace = true
+oxirs-shacl.workspace = true
+
+# HTTP server framework
+tokio = { version = "1.47", features = ["full"] }
+tokio-util = "0.7"
+hyper = { version = "1.8", features = ["full"] }
+axum = { version = "0.7", features = ["ws", "multipart"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = { version = "0.5", features = ["timeout", "load-shed", "buffer"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "timeout", "compression-gzip", "compression-br", "request-id", "sensitive-headers"] }
+
+# TLS/SSL support
+rustls = { version = "0.23", optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+rustls-pemfile = { version = "2.2", optional = true }
+axum-server = { version = "0.8", features = ["tls-rustls"], optional = true }
+
+# CLI and configuration
+clap = { version = "4.4", features = ["derive", "env"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+serde_urlencoded = "0.7"
+toml = "0.9"
+config = "0.14"
+figment = { version = "0.10", features = ["toml", "yaml", "env"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Hashing
+md5 = "0.8"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }
+tracing-opentelemetry = { version = "0.28", optional = true }
+opentelemetry = { workspace = true, features = ["trace"] }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true, features = ["trace"] }
+
+# Authentication and security
+uuid = { version = "1.19", features = ["v4", "serde"] }
+argon2 = "0.5"
+jsonwebtoken = { version = "9.2", optional = true }
+bcrypt = { version = "0.17", optional = true }
+sha2 = "0.10"
+base64 = "0.22"
+
+# Time and dates
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP utilities
+headers = "0.4"
+mime = "0.3"
+http-body-util = "0.1"
+
+# Metrics and monitoring
+prometheus = { version = "0.13", optional = true }
+axum-prometheus = { version = "0.7", optional = true }
+metrics = "0.23"
+metrics-exporter-prometheus = "0.18"
+
+# Caching
+lru = "0.16"
+moka = { version = "0.12", features = ["future"] }
+
+# Rate limiting and concurrent data structures
+governor = "0.10"
+dashmap = "6.1"
+parking_lot = "0.12"
+
+# Streaming
+rdkafka = { version = "0.37", optional = true }
+async-nats = { version = "0.45", optional = true }
+bytes = { workspace = true }
+brotli = "8.0"
+num_cpus = "1.17"
+
+# Validation
+validator = { version = "0.19", features = ["derive"] }
+
+# Random number generation
+# rand functionality now provided by scirs2-core (use scirs2_core::random)
+
+# Regular expressions for query validation
+regex = "1.12"
+
+# Serialization and encoding
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
+hex = "0.4"
+
+# Additional dependencies for MFA and authentication
+urlencoding = "2.1"
+base32 = "0.5"
+qrcode = "0.14"
+hmac = "0.12"
+sha1 = "0.10"
+flate2 = "1.1"
+
+# OAuth2 and HTTP client
+reqwest = { workspace = true }
+percent-encoding = "2.3"
+url = { version = "2.5", features = ["serde"] }
+
+# HTTP date handling for static assets
+httpdate = "1.0"
+
+# SAML security (optional)
+# xmlsec has compatibility issues with newer OpenSSL - disabled for now
+# samael = { version = "0.0.19", optional = true, default-features = false }
+
+# LDAP authentication
+ldap3 = { version = "0.12", optional = true }
+
+# System utilities
+libc = "0.2"
+sysinfo = "0.33"
+
+# Kubernetes operator support (optional)
+kube = { version = "0.96", default-features = false, features = ["client", "rustls-tls", "runtime", "derive"], optional = true }
+k8s-openapi = { version = "0.23", default-features = false, features = ["v1_31"], optional = true }
+schemars = { version = "0.8", optional = true }
+
+# Async utilities
+futures = "0.3"
+futures-util = "0.3"
+tokio-stream = "0.1"
+async-trait = "0.1"
+
+# GraphQL
+async-graphql = "7.0"
+async-graphql-axum = "7.2"
+
+# OpenAPI
+utoipa = { version = "4.2", features = ["chrono"] }
+utoipa-swagger-ui = { version = "9.0", features = ["axum", "vendored"] }
+
+# DNS resolution for service discovery
+trust-dns-resolver = "0.23"
+
+# X.509 certificate parsing for client authentication
+x509-parser = "0.18"
+der-parser = "10.0"
+ring = "0.17"
+
+# ACME/Let's Encrypt certificate automation (optional)
+instant-acme = { version = "0.8", optional = true }
+
+# Certificate generation for self-signed certs (optional)
+rcgen = { version = "0.14", optional = true }
+
+# File watching for hot reload
+notify = { version = "6.1", optional = true }
+
+# Template engine for admin UI
+askama = { version = "0.12", features = ["with-axum"], optional = true }
+
+# Environment
+dotenv = "0.15"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio-test = "0.4"
+axum-test = "14.10"
+http = { workspace = true }
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3.24"
+rstest = "0.26"
+proptest = "1.7"
+insta = "1.46"
+serial_test = "3.3"
+wiremock = "0.6"
+
+[features]
+default = ["metrics", "auth"]
+metrics = ["prometheus", "axum-prometheus"]
+auth = ["jsonwebtoken", "bcrypt"]
+admin-ui = ["askama"]
+tracing = ["tracing-opentelemetry"]
+rate-limit = []
+tls = ["rustls", "tokio-rustls", "rustls-pemfile", "axum-server"]
+kafka = ["rdkafka"]
+nats = ["async-nats"]
+hot-reload = ["notify"]
+ldap = ["ldap3"]
+saml = []  # SAML authentication support (implementation in progress)
+# saml = [] # Disabled until xmlsec compatibility issues are resolved
+development = ["admin-ui", "tracing"]
+production = ["metrics", "auth", "rate-limit", "tls", "ldap"]
+k8s = ["kube", "k8s-openapi", "schemars"]  # Kubernetes operator support
+acme = ["instant-acme", "rcgen"]  # ACME/Let's Encrypt certificate automation
+memory_management = []  # SciRS2-Core advanced memory leak detection
+
+[package.metadata.docs.rs]
+# Exclude features requiring system libraries not available on docs.rs
+features = ["metrics", "auth", "admin-ui", "tracing", "rate-limit", "tls", "hot-reload", "acme"]
+# Exclude: kafka (rdkafka), nats (async-nats has build issues), ldap, k8s (kube/k8s-openapi)
+rustdoc-args = ["--cfg", "docsrs"]
+
+[[bin]]
+name = "oxirs-fuseki"
+path = "src/main.rs"
+

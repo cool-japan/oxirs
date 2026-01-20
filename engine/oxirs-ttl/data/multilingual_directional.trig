@@ -1,0 +1,223 @@
+# Multilingual Knowledge Base with Directional Language Tags (RDF 1.2)
+#
+# This TriG file demonstrates real-world usage of directional language tags
+# for proper text rendering in multilingual applications supporting both
+# LTR (Left-to-Right) and RTL (Right-to-Left) languages.
+#
+# Use case: International e-commerce platform with product descriptions
+# in multiple languages with correct text directionality.
+
+@prefix ex: <http://example.org/shop/> .
+@prefix schema: <http://schema.org/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# ==============================================================================
+# Product Catalog - Default Graph
+# ==============================================================================
+
+ex:product001 a schema:Product ;
+    schema:sku "PROD-001" ;
+    schema:price "49.99" ;
+    schema:currency "USD" .
+
+ex:product002 a schema:Product ;
+    schema:sku "PROD-002" ;
+    schema:price "79.99" ;
+    schema:currency "USD" .
+
+# ==============================================================================
+# English Product Descriptions (LTR)
+# ==============================================================================
+
+ex:englishDescriptions {
+    ex:product001
+        schema:name "Smart LED Bulb"@en--ltr ;
+        schema:description "Energy-efficient smart LED bulb with WiFi connectivity. Compatible with Alexa and Google Home."@en--ltr ;
+        schema:brand "TechHome"@en--ltr .
+
+    ex:product002
+        schema:name "Wireless Charging Pad"@en--ltr ;
+        schema:description "Fast wireless charging pad with Qi certification. Charges your phone up to 50% in 30 minutes."@en--ltr ;
+        schema:brand "ChargeTech"@en--ltr .
+}
+
+# ==============================================================================
+# Arabic Product Descriptions (RTL)
+# ==============================================================================
+
+ex:arabicDescriptions {
+    ex:product001
+        schema:name "لمبة ليد ذكية"@ar--rtl ;
+        schema:description "لمبة ليد ذكية موفرة للطاقة مع اتصال واي فاي. متوافقة مع أليكسا وجوجل هوم."@ar--rtl ;
+        schema:brand "تك هوم"@ar--rtl .
+
+    ex:product002
+        schema:name "شاحن لاسلكي"@ar--rtl ;
+        schema:description "شاحن لاسلكي سريع معتمد من كيو آي. يشحن هاتفك حتى 50% في 30 دقيقة."@ar--rtl ;
+        schema:brand "تشارج تك"@ar--rtl .
+}
+
+# ==============================================================================
+# Hebrew Product Descriptions (RTL)
+# ==============================================================================
+
+ex:hebrewDescriptions {
+    ex:product001
+        schema:name "נורת LED חכמה"@he--rtl ;
+        schema:description "נורת LED חכמה חסכונית באנרגיה עם קישוריות WiFi. תואמת לאלקסה ו-Google Home."@he--rtl ;
+        schema:brand "טכנו-בית"@he--rtl .
+
+    ex:product002
+        schema:name "משטח טעינה אלחוטי"@he--rtl ;
+        schema:description "משטח טעינה אלחוטי מהיר עם אישור Qi. טוען את הטלפון עד 50% ב-30 דקות."@he--rtl ;
+        schema:brand "צ'ארג' טק"@he--rtl .
+}
+
+# ==============================================================================
+# Chinese Product Descriptions (LTR - Simplified)
+# ==============================================================================
+
+ex:chineseDescriptions {
+    ex:product001
+        schema:name "智能LED灯泡"@zh--ltr ;
+        schema:description "节能智能LED灯泡，支持WiFi连接。兼容Alexa和Google Home。"@zh--ltr ;
+        schema:brand "科技家居"@zh--ltr .
+
+    ex:product002
+        schema:name "无线充电板"@zh--ltr ;
+        schema:description "快速无线充电板，Qi认证。30分钟内可将手机充至50%。"@zh--ltr ;
+        schema:brand "充电科技"@zh--ltr .
+}
+
+# ==============================================================================
+# Urdu Product Descriptions (RTL)
+# ==============================================================================
+
+ex:urduDescriptions {
+    ex:product001
+        schema:name "سمارٹ ایل ای ڈی بلب"@ur--rtl ;
+        schema:description "توانائی بچانے والا سمارٹ ایل ای ڈی بلب وائی فائی کنیکٹیویٹی کے ساتھ۔ الیکسا اور گوگل ہوم کے ساتھ مطابقت۔"@ur--rtl ;
+        schema:brand "ٹیک ہوم"@ur--rtl .
+
+    ex:product002
+        schema:name "وائرلیس چارجنگ پیڈ"@ur--rtl ;
+        schema:description "تیز وائرلیس چارجنگ پیڈ کیو آئی سرٹیفکیشن کے ساتھ۔ 30 منٹ میں آپ کے فون کو 50% تک چارج کرتا ہے۔"@ur--rtl ;
+        schema:brand "چارج ٹیک"@ur--rtl .
+}
+
+# ==============================================================================
+# Customer Reviews with RDF-star Metadata
+# ==============================================================================
+
+ex:reviews {
+    # English review
+    << ex:product001 schema:review ex:review001 >>
+        ex:reviewLanguage "en"@en--ltr ;
+        ex:textDirection "ltr" ;
+        ex:reviewedAt "2024-11-15T10:30:00Z" .
+
+    ex:review001
+        schema:reviewBody "Great product! Easy to set up and works perfectly with my smart home system."@en--ltr ;
+        schema:reviewRating 5 ;
+        schema:author "John Smith"@en--ltr .
+
+    # Arabic review
+    << ex:product001 schema:review ex:review002 >>
+        ex:reviewLanguage "ar"@ar--rtl ;
+        ex:textDirection "rtl" ;
+        ex:reviewedAt "2024-11-20T14:45:00Z" .
+
+    ex:review002
+        schema:reviewBody "منتج رائع! سهل الاستخدام ويعمل بشكل مثالي مع نظام المنزل الذكي."@ar--rtl ;
+        schema:reviewRating 5 ;
+        schema:author "أحمد محمد"@ar--rtl .
+
+    # Hebrew review
+    << ex:product002 schema:review ex:review003 >>
+        ex:reviewLanguage "he"@he--rtl ;
+        ex:textDirection "rtl" ;
+        ex:reviewedAt "2024-11-25T09:15:00Z" .
+
+    ex:review003
+        schema:reviewBody "טעינה מהירה ואמינה. ממליץ בחום!"@he--rtl ;
+        schema:reviewRating 4 ;
+        schema:author "דוד כהן"@he--rtl .
+}
+
+# ==============================================================================
+# UI Display Preferences with Directional Metadata
+# ==============================================================================
+
+ex:uiPreferences {
+    # Language-specific UI layout settings using RDF-star
+    << ex:englishDescriptions ex:defaultLanguage "en" >>
+        ex:textAlignment "left" ;
+        ex:readingDirection "ltr" ;
+        ex:fontFamily "Arial, sans-serif" .
+
+    << ex:arabicDescriptions ex:defaultLanguage "ar" >>
+        ex:textAlignment "right" ;
+        ex:readingDirection "rtl" ;
+        ex:fontFamily "Arial, 'Traditional Arabic', sans-serif" .
+
+    << ex:hebrewDescriptions ex:defaultLanguage "he" >>
+        ex:textAlignment "right" ;
+        ex:readingDirection "rtl" ;
+        ex:fontFamily "Arial, 'David', sans-serif" .
+
+    << ex:chineseDescriptions ex:defaultLanguage "zh" >>
+        ex:textAlignment "left" ;
+        ex:readingDirection "ltr" ;
+        ex:fontFamily "'Microsoft YaHei', SimSun, sans-serif" .
+
+    << ex:urduDescriptions ex:defaultLanguage "ur" >>
+        ex:textAlignment "right" ;
+        ex:readingDirection "rtl" ;
+        ex:fontFamily "Arial, 'Noto Nastaliq Urdu', sans-serif" .
+}
+
+# ==============================================================================
+# Search Keywords with Language and Direction
+# ==============================================================================
+
+ex:searchKeywords {
+    ex:product001
+        ex:keyword "smart bulb"@en--ltr ;
+        ex:keyword "LED"@en--ltr ;
+        ex:keyword "لمبة ذكية"@ar--rtl ;
+        ex:keyword "نורת חכמה"@he--rtl ;
+        ex:keyword "智能灯泡"@zh--ltr .
+
+    ex:product002
+        ex:keyword "wireless charger"@en--ltr ;
+        ex:keyword "fast charging"@en--ltr ;
+        ex:keyword "شاحن لاسلكي"@ar--rtl ;
+        ex:keyword "טעינה אלחוטית"@he--rtl ;
+        ex:keyword "无线充电"@zh--ltr .
+}
+
+# ==============================================================================
+# Localization Metadata with RDF-star
+# ==============================================================================
+
+ex:localizationMeta {
+    # Track translation quality and freshness
+    << ex:product001 schema:name "Smart LED Bulb"@en--ltr >>
+        ex:translationSource "Original" ;
+        ex:translationQuality "100%" ;
+        ex:lastUpdated "2024-10-01" .
+
+    << ex:product001 schema:name "لمبة ليد ذكية"@ar--rtl >>
+        ex:translationSource "Professional Translation" ;
+        ex:translationQuality "95%" ;
+        ex:translator ex:translator_ar_001 ;
+        ex:lastUpdated "2024-10-15" ;
+        ex:reviewedBy ex:native_speaker_ar_002 .
+
+    << ex:product001 schema:name "נורת LED חכמה"@he--rtl >>
+        ex:translationSource "Professional Translation" ;
+        ex:translationQuality "93%" ;
+        ex:translator ex:translator_he_001 ;
+        ex:lastUpdated "2024-10-20" ;
+        ex:culturalAdaptation "Adjusted terminology for Israeli market" .
+}

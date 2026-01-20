@@ -1,0 +1,28 @@
+# Generated from SAMM Aspect Model: {{ aspect_name }}
+# Namespace: {{ namespace }}
+# Generated at: {{ generation_timestamp | default(value="") }}
+
+{% if properties %}
+type {{ aspect_name | pascal_case }} {
+{% for property in properties %}
+  {{ property.name | camel_case }}: {{ property.data_type | xsd_to_type(target="graphql") }}{% if not property.optional %}!{% endif %}
+{% endfor %}
+}
+
+input {{ aspect_name | pascal_case }}Input {
+{% for property in properties %}
+  {{ property.name | camel_case }}: {{ property.data_type | xsd_to_type(target="graphql") }}{% if not property.optional %}!{% endif %}
+{% endfor %}
+}
+
+extend type Query {
+  {{ aspect_name | camel_case }}(id: ID!): {{ aspect_name | pascal_case }}
+  {{ aspect_name | camel_case }}List(limit: Int, offset: Int): [{{ aspect_name | pascal_case }}!]!
+}
+
+extend type Mutation {
+  create{{ aspect_name | pascal_case }}(input: {{ aspect_name | pascal_case }}Input!): {{ aspect_name | pascal_case }}!
+  update{{ aspect_name | pascal_case }}(id: ID!, input: {{ aspect_name | pascal_case }}Input!): {{ aspect_name | pascal_case }}!
+  delete{{ aspect_name | pascal_case }}(id: ID!): Boolean!
+}
+{% endif %}

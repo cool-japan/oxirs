@@ -1,0 +1,52 @@
+---
+# Common role default variables
+
+common_packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - net-tools
+  - unzip
+  - tar
+  - build-essential
+  - python3
+  - python3-pip
+
+ntp_package: "{{ 'chrony' if ansible_os_family == 'RedHat' else 'ntp' }}"
+ntp_service: "{{ 'chronyd' if ansible_os_family == 'RedHat' else 'ntp' }}"
+
+system_timezone: UTC
+
+system_limits:
+  - domain: '*'
+    type: soft
+    item: nofile
+    value: 65536
+  - domain: '*'
+    type: hard
+    item: nofile
+    value: 65536
+  - domain: '*'
+    type: soft
+    item: nproc
+    value: 32768
+  - domain: '*'
+    type: hard
+    item: nproc
+    value: 32768
+
+kernel_parameters:
+  - name: vm.max_map_count
+    value: 262144
+  - name: net.core.somaxconn
+    value: 65535
+  - name: net.ipv4.tcp_max_syn_backlog
+    value: 8192
+  - name: net.ipv4.ip_local_port_range
+    value: "1024 65535"
+  - name: net.ipv4.tcp_tw_reuse
+    value: 1
+  - name: net.ipv4.tcp_fin_timeout
+    value: 30

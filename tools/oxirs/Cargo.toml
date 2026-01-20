@@ -1,0 +1,137 @@
+[package]
+name = "oxirs"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Command-line interface for OxiRS - import, export, migration, and benchmarking tools"
+keywords = ["cli", "sparql", "rdf", "command-line", "semantic-web"]
+categories = ["command-line-utilities", "database", "development-tools"]
+rust-version.workspace = true
+
+[dependencies]
+scirs2-core = { workspace = true }
+# SCIRS2 POLICY: Full use of SciRS2 ecosystem for advanced analytics
+scirs2-graph = { workspace = true }  # Graph algorithms (betweenness, closeness, etc.)
+# scirs2-linalg, scirs2-optimize will be added when needed
+oxirs-core.workspace = true
+oxirs-arq.workspace = true
+oxirs-fuseki.workspace = true
+oxirs-gql.workspace = true
+oxirs-tdb.workspace = true
+oxirs-samm.workspace = true
+
+# Phase D: Industrial Connectivity (0.1.0)
+oxirs-tsdb.workspace = true
+oxirs-modbus.workspace = true
+oxirs-canbus.workspace = true
+clap.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+reqwest.workspace = true  # HTTP client for triplestore migrations
+# rand functionality now provided by scirs2-core (use scirs2_core::random)
+uuid = "1.19"       # UUID generation
+sysinfo = { workspace = true }    # System information
+tempfile = "3.24"    # Temporary file handling
+
+# Enhanced CLI features
+indicatif = "0.18"  # Progress bars
+colored = "2.2"     # Colored output
+prettytable-rs = "0.10"  # Table formatting
+rustyline = "17.0"  # Interactive mode
+rustyline-derive = "0.11"  # Helper derive macros
+strsim = "0.11"     # String similarity for suggestions
+atty = "0.2"        # Terminal detection
+regex = "1.12"      # Pattern matching for validation
+once_cell = "1.21"  # Lazy static initialization
+url = "2.5"         # URL parsing and validation
+dirs = "6.0"        # Platform-specific directories
+clap_complete = "4.4"  # Shell completion support
+textwrap = "0.16"   # Text wrapping for help
+unicode-width = "0.2"  # Unicode text width
+terminal_size = "0.4"  # Terminal dimensions
+shlex = "1.3"       # Shell-like parsing
+ring = "0.17"       # Cryptography for secrets
+aes-gcm = "0.10"    # AES-256-GCM encryption for backups
+argon2 = "0.5"      # Argon2 key derivation for backup encryption
+chrono = { version = "0.4", features = ["serde"] }  # Date/time handling
+dialoguer = "0.12"  # Interactive prompts
+flate2 = "1.1"      # Gzip compression/decompression
+hostname = "0.4"    # System hostname for test reports
+md5 = "0.8"         # MD5 hashing for checkpoint filenames
+hex = "0.4"         # Hex encoding for checksums
+rust_xlsxwriter = "0.79"  # Excel XLSX file generation
+inferno = "0.11"    # Flame graph generation for profiling
+printpdf = "0.8"    # PDF generation for reports
+handlebars = "5.1"  # Template engine for custom output formats
+
+[dev-dependencies]
+criterion.workspace = true
+tokio-test = "0.4"
+
+[features]
+default = []
+all-features = [
+    "star",
+    "ai",
+    "cluster",
+    "text",
+    "geo",
+    "vec"
+]
+star = ["oxirs-star"]
+ai = ["oxirs-chat"] # oxirs-embed temporarily disabled
+cluster = ["oxirs-cluster"]
+text = ["tantivy"]
+geo = []
+vec = ["oxirs-vec"]
+
+[dependencies.oxirs-star]
+workspace = true
+optional = true
+
+# [dependencies.oxirs-embed] # Temporarily disabled
+# workspace = true
+# optional = true
+
+[dependencies.oxirs-chat]
+workspace = true
+optional = true
+
+[dependencies.oxirs-cluster]
+workspace = true
+optional = true
+
+[dependencies.oxirs-vec]
+workspace = true
+optional = true
+
+[dependencies.tantivy]
+workspace = true
+optional = true
+
+[package.metadata.docs.rs]
+# Use minimal features for docs.rs build (avoid features with system dependencies)
+features = ["star", "geo"]
+# Exclude: ai (complex), cluster (lmdb), text (tantivy build issues), vec
+rustdoc-args = ["--cfg", "docsrs"]
+
+[[bin]]
+name = "oxirs"
+path = "src/main.rs"
+
+[[bench]]
+name = "cli_performance"
+harness = false
+
+[[bench]]
+name = "cli_enhancements"
+harness = false

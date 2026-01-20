@@ -1,0 +1,40 @@
+---
+# Global variables for all hosts
+
+# OxiRS Fuseki configuration
+oxirs_version: "0.1.0-beta.2"
+oxirs_user: "oxirs"
+oxirs_group: "oxirs"
+
+# Installation paths
+oxirs_install_dir: "/opt/oxirs-fuseki"
+oxirs_data_dir: "/var/lib/oxirs-fuseki"
+oxirs_log_dir: "/var/log/oxirs-fuseki"
+oxirs_config_dir: "/etc/oxirs-fuseki"
+
+# Network configuration
+oxirs_http_port: 3030
+oxirs_https_port: 3031
+
+# Feature flags
+enable_tls: false
+enable_metrics: true
+enable_auth: false
+enable_clustering: false
+
+# Performance tuning
+max_memory: "4096m"
+max_threads: 4
+log_level: "info"
+
+# Installation method
+install_from_source: false
+
+# Security
+configure_firewall: true
+harden_ssh: true
+auto_security_updates: true
+
+# Monitoring
+enable_cron_monitoring: true
+enable_alerting: false

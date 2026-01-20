@@ -1,0 +1,276 @@
+# OxiRS Configuration with IDS (International Data Spaces) Connector
+#
+# This configuration file demonstrates how to run OxiRS Fuseki with IDS support
+# for participating in data sovereignty ecosystems like Catena-X and Gaia-X.
+#
+# IDS Features:
+# - ODRL 2.2 policy enforcement
+# - Contract negotiation
+# - Data lineage tracking (W3C PROV-O)
+# - GDPR compliance checking
+# - Gaia-X Trust Framework integration
+# - IDS Metadata Broker connectivity
+
+[server]
+port = 3030
+host = "0.0.0.0"
+admin_ui = true
+cors = true
+max_connections = 1000
+request_timeout_secs = 60
+graceful_shutdown_timeout_secs = 30
+
+# TLS configuration (required for production IDS deployments)
+[server.tls]
+cert_path = "/path/to/connector.crt"
+key_path = "/path/to/connector.key"
+require_client_cert = false
+# ca_cert_path = "/path/to/ca.crt"  # For mTLS
+
+[security]
+auth_required = true
+
+# JWT authentication for API access
+[security.jwt]
+secret = "your-jwt-secret-key-change-this-in-production"
+issuer = "oxirs-fuseki"
+audience = "oxirs-api"
+expiration_secs = 3600
+
+# CORS configuration
+[security.cors]
+enabled = true
+allow_origins = ["*"]
+allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+allow_headers = ["*"]
+allow_credentials = false
+max_age_secs = 3600
+
+# Session configuration
+[security.session]
+secret = "your-session-secret-change-this-in-production"
+timeout_secs = 3600
+secure = true  # Requires HTTPS
+http_only = true
+same_site = "strict"
+
+[security.authentication]
+enabled = true
+
+# User authentication (example users)
+[[security.users]]
+username = "admin"
+password_hash = "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHQ$..."  # Change this
+roles = ["admin", "ids_provider", "ids_consumer"]
+
+[[security.users]]
+username = "ids_user"
+password_hash = "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHQ$..."  # Change this
+roles = ["ids_consumer"]
+
+# Monitoring and metrics
+[monitoring]
+enabled = true
+prometheus_port = 9090
+
+[monitoring.opentelemetry]
+enabled = true
+endpoint = "http://localhost:4317"
+service_name = "oxirs-fuseki-ids"
+service_version = "0.1.0"
+
+[logging]
+level = "info"
+format = "json"
+
+[performance]
+max_query_complexity = 1000
+query_timeout_secs = 30
+max_result_size_mb = 100
+enable_query_caching = true
+
+# HTTP/2 and HTTP/3 configuration
+[http_protocol]
+http2_enabled = true
+http3_enabled = false  # Experimental
+http2_initial_connection_window_size = 1048576  # 1MB
+http2_initial_stream_window_size = 262144  # 256KB
+http2_max_concurrent_streams = 100
+http2_max_frame_size = 16384  # 16KB
+http2_keep_alive_interval_secs = 60
+http2_keep_alive_timeout_secs = 20
+enable_server_push = false
+enable_header_compression = true
+sparql_optimized = true
+
+# Dataset configuration
+[datasets.default]
+type = "memory"  # or "persistent"
+# storage_path = "/data/oxirs/tdb"  # For persistent storage
+
+# IDS-specific dataset for data sovereignty metadata
+[datasets.ids_metadata]
+type = "memory"
+description = "IDS metadata catalog, contracts, and lineage"
+
+# ========== IDS (International Data Spaces) Configuration ==========
+#
+# The IDS connector is automatically initialized when oxirs-fuseki starts.
+# The following settings would be configured if full IDS configuration
+# support is added to ServerConfig in the future.
+#
+# Current implementation uses defaults from IdsConnectorConfig:
+# - connector_id: "urn:ids:connector:oxirs"
+# - title: "OxiRS IDS Connector"
+# - security_profile: TrustSecurityProfile
+# - daps_url: "https://daps.aisec.fraunhofer.de"
+# - broker_urls: ["https://broker.ids.isst.fraunhofer.de"]
+#
+# IDS API Endpoints (automatically mounted at /api/ids):
+# - GET    /api/ids/connector                    - Connector information
+# - GET    /api/ids/catalog                      - Resource catalog
+# - POST   /api/ids/catalog/resources            - Add resource
+# - GET    /api/ids/catalog/resources/:id        - Get resource
+# - DELETE /api/ids/catalog/resources/:id        - Remove resource
+# - GET    /api/ids/contracts                    - List contracts
+# - POST   /api/ids/contracts                    - Initiate negotiation
+# - GET    /api/ids/contracts/:id                - Get contract
+# - POST   /api/ids/contracts/:id/accept         - Accept contract
+# - POST   /api/ids/contracts/:id/reject         - Reject contract
+# - POST   /api/ids/contracts/:id/terminate      - Terminate contract
+# - GET    /api/ids/transfers                    - List transfers
+# - POST   /api/ids/transfers                    - Initiate transfer
+# - POST   /api/ids/policy/evaluate              - Evaluate ODRL policy
+# - POST   /api/ids/broker/register              - Register with broker
+# - POST   /api/ids/broker/publish               - Publish resource
+# - POST   /api/ids/broker/query                 - Query broker catalog
+#
+# ========== Future IDS Configuration (Planned) ==========
+#
+# [ids]
+# enabled = true
+# connector_id = "urn:ids:connector:oxirs:production001"
+# title = "OxiRS Production IDS Connector"
+# description = "Semantic Web Data Space Connector for Enterprise"
+# curator = "https://your-organization.com"
+# maintainer = "https://your-organization.com"
+#
+# # Security profile: BaseSecurityProfile | TrustSecurityProfile | TrustPlusSecurityProfile
+# security_profile = "TrustSecurityProfile"
+#
+# # Dynamic Attribute Provisioning Service (DAPS)
+# [ids.daps]
+# url = "https://daps.aisec.fraunhofer.de"
+# client_id = "YOUR_CLIENT_ID"
+# client_cert = "/path/to/daps-client.crt"
+# client_key = "/path/to/daps-client.key"
+# token_cache_ttl_secs = 3600
+#
+# # IDS Metadata Broker
+# [ids.broker]
+# urls = ["https://broker.ids.isst.fraunhofer.de"]
+# auto_register = true
+# auto_publish_resources = true
+# update_interval_secs = 3600
+#
+# # Gaia-X Registry Integration
+# [ids.gaiax]
+# registry_url = "https://registry.gaia-x.eu"
+# participant_id = "YOUR_PARTICIPANT_ID"
+# self_description_path = "/path/to/gaiax-self-description.json"
+# auto_register = true
+#
+# # Data Residency and GDPR Compliance
+# [ids.residency]
+# default_region = "EU"
+# allowed_regions = ["EU", "EEA", "CH"]  # EU, EEA, Switzerland
+# enforce_gdpr = true
+# require_adequacy_decision = true
+#
+# # Supported Transfer Protocols
+# [ids.transfer]
+# protocols = ["HTTPS", "IDSCP2", "S3", "Kafka", "NATS"]
+# default_protocol = "HTTPS"
+#
+# # HTTPS transfer settings
+# [ids.transfer.https]
+# buffer_size = 8192
+# max_retries = 3
+# timeout_secs = 300
+#
+# # Kafka transfer settings
+# [ids.transfer.kafka]
+# bootstrap_servers = ["localhost:9092"]
+# topic_prefix = "ids-transfer"
+#
+# # NATS transfer settings
+# [ids.transfer.nats]
+# url = "nats://localhost:4222"
+# subject_prefix = "ids.transfer"
+#
+# # Usage Control and Policy Enforcement
+# [ids.policy]
+# default_policy = "ALLOW_ALL"  # or "DENY_ALL" or path to ODRL policy
+# strict_mode = true  # Reject requests if policy evaluation fails
+# cache_decisions = true
+# cache_ttl_secs = 300
+#
+# # Data Lineage and Provenance
+# [ids.lineage]
+# enabled = true
+# track_all_transfers = true
+# storage_backend = "sparql"  # or "file"
+# # sparql_endpoint = "http://localhost:3030/ids_metadata/sparql"
+# # file_path = "/data/oxirs/lineage.jsonld"
+
+# ========== Example Usage ==========
+#
+# 1. Start OxiRS with IDS configuration:
+#    cargo run -p oxirs-fuseki -- --config oxirs-ids.toml
+#
+# 2. Check IDS connector status:
+#    curl http://localhost:3030/api/ids/connector
+#
+# 3. Add a resource to the catalog:
+#    curl -X POST http://localhost:3030/api/ids/catalog/resources \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "id": "urn:ids:resource:semantic-knowledge-base",
+#        "title": "Semantic Knowledge Base",
+#        "description": "RDF data for enterprise knowledge graph",
+#        "keywords": ["rdf", "knowledge graph", "semantic web"]
+#      }'
+#
+# 4. Initiate a contract negotiation:
+#    curl -X POST http://localhost:3030/api/ids/contracts \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "providerId": "urn:ids:connector:provider",
+#        "assetId": "urn:ids:resource:semantic-knowledge-base",
+#        "consumer": {
+#          "id": "urn:ids:connector:consumer",
+#          "name": "Consumer Organization"
+#        }
+#      }'
+#
+# 5. Evaluate an ODRL policy:
+#    curl -X POST http://localhost:3030/api/ids/policy/evaluate \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "policyUri": "urn:ids:policy:allow-internal-use",
+#        "action": "USE",
+#        "resource": "urn:ids:resource:semantic-knowledge-base"
+#      }'
+#
+# ========== IDSA Certification ==========
+#
+# For IDSA certification, refer to:
+# - IDS_CERTIFICATION_GUIDE.md
+# - https://internationaldataspaces.org/certification/
+#
+# Required steps:
+# 1. Configure DAPS authentication
+# 2. Register with IDS Metadata Broker
+# 3. Implement required security profile
+# 4. Pass IDSA conformance tests
+# 5. External security audit

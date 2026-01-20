@@ -1,0 +1,33 @@
+# OxiRS Build Configuration
+#
+# This configuration prevents duplicate library linking issues when building
+# with dependencies that use BLAS/LAPACK (scirs2-core, scirs2-linalg).
+#
+# The issue: Multiple transitive dependencies (ndarray-linalg, blas-src, cblas-sys)
+# each add -lopenblas to linker flags, causing 300+ duplicate flags and linker failure.
+#
+# Solution: Use system Accelerate framework on macOS (includes optimized BLAS/LAPACK)
+
+[target.aarch64-apple-darwin]
+# Use system Accelerate framework (no explicit openblas needed)
+rustflags = [
+    "-C", "link-arg=-framework",
+    "-C", "link-arg=Accelerate"
+]
+
+[target.x86_64-apple-darwin]
+# Use system Accelerate framework (no explicit openblas needed)
+rustflags = [
+    "-C", "link-arg=-framework",
+    "-C", "link-arg=Accelerate"
+]
+
+[target.x86_64-unknown-linux-gnu]
+# Linux: Use system OpenBLAS/LAPACK (but only link once)
+rustflags = []
+
+# Environment variables to control BLAS backend selection
+[env]
+# Use system libraries (not source builds)
+LAPACK_SRC = "system"
+BLAS_SRC = "system"

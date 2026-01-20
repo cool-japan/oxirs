@@ -1,0 +1,239 @@
+//! SPARQL query tests
+
+use oxirs_core::model::*;
+use oxirs_core::query::*;
+use oxirs_core::plan::QueryPlanner;
+use oxirs_core::execution::QueryExecutor;
+use oxirs_core::store::Store;
+
+#[cfg(test)]
+mod parser_tests {
+    use super::*;
+    
+    #[test]
+    fn test_simple_select_parsing() {
+        let parser = SparqlParser::new();
+        let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
+        
+        let result = parser.parse_query(query_str);
+        assert!(result.is_ok());
+        
+        let query = result.unwrap();
+        match query.form {
+            QueryForm::Select { variables, .. } => {
+                assert!(matches!(variables, SelectVariables::Specific(_)));
+            }
+            _ => panic!("Expected SELECT query"),
+        }
+    }
+    
+    #[test]
+    fn test_select_all_parsing() {
+        let parser = SparqlParser::new();
+        let query_str = "SELECT * WHERE { ?s ?p ?o . }";
+        
+        let result = parser.parse_query(query_str);
+        assert!(result.is_ok());
+        
+        let query = result.unwrap();
+        match query.form {
+            QueryForm::Select { variables, .. } => {
+                assert!(matches!(variables, SelectVariables::All));
+            }
+            _ => panic!("Expected SELECT query"),
+        }
+    }
+    
+    #[test]
+    fn test_ask_query_parsing() {
+        let parser = SparqlParser::new();
+        let query_str = "ASK WHERE { ?s ?p ?o . }";
+        
+        let result = parser.parse_query(query_str);
+        assert!(result.is_ok());
+        
+        let query = result.unwrap();
+        assert!(matches!(query.form, QueryForm::Ask { .. }));
+    }
+    
+    #[test]
+    fn test_prefix_parsing() {
+        let parser = SparqlParser::new()
+            .with_prefix("ex", "http://example.org/")
+            .unwrap();
+        
+        let query_str = "SELECT ?s WHERE { ex:subject ?p ?o . }";
+        
+        let result = parser.parse_query(query_str);
+        assert!(result.is_ok());
+    }
+}
+
+#[cfg(test)]
+mod execution_tests {
+    use super::*;
+    use oxirs_core::query::plan::{QueryPlanner, ExecutionPlan};
+    use oxirs_core::query::exec::{QueryExecutor, Solution};
+    
+    #[test]
+    fn test_simple_query_execution() {
+        // Create a store with some test data
+        let mut store = Store::new().unwrap();
+        
+        // Add some test triples
+        let s1 = NamedNode::new("http://example.org/subject1").unwrap();
+        let s2 = NamedNode::new("http://example.org/subject2").unwrap();
+        let p = NamedNode::new("http://example.org/predicate").unwrap();
+        let o1 = Literal::new("value1");
+        let o2 = Literal::new("value2");
+        
+        store.insert_triple(Triple::new(s1.clone(), p.clone(), o1.clone())).unwrap();
+        store.insert_triple(Triple::new(s2.clone(), p.clone(), o2.clone())).unwrap();
+        
+        // Parse a query
+        let parser = SparqlParser::new();
+        let query_str = "SELECT ?s ?o WHERE { ?s <http://example.org/predicate> ?o . }";
+        let query = parser.parse_query(query_str).unwrap();
+        
+        // Plan the query
+        let planner = QueryPlanner::new();
+        let plan = planner.plan_query(&query).unwrap();
+        
+        // Execute the query
+        let executor = QueryExecutor::new(&store);
+        let solutions = executor.execute(&plan).unwrap();
+        
+        // Check results
+        assert_eq!(solutions.len(), 2);
+        
+        // Verify that we got the expected bindings
+        let mut found_s1 = false;
+        let mut found_s2 = false;
+        
+        for solution in &solutions {
+            if let Some(Term::NamedNode(n)) = solution.get(&Variable::new("s").unwrap()) {
+                if n.as_str() == "http://example.org/subject1" {
+                    found_s1 = true;
+                    if let Some(Term::Literal(l)) = solution.get(&Variable::new("o").unwrap()) {
+                        assert_eq!(l.value(), "value1");
+                    }
+                } else if n.as_str() == "http://example.org/subject2" {
+                    found_s2 = true;
+                    if let Some(Term::Literal(l)) = solution.get(&Variable::new("o").unwrap()) {
+                        assert_eq!(l.value(), "value2");
+                    }
+                }
+            }
+        }
+        
+        assert!(found_s1 && found_s2);
+    }
+    
+    #[test]
+    fn test_query_with_literal_match() {
+        let mut store = Store::new().unwrap();
+        
+        // Add test data
+        let s = NamedNode::new("http://example.org/s").unwrap();
+        let p = NamedNode::new("http://example.org/p").unwrap();
+        let o = Literal::new("test");
+        
+        store.insert_triple(Triple::new(s, p, o)).unwrap();
+        
+        // Query for specific literal
+        let parser = SparqlParser::new();
+        let query_str = r#"SELECT ?s WHERE { ?s ?p "test" . }"#;
+        let query = parser.parse_query(query_str).unwrap();
+        
+        let planner = QueryPlanner::new();
+        let plan = planner.plan_query(&query).unwrap();
+        
+        let executor = QueryExecutor::new(&store);
+        let solutions = executor.execute(&plan).unwrap();
+        
+        assert_eq!(solutions.len(), 1);
+    }
+    
+    #[test]
+    fn test_empty_result_query() {
+        let mut store = Store::new().unwrap();
+        
+        // Query empty store
+        let parser = SparqlParser::new();
+        let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
+        let query = parser.parse_query(query_str).unwrap();
+        
+        let planner = QueryPlanner::new();
+        let plan = planner.plan_query(&query).unwrap();
+        
+        let executor = QueryExecutor::new(&store);
+        let solutions = executor.execute(&plan).unwrap();
+        
+        assert_eq!(solutions.len(), 0);
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    
+    #[test]
+    fn test_end_to_end_sparql_workflow() {
+        // Create store and load data
+        let mut store = Store::new().unwrap();
+        
+        // Create some RDF data about books
+        let book1 = NamedNode::new("http://example.org/book1").unwrap();
+        let book2 = NamedNode::new("http://example.org/book2").unwrap();
+        let title = NamedNode::new("http://example.org/title").unwrap();
+        let author = NamedNode::new("http://example.org/author").unwrap();
+        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+        let book_class = NamedNode::new("http://example.org/Book").unwrap();
+        
+        // Insert data
+        store.insert_triple(Triple::new(book1.clone(), rdf_type.clone(), book_class.clone())).unwrap();
+        store.insert_triple(Triple::new(book1.clone(), title.clone(), Literal::new("The Rust Programming Language"))).unwrap();
+        store.insert_triple(Triple::new(book1.clone(), author.clone(), Literal::new("Steve Klabnik"))).unwrap();
+        
+        store.insert_triple(Triple::new(book2.clone(), rdf_type.clone(), book_class.clone())).unwrap();
+        store.insert_triple(Triple::new(book2.clone(), title.clone(), Literal::new("Programming Rust"))).unwrap();
+        store.insert_triple(Triple::new(book2.clone(), author.clone(), Literal::new("Jim Blandy"))).unwrap();
+        
+        // Query for all books and their titles
+        let parser = SparqlParser::new()
+            .with_prefix("ex", "http://example.org/")
+            .unwrap();
+        
+        let query_str = r#"
+            SELECT ?book ?title 
+            WHERE { 
+                ?book <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Book> .
+                ?book <http://example.org/title> ?title .
+            }
+        "#;
+        
+        let query = parser.parse_query(query_str).unwrap();
+        let planner = QueryPlanner::new();
+        let plan = planner.plan_query(&query).unwrap();
+        let executor = QueryExecutor::new(&store);
+        let solutions = executor.execute(&plan).unwrap();
+        
+        // Should get 2 results
+        assert_eq!(solutions.len(), 2);
+        
+        // Verify we got both books
+        let titles: Vec<String> = solutions
+            .iter()
+            .filter_map(|sol| {
+                if let Some(Term::Literal(lit)) = sol.get(&Variable::new("title").unwrap()) {
+                    Some(lit.value().to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        assert!(titles.contains(&"The Rust Programming Language".to_string()));
+        assert!(titles.contains(&"Programming Rust".to_string()));
+    }
+}

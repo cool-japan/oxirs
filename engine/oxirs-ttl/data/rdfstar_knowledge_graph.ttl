@@ -1,0 +1,201 @@
+# Real-World RDF-star Knowledge Graph Example
+#
+# This file demonstrates practical uses of RDF-star (RDF 1.2) quoted triples
+# for knowledge graph provenance, metadata annotation, and temporal reasoning.
+#
+# Scenario: A research knowledge graph tracking scientific publications,
+# author relationships, and citation metadata with confidence scores.
+
+@prefix ex: <http://example.org/research/> .
+@prefix schema: <http://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+
+# ==============================================================================
+# Authors and their basic information
+# ==============================================================================
+
+ex:alice <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> foaf:Person ;
+    foaf:name "Alice Chen"@en--ltr ;
+    foaf:name "陈爱丽丝"@zh ;
+    schema:affiliation ex:mitAI .
+
+ex:bob <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> foaf:Person ;
+    foaf:name "Bob Smith"@en--ltr ;
+    foaf:name "بوب سميث"@ar--rtl ;
+    schema:affiliation ex:stanfordNLP .
+
+ex:charlie <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> foaf:Person ;
+    foaf:name "Charlie Brown"@en--ltr ;
+    schema:affiliation ex:oxfordCS .
+
+# ==============================================================================
+# RDF-star: Provenance and confidence for research claims
+# ==============================================================================
+
+# Collaboration fact with provenance metadata
+<< ex:alice foaf:knows ex:bob >>
+    ex:source ex:academicNetwork ;
+    ex:confidence "0.98"^^xsd:decimal ;
+    ex:verifiedAt "2024-05-15T10:30:00Z"^^xsd:dateTime ;
+    ex:verificationMethod "Manual review of conference proceedings" .
+
+<< ex:bob foaf:knows ex:charlie >>
+    ex:source ex:coAuthorshipDatabase ;
+    ex:confidence "0.95"^^xsd:decimal ;
+    ex:verifiedAt "2024-08-22T14:45:00Z"^^xsd:dateTime ;
+    ex:verificationMethod "Automated co-authorship analysis" .
+
+# Research expertise claims with evidence
+<< ex:alice ex:expertise "Machine Learning" >>
+    ex:evidenceType "Publications" ;
+    ex:publicationCount 47 ;
+    ex:citationCount 1284 ;
+    ex:confidence "0.99"^^xsd:decimal .
+
+<< ex:bob ex:expertise "Natural Language Processing" >>
+    ex:evidenceType "Publications" ;
+    ex:publicationCount 32 ;
+    ex:citationCount 892 ;
+    ex:confidence "0.97"^^xsd:decimal .
+
+# ==============================================================================
+# RDF-star: Citation relationships with metadata
+# ==============================================================================
+
+# Papers
+ex:paper1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> schema:ScholarlyArticle ;
+    dc:title "Deep Learning for NLP"@en--ltr ;
+    dc:creator ex:alice, ex:bob ;
+    schema:datePublished "2024-03-15"^^xsd:date .
+
+ex:paper2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> schema:ScholarlyArticle ;
+    dc:title "Transformer Architectures"@en--ltr ;
+    dc:creator ex:bob, ex:charlie ;
+    schema:datePublished "2024-06-20"^^xsd:date .
+
+ex:paper3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> schema:ScholarlyArticle ;
+    dc:title "AI Ethics and Safety"@en--ltr ;
+    dc:creator ex:alice ;
+    schema:datePublished "2024-09-10"^^xsd:date .
+
+# Citation with context
+<< ex:paper3 schema:citation ex:paper1 >>
+    ex:citationContext "Section 2: Related Work" ;
+    ex:citationType "MethodologicalSupport" ;
+    ex:importance "High" ;
+    ex:extractedAt "2024-10-01T09:00:00Z"^^xsd:dateTime .
+
+<< ex:paper2 schema:citation ex:paper1 >>
+    ex:citationContext "Section 4: Comparison with Prior Work" ;
+    ex:citationType "Comparative" ;
+    ex:importance "Medium" ;
+    ex:extractedAt "2024-10-01T09:15:00Z"^^xsd:dateTime .
+
+# ==============================================================================
+# RDF-star: Nested metadata (meta-metadata)
+# ==============================================================================
+
+# Track the verification of provenance itself
+<< << ex:alice foaf:knows ex:bob >> ex:source ex:academicNetwork >>
+    ex:metaVerifiedBy ex:dataQualityTeam ;
+    ex:metaVerifiedAt "2024-11-01T16:20:00Z"^^xsd:dateTime ;
+    ex:qualityScore "0.96"^^xsd:decimal .
+
+# Confidence in the citation extraction process
+<< << ex:paper3 schema:citation ex:paper1 >> ex:citationType "MethodologicalSupport" >>
+    ex:extractionConfidence "0.92"^^xsd:decimal ;
+    ex:extractionMethod "NLP-based citation parsing" ;
+    ex:reviewedBy ex:humanAnnotator1 .
+
+# ==============================================================================
+# RDF-star: Temporal versioning of facts
+# ==============================================================================
+
+# Alice's affiliation changed over time (versioned with RDF-star)
+<< ex:alice schema:affiliation ex:mitAI >>
+    ex:validFrom "2020-09-01"^^xsd:date ;
+    ex:validTo "2024-08-31"^^xsd:date ;
+    ex:status "Historical" .
+
+<< ex:alice schema:affiliation ex:berkeleyAI >>
+    ex:validFrom "2024-09-01"^^xsd:date ;
+    ex:status "Current" .
+
+# Research expertise evolved (versioning with confidence decay)
+<< ex:bob ex:expertise "Natural Language Processing" >>
+    ex:confidenceDecayRate "0.01"^^xsd:decimal ;
+    ex:lastUpdated "2024-12-01"^^xsd:date .
+
+# ==============================================================================
+# RDF-star: Review and rating metadata
+# ==============================================================================
+
+# Paper reviews with quoted triple subjects
+<< ex:paper1 schema:review ex:review1 >>
+    ex:reviewerID "anonymous-reviewer-42" ;
+    ex:reviewScore "8.5"^^xsd:decimal ;
+    ex:reviewDate "2024-02-20"^^xsd:date ;
+    ex:reviewConfidentiality "Anonymous" .
+
+ex:review1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> schema:Review ;
+    schema:reviewBody "Strong empirical results and novel methodology"@en--ltr ;
+    schema:reviewRating 4 .
+
+<< << ex:paper1 schema:review ex:review1 >> ex:reviewScore "8.5"^^xsd:decimal >>
+    ex:metaReviewedBy ex:programChair ;
+    ex:reviewAccepted true ;
+    ex:acceptanceDate "2024-02-25"^^xsd:date .
+
+# ==============================================================================
+# RDF-star: Uncertainty and disagreement
+# ==============================================================================
+
+# Multiple sources with different confidence scores
+<< ex:alice ex:expertise "Computer Vision" >>
+    ex:source ex:source1 ;
+    ex:confidence "0.75"^^xsd:decimal .
+
+<< ex:alice ex:expertise "Computer Vision" >>
+    ex:source ex:source2 ;
+    ex:confidence "0.62"^^xsd:decimal .
+
+# Disagreement metadata
+<< << ex:alice ex:expertise "Computer Vision" >> ex:confidence "0.75"^^xsd:decimal >>
+    ex:disagreementWith << << ex:alice ex:expertise "Computer Vision" >> ex:confidence "0.62"^^xsd:decimal >> ;
+    ex:resolutionMethod "Weighted average" ;
+    ex:finalConfidence "0.69"^^xsd:decimal .
+
+# ==============================================================================
+# RDF-star: Access control and privacy
+# ==============================================================================
+
+# Sensitive information with access control metadata
+<< ex:alice foaf:mbox <mailto:alice@example.org> >>
+    ex:accessLevel "Private" ;
+    ex:allowedRoles ex:AdminRole, ex:OwnerRole ;
+    ex:encryptionRequired true .
+
+<< ex:bob schema:salary "120000"^^xsd:decimal >>
+    ex:accessLevel "Confidential" ;
+    ex:allowedRoles ex:HRRole ;
+    ex:auditRequired true ;
+    ex:lastAccessed "2024-12-01T10:00:00Z"^^xsd:dateTime .
+
+# ==============================================================================
+# RDF-star: Machine learning predictions
+# ==============================================================================
+
+# Predicted collaborations with ML confidence
+<< ex:alice foaf:knows ex:charlie >>
+    ex:predictionType "PotentialCollaboration" ;
+    ex:predictedBy ex:mlModel_v2_3 ;
+    ex:predictionConfidence "0.78"^^xsd:decimal ;
+    ex:recommendationScore "High" ;
+    ex:predictedAt "2024-12-05T08:30:00Z"^^xsd:dateTime .
+
+<< << ex:alice foaf:knows ex:charlie >> ex:predictionConfidence "0.78"^^xsd:decimal >>
+    ex:modelFeatures "shared_topics, citation_network, conference_attendance" ;
+    ex:modelPrecision "0.82"^^xsd:decimal ;
+    ex:modelRecall "0.75"^^xsd:decimal .

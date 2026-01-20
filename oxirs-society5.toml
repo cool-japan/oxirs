@@ -1,0 +1,377 @@
+# OxiRS Configuration for Society 5.0 / Japan Smart Society
+# OxiRS Society 5.0 / 日本スマート社会向け設定
+#
+# このファイルは、Society 5.0（ソサエティ5.0）の実現に向けた
+# 日本のスマートシティ、製造業、医療、農業、防災などの
+# ユースケースに最適化された設定です。
+#
+# This configuration is optimized for Japanese Society 5.0 use cases
+# including smart cities (PLATEAU), manufacturing, healthcare,
+# agriculture, and disaster prevention.
+
+[server]
+port = 3030
+host = "0.0.0.0"
+admin_ui = true
+cors = true
+max_connections = 5000  # High concurrency for smart city sensors
+request_timeout_secs = 60
+graceful_shutdown_timeout_secs = 30
+
+# TLS設定（本番環境では必須）
+# TLS configuration (required for production)
+[server.tls]
+cert_path = "/path/to/server.crt"
+key_path = "/path/to/server.key"
+require_client_cert = false
+
+# セキュリティ設定
+# Security configuration
+[security]
+auth_required = true
+
+# JWT認証（APIアクセス用）
+# JWT authentication for API access
+[security.jwt]
+secret = "${JWT_SECRET}"  # 環境変数から読み込み / From environment variable
+issuer = "oxirs-society5"
+audience = "society5-api"
+expiration_secs = 3600
+
+# CORS設定（PLATEAU連携用）
+# CORS configuration for PLATEAU integration
+[security.cors]
+enabled = true
+allow_origins = [
+    "https://plateau.mlit.go.jp",
+    "https://*.plateau.go.jp",
+    "http://localhost:*"
+]
+allow_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+allow_headers = ["*"]
+allow_credentials = true
+max_age_secs = 3600
+
+# セッション設定
+# Session configuration
+[security.session]
+secret = "${SESSION_SECRET}"
+timeout_secs = 3600
+secure = true
+http_only = true
+same_site = "strict"
+
+[security.authentication]
+enabled = true
+
+# ユーザー認証（例）
+# User authentication examples
+[[security.users]]
+username = "admin"
+password_hash = "${ADMIN_PASSWORD_HASH}"
+roles = ["admin", "plateau", "ids_provider"]
+
+[[security.users]]
+username = "plateau_user"
+password_hash = "${PLATEAU_USER_PASSWORD_HASH}"
+roles = ["plateau", "smart_city"]
+
+[[security.users]]
+username = "factory_iot"
+password_hash = "${FACTORY_PASSWORD_HASH}"
+roles = ["industry40", "modbus"]
+
+# 監視とメトリクス
+# Monitoring and metrics
+[monitoring]
+enabled = true
+prometheus_port = 9090
+
+[monitoring.opentelemetry]
+enabled = true
+endpoint = "http://localhost:4317"
+service_name = "oxirs-society5"
+service_version = "0.1.0"
+# 日本リージョンのトレース送信先
+# Trace endpoint for Japan region
+# endpoint = "https://trace.ap-northeast-1.amazonaws.com"
+
+# ログ設定（日本語対応）
+# Logging configuration with Japanese support
+[logging]
+level = "info"
+format = "json"
+# 日本語ログのエンコーディング: UTF-8
+# Japanese log encoding: UTF-8
+
+# パフォーマンス設定（大規模IoT用）
+# Performance settings for large-scale IoT
+[performance]
+max_query_complexity = 2000  # PLATEAUの複雑なクエリ対応
+query_timeout_secs = 60      # 長時間クエリ許可
+max_result_size_mb = 200     # 大容量結果セット
+enable_query_caching = true  # キャッシュ有効化
+
+[performance.rate_limiting]
+enabled = true
+requests_per_minute = 10000  # 高スループット
+burst_size = 1000
+
+# HTTP/2設定（高速通信）
+# HTTP/2 configuration for high-speed communication
+[http_protocol]
+http2_enabled = true
+http3_enabled = false
+http2_initial_connection_window_size = 2097152  # 2MB
+http2_initial_stream_window_size = 524288       # 512KB
+http2_max_concurrent_streams = 200
+http2_max_frame_size = 16384
+http2_keep_alive_interval_secs = 60
+http2_keep_alive_timeout_secs = 20
+enable_server_push = true    # PLATEAU用プッシュ有効化
+enable_header_compression = true
+sparql_optimized = true
+
+# データセット設定
+# Dataset configuration
+[datasets.default]
+type = "persistent"
+storage_path = "/data/oxirs/society5/default"
+description = "Society 5.0 デフォルトデータセット"
+
+# PLATEAU 3D都市モデル用データセット
+# Dataset for PLATEAU 3D city models
+[datasets.plateau_tokyo]
+type = "persistent"
+storage_path = "/data/oxirs/society5/plateau/tokyo"
+description = "PLATEAU 東京都 3D都市モデル"
+
+[datasets.plateau_osaka]
+type = "persistent"
+storage_path = "/data/oxirs/society5/plateau/osaka"
+description = "PLATEAU 大阪府 3D都市モデル"
+
+# スマートシティセンサーデータ（時系列）
+# Smart city sensor data (time-series)
+[datasets.smart_city_sensors]
+type = "persistent"
+storage_path = "/data/oxirs/society5/sensors"
+description = "スマートシティセンサーデータ（IoT）"
+
+# 製造業デジタルツイン
+# Manufacturing digital twin
+[datasets.factory_digital_twin]
+type = "persistent"
+storage_path = "/data/oxirs/society5/factory"
+description = "工場デジタルツイン（Modbus/OPC UA）"
+
+# 医療データ（高セキュリティ）
+# Healthcare data (high security)
+[datasets.healthcare_phr]
+type = "persistent"
+storage_path = "/data/oxirs/society5/healthcare"
+description = "個人健康記録（PHR）"
+
+# 農業スマートファーム
+# Smart farming agriculture
+[datasets.agriculture]
+type = "persistent"
+storage_path = "/data/oxirs/society5/agriculture"
+description = "スマート農業データ"
+
+# 防災・気象データ
+# Disaster prevention and weather data
+[datasets.disaster_prevention]
+type = "persistent"
+storage_path = "/data/oxirs/society5/disaster"
+description = "防災・気象観測データ"
+
+# ========== Society 5.0 固有設定 / Society 5.0 Specific Configuration ==========
+
+# PLATEAU統合設定（将来の拡張用）
+# PLATEAU integration settings (for future extensions)
+#
+# [plateau]
+# enabled = true
+# api_endpoint = "https://api.plateau.mlit.go.jp"
+# api_key = "${PLATEAU_API_KEY}"
+# cities = ["tokyo", "osaka", "yokohama", "nagoya", "fukuoka"]
+# 3d_tiles_enabled = true
+# citygml_import = true
+
+# NGSI-LD設定（FIWARE互換性）
+# NGSI-LD configuration (FIWARE compatibility)
+#
+# [ngsi_ld]
+# enabled = true
+# context_broker_mode = true
+# default_context = "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
+# temporal_endpoint = "/ngsi-ld/v1/temporal"
+# subscription_endpoint = "/ngsi-ld/v1/subscriptions"
+
+# Modbus統合（工場IoT）
+# Modbus integration for factory IoT
+#
+# [[modbus.devices]]
+# device_id = "factory_plc_001"
+# host = "192.168.1.100"
+# port = 502
+# poll_interval_ms = 1000
+# registers = [
+#   { address = 1000, type = "holding", data_type = "INT16", uri = "vocab:temperature" },
+#   { address = 1002, type = "holding", data_type = "UINT16", uri = "vocab:production_count" }
+# ]
+
+# CANbus統合（自動車テレマティクス）
+# CANbus integration for automotive telematics
+#
+# [[canbus.interfaces]]
+# interface = "can0"
+# baudrate = 500000
+# dbc_file = "/config/automotive_j1939.dbc"
+# rdf_mapping = true
+
+# IDS Connector設定（データ主権）
+# IDS Connector configuration for data sovereignty
+#
+# [ids]
+# enabled = true
+# connector_id = "urn:ids:connector:society5:japan:001"
+# title = "Society 5.0 Japan Data Connector"
+# description = "日本のSociety 5.0データ連携基盤"
+# security_profile = "TrustSecurityProfile"
+#
+# [ids.daps]
+# url = "https://daps.society5.go.jp"  # 日本のDAPS（将来）
+# client_id = "${IDS_CLIENT_ID}"
+# client_cert = "/certs/ids-client.crt"
+# client_key = "/certs/ids-client.key"
+#
+# [ids.residency]
+# default_region = "JP"
+# allowed_regions = ["JP"]  # 日本国内のみ
+# enforce_gdpr = false      # APPI（個人情報保護法）準拠
+# enforce_appi = true       # Act on the Protection of Personal Information
+
+# AI/ML統合
+# AI/ML integration
+#
+# [ai]
+# embeddings_enabled = true
+# embedding_model = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"  # 日本語対応
+# graphrag_enabled = true
+# chat_enabled = true
+# chat_language = "ja"  # 日本語チャット
+
+# 地理空間設定（日本の座標系）
+# Geospatial configuration (Japanese coordinate systems)
+#
+# [geosparql]
+# enabled = true
+# default_crs = "EPSG:6668"  # JGD2011 / Japan Plane Rectangular CS
+# supported_crs = [
+#   "EPSG:4326",  # WGS84
+#   "EPSG:6668",  # JGD2011
+#   "EPSG:6677",  # JGD2011 / Japan Plane Rectangular CS Zone 9 (Tokyo)
+# ]
+
+# WebSocket設定（リアルタイム通知）
+# WebSocket configuration for real-time notifications
+#
+# [websocket]
+# enabled = true
+# max_connections = 10000
+# heartbeat_interval_secs = 30
+# max_message_size_mb = 10
+
+# バックアップ設定
+# Backup configuration
+#
+# [backup]
+# enabled = true
+# schedule = "0 2 * * *"  # 毎日午前2時
+# retention_days = 30
+# storage_path = "/backup/oxirs-society5"
+# compression = "zstd"
+
+# ========== デプロイメント例 / Deployment Examples ==========
+#
+# AWS Tokyo (ap-northeast-1):
+# - EC2: t3.xlarge (4 vCPU, 16 GB RAM)
+# - EBS: gp3 500 GB
+# - ECS Fargate: 2 vCPU, 4 GB RAM
+#
+# Azure Japan East:
+# - VM: Standard_D4s_v3 (4 vCPU, 16 GB RAM)
+# - Managed Disk: Premium SSD 512 GB
+# - AKS: Standard_D2s_v3 nodes
+#
+# オンプレミス / On-premises:
+# - CPU: Intel Xeon / AMD EPYC 8 cores
+# - RAM: 32 GB
+# - Storage: NVMe SSD 1 TB
+# - Network: 10 Gbps
+
+# ========== ユースケース別設定例 / Use Case Configuration Examples ==========
+
+# 1. PLATEAUスマートシティ
+#    - dataset: plateau_tokyo
+#    - NGSI-LD: enabled
+#    - WebSocket: enabled (リアルタイムセンサー)
+
+# 2. コネクテッドファクトリー
+#    - dataset: factory_digital_twin
+#    - Modbus: enabled
+#    - Time-series: enabled
+
+# 3. 医療PHR
+#    - dataset: healthcare_phr
+#    - IDS: enabled (データ主権)
+#    - Encryption: required
+
+# 4. スマート農業
+#    - dataset: agriculture
+#    - Weather API: enabled
+#    - AI prediction: enabled
+
+# 5. 防災システム
+#    - dataset: disaster_prevention
+#    - WebSocket: enabled (緊急通知)
+#    - GeoSPARQL: enabled
+
+# ========== パフォーマンスチューニング / Performance Tuning ==========
+
+# 大規模IoT（10万デバイス以上）
+# Large-scale IoT (100K+ devices)
+# - max_connections: 10000
+# - query_timeout_secs: 120
+# - enable_query_caching: true
+# - http2_max_concurrent_streams: 500
+
+# リアルタイム性重視
+# Real-time priority
+# - poll_interval_ms: 100
+# - websocket_heartbeat: 5
+# - query_timeout_secs: 5
+
+# データ量重視（ビッグデータ）
+# Data volume priority (big data)
+# - max_result_size_mb: 500
+# - compression: true
+# - batch_size: 10000
+
+# ========== サポート / Support ==========
+#
+# 技術サポート / Technical Support:
+# - GitHub: https://github.com/cool-japan/oxirs
+# - Email: info@cooljapan.eu
+#
+# Society 5.0関連:
+# - 内閣府 Society 5.0: https://www8.cao.go.jp/cstp/society5_0/
+# - デジタル庁: https://www.digital.go.jp/
+# - PLATEAU: https://www.mlit.go.jp/plateau/
+#
+# 標準規格:
+# - ETSI NGSI-LD: https://www.etsi.org/committee/cim
+# - FIWARE: https://www.fiware.org/
+# - W3C Semantic Web: https://www.w3.org/standards/semanticweb/

@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 6aebb525c3628f8ba14af4cda1bd38d53d148933c89d4da12b583be6be6a1359 # shrinks to geom = Geometry { geom: POINT(0.0 0.0), crs: Crs { uri: "http://www.opengis.net/def/crs/OGC/1.3/CRS84" } }
+cc d9ec1d845a9f6af005cc125fe2f37207535aad5c805b90fdb1a8f4823798304b # shrinks to num_polygons = 2, coords_per_poly = 3

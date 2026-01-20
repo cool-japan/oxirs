@@ -1,0 +1,163 @@
+use crate::model::literal::LanguageTagParseError;
+use oxiri::IriParseError;
+// Note: EncodingError has been moved in newer versions of quick-xml
+use quick_xml::encoding::EncodingError;
+use quick_xml::escape::EscapeError;
+use quick_xml::events::attributes::AttrError;
+use std::io;
+use std::str::Utf8Error;
+use std::sync::Arc;
+
+/// Error returned during RDF/XML parsing.
+#[derive(Debug, thiserror::Error)]
+pub enum RdfXmlParseError {
+    /// I/O error during parsing (file not found...).
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    /// An error in the file syntax.
+    #[error(transparent)]
+    Syntax(#[from] RdfXmlSyntaxError),
+    /// XML error during parsing.
+    #[error("XML error: {0}")]
+    XmlError(String),
+    /// Undefined prefix error.
+    #[error("Undefined prefix: {0}")]
+    UndefinedPrefix(String),
+    /// Invalid parse type error.
+    #[error("Invalid parse type: {0}")]
+    InvalidParseType(String),
+}
+
+impl From<RdfXmlParseError> for io::Error {
+    #[inline]
+    fn from(error: RdfXmlParseError) -> Self {
+        match error {
+            RdfXmlParseError::Io(error) => error,
+            RdfXmlParseError::Syntax(error) => error.into(),
+            RdfXmlParseError::XmlError(msg) => Self::new(io::ErrorKind::InvalidData, msg),
+            RdfXmlParseError::UndefinedPrefix(msg) => Self::new(
+                io::ErrorKind::InvalidData,
+                format!("Undefined prefix: {msg}"),
+            ),
+            RdfXmlParseError::InvalidParseType(msg) => Self::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid parse type: {msg}"),
+            ),
+        }
+    }
+}
+
+#[doc(hidden)]
+impl From<quick_xml::Error> for RdfXmlParseError {
+    #[inline]
+    fn from(error: quick_xml::Error) -> Self {
+        match error {
+            quick_xml::Error::Io(error) => {
+                Self::Io(Arc::try_unwrap(error).unwrap_or_else(|e| io::Error::new(e.kind(), e)))
+            }
+            _ => Self::Syntax(RdfXmlSyntaxError(SyntaxErrorKind::Xml(error))),
+        }
+    }
+}
+
+// EncodingError integration for quick-xml 0.37+
+#[doc(hidden)]
+impl From<EncodingError> for RdfXmlParseError {
+    fn from(error: EncodingError) -> Self {
+        Self::Syntax(RdfXmlSyntaxError::msg(error.to_string()))
+    }
+}
+
+#[doc(hidden)]
+impl From<AttrError> for RdfXmlParseError {
+    fn from(error: AttrError) -> Self {
+        quick_xml::Error::from(error).into()
+    }
+}
+
+impl From<crate::OxirsError> for RdfXmlParseError {
+    fn from(error: crate::OxirsError) -> Self {
+        Self::Syntax(RdfXmlSyntaxError::msg(error.to_string()))
+    }
+}
+
+impl From<IriParseError> for RdfXmlParseError {
+    fn from(error: IriParseError) -> Self {
+        Self::Syntax(RdfXmlSyntaxError(SyntaxErrorKind::InvalidIri {
+            iri: String::new(),
+            error,
+        }))
+    }
+}
+
+// Utf8Error conversion for quick-xml 0.38
+#[doc(hidden)]
+impl From<Utf8Error> for RdfXmlParseError {
+    fn from(error: Utf8Error) -> Self {
+        Self::Syntax(RdfXmlSyntaxError::msg(format!("UTF-8 error: {}", error)))
+    }
+}
+
+// EscapeError conversion for quick-xml 0.38
+#[doc(hidden)]
+impl From<EscapeError> for RdfXmlParseError {
+    fn from(error: EscapeError) -> Self {
+        Self::Syntax(RdfXmlSyntaxError::msg(format!("Escape error: {}", error)))
+    }
+}
+
+/// An error in the syntax of the parsed file.
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct RdfXmlSyntaxError(#[from] SyntaxErrorKind);
+
+#[derive(Debug, thiserror::Error)]
+enum SyntaxErrorKind {
+    #[error(transparent)]
+    Xml(#[from] quick_xml::Error),
+    #[error("error while parsing IRI '{iri}': {error}")]
+    InvalidIri {
+        iri: String,
+        #[source]
+        error: IriParseError,
+    },
+    #[error("error while parsing language tag '{tag}': {error}")]
+    InvalidLanguageTag {
+        tag: String,
+        #[source]
+        error: LanguageTagParseError,
+    },
+    #[error("{0}")]
+    Msg(String),
+}
+
+impl RdfXmlSyntaxError {
+    /// Builds an error from a printable error message.
+    pub(crate) fn msg(msg: impl Into<String>) -> Self {
+        Self(SyntaxErrorKind::Msg(msg.into()))
+    }
+
+    pub(crate) fn invalid_iri(iri: String, error: IriParseError) -> Self {
+        Self(SyntaxErrorKind::InvalidIri { iri, error })
+    }
+
+    pub(crate) fn invalid_language_tag(tag: String, error: LanguageTagParseError) -> Self {
+        Self(SyntaxErrorKind::InvalidLanguageTag { tag, error })
+    }
+}
+
+impl From<RdfXmlSyntaxError> for io::Error {
+    #[inline]
+    fn from(error: RdfXmlSyntaxError) -> Self {
+        match error.0 {
+            SyntaxErrorKind::Xml(error) => match error {
+                quick_xml::Error::Io(error) => {
+                    Arc::try_unwrap(error).unwrap_or_else(|e| Self::new(e.kind(), e))
+                }
+                _ => Self::new(io::ErrorKind::InvalidData, error),
+            },
+            SyntaxErrorKind::Msg(msg) => Self::new(io::ErrorKind::InvalidData, msg),
+            _ => Self::new(io::ErrorKind::InvalidData, error),
+        }
+    }
+}

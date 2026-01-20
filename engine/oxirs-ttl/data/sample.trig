@@ -1,0 +1,52 @@
+# Sample TriG File for Testing
+# OxiRS TTL Parser Test Data
+
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix ex: <http://example.org/> .
+
+# Default graph
+ex:dataset a ex:Dataset ;
+    rdfs:label "Sample TriG Dataset" ;
+    ex:created "2025-11-20"^^xsd:date .
+
+# Named graph: People
+ex:graph:people {
+    ex:alice a foaf:Person ;
+        foaf:name "Alice Smith" ;
+        foaf:age 30 ;
+        foaf:knows ex:bob .
+
+    ex:bob a foaf:Person ;
+        foaf:name "Bob Jones" ;
+        foaf:age 25 ;
+        foaf:knows ex:alice , ex:charlie .
+
+    ex:charlie a foaf:Person ;
+        foaf:name "Charlie Brown"@en ;
+        foaf:age 28 .
+}
+
+# Named graph: Organizations
+ex:graph:orgs {
+    ex:acme a ex:Organization ;
+        rdfs:label "ACME Corp" ;
+        ex:employee ex:alice , ex:bob .
+
+    ex:example a ex:Organization ;
+        rdfs:label "Example Inc" ;
+        ex:employee ex:charlie .
+}
+
+# Named graph: Metadata
+ex:graph:metadata {
+    ex:graph:people rdfs:label "People Graph" ;
+        ex:recordCount 3 ;
+        ex:created "2025-11-20T10:00:00"^^xsd:dateTime .
+
+    ex:graph:orgs rdfs:label "Organizations Graph" ;
+        ex:recordCount 2 ;
+        ex:created "2025-11-20T10:05:00"^^xsd:dateTime .
+}

@@ -1,0 +1,93 @@
+# OpenTelemetry Collector Configuration for OxiRS Fuseki
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus receiver for metrics
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['localhost:8888']
+
+processors:
+  # Batch processor
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Memory limiter
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+  # Resource processor
+  resource:
+    attributes:
+      - key: service.name
+        value: oxirs-fuseki
+        action: upsert
+      - key: deployment.environment
+        value: production
+        action: upsert
+
+  # Span processor
+  span:
+    name:
+      from_attributes: [http.method, http.route]
+      separator: " "
+
+exporters:
+  # Jaeger exporter for traces
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Prometheus exporter for metrics
+  prometheus:
+    endpoint: "0.0.0.0:8888"
+    namespace: oxirs
+    const_labels:
+      service: fuseki
+
+  # Logging exporter for debugging
+  logging:
+    loglevel: info
+
+  # OTLP exporter (for external backends)
+  otlp:
+    endpoint: localhost:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource, span]
+      exporters: [otlp/jaeger, logging]
+
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus, logging]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [logging]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: detailed
+      address: 0.0.0.0:8888

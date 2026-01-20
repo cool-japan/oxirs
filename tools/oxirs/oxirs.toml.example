@@ -1,0 +1,86 @@
+# OxiRS Configuration File (oxirs.toml)
+# Production-ready SPARQL 1.2 server configuration
+
+[general]
+# Default RDF format for import/export operations
+default_format = "turtle"
+
+# Enable progress bars for CLI operations
+show_progress = true
+
+# Enable colored output
+colored_output = true
+
+# Default timeout for operations (seconds)
+timeout = 300
+
+# Logging level: trace, debug, info, warn, error
+log_level = "info"
+
+[server]
+# Server host (use "0.0.0.0" to bind to all interfaces)
+host = "localhost"
+
+# Server port
+port = 3030
+
+# Enable admin interface
+admin_enabled = true
+
+# Enable GraphQL endpoint (in addition to SPARQL)
+enable_graphql = false
+
+# GraphQL endpoint path
+graphql_path = "/graphql"
+
+# CORS configuration
+[server.cors]
+enabled = true
+allowed_origins = ["http://localhost:3000", "http://localhost:8080"]
+allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+allowed_headers = ["Content-Type", "Authorization"]
+
+# Authentication configuration
+[server.auth]
+enabled = false
+method = "jwt"  # Options: basic, jwt, oauth
+
+# Dataset configurations
+[datasets.default]
+name = "default"
+dataset_type = "tdb2"
+location = "./data/default"
+read_only = false
+
+[datasets.production]
+name = "production"
+dataset_type = "tdb2"
+location = "/var/lib/oxirs/production"
+read_only = false
+
+[datasets.readonly]
+name = "readonly"
+dataset_type = "tdb2"
+location = "./data/readonly"
+read_only = true
+
+# Tool-specific settings
+[tools.riot]
+# RDF I/O settings
+check_syntax = true
+validate_iris = true
+
+[tools.query]
+# Query execution settings
+timeout = 60
+max_results = 10000
+
+[tools.tdb]
+# TDB storage settings
+cache_size = 1024  # MB
+journal_size = 256  # MB
+
+[tools.validation]
+# SHACL validation settings
+enabled = true
+report_format = "turtle"

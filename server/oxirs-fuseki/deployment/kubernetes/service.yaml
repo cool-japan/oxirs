@@ -1,0 +1,99 @@
+# OxiRS Fuseki - Kubernetes Services
+---
+# Main SPARQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: oxirs-fuseki
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: sparql-server
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours
+  selector:
+    app: oxirs-fuseki
+  ports:
+  - name: sparql
+    port: 3030
+    targetPort: 3030
+    protocol: TCP
+  - name: admin
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+
+---
+# Headless Service for StatefulSet (if using StatefulSet)
+apiVersion: v1
+kind: Service
+metadata:
+  name: oxirs-fuseki-headless
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: sparql-server
+spec:
+  clusterIP: None
+  selector:
+    app: oxirs-fuseki
+  ports:
+  - name: sparql
+    port: 3030
+    targetPort: 3030
+    protocol: TCP
+
+---
+# Metrics Service for Prometheus
+apiVersion: v1
+kind: Service
+metadata:
+  name: oxirs-fuseki-metrics
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: metrics
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app: oxirs-fuseki
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+
+---
+# Internal Service for cluster communication
+apiVersion: v1
+kind: Service
+metadata:
+  name: oxirs-fuseki-internal
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: sparql-server
+spec:
+  type: ClusterIP
+  selector:
+    app: oxirs-fuseki
+  ports:
+  - name: sparql
+    port: 3030
+    targetPort: 3030
+    protocol: TCP
+  - name: admin
+    port: 8080
+    targetPort: 8080
+    protocol: TCP

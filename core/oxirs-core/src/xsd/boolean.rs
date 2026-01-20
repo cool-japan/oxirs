@@ -1,0 +1,123 @@
+use crate::xsd::{Decimal, Double, Float, Integer};
+use std::fmt;
+use std::str::{FromStr, ParseBoolError};
+
+/// [XML Schema `boolean` datatype](https://www.w3.org/TR/xmlschema11-2/#boolean)
+///
+/// Uses internally a [`bool`].
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[repr(transparent)]
+pub struct Boolean {
+    value: bool,
+}
+
+impl Boolean {
+    /// Checks if the two values are [identical](https://www.w3.org/TR/xmlschema11-2/#identity).
+    #[inline]
+    #[must_use]
+    pub fn is_identical_with(self, other: Self) -> bool {
+        self == other
+    }
+}
+
+impl From<bool> for Boolean {
+    #[inline]
+    fn from(value: bool) -> Self {
+        Self { value }
+    }
+}
+
+impl From<Integer> for Boolean {
+    #[inline]
+    fn from(value: Integer) -> Self {
+        (value != Integer::from(0)).into()
+    }
+}
+
+impl From<Decimal> for Boolean {
+    #[inline]
+    fn from(value: Decimal) -> Self {
+        (value != Decimal::from(0)).into()
+    }
+}
+
+impl From<Float> for Boolean {
+    #[inline]
+    fn from(value: Float) -> Self {
+        (value != Float::from(0.) && !value.is_nan()).into()
+    }
+}
+
+impl From<Double> for Boolean {
+    #[inline]
+    fn from(value: Double) -> Self {
+        (value != Double::from(0.) && !value.is_nan()).into()
+    }
+}
+
+impl From<Boolean> for bool {
+    #[inline]
+    fn from(value: Boolean) -> Self {
+        value.value
+    }
+}
+
+impl FromStr for Boolean {
+    type Err = ParseBoolError;
+
+    #[inline]
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Ok(match input {
+            "true" | "1" => true,
+            "false" | "0" => false,
+            _ => bool::from_str(input)?,
+        }
+        .into())
+    }
+}
+
+impl fmt::Display for Boolean {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.value.fmt(f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_from_str() -> Result<(), ParseBoolError> {
+        assert_eq!(Boolean::from_str("true")?.to_string(), "true");
+        assert_eq!(Boolean::from_str("1")?.to_string(), "true");
+        assert_eq!(Boolean::from_str("false")?.to_string(), "false");
+        assert_eq!(Boolean::from_str("0")?.to_string(), "false");
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_integer() {
+        assert_eq!(Boolean::from(false), Integer::from(0).into());
+        assert_eq!(Boolean::from(true), Integer::from(1).into());
+        assert_eq!(Boolean::from(true), Integer::from(2).into());
+    }
+
+    #[test]
+    fn test_identity() {
+        let a = Boolean::from(true);
+        let b = Boolean::from(true);
+        assert!(a.is_identical_with(b));
+    }
+
+    #[test]
+    fn test_basic_operations() {
+        let t = Boolean::from(true);
+        let f = Boolean::from(false);
+        
+        assert_eq!(bool::from(t), true);
+        assert_eq!(bool::from(f), false);
+        assert_ne!(t, f);
+        assert!(t > f);
+    }
+}

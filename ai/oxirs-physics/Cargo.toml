@@ -1,0 +1,65 @@
+[package]
+name = "oxirs-physics"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Physics-informed digital twin simulation bridge for OxiRS"
+keywords = ["physics", "simulation", "digital-twin", "scirs2", "neuro-symbolic"]
+categories = ["science", "simulation"]
+rust-version.workspace = true
+
+[dependencies]
+oxirs-core.workspace = true
+oxirs-embed = { workspace = true, optional = true }
+oxirs-samm = { workspace = true, optional = true }
+oxirs-stream = { workspace = true, optional = true }
+
+# SciRS2 scientific computing foundation
+scirs2-core.workspace = true
+scirs2-integrate = { version = "0.1.2", optional = true }
+scirs2-optimize = { workspace = true, optional = true }
+scirs2-neural = { workspace = true, optional = true }
+scirs2-linalg = { workspace = true, optional = true }
+scirs2-stats = { workspace = true, optional = true }
+
+# Units of measurement (type-safe physics)
+uom = { version = "0.37", optional = true }
+
+# Async runtime
+tokio.workspace = true
+async-trait = "0.1"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Time
+chrono.workspace = true
+
+# UUID
+uuid.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile.workspace = true
+
+[features]
+default = []
+simulation = ["scirs2-integrate", "scirs2-optimize", "uom"]
+embeddings = ["scirs2-neural", "oxirs-embed"]
+samm = ["oxirs-samm"]
+streaming = ["oxirs-stream"]
+full = ["simulation", "embeddings", "samm", "streaming"]
+
+[package.metadata.docs.rs]
+features = ["full"]

@@ -1,0 +1,29 @@
+---
+# Production environment variables
+
+# Feature flags for production
+enable_tls: true
+enable_metrics: true
+enable_auth: true
+enable_clustering: true
+
+# Performance tuning for production
+max_memory: "8192m"
+max_threads: 8
+log_level: "info"
+
+# Security - production hardening
+harden_ssh: true
+configure_firewall: true
+auto_security_updates: true
+install_aide: true
+install_rootkit_detection: true
+enable_security_scans: true
+
+# Monitoring
+enable_cron_monitoring: true
+enable_alerting: true
+prometheus_retention_days: 30
+
+# JWT secret (override in vault)
+jwt_secret: "{{ vault_jwt_secret }}"

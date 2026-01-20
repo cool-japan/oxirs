@@ -1,0 +1,37 @@
+/**
+ * Generated from SAMM Aspect Model: {{ aspect_name }}
+ * Namespace: {{ namespace }}
+ * Generated at: {{ generation_timestamp | default(value="") }}
+ */
+
+{% if properties %}
+export interface {{ aspect_name | pascal_case }} {
+{% for property in properties %}
+  {{ property.name | camel_case }}{% if property.optional %}?{% endif %}: {{ property.data_type | xsd_to_type(target="typescript") }};
+{% endfor %}
+}
+
+export class {{ aspect_name | pascal_case }}Impl implements {{ aspect_name | pascal_case }} {
+{% for property in properties %}
+  {{ property.name | camel_case }}{% if property.optional %}?{% endif %}: {{ property.data_type | xsd_to_type(target="typescript") }};
+{% endfor %}
+
+  constructor(data: {{ aspect_name | pascal_case }}) {
+{% for property in properties %}
+    this.{{ property.name | camel_case }} = data.{{ property.name | camel_case }};
+{% endfor %}
+  }
+
+  toJSON(): {{ aspect_name | pascal_case }} {
+    return {
+{% for property in properties %}
+      {{ property.name | camel_case }}: this.{{ property.name | camel_case }},
+{% endfor %}
+    };
+  }
+
+  static fromJSON(data: {{ aspect_name | pascal_case }}): {{ aspect_name | pascal_case }}Impl {
+    return new {{ aspect_name | pascal_case }}Impl(data);
+  }
+}
+{% endif %}

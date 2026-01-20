@@ -1,0 +1,125 @@
+# Rust
+/target/
+**/*.rs.bk
+*.rs.cleanup
+*.pdb
+Cargo.lock
+**/*.rs.backup
+**/*.rs.bak
+**/*.rs.bak2
+**/*.rs.bak3
+**/*.rs.bak4
+**/*.rs.bak5
+**/*.rs.bak6
+**/*.rs.bak7
+**/*.rs.bak8
+**/*.rs.bak9
+**/*.rs.bak10
+**/*.rs.final
+**/*.rs.final2
+**/*.rs.final3
+**/*.rs.cleanup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+**/.ipynb_checkpoints/
+
+# Claude Code
+.claude/
+**/CLAUDE.md
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.rocksdb/
+/data/
+/tdb/
+/tdb2/
+
+# Configuration files with secrets
+.env
+.env.local
+*.secret
+config.local.*
+
+# Test outputs
+/test-results/
+/coverage/
+criterion-output/
+
+# Benchmarks
+/benchmarks/results/
+*.bench
+
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# Build artifacts
+/dist/
+/build/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+kube-config
+
+# RDF/Knowledge Graph data
+*.ttl.gz
+*.nt.gz
+*.rdf.gz
+*.n3.gz
+*.jsonld.gz
+/datasets/
+/graphs/
+/indices/
+
+# AI/ML models
+*.model
+*.bin
+*.pkl
+*.pt
+*.pth
+/models/
+/embeddings/
+
+# Profiling
+*.prof
+*.pprof
+flamegraph.svg
+perf.data*
+
+# other target directories
+*/target/
+*/*/target/
+ai/oxirs-embed/target/*
+# Rust specific
+*.rlib
+engine/oxirs-samm/vehicle*.dot
+
+# Test-generated files
+engine/oxirs-vec/metadata.json

@@ -1,0 +1,122 @@
+[package]
+name = "oxirs-stream"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Real-time streaming support with Kafka/NATS/MQTT/OPC-UA I/O, RDF Patch, and SPARQL Update delta"
+keywords = ["streaming", "kafka", "mqtt", "opcua", "industry40"]
+categories = ["network-programming", "asynchronous", "database"]
+rust-version.workspace = true
+
+[dependencies]
+oxirs-core.workspace = true
+
+# SciRS2 dependencies for streaming analysis
+scirs2-signal = { workspace = true }
+scirs2-stats = { workspace = true }
+scirs2-core = { workspace = true }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rdkafka = { workspace = true, optional = true }
+async-nats = { workspace = true, optional = true }
+chrono.workspace = true
+uuid.workspace = true
+regex = "1.12"
+futures-util.workspace = true
+futures.workspace = true
+async-trait = "0.1"
+parking_lot = "0.12.4"
+bytes = { workspace = true }
+fastrand = "2.3"
+bumpalo = "3.14"
+quick-xml = "0.38"
+rayon = "1.10"
+aws-config = { version = "1.8", optional = true }
+aws-sdk-kinesis = { version = "1.21", optional = true }
+aws-smithy-types = { version = "1.3", optional = true }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager", "cluster-async", "streams"], optional = true }
+pulsar = { version = "6.6", optional = true }
+lapin = { version = "2.3", optional = true, features = ["native-tls"] }
+rumqttc = { version = "0.25", optional = true, features = ["use-rustls"] }
+opcua = { version = "0.12", optional = true, features = ["client", "generated-address-space"] }
+time = { version = "0.3", optional = true }
+toml = "0.9"
+base64 = "0.22"
+rmp-serde = "1.3"
+serde_cbor = "0.11"
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
+flate2 = "1.1"
+zstd = "0.13"
+reqwest = { workspace = true }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+# rand functionality now provided by scirs2-core (use scirs2_core::random)
+prost = "0.13"
+prost-types = "0.13"
+apache-avro = "0.21"
+tokio-stream = "0.1"
+lz4_flex.workspace = true
+snap = "1.1"
+brotli = "8.0"
+crc32fast = "1.5"
+dashmap = "6.1"
+num_cpus = "1.17"
+nalgebra = "0.33"
+num-complex = "0.4"
+# OpenTelemetry for enhanced observability (optional)
+opentelemetry = { workspace = true, optional = true }
+opentelemetry-jaeger = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-semantic-conventions = { workspace = true, optional = true }
+sysinfo = "0.30"
+wasmparser = "0.207"
+wasmtime = { version = "14.0", optional = true }
+ed25519-dalek = "2.1"
+rsa = { version = "0.9.10", features = ["sha2"] }
+once_cell.workspace = true
+serde_yaml = "0.9.34"
+
+[build-dependencies]
+prost-build = { version = "0.13", optional = true }
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile.workspace = true
+tracing-subscriber = "0.3"
+
+[features]
+default = ["memory"]
+memory = []
+kafka = ["rdkafka"]
+nats = ["async-nats", "time"]
+kinesis = ["aws-config", "aws-sdk-kinesis", "aws-smithy-types"]
+redis = ["dep:redis"]
+pulsar = ["dep:pulsar"]
+rabbitmq = ["dep:lapin", "time"]
+mqtt = ["dep:rumqttc"]
+opcua = ["dep:opcua"]
+sparkplug = ["mqtt", "dep:prost-build"]
+industry40 = ["mqtt", "opcua", "sparkplug"]
+compression = []
+opentelemetry = ["dep:opentelemetry", "dep:opentelemetry-jaeger", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
+all-backends = ["kafka", "nats", "kinesis", "redis", "pulsar", "rabbitmq", "mqtt", "opcua"]
+wasm = ["dep:wasmtime"]
+
+[package.metadata.docs.rs]
+# Use memory backend only for docs.rs (avoids rdkafka, async-nats system deps)
+features = ["memory", "compression"]
+# Exclude: kafka (rdkafka), nats, kinesis, redis, pulsar, rabbitmq, wasm (wasmtime)
+rustdoc-args = ["--cfg", "docsrs"]
+
+[[bench]]
+name = "performance_benchmarks"
+harness = false
+

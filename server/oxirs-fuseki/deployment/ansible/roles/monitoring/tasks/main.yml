@@ -1,0 +1,198 @@
+---
+# Monitoring role tasks
+
+- name: Create monitoring user
+  ansible.builtin.user:
+    name: monitoring
+    system: true
+    shell: /bin/false
+    createhome: false
+  tags: [monitoring, user]
+
+- name: Install Prometheus Node Exporter
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    dest: /tmp/node_exporter.tar.gz
+    mode: '0644'
+  tags: [monitoring, node-exporter]
+
+- name: Extract Node Exporter
+  ansible.builtin.unarchive:
+    src: /tmp/node_exporter.tar.gz
+    dest: /opt
+    remote_src: true
+    creates: "/opt/node_exporter-{{ node_exporter_version }}.linux-amd64"
+  tags: [monitoring, node-exporter]
+
+- name: Create Node Exporter symlink
+  ansible.builtin.file:
+    src: "/opt/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+    dest: /usr/local/bin/node_exporter
+    state: link
+  tags: [monitoring, node-exporter]
+
+- name: Install Node Exporter systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/node_exporter.service
+    content: |
+      [Unit]
+      Description=Prometheus Node Exporter
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=monitoring
+      Group=monitoring
+      ExecStart=/usr/local/bin/node_exporter \
+        --web.listen-address=:9100 \
+        --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/) \
+        --collector.netclass.ignored-devices=^(veth.*|docker.*|br-.*)$
+      Restart=on-failure
+      RestartSec=5s
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+  notify: restart node_exporter
+  tags: [monitoring, node-exporter]
+
+- name: Enable and start Node Exporter
+  ansible.builtin.systemd:
+    name: node_exporter
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: [monitoring, node-exporter]
+
+- name: Install Prometheus (monitoring servers only)
+  block:
+    - name: Download Prometheus
+      ansible.builtin.get_url:
+        url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+        dest: /tmp/prometheus.tar.gz
+        mode: '0644'
+
+    - name: Extract Prometheus
+      ansible.builtin.unarchive:
+        src: /tmp/prometheus.tar.gz
+        dest: /opt
+        remote_src: true
+        creates: "/opt/prometheus-{{ prometheus_version }}.linux-amd64"
+
+    - name: Create Prometheus directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: monitoring
+        group: monitoring
+        mode: '0755'
+      loop:
+        - /etc/prometheus
+        - /var/lib/prometheus
+
+    - name: Create Prometheus symlinks
+      ansible.builtin.file:
+        src: "/opt/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        state: link
+      loop:
+        - prometheus
+        - promtool
+
+    - name: Install Prometheus configuration
+      ansible.builtin.template:
+        src: prometheus.yml.j2
+        dest: /etc/prometheus/prometheus.yml
+        owner: monitoring
+        group: monitoring
+        mode: '0644'
+      notify: restart prometheus
+
+    - name: Install Prometheus systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/prometheus.service
+        content: |
+          [Unit]
+          Description=Prometheus Monitoring System
+          Documentation=https://prometheus.io/docs/introduction/overview/
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=monitoring
+          Group=monitoring
+          ExecStart=/usr/local/bin/prometheus \
+            --config.file=/etc/prometheus/prometheus.yml \
+            --storage.tsdb.path=/var/lib/prometheus \
+            --storage.tsdb.retention.time=15d \
+            --web.console.templates=/etc/prometheus/consoles \
+            --web.console.libraries=/etc/prometheus/console_libraries \
+            --web.listen-address=:9090 \
+            --web.enable-lifecycle
+          Restart=on-failure
+          RestartSec=5s
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+      notify: restart prometheus
+
+    - name: Enable and start Prometheus
+      ansible.builtin.systemd:
+        name: prometheus
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  when: inventory_hostname in groups['monitoring_servers']
+  tags: [monitoring, prometheus]
+
+- name: Configure log monitoring
+  ansible.builtin.template:
+    src: logrotate.conf.j2
+    dest: /etc/logrotate.d/oxirs-monitoring
+    mode: '0644'
+  tags: [monitoring, logging]
+
+- name: Install monitoring scripts
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /usr/local/bin/
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - check_oxirs_health.sh
+    - collect_metrics.sh
+  ignore_errors: true
+  tags: [monitoring, scripts]
+
+- name: Create monitoring cron jobs
+  ansible.builtin.cron:
+    name: "{{ item.name }}"
+    minute: "{{ item.minute }}"
+    hour: "{{ item.hour }}"
+    job: "{{ item.job }}"
+    state: present
+  loop:
+    - name: "Collect OxiRS metrics"
+      minute: "*/5"
+      hour: "*"
+      job: "/usr/local/bin/collect_metrics.sh"
+    - name: "Health check OxiRS"
+      minute: "*/1"
+      hour: "*"
+      job: "/usr/local/bin/check_oxirs_health.sh"
+  when: enable_cron_monitoring | default(true)
+  tags: [monitoring, cron]
+
+- name: Configure alerting (if Alertmanager is available)
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: /etc/prometheus/alertmanager.yml
+    owner: monitoring
+    group: monitoring
+    mode: '0644'
+  when: enable_alerting | default(false)
+  notify: restart alertmanager
+  tags: [monitoring, alerting]

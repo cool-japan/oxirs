@@ -1,0 +1,58 @@
+[package]
+name = "oxirs-ttl-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.oxirs-ttl]
+path = ".."
+
+[[bin]]
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "turtle_parser"
+path = "fuzz_targets/turtle_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ntriples_parser"
+path = "fuzz_targets/ntriples_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "nquads_parser"
+path = "fuzz_targets/nquads_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "trig_parser"
+path = "fuzz_targets/trig_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "turtle_serializer"
+path = "fuzz_targets/turtle_serializer.rs"
+test = false
+doc = false
+bench = false

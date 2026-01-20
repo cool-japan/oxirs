@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OxiRS WASM - Browser RDF/SPARQL Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 100%;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        .success {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .error {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .info {
+            color: #3498db;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .stat-box {
+            background: #ecf0f1;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+        }
+        #status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🦀 OxiRS WASM - RDF & SPARQL in the Browser</h1>
+
+    <div id="status" class="container info">
+        Initializing WASM module...
+    </div>
+
+    <div class="stats" id="stats" style="display: none;">
+        <div class="stat-box">
+            <div class="stat-value" id="tripleCount">0</div>
+            <div class="stat-label">Triples</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value" id="queryCount">0</div>
+            <div class="stat-label">Queries</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value" id="parseTime">0ms</div>
+            <div class="stat-label">Parse Time</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value" id="queryTime">0ms</div>
+            <div class="stat-label">Query Time</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>1. Load RDF Data (Turtle Format)</h2>
+        <textarea id="rdfInput" rows="12" placeholder="Enter Turtle RDF data...">@prefix : <http://example.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix schema: <http://schema.org/> .
+
+:alice a foaf:Person ;
+    foaf:name "Alice Smith" ;
+    foaf:mbox <mailto:alice@example.org> ;
+    foaf:knows :bob ;
+    schema:affiliation :tokyo-university .
+
+:bob a foaf:Person ;
+    foaf:name "Bob Johnson" ;
+    foaf:knows :alice ;
+    schema:jobTitle "Researcher" .
+
+:tokyo-university a schema:Organization ;
+    schema:name "University of Tokyo" .</textarea>
+        <div style="margin-top: 10px;">
+            <button onclick="loadData()" id="loadBtn">Load RDF Data</button>
+            <button onclick="clearStore()" id="clearBtn">Clear Store</button>
+            <button onclick="loadSampleData()" id="sampleBtn">Load Sample Data</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>2. Execute SPARQL Query</h2>
+        <textarea id="sparqlQuery" rows="8" placeholder="Enter SPARQL query...">SELECT ?person ?name ?email WHERE {
+    ?person a <http://xmlns.com/foaf/0.1/Person> ;
+            <http://xmlns.com/foaf/0.1/name> ?name .
+    OPTIONAL { ?person <http://xmlns.com/foaf/0.1/mbox> ?email }
+}
+LIMIT 10</textarea>
+        <div style="margin-top: 10px;">
+            <button onclick="executeQuery()" id="queryBtn">Run SELECT Query</button>
+            <button onclick="executeAsk()" id="askBtn">Run ASK Query</button>
+            <button onclick="runExamples()" id="examplesBtn">Run Example Queries</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>3. Results</h2>
+        <pre id="results">Results will appear here...</pre>
+    </div>
+
+    <div class="container">
+        <h2>4. Export Data</h2>
+        <button onclick="exportTurtle()">Export as Turtle</button>
+        <button onclick="exportNTriples()">Export as N-Triples</button>
+        <button onclick="showStats()">Show Statistics</button>
+        <pre id="export" style="display: none;"></pre>
+    </div>
+
+    <script type="module">
+        // Import from the built WASM package
+        // In production, this would be: import { initialize, createStore } from 'oxirs-wasm';
+        import init, { OxiRSStore } from '../pkg/oxirs_wasm.js';
+
+        let store;
+        let queryCount = 0;
+
+        async function initWasm() {
+            try {
+                await init();
+                store = new OxiRSStore();
+
+                document.getElementById('status').innerHTML =
+                    '<span class="success">✓ WASM module initialized successfully!</span>';
+                document.getElementById('status').className = 'container success';
+                document.getElementById('stats').style.display = 'grid';
+
+                console.log('OxiRS WASM ready');
+            } catch (error) {
+                document.getElementById('status').innerHTML =
+                    '<span class="error">✗ Failed to initialize: ' + error + '</span>';
+                document.getElementById('status').className = 'container error';
+                console.error('Initialization error:', error);
+            }
+        }
+
+        window.loadData = async function() {
+            const rdf = document.getElementById('rdfInput').value;
+            const startTime = performance.now();
+
+            try {
+                const count = await store.loadTurtle(rdf);
+                const parseTime = (performance.now() - startTime).toFixed(2);
+
+                document.getElementById('tripleCount').textContent = store.size();
+                document.getElementById('parseTime').textContent = parseTime + 'ms';
+                document.getElementById('results').textContent =
+                    `✓ Successfully loaded ${count} triples in ${parseTime}ms`;
+            } catch (error) {
+                document.getElementById('results').textContent =
+                    '✗ Error loading data: ' + error;
+            }
+        };
+
+        window.executeQuery = async function() {
+            const query = document.getElementById('sparqlQuery').value;
+            const startTime = performance.now();
+
+            try {
+                const results = await store.query(query);
+                const queryTime = (performance.now() - startTime).toFixed(2);
+
+                queryCount++;
+                document.getElementById('queryCount').textContent = queryCount;
+                document.getElementById('queryTime').textContent = queryTime + 'ms';
+
+                const output = `Query executed in ${queryTime}ms\n` +
+                              `Results: ${results.length} bindings\n\n` +
+                              JSON.stringify(results, null, 2);
+                document.getElementById('results').textContent = output;
+            } catch (error) {
+                document.getElementById('results').textContent =
+                    '✗ Query error: ' + error;
+            }
+        };
+
+        window.executeAsk = async function() {
+            const query = document.getElementById('sparqlQuery').value;
+            const startTime = performance.now();
+
+            try {
+                const result = await store.ask(query);
+                const queryTime = (performance.now() - startTime).toFixed(2);
+
+                queryCount++;
+                document.getElementById('queryCount').textContent = queryCount;
+                document.getElementById('queryTime').textContent = queryTime + 'ms';
+
+                document.getElementById('results').textContent =
+                    `ASK query result: ${result ? '✓ TRUE' : '✗ FALSE'}\n` +
+                    `Execution time: ${queryTime}ms`;
+            } catch (error) {
+                document.getElementById('results').textContent =
+                    '✗ Query error: ' + error;
+            }
+        };
+
+        window.clearStore = function() {
+            store.clear();
+            document.getElementById('tripleCount').textContent = '0';
+            document.getElementById('results').textContent = '✓ Store cleared';
+        };
+
+        window.exportTurtle = function() {
+            const turtle = store.toTurtle();
+            document.getElementById('export').textContent = turtle;
+            document.getElementById('export').style.display = 'block';
+            document.getElementById('results').textContent =
+                `✓ Exported ${store.size()} triples as Turtle`;
+        };
+
+        window.exportNTriples = function() {
+            const ntriples = store.toNTriples();
+            document.getElementById('export').textContent = ntriples;
+            document.getElementById('export').style.display = 'block';
+            document.getElementById('results').textContent =
+                `✓ Exported ${store.size()} triples as N-Triples`;
+        };
+
+        window.showStats = function() {
+            const subjects = store.subjects();
+            const predicates = store.predicates();
+            const objects = store.objects();
+
+            const stats = `RDF Store Statistics:
+  Total triples: ${store.size()}
+  Unique subjects: ${subjects.length}
+  Unique predicates: ${predicates.length}
+  Unique objects: ${objects.length}
+
+Subjects:
+${subjects.slice(0, 5).map(s => '  - ' + s).join('\n')}
+${subjects.length > 5 ? '  ... and ' + (subjects.length - 5) + ' more' : ''}
+
+Predicates:
+${predicates.map(p => '  - ' + p).join('\n')}`;
+
+            document.getElementById('results').textContent = stats;
+        };
+
+        window.loadSampleData = async function() {
+            const sample = `@prefix : <http://research.example/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix dc: <http://purl.org/dc/terms/> .
+
+:paper-1 a :ResearchPaper ;
+    dc:title "Quantum Computing Applications" ;
+    dc:creator :researcher-alice ;
+    dc:date "2025-01-15" ;
+    :citations 42 .
+
+:researcher-alice a foaf:Person ;
+    foaf:name "Dr. Alice Chen" ;
+    foaf:mbox <mailto:alice@tokyo-u.ac.jp> ;
+    :affiliation :tokyo-university .
+
+:tokyo-university a :University ;
+    foaf:name "University of Tokyo" ;
+    :location "Tokyo, Japan" .`;
+
+            document.getElementById('rdfInput').value = sample;
+            await loadData();
+        };
+
+        window.runExamples = async function() {
+            const examples = [
+                {
+                    name: "Find all people",
+                    query: "SELECT ?person ?name WHERE { ?person a <http://xmlns.com/foaf/0.1/Person> ; <http://xmlns.com/foaf/0.1/name> ?name }"
+                },
+                {
+                    name: "Find connections",
+                    query: "SELECT ?p1 ?p2 WHERE { ?p1 <http://xmlns.com/foaf/0.1/knows> ?p2 }"
+                },
+                {
+                    name: "Check if Alice knows Bob",
+                    query: "ASK { <http://example.org/alice> <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> }"
+                }
+            ];
+
+            let output = "Running example queries:\n\n";
+
+            for (const ex of examples) {
+                output += `${ex.name}:\n`;
+                output += `  Query: ${ex.query}\n`;
+
+                try {
+                    const startTime = performance.now();
+                    const result = await store.query(ex.query);
+                    const time = (performance.now() - startTime).toFixed(2);
+
+                    output += `  Result: ${JSON.stringify(result)}\n`;
+                    output += `  Time: ${time}ms\n\n`;
+                    queryCount++;
+                } catch (error) {
+                    output += `  Error: ${error}\n\n`;
+                }
+            }
+
+            document.getElementById('queryCount').textContent = queryCount;
+            document.getElementById('results').textContent = output;
+        };
+
+        // Initialize on load
+        initWasm();
+    </script>
+
+    <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #7f8c8d; text-align: center;">
+        <p>OxiRS WASM v0.1.0-rc.1 | Rust-powered RDF/SPARQL in the browser</p>
+        <p>
+            <a href="https://github.com/cool-japan/oxirs" target="_blank">GitHub</a> |
+            <a href="https://docs.rs/oxirs-wasm" target="_blank">Documentation</a> |
+            <a href="https://crates.io/crates/oxirs-wasm" target="_blank">Crates.io</a>
+        </p>
+    </footer>
+</body>
+</html>

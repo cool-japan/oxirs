@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.cc d98df6f15c31716d0d196f925b72ba8643f8d41cc0ee8e7dc490ea648c74234d # shrinks to value = "", lang = Some("aa"), datatype = Some("http://0/")
+cc 61f6706536743969d228e13a25386c6624ce55953efe23b2fe98b346fa293886 # shrinks to value = "", lang = Some("aa"), datatype = Some("http://0/")

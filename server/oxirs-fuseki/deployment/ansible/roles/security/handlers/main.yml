@@ -1,0 +1,17 @@
+---
+# Security role handlers
+
+- name: restart fail2ban
+  ansible.builtin.service:
+    name: fail2ban
+    state: restarted
+
+- name: restart sshd
+  ansible.builtin.service:
+    name: "{{ 'sshd' if ansible_os_family == 'RedHat' else 'ssh' }}"
+    state: restarted
+
+- name: reload auditd
+  ansible.builtin.service:
+    name: auditd
+    state: reloaded

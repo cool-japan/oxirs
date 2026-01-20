@@ -1,0 +1,15 @@
+PREFIX ub: <http://swat.cse.lehigh.edu/onto/univ-bench.owl#>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+CONSTRUCT {
+    ?student foaf:name ?name .
+    ?student foaf:knows ?advisor .
+    ?advisor foaf:name ?advisorName .
+}
+WHERE {
+    ?student rdf:type ub:Student .
+    ?student ub:name ?name .
+    ?student ub:advisor ?advisor .
+    ?advisor ub:name ?advisorName .
+}

@@ -1,0 +1,262 @@
+# OxiRS Prometheus Alert Rules
+# Version: 0.1.0-beta.1
+# Date: October 12, 2025
+
+groups:
+  - name: oxirs_sparql_alerts
+    interval: 30s
+    rules:
+      # High Query Error Rate
+      - alert: HighSPARQLQueryErrorRate
+        expr: (rate(oxirs_sparql_queries_failed_total[5m]) / rate(oxirs_sparql_queries_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: sparql
+        annotations:
+          summary: "High SPARQL query error rate detected"
+          description: "SPARQL query error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+          runbook_url: "https://docs.oxirs.io/runbooks/high-error-rate"
+
+      # Critical Query Error Rate
+      - alert: CriticalSPARQLQueryErrorRate
+        expr: (rate(oxirs_sparql_queries_failed_total[5m]) / rate(oxirs_sparql_queries_total[5m])) > 0.20
+        for: 2m
+        labels:
+          severity: critical
+          component: sparql
+        annotations:
+          summary: "CRITICAL: Very high SPARQL query error rate"
+          description: "SPARQL query error rate is {{ $value | humanizePercentage }} (threshold: 20%)"
+          runbook_url: "https://docs.oxirs.io/runbooks/critical-error-rate"
+
+      # Slow Query Warning
+      - alert: SlowSPARQLQueries
+        expr: histogram_quantile(0.95, rate(oxirs_sparql_query_duration_milliseconds_bucket[5m])) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: sparql
+        annotations:
+          summary: "SPARQL queries are slow"
+          description: "95th percentile query duration is {{ $value }}ms (threshold: 1000ms)"
+          runbook_url: "https://docs.oxirs.io/runbooks/slow-queries"
+
+      # Very Slow Query Alert
+      - alert: VerySlow SPARQL Queries
+        expr: histogram_quantile(0.95, rate(oxirs_sparql_query_duration_milliseconds_bucket[5m])) > 5000
+        for: 5m
+        labels:
+          severity: critical
+          component: sparql
+        annotations:
+          summary: "CRITICAL: SPARQL queries are very slow"
+          description: "95th percentile query duration is {{ $value }}ms (threshold: 5000ms)"
+          runbook_url: "https://docs.oxirs.io/runbooks/very-slow-queries"
+
+      # High Query Load
+      - alert: HighSPARQLQueryLoad
+        expr: rate(oxirs_sparql_queries_total[5m]) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: sparql
+        annotations:
+          summary: "High SPARQL query load"
+          description: "Query rate is {{ $value | humanize }} qps (threshold: 1000 qps)"
+          runbook_url: "https://docs.oxirs.io/runbooks/high-load"
+
+  - name: oxirs_system_alerts
+    interval: 30s
+    rules:
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: (process_resident_memory_bytes / (1024 * 1024 * 1024)) > 8
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanize }}GB (threshold: 8GB)"
+          runbook_url: "https://docs.oxirs.io/runbooks/high-memory"
+
+      # Critical Memory Usage
+      - alert: CriticalMemoryUsage
+        expr: (process_resident_memory_bytes / (1024 * 1024 * 1024)) > 14
+        for: 2m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "CRITICAL: Memory usage is very high"
+          description: "Memory usage is {{ $value | humanize }}GB (threshold: 14GB)"
+          runbook_url: "https://docs.oxirs.io/runbooks/critical-memory"
+
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[1m]) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value | humanizePercentage }} (threshold: 80%)"
+          runbook_url: "https://docs.oxirs.io/runbooks/high-cpu"
+
+      # OxiRS Process Down
+      - alert: OxiRSProcessDown
+        expr: up{job="oxirs"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "CRITICAL: OxiRS process is down"
+          description: "OxiRS process has been down for more than 1 minute"
+          runbook_url: "https://docs.oxirs.io/runbooks/process-down"
+
+  - name: oxirs_cluster_alerts
+    interval: 30s
+    rules:
+      # Cluster Node Unhealthy
+      - alert: ClusterNodeUnhealthy
+        expr: oxirs_cluster_nodes_healthy < oxirs_cluster_nodes_total
+        for: 5m
+        labels:
+          severity: warning
+          component: cluster
+        annotations:
+          summary: "Cluster node(s) unhealthy"
+          description: "{{ $value }} cluster node(s) are unhealthy"
+          runbook_url: "https://docs.oxirs.io/runbooks/unhealthy-nodes"
+
+      # Cluster Quorum Lost
+      - alert: ClusterQuorumLost
+        expr: oxirs_cluster_nodes_healthy < (oxirs_cluster_nodes_total / 2 + 1)
+        for: 1m
+        labels:
+          severity: critical
+          component: cluster
+        annotations:
+          summary: "CRITICAL: Cluster quorum lost"
+          description: "Only {{ $value }} nodes healthy (need majority for quorum)"
+          runbook_url: "https://docs.oxirs.io/runbooks/quorum-lost"
+
+      # High Replication Lag
+      - alert: HighReplicationLag
+        expr: oxirs_cluster_replication_lag_seconds > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: cluster
+        annotations:
+          summary: "High replication lag detected"
+          description: "Replication lag is {{ $value }}s (threshold: 10s)"
+          runbook_url: "https://docs.oxirs.io/runbooks/replication-lag"
+
+      # Critical Replication Lag
+      - alert: CriticalReplicationLag
+        expr: oxirs_cluster_replication_lag_seconds > 60
+        for: 2m
+        labels:
+          severity: critical
+          component: cluster
+        annotations:
+          summary: "CRITICAL: Very high replication lag"
+          description: "Replication lag is {{ $value }}s (threshold: 60s)"
+          runbook_url: "https://docs.oxirs.io/runbooks/critical-replication-lag"
+
+  - name: oxirs_rdf_store_alerts
+    interval: 30s
+    rules:
+      # Rapid Triple Growth
+      - alert: RapidTripleGrowth
+        expr: rate(oxirs_rdf_store_triples_total[5m]) > 10000
+        for: 15m
+        labels:
+          severity: warning
+          component: rdf_store
+        annotations:
+          summary: "Rapid RDF store growth detected"
+          description: "Triple insertion rate is {{ $value | humanize }}/s (threshold: 10000/s)"
+          runbook_url: "https://docs.oxirs.io/runbooks/rapid-growth"
+
+      # Large Dataset
+      - alert: LargeRDFDataset
+        expr: oxirs_rdf_store_triples_total > 100000000
+        for: 5m
+        labels:
+          severity: info
+          component: rdf_store
+        annotations:
+          summary: "RDF dataset is very large"
+          description: "Dataset contains {{ $value | humanize }} triples (threshold: 100M)"
+          runbook_url: "https://docs.oxirs.io/runbooks/large-dataset"
+
+  - name: oxirs_security_alerts
+    interval: 30s
+    rules:
+      # High Authentication Failure Rate
+      - alert: HighAuthenticationFailureRate
+        expr: rate(oxirs_auth_failures_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Authentication failure rate is {{ $value | humanize }}/s (threshold: 10/s)"
+          runbook_url: "https://docs.oxirs.io/runbooks/auth-failures"
+
+      # Potential Brute Force Attack
+      - alert: PotentialBruteForceAttack
+        expr: rate(oxirs_auth_failures_total[1m]) > 50
+        for: 2m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "CRITICAL: Potential brute force attack detected"
+          description: "Authentication failure rate is {{ $value | humanize }}/s (threshold: 50/s)"
+          runbook_url: "https://docs.oxirs.io/runbooks/brute-force"
+
+      # Rate Limit Exceeded
+      - alert: RateLimitExceeded
+        expr: rate(oxirs_rate_limit_exceeded_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Rate limit frequently exceeded"
+          description: "Rate limit exceeded {{ $value | humanize }} times/s (threshold: 100/s)"
+          runbook_url: "https://docs.oxirs.io/runbooks/rate-limit"
+
+  - name: oxirs_federation_alerts
+    interval: 30s
+    rules:
+      # Federation Endpoint Unavailable
+      - alert: FederationEndpointUnavailable
+        expr: rate(oxirs_federation_endpoint_failures_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: federation
+        annotations:
+          summary: "Federation endpoint frequently unavailable"
+          description: "Endpoint {{ $labels.endpoint }} failure rate: {{ $value | humanize }}/s"
+          runbook_url: "https://docs.oxirs.io/runbooks/federation-unavailable"
+
+      # High Federation Latency
+      - alert: HighFederationLatency
+        expr: histogram_quantile(0.95, rate(oxirs_federation_request_duration_milliseconds_bucket[5m])) > 5000
+        for: 10m
+        labels:
+          severity: warning
+          component: federation
+        annotations:
+          summary: "High federation request latency"
+          description: "95th percentile federation latency is {{ $value }}ms (threshold: 5000ms)"
+          runbook_url: "https://docs.oxirs.io/runbooks/federation-latency"

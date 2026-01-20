@@ -1,0 +1,72 @@
+[package]
+name = "oxirs-graphrag"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "GraphRAG: Hybrid Vector + Graph Retrieval-Augmented Generation for OxiRS"
+keywords = ["graphrag", "rag", "knowledge-graph", "vector-search", "llm"]
+categories = ["database", "science", "text-processing"]
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Internal OxiRS crates
+oxirs-core.workspace = true
+oxirs-arq.workspace = true
+oxirs-vec.workspace = true
+oxirs-embed.workspace = true
+oxirs-chat.workspace = true
+
+# SciRS2 for graph algorithms and scientific computing
+scirs2-core.workspace = true
+scirs2-graph.workspace = true
+scirs2-linalg.workspace = true
+scirs2-text.workspace = true
+
+# Async runtime
+tokio.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Utilities
+uuid.workspace = true
+chrono.workspace = true
+lru.workspace = true
+regex.workspace = true
+
+# Graph algorithms
+petgraph.workspace = true
+
+# Optional: streaming support
+oxirs-stream = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tempfile.workspace = true
+
+[features]
+default = ["community-detection", "hierarchical-summarization"]
+community-detection = []
+hierarchical-summarization = []
+sparql-extensions = []
+streaming = ["oxirs-stream"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

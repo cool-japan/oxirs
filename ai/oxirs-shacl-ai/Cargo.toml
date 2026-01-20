@@ -1,0 +1,65 @@
+[package]
+name = "oxirs-shacl-ai"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "AI-powered shape induction and data repair suggestions for SHACL validation"
+keywords = ["shacl", "ai", "machine-learning", "validation", "rdf"]
+categories = ["science", "algorithms", "data-structures"]
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+oxirs-core.workspace = true
+oxirs-shacl.workspace = true
+
+# SciRS2 dependencies for AI-powered SHACL validation
+scirs2-core = { workspace = true }
+scirs2-neural = { workspace = true }
+scirs2-graph = { workspace = true }
+scirs2-stats = { workspace = true }
+scirs2-metrics = { workspace = true }
+scirs2-optimize = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono = "0.4.43"
+tokio.workspace = true
+num_cpus = "1.17"
+# ndarray and rand now provided by scirs2-core (SciRS2 compliance)
+regex = "1.12"
+indexmap = "2.11"
+uuid = { version = "1.19", features = ["v4", "serde"] }
+threadpool = "1.8"
+sysinfo = "0.30"
+nalgebra = { version = "0.33", features = ["serde-serialize"] }
+num-complex = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+futures = "0.3"
+dashmap = "6.1"
+# datafusion.workspace = true  # Temporarily disabled due to version conflicts
+fastrand = "2.3"
+base64 = "0.22"
+url = { version = "2.5", features = ["serde"] }
+tokio-stream = "0.1"
+libm = "0.2"  # For erf function
+
+[dev-dependencies]
+criterion.workspace = true
+tracing-subscriber.workspace = true
+
+[features]
+default = []
+shape-induction = []
+data-repair = []

@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.cc 5c99731e268501ac320a0fd8fcede6197c81e8bd32bdca061a422edb7a3493fa # shrinks to triples1 = [], triples2 = [StarTriple { subject: NamedNode(NamedNode { iri: "http://example0org/a" }), predicate: NamedNode(NamedNode { iri: "http://exampleaorg/a" }), object: NamedNode(NamedNode { iri: "http://exampleaorg/a" }) }]
+cc 3493ea76aae365816135de893fc2deb5593574ceb05c01e718e0e762104ed58b # shrinks to triples = [StarTriple { subject: NamedNode(NamedNode { iri: "http://example org/a" }), predicate: NamedNode(NamedNode { iri: "http://example org/a" }), object: NamedNode(NamedNode { iri: "http://example\0org/a" }) }]
+cc 11237e1f811bae3424b6affb44a851c7f7d8f51a9c010f53c48e06582635fd00 # shrinks to triples = [StarTriple { subject: NamedNode(NamedNode { iri: "http://example¡org/a" }), predicate: NamedNode(NamedNode { iri: "http://exampleaorg/a" }), object: NamedNode(NamedNode { iri: "http://example¡org/a" }) }]
+cc 3cd555da2923e77092054d6c2c9a90fdb371d2c693cb658f86e25043881ad922 # shrinks to triples = [StarTriple { subject: NamedNode(NamedNode { iri: "http://exampleaorg/a" }), predicate: NamedNode(NamedNode { iri: "http://exampleAorg/a" }), object: NamedNode(NamedNode { iri: "http://example¡org/a" }) }]
+cc 15ed00dd28224c53cdbdbbcffa2783c682fbc2d68ae0e254a51cae81b566c172 # shrinks to quoted_triples = []

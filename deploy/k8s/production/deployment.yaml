@@ -1,0 +1,339 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oxirs-fuseki
+  namespace: oxirs-production
+  labels:
+    app: oxirs-fuseki
+    tier: backend
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: oxirs-fuseki
+  template:
+    metadata:
+      labels:
+        app: oxirs-fuseki
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3032"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Performance optimizations
+      nodeSelector:
+        performance.oxirs.io/simd: "avx2"  # Or "neon" for ARM nodes
+        performance.oxirs.io/gpu: "available"
+
+      # CPU performance affinity
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - oxirs-fuseki
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            preference:
+              matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                - c5.xlarge
+                - c5.2xlarge
+                - c5.4xlarge
+                - m6i.xlarge
+                - m6i.2xlarge
+
+      tolerations:
+      - key: "performance.oxirs.io/dedicated"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+      serviceAccountName: oxirs-fuseki
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
+      initContainers:
+      - name: performance-tuning
+        image: alpine:3.18
+        command:
+        - sh
+        - -c
+        - |
+          # System performance tuning
+          echo "Applying performance optimizations..."
+
+          # NUMA memory policy
+          if [ -d /sys/devices/system/node ]; then
+            echo "NUMA topology detected"
+            numactl --show || true
+          fi
+
+          # CPU governor (if accessible)
+          for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+            if [ -w "$cpu" ]; then
+              echo performance > "$cpu" || true
+            fi
+          done
+
+          # Transparent hugepages
+          if [ -w /sys/kernel/mm/transparent_hugepage/enabled ]; then
+            echo madvise > /sys/kernel/mm/transparent_hugepage/enabled || true
+          fi
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: sys
+          mountPath: /sys
+        - name: proc
+          mountPath: /proc
+
+      containers:
+      - name: oxirs-fuseki
+        image: oxirs/oxirs:v1.0.0-production
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: sparql
+          containerPort: 3030
+          protocol: TCP
+        - name: graphql
+          containerPort: 3031
+          protocol: TCP
+        - name: metrics
+          containerPort: 3032
+          protocol: TCP
+
+        env:
+        # Performance configuration
+        - name: OXIRS_WORKER_THREADS
+          value: "auto"
+        - name: OXIRS_ENABLE_SIMD
+          value: "true"
+        - name: OXIRS_ENABLE_GPU
+          value: "auto-detect"
+        - name: OXIRS_NUMA_POLICY
+          value: "interleave"
+
+        # Memory management
+        - name: OXIRS_MAX_HEAP_SIZE
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+              divisor: "2"  # Use 50% of allocated memory
+        - name: OXIRS_CACHE_SIZE
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+              divisor: "4"  # Use 25% for cache
+
+        # Pod-specific configuration
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+
+        # Monitoring
+        - name: OXIRS_METRICS_ENABLED
+          value: "true"
+        - name: OXIRS_TRACING_ENABLED
+          value: "true"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://jaeger:14268/api/traces"
+
+        # Security
+        - name: OXIRS_SECURITY_MODE
+          value: "strict"
+        - name: OXIRS_ALLOW_ADMIN_UI
+          value: "false"
+
+        resources:
+          requests:
+            cpu: 2000m
+            memory: 4Gi
+            ephemeral-storage: 10Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+            ephemeral-storage: 20Gi
+            # GPU resources (if available)
+            nvidia.com/gpu: 1
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+        volumeMounts:
+        - name: config
+          mountPath: /opt/oxirs/config
+          readOnly: true
+        - name: data
+          mountPath: /opt/oxirs/data
+        - name: cache
+          mountPath: /opt/oxirs/cache
+        - name: tmp
+          mountPath: /opt/oxirs/tmp
+        - name: logs
+          mountPath: /opt/oxirs/logs
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: sparql
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: sparql
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                # Graceful shutdown with performance cleanup
+                echo "Initiating graceful shutdown..."
+
+                # Stop accepting new requests
+                curl -X POST http://localhost:3030/admin/shutdown?mode=graceful || true
+
+                # Wait for ongoing requests to complete
+                sleep 15
+
+                # Flush caches and save state
+                curl -X POST http://localhost:3030/admin/flush-cache || true
+
+                echo "Graceful shutdown completed"
+
+      terminationGracePeriodSeconds: 60
+
+      volumes:
+      - name: config
+        configMap:
+          name: oxirs-config
+      - name: data
+        persistentVolumeClaim:
+          claimName: oxirs-data
+      - name: cache
+        emptyDir:
+          sizeLimit: 2Gi
+          medium: Memory  # Use memory for cache when available
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: logs
+        emptyDir:
+          sizeLimit: 5Gi
+      - name: sys
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: proc
+        hostPath:
+          path: /proc
+          type: Directory
+
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oxirs-fuseki-service
+  namespace: oxirs-production
+  labels:
+    app: oxirs-fuseki
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+spec:
+  type: LoadBalancer
+  ports:
+  - name: sparql
+    port: 3030
+    targetPort: sparql
+    protocol: TCP
+  - name: graphql
+    port: 3031
+    targetPort: graphql
+    protocol: TCP
+  selector:
+    app: oxirs-fuseki
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oxirs-fuseki-metrics
+  namespace: oxirs-production
+  labels:
+    app: oxirs-fuseki
+    monitoring: prometheus
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 3032
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: oxirs-fuseki
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oxirs-fuseki-pdb
+  namespace: oxirs-production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: oxirs-fuseki

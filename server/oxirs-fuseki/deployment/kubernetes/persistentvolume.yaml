@@ -1,0 +1,37 @@
+# OxiRS Fuseki - Persistent Volume Claims
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oxirs-fuseki-data
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: fast-ssd  # Adjust based on your cluster
+  volumeMode: Filesystem
+
+---
+# PVC for shared data across replicas (optional, for distributed setups)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oxirs-fuseki-shared
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: shared-storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: shared-nfs  # Requires NFS or similar
+  volumeMode: Filesystem

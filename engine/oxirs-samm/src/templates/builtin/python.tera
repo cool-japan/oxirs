@@ -1,0 +1,35 @@
+"""
+Generated from SAMM Aspect Model: {{ aspect_name }}
+Namespace: {{ namespace }}
+Generated at: {{ generation_timestamp | default(value="") }}
+"""
+
+from dataclasses import dataclass
+from typing import Optional
+from datetime import datetime
+
+{% if properties %}
+@dataclass
+class {{ aspect_name | pascal_case }}:
+    """{{ aspect_name }} - SAMM Aspect Model"""
+{% for property in properties %}
+    {{ property.name | snake_case }}: {% if property.optional %}Optional[{% endif %}{{ property.data_type | xsd_to_type(target="python") }}{% if property.optional %}]{% endif %}{% if property.optional %} = None{% endif %}
+{% endfor %}
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary representation"""
+        return {
+{% for property in properties %}
+            "{{ property.name | camel_case }}": self.{{ property.name | snake_case }},
+{% endfor %}
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "{{ aspect_name | pascal_case }}":
+        """Create from dictionary representation"""
+        return cls(
+{% for property in properties %}
+            {{ property.name | snake_case }}=data.get("{{ property.name | camel_case }}"){% if not loop.last %},{% endif %}
+{% endfor %}
+        )
+{% endif %}

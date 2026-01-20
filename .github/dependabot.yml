@@ -1,0 +1,101 @@
+# Dependabot configuration for automated dependency updates
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Rust/Cargo dependencies for all workspace members
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "maintainers"
+    labels:
+      - "dependencies"
+      - "rust"
+      - "automated"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    # Group related updates together
+    groups:
+      # Group SciRS2 dependencies
+      scirs2:
+        patterns:
+          - "scirs2-*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group Oxirs internal dependencies
+      oxirs:
+        patterns:
+          - "oxirs-*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group tokio async runtime
+      tokio:
+        patterns:
+          - "tokio*"
+          - "async-*"
+          - "futures*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group serialization dependencies
+      serde:
+        patterns:
+          - "serde*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group geo/spatial dependencies
+      geo:
+        patterns:
+          - "geo*"
+          - "proj"
+          - "geos"
+          - "wkt"
+          - "rstar"
+        update-types:
+          - "minor"
+          - "patch"
+      # Group test dependencies
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    # Ignore certain dependencies that require manual review
+    ignore:
+      # Ignore major version updates for critical dependencies (review manually)
+      - dependency-name: "oxrdf"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "oxttl"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "geo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "geo-types"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions workflow dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "maintainers"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "ci"

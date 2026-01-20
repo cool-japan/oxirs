@@ -1,0 +1,356 @@
+version: '3.8'
+
+# Production Docker Compose configuration for OxiRS
+# Includes performance monitoring, GPU support, and high availability setup
+
+networks:
+  oxirs-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  oxirs-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /opt/oxirs/data
+      o: bind
+  oxirs-cache:
+    driver: tmpfs
+    driver_opts:
+      tmpfs-size: 2g
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+services:
+  # Main OxiRS service with performance optimizations
+  oxirs-fuseki:
+    image: oxirs/oxirs:v1.0.0-production
+    container_name: oxirs-fuseki-1
+    restart: unless-stopped
+
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # Performance environment variables
+    environment:
+      - OXIRS_WORKER_THREADS=auto
+      - OXIRS_ENABLE_SIMD=true
+      - OXIRS_ENABLE_GPU=auto-detect
+      - OXIRS_NUMA_POLICY=interleave
+      - OXIRS_MAX_HEAP_SIZE=8GB
+      - OXIRS_MIN_HEAP_SIZE=2GB
+      - OXIRS_CACHE_SIZE=2GB
+      - OXIRS_METRICS_ENABLED=true
+      - OXIRS_TRACING_ENABLED=true
+      - OXIRS_SECURITY_MODE=strict
+      - RUST_LOG=info
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:14268/api/traces
+
+    # Resource limits for performance
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+
+    # CPU affinity for performance
+    cpuset: "0-3"
+
+    # NUMA and memory settings
+    sysctls:
+      - vm.swappiness=1
+      - vm.dirty_ratio=10
+      - vm.dirty_background_ratio=5
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+    ports:
+      - "3030:3030"  # SPARQL endpoint
+      - "3031:3031"  # GraphQL endpoint
+      - "3032:3032"  # Metrics endpoint
+
+    volumes:
+      - oxirs-data:/opt/oxirs/data
+      - oxirs-cache:/opt/oxirs/cache
+      - ./config/production/oxirs.toml:/opt/oxirs/config/oxirs.toml:ro
+      - /dev/shm:/dev/shm  # Shared memory for performance
+
+    networks:
+      - oxirs-network
+
+    depends_on:
+      - redis
+      - jaeger
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Second OxiRS instance for high availability
+  oxirs-fuseki-2:
+    image: oxirs/oxirs:v1.0.0-production
+    container_name: oxirs-fuseki-2
+    restart: unless-stopped
+
+    environment:
+      - OXIRS_WORKER_THREADS=auto
+      - OXIRS_ENABLE_SIMD=true
+      - OXIRS_ENABLE_GPU=auto-detect
+      - OXIRS_NUMA_POLICY=interleave
+      - OXIRS_MAX_HEAP_SIZE=8GB
+      - OXIRS_MIN_HEAP_SIZE=2GB
+      - OXIRS_CACHE_SIZE=2GB
+      - OXIRS_METRICS_ENABLED=true
+      - OXIRS_TRACING_ENABLED=true
+      - OXIRS_SECURITY_MODE=strict
+      - RUST_LOG=info
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:14268/api/traces
+
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+
+    cpuset: "4-7"
+
+    ports:
+      - "3033:3030"  # SPARQL endpoint (different port)
+      - "3034:3031"  # GraphQL endpoint
+      - "3035:3032"  # Metrics endpoint
+
+    volumes:
+      - oxirs-data:/opt/oxirs/data:ro  # Read-only for replica
+      - oxirs-cache:/opt/oxirs/cache
+      - ./config/production/oxirs.toml:/opt/oxirs/config/oxirs.toml:ro
+
+    networks:
+      - oxirs-network
+
+    depends_on:
+      - oxirs-fuseki
+      - redis
+
+  # Load balancer for high availability
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: oxirs-nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/nginx/certs:ro
+
+    networks:
+      - oxirs-network
+
+    depends_on:
+      - oxirs-fuseki
+      - oxirs-fuseki-2
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: oxirs-redis
+    restart: unless-stopped
+
+    command: >
+      redis-server
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --appendonly yes
+      --tcp-keepalive 60
+      --timeout 300
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - ./redis/redis.conf:/etc/redis/redis.conf:ro
+      - redis-data:/data
+
+    networks:
+      - oxirs-network
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: oxirs-prometheus
+    restart: unless-stopped
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+
+    networks:
+      - oxirs-network
+
+    depends_on:
+      - oxirs-fuseki
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: oxirs-grafana
+    restart: unless-stopped
+
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+
+    networks:
+      - oxirs-network
+
+    depends_on:
+      - prometheus
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.46
+    container_name: oxirs-jaeger
+    restart: unless-stopped
+
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector
+
+    networks:
+      - oxirs-network
+
+  # Node Exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:v1.6.0
+    container_name: oxirs-node-exporter
+    restart: unless-stopped
+
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+    ports:
+      - "9100:9100"
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+    networks:
+      - oxirs-network
+
+  # NVIDIA GPU Exporter (if GPU available)
+  nvidia-gpu-exporter:
+    image: utkuozdemir/nvidia_gpu_exporter:1.2.0
+    container_name: oxirs-gpu-exporter
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    ports:
+      - "9835:9835"
+
+    networks:
+      - oxirs-network
+
+    profiles:
+      - gpu  # Only start with GPU profile
+
+  # Performance monitoring and alerting
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: oxirs-alertmanager
+    restart: unless-stopped
+
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+
+    ports:
+      - "9093:9093"
+
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+    networks:
+      - oxirs-network
+
+    depends_on:
+      - prometheus
+
+volumes:
+  redis-data:
+    driver: local

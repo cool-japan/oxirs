@@ -1,0 +1,370 @@
+# Copyright (c) 2023 Robert Bosch Manufacturing Solutions GmbH
+
+# See the AUTHORS file(s) distributed with this work for additional information regarding authorship.
+
+# This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+# If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/
+# SPDX-License-Identifier: MPL-2.0
+
+@prefix : <urn:samm:com.mycompany.myapplication:1.0.0#> .
+@prefix samm: <urn:samm:org.eclipse.esmf.samm:meta-model:2.2.0#> .
+@prefix samm-c: <urn:samm:org.eclipse.esmf.samm:characteristic:2.2.0#> .
+@prefix samm-e: <urn:samm:org.eclipse.esmf.samm:entity:2.2.0#> .
+@prefix unit: <urn:samm:org.eclipse.esmf.samm:unit:2.2.0#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# tag::aspect-declaration[]
+:MyAspect a samm:Aspect ;
+   samm:preferredName "My Aspect"@en ;
+   samm:preferredName "Mein Aspekt"@de ;
+   samm:description "This Aspect is an example."@en ;
+   samm:description "Dieser Aspekt ist ein Beispiel."@de ;
+   samm:properties ( :myProperty :anotherProperty ) ;
+   # In this example, there are no operations or events.
+   samm:operations ( ) ;
+   samm:events ( ) .
+# end::aspect-declaration[]
+
+# To make MyAspect valid
+:myProperty a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+# To make MyAspect valid
+:anotherProperty a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+# tag::property-declaration[]
+:materialNumber a samm:Property ;
+   samm:preferredName "Material number"@en ;
+   samm:description "A material number"@en ;
+   samm:exampleValue "ABC123456-000" ;
+   samm:characteristic samm-c:Text .
+# end::property-declaration[]
+
+# tag::state-declaration[]
+:MachineState a samm-c:State ;
+   samm:dataType xsd:string ;
+   samm-c:defaultValue "STANDBY" ;
+   samm-c:values ( "RUNNING" "STANDBY" "OFF" ) .
+# end::state-declaration[]
+
+# tag::scalar-collection[]
+:NumberList a samm-c:List ;
+   samm:dataType xsd:float .
+# end::scalar-collection[]
+
+
+# tag::entity-collection[]
+:MyEntity a samm:Entity ;
+   samm:properties ( ) ;
+   # ...
+   .
+
+:MyEntityList a samm-c:List ;
+   samm:dataType :MyEntity .
+# end::entity-collection[]
+
+# tag::timeseries-declaration[]
+:MachineStateTimeSeries a samm-c:TimeSeries ;
+   samm:dataType :MachineStateTimeSeriesEntity .
+
+:MachineStateTimeSeriesEntity a samm:Entity ;
+   samm:extends samm-e:TimeSeriesEntity ;
+   samm:properties (
+     [ samm:extends samm-e:value ; samm:characteristic :MachineState ]
+   ) .
+# end::timeseries-declaration[]
+
+# tag::quantity-declaration[]
+:Parameter a samm:Entity ;
+   samm:extends samm-e:Quantity ;
+   samm:properties (
+      [ samm:extends samm-e:value ; samm:characteristic :ParameterValueCharacteristic ]
+   ) .
+:ParameterValueCharacteristic a samm:Characteristic ;
+   samm:dataType xsd:integer .
+# end::quantity-declaration[]
+
+# tag::enumeration-simple-declaration-string[]
+:Status a samm-c:Enumeration ;
+   samm:dataType xsd:string ;
+   samm-c:values ( "Complete" "In Progress" "Created" ) .
+# end::enumeration-simple-declaration-string[]
+
+# tag::enumeration-simple-declaration-integer[]
+:PrimesBelowTwenty a samm-c:Enumeration ;
+   samm:dataType xsd:integer ;
+   samm-c:values ( 2 3 5 7 11 13 17 19 ) .
+# end::enumeration-simple-declaration-integer[]
+
+# tag::enumeration-simple-declaration-int[]
+:ValidOffsets a samm-c:Enumeration ;
+   samm:dataType xsd:int ;
+   samm-c:values ( "-1"^^xsd:int "1"^^xsd:int ) .
+# end::enumeration-simple-declaration-int[]
+
+# tag::enumeration-simple-declaration-date[]
+:MaintenanceDates a samm-c:Enumeration ;
+   samm:dataType xsd:date ;
+   samm-c:values ( "2010-01-01"^^xsd:date "2012-05-07"^^xsd:date "2018-03-08"^^xsd:date ) .
+# end::enumeration-simple-declaration-date[]
+
+# tag::value-declaration[]
+:GreenLight a samm:Value ;
+   samm:value "green" ;
+   samm:preferredName "Normal"@en ;
+   samm:description "Indicates that the speed of position change is within specification."@en ;
+   samm:see <https://en.wikipedia.org/wiki/Traffic_light> .
+# end::value-declaration[]
+
+# tag::value-in-example-value-additional[]
+:warningLevelProperty a samm:Property ;
+   samm:exampleValue :GreenLight ;
+   samm:characteristic [
+      a samm:Characteristic ;
+      samm:dataType xsd:string ;
+   ] .
+
+:GreenLight a samm:Value ;
+   samm:value "green" ;
+   samm:preferredName "Normal"@en ;
+   samm:description "Indicates that the speed of position change is within specification."@en ;
+   samm:see <https://en.wikipedia.org/wiki/Traffic_light> .
+# end::value-in-example-value-additional[]
+
+# tag::value-in-example-value-anonymous[]
+:propertyWithExampleValue a samm:Property ;
+   samm:exampleValue [
+      a samm:Value ;
+      samm:description "Some Description"@en ;
+      samm:value 2 ;
+   ] ;
+   samm:characteristic [
+      a samm:Characteristic ;
+      samm:dataType xsd:integer ;
+   ] .
+# end::value-in-example-value-anonymous[]
+
+# tag::enumeration-value-type-common-start[]
+:TrafficLight a samm-c:Enumeration ;
+   samm:preferredName "Warning Level"@en ;
+   samm:description "Represents if speed of position change is within specification (green), within tolerance (yellow), or outside specification (red)."@en ;
+   samm:dataType xsd:string ;
+   samm-c:values (
+# end::enumeration-value-type-common-start[]
+# tag::enumeration-value-type-is-value-reference[]
+      :GreenLight
+# end::enumeration-value-type-is-value-reference[]
+# tag::enumeration-value-type-in-value-mixed-instance[]
+      :GreenLight        # A reference to named described scalar value
+      "yellow"           # A direct literal value
+      [
+         a samm:Value ;  # An anonymous described scalar value with additional metadata
+         samm:value "red" ;
+         samm:preferredName "Critical Warning"@en ;
+         samm:description "Indicates that the position change is outside the specification."@en
+      ]
+# end::enumeration-value-type-in-value-mixed-instance[]
+# tag::enumeration-value-type-common-end[]
+   ) .
+# end::enumeration-value-type-common-end[]
+
+# tag::enumeration-value-green-light[]
+:GreenLight a samm:Value ;
+   samm:value "green" ;
+   samm:preferredName "Normal"@en ;
+   samm:description "Indicates that the speed of position change is within specification."@en ;
+   samm:see <https://en.wikipedia.org/wiki/Traffic_light> .
+# end::enumeration-value-green-light[]
+
+# tag::enumeration-complex-declaration[]
+:Results a samm-c:Enumeration ;
+   samm:dataType :Result ;
+   samm-c:values ( :Success :Failed ) .
+
+:Result a samm:Entity ;
+   samm:properties (
+      :status
+      [ samm:property :description; samm:notInPayload "true"^^xsd:boolean ]
+   ) .
+
+:Success a :Result ;
+   :status "SUCCESS" ;
+   :description "The process completed successfully." .
+
+:Failed a :Result ;
+   :status "FAILURE" ;
+   :description "The process did not complete successfully." .
+# end::enumeration-complex-declaration[]
+
+# To make :Result valid
+:status a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+# To make :Result valid
+:description a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+# To make :ErrorEntity valid
+:errorCode a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+# To make :ErrorEntity valid
+:errorDescription a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+# tag::entity-declaration[]
+:Error a samm:Entity ;
+   samm:properties ( :errorCode :severity ) .
+# end::entity-declaration[]
+
+# To make :Error valid
+:severity a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+# tag::extending-entity-declaration[]
+:Student a samm:Entity ;
+   samm:extends :Person ;
+   samm:properties ( :studentNumber ) .
+
+:Teacher a samm:Entity ;
+   samm:extends :Person ;
+   samm:properties ( :employeeNumber ) .
+
+:Person a samm:Entity ;
+   samm:properties ( :name :surname ) .
+# end::extending-entity-declaration[]
+
+:studentNumber a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+:employeeNumber a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+:name a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+:surname a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+# tag::abstract-entity-declaration[]
+:VehicleComponent a samm:AbstractEntity ;
+   samm:properties ( :typeNumber :manufacturer ) .
+
+:Steeringwheel a samm:Entity ;
+   samm:extends :VehicleComponent ;
+   samm:properties ( :isMultifunction  ) .
+
+:Seat a samm:Entity ;
+   samm:extends :VehicleComponent ;
+   samm:properties ( :material ) .
+# end::abstract-entity-declaration[]
+
+:isMultifunction a samm:Property ;
+   samm:characteristic samm-c:Boolean .
+
+:material a samm:Property ;
+   samm:characteristic samm-c:Text .
+
+# tag::operation-declaration[]
+:toggle a samm:Operation ;
+   samm:preferredName "Toggle"@en ;
+   samm:description "Switches the device on or off"@en ;
+   samm:input ( :toggleArgument ) ;
+   samm:output :toggleResult .
+
+:toggleArgument a samm:Property ;
+   samm:preferredName "Toggle argument"@en ;
+   samm:description "The argument for the toggling operation"@en ;
+   samm:characteristic :ToggleValues .
+
+:ToggleValues a samm-c:Enumeration ;
+   samm:preferredName "Toggle values"@en ;
+   samm:description "The possible input values for the toggle operation"@en ;
+   samm:dataType xsd:string ;
+   samm-c:values ( "on" "off" ) .
+
+:toggleResult a samm:Property ;
+   samm:preferredName "Toggle result"@en ;
+   samm:description "The result of the toggle operation"@en ;
+   samm:characteristic :ToggleResult .
+
+:ToggleResult a samm-c:Enumeration ;
+   samm:preferredName "Toggle result"@en ;
+   samm:description "The possible results of the toggle operation"@en ;
+   samm:dataType xsd:string ;
+   samm-c:values ( "ok" "denied" "unknown" ) .
+# end::operation-declaration[]
+
+# tag::see-url-declaration[]
+:lastName a samm:Property ;
+   samm:see <https://schema.org/familyName> ;
+   samm:see <http://xmlns.com/foaf/0.1/lastName> ;
+   samm:characteristic samm-c:Text .
+# end::see-url-declaration[]
+
+# tag::see-oid-declaration[]
+:filterName a samm:Property ;
+   samm:see <urn:oid:1.3.6.1.4.1.1919.1.1.2> ;
+   samm:characteristic samm-c:Text .
+# end::see-oid-declaration[]
+
+# tag::see-irdi-declaration[]
+:drillDiameter a samm:Property ;
+   # Reference to IRDI 0173-1#02-AAC895#009
+   samm:see <urn:irdi:0173-1#02-AAC895%23009> ;
+   samm:characteristic :Diameter .
+# end::see-irdi-declaration[]
+
+:Diameter a samm:Characteristic ;
+   samm:dataType xsd:int .
+
+# tag::see-dontuse[]
+:organizationPerson a samm:Property ;
+   samm:description "See ISO/IEC 11179-6:2015(E), section 3.35"@en ;
+   samm:characteristic samm-c:Text .
+# end::see-dontuse[]
+
+# tag::measurement-declaration[]
+:ToolTemperature a samm-c:Measurement ;
+   samm:dataType xsd:float ;
+   samm-c:unit unit:degreeCelsius .
+
+:drillHeadTemperature a samm:Property ;
+   samm:characteristic :ToolTemperature .
+# end::measurement-declaration[]
+
+# tag::single-entity-declaration[]
+:AccelerationVector a samm:Entity ;
+   samm:properties ( :x :y :z ) .
+
+# Definition of Properties x, y and z for the Entity here
+# ...
+
+:acceleration a samm:Property ;
+   samm:characteristic [
+      a samm-c:SingleEntity ;
+      samm:dataType :AccelerationVector
+   ] .
+# end::single-entity-declaration[]
+
+# To make AccelerationVector valid
+:x a samm:Property ;
+   samm:characteristic :AccelerationMeasurement .
+
+# To make AccelerationVector valid
+:y a samm:Property ;
+   samm:characteristic :AccelerationMeasurement .
+
+# To make AccelerationVector valid
+:z a samm:Property ;
+   samm:characteristic :AccelerationMeasurement .
+
+:AccelerationMeasurement a samm-c:Measurement ;
+   samm:dataType xsd:float ;
+   samm-c:unit unit:metrePerSecondSquared .
+
+# tag::event-declaration[]
+:temperatureUpdated a samm:Event ;
+   samm:parameters ( :drillHeadTemperature ) .
+# end::event-declaration[]

@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # SPARQL Server
+  oxirs-fuseki:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "3030:3030"
+    volumes:
+      - oxirs_data:/data
+      - ../oxirs.toml:/etc/oxirs/oxirs.toml:ro
+    environment:
+      - RUST_LOG=info
+    command: ["oxirs-fuseki", "--config", "/etc/oxirs/oxirs.toml", "--port", "3030"]
+    
+  # GraphQL Server
+  oxirs-graphql:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "4000:4000"
+    volumes:
+      - oxirs_data:/data
+    environment:
+      - RUST_LOG=info
+    command: ["oxirs-gql", "--port", "4000", "--dataset", "/data"]
+    depends_on:
+      - oxirs-fuseki
+      
+  # Chat API Server
+  oxirs-chat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - oxirs_data:/data
+    environment:
+      - RUST_LOG=info
+    command: ["oxirs-chat", "--port", "8080", "--dataset", "/data"]
+    depends_on:
+      - oxirs-fuseki
+
+  # Optional: Kafka for streaming (if streaming features enabled)
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+    profiles:
+      - streaming
+
+  # Optional: Zookeeper for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    profiles:
+      - streaming
+
+  # Optional: NATS for streaming (alternative to Kafka)
+  nats:
+    image: nats:latest
+    ports:
+      - "4222:4222"
+      - "8222:8222"  # HTTP monitoring
+    command: ["--jetstream", "--http_port", "8222"]
+    profiles:
+      - streaming
+
+volumes:
+  oxirs_data:
+
+networks:
+  default:
+    name: oxirs-network

@@ -1,0 +1,108 @@
+[package]
+name = "oxirs-samm"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Semantic Aspect Meta Model (SAMM) implementation for OxiRS"
+keywords = ["samm", "aspect-model", "semantic-web", "rdf", "digital-twin"]
+categories = ["data-structures", "parser-implementations", "web-programming"]
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+# OxiRS dependencies
+oxirs-core.workspace = true
+oxirs-shacl.workspace = true
+oxirs-ttl.workspace = true
+
+# RDF parsing
+oxttl.workspace = true
+oxrdf.workspace = true
+oxiri.workspace = true
+oxilangtag.workspace = true
+oxsdatatypes.workspace = true
+
+# SciRS2 for scientific computing
+scirs2-core = { workspace = true, features = ["profiling", "leak_detection"] }
+scirs2-graph = { workspace = true }
+scirs2-stats = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+async-trait.workspace = true
+rayon = "1.10"
+async-stream = "0.3"
+futures = "0.3"
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+quick-xml = { version = "0.38", features = ["serialize"] }
+zip = { version = "1.1", default-features = false, features = ["deflate"] }
+base64 = "0.22"
+
+# Error handling and logging
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+
+# Utilities
+url.workspace = true
+once_cell.workspace = true
+regex = "1.12"
+num_cpus = "1.17"
+bytecount = "0.6"
+reqwest.workspace = true
+chrono = { version = "0.4", features = ["serde"] }
+
+# Template engine for custom code generation
+tera = "1.20"
+
+# Image processing (optional, for AASX custom thumbnails)
+image = { version = "0.25", optional = true }
+
+# Graphviz rendering (optional, for SVG/PNG diagram generation)
+graphviz-rust = { version = "0.9", optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio-test = "0.4"
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+proptest = "1.7"
+
+[[bench]]
+name = "parser_benchmarks"
+harness = false
+
+[[bench]]
+name = "generator_benchmarks"
+harness = false
+
+[[bench]]
+name = "validation_benchmarks"
+harness = false
+
+[[bench]]
+name = "simd_benchmarks"
+harness = false
+
+[[bench]]
+name = "large_model_benchmarks"
+harness = false
+
+[features]
+default = []
+codegen = []  # Code generation support (GraphQL, TypeScript)
+aas = []      # Asset Administration Shell support
+aasx-thumbnails = ["image"]  # Custom thumbnail support for AASX packages
+graphviz = ["graphviz-rust"]  # SVG/PNG diagram rendering via Graphviz
+
+[lints]
+workspace = true

@@ -1,0 +1,9 @@
+# OxiRS Fuseki - Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oxirs
+  labels:
+    name: oxirs
+    environment: production
+    app: oxirs-fuseki

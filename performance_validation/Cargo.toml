@@ -1,0 +1,62 @@
+[package]
+name = "oxirs-performance-validation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Revolutionary performance validation and benchmarking suite for OxiRS"
+
+[dependencies]
+# SciRS2 Core Dependencies (Full Usage - MANDATORY)
+scirs2-core = { workspace = true, features = ["all"] }
+scirs2-graph = { workspace = true }
+scirs2-linalg = { workspace = true }
+scirs2-stats = { workspace = true }
+scirs2-neural = { workspace = true }
+scirs2-optimize = { workspace = true }
+scirs2-cluster = { workspace = true }
+
+# Async Runtime
+tokio = { workspace = true, features = ["full"] }
+futures = { workspace = true }
+
+# Standard Library Extensions
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Logging and Tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Time Handling
+chrono = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true, features = ["html_reports"] }
+
+[features]
+default = ["quantum", "gpu", "distributed", "ml"]
+quantum = ["scirs2-core/quantum"]
+gpu = ["scirs2-core/gpu"]
+distributed = ["scirs2-cluster/distributed"]
+ml = ["scirs2-neural/ml"]
+cosmic-scale = ["scirs2-core/cosmic"]
+
+[profile.release]
+opt-level = 3
+debug = false
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+opt-level = 3
+debug = true
+lto = true

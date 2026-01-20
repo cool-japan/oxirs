@@ -1,0 +1,58 @@
+[package]
+name = "oxirs-wasm"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "WebAssembly bindings for OxiRS - Run RDF/SPARQL in the browser"
+keywords = ["wasm", "webassembly", "rdf", "sparql", "browser"]
+categories = ["wasm", "web-programming", "database"]
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Utilities
+uuid.workspace = true
+
+# WASM bindings
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+web-sys.workspace = true
+wasm-bindgen-futures.workspace = true
+getrandom = { version = "0.3", features = ["wasm_js"] }
+console_error_panic_hook.workspace = true
+
+# Logging for WASM
+tracing.workspace = true
+tracing-wasm.workspace = true
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[features]
+default = []
+sparql = []
+reasoning = []
+shacl = []
+jsonld = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O3", "--enable-mutable-globals"]

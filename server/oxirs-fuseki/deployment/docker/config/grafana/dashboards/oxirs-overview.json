@@ -1,0 +1,149 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "oxirs-overview",
+    "title": "OxiRS Fuseki - Overview",
+    "tags": ["oxirs", "sparql", "overview"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "type": "graph",
+        "title": "SPARQL Queries per Second",
+        "targets": [
+          {
+            "expr": "rate(sparql_queries_total[5m])",
+            "legendFormat": "{{method}} - {{status}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Queries/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "type": "graph",
+        "title": "Query Duration (p95, p99)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(sparql_query_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(sparql_query_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Duration"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
+        "type": "singlestat",
+        "title": "Total Queries",
+        "targets": [
+          {
+            "expr": "sum(sparql_queries_total)",
+            "refId": "A"
+          }
+        ],
+        "format": "short",
+        "valueName": "current"
+      },
+      {
+        "id": 4,
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8},
+        "type": "singlestat",
+        "title": "Cache Hit Ratio",
+        "targets": [
+          {
+            "expr": "cache_hit_ratio",
+            "refId": "A"
+          }
+        ],
+        "format": "percentunit",
+        "valueName": "current"
+      },
+      {
+        "id": 5,
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
+        "type": "singlestat",
+        "title": "Active Connections",
+        "targets": [
+          {
+            "expr": "active_connections",
+            "refId": "A"
+          }
+        ],
+        "format": "short",
+        "valueName": "current"
+      },
+      {
+        "id": 6,
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
+        "type": "singlestat",
+        "title": "Memory Usage",
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes / 1024 / 1024",
+            "refId": "A"
+          }
+        ],
+        "format": "none",
+        "valueName": "current",
+        "postfix": " MB"
+      },
+      {
+        "id": 7,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "type": "graph",
+        "title": "HTTP Request Rate by Status",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Requests/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 8,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "type": "graph",
+        "title": "Error Rate",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
+            "legendFormat": "5xx errors",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(http_requests_total{status=~\"4..\"}[5m])",
+            "legendFormat": "4xx errors",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Errors/sec"},
+          {"format": "short"}
+        ]
+      }
+    ]
+  }
+}

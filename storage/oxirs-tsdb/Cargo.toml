@@ -1,0 +1,57 @@
+[package]
+name = "oxirs-tsdb"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Time-series optimizations for OxiRS semantic web platform"
+keywords = ["time-series", "iot", "compression", "rdf", "sparql"]
+categories = ["database", "compression", "algorithms"]
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+oxirs-core.workspace = true
+oxirs-tdb.workspace = true
+scirs2-core.workspace = true
+
+tokio = { workspace = true, features = ["fs", "io-util", "time", "sync", "rt-multi-thread"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+chrono = { workspace = true, features = ["serde"] }
+arrow = { workspace = true, optional = true }
+bit-vec = "0.6"
+lz4 = "1.28"
+lru = "0.12"
+humantime-serde = "1.1"
+
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+tokio-test = "0.4"
+
+[features]
+default = ["compression"]
+compression = []
+arrow-integration = ["arrow"]
+
+[[bench]]
+name = "write_throughput"
+harness = false
+
+[[bench]]
+name = "query_performance"
+harness = false
+
+[[bench]]
+name = "compression_ratio"
+harness = false

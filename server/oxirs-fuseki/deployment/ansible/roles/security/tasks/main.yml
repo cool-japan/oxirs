@@ -1,0 +1,175 @@
+---
+# Security role tasks
+
+- name: Install security packages
+  ansible.builtin.package:
+    name: "{{ security_packages }}"
+    state: present
+  tags: [security, packages]
+
+- name: Configure automatic security updates (Debian/Ubuntu)
+  ansible.builtin.package:
+    name: unattended-upgrades
+    state: present
+  when: ansible_os_family == 'Debian' and auto_security_updates | default(true)
+  tags: [security, updates]
+
+- name: Configure automatic security updates (RedHat/CentOS)
+  ansible.builtin.package:
+    name: yum-cron
+    state: present
+  when: ansible_os_family == 'RedHat' and auto_security_updates | default(true)
+  tags: [security, updates]
+
+- name: Configure fail2ban
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      [DEFAULT]
+      bantime = 3600
+      findtime = 600
+      maxretry = 5
+
+      [sshd]
+      enabled = true
+      port = ssh
+      logpath = /var/log/auth.log
+
+      [oxirs-fuseki]
+      enabled = true
+      port = {{ oxirs_http_port }},{{ oxirs_https_port }}
+      logpath = {{ oxirs_log_dir }}/oxirs-fuseki.log
+      maxretry = 10
+    mode: '0644'
+  notify: restart fail2ban
+  tags: [security, fail2ban]
+
+- name: Ensure fail2ban service is running
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true
+  tags: [security, fail2ban]
+
+- name: Configure SSH hardening
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - regexp: '^#?PermitRootLogin'
+      line: 'PermitRootLogin no'
+    - regexp: '^#?PasswordAuthentication'
+      line: 'PasswordAuthentication no'
+    - regexp: '^#?PubkeyAuthentication'
+      line: 'PubkeyAuthentication yes'
+    - regexp: '^#?X11Forwarding'
+      line: 'X11Forwarding no'
+    - regexp: '^#?MaxAuthTries'
+      line: 'MaxAuthTries 3'
+    - regexp: '^#?ClientAliveInterval'
+      line: 'ClientAliveInterval 300'
+    - regexp: '^#?ClientAliveCountMax'
+      line: 'ClientAliveCountMax 2'
+  notify: restart sshd
+  when: harden_ssh | default(true)
+  tags: [security, ssh]
+
+- name: Install and configure auditd
+  ansible.builtin.package:
+    name: auditd
+    state: present
+  tags: [security, audit]
+
+- name: Configure auditd rules
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/oxirs-fuseki.rules
+    content: |
+      # OxiRS Fuseki audit rules
+      -w {{ oxirs_config_dir }} -p wa -k oxirs_config_change
+      -w {{ oxirs_data_dir }} -p wa -k oxirs_data_access
+      -w {{ oxirs_install_dir }}/bin/oxirs-fuseki -p x -k oxirs_execution
+      -w /etc/systemd/system/oxirs-fuseki.service -p wa -k oxirs_service_change
+    mode: '0640'
+  notify: reload auditd
+  tags: [security, audit]
+
+- name: Start auditd service
+  ansible.builtin.service:
+    name: auditd
+    state: started
+    enabled: true
+  tags: [security, audit]
+
+- name: Install AIDE (intrusion detection)
+  ansible.builtin.package:
+    name: aide
+    state: present
+  when: install_aide | default(false)
+  tags: [security, ids]
+
+- name: Initialize AIDE database
+  ansible.builtin.command: aide --init
+  args:
+    creates: /var/lib/aide/aide.db.new.gz
+  when: install_aide | default(false)
+  tags: [security, ids]
+
+- name: Configure firewall rules
+  ansible.builtin.include_tasks: "firewall_{{ ansible_os_family | lower }}.yml"
+  when: configure_firewall | default(true)
+  tags: [security, firewall]
+
+- name: Disable unnecessary services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop: "{{ services_to_disable }}"
+  ignore_errors: true
+  tags: [security, services]
+
+- name: Set secure umask
+  ansible.builtin.lineinfile:
+    path: /etc/profile
+    regexp: '^umask'
+    line: 'umask 027'
+    state: present
+  tags: [security, permissions]
+
+- name: Configure password policy
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - regexp: '^PASS_MAX_DAYS'
+      line: 'PASS_MAX_DAYS   90'
+    - regexp: '^PASS_MIN_DAYS'
+      line: 'PASS_MIN_DAYS   1'
+    - regexp: '^PASS_MIN_LEN'
+      line: 'PASS_MIN_LEN    14'
+    - regexp: '^PASS_WARN_AGE'
+      line: 'PASS_WARN_AGE   7'
+  tags: [security, password]
+
+- name: Install rootkit detection tools
+  ansible.builtin.package:
+    name:
+      - rkhunter
+      - chkrootkit
+    state: present
+  when: install_rootkit_detection | default(false)
+  tags: [security, rootkit]
+
+- name: Create security scan cron job
+  ansible.builtin.cron:
+    name: "OxiRS security scan"
+    minute: "0"
+    hour: "2"
+    job: "/opt/oxirs-fuseki/scripts/security-scan.sh"
+    state: present
+  when: enable_security_scans | default(false)
+  tags: [security, cron]

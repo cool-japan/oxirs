@@ -1,0 +1,97 @@
+[package]
+name = "oxirs-arq"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Jena-style SPARQL algebra with extension points and query optimization"
+keywords = ["sparql", "query-engine", "optimization", "rdf", "jena"]
+categories = ["database", "algorithms", "data-structures"]
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+oxirs-core.workspace = true
+
+# SciRS2 dependencies for query optimization with full feature support
+scirs2-optimize = { workspace = true }
+scirs2-stats = { workspace = true }
+scirs2-neural = { workspace = true }
+scirs2-cluster = { workspace = true }
+scirs2-core = { workspace = true, features = ["all"] }
+
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+rayon = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+async-trait.workspace = true
+num_cpus = { workspace = true, optional = true }
+# rand functionality now provided by scirs2-core (use scirs2_core::random)
+# fastrand removed - using scirs2_core::random instead
+regex = "1.12"
+reqwest.workspace = true
+md5 = "0.8"
+sha1 = "0.10"
+sha2 = "0.10"
+urlencoding = "2.1"
+uuid.workspace = true
+dashmap = "6.1"
+parking_lot = "0.12"
+ordered-float = "5.1"
+rust_decimal = "1.40"
+hex = "0.4"
+base64 = "0.22"
+# lazy_static removed - using std::sync::OnceLock instead (Rust 1.70+)
+oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
+tempfile.workspace = true
+flate2 = "1.1"
+lz4_flex.workspace = true
+zstd = "0.13"
+
+[dev-dependencies]
+criterion.workspace = true
+tracing-subscriber.workspace = true
+
+[features]
+default = ["parallel"]
+star = ["oxirs-star"]
+extensions = []
+parallel = ["rayon", "tokio", "num_cpus"]
+
+[dependencies.oxirs-star]
+workspace = true
+optional = true
+
+[[bench]]
+name = "join_performance"
+harness = false
+
+[[bench]]
+name = "comprehensive_sparql_bench"
+harness = false
+
+[[bench]]
+name = "gpu_operations_bench"
+harness = false
+
+[[bench]]
+name = "sparql_star_bench"
+harness = false
+
+[[bench]]
+name = "simple_optimizer_bench"
+harness = false
+
+[[bench]]
+name = "production_profiles_bench"
+harness = false
+

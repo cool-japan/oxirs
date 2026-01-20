@@ -1,0 +1,50 @@
+# OxiRS Configuration Example
+
+[server]
+host = "0.0.0.0"
+port = 3030
+admin_ui = true
+cors = true
+
+[datasets.default]
+name = "default"
+location = "./data/default"
+read_only = false
+shacl_shapes = []
+services = []
+
+[datasets.example]
+name = "example"
+location = "./data/example"
+read_only = true
+shacl_shapes = []
+services = []
+
+[security]
+auth_required = false
+
+[security.users.admin]
+password_hash = "$2b$12$..."
+roles = ["admin", "write", "read"]
+
+[security.users.reader]
+password_hash = "$2b$12$..."
+roles = ["read"]
+
+[features]
+# Optional features
+text_search = false
+vector_search = false
+rdf_star = false
+clustering = false
+streaming = false
+
+[logging]
+level = "info"
+format = "json"
+output = "stdout"
+
+[performance]
+cache_size = 104857600  # 100MB
+query_timeout = 30000   # 30 seconds
+max_concurrent_queries = 100

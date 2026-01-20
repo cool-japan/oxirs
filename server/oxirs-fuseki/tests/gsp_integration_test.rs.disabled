@@ -1,0 +1,97 @@
+//! Graph Store Protocol (GSP) Integration Tests
+//!
+//! Tests W3C SPARQL 1.1 Graph Store HTTP Protocol compliance
+
+use axum::{
+    body::Body,
+    http::{header, Request, StatusCode},
+};
+use oxirs_core::rdf_store::ConcreteStore;
+use std::sync::Arc;
+use tower::ServiceExt;
+
+/// Test GSP GET on default graph
+#[tokio::test]
+async fn test_gsp_get_default_graph() {
+    let store = Arc::new(ConcreteStore::new());
+
+    // Add test data
+    let turtle_data = r#"
+        @prefix ex: <http://example.org/> .
+        ex:subject ex:predicate "test value" .
+    "#;
+
+    // Parse and insert data
+    use oxirs_core::format::parser::parse_turtle;
+    let triples = parse_turtle(turtle_data, None).unwrap();
+    for triple in triples {
+        store.insert_triple(triple).unwrap();
+    }
+
+    // Build router with GSP handlers
+    // Note: This requires access to the server's build_app or similar
+    // For now, this is a placeholder test structure
+}
+
+/// Test GSP PUT to replace graph
+#[tokio::test]
+async fn test_gsp_put_replace_graph() {
+    // Test replacing entire graph content
+    // Placeholder for actual test
+}
+
+/// Test GSP POST to add triples
+#[tokio::test]
+async fn test_gsp_post_add_triples() {
+    // Test adding triples to existing graph
+    // Placeholder for actual test
+}
+
+/// Test GSP DELETE to remove graph
+#[tokio::test]
+async fn test_gsp_delete_graph() {
+    // Test deleting entire graph
+    // Placeholder for actual test
+}
+
+/// Test GSP HEAD for graph existence
+#[tokio::test]
+async fn test_gsp_head_graph_exists() {
+    // Test checking if graph exists
+    // Placeholder for actual test
+}
+
+/// Test GSP content negotiation
+#[tokio::test]
+async fn test_gsp_content_negotiation() {
+    // Test Accept header handling
+    // Placeholder for actual test
+}
+
+/// Test GSP error handling - 404 Not Found
+#[tokio::test]
+async fn test_gsp_error_not_found() {
+    // Test accessing non-existent graph
+    // Placeholder for actual test
+}
+
+/// Test GSP error handling - 405 Method Not Allowed
+#[tokio::test]
+async fn test_gsp_error_method_not_allowed() {
+    // Test trying to write to union graph
+    // Placeholder for actual test
+}
+
+/// Test GSP with named graph
+#[tokio::test]
+async fn test_gsp_named_graph() {
+    // Test operations on named graph
+    // Placeholder for actual test
+}
+
+/// Test GSP OPTIONS
+#[tokio::test]
+async fn test_gsp_options() {
+    // Test OPTIONS request
+    // Placeholder for actual test
+}

@@ -1,0 +1,76 @@
+[package]
+name = "oxirs-did"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "W3C DID and Verifiable Credentials implementation with Signed RDF Graphs for OxiRS"
+keywords = ["did", "vc", "w3c", "rdf", "cryptography"]
+categories = ["cryptography", "authentication", "web-programming"]
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Internal OxiRS crates
+oxirs-core.workspace = true
+
+# SciRS2 for cryptographic operations
+scirs2-core.workspace = true
+
+# Cryptography
+ed25519-dalek.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+base64.workspace = true
+hex.workspace = true
+
+# Multiformat encoding
+multibase.workspace = true
+bs58.workspace = true
+
+# Async runtime
+tokio.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+
+# HTTP client (for did:web resolution)
+reqwest = { workspace = true, optional = true }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Utilities
+uuid.workspace = true
+chrono.workspace = true
+lru.workspace = true
+url.workspace = true
+once_cell.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tempfile.workspace = true
+
+[features]
+default = ["did-key", "vc-data-model-2"]
+did-key = []
+did-web = ["reqwest"]
+did-ebsi = ["reqwest"]
+vc-data-model-2 = []
+signed-graphs = []
+key-management = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
