@@ -83,7 +83,7 @@ lettre = { version = "0.11", features = ["tokio1-native-tls"] }
 slack-hook2 = "0.10"
 
 # Web dashboard dependencies
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.8", features = ["macros"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
 

@@ -54,7 +54,7 @@ scirs2-metrics = { workspace = true }
 scirs2-linalg = { workspace = true }
 
 # Web server dependencies (for API server feature)
-axum = { version = "0.7", optional = true }
+axum = { version = "0.8", optional = true }
 tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6", features = ["cors", "timeout", "trace"], optional = true }
 
