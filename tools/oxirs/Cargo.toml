@@ -69,7 +69,7 @@ hostname = "0.4"    # System hostname for test reports
 md5 = "0.8"         # MD5 hashing for checkpoint filenames
 hex = "0.4"         # Hex encoding for checksums
 rust_xlsxwriter = "0.79"  # Excel XLSX file generation
-inferno = "0.11"    # Flame graph generation for profiling
+inferno = "0.12"    # Flame graph generation for profiling
 printpdf = "0.8"    # PDF generation for reports
 handlebars = "5.1"  # Template engine for custom output formats
 
