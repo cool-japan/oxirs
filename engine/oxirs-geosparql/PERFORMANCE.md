@@ -657,20 +657,20 @@ let results = transform_batch(&small_dataset, &target_crs)?;
 
 ### Planned Improvements
 
-1. **GPU Acceleration** (H2 2025)
+1. **GPU Acceleration** (H2 2026)
    - CUDA/OpenCL for CRS transformations
    - Parallel geometry processing
    - Target: 10-100x speedup for large batches
 
-2. **Compressed Geometries** (Q2 2025)
+2. **Compressed Geometries** (Q1 2026)
    - Topology-preserving compression
    - Reduce memory footprint by 50-70%
 
-3. **Adaptive Indexing** (Q3 2025)
+3. **Adaptive Indexing** (Q1 2026)
    - Choose index strategy based on data distribution
    - R-tree, Quad-tree, or Grid based on geometry characteristics
 
-4. **Query Planning** (Q4 2025)
+4. **Query Planning** (Q2 2026)
    - Cost-based optimization for complex spatial queries
    - Automatic index selection
 

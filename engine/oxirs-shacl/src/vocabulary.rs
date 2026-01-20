@@ -17,6 +17,9 @@ pub struct ShaclVocabulary {
     pub validation_report: NamedNode,
     pub validation_result: NamedNode,
 
+    // Shape Properties
+    pub property: NamedNode, // sh:property - links NodeShape to PropertyShapes
+
     // Target Properties
     pub target_class: NamedNode,
     pub target_node: NamedNode,
@@ -166,6 +169,9 @@ impl ShaclVocabulary {
             constraint_component: named_node("ConstraintComponent"),
             validation_report: named_node("ValidationReport"),
             validation_result: named_node("ValidationResult"),
+
+            // Shape Properties
+            property: named_node("property"),
 
             // Target Properties
             target_class: named_node("targetClass"),

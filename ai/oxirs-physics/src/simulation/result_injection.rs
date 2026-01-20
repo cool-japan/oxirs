@@ -435,14 +435,14 @@ mod tests {
     fn test_provenance_tracking() {
         let prov = SimulationProvenance {
             software: "oxirs-physics".to_string(),
-            version: "0.1.0-rc.1".to_string(),
+            version: "0.1.0".to_string(),
             parameters_hash: "def456".to_string(),
             executed_at: Utc::now(),
             execution_time_ms: 2500,
         };
 
         assert_eq!(prov.software, "oxirs-physics");
-        assert_eq!(prov.version, "0.1.0-rc.1");
+        assert_eq!(prov.version, "0.1.0");
         assert_eq!(prov.execution_time_ms, 2500);
     }
 }

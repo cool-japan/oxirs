@@ -33,9 +33,12 @@
 //! - `residency` - Data residency and GDPR compliance
 //! - `message` - IDS message protocol
 
+pub mod api;
+pub mod broker;
 pub mod catalog;
 pub mod connector;
 pub mod contract;
+pub mod data_plane;
 pub mod identity;
 pub mod lineage;
 pub mod message;
@@ -43,9 +46,18 @@ pub mod policy;
 pub mod residency;
 pub mod types;
 
+pub use api::{ids_router, IdsApiState};
+pub use broker::{
+    BrokerCatalog, BrokerClient, BrokerResource, CatalogQuery, ConnectorEndpoint,
+    ConnectorSelfDescription, MultiBrokerManager, RegistrationResult,
+};
 pub use catalog::{DataResource, ResourceCatalog};
 pub use connector::{IdsConnector, IdsConnectorConfig};
 pub use contract::{ContractNegotiator, ContractState, DataContract};
+pub use data_plane::{
+    DataPlaneManager, StreamTransferAdapter, TransferProcess, TransferRequest, TransferResult,
+    TransferStatus, TransferType,
+};
 pub use identity::{DapsClient, IdentityProvider};
 pub use lineage::{LineageRecord, ProvenanceGraph};
 pub use policy::{OdrlPolicy, PolicyEngine, UsageController};

@@ -1,9 +1,9 @@
 //! # OxiRS ARQ - SPARQL Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-arq/badge.svg)](https://docs.rs/oxirs-arq)
 //!
-//! **Status**: Beta Release (v0.1.0-rc.1)
+//! **Status**: Production Release (v0.1.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Advanced SPARQL 1.1/1.2 query engine with optimization, federation support, and custom functions.
@@ -40,7 +40,7 @@
 //! - [`oxirs-fuseki`](https://docs.rs/oxirs-fuseki) - SPARQL HTTP server
 
 // Core modules
-pub mod adaptive_execution; // Adaptive query execution (v0.1.0)
+pub mod adaptive_execution;
 pub mod aggregates_ext;
 pub mod algebra;
 pub mod algebra_generation;
@@ -50,78 +50,76 @@ pub mod buffer_management;
 pub mod builtin;
 pub mod builtin_fixed;
 pub mod cache_integration;
-pub mod cardinality_estimator; // Advanced cardinality estimation (v0.1.0)
+pub mod cardinality_estimator;
 pub mod cost_model;
-pub mod debug_utilities; // Debugging utilities for SPARQL queries (v0.1.0)
+pub mod debug_utilities;
 pub mod distributed;
 pub mod executor;
 pub mod expression;
 pub mod extensions;
-pub mod federation; // Enhanced federated query execution (v0.1.0)
-pub mod gpu_accelerated_ops; // GPU-accelerated SPARQL operations (Beta.2+)
-pub mod graphql_translator; // GraphQL to SPARQL translation (v0.1.0)
+pub mod federation;
+pub mod gpu_accelerated_ops;
+pub mod graphql_translator;
 pub mod integrated_query_planner;
-pub mod interactive_query_builder; // Interactive SPARQL query builder (v0.1.0)
-pub mod jit_compiler; // JIT compilation for SPARQL queries (v0.1.0)
+pub mod interactive_query_builder;
+pub mod jit_compiler;
 pub mod join_algorithms;
-pub mod materialization; // Query result materialization strategies (v0.1.0)
+pub mod materialization;
 pub mod materialized_views;
 pub mod optimizer;
 pub mod parallel;
 pub mod path;
 pub mod path_extensions;
 pub mod procedures;
-pub mod production; // Production hardening features (Beta.1)
+pub mod production;
 pub mod property_functions;
 pub mod query;
 pub mod query_analysis;
 pub mod query_builder;
 pub mod query_plan_cache;
-pub mod query_profiler; // Query performance profiling (NEW)
-pub mod query_rewriter; // Advanced query rewriting (v0.1.0)
-pub mod query_validator; // Comprehensive query validation (v0.1.0)
+pub mod query_profiler;
+pub mod query_rewriter;
+pub mod query_validator;
 pub mod result_formats;
 pub mod results;
 pub mod scirs_optimize_integration;
 pub mod service_description;
-pub mod simd_query_ops; // SIMD-accelerated query operations (v0.1.0)
+pub mod simd_query_ops;
 pub mod statistics_collector;
 pub mod streaming;
 pub mod string_functions_ext;
-pub mod system_load_monitor; // System load monitoring for adaptive execution (NEW)
+pub mod system_load_monitor;
 pub mod term;
 pub mod triple_functions;
 pub mod update;
 pub mod values_support;
 pub mod vector_query_optimizer;
-pub mod websocket_streaming; // WebSocket streaming for SPARQL results (v0.1.0)
+pub mod websocket_streaming;
 
-// Beta.2+ Advanced modules
-pub mod adaptive_index_advisor; // Adaptive index recommendations (Beta.2+)
-pub mod cost_model_calibration; // Cost model calibration for adaptive learning (Beta.2+)
+// Advanced modules
+pub mod adaptive_index_advisor;
+pub mod cost_model_calibration;
 pub mod query_batch_executor;
-pub mod query_execution_history; // Query execution history tracking (Beta.2+)
-pub mod query_fingerprinting; // Advanced query fingerprinting for caching and analysis (Beta.2+)
-pub mod query_hints; // Query hints system for optimizer guidance (Beta.2+)
-pub mod query_optimization_advisor; // Automatic query optimization suggestions (Beta.2+)
-pub mod query_pagination; // Query result pagination for large datasets (Beta.2+)
-pub mod query_plan_diff; // Query plan comparison and diff utilities (Beta.2+++)
+pub mod query_execution_history;
+pub mod query_fingerprinting;
+pub mod query_hints;
+pub mod query_optimization_advisor;
+pub mod query_pagination;
+pub mod query_plan_diff;
 pub mod query_plan_export;
 pub mod query_regression_testing;
-pub mod query_result_cache; // Query result caching with fingerprint keys (Beta.2++++)
-pub mod query_templates; // SPARQL query template system (Beta.2+++) // Query regression testing framework (Beta.2+) // Query plan export to various formats (Beta.2+) // Smart batch query executor with parallel execution (Beta.2+++++++) NEW!
+pub mod query_result_cache;
+pub mod query_templates;
 
 // RDF-star / SPARQL-star integration
 #[cfg(feature = "star")]
 pub mod star_integration;
-pub mod statistics; // Advanced statistics and cardinality estimation
+pub mod statistics;
 
 // Advanced modules
 pub mod advanced_optimizer;
-// Temporarily disabled - require scirs2-core API migration (248/316 errors fixed as of Dec 9, 2025)
-// Progress: Counter/Timer API updated (.inc(), .get(), String parameters), 68 errors resolved
-// Remaining: Clone/Debug trait issues, missing methods, async Send/Sync fixes needed
-// TODO: Complete API migration in future release when scirs2-core stabilizes further
+// Temporarily disabled - require scirs2-core API migration
+// TODO: Complete API migration in future release when scirs2-core API stabilizes
 // pub mod advanced_statistics;
 // pub mod ai_shape_learning;
 // pub mod distributed_consensus;

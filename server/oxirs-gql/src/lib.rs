@@ -1,9 +1,9 @@
 //! # OxiRS GraphQL - GraphQL Interface for RDF
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-gql/badge.svg)](https://docs.rs/oxirs-gql)
 //!
-//! **Status**: Beta Release (v0.1.0-rc.1)
+//! **Status**: Production Release (v0.1.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! GraphQL interface for RDF data with automatic schema generation from ontologies.
@@ -331,7 +331,7 @@ pub mod types;
 pub mod validation;
 pub mod zero_trust_security;
 
-// v0.2.0 Operational Enhancements (November 24, 2025)
+// v0.2.0 Operational Enhancements
 pub mod api_versioning;
 pub mod blue_green_deployment;
 pub mod canary_release;
@@ -342,21 +342,21 @@ pub mod performance_insights;
 pub mod schema_changelog;
 pub mod visual_schema_designer;
 
-// v0.3.0 Security & Integration Features (November 24, 2025)
+// v0.3.0 Security & Integration Features
 pub mod content_security_policy;
 pub mod edge_caching;
 pub mod query_sanitization;
 pub mod response_streaming;
 pub mod webhook_support;
 
-// v0.4.0 Advanced Observability & Protocol Features (November 29, 2025)
+// v0.4.0 Advanced Observability & Protocol Features
 pub mod cost_based_optimizer;
 pub mod incremental_execution;
 pub mod query_batching;
 pub mod query_plan_visualizer;
 pub mod query_result_streaming;
 
-// v0.5.0 Advanced Observability & Monitoring (December 2, 2025)
+// v0.5.0 Advanced Observability & Monitoring
 pub mod graphql_span_attributes;
 pub mod performance_anomaly_detector;
 pub mod performance_heatmap;

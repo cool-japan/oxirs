@@ -855,7 +855,8 @@ mod tests {
         // Fresh connection should not be stale
         assert!(!connection.is_stale(Duration::from_secs(10)));
 
-        // Connection should be stale with very short timeout
+        // Connection should be stale with very short timeout after some time passes
+        std::thread::sleep(Duration::from_millis(1));
         assert!(connection.is_stale(Duration::from_nanos(1)));
     }
 

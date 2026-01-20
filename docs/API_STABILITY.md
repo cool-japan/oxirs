@@ -1,15 +1,15 @@
 # OxiRS API Stability Guarantees
 
-**Version**: v0.1.0-rc.2
-**Date**: December 21, 2025
+**Version**: v0.1.0
+**Date**: January 7, 2026
 **Status**: Production-Ready
-**Stability Level**: Release Candidate
+**Stability Level**: Production Release
 
 ---
 
 ## 🎯 Overview
 
-This document defines OxiRS's API stability guarantees, versioning policy, and deprecation procedures. Starting with v0.1.0-rc.2, we commit to **backward compatibility** within the v0.1.x series and establish a clear path to v1.0.0 stability. As of v0.1.0-rc.2, stability guarantees are now expanded with distributed storage and AI modules reaching unstable/stable status.
+This document defines OxiRS's API stability guarantees, versioning policy, and deprecation procedures. Starting with v0.1.0, we commit to **backward compatibility** within the v0.1.x series and establish a clear path to v1.0.0 stability. As of v0.1.0, stability guarantees are now expanded with distributed storage and AI modules reaching unstable/stable status.
 
 ---
 
@@ -110,7 +110,7 @@ OxiRS follows [Semantic Versioning 2.0.0](https://semver.org/) with Rust-specifi
 - Changes to trait requirements
 - Incompatible data format changes
 
-**Timeline**: v1.0.0 planned for Q2 2026 (after RC.1 → RC.1 → RC.1 → Stable)
+**Timeline**: v1.0.0 planned for Q2 2026 (after v0.1.0 → v0.1.0 → v0.1.0 → Stable)
 
 #### Minor Version (0.1.x → 0.2.x)
 **Non-breaking additions and unstable API changes**:
@@ -120,7 +120,7 @@ OxiRS follows [Semantic Versioning 2.0.0](https://semver.org/) with Rust-specifi
 - Changes to unstable APIs
 - Performance improvements
 
-**Timeline**: v0.2.0 planned for Q1 2026 (3 months after RC.1)
+**Timeline**: v0.2.0 planned for Q1 2026 (3 months after v0.1.0)
 
 #### Patch Version (0.1.0 → 0.1.1)
 **Bug fixes only**:
@@ -155,9 +155,9 @@ OxiRS follows [Semantic Versioning 2.0.0](https://semver.org/) with Rust-specifi
 ### Example Deprecation
 
 ```rust
-// Version 0.1.0-rc.2 (Deprecation announcement)
+// Version 0.1.0 (Deprecation announcement)
 #[deprecated(
-    since = "0.1.0-rc.2",
+    since = "0.1.0",
     note = "Use `MemoryStore::new()` or `TdbStore::open()` instead. \
             See migration guide: docs/MIGRATION_ALPHA3_BETA1.md"
 )]
@@ -169,15 +169,9 @@ pub fn ConcreteStore::new() -> Result<Self> {
 // ConcreteStore::new() removed entirely
 ```
 
-### Current Deprecations (v0.1.0-rc.2)
+### Current Deprecations (v0.1.0)
 
-| Deprecated API | Replacement | Removal Version | Migration Guide |
-|----------------|-------------|-----------------|-----------------|
-| `ConcreteStore::new()` | `MemoryStore::new()` | v0.2.0 | [Migration Guide](MIGRATION_ALPHA3_BETA1.md#1-concretestore-construction) |
-| `QueryExecutor::execute_query()` | `QueryExecutor::execute()` | v0.2.0 | [Migration Guide](MIGRATION_ALPHA3_BETA1.md#2-query-execution-api) |
-| `FederationConfig` struct | `FederationClient::builder()` | v0.2.0 | [Migration Guide](MIGRATION_ALPHA3_BETA1.md#3-federation-configuration) |
-| String-based errors | `OxirsError` enum | v0.2.0 | [Migration Guide](MIGRATION_ALPHA3_BETA1.md#4-error-handling) |
-| Manual health endpoints | Built-in `/$/ping` endpoints | v0.2.0 | [Migration Guide](MIGRATION_ALPHA3_BETA1.md#5-manual-health-check-endpoints) |
+*No deprecations in v0.1.0 - this is the initial production release.*
 
 ---
 
@@ -185,7 +179,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Core Foundation (🟢 Stable)
 
-#### oxirs-core (v0.1.0-rc.2)
+#### oxirs-core (v0.1.0)
 **Stability**: 🟢 **Stable** (95% frozen)
 
 | API Surface | Stability | Notes |
@@ -202,7 +196,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **LOW** (< 5%)
 
-#### oxirs-tdb (v0.1.0-rc.2)
+#### oxirs-tdb (v0.1.0)
 **Stability**: 🟢 **Stable** (90% frozen)
 
 | API Surface | Stability | Notes |
@@ -219,7 +213,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Query Engine (🟢 Stable)
 
-#### oxirs-arq (v0.1.0-rc.2)
+#### oxirs-arq (v0.1.0)
 **Stability**: 🟢 **Stable** (90% frozen)
 
 | API Surface | Stability | Notes |
@@ -233,7 +227,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **LOW** (< 10%)
 
-#### oxirs-rule (v0.1.0-rc.2)
+#### oxirs-rule (v0.1.0)
 **Stability**: 🟡 **Unstable** (70% frozen)
 
 | API Surface | Stability | Notes |
@@ -249,7 +243,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Server & HTTP (🟢 Stable)
 
-#### oxirs-fuseki (v0.1.0-rc.2)
+#### oxirs-fuseki (v0.1.0)
 **Stability**: 🟢 **Stable** (95% frozen)
 
 | API Surface | Stability | Notes |
@@ -262,7 +256,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **VERY LOW** (< 5%)
 
-#### oxirs-gql (v0.1.0-rc.2)
+#### oxirs-gql (v0.1.0)
 **Stability**: 🟡 **Unstable** (80% frozen)
 
 | API Surface | Stability | Notes |
@@ -277,7 +271,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Storage & Distribution (🟡 Unstable)
 
-#### oxirs-cluster (v0.1.0-rc.2)
+#### oxirs-cluster (v0.1.0)
 **Stability**: 🟡 **Unstable** (70% frozen)
 
 | API Surface | Stability | Notes |
@@ -293,7 +287,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Validation & Reasoning (🟡 Unstable)
 
-#### oxirs-shacl (v0.1.0-rc.2)
+#### oxirs-shacl (v0.1.0)
 **Stability**: 🟡 **Unstable** (75% frozen)
 
 | API Surface | Stability | Notes |
@@ -304,7 +298,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **MEDIUM** (25%)
 
-#### oxirs-shacl-ai (v0.1.0-rc.2)
+#### oxirs-shacl-ai (v0.1.0)
 **Stability**: 🔴 **Experimental** (50% frozen)
 
 | API Surface | Stability | Notes |
@@ -318,18 +312,18 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### AI & Machine Learning (🔴 Experimental)
 
-#### oxirs-embed (v0.1.0-rc.2)
+#### oxirs-embed (v0.1.0)
 **Stability**: 🔴 **Experimental** (60% frozen)
 
 | API Surface | Stability | Notes |
 |-------------|-----------|-------|
-| `EmbeddingModel::encode()` | 🟡 Unstable | Encoding API stabilizing in RC.1 |
+| `EmbeddingModel::encode()` | 🟡 Unstable | Encoding API stabilizing in v0.1.0 |
 | `VectorStore` | 🔴 Experimental | Storage format may change |
 | Similarity search | 🔴 Experimental | Algorithm may be replaced |
 
 **Breaking Change Risk**: **HIGH** (40%)
 
-#### oxirs-chat (v0.1.0-rc.2)
+#### oxirs-chat (v0.1.0)
 **Stability**: 🔴 **Experimental** (50% frozen)
 
 | API Surface | Stability | Notes |
@@ -344,7 +338,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Streaming & Federation (🟡 Unstable)
 
-#### oxirs-stream (v0.1.0-rc.2)
+#### oxirs-stream (v0.1.0)
 **Stability**: 🟡 **Unstable** (65% frozen)
 
 | API Surface | Stability | Notes |
@@ -355,7 +349,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **MEDIUM** (35%)
 
-#### oxirs-federate (v0.1.0-rc.2)
+#### oxirs-federate (v0.1.0)
 **Stability**: 🟡 **Unstable** (80% frozen)
 
 | API Surface | Stability | Notes |
@@ -370,7 +364,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### Extensions (🔴 Experimental)
 
-#### oxirs-star (v0.1.0-rc.2)
+#### oxirs-star (v0.1.0)
 **Stability**: 🟡 **Unstable** (85% frozen)
 
 | API Surface | Stability | Notes |
@@ -381,7 +375,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: **MEDIUM** (15%)
 
-#### oxirs-geosparql (v0.1.0-rc.2)
+#### oxirs-geosparql (v0.1.0)
 **Stability**: 🔴 **Experimental** (60% frozen)
 
 | API Surface | Stability | Notes |
@@ -394,7 +388,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ---
 
-## 🔒 API Stability Contract (RC.1 → v1.0.0)
+## 🔒 API Stability Contract (v0.1.0 → v1.0.0)
 
 ### What We Guarantee
 
@@ -442,7 +436,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ## 📊 Stability Roadmap
 
-### v0.1.0-rc.2 (December 2025)
+### v0.1.0 (January 2026)
 **Focus**: API freeze for core modules
 
 - 🟢 **Stable**: oxirs-core, oxirs-arq, oxirs-fuseki, oxirs-tdb (95% frozen)
@@ -451,7 +445,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: 10% overall
 
-### v0.1.0-rc.2 (Current - December 2025)
+### v0.1.0 (Current - January 2026)
 **Focus**: Stabilize distributed storage, GraphQL, and AI modules
 
 - 🟢 **Stable**: oxirs-cluster, oxirs-gql promoted to stable (90%+ frozen)
@@ -461,8 +455,8 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: 5% overall
 
-### v0.1.0-rc.2 (Q1 2026)
-**Focus**: Release candidate with full API freeze
+### v0.1.0 (Q1 2026)
+**Focus**: Production release with full API stability
 
 - 🟢 **Stable**: All core modules frozen (99% frozen)
 - 🟡 **Unstable**: Only experimental features remain unstable
@@ -501,7 +495,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 # Cargo.toml
 [package]
 name = "oxirs-core"
-version = "0.1.0-rc.2"
+version = "0.1.0"
 rust-version = "1.75.0"  # MSRV declared
 ```
 
@@ -568,7 +562,7 @@ experimental-neuro = ["dep:oxirs-neuro"]
 ### ❌ Breaking Changes (Require Major/Minor Version Bump)
 
 ```rust
-// BEFORE (v0.1.0-rc.2)
+// BEFORE (v0.1.0)
 pub fn execute(&self, query: &str) -> Result<QueryResults>;
 
 // AFTER (v0.2.0) - BREAKING: New required parameter
@@ -576,7 +570,7 @@ pub fn execute(&self, query: &str, options: QueryOptions) -> Result<QueryResults
 ```
 
 ```rust
-// BEFORE (v0.1.0-rc.2)
+// BEFORE (v0.1.0)
 pub struct Triple {
     pub subject: Term,
     pub predicate: Term,
@@ -594,7 +588,7 @@ pub struct Triple {
 ### ✅ Non-Breaking Changes (Allowed in Patch Releases)
 
 ```rust
-// BEFORE (v0.1.0-rc.2)
+// BEFORE (v0.1.0)
 pub fn execute(&self, query: &str) -> Result<QueryResults>;
 
 // AFTER (v0.1.1) - NON-BREAKING: New optional parameter via overload
@@ -602,7 +596,7 @@ pub fn execute_with_options(&self, query: &str, options: QueryOptions) -> Result
 ```
 
 ```rust
-// BEFORE (v0.1.0-rc.2)
+// BEFORE (v0.1.0)
 pub struct Triple {
     pub subject: Term,
     pub predicate: Term,
@@ -629,7 +623,7 @@ pub struct Triple {
 **Most Important**: Always read CHANGELOG.md before upgrading
 ```bash
 # View changes between versions
-git log v0.1.0-rc.2..v0.1.0-rc.2 --oneline CHANGELOG.md
+git log v0.1.0..v0.1.0 --oneline CHANGELOG.md
 ```
 
 #### 2. Compiler Warnings
@@ -637,13 +631,11 @@ git log v0.1.0-rc.2..v0.1.0-rc.2 --oneline CHANGELOG.md
 ```rust
 warning: use of deprecated function `ConcreteStore::new`:
 Use `MemoryStore::new()` or `TdbStore::open()` instead.
-See migration guide: docs/MIGRATION_ALPHA3_BETA1.md
+See API documentation for migration guidance.
 ```
 
 #### 3. Migration Guides
-**Step-by-step** upgrade instructions
-- [Alpha.3 → RC.1](MIGRATION_ALPHA3_BETA1.md)
-- [RC.1 → RC.1](MIGRATION_BETA1_BETA2.md) *(coming soon)*
+**Step-by-step** upgrade instructions provided for each major/minor version transition.
 
 #### 4. API Documentation
 **docs.rs** updated with each release
@@ -663,7 +655,7 @@ See migration guide: docs/MIGRATION_ALPHA3_BETA1.md
 ### Getting Help with API Changes
 
 #### Documentation
-- **API Docs**: https://docs.rs/oxirs-core/0.1.0-rc.2
+- **API Docs**: https://docs.rs/oxirs-core/0.1.0
 - **Migration Guides**: `/docs/MIGRATION_*.md`
 - **Architecture Guide**: `/docs/ARCHITECTURE.md`
 
@@ -682,7 +674,7 @@ If you encounter an **undocumented breaking change**, please report:
 
 ## 🎯 Summary: What You Can Rely On
 
-### ✅ Safe for Production (v0.1.0-rc.2)
+### ✅ Safe for Production (v0.1.0)
 
 **Core RDF Operations**:
 - ✅ `oxirs-core`: Store trait, RDF model, error types
@@ -766,7 +758,7 @@ v1.0.0 ────────────────────────�
 
 ## ✅ Conclusion
 
-**OxiRS v0.1.0-rc.2** establishes a **clear stability contract**:
+**OxiRS v0.1.0** establishes a **clear stability contract**:
 
 1. **Core APIs (🟢 Stable)**: Safe for production, backward compatible within v0.1.x
 2. **Distributed APIs (🟡 Unstable → 🟢 Stable)**: Most now stable, safe for production
@@ -776,13 +768,12 @@ v1.0.0 ────────────────────────�
 **Commitment**: We prioritize **smooth upgrades** with **clear migration paths** over rapid breaking changes.
 
 **Timeline**:
-- **RC.1 (Oct 2025)**: Core APIs frozen
-- **RC.1 (Dec 2025, current)**: Distributed and AI APIs stabilized
-- **RC.1 (Q1 2026)**: Full API freeze
+- **v0.1.0 (January 2026)**: Initial production release with stable APIs
+- **v0.1.0 (Q1 2026)**: Full API freeze
 - **v1.0.0 (Q2 2026)**: Long-term stability guarantee
 
 ---
 
-*API Stability Guarantees - December 21, 2025*
-*Version: v0.1.0-rc.2*
+*API Stability Guarantees - January 7, 2026*
+*Version: v0.1.0*
 *Status: Production-Ready*

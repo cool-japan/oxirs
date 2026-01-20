@@ -1,7 +1,7 @@
 # OxiRS Embed - Production Deployment Guide
 
-**Version**: 0.1.0-rc.2
-**Last Updated**: November 20, 2025
+**Version**: 0.1.0
+**Last Updated**: 2026-01-06
 **Status**: Production Ready ✅
 
 ## Table of Contents
@@ -72,7 +72,7 @@ GPU: NVIDIA A100 (40GB+) or H100
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-embed = { version = "0.1.0-rc.2", features = ["all"] }
+oxirs-embed = { version = "0.1.0", features = ["all"] }
 tokio = { version = "1.48", features = ["full"] }
 tracing-subscriber = "0.3"
 ```
@@ -193,7 +193,7 @@ spec:
     spec:
       containers:
       - name: oxirs-embed
-        image: ghcr.io/cool-japan/oxirs-embed:0.1.0-rc.2
+        image: ghcr.io/cool-japan/oxirs-embed:0.1.0
         ports:
         - containerPort: 8080
           name: http
@@ -317,7 +317,7 @@ async fn main() -> Result<()> {
 
 ```bash
 # Download latest release
-wget https://github.com/cool-japan/oxirs/releases/download/v0.1.0-rc.2/oxirs-embed-linux-x86_64.tar.gz
+wget https://github.com/cool-japan/oxirs/releases/download/v0.1.0/oxirs-embed-linux-x86_64.tar.gz
 
 # Extract
 tar -xzf oxirs-embed-linux-x86_64.tar.gz
@@ -370,7 +370,7 @@ CMD ["oxirs-embed", "serve"]
 
 ```bash
 # Build Docker image
-docker build -t oxirs-embed:0.1.0-rc.2 .
+docker build -t oxirs-embed:0.1.0 .
 
 # Run container
 docker run -d \
@@ -378,7 +378,7 @@ docker run -d \
   -p 8080:8080 \
   -p 9090:9090 \
   -v /path/to/models:/var/lib/oxirs/models \
-  oxirs-embed:0.1.0-rc.2
+  oxirs-embed:0.1.0
 ```
 
 ---
@@ -637,7 +637,7 @@ tracing_subscriber::registry()
 // GET /health
 {
   "status": "healthy",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0",
   "uptime_seconds": 86400,
   "cache_hit_rate": 0.85,
   "models_loaded": 3
@@ -784,4 +784,4 @@ burst_size = 50
 
 **License**: MIT
 **Maintainers**: OxiRS Team
-**Version**: 0.1.0-rc.2 (Production Ready)
+**Version**: 0.1.0 (Production Ready)

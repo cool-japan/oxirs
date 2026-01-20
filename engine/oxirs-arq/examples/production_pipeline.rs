@@ -1,6 +1,6 @@
-//! Production Pipeline Example - Beta.2 Features
+//! Production Pipeline Example
 //!
-//! This example demonstrates how to use the Beta.2 production features together:
+//! This example demonstrates production features for SPARQL endpoints:
 //! - Query Priority System for intelligent scheduling
 //! - Query Cost Estimator for proactive optimization
 //! - Performance Baseline Tracker for regression detection
@@ -16,7 +16,7 @@
 //! # Usage
 //!
 //! ```bash
-//! cargo run --example production_pipeline_beta2
+//! cargo run --example production_pipeline
 //! ```
 
 use oxirs_arq::production::{

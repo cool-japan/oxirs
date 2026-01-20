@@ -1,6 +1,6 @@
 # DTDL Complete Implementation Guide
 
-**Version**: OxiRS v0.1.0-rc.2 (rc.1)
+**Version**: OxiRS v0.1.0 (0.1.0)
 **Implementation**: Phase 1 + Phase 2 Complete
 **Status**: ✅ Production-Ready
 **Test Coverage**: 446 tests (100% passing)
@@ -800,7 +800,7 @@ See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for guidelines.
 
 ## Changelog
 
-### Phase 2 (2025-12-24)
+### Phase 2 (2026-01-06)
 
 **Added:**
 - ✅ DTDL Interface parser (`dtdl_parser/mod.rs`, 450 lines)
@@ -816,7 +816,7 @@ See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for guidelines.
 - Round-trip: 6 integration tests (100% passing)
 - **Total: 446 tests** (440 lib + 6 roundtrip)
 
-### Phase 1 (2025-12-24)
+### Phase 1 (2026-01-06)
 
 **Added:**
 - ✅ DTDL v3 generator (`generators/dtdl.rs`, 455 lines)
@@ -829,6 +829,6 @@ See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for guidelines.
 
 ---
 
-**Last Updated**: December 24, 2025
+**Last Updated**: 2026-01-06
 **Maintainer**: OxiRS Team
 **Status**: Phase 1 + Phase 2 Complete ✅

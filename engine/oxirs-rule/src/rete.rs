@@ -225,6 +225,93 @@ impl ReteNetwork {
         id
     }
 
+    /// Check if a RuleAtom is a filter condition (comparison or builtin test)
+    /// Filter conditions should not create alpha nodes but instead be added as
+    /// conditions on beta joins.
+    fn is_filter_condition(&self, atom: &RuleAtom) -> bool {
+        matches!(
+            atom,
+            RuleAtom::GreaterThan { .. } | RuleAtom::LessThan { .. } | RuleAtom::NotEqual { .. }
+        )
+    }
+
+    /// Convert a filter RuleAtom to a JoinCondition for the enhanced beta join
+    fn convert_filter_to_join_condition(
+        &self,
+        atom: &RuleAtom,
+    ) -> Option<crate::rete_enhanced::JoinCondition> {
+        match atom {
+            RuleAtom::GreaterThan { left, right } => self.create_comparison_condition(
+                left,
+                right,
+                crate::rete_enhanced::ComparisonOp::Greater,
+            ),
+            RuleAtom::LessThan { left, right } => self.create_comparison_condition(
+                left,
+                right,
+                crate::rete_enhanced::ComparisonOp::Less,
+            ),
+            RuleAtom::NotEqual { left, right } => self.create_comparison_condition(
+                left,
+                right,
+                crate::rete_enhanced::ComparisonOp::NotEqual,
+            ),
+            _ => None,
+        }
+    }
+
+    /// Create a comparison condition from two terms
+    fn create_comparison_condition(
+        &self,
+        left: &Term,
+        right: &Term,
+        op: crate::rete_enhanced::ComparisonOp,
+    ) -> Option<crate::rete_enhanced::JoinCondition> {
+        match (left, right) {
+            // Variable vs Variable
+            (Term::Variable(left_var), Term::Variable(right_var)) => {
+                Some(crate::rete_enhanced::JoinCondition::VarComparison {
+                    left_var: left_var.clone(),
+                    right_var: right_var.clone(),
+                    op,
+                })
+            }
+            // Variable vs Constant/Literal
+            (Term::Variable(var), constant) | (constant, Term::Variable(var)) => {
+                Some(crate::rete_enhanced::JoinCondition::VarConstComparison {
+                    var: var.clone(),
+                    constant: constant.clone(),
+                    op,
+                })
+            }
+            // Constant vs Constant - evaluate at compile time (should not happen in practice)
+            _ => None,
+        }
+    }
+
+    /// Add a filter condition to an existing beta join node
+    fn add_filter_to_beta_node(
+        &mut self,
+        beta_id: NodeId,
+        condition: crate::rete_enhanced::JoinCondition,
+    ) -> Result<()> {
+        if let Some(enhanced_node) = self.enhanced_beta_nodes.get_mut(&beta_id) {
+            if self.debug_mode {
+                debug!(
+                    "Adding filter condition {:?} to beta node {}",
+                    condition, beta_id
+                );
+            }
+            enhanced_node.conditions.push(condition);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(
+                "Beta node {} not found for adding filter",
+                beta_id
+            ))
+        }
+    }
+
     /// Add a rule to the RETE network
     pub fn add_rule(&mut self, rule: &Rule) -> Result<()> {
         info!("Adding rule '{}' to RETE network", rule.name);
@@ -237,22 +324,79 @@ impl ReteNetwork {
         // Build the network for this rule
         let mut current_nodes = vec![self.root_id];
 
+        // Separate pattern conditions from filter conditions
+        // Filters need to be applied after we have a beta join with variable bindings
+        let mut pending_filters: Vec<RuleAtom> = Vec::new();
+
         // Process each condition in the rule body
         for (i, condition) in rule.body.iter().enumerate() {
+            // Check if this is a filter condition
+            if self.is_filter_condition(condition) {
+                // Collect filter for later application
+                pending_filters.push(condition.clone());
+                continue;
+            }
+
             let mut next_nodes = Vec::new();
 
             for &current_node in &current_nodes {
-                let node_id = if i == 0 {
-                    // First condition - create alpha node
+                let node_id = if i == 0 || current_node == self.root_id {
+                    // First pattern condition - create alpha node
                     self.create_alpha_node(condition.clone(), current_node)?
                 } else {
-                    // Subsequent conditions - create beta join
+                    // Subsequent pattern conditions - create beta join
                     self.create_beta_join(current_node, condition.clone())?
                 };
                 next_nodes.push(node_id);
             }
 
+            // Apply any pending filters to the newly created nodes
+            for node_id in &next_nodes {
+                if self.enhanced_beta_nodes.contains_key(node_id) {
+                    for filter in &pending_filters {
+                        if let Some(join_condition) = self.convert_filter_to_join_condition(filter)
+                        {
+                            self.add_filter_to_beta_node(*node_id, join_condition)?;
+                        }
+                    }
+                }
+            }
+            pending_filters.clear();
+
             current_nodes = next_nodes;
+        }
+
+        // Handle remaining filters - if we have pending filters but no beta join yet,
+        // we need to create a special "filter-only" beta join or apply to production
+        // For now, if there are filters left and we have beta nodes, apply them to the last beta node
+        if !pending_filters.is_empty() {
+            // First pass: collect nodes that need filter beta nodes
+            let mut replacements: Vec<(usize, NodeId)> = Vec::new();
+
+            for (idx, &node_id) in current_nodes.iter().enumerate() {
+                if self.enhanced_beta_nodes.contains_key(&node_id) {
+                    for filter in &pending_filters {
+                        if let Some(join_condition) = self.convert_filter_to_join_condition(filter)
+                        {
+                            self.add_filter_to_beta_node(node_id, join_condition)?;
+                        }
+                    }
+                } else {
+                    // Need to create a filter-only node - create a dummy beta join that just applies filters
+                    // This handles cases like a single pattern followed by a filter
+                    if let Some(ReteNode::Alpha { .. }) = self.nodes.get(&node_id).cloned() {
+                        // Create a "filter beta" that has the same pattern on both sides but applies the filter
+                        let filter_beta_id =
+                            self.create_filter_beta_node(node_id, &pending_filters)?;
+                        replacements.push((idx, filter_beta_id));
+                    }
+                }
+            }
+
+            // Apply replacements
+            for (idx, filter_beta_id) in replacements {
+                current_nodes[idx] = filter_beta_id;
+            }
         }
 
         // Create production nodes for rule head
@@ -265,6 +409,64 @@ impl ReteNetwork {
         }
 
         Ok(())
+    }
+
+    /// Create a filter-only beta node for applying filter conditions after an alpha node
+    /// This is used when a pattern is followed directly by filter conditions
+    fn create_filter_beta_node(
+        &mut self,
+        alpha_parent: NodeId,
+        filters: &[RuleAtom],
+    ) -> Result<NodeId> {
+        // Create a special beta node that filters tokens from the alpha node
+        // This acts as a "self-join" that just applies filter conditions
+
+        let node_id = self.create_node(ReteNode::Beta {
+            left_parent: alpha_parent,
+            right_parent: alpha_parent, // Same parent - this is a filter node
+            join_condition: JoinCondition::default(),
+            children: Vec::new(),
+        });
+
+        // Update parent children
+        self.add_child(alpha_parent, node_id)?;
+
+        // Initialize beta memory
+        self.beta_memory.insert(node_id, (Vec::new(), Vec::new()));
+
+        // Create enhanced beta join node with filter conditions
+        let mut enhanced_node = BetaJoinNode::new(
+            node_id,
+            alpha_parent,
+            alpha_parent, // Same parent
+            self.memory_strategy,
+            self.conflict_resolution,
+        );
+
+        // Add all filter conditions
+        for filter in filters {
+            if let Some(join_condition) = self.convert_filter_to_join_condition(filter) {
+                if self.debug_mode {
+                    debug!(
+                        "Adding filter condition {:?} to filter beta node {}",
+                        join_condition, node_id
+                    );
+                }
+                enhanced_node.conditions.push(join_condition);
+            }
+        }
+
+        self.enhanced_beta_nodes.insert(node_id, enhanced_node);
+
+        if self.debug_mode {
+            debug!(
+                "Created filter beta node {} with {} filters",
+                node_id,
+                filters.len()
+            );
+        }
+
+        Ok(node_id)
     }
 
     /// Create an alpha node for pattern matching
@@ -1720,5 +1922,163 @@ mod tests {
 
         let results = network.add_fact(fact).unwrap();
         assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_comparison_operator_greater_than() {
+        // Test for GitHub issue #44: Rete Engine Comparison Operator Usage
+        // Comparison operators like `?age > 18` should work correctly
+        let mut network = ReteNetwork::new();
+        network.set_debug_mode(true);
+
+        // Rule: if ?person :hasAge ?age and ?age > 18, then ?person :isAdult true
+        let rule = Rule {
+            name: "isAdult".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("person".to_string()),
+                    predicate: Term::Constant(":hasAge".to_string()),
+                    object: Term::Variable("age".to_string()),
+                },
+                RuleAtom::GreaterThan {
+                    left: Term::Variable("age".to_string()),
+                    right: Term::Literal("18".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("person".to_string()),
+                predicate: Term::Constant(":isAdult".to_string()),
+                object: Term::Literal("true".to_string()),
+            }],
+        };
+
+        network.add_rule(&rule).unwrap();
+
+        // Fact: john has age 20 (which is > 18)
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant(":hasAge".to_string()),
+            object: Term::Literal("20".to_string()),
+        }];
+
+        let result = network.forward_chain(facts).unwrap();
+
+        // Should derive john :isAdult true
+        let expected = RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant(":isAdult".to_string()),
+            object: Term::Literal("true".to_string()),
+        };
+
+        assert!(
+            result.contains(&expected),
+            "Expected {:?} to be in {:?}",
+            expected,
+            result
+        );
+    }
+
+    #[test]
+    fn test_comparison_operator_less_than() {
+        // Test LessThan comparison operator
+        let mut network = ReteNetwork::new();
+
+        // Rule: if ?person :hasAge ?age and ?age < 18, then ?person :isMinor true
+        let rule = Rule {
+            name: "isMinor".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("person".to_string()),
+                    predicate: Term::Constant(":hasAge".to_string()),
+                    object: Term::Variable("age".to_string()),
+                },
+                RuleAtom::LessThan {
+                    left: Term::Variable("age".to_string()),
+                    right: Term::Literal("18".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("person".to_string()),
+                predicate: Term::Constant(":isMinor".to_string()),
+                object: Term::Literal("true".to_string()),
+            }],
+        };
+
+        network.add_rule(&rule).unwrap();
+
+        // Fact: alice has age 15 (which is < 18)
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("alice".to_string()),
+            predicate: Term::Constant(":hasAge".to_string()),
+            object: Term::Literal("15".to_string()),
+        }];
+
+        let result = network.forward_chain(facts).unwrap();
+
+        // Should derive alice :isMinor true
+        let expected = RuleAtom::Triple {
+            subject: Term::Constant("alice".to_string()),
+            predicate: Term::Constant(":isMinor".to_string()),
+            object: Term::Literal("true".to_string()),
+        };
+
+        assert!(
+            result.contains(&expected),
+            "Expected {:?} to be in {:?}",
+            expected,
+            result
+        );
+    }
+
+    #[test]
+    fn test_comparison_operator_filter_fails() {
+        // Test that comparison filter correctly rejects non-matching facts
+        let mut network = ReteNetwork::new();
+
+        // Rule: if ?person :hasAge ?age and ?age > 18, then ?person :isAdult true
+        let rule = Rule {
+            name: "isAdult".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("person".to_string()),
+                    predicate: Term::Constant(":hasAge".to_string()),
+                    object: Term::Variable("age".to_string()),
+                },
+                RuleAtom::GreaterThan {
+                    left: Term::Variable("age".to_string()),
+                    right: Term::Literal("18".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("person".to_string()),
+                predicate: Term::Constant(":isAdult".to_string()),
+                object: Term::Literal("true".to_string()),
+            }],
+        };
+
+        network.add_rule(&rule).unwrap();
+
+        // Fact: bob has age 10 (which is NOT > 18)
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("bob".to_string()),
+            predicate: Term::Constant(":hasAge".to_string()),
+            object: Term::Literal("10".to_string()),
+        }];
+
+        let result = network.forward_chain(facts).unwrap();
+
+        // Should NOT derive bob :isAdult true
+        let not_expected = RuleAtom::Triple {
+            subject: Term::Constant("bob".to_string()),
+            predicate: Term::Constant(":isAdult".to_string()),
+            object: Term::Literal("true".to_string()),
+        };
+
+        assert!(
+            !result.contains(&not_expected),
+            "Did not expect {:?} to be in {:?}",
+            not_expected,
+            result
+        );
     }
 }

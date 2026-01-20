@@ -1,9 +1,9 @@
 //! # OxiRS Core - RDF and SPARQL Foundation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 //!
-//! **Status**: Beta Release (v0.1.0-rc.1)
+//! **Status**: Production Release (v0.1.0)
 //! **Stability**: Public APIs are stabilizing. Production-ready for RDF/SPARQL core operations.
 //!
 //! ## Overview
@@ -252,7 +252,7 @@
 //!
 //! ## API Stability
 //!
-//! As of Beta 1 (v0.1.0-rc.1):
+//! As of Beta 1 (v0.1.0):
 //! - **Stable APIs**: Core RDF model types (`NamedNode`, `Literal`, `Triple`, `Quad`)
 //! - **Stable APIs**: Store operations (`RdfStore`, `insert`, `query`, `remove`)
 //! - **Stable APIs**: Parser and serializer interfaces
@@ -278,18 +278,18 @@ pub mod ai;
 pub mod concurrent;
 pub mod consciousness; // Consciousness-inspired computing for intuitive query optimization
 pub mod distributed;
-pub mod federation; // SPARQL federation support for distributed query execution
-pub mod format; // Phase 3: Complete RDF format support with zero dependencies
+pub mod federation;
+pub mod format;
 pub mod graph;
 pub mod indexing;
 pub mod interning;
 pub mod io;
 pub mod model;
-pub mod molecular; // Molecular-level memory management inspired by biological systems
+pub mod molecular;
 pub mod optimization;
 pub mod parser;
-pub mod production; // Production hardening features (Beta.1)
-pub mod quantum; // Quantum-inspired computing for next-generation RDF processing
+pub mod production;
+pub mod quantum;
 pub mod query;
 pub mod rdf_store;
 pub mod serializer;

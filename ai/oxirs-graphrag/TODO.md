@@ -1,97 +1,51 @@
-# oxirs-graphrag TODO
+# OxiRS GraphRAG - TODO
 
-## High Priority
+*Version: 0.1.0 | Last Updated: 2026-01-06*
 
-- [ ] **Leiden Community Detection**: Implement Leiden algorithm (better than Louvain)
-  - Better modularity optimization
-  - Handles disconnected graphs better
-  - Reference: scirs2-graph potential future support
+## Status: Production Ready
 
-- [ ] **Query Result Caching**: LRU cache for repeated queries
-  - Cache key: query embedding + config hash
-  - TTL-based expiration
-  - Memory-bounded cache (e.g., 1GB max)
+**oxirs-graphrag** provides Graph-based Retrieval Augmented Generation for knowledge graphs.
 
-- [ ] **Graph Embedding Integration**: Use node embeddings for similarity
-  - GraphSAGE for inductive learning
-  - Node2Vec for structural similarity
-  - Integration with oxirs-embed
+### Features
+- Graph-based retrieval with community detection
+- Entity retrieval and ranking
+- Louvain community detection
+- Context building from subgraphs
+- Reciprocal Rank Fusion (RRF)
+- Integration with oxirs-embed for embeddings
 
-- [ ] **Streaming SPARQL**: Handle large subgraphs efficiently
-  - Chunked result processing
-  - Incremental community detection
-  - Memory-bounded graph expansion
+## Future Roadmap
 
-## Medium Priority
+### v0.2.0 - Enhanced Retrieval (Q1 2026 - Expanded)
+- [ ] Leiden community detection (better than Louvain)
+- [ ] Query result caching (LRU with TTL)
+- [ ] Graph embedding integration (GraphSAGE, Node2Vec)
+- [ ] Streaming SPARQL for large subgraphs
+- [ ] Advanced fusion strategies (BM25 + Dense, ColBERT-style)
+- [ ] Multi-hop reasoning with oxirs-rule
+- [ ] Temporal GraphRAG (time-aware retrieval)
+- [ ] Distributed GraphRAG (federated expansion)
 
-- [ ] **Advanced Fusion Strategies**:
-  - BM25 + Dense retrieval (ColBERT-style)
-  - Cross-encoder reranking
-  - Query expansion with synonyms
+### v0.4.0 - Production Features (Q3 2026)
+- [ ] Graph summarization
+- [ ] Interactive refinement with user feedback
+- [ ] Explainability (attention visualization, path explanation)
+- [ ] Benchmark suite against LangChain GraphRAG
 
-- [ ] **Multi-hop Reasoning**:
-  - Integrate with oxirs-rule for inferencing
-  - RDFS/OWL reasoning during expansion
-  - Rule-based subgraph pruning
-
-- [ ] **Temporal GraphRAG**:
-  - Time-aware entity retrieval
-  - Temporal graph patterns
-  - Evolution tracking over time
-
-- [ ] **Distributed GraphRAG**:
-  - Federated graph expansion (SERVICE)
-  - Distributed community detection
-  - Integration with oxirs-cluster
-
-## Low Priority
-
-- [ ] **Graph Summarization**:
-  - Entity type hierarchies
-  - Predicate abstraction
-  - Schema-aware summarization
-
-- [ ] **Interactive Refinement**:
-  - User feedback loop
-  - Active learning for entity selection
-  - Query reformulation suggestions
-
-- [ ] **Explainability**:
-  - Attention visualization for entity selection
-  - Path explanation (why this entity was included)
-  - Community influence scores
-
-## Research Ideas
-
-- [ ] **Hybrid GNN + LLM**:
-  - Train GNN on graph structure
-  - Use GNN embeddings instead of static embeddings
-  - End-to-end differentiable retrieval
-
-- [ ] **Quantum Graph Algorithms**:
-  - Quantum walk for graph expansion
-  - Integration with scirs2-quantum (future)
-
-- [ ] **Neuro-Symbolic Fusion**:
-  - Integrate with oxirs-physics for constraint checking
-  - Physics-informed retrieval
+### v1.0.0 - Research & Innovation (Q2 2026)
+- [ ] Hybrid GNN + LLM architecture
+- [ ] Neuro-symbolic fusion with oxirs-physics
+- [ ] Comprehensive documentation and tutorials
 
 ## Testing & Quality
-
 - [ ] Property-based testing with proptest
-- [ ] Benchmark suite against LangChain GraphRAG
 - [ ] Memory profiling for large graphs
 - [ ] Concurrency testing
 
-## Documentation
+## Contributing
 
-- [ ] Tutorial: Building a GraphRAG application
-- [ ] Comparison: GraphRAG vs traditional RAG
-- [ ] Algorithm deep-dive: RRF, Louvain, context building
-- [ ] Integration guide with existing OxiRS modules
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
-## Dependencies to Consider
+---
 
-- `approx` - Floating point comparisons in tests
-- `criterion` - Benchmarking
-- `rayon` - Parallel community detection
+*OxiRS GraphRAG v0.1.0 - Graph-based RAG for knowledge graphs*

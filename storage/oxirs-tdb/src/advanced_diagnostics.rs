@@ -1516,8 +1516,9 @@ mod tests {
         let mut engine = AdvancedDiagnosticEngine::new();
         let stats = BufferPoolStats::default();
 
-        // Simulate growth
+        // Simulate growth - need measurable time difference for rate calculation
         engine.record_snapshot(0.1, 100.0, 1_000_000, 0, &stats);
+        std::thread::sleep(std::time::Duration::from_millis(10));
         engine.record_snapshot(0.1, 100.0, 1_500_000, 0, &stats);
 
         let forecast = engine.forecast_capacity(1_500_000, 10_000_000).unwrap();

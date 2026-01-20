@@ -23,7 +23,7 @@ oxirs-gql.workspace = true
 oxirs-tdb.workspace = true
 oxirs-samm.workspace = true
 
-# Phase D: Industrial Connectivity (0.1.0-rc.1)
+# Phase D: Industrial Connectivity (0.1.0)
 oxirs-tsdb.workspace = true
 oxirs-modbus.workspace = true
 oxirs-canbus.workspace = true

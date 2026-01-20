@@ -1,6 +1,6 @@
 # OxiRS Vec Documentation
 
-**Version**: v0.1.0-rc.2
+**Version**: v0.1.0
 **Status**: Production-Ready RC
 
 Welcome to the OxiRS Vec documentation! This comprehensive guide covers everything you need to deploy, optimize, and operate OxiRS Vec in production.
@@ -187,7 +187,7 @@ Accelerate vector operations with CUDA:
 
 ## OxiRS Vec at a Glance
 
-### Current Status (v0.1.0-rc.2)
+### Current Status (v0.1.0)
 
 - ✅ **667 tests passing** (100% pass rate)
 - ✅ **Production-ready**: Real-time updates, crash recovery, multi-tenancy
@@ -342,6 +342,6 @@ Special thanks to the Rust community and contributors.
 
 ---
 
-**Last Updated**: December 6, 2025
+**Last Updated**: 2026-01-06
 **Document Version**: 1.0
-**OxiRS Vec Version**: v0.1.0-rc.2
+**OxiRS Vec Version**: v0.1.0

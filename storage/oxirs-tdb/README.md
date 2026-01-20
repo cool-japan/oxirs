@@ -1,12 +1,12 @@
 # OxiRS TDB - High-Performance RDF Storage Engine
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Status**: Release Candidate (v0.1.0-rc.2) - Released December 26, 2025
+**Status**: Production Release (v0.1.0) - Released January 7, 2026
 
-✨ **Release Candidate**: Production-ready with API stability guarantees. Semantic versioning enforced.
+✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 A high-performance, ACID-compliant RDF storage engine with multi-version concurrency control (MVCC) and advanced transaction support. OxiRS TDB provides TDB2-equivalent functionality with modern Rust performance optimizations.
 
@@ -61,7 +61,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-tdb = "0.1.0-rc.2"
+oxirs-tdb = "0.1.0"
 ```
 
 ### Basic Usage

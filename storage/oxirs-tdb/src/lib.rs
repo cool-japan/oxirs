@@ -1,8 +1,8 @@
 //! # OxiRS TDB - Apache Jena TDB/TDB2 Compatible Storage Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Beta Release (v0.1.0-rc.1)
+//! **Status**: Production Release (v0.1.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! High-performance RDF triple store with B+Tree indexes, ACID transactions,
@@ -76,7 +76,7 @@
 //! - [`oxirs-core`](https://docs.rs/oxirs-core) - RDF data model
 //! - [`oxirs-arq`](https://docs.rs/oxirs-arq) - SPARQL query engine
 
-#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.1.0-rc.1")]
+#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.1.0")]
 #![warn(missing_docs)]
 #![allow(dead_code)] // Allow during development
 #![allow(unused_imports)] // Allow during development
@@ -136,8 +136,7 @@ pub mod query_hints;
 // Query result caching
 pub mod query_cache;
 
-// Cost-based query optimization
-// TODO(v0.1.0-rc.1): Complete StatisticsSnapshot API integration for full functionality
+// Cost-based query optimization with StatisticsSnapshot integration
 pub mod query_optimizer;
 
 // Join order optimization for query planning

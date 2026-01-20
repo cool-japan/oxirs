@@ -191,7 +191,7 @@ GET /api/v2/datasets
       "name": "default",
       "type": "Memory",
       "triple_count": 1234,
-      "created_at": "2025-11-10T00:00:00Z"
+      "created_at": "2026-01-10T00:00:00Z"
     }
   ],
   "total": 1
@@ -213,8 +213,8 @@ GET /api/v2/datasets/{dataset}
   "triple_count": 1234,
   "quad_count": 1234,
   "graph_count": 5,
-  "created_at": "2025-11-10T00:00:00Z",
-  "updated_at": "2025-11-10T12:00:00Z"
+  "created_at": "2026-01-10T00:00:00Z",
+  "updated_at": "2026-01-10T12:00:00Z"
 }
 ```
 
@@ -453,7 +453,7 @@ Real-time subscriptions and notifications.
 {
   "type": "query_result",
   "subscription_id": "uuid",
-  "timestamp": "2025-11-10T12:00:00Z",
+  "timestamp": "2026-01-10T12:00:00Z",
   "results": {
     "bindings": [...]
   }
@@ -489,7 +489,7 @@ Real-time subscriptions and notifications.
 {
   "event_type": "dataset_updated",
   "dataset": "default",
-  "timestamp": "2025-11-10T12:00:00Z",
+  "timestamp": "2026-01-10T12:00:00Z",
   "severity": "info",
   "details": {
     "triples_added": 10,
@@ -521,8 +521,8 @@ GET /$/server
 **Response**:
 ```json
 {
-  "version": "0.1.0-rc.2",
-  "build_date": "2025-12-21",
+  "version": "0.1.0",
+  "build_date": "2026-01-07",
   "uptime_seconds": 86400,
   "rust_version": "1.75.0"
 }
@@ -591,7 +591,7 @@ curl -X POST http://localhost:3030/$/admin/api-keys \
   "api_key": "ak_xxxxxxxxxxxxx",
   "name": "my-app",
   "permissions": ["read", "write"],
-  "created_at": "2025-11-10T12:00:00Z",
+  "created_at": "2026-01-10T12:00:00Z",
   "expires_at": "2026-02-08T12:00:00Z"
 }
 ```

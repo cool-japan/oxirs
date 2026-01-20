@@ -110,7 +110,7 @@ pub struct BufferPoolTuner {
     /// Tuning iterations counter
     tuning_iterations: u64,
 
-    // Metrics (scirs2-core v0.1.0-rc.2+ API)
+    // Metrics (scirs2-core v0.1.0+ API)
     /// Hit rate gauge
     hit_rate_gauge: Gauge,
     /// Miss rate gauge

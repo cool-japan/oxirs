@@ -1,6 +1,6 @@
 # OxiRS Fuseki - Benchmark Quick Reference
 
-**Last Updated**: December 9, 2025
+**Last Updated**: 2026-01-06
 
 ## Overview
 
@@ -24,7 +24,7 @@ This document provides a quick reference for running and interpreting oxirs-fuse
 - `query_cache` - Cache hit vs miss performance
 
 ### 2. Performance Benchmarks (`performance_benchmarks.rs`)
-**Purpose**: Detailed analysis of rc.1 optimization features
+**Purpose**: Detailed analysis of 0.1.0 optimization features
 **Run**: `cargo bench --bench performance_benchmarks`
 
 **Benchmark Groups**:
@@ -272,5 +272,5 @@ For performance issues or benchmark questions:
 ---
 
 *Quick Reference Guide - OxiRS Fuseki Benchmarking*
-*Version: 0.1.0-rc.3*
-*Last Updated: December 9, 2025*
+*Version: 0.1.0*
+*Last Updated: 2026-01-06*

@@ -90,6 +90,8 @@ pub struct Runtime {
     adaptive_execution_engine: Option<Arc<AdaptiveExecutionEngine>>,
     // ReBAC (Relationship-Based Access Control)
     rebac_manager: Option<Arc<dyn crate::auth::rebac::RebacEvaluator>>,
+    // IDS (International Data Spaces) Connector
+    ids_api_state: Option<Arc<crate::ids::IdsApiState>>,
     #[cfg(feature = "rate-limit")]
     rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
     #[cfg(feature = "hot-reload")]
@@ -133,6 +135,7 @@ impl Runtime {
             // v0.1.0 Final modules
             adaptive_execution_engine: None,
             rebac_manager: None,
+            ids_api_state: None,
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
             #[cfg(feature = "hot-reload")]
@@ -506,6 +509,23 @@ impl Runtime {
                 info!("Hot-reload feature is available but no config file path specified");
             }
         }
+
+        // Initialize IDS (International Data Spaces) Connector
+        info!("Initializing IDS Connector");
+        let ids_config = crate::ids::IdsConnectorConfig::default();
+        let ids_connector = Arc::new(crate::ids::IdsConnector::new(ids_config));
+
+        // Create data plane manager for IDS transfers
+        let data_plane = Arc::new(crate::ids::DataPlaneManager::new(
+            ids_connector.connector_id().clone(),
+            ids_connector.policy_engine(),
+            ids_connector.lineage_tracker(),
+        ));
+
+        // Create IDS API state
+        let ids_api_state = Arc::new(crate::ids::IdsApiState::new(ids_connector, data_plane));
+        self.ids_api_state = Some(ids_api_state);
+        info!("IDS Connector initialized (IDSA Reference Architecture 4.x)");
 
         info!("Server services initialized successfully");
         Ok(())
@@ -1100,6 +1120,14 @@ impl Runtime {
         // REST API v2 (RC.1) - OpenAPI documented RESTful endpoints
         // REST API v2 routes
         app = crate::rest_api_v2::register_routes(app);
+
+        // Mount IDS API router (International Data Spaces)
+        // Note: IDS router uses its own state (IdsApiState) independent of AppState
+        if let Some(ids_api_state) = &self.ids_api_state {
+            let ids_router = crate::ids::ids_router(ids_api_state.clone());
+            app = app.nest_service("/api/ids", ids_router);
+            info!("IDS API mounted at /api/ids");
+        }
 
         // Admin UI route (if enabled)
         #[cfg(feature = "admin-ui")]

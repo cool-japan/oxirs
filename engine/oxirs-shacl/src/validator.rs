@@ -492,6 +492,7 @@ impl Validator {
                             severity: shape.severity,
                             messages: indexmap::IndexMap::new(),
                             extends: vec![],
+                            property_shapes: vec![],
                             priority: None,
                             metadata: ShapeMetadata::default(),
                         })?;
@@ -514,6 +515,7 @@ impl Validator {
                             severity: shape.severity,
                             messages: indexmap::IndexMap::new(),
                             extends: vec![],
+                            property_shapes: vec![],
                             priority: None,
                             metadata: ShapeMetadata::default(),
                         })?;
@@ -535,6 +537,7 @@ impl Validator {
                         severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
+                        property_shapes: vec![],
                         priority: None,
                         metadata: ShapeMetadata::default(),
                     })?;
@@ -552,6 +555,7 @@ impl Validator {
                         severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
+                        property_shapes: vec![],
                         priority: None,
                         metadata: ShapeMetadata::default(),
                     })?;
@@ -572,6 +576,7 @@ impl Validator {
                         severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
+                        property_shapes: vec![],
                         priority: None,
                         metadata: ShapeMetadata::default(),
                     })?;
@@ -592,6 +597,7 @@ impl Validator {
                         severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
+                        property_shapes: vec![],
                         priority: None,
                         metadata: ShapeMetadata::default(),
                     })?;
@@ -612,6 +618,7 @@ impl Validator {
                         severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
+                        property_shapes: vec![],
                         priority: None,
                         metadata: ShapeMetadata::default(),
                     })?;

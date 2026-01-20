@@ -501,4 +501,4 @@ docker exec -it oxirs-chat /bin/sh
 
 ## License
 
-Copyright © 2025 OxiRS Team. Licensed under MIT OR Apache-2.0.
+Copyright © 2026 OxiRS Team. Licensed under MIT OR Apache-2.0.

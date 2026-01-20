@@ -306,68 +306,197 @@ impl ConstraintEvaluator {
     /// Evaluate spatial constraint
     fn evaluate_spatial(
         &self,
-        _allowed_regions: &[Region],
-        _restriction_type: SpatialRestriction,
-        _context: &EvaluationContext,
+        allowed_regions: &[Region],
+        restriction_type: SpatialRestriction,
+        context: &EvaluationContext,
     ) -> IdsResult<ConstraintResult> {
-        // TODO: Implement geolocation-based evaluation
+        // Get region from context (could be from IP geolocation or explicit)
+        let current_region = context.region_code.as_deref();
+
+        let satisfied = match restriction_type {
+            SpatialRestriction::Within
+            | SpatialRestriction::ProcessingIn
+            | SpatialRestriction::StorageIn => {
+                // Must be within allowed regions
+                if let Some(region_code) = current_region {
+                    allowed_regions
+                        .iter()
+                        .any(|r| r.jurisdiction.country_code == region_code)
+                } else {
+                    // No region info - conservative denial
+                    false
+                }
+            }
+            SpatialRestriction::Outside => {
+                // Must NOT be in listed regions
+                if let Some(region_code) = current_region {
+                    !allowed_regions
+                        .iter()
+                        .any(|r| r.jurisdiction.country_code == region_code)
+                } else {
+                    // No region info - conservative denial
+                    false
+                }
+            }
+        };
+
+        let region_names: Vec<_> = allowed_regions.iter().map(|r| r.name.as_str()).collect();
         Ok(ConstraintResult {
-            satisfied: true,
-            constraint: "spatial(...)".to_string(),
-            reason: None,
-            trust_impact: 1.0,
+            satisfied,
+            constraint: format!(
+                "spatial({:?}, regions={:?})",
+                restriction_type, region_names
+            ),
+            reason: if !satisfied {
+                Some(format!(
+                    "Region {} does not satisfy {:?} constraint for regions {:?}",
+                    current_region.unwrap_or("unknown"),
+                    restriction_type,
+                    region_names
+                ))
+            } else {
+                None
+            },
+            trust_impact: if satisfied { 1.0 } else { 0.0 },
         })
     }
 
     /// Evaluate purpose constraint
     fn evaluate_purpose(
         &self,
-        _allowed_purposes: &[Purpose],
+        allowed_purposes: &[Purpose],
         context: &EvaluationContext,
     ) -> IdsResult<ConstraintResult> {
-        // Check if request metadata contains purpose
-        let request_purpose = context.metadata.get("purpose");
+        // Get purpose from context (direct field or metadata)
+        let request_purpose = context
+            .purpose
+            .as_deref()
+            .or_else(|| context.metadata.get("purpose").map(|s| s.as_str()));
 
+        let satisfied = if let Some(purpose_str) = request_purpose {
+            // Try to match against allowed purposes
+            allowed_purposes.iter().any(|allowed| match allowed {
+                Purpose::CommercialUse => purpose_str.to_lowercase().contains("commercial"),
+                Purpose::ResearchUse => purpose_str.to_lowercase().contains("research"),
+                Purpose::EducationalUse => purpose_str.to_lowercase().contains("education"),
+                Purpose::QualityImprovement => purpose_str.to_lowercase().contains("quality"),
+                Purpose::ServiceProvisioning => purpose_str.to_lowercase().contains("service"),
+                Purpose::Analytics => {
+                    purpose_str.to_lowercase().contains("analytics")
+                        || purpose_str.to_lowercase().contains("analysis")
+                }
+                Purpose::MachineLearningTraining => {
+                    purpose_str.to_lowercase().contains("ml")
+                        || purpose_str.to_lowercase().contains("machine learning")
+                        || purpose_str.to_lowercase().contains("training")
+                }
+                Purpose::Testing => purpose_str.to_lowercase().contains("test"),
+                Purpose::Compliance => {
+                    purpose_str.to_lowercase().contains("compliance")
+                        || purpose_str.to_lowercase().contains("audit")
+                }
+                Purpose::Custom(custom) => purpose_str.to_lowercase() == custom.to_lowercase(),
+            })
+        } else {
+            false
+        };
+
+        let purpose_names: Vec<_> = allowed_purposes
+            .iter()
+            .map(|p| format!("{:?}", p))
+            .collect();
         Ok(ConstraintResult {
-            satisfied: request_purpose.is_some(),
-            constraint: "purpose(...)".to_string(),
-            reason: if request_purpose.is_none() {
-                Some("Purpose not specified in request".to_string())
+            satisfied,
+            constraint: format!("purpose(allowed={:?})", purpose_names),
+            reason: if !satisfied {
+                Some(format!(
+                    "Purpose '{}' not in allowed purposes: {:?}",
+                    request_purpose.unwrap_or("not specified"),
+                    purpose_names
+                ))
             } else {
                 None
             },
-            trust_impact: if request_purpose.is_some() { 1.0 } else { 0.5 },
+            trust_impact: if satisfied { 1.0 } else { 0.3 },
         })
     }
 
     /// Evaluate count constraint
     fn evaluate_count(
         &self,
-        _operator: ComparisonOperator,
-        _max_count: u64,
-        _context: &EvaluationContext,
+        operator: ComparisonOperator,
+        max_count: u64,
+        context: &EvaluationContext,
     ) -> IdsResult<ConstraintResult> {
-        // TODO: Track usage count per resource
+        // Get current usage count from context
+        let current_count = context.usage_count.unwrap_or(0);
+
+        let satisfied = match operator {
+            ComparisonOperator::Lt => current_count < max_count,
+            ComparisonOperator::Lteq => current_count <= max_count,
+            ComparisonOperator::Gt => current_count > max_count,
+            ComparisonOperator::Gteq => current_count >= max_count,
+            ComparisonOperator::Eq => current_count == max_count,
+            ComparisonOperator::Neq => current_count != max_count,
+            _ => false, // Other operators not applicable to count
+        };
+
         Ok(ConstraintResult {
-            satisfied: true,
-            constraint: "count(...)".to_string(),
-            reason: None,
-            trust_impact: 1.0,
+            satisfied,
+            constraint: format!(
+                "count(current={}, {:?} {})",
+                current_count, operator, max_count
+            ),
+            reason: if !satisfied {
+                Some(format!(
+                    "Usage count {} does not satisfy {:?} {}",
+                    current_count, operator, max_count
+                ))
+            } else {
+                None
+            },
+            trust_impact: if satisfied { 1.0 } else { 0.0 },
         })
     }
 
     /// Evaluate connector constraint
     fn evaluate_connector(
         &self,
-        _allowed_connector_ids: &[String],
-        _context: &EvaluationContext,
+        allowed_connector_ids: &[String],
+        context: &EvaluationContext,
     ) -> IdsResult<ConstraintResult> {
-        // TODO: Check connector ID from context
+        // Get connector ID from context (typically from DAPS token)
+        let connector_id = context.connector_id.as_deref();
+
+        let satisfied = if let Some(id) = connector_id {
+            // Check if connector ID is in the allowed list
+            allowed_connector_ids.iter().any(|allowed| {
+                // Exact match or wildcard pattern matching
+                if allowed.ends_with('*') {
+                    let prefix = &allowed[..allowed.len() - 1];
+                    id.starts_with(prefix)
+                } else {
+                    id == allowed
+                }
+            })
+        } else {
+            // No connector ID in context - deny by default
+            false
+        };
+
         Ok(ConstraintResult {
-            satisfied: true,
-            constraint: "connector(...)".to_string(),
-            reason: None,
-            trust_impact: 1.0,
+            satisfied,
+            constraint: format!("connector(allowed={:?})", allowed_connector_ids),
+            reason: if !satisfied {
+                Some(format!(
+                    "Connector '{}' not in allowed list: {:?}",
+                    connector_id.unwrap_or("not specified"),
+                    allowed_connector_ids
+                ))
+            } else {
+                None
+            },
+            trust_impact: if satisfied { 1.0 } else { 0.0 },
         })
     }
 
@@ -400,15 +529,36 @@ impl ConstraintEvaluator {
     /// Evaluate event constraint
     fn evaluate_event(
         &self,
-        _event_type: &str,
-        _context: &EvaluationContext,
+        expected_event_type: &str,
+        context: &EvaluationContext,
     ) -> IdsResult<ConstraintResult> {
-        // TODO: Check event in context
+        // Get event type from context
+        let current_event = context.event_type.as_deref();
+
+        let satisfied = if let Some(event) = current_event {
+            // Check if current event matches expected event type
+            // Support hierarchical event matching (e.g., "policyUsage" matches "policyUsage:firstUse")
+            event == expected_event_type
+                || event.starts_with(&format!("{}:", expected_event_type))
+                || expected_event_type.starts_with(&format!("{}:", event))
+        } else {
+            // No event in context - check if constraint is for "any" event
+            expected_event_type.eq_ignore_ascii_case("any")
+        };
+
         Ok(ConstraintResult {
-            satisfied: true,
-            constraint: "event(...)".to_string(),
-            reason: None,
-            trust_impact: 1.0,
+            satisfied,
+            constraint: format!("event(expected={})", expected_event_type),
+            reason: if !satisfied {
+                Some(format!(
+                    "Event '{}' does not match expected '{}'",
+                    current_event.unwrap_or("none"),
+                    expected_event_type
+                ))
+            } else {
+                None
+            },
+            trust_impact: if satisfied { 1.0 } else { 0.5 },
         })
     }
 
@@ -515,5 +665,117 @@ mod tests {
             .unwrap();
 
         assert!(result.satisfied);
+    }
+
+    #[tokio::test]
+    async fn test_count_constraint_satisfied() {
+        let evaluator = ConstraintEvaluator::new();
+        let context = EvaluationContext::new().with_usage_count(5);
+
+        let result = evaluator
+            .evaluate_count(ComparisonOperator::Lteq, 10, &context)
+            .unwrap();
+
+        assert!(result.satisfied);
+        assert!(result.constraint.contains("current=5"));
+    }
+
+    #[tokio::test]
+    async fn test_count_constraint_exceeded() {
+        let evaluator = ConstraintEvaluator::new();
+        let context = EvaluationContext::new().with_usage_count(15);
+
+        let result = evaluator
+            .evaluate_count(ComparisonOperator::Lteq, 10, &context)
+            .unwrap();
+
+        assert!(!result.satisfied);
+        assert!(result.reason.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_connector_constraint_allowed() {
+        let evaluator = ConstraintEvaluator::new();
+        let context =
+            EvaluationContext::new().with_connector_id("urn:ids:connector:acme-corp:connector-01");
+
+        let allowed = vec![
+            "urn:ids:connector:acme-corp:connector-01".to_string(),
+            "urn:ids:connector:partner-inc:connector-02".to_string(),
+        ];
+
+        let result = evaluator.evaluate_connector(&allowed, &context).unwrap();
+
+        assert!(result.satisfied);
+    }
+
+    #[tokio::test]
+    async fn test_connector_constraint_wildcard() {
+        let evaluator = ConstraintEvaluator::new();
+        let context =
+            EvaluationContext::new().with_connector_id("urn:ids:connector:acme-corp:connector-99");
+
+        let allowed = vec!["urn:ids:connector:acme-corp:*".to_string()];
+
+        let result = evaluator.evaluate_connector(&allowed, &context).unwrap();
+
+        assert!(result.satisfied);
+    }
+
+    #[tokio::test]
+    async fn test_connector_constraint_denied() {
+        let evaluator = ConstraintEvaluator::new();
+        let context =
+            EvaluationContext::new().with_connector_id("urn:ids:connector:unknown:connector-01");
+
+        let allowed = vec!["urn:ids:connector:acme-corp:*".to_string()];
+
+        let result = evaluator.evaluate_connector(&allowed, &context).unwrap();
+
+        assert!(!result.satisfied);
+    }
+
+    #[tokio::test]
+    async fn test_event_constraint_matched() {
+        let evaluator = ConstraintEvaluator::new();
+        let context = EvaluationContext::new().with_event_type("policyUsage:firstUse");
+
+        let result = evaluator.evaluate_event("policyUsage", &context).unwrap();
+
+        assert!(result.satisfied);
+    }
+
+    #[tokio::test]
+    async fn test_event_constraint_not_matched() {
+        let evaluator = ConstraintEvaluator::new();
+        let context = EvaluationContext::new().with_event_type("contractExpiry");
+
+        let result = evaluator.evaluate_event("policyUsage", &context).unwrap();
+
+        assert!(!result.satisfied);
+    }
+
+    #[tokio::test]
+    async fn test_purpose_constraint_research() {
+        let evaluator = ConstraintEvaluator::new();
+        let context = EvaluationContext::new().with_purpose("research and development");
+
+        let allowed = vec![Purpose::ResearchUse, Purpose::EducationalUse];
+
+        let result = evaluator.evaluate_purpose(&allowed, &context).unwrap();
+
+        assert!(result.satisfied);
+    }
+
+    #[tokio::test]
+    async fn test_purpose_constraint_denied() {
+        let evaluator = ConstraintEvaluator::new();
+        let context = EvaluationContext::new().with_purpose("commercial advertising");
+
+        let allowed = vec![Purpose::ResearchUse, Purpose::EducationalUse];
+
+        let result = evaluator.evaluate_purpose(&allowed, &context).unwrap();
+
+        assert!(!result.satisfied);
     }
 }

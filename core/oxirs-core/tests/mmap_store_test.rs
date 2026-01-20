@@ -151,7 +151,7 @@ fn test_blank_nodes() -> Result<()> {
 #[test]
 #[ignore] // Performance: Test takes 13+ minutes due to large dataset operations.
           // This is a stress test for comprehensive literal type handling with heavy store operations.
-          // For 0.1.0-rc.1: Acceptable to skip in standard test runs.
+          // For v0.1.0: Acceptable to skip in standard test runs.
           // Future: Optimize MmapStore bulk operations or use sampled test data.
 fn test_literal_types() -> Result<()> {
     // Test literal type handling without heavy store operations
@@ -370,7 +370,7 @@ fn test_very_large_dataset() -> Result<()> {
 #[test]
 #[ignore] // Performance: Test takes 840+ seconds (14 minutes) due to crash recovery simulation.
           // This is a comprehensive stress test for crash recovery with large dataset operations.
-          // For 0.1.0-rc.1: Acceptable to skip in standard test runs.
+          // For v0.1.0: Acceptable to skip in standard test runs.
           // Future: Optimize recovery mechanism or use smaller dataset for integration tests.
 fn test_recovery_after_crash() -> Result<()> {
     let temp_dir = TempDir::new()?;

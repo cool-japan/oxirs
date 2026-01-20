@@ -47,14 +47,14 @@ uuid.workspace = true
 dashmap = "6.1"
 parking_lot = "0.12"
 ordered-float = "5.1"
-rust_decimal = "1.39"
+rust_decimal = "1.40"
 hex = "0.4"
 base64 = "0.22"
 # lazy_static removed - using std::sync::OnceLock instead (Rust 1.70+)
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 tempfile.workspace = true
 flate2 = "1.1"
-lz4_flex = "0.11"
+lz4_flex.workspace = true
 zstd = "0.13"
 
 [dev-dependencies]

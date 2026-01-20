@@ -1,11 +1,11 @@
-//! Comprehensive benchmarks for v0.3.0 features
+//! Comprehensive benchmarks for advanced RDF-star features
 //!
 //! This benchmark suite validates the performance of:
 //! - HDT-star binary format (encoding, decoding, compression)
 //! - Streaming query processor (window operations, CEP)
 //! - Property graph bridge (RDF-star ↔ LPG conversion)
 //!
-//! Run with: `cargo bench --bench v0_3_0_benchmarks`
+//! Run with: `cargo bench --bench rdf_star_advanced_benchmarks`
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_star::hdt_star::{HdtStarBuilder, HdtStarConfig, HdtStarReader};

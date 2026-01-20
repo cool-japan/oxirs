@@ -288,7 +288,7 @@ impl TwoPhaseCoordinator {
     /// Request prepare vote from a participant (simulated)
     async fn request_prepare_vote(&self, _node_id: &str) -> Result<Vote> {
         // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For 0.1.0-rc.1: Simulated network allows testing of 2PC protocol locally.
+        // For v0.1.0: Simulated network allows testing of 2PC protocol locally.
         // The complete 2PC state machine and coordinator logic are fully implemented.
         tokio::time::sleep(Duration::from_millis(10)).await;
         Ok(Vote::Yes)
@@ -328,7 +328,7 @@ impl TwoPhaseCoordinator {
     /// Send COMMIT message to a participant (simulated)
     async fn send_commit_message(&self, _node_id: &str) -> Result<()> {
         // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For 0.1.0-rc.1: Simulated for local testing. Protocol logic is production-ready.
+        // For v0.1.0: Simulated for local testing. Protocol logic is production-ready.
         tokio::time::sleep(Duration::from_millis(10)).await;
         Ok(())
     }
@@ -361,7 +361,7 @@ impl TwoPhaseCoordinator {
     /// Send ABORT message to a participant (simulated)
     async fn send_abort_message(&self, _node_id: &str) -> Result<()> {
         // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For 0.1.0-rc.1: Simulated for local testing. Protocol logic is production-ready.
+        // For v0.1.0: Simulated for local testing. Protocol logic is production-ready.
         tokio::time::sleep(Duration::from_millis(10)).await;
         Ok(())
     }

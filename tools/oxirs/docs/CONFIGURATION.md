@@ -1,7 +1,7 @@
 # OxiRS Configuration Reference
 
-**Version**: 0.1.0-rc.2
-**Last Updated**: December 21, 2025
+**Version**: 0.1.0
+**Last Updated**: January 7, 2026
 **Status**: Production-Ready
 
 ## Overview
@@ -617,10 +617,10 @@ federation = true
 text_search = true
 ```
 
-### Beta Features
+### Experimental Features
 
 ```toml
-[features.beta]
+[features.experimental]
 # Enable AI-powered query suggestions
 query_suggestions = false
 
@@ -940,4 +940,4 @@ Error: Environment variable 'JWT_SECRET' is not set
 
 ---
 
-**OxiRS v0.1.0-rc.2** - Production-ready semantic web server configuration
+**OxiRS v0.1.0** - Production-ready semantic web server configuration

@@ -1,11 +1,11 @@
-//! # Beta.4 Features Showcase
+//! # Rule Engine Features Showcase
 //!
-//! Comprehensive examples demonstrating the new features in Beta.4:
+//! Comprehensive examples demonstrating the advanced rule engine features:
 //! - RIF (Rule Interchange Format) for rule interchange between engines
 //! - CHR (Constraint Handling Rules) for declarative constraint solving
 //! - ASP (Answer Set Programming) for combinatorial optimization
 //!
-//! Run with: `cargo run --example beta4_features_showcase --all-features`
+//! Run with: `cargo run --example rule_engine_showcase --all-features`
 
 use anyhow::Result;
 use oxirs_rule::asp::{AspLiteral, AspSolver, AspTerm, Atom};
@@ -13,7 +13,7 @@ use oxirs_rule::chr::{ChrEngine, ChrRule, ChrTerm, Constraint};
 use oxirs_rule::rif::{RifDialect, RifParser, RifSerializer};
 
 fn main() -> Result<()> {
-    println!("=== OxiRS Rule Engine Beta.4 Features Showcase ===\n");
+    println!("=== OxiRS Rule Engine Features Showcase ===\n");
 
     // Run all demonstrations
     demonstrate_rif()?;
@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     println!();
     demonstrate_integration()?;
 
-    println!("\n=== All Beta.4 demonstrations completed successfully! ===");
+    println!("\n=== All demonstrations completed successfully! ===");
     Ok(())
 }
 

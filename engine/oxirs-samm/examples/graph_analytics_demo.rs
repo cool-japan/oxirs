@@ -12,7 +12,7 @@ use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("🔍 SAMM Model Graph Analytics Demo\n");
-    println!("Using scirs2-graph v0.1.0-rc.2 for advanced graph analysis\n");
+    println!("Using scirs2-graph v0.1.0 for advanced graph analysis\n");
     println!("{}", "=".repeat(70));
 
     // Create a sample SAMM aspect model with dependencies

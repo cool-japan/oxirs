@@ -1,7 +1,7 @@
 # OxiRS Best Practices Guide
 
-**Version**: 0.1.0-rc.2
-**Last Updated**: December 21, 2025
+**Version**: 0.1.0
+**Last Updated**: January 7, 2026
 **Status**: Production-Ready
 
 ## Overview
@@ -31,7 +31,7 @@ This guide provides best practices, tips, and recommendations for using OxiRS CL
 # Use alphanumeric, underscore, hyphen
 oxirs init my_dataset
 oxirs init my-dataset
-oxirs init myDataset2025
+oxirs init myDataset2026
 ```
 
 ❌ **DON'T**:
@@ -46,7 +46,7 @@ oxirs init my@dataset      # Error: special chars not allowed
 
 ✅ **DO**:
 ```bash
-oxirs init product_catalog_2025
+oxirs init product_catalog_2026
 oxirs init user_profiles_prod
 oxirs init geo_spatial_dev
 ```
@@ -507,7 +507,7 @@ CMD ["oxirs", "serve", "--config", "/etc/oxirs/oxirs.toml"]
 
 ```bash
 # Build
-docker build -t oxirs:rc.1 .
+docker build -t oxirs:0.1.0 .
 
 # Run
 docker run -d \
@@ -517,7 +517,7 @@ docker run -d \
   -v $(pwd)/oxirs.toml:/etc/oxirs/oxirs.toml:ro \
   -e JWT_SECRET="$(openssl rand -base64 64)" \
   --restart unless-stopped \
-  oxirs:rc.1
+  oxirs:0.1.0
 ```
 
 ### 4. Kubernetes Deployment
@@ -540,7 +540,7 @@ spec:
     spec:
       containers:
       - name: oxirs
-        image: oxirs:rc.1
+        image: oxirs:0.1.0
         ports:
         - containerPort: 3030
         env:
@@ -839,4 +839,4 @@ done
 
 ---
 
-**OxiRS v0.1.0-rc.2** - Production-ready best practices for semantic web operations
+**OxiRS v0.1.0** - Production-ready best practices for semantic web operations

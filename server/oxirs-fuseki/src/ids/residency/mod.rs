@@ -5,5 +5,8 @@
 pub mod gdpr_compliance;
 pub mod region_policy;
 
-pub use gdpr_compliance::{GdprArticle, GdprComplianceChecker};
+pub use gdpr_compliance::{
+    Article49Derogation, GdprArticle, GdprComplianceChecker, Safeguard, TransferComplianceResult,
+    TransferRecord,
+};
 pub use region_policy::{Region, ResidencyEnforcer, ResidencyPolicy};

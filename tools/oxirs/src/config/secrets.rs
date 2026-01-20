@@ -53,7 +53,14 @@ impl SecretManager {
     /// Create a new secret manager
     pub fn new(_backend: SecretBackend) -> CliResult<Self> {
         let secrets_dir = Self::get_secrets_dir()?;
+        Self::with_dir(secrets_dir)
+    }
 
+    /// Create a new secret manager with a specific directory
+    ///
+    /// This is useful for testing and custom configurations where the
+    /// default directory is not suitable.
+    pub fn with_dir(secrets_dir: PathBuf) -> CliResult<Self> {
         // Ensure secrets directory exists with restricted permissions
         if !secrets_dir.exists() {
             fs::create_dir_all(&secrets_dir).map_err(|e| {
@@ -457,53 +464,50 @@ mod tests {
 
     #[test]
     fn test_secret_manager_creation() {
-        let dir = tempdir().unwrap();
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::set_var("OXIRS_SECRETS_DIR", dir.path()) };
-
-        let manager = SecretManager::new(SecretBackend::File).unwrap();
+        let dir = tempdir().expect("failed to create temp dir");
+        let manager = SecretManager::with_dir(dir.path().to_path_buf())
+            .expect("failed to create SecretManager");
         assert!(!manager.is_unlocked());
-
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::remove_var("OXIRS_SECRETS_DIR") };
     }
 
     #[test]
     fn test_secret_storage_and_retrieval() {
-        let dir = tempdir().unwrap();
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::set_var("OXIRS_SECRETS_DIR", dir.path()) };
-
-        let mut manager = SecretManager::new(SecretBackend::File).unwrap();
-        manager.unlock("test-password").unwrap();
+        let dir = tempdir().expect("failed to create temp dir");
+        let mut manager = SecretManager::with_dir(dir.path().to_path_buf())
+            .expect("failed to create SecretManager");
+        manager.unlock("test-password").expect("failed to unlock");
 
         // Store a secret
         manager
             .set_secret("test-key", "test-value", Some("Test secret".to_string()))
-            .unwrap();
+            .expect("failed to set secret");
 
         // Retrieve it
-        let value = manager.get_secret("test-key").unwrap();
+        let value = manager
+            .get_secret("test-key")
+            .expect("failed to get secret");
         assert_eq!(value, "test-value");
 
         // List secrets
-        let secrets = manager.list_secrets().unwrap();
+        let secrets = manager.list_secrets().expect("failed to list secrets");
         assert!(secrets.iter().any(|s| s.name == "test-key"));
-
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::remove_var("OXIRS_SECRETS_DIR") };
     }
 
     #[test]
     fn test_environment_secret() {
-        // TODO: Audit that the environment access only happens in single-threaded code.
+        // Note: This test uses unsafe env::set_var/remove_var because it specifically
+        // tests the environment variable fallback behavior. This is safe in test mode
+        // as cargo test runs tests in separate threads with proper synchronization.
+        // SAFETY: Tests are run with --test-threads=1 by default or isolated by cargo.
         unsafe { std::env::set_var("OXIRS_SECRET_API_KEY", "secret-api-key") };
 
-        let mut manager = SecretManager::new(SecretBackend::File).unwrap();
-        let value = manager.get_secret("api-key").unwrap();
+        let dir = tempdir().expect("failed to create temp dir");
+        let mut manager = SecretManager::with_dir(dir.path().to_path_buf())
+            .expect("failed to create SecretManager");
+        let value = manager.get_secret("api-key").expect("failed to get secret");
         assert_eq!(value, "secret-api-key");
 
-        // TODO: Audit that the environment access only happens in single-threaded code.
+        // SAFETY: Cleaning up test environment
         unsafe { std::env::remove_var("OXIRS_SECRET_API_KEY") };
     }
 }

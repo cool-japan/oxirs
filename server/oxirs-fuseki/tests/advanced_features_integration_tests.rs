@@ -1,4 +1,4 @@
-//! Integration tests for Beta.2 performance and scalability features
+//! Integration tests for advanced performance and scalability features
 //!
 //! Tests the following modules:
 //! - concurrent: Advanced concurrent request handling

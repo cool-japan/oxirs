@@ -10,7 +10,7 @@ pub mod adaptive_tuning;
 pub mod allocator;
 pub mod async_io;
 pub mod buffer_pool;
-pub mod buffer_pool_tuner; // ✅ Updated to scirs2-core v0.1.0-rc.2+ metrics API
+pub mod buffer_pool_tuner; // ✅ Updated to scirs2-core v0.1.0+ metrics API
 pub mod columnar_analytics; // Columnar analytics storage for SPARQL analytical queries
 pub mod direct_io;
 pub mod file_manager;

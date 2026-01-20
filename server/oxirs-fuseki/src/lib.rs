@@ -1,9 +1,9 @@
 //! # OxiRS Fuseki - SPARQL HTTP Server
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-fuseki/badge.svg)](https://docs.rs/oxirs-fuseki)
 //!
-//! **Status**: Beta Release (v0.1.0-rc.1)
+//! **Status**: Production Release (v0.1.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SPARQL 1.1/1.2 HTTP protocol server with Apache Fuseki compatibility.
@@ -43,69 +43,69 @@
 
 use std::net::SocketAddr;
 
-pub mod adaptive_execution; // Adaptive query execution with full SciRS2 integration (v0.1.0 Final)
-pub mod admin_ui; // Admin UI enhancements (Beta.2/RC.1)
+pub mod adaptive_execution;
+pub mod admin_ui;
 pub mod aggregation;
 pub mod analytics;
-pub mod api; // 🆕 REST API endpoints (Phase 3)
+pub mod api;
 pub mod auth;
-pub mod backup; // Automatic backup and restore
-pub mod batch_execution; // Request batching and parallel execution
+pub mod backup;
+pub mod batch_execution;
 pub mod bind_values_enhanced;
 pub mod clustering;
-pub mod concurrent; // Advanced concurrent request handling
+pub mod concurrent;
 pub mod config;
 #[cfg(feature = "hot-reload")]
-pub mod config_reload; // Configuration hot-reload support
-pub mod connection_pool; // Connection pooling optimization
+pub mod config_reload;
+pub mod connection_pool;
 pub mod consciousness;
-pub mod dataset_management; // Enhanced dataset management API
-pub mod ddos_protection; // DDoS protection and traffic analysis
-pub mod disaster_recovery; // Disaster recovery and failover
+pub mod dataset_management;
+pub mod ddos_protection;
+pub mod disaster_recovery;
 pub mod error;
 pub mod federated_query_optimizer;
 pub mod federation;
-pub mod gpu_kg_embeddings; // GPU-accelerated knowledge graph embeddings (v0.1.0 Final - SciRS2 GPU/Tensor)
+pub mod gpu_kg_embeddings;
 pub mod graph_analytics;
-pub mod graphql_integration; // GraphQL API integration (Beta.2/RC.1)
+pub mod graphql_integration;
 pub mod handlers;
-pub mod health; // Enhanced health checks
-pub mod http_protocol; // HTTP/2 and HTTP/3 support
-pub mod ids; // IDS/Gaia-X Connector for Data Sovereignty (Phase B)
-pub mod k8s_operator; // Kubernetes operator for managing Fuseki instances
-pub mod memory_pool; // Memory pooling and optimization
+pub mod health;
+pub mod http_protocol;
+pub mod ids;
+pub mod k8s_operator;
+pub mod memory_pool;
 pub mod metrics;
 pub mod middleware;
-pub mod middleware_integration; // Integrated middleware for production features (RC.1)
+pub mod middleware_integration;
 pub mod optimization;
 pub mod performance;
-pub mod performance_profiler; // Performance profiling tools (Beta.2/RC.1)
-pub mod production; // Production hardening features (Beta.1)
+pub mod performance_profiler;
+pub mod production;
 pub mod property_path_optimizer;
-pub mod query_cache; // Query result caching with intelligent invalidation
-pub mod realtime_notifications; // Real-time update notifications (Beta.2/RC.1)
-pub mod recovery; // Automatic recovery mechanisms
-pub mod rest_api_v2; // REST API v2 with OpenAPI (Beta.2/RC.1)
-pub mod security_audit; // Security auditing and vulnerability scanning
+pub mod query_cache;
+pub mod realtime_notifications;
+pub mod recovery;
+pub mod rest_api_v2;
+pub mod security_audit;
 pub mod server;
-pub mod simd_triple_matcher; // SIMD-accelerated triple pattern matching (v0.1.0 Final - SciRS2 SIMD)
-pub mod sparql_simd_integration; // SPARQL-SIMD integration for high-performance queries (v0.1.0 Final - Session 20)
+pub mod simd_triple_matcher;
+pub mod sparql_simd_integration;
 pub mod store;
-pub mod store_ext; // Extension trait for Store convenience methods
-pub mod store_health; // Store health monitoring and metrics (v0.1.0 Final)
+pub mod store_ext;
+pub mod store_health;
 pub mod store_impl;
 pub mod streaming;
-pub mod streaming_results; // Memory-efficient result streaming
+pub mod streaming_results;
 pub mod subquery_optimizer;
-pub mod tls; // TLS/SSL support
-pub mod tls_rotation; // TLS certificate rotation
+pub mod tls;
+pub mod tls_rotation;
 pub mod vector_search;
 pub mod websocket;
 
-// v0.1.0 Final - Additional Production Features
-pub mod cdn_static; // CDN support for static assets
-pub mod edge_caching; // Edge caching integration framework
-pub mod load_balancing; // Advanced load balancing strategies
+// Additional Production Features
+pub mod cdn_static;
+pub mod edge_caching;
+pub mod load_balancing;
 
 use store::Store;
 

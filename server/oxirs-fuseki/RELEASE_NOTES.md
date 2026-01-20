@@ -1,7 +1,7 @@
 # OxiRS Fuseki v0.1.0 Release Notes
 
-**Release Date**: December 2025
-**Status**: Release Candidate 3 (RC.3) - Feature Complete
+**Release Date**: January 7, 2026
+**Status**: Production Release - Initial v0.1.0
 
 ---
 
@@ -462,7 +462,7 @@ OxiRS Fuseki maintains full API compatibility with Apache Jena Fuseki. Existing 
 
 ## 📦 Installation
 
-### From Crates.io (Coming Soon)
+### From Crates.io
 
 ```bash
 cargo install oxirs-fuseki
@@ -552,13 +552,19 @@ cargo fmt --check
 - Machine learning integration (oxirs-embed, oxirs-chat)
 - Advanced SHACL validation with AI shape inference
 - Real-time streaming with Kafka/NATS integration
-
-### v0.3.0 (Q2 2026)
-
 - Cluster mode with Raft consensus
 - Multi-master replication
 - Horizontal scalability
 - Global query optimization across cluster
+- Full-text search (Tantivy)
+- Enhanced GeoSPARQL capabilities
+
+### v1.0.0 LTS (Q2 2026)
+
+- Full Jena parity verification
+- Enterprise support features
+- Long-term support guarantees
+- Comprehensive performance benchmarks
 
 ---
 

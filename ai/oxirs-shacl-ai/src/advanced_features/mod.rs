@@ -1,4 +1,4 @@
-//! Advanced features for SHACL-AI v0.1.0-rc.1
+//! Advanced features for SHACL-AI v0.1.0
 //!
 //! This module provides cutting-edge AI capabilities for SHACL validation including:
 //! - Graph Neural Networks for shape learning

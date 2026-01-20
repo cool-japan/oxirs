@@ -1,7 +1,7 @@
 # OxiRS Vec - Write-Ahead Logging (WAL) Configuration Guide
 
-**Version**: v0.1.0-rc.2
-**Last Updated**: December 6, 2025
+**Version**: v0.1.0
+**Last Updated**: 2026-01-06
 
 ## Table of Contents
 
@@ -754,5 +754,5 @@ let config = WalConfig {
 ---
 
 **Document Version**: 1.0
-**OxiRS Vec Version**: v0.1.0-rc.2
-**Last Updated**: December 6, 2025
+**OxiRS Vec Version**: v0.1.0
+**Last Updated**: 2026-01-06

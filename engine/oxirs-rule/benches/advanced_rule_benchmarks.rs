@@ -1,8 +1,8 @@
-//! # Beta.4 Features Performance Benchmarks
+//! # Advanced Rule Engine Performance Benchmarks
 //!
-//! Benchmarks for RIF, CHR, and ASP features added in Beta.4
+//! Benchmarks for RIF, CHR, and ASP features
 //!
-//! Run with: `cargo bench --bench beta4_benchmarks`
+//! Run with: `cargo bench --bench advanced_rule_benchmarks`
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_rule::asp::{AspLiteral, AspSolver, AspTerm, Atom};

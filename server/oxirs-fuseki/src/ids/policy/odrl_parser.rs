@@ -354,17 +354,19 @@ mod tests {
     #[test]
     fn test_create_read_permission() {
         let assigner = Party {
-            id: IdsUri::new("https://provider.example.org").unwrap(),
+            id: IdsUri::new("https://provider.example.org").expect("valid uri"),
             name: "Data Provider".to_string(),
-            organization: None,
+            legal_name: None,
+            description: None,
             contact: None,
             gaiax_participant_id: None,
         };
 
         let assignee = Party {
-            id: IdsUri::new("https://consumer.example.org").unwrap(),
+            id: IdsUri::new("https://consumer.example.org").expect("valid uri"),
             name: "Data Consumer".to_string(),
-            organization: None,
+            legal_name: None,
+            description: None,
             contact: None,
             gaiax_participant_id: None,
         };

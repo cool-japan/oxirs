@@ -259,6 +259,21 @@ pub struct EvaluationContext {
 
     /// Gaia-X trust level (0.0 - 1.0)
     pub trust_level: Option<f64>,
+
+    /// Connector ID (from DAPS token)
+    pub connector_id: Option<String>,
+
+    /// Event type for event-based constraints
+    pub event_type: Option<String>,
+
+    /// Current usage count for the resource
+    pub usage_count: Option<u64>,
+
+    /// Region code (ISO 3166-1 alpha-2)
+    pub region_code: Option<String>,
+
+    /// Purpose of data usage
+    pub purpose: Option<String>,
 }
 
 impl EvaluationContext {
@@ -271,6 +286,11 @@ impl EvaluationContext {
             metadata: std::collections::HashMap::new(),
             source_ip: None,
             trust_level: None,
+            connector_id: None,
+            event_type: None,
+            usage_count: None,
+            region_code: None,
+            purpose: None,
         }
     }
 
@@ -295,6 +315,36 @@ impl EvaluationContext {
     /// Set trust level
     pub fn with_trust_level(mut self, level: f64) -> Self {
         self.trust_level = Some(level);
+        self
+    }
+
+    /// Set connector ID
+    pub fn with_connector_id(mut self, connector_id: impl Into<String>) -> Self {
+        self.connector_id = Some(connector_id.into());
+        self
+    }
+
+    /// Set event type
+    pub fn with_event_type(mut self, event_type: impl Into<String>) -> Self {
+        self.event_type = Some(event_type.into());
+        self
+    }
+
+    /// Set usage count
+    pub fn with_usage_count(mut self, count: u64) -> Self {
+        self.usage_count = Some(count);
+        self
+    }
+
+    /// Set region code
+    pub fn with_region(mut self, region_code: impl Into<String>) -> Self {
+        self.region_code = Some(region_code.into());
+        self
+    }
+
+    /// Set purpose
+    pub fn with_purpose(mut self, purpose: impl Into<String>) -> Self {
+        self.purpose = Some(purpose.into());
         self
     }
 }

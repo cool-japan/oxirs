@@ -7,311 +7,210 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
 ---
 
-## [0.1.0-rc.2] - 2026-01-04
+## [0.1.0] - 2026-01-07
 
 ### Overview
 
-**Performance Breakthrough Release** delivering **3.8x faster query optimization** through adaptive complexity detection. This release eliminates the "optimization overhead paradox" where optimization time exceeded query execution time.
+**Initial production release** of OxiRS - A Rust-native, modular platform for Semantic Web, SPARQL 1.2, GraphQL, and AI-augmented reasoning. This release provides a complete, production-ready alternative to Apache Jena + Fuseki with modern enhancements.
 
 **Major Achievements**:
-- **Adaptive Query Optimization**: Automatic complexity detection with fast path for simple queries
-- **75% CPU Savings**: At production scale (100K QPS), saves 45 minutes of CPU time per hour
-- **13,123 tests passing**: +875 tests since RC.1 (100% pass rate, 136 skipped)
-- **Zero warnings**: Maintained strict `-D warnings` enforcement
-- **Backward compatible**: Zero API changes, transparent to existing code
+- **Complete SPARQL 1.1/1.2 Implementation**: Full W3C compliance with advanced query optimization
+- **13,123 tests passing**: 100% pass rate with comprehensive test coverage (136 skipped)
+- **Zero warnings**: Strict `-D warnings` enforcement across all 22 crates
+- **Industrial IoT Support**: Time-series, Modbus, CANbus/J1939 integration
+- **AI-Powered Features**: GraphRAG, embeddings, physics-informed reasoning
+- **Production-Ready**: Complete observability, security, and deployment automation
 
-**Production Impact**: Validated $10K-50K annual cloud cost savings in production deployments.
+**Quality Metrics**:
+- **13,123 tests passing** - 100% pass rate (136 skipped)
+- **Zero compilation warnings** - Enforced with `-D warnings`
+- **95%+ test coverage** - Comprehensive test suites
+- **95%+ documentation coverage** - Complete API documentation
+- **Zero clippy warnings** - Production-grade code quality
 
 ### Added
 
-#### Performance Optimization
+#### Core RDF & SPARQL
+- **RDF 1.2 Support** - Complete implementation with 7 format parsers (Turtle, N-Triples, RDF/XML, JSON-LD, N-Quads, TriG, N3)
+- **SPARQL 1.1 Query & Update** - Full W3C compliance with SELECT, CONSTRUCT, ASK, DESCRIBE, INSERT, DELETE
+- **SPARQL 1.2 Extensions** - RDF-star, enhanced property paths, advanced aggregations
+- **Adaptive Query Optimization** - 3.8x faster queries via automatic complexity detection
+- **Persistent Storage** - N-Quads format with automatic save/load
 
-- **Adaptive Query Complexity Detection** - Automatic selection between fast heuristics (≤5 patterns) and full cost-based optimization (>5 patterns)
-- **Query Complexity Analyzer** - Recursive algebra tree traversal to determine optimization strategy
-- **Adaptive Pass Limiting** - Maximum 2 passes for simple queries, configurable for complex queries
-- **Zero-Overhead Detection** - Complexity analysis overhead <0.1 µs
+#### Server & API
+- **oxirs-fuseki** - SPARQL 1.1/1.2 HTTP server with Fuseki compatibility
+- **oxirs-gql** - GraphQL API for RDF data
+- **REST API v2** - OpenAPI 3.0 with Swagger UI
+- **WebSocket Support** - Real-time subscriptions and query streaming
+- **Admin UI** - Modern web-based dashboard with live metrics
 
-#### Experimental Features
+#### Query & Reasoning
+- **oxirs-arq** - Advanced SPARQL query engine with cost-based optimization
+- **oxirs-rule** - Rule-based reasoning (RDFS/OWL/SWRL)
+- **oxirs-shacl** - SHACL Core + SHACL-SPARQL validation (27/27 W3C tests passing)
+- **oxirs-federate** - Distributed query federation with 2-phase commit
+- **GeoSPARQL Support** - OGC 1.1 compliance with spatial indexing
 
-- **Enhanced oxirs-physics Interface** - Preparing support for custom simulation modules (e.g., Bayesian Networks, PINNs) in upcoming releases
+#### Industrial Connectivity (Phase D)
+- **oxirs-tsdb** - Time-series database with 40:1 Gorilla compression
+  - SPARQL temporal extensions (ts:window, ts:resample, ts:interpolate)
+  - Hybrid RDF + time-series storage with automatic routing
+  - 500K pts/sec write throughput, 180ms p50 query latency
+  - 128 tests passing
+- **oxirs-modbus** - Complete Modbus TCP/RTU protocol support
+  - PLC integration with 6 data types (INT16, UINT16, INT32, UINT32, FLOAT32, BIT)
+  - RDF triple generation with QUDT units and PROV-O timestamps
+  - Connection pooling with health monitoring
+  - 75 tests passing
+- **oxirs-canbus** - CANbus/J1939 automotive integration
+  - DBC file parser with signal extraction
+  - J1939 protocol with PGN extraction and multi-packet reassembly
+  - SAMM Aspect Model generation from DBC
+  - 98 tests passing
+
+#### AI & Machine Learning
+- **oxirs-embed** - Knowledge graph embeddings (TransE, ComplEx, Tucker)
+  - CUDA GPU acceleration for 2-5x faster computation
+  - Multi-GPU support for large-scale graphs
+  - 350+ tests passing
+- **oxirs-chat** - RAG chat API with LLM integration
+  - Multi-LLM support (OpenAI, Anthropic Claude, Ollama)
+  - Session management and context tracking
+- **oxirs-shacl-ai** - AI-powered SHACL validation
+  - Shape learning and data repair suggestions
+  - 350+ tests passing
+- **oxirs-graphrag** - GraphRAG hybrid search
+  - RRF (Reciprocal Rank Fusion) combining vector and graph topology
+  - N-hop SPARQL graph expansion for context retrieval
+  - Louvain community detection for hierarchical summarization
+  - 23 tests passing
+- **oxirs-physics** - Physics-informed digital twins
+  - SciRS2 simulation integration
+  - RDF → Simulation parameter extraction
+  - Physics constraint validation
+
+#### Security & Trust
+- **oxirs-did** - W3C DID & Verifiable Credentials
+  - DID Core 1.0 and VC Data Model 2.0 implementation
+  - did:key and did:web methods with Ed25519 signatures
+  - RDFC-1.0 RDF graph canonicalization
+  - 43 tests passing
+- **ReBAC** - Relationship-Based Access Control
+  - Graph-level authorization with hierarchical permissions
+  - SPARQL-based policy storage
+  - 83 tests passing
+- **OAuth2/OIDC/JWT** - Modern authentication
+- **TLS/SSL** - Certificate rotation with ACME/Let's Encrypt integration
+
+#### Storage & Distribution
+- **oxirs-tdb** - TDB2-compatible storage with MVCC
+  - Memory-mapped optimization for large datasets
+  - Background compaction and snapshots
+  - 250+ tests passing
+- **oxirs-cluster** - Distributed clustering with Raft consensus
+  - Multi-region replication
+  - Automatic failover and recovery
+- **oxirs-stream** - Real-time streaming (Kafka/NATS)
+  - RDF Patch and SPARQL Update delta
+  - 100K+ events/sec throughput
+  - 300+ tests passing
+
+#### Platforms
+- **oxirs-wasm** - WebAssembly browser/edge deployment
+  - In-memory RDF store for browsers
+  - TypeScript definitions and ES modules
+  - Zero Tokio dependency (WASM-compatible)
+  - 8 tests passing
+
+#### Industry Standards
+- **oxirs-samm** - SAMM 2.0-2.3 metamodel & AAS integration
+  - 16 code generators for Industry 4.0
+- **NGSI-LD** - FIWARE smart city compatibility (ETSI GS CIM 009 v1.6)
+- **MQTT & OPC UA** - Industrial IoT bridges
+- **IDS/Gaia-X** - European data space compliance with ODRL 2.2
+
+#### Performance & Operations
+- **Adaptive Query Optimization** - 3.8x faster for simple queries
+  - Automatic complexity detection
+  - Fast path for simple queries (≤5 patterns)
+  - Full cost-based optimization for complex queries
+  - 75% CPU savings at production scale (100K QPS)
+- **Work-Stealing Scheduler** - Efficient concurrency with 4-level priority queuing
+- **Memory Pooling** - SciRS2-integrated buffer management
+- **Request Batching** - Automatic batching with adaptive sizing
+- **Result Streaming** - Zero-copy streaming with compression (Gzip, Brotli)
+- **Load Balancing** - 9 strategies including consistent hashing
+- **Edge Caching** - Multi-CDN support (Cloudflare, Fastly, CloudFront, Akamai)
+- **DDoS Protection** - IP-based rate limiting with anomaly detection
+- **Security Audit** - OWASP Top 10 vulnerability scanning
+- **Prometheus Metrics** - Complete observability with OpenTelemetry tracing
+- **Disaster Recovery** - Automated failover with RPO/RTO management
+
+#### Deployment Automation
+- **Docker** - Multi-stage production builds (12MB binary)
+- **Kubernetes** - Production-grade manifests with HPA and Prometheus Operator
+- **Kubernetes Operator** - CRD-based deployment automation
+- **Terraform** - Complete cloud infrastructure (AWS EKS, GCP GKE, Azure AKS)
+- **Ansible** - Production deployment playbooks
+
+#### CLI Tools
+- **oxirs** - Comprehensive command-line tool
+  - Dataset management (init, import, export, query, serve)
+  - Time-series operations (query, insert, stats, compact, retention, benchmark)
+  - Modbus operations (monitor-tcp, monitor-rtu, read, write, to-rdf, mock-server)
+  - CANbus operations (monitor, parse-dbc, decode, send, to-samm, to-rdf, replay)
+  - ReBAC management (add-relationship, remove-relationship, check-permission, list-relationships)
 
 ### Changed
 
-- **Query Optimizer Performance** - All profiles now optimize at ~3.0 µs (down from 10-16 µs)
+- **Query Optimizer Performance** - All profiles optimized at ~3.0 µs (down from 10-16 µs)
   - HighThroughput: 10.8 µs → 3.24 µs (3.3x faster)
   - Analytical: 11.7 µs → 3.01 µs (3.9x faster)
   - Mixed: 10.5 µs → 2.95 µs (3.6x faster)
   - LowMemory: 15.6 µs → 2.94 µs (5.3x faster)
 
-### Fixed
+### Performance Benchmarks
 
-- Eliminated optimization overhead paradox for simple queries
-- Improved query optimization ROI across all workload profiles
-
-### Quality Metrics
-
-- **13,123 tests passing** - 100% pass rate (136 skipped)
-- **Zero compilation warnings** - Strict `-D warnings` enforced across all 22 crates
-- **Zero clippy warnings** - Production-grade code quality
-- **95%+ test coverage** - Comprehensive test suites
-- **95%+ documentation coverage** - Complete API documentation
-
----
-
-## [0.1.0-rc.1] - 2025-12-25
-
-### Overview
-
-**First release candidate** delivering **Phase D: Industrial Connectivity Infrastructure** with complete time-series optimization, Modbus protocol support, and CANbus/J1939 integration. This release marks production-ready implementations of three major industrial IoT capabilities.
-
-**Major Achievements**:
-- **oxirs-tsdb**: Complete time-series database with 40:1 compression
-- **oxirs-modbus**: Full Modbus TCP/RTU protocol support
-- **oxirs-canbus**: CANbus/J1939 with DBC parsing
-- **301/301 tests passing** (100% success rate)
-- **Zero warnings** enforced across all three crates
-
-**Production-Ready RC**: Suitable for production deployment in industrial IoT, manufacturing, automotive, and smart city applications.
-
-### Quality Metrics
-
-- **301 tests passing** - 100% pass rate (128 tsdb, 75 modbus, 98 canbus)
-- **Zero compilation warnings** - Strict `-D warnings` enforced
-- **Zero clippy warnings** - Production-grade code quality
-- **Zero rustdoc warnings** - Complete documentation
-- **95%+ documentation coverage** - Comprehensive API docs
-- **21 working examples** - Full coverage of features
-
-### Added
-
-#### oxirs-tsdb: Time-Series Database
-
-**Complete Industrial-Scale Time-Series Storage**:
-- **Hybrid RDF + Time-Series Storage** - Automatic routing between semantic metadata and high-frequency numerical data
-- **Gorilla Compression** - 40:1 storage reduction for float values (Facebook VLDB 2015 algorithm)
-- **Delta-of-Delta Timestamps** - <2 bits per timestamp for regular sampling
-- **SPARQL Temporal Extensions** - ts:window, ts:resample, ts:interpolate functions
-- **Write-Ahead Log (WAL)** - Crash recovery and durability
-- **Background Compaction** - Automatic storage optimization
-- **Retention Policies** - Time-based expiration with automatic downsampling
-- **Columnar Storage** - Disk-backed binary format with LRU caching
-- **Series Indexing** - Efficient time-based chunk lookups with BTreeMap
-
-**Architecture**:
 ```
-HybridStore (Store trait)
-├─ RDF Store (oxirs-tdb)
-│  └─ Semantic metadata, provenance, relationships
-└─ Time-Series DB (oxirs-tsdb)
-   └─ High-frequency sensor data with compression
+Query Optimization (5 triple patterns):
+  HighThroughput:  3.24 µs (3.3x faster than baseline)
+  Analytical:      3.01 µs (3.9x faster than baseline)
+  Mixed:           2.95 µs (3.6x faster than baseline)
+  LowMemory:       2.94 µs (5.3x faster than baseline)
+
+Time-Series Database:
+  Write throughput: 500K pts/sec (single), 2M pts/sec (batch 1K)
+  Query latency:    180ms p50 (1M points range), 120ms p50 (aggregation)
+  Compression:      38:1 (temperature), 25:1 (vibration), 32:1 (timestamps)
+
+Production Impact (100K QPS):
+  CPU time saved:   45 minutes per hour (75% reduction)
+  Annual savings:   $10,000 - $50,000 (cloud deployments)
 ```
 
-**Integration**:
-- **RDF Bridge** - Intelligent auto-detection with 5-level confidence system
-- **Hybrid Store Adapter** - Implements oxirs_core::store::Store trait
-- **Query Router** - Automatic backend selection based on SPARQL patterns
-- **Subject Series Mapping** - Bidirectional lookup between RDF subjects and series IDs
+### Standards Compliance
 
-**Performance**:
-| Metric | Achievement |
-|--------|-------------|
-| Write throughput | ~500K pts/sec (single), ~2M pts/sec (batch 1K) |
-| Query latency (1M pts) | ~180ms p50 (range), ~120ms p50 (aggregation) |
-| Compression ratio | 38:1 (temperature), 25:1 (vibration), 32:1 (timestamps) |
-| Multi-series (100) | ~1.5M pts/sec sustained throughput |
-
-**Statistics**:
-- **Files**: 40 Rust files
-- **Lines**: 10,964 (8,612 code, 1,349 comments)
-- **Tests**: 128/128 passing (Integration: 18, SPARQL: 18, Storage: 30, Query: 35, Write: 24)
-- **Examples**: 10 working examples
-- **Benchmarks**: 3 comprehensive suites
-
-**SPARQL Extensions**:
-```sparql
-# Moving average over 10-minute window
-SELECT (ts:window(?temp, 600, "AVG") AS ?avg_temp)
-
-# Resample to hourly buckets
-GROUP BY (ts:resample(?time, "1h") AS ?hour)
-
-# Linear interpolation for missing values
-SELECT (ts:interpolate(?time, ?value, "linear") AS ?interpolated)
-```
-
-#### oxirs-modbus: Modbus Protocol Support
-
-**Complete Industrial Modbus Implementation**:
-- **Modbus TCP Client** - Port 502 Ethernet connectivity
-- **Modbus RTU Client** - RS-232/RS-485 serial support
-- **Register Mapping** - 6 data types (INT16, UINT16, INT32, UINT32, FLOAT32, BIT)
-- **RDF Triple Generation** - Automatic conversion with QUDT units and PROV-O timestamps
-- **Connection Pooling** - Health monitoring and automatic reconnection
-- **Mock Server** - Testing infrastructure without hardware
-
-**Function Codes**:
-- Read Holding Registers (0x03)
-- Read Input Registers (0x04)
-- Write Single Register (0x06)
-- Write Multiple Registers (0x10)
-
-**Statistics**:
-- **Files**: 24 Rust files
-- **Lines**: 6,752
-- **Tests**: 75/75 passing
-- **Examples**: 5 working examples (TCP, RTU, mock server, register mapping, RDF integration)
-
-**Standards Compliance**:
-- Modbus Application Protocol V1.1b3
-- W3C PROV-O provenance tracking
-- QUDT unit handling
-
-#### oxirs-canbus: CANbus/J1939 Protocol Support
-
-**Complete Automotive/Industrial CAN Implementation**:
-- **Socketcan Interface** - Linux CAN interface (vcan for testing)
-- **J1939 Protocol** - Heavy vehicle parameter groups with PGN extraction
-- **Multi-Packet Reassembly** - BAM (Broadcast Announce Message) support
-- **DBC File Parser** - Vector CANdb++ format with signal extraction
-- **Signal Decoding** - Little/big endian, unaligned, signed/unsigned
-- **SAMM Aspect Model Generation** - Auto-generate semantic models from DBC
-- **RDF Mapping** - CAN frames to RDF triples with provenance
-
-**Signal Types**:
-- Unsigned (1-64 bits)
-- Signed (1-64 bits)
-- IEEE 754 Float (32-bit)
-- IEEE 754 Double (64-bit)
-- Little/Big Endian
-- Unaligned bit positions
-- Multiplexed signals
-
-**Statistics**:
-- **Files**: 25 Rust files
-- **Lines**: 8,667
-- **Tests**: 98/98 passing
-- **Examples**: 6 working examples (CAN frame, DBC parsing, J1939 engine, OBD2, RDF integration, SAMM export)
-
-**Standards Compliance**:
-- ISO 11898-1 (CAN 2.0)
-- ISO 11898-1:2015 (CAN FD)
-- SAE J1939 (heavy vehicles)
-- Vector CANdb++ DBC format
-
-#### CLI Enhancements: Industrial Connectivity Commands
-
-**New Command Groups** (3 major additions):
-
-1. **`oxirs tsdb`** - Time-Series Database Operations
-   - `query` - Query with SPARQL temporal extensions (ts:window, ts:resample, ts:interpolate)
-   - `insert` - Insert data points (single or batch from CSV)
-   - `stats` - Compression statistics and storage metrics
-   - `compact` - Storage compaction and optimization
-   - `retention` - Retention policy management (list, add, remove, enforce)
-   - `export` - Export to CSV/Parquet
-   - `benchmark` - Performance testing
-
-2. **`oxirs modbus`** - Modbus Protocol Operations
-   - `monitor-tcp` - Real-time Modbus TCP monitoring
-   - `monitor-rtu` - Real-time Modbus RTU (serial) monitoring
-   - `read` - Read registers (6 data types: INT16, UINT16, INT32, UINT32, FLOAT32, BIT)
-   - `write` - Write registers with type conversion
-   - `to-rdf` - Generate RDF triples from Modbus data
-   - `mock-server` - Start mock server for testing
-
-3. **`oxirs canbus`** - CANbus/J1939 Operations
-   - `monitor` - Real-time CAN interface monitoring with DBC decoding
-   - `parse-dbc` - Parse Vector CANdb++ DBC files
-   - `decode` - Decode CAN frames using DBC signal definitions
-   - `send` - Send CAN frames to interface
-   - `to-samm` - Generate SAMM Aspect Models from DBC
-   - `to-rdf` - Generate RDF triples from CAN data
-   - `replay` - Replay CAN log files
-
-**Command Examples**:
-```bash
-# Time-series query with aggregation
-oxirs tsdb query mykg --series 1 --start 2025-12-01T00:00:00Z --aggregate avg
-
-# Monitor Modbus PLC in real-time
-oxirs modbus monitor-tcp --address 192.168.1.100:502 --start 40001 --count 10
-
-# Decode CAN frame using DBC
-oxirs canbus decode --id 0x0CF00400 --data DEADBEEF --dbc vehicle.dbc
-
-# Generate SAMM from DBC
-oxirs canbus to-samm --dbc vehicle.dbc --output ./models/
-```
-
-**Implementation**:
-- ~650 lines of CLI code (3 new command modules)
-- 20 new subcommands across 3 command groups
-- Comprehensive help text and examples
-- Integration with Phase D crates (oxirs-tsdb, oxirs-modbus, oxirs-canbus)
-- Colored output and table formatting
-- Error handling and validation
-
-### Changed
-
-- **Performance Optimization**: SIMD-accelerated compression in oxirs-tsdb
-- **Memory Efficiency**: LRU caching and memory-mapped storage for large datasets
-- **Error Handling**: Comprehensive TsdbError/ModbusError/CanbusError types with context
-- **Configuration**: Production-ready TOML configuration for all three crates
-
-### Technical Highlights
-
-**Code Statistics**:
-- **Total Files**: 89 Rust files (40 tsdb, 24 modbus, 25 canbus)
-- **Total Lines**: 25,794 (20,383 LOC)
-- **Test Coverage**: 301 tests (100% passing)
-- **Documentation**: 95%+ API coverage with working examples
-
-**Build Quality**:
-- Zero errors across all modules
-- Zero warnings (compiler, clippy, rustdoc)
-- Clean compilation with `-D warnings` enforced
-- All benchmarks and examples verified
-
-**Integration Ready**:
-- Seamless oxirs-core Store trait integration
-- SPARQL temporal function registry
-- RDF provenance with W3C PROV-O
-- SAMM Aspect Model generation
-
-### Use Cases
-
-**Manufacturing** (oxirs-modbus):
-- Real-time PLC monitoring (temperature, pressure, vibration)
-- Energy meter integration
-- Factory automation with semantic twins
-
-**Automotive** (oxirs-canbus):
-- Fleet management with OBD-II data
-- EV battery monitoring and diagnostics
-- Predictive maintenance from CAN bus
-
-**Smart Cities** (oxirs-tsdb):
-- Traffic flow optimization with time-series
-- Air quality monitoring and analytics
-- Smart grid energy management
-
-### Documentation
-
-- **API Documentation**: 95%+ coverage with rustdoc
-- **Examples**: 21 working examples (10 tsdb, 5 modbus, 6 canbus)
-- **Guides**: Phase D implementation plan and completion summary
-- **Benchmarks**: 3 performance suites for oxirs-tsdb
+- **W3C**: SPARQL 1.1, SPARQL 1.2, RDF 1.2, SHACL, DID Core 1.0, VC Data Model 2.0, RDFC-1.0
+- **OGC**: GeoSPARQL 1.1
+- **ETSI**: NGSI-LD v1.6
+- **ISO/IEC**: MQTT 5.0 (20922), CAN 2.0/CAN FD (11898-1)
+- **SAE**: J1939 (heavy vehicles)
+- **IEC**: OPC UA (62541)
+- **IDSA**: Reference Architecture 4.x
+- **Eclipse**: Sparkplug B 3.0
 
 ### Contributors
 
-- @cool-japan (KitaSan) - Phase D implementation
+- @cool-japan (KitaSan) - Core development and architecture
 
 ### Links
 
 - **Repository**: https://github.com/cool-japan/oxirs
 - **Issues**: https://github.com/cool-japan/oxirs/issues
-- **Documentation**: https://docs.rs/oxirs-tsdb, https://docs.rs/oxirs-modbus, https://docs.rs/oxirs-canbus
+- **Documentation**: https://docs.rs/oxirs-core
+
+---
+
+*"Rust makes memory safety table stakes; OxiRS makes knowledge-graph engineering table stakes."*

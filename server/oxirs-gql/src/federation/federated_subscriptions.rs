@@ -1,4 +1,4 @@
-// Copyright (c) 2025-2026 COOLJAPAN OU (Team KitaSan)
+// Copyright (c) 2026 COOLJAPAN OU (Team KitaSan)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Federated Subscription Support

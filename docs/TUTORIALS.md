@@ -1,7 +1,7 @@
 # OxiRS Tutorials
 
-**Version**: v0.1.0-rc.2
-**Date**: December 21, 2025
+**Version**: v0.1.0
+**Date**: January 7, 2026
 **Audience**: Developers, Data Engineers, Semantic Web Practitioners
 
 ---
@@ -39,14 +39,14 @@ docker --version
 #### Option A: Install Pre-built Binary (Fastest)
 ```bash
 # Download latest release
-curl -L https://github.com/cool-japan/oxirs/releases/download/v0.1.0-rc.2/oxirs-linux-x86_64.tar.gz | tar xz
+curl -L https://github.com/cool-japan/oxirs/releases/download/v0.1.0/oxirs-linux-x86_64.tar.gz | tar xz
 
 # Move to PATH
 sudo mv oxirs-fuseki /usr/local/bin/
 
 # Verify installation
 oxirs-fuseki --version
-# oxirs-fuseki 0.1.0-rc.2
+# oxirs-fuseki 0.1.0
 ```
 
 #### Option B: Build from Source
@@ -65,13 +65,13 @@ cargo build --release -p oxirs-fuseki
 #### Option C: Docker (Recommended for Production)
 ```bash
 # Pull image
-docker pull ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-rc.2
+docker pull ghcr.io/cool-japan/oxirs-fuseki:v0.1.0
 
 # Run container
 docker run -d \
   -p 3030:3030 \
   --name oxirs \
-  ghcr.io/cool-japan/oxirs-fuseki:v0.1.0-rc.2
+  ghcr.io/cool-japan/oxirs-fuseki:v0.1.0
 
 # Verify
 curl http://localhost:3030/$/ping
@@ -103,7 +103,7 @@ EOF
 oxirs-fuseki --config oxirs.toml
 
 # Server starts
-# INFO  oxirs_fuseki: Starting OxiRS Fuseki Server v0.1.0-rc.2
+# INFO  oxirs_fuseki: Starting OxiRS Fuseki Server v0.1.0
 # INFO  oxirs_fuseki: Listening on http://0.0.0.0:3030
 # INFO  oxirs_fuseki: Dataset 'my_dataset' ready
 ```
@@ -840,7 +840,7 @@ CMD ["oxirs-fuseki", "--config", "/etc/oxirs/oxirs.toml"]
 
 ```bash
 # Build image
-docker build -t oxirs-fuseki:v0.1.0-rc.2 .
+docker build -t oxirs-fuseki:v0.1.0 .
 
 # Run production container
 docker run -d \
@@ -851,7 +851,7 @@ docker run -d \
   --restart unless-stopped \
   --memory 16g \
   --cpus 8 \
-  oxirs-fuseki:v0.1.0-rc.2
+  oxirs-fuseki:v0.1.0
 ```
 
 ### Kubernetes Deployment
@@ -1268,7 +1268,7 @@ processor.stream_updates(|update| {
 - [Architecture Guide](ARCHITECTURE.md) - System design and internals
 - [API Stability](API_STABILITY.md) - Version guarantees
 - [Deployment Guide](DEPLOYMENT.md) - Production deployment
-- [Migration Guide](MIGRATION_ALPHA3_BETA1.md) - Upgrade from Alpha.3
+- [Migration Guide](CHANGELOG.md) - Version upgrade guidance
 
 ### Community
 - GitHub: https://github.com/cool-japan/oxirs
@@ -1282,6 +1282,6 @@ processor.stream_updates(|update| {
 
 ---
 
-*Tutorials - October 12, 2025*
-*Version: v0.1.0-rc.2*
+*Tutorials - January 7, 2026*
+*Version: v0.1.0*
 *Happy SPARQL querying! 🚀*

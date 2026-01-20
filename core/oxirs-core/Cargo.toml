@@ -29,7 +29,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-url = "2.5.7"
+url = "2.5.8"
 regex = "1.12"
 lazy_static = "1.5"
 once_cell = "1.21"
@@ -56,7 +56,7 @@ smallvec = "1.15"
 futures = "0.3"
 
 # HTTP client for federated SPARQL queries
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { workspace = true, features = ["stream"] }
 
 # Hash function dependencies for SPARQL 1.2
 sha1 = "0.10"

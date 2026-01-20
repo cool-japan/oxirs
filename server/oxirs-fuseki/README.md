@@ -1,12 +1,12 @@
 # OxiRS Fuseki
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility**
 
-**Status**: Release Candidate (v0.1.0-rc.2) - Released December 26, 2025
+**Status**: Production Release (v0.1.0) - Released January 7, 2026
 
-✨ **Release Candidate**: Production-ready with API stability guarantees. Semantic versioning enforced.
+✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 ## Overview
 
@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-oxirs-fuseki = "0.1.0-rc.2"
+oxirs-fuseki = "0.1.0"
 ```
 
 ### As a Binary
@@ -309,7 +309,7 @@ GET /health
 ```json
 {
   "status": "healthy",
-  "version": "0.1.0-rc.2",
+  "version": "0.1.0",
   "uptime": "2h 15m 30s",
   "datasets": {
     "example": {
@@ -551,7 +551,7 @@ at your option.
 
 ## Status
 
-🚀 **Release Candidate (v0.1.0-rc.2)** - December 26, 2025
+🚀 **Production Release (v0.1.0)** - January 7, 2026
 
 Current features:
 - ✅ SPARQL query/update endpoints backed by persisted N-Quads datasets
@@ -563,4 +563,4 @@ Current features:
 - 🚧 Authentication system (in progress)
 - 🚧 GraphQL integration (in progress)
 
-Note: This is a release candidate. Some features are incomplete and APIs may change.
+APIs follow semantic versioning. See CHANGELOG.md for details.

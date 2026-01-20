@@ -1,12 +1,12 @@
 # OxiRS Cluster
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Status**: Release Candidate (v0.1.0-rc.2) - Released December 26, 2025
+**Status**: Production Release (v0.1.0) - Released January 7, 2026
 
-✨ **Release Candidate**: Production-ready with API stability guarantees and comprehensive testing.
+✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
 A high-performance, distributed RDF storage system using Raft consensus for horizontal scaling and fault tolerance. Part of the OxiRS ecosystem providing a JVM-free alternative to Apache Jena + Fuseki with enhanced clustering capabilities.
 
@@ -58,7 +58,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-cluster = "0.1.0-rc.2"
+oxirs-cluster = "0.1.0"
 ```
 
 ### Basic Usage

@@ -1,9 +1,9 @@
 //! # OxiRS SHACL - RDF Validation Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl/badge.svg)](https://docs.rs/oxirs-shacl)
 //!
-//! **Status**: Beta Release (v0.1.0-rc.1)
+//! **Status**: Production Release (v0.1.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SHACL (Shapes Constraint Language) validation engine for RDF data.
@@ -404,6 +404,9 @@ pub struct Shape {
     /// Parent shapes for inheritance (sh:extends)
     pub extends: Vec<ShapeId>,
 
+    /// Property shapes linked via sh:property (for NodeShapes)
+    pub property_shapes: Vec<ShapeId>,
+
     /// Priority for conflict resolution (higher value = higher priority)
     pub priority: Option<i32>,
 
@@ -427,6 +430,7 @@ impl Shape {
             severity: Severity::Violation,
             messages: IndexMap::new(),
             extends: Vec::new(),
+            property_shapes: Vec::new(),
             priority: None,
             metadata: ShapeMetadata::default(),
         }

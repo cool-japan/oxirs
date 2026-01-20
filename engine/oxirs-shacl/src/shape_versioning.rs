@@ -950,6 +950,7 @@ mod tests {
             severity: Severity::Violation,
             messages: IndexMap::new(),
             extends: Vec::new(),
+            property_shapes: Vec::new(),
             priority: None,
             metadata: ShapeMetadata::default(),
         };

@@ -47,7 +47,7 @@ This handbook provides comprehensive guidance for deploying OxiRS Core in produc
 
 ```bash
 # Download latest release
-curl -L https://github.com/cool-japan/oxirs/releases/download/v0.1.0-rc.2/oxirs-core-x86_64-linux.tar.gz -o oxirs-core.tar.gz
+curl -L https://github.com/cool-japan/oxirs/releases/download/v0.1.0/oxirs-core-x86_64-linux.tar.gz -o oxirs-core.tar.gz
 
 # Extract
 tar -xzf oxirs-core.tar.gz

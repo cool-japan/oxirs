@@ -1,6 +1,6 @@
-//! Phase 1.1 Service Registry and Discovery Demo
+//! Service Registry and Discovery Demo
 //!
-//! This example demonstrates the core Phase 1.1 functionality:
+//! This example demonstrates service registry and discovery functionality:
 //! - Service Registry with health monitoring and capability detection
 //! - Automatic Service Discovery (mDNS, DNS, Kubernetes)
 //! - Extended metadata collection and management
@@ -23,8 +23,8 @@ async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
-    info!("🚀 OxiRS Federation Engine - Phase 1.1 Demo");
-    info!("===============================================");
+    info!("🚀 OxiRS Federation Engine - Service Registry Demo");
+    info!("===================================================");
 
     // Demo 1: Service Registry with Manual Registration
     demo_service_registry().await?;

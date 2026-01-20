@@ -75,7 +75,7 @@ name = "refactoring_benchmarks"
 harness = false
 
 [[bench]]
-name = "v0_3_0_benchmarks"
+name = "rdf_star_advanced_benchmarks"
 harness = false
 
 [[bench]]

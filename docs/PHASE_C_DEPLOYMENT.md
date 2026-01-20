@@ -111,7 +111,7 @@ spec:
     spec:
       containers:
       - name: oxirs
-        image: oxirs:0.1.0-rc.2
+        image: oxirs:0.1.0
         resources:
           requests:
             cpu: "4"
@@ -280,7 +280,7 @@ git push origin gh-pages
     });
 
     // Cache frequently used graphs
-    await db.put('graphs', graphData, 'research-2025-q1');
+    await db.put('graphs', graphData, 'research-2026-q1');
 </script>
 ```
 
@@ -768,9 +768,9 @@ console.error('WASM error:', error);
 ./scripts/backup.sh
 
 # 2. Update Cargo.toml
-cargo add oxirs-graphrag@0.1.0-rc.2
-cargo add oxirs-did@0.1.0-rc.2
-cargo add oxirs-wasm@0.1.0-rc.2
+cargo add oxirs-graphrag@0.1.0
+cargo add oxirs-did@0.1.0
+cargo add oxirs-wasm@0.1.0
 
 # 3. Update configuration
 cat >> oxirs.toml << EOF

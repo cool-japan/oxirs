@@ -680,7 +680,7 @@ terraform apply
 | **TDB Storage** | ✅ | ❌ | Use N-Quads |
 | **Inference** | ✅ | 🚧 | Coming v0.2.0 |
 | **Text Search** | ✅ | 🚧 | Coming v0.2.0 |
-| **GeoSPARQL** | Plugin | 🚧 | Coming v0.3.0 |
+| **GeoSPARQL** | Plugin | 🚧 | Coming v0.2.0 |
 | **Federation (SERVICE)** | ✅ | ✅ | Enhanced |
 | **Authentication** | Basic | OAuth2/JWT | Much better |
 | **Authorization** | Basic | RBAC/ReBAC | Fine-grained |

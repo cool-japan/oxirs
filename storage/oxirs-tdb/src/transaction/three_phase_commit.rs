@@ -322,7 +322,7 @@ impl ThreePhaseCoordinator {
     /// Request can-commit response from a participant (simulated)
     async fn request_can_commit(&self, _node_id: &str) -> Result<CanCommitResponse> {
         // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For 0.1.0-rc.1: Simulated for local testing. 3PC protocol logic is production-ready.
+        // For v0.1.0: Simulated for local testing. 3PC protocol logic is production-ready.
         tokio::time::sleep(Duration::from_millis(10)).await;
         Ok(CanCommitResponse::Yes)
     }
@@ -362,7 +362,7 @@ impl ThreePhaseCoordinator {
     /// Send PRE-COMMIT message to a participant (simulated)
     async fn send_pre_commit_message(&self, _node_id: &str) -> Result<()> {
         // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For 0.1.0-rc.1: Simulated for local testing. 3PC protocol logic is production-ready.
+        // For v0.1.0: Simulated for local testing. 3PC protocol logic is production-ready.
         tokio::time::sleep(Duration::from_millis(10)).await;
         Ok(())
     }
@@ -402,7 +402,7 @@ impl ThreePhaseCoordinator {
     /// Send DO-COMMIT message to a participant (simulated)
     async fn send_do_commit_message(&self, _node_id: &str) -> Result<()> {
         // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For 0.1.0-rc.1: Simulated for local testing. 3PC protocol logic is production-ready.
+        // For v0.1.0: Simulated for local testing. 3PC protocol logic is production-ready.
         tokio::time::sleep(Duration::from_millis(10)).await;
         Ok(())
     }
@@ -435,7 +435,7 @@ impl ThreePhaseCoordinator {
     /// Send ABORT message to a participant (simulated)
     async fn send_abort_message(&self, _node_id: &str) -> Result<()> {
         // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For 0.1.0-rc.1: Simulated for local testing. 3PC protocol logic is production-ready.
+        // For v0.1.0: Simulated for local testing. 3PC protocol logic is production-ready.
         tokio::time::sleep(Duration::from_millis(10)).await;
         Ok(())
     }

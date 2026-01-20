@@ -1,6 +1,6 @@
-//! Benchmarks for v0.1.0 advanced features
+//! Benchmarks for advanced features
 //!
-//! This benchmark suite focuses on the new features added in v0.1.0:
+//! This benchmark suite focuses on advanced features:
 //! - Zero-copy RDF operations
 //! - ACID transactions with WAL
 //! - Enhanced concurrent index updates

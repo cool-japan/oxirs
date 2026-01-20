@@ -559,6 +559,26 @@ impl<'a> ValidationEngine<'a> {
             for violation in constraint_results.into_iter().flatten() {
                 report.add_violation(violation);
             }
+
+            // Also validate any property shapes linked via sh:property
+            for property_shape_id in &shape.property_shapes {
+                if let Some(property_shape) = self.shapes.get(property_shape_id) {
+                    // Clone the property shape to avoid borrow issues
+                    let property_shape = property_shape.clone();
+                    let property_report = self.validate_node_against_shape(
+                        store,
+                        &property_shape,
+                        focus_node,
+                        graph_name,
+                    )?;
+                    report.merge_result(property_report);
+                } else {
+                    tracing::warn!(
+                        "Property shape {} not found in shapes map",
+                        property_shape_id.as_str()
+                    );
+                }
+            }
         } else if shape.is_property_shape() {
             // For property shapes, evaluate the property path first
             if let Some(path) = &shape.path {

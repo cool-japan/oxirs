@@ -1,7 +1,7 @@
 # OxiRS CLI Migration Guide
 
-**Version**: 0.1.0-rc.2  
-**Last Updated**: November 23, 2025  
+**Version**: 0.1.0  
+**Last Updated**: January 7, 2026  
 **Status**: Stub - To be completed in v0.2.0
 
 ## Overview
@@ -164,4 +164,4 @@ Migration performance tips:
 
 **Note**: This migration guide is a work in progress. Detailed step-by-step migration procedures for each source system will be added in v0.2.0. For now, use `oxirs migrate --help` for current options.
 
-**OxiRS CLI v0.1.0-rc.2** - Migration guide stub
+**OxiRS CLI v0.1.0** - Migration guide stub

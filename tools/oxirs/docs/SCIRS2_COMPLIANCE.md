@@ -1,6 +1,6 @@
 # SCIRS2 Policy Compliance Report - OxiRS CLI
 
-**Date**: November 23, 2025  
+**Date**: January 7, 2026  
 **Crate**: oxirs (tools/oxirs)  
 **Status**: ✅ FULLY COMPLIANT
 
@@ -72,7 +72,7 @@ cargo tree -p oxirs --depth 1 | grep scirs2
 
 **Result**:
 ```
-├── scirs2-core v0.1.0-rc.2
+├── scirs2-core v0.1.0
 ```
 
 ✅ scirs2-core is properly included as a direct dependency
@@ -124,5 +124,5 @@ All random number generation, array operations, and scientific computing properl
 ---
 
 **Verified by**: Automated compliance scan  
-**Date**: November 23, 2025  
-**Version**: v0.1.0-rc.2
+**Date**: January 7, 2026  
+**Version**: v0.1.0

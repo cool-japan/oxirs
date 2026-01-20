@@ -1,7 +1,7 @@
 # Cloud Deployment Guide for OxiRS Cluster
 
-**Version:** 0.1.0-rc.2
-**Last Updated:** December 4, 2025
+**Version:** 0.1.0
+**Last Updated:** 2026-01-06
 
 ## Overview
 
@@ -851,5 +851,5 @@ let lifecycle_policy = LifecyclePolicy {
 
 ---
 
-**Last Updated:** December 4, 2025
+**Last Updated:** 2026-01-06
 **Maintainer:** OxiRS Team

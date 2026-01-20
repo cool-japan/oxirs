@@ -1,10 +1,10 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: Release Candidate (v0.1.0-rc.2) - Released December 2025
+**Status**: Production Release (v0.1.0) - Released January 7, 2026
 
 ⚡ **Production-Ready**: APIs are stable and tested. Ready for production use with comprehensive documentation.
 
@@ -12,7 +12,7 @@
 
 `oxirs` is the unified command-line tool for the OxiRS ecosystem, providing comprehensive functionality for RDF data management, SPARQL operations, server administration, and development workflows. It's designed to be the Swiss Army knife for semantic web developers and data engineers working with knowledge graphs and semantic data.
 
-## What's New in v0.1.0-rc.2 (December 2025)
+## What's New in v0.1.0 (January 7, 2026)
 
 - **API Stability**: All CLI commands and flags are now stable with semantic versioning guarantees
 - **Enhanced Documentation**: Comprehensive help text, examples, and error messages for all commands
@@ -37,11 +37,11 @@
 ### From Crates.io
 
 ```bash
-# Install the latest release candidate
-cargo install oxirs --version 0.1.0-rc.2
+# Install the latest release
+cargo install oxirs --version 0.1.0
 
 # Or install with all optional features
-cargo install oxirs --version 0.1.0-rc.2 --features all-features
+cargo install oxirs --version 0.1.0 --features all-features
 ```
 
 ### From Source
@@ -722,4 +722,4 @@ RUST_LOG=oxirs_core=debug,oxirs_arq=trace oxirs query mydata query.sparql
 
 ---
 
-**OxiRS CLI v0.1.0-rc.2** - Production-ready command-line interface for semantic web operations
+**OxiRS CLI v0.1.0** - Production-ready command-line interface for semantic web operations

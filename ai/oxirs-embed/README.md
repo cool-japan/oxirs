@@ -1,10 +1,10 @@
 # OxiRS Embed - Knowledge Graph Embeddings
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Release Candidate (v0.1.0-rc.2) - Released December 2025
+**Status**: Production Release (v0.1.0) - Released January 2026
 
-⚡ **Release Candidate**: Feature-complete release candidate with comprehensive testing. APIs are stabilizing. Production-ready for experimental use.
+✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 Generate vector embeddings for RDF knowledge graphs enabling semantic similarity search, entity linking, and neural-symbolic AI integration.
 
@@ -15,12 +15,12 @@ Generate vector embeddings for RDF knowledge graphs enabling semantic similarity
 - **DistMult** - Bilinear diagonal models for symmetric relations
 - **ComplEx** - Complex-valued embeddings for asymmetric relations
 - **RotatE** - Rotation-based models in complex space
-- **HolE** - Holographic embeddings using circular correlation (NEW in v0.1.0-rc.2)
-- **ConvE** - Convolutional 2D neural network embeddings (NEW in v0.1.0-rc.2)
+- **HolE** - Holographic embeddings using circular correlation (NEW in v0.1.0)
+- **ConvE** - Convolutional 2D neural network embeddings (NEW in v0.1.0)
 - **TuckER** - Tucker decomposition for multi-relational learning
 - **QuatE** - Quaternion embeddings for complex patterns
 
-### Advanced Features (NEW in v0.1.0-rc.2)
+### Advanced Features (NEW in v0.1.0)
 - **Link Prediction** - Predict missing triples (head/tail/relation)
   - Filtered ranking to remove known triples
   - Batch prediction for efficiency
@@ -36,7 +36,7 @@ Generate vector embeddings for RDF knowledge graphs enabling semantic similarity
   - Label propagation
   - Girvan-Newman edge betweenness
   - Embedding-based detection
-- **Vector Search** - High-performance semantic search (NEW in rc.1)
+- **Vector Search** - High-performance semantic search (NEW in 0.1.0)
   - Exact search with multiple distance metrics
   - Cosine similarity, Euclidean, dot product, Manhattan
   - Batch search for multiple queries
@@ -75,10 +75,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-embed = "0.1.0-rc.2"
+oxirs-embed = "0.1.0"
 
 # Enable specific providers
-oxirs-embed = { version = "0.1.0-rc.2", features = ["openai", "sentence-transformers"] }
+oxirs-embed = { version = "0.1.0", features = ["openai", "sentence-transformers"] }
 ```
 
 ## Quick Start
@@ -161,7 +161,7 @@ for (entity, score) in similar_entities {
 }
 ```
 
-## New Models (v0.1.0-rc.2)
+## New Models (v0.1.0)
 
 ### HolE (Holographic Embeddings)
 
@@ -625,7 +625,7 @@ let model = EmbeddingModel::builder()
 
 ## Status
 
-### Release Candidate (v0.1.0-rc.2)
+### Production Release (v0.1.0)
 - ✅ Sentence Transformers integration with batch streaming + persistence
 - ✅ OpenAI embeddings support with provider failover and caching
 - ✅ Entity/graph embeddings wired into CLI ingest/export pipelines

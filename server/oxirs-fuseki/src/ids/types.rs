@@ -104,6 +104,18 @@ pub enum IdsError {
 
     #[error("Internal error: {0}")]
     InternalError(String),
+
+    #[error("Contract not agreed: {0}")]
+    ContractNotAgreed(String),
+
+    #[error("Contract expired: {0}")]
+    ContractExpired(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Transfer failed: {0}")]
+    TransferFailed(String),
 }
 
 impl IdsError {
@@ -125,6 +137,10 @@ impl IdsError {
             IdsError::MessageProtocolError(_) => 400,
             IdsError::SerializationError(_) => 500,
             IdsError::InternalError(_) => 500,
+            IdsError::ContractNotAgreed(_) => 409,
+            IdsError::ContractExpired(_) => 410, // Gone
+            IdsError::NotFound(_) => 404,
+            IdsError::TransferFailed(_) => 502,
         }
     }
 }
@@ -141,8 +157,11 @@ pub struct Party {
     /// Party name
     pub name: String,
 
-    /// Organization name
-    pub organization: Option<String>,
+    /// Legal name (official registered name)
+    pub legal_name: Option<String>,
+
+    /// Description
+    pub description: Option<String>,
 
     /// Contact information
     pub contact: Option<ContactInfo>,
@@ -190,7 +209,7 @@ impl SecurityProfile {
 }
 
 /// Transfer protocol supported by IDS connector
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TransferProtocol {
     /// HTTPS
     Https,
@@ -200,6 +219,15 @@ pub enum TransferProtocol {
 
     /// Multipart form data
     MultipartFormData,
+
+    /// Amazon S3
+    S3,
+
+    /// Apache Kafka
+    Kafka,
+
+    /// NATS JetStream
+    Nats,
 }
 
 impl TransferProtocol {
@@ -209,6 +237,9 @@ impl TransferProtocol {
             TransferProtocol::Https => "https://w3id.org/idsa/code/HTTPS",
             TransferProtocol::Idscp2 => "https://w3id.org/idsa/code/IDSCP2",
             TransferProtocol::MultipartFormData => "https://w3id.org/idsa/code/MULTIPART_FORM_DATA",
+            TransferProtocol::S3 => "https://w3id.org/idsa/code/S3",
+            TransferProtocol::Kafka => "https://w3id.org/idsa/code/KAFKA",
+            TransferProtocol::Nats => "https://w3id.org/idsa/code/NATS",
         }
     }
 }

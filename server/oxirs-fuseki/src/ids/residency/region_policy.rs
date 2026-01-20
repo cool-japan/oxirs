@@ -24,11 +24,12 @@ pub struct Region {
 impl Region {
     /// EU Member States
     pub fn eu_member(code: impl Into<String>, name: impl Into<String>) -> Self {
+        let code_str = code.into();
         Self {
-            code: code.into(),
+            code: code_str.clone(),
             name: name.into(),
             jurisdiction: Jurisdiction {
-                country_code: "EU".to_string(),
+                country_code: code_str, // Use actual country code for EEA check
                 legal_framework: vec!["GDPR".to_string()],
                 data_protection_authority: None,
             },

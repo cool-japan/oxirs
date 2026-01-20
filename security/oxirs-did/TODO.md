@@ -1,131 +1,45 @@
-# oxirs-did TODO
+# OxiRS DID - TODO
 
-## High Priority
+*Version: 0.1.0 | Last Updated: 2026-01-06*
 
-- [ ] **Additional DID Methods**:
-  - [ ] `did:ethr` - Ethereum-based DIDs
-  - [ ] `did:ion` - Bitcoin-anchored DIDs (Microsoft/Sidetree)
-  - [ ] `did:pkh` - Public key hash (blockchain agnostic)
+## Status: Production Ready
 
-- [ ] **JWS Signature Support**: JsonWebSignature2020
-  - Parse and verify JWS format
-  - Compact JWS serialization
-  - Integration with existing Ed25519 suite
+OxiRS DID v0.1.0 provides W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) support for secure, decentralized identity management in semantic web applications.
 
-- [ ] **Key Rotation**:
-  - Key rotation mechanism in DID Document
-  - Previous key tracking for historical verification
-  - Revocation lists
+### Features
+- ✅ W3C DID Core specification compliance
+- ✅ `did:key` method implementation
+- ✅ `did:web` method implementation
+- ✅ Ed25519 cryptographic suite (Ed25519Signature2020)
+- ✅ Verifiable Credentials issuance and verification
+- ✅ JSON-LD Signatures with RDFC-1.0 canonicalization
+- ✅ DID Document CRUD operations
+- ✅ Proof creation and verification
 
-- [ ] **Hardware Security Module (HSM)**:
-  - PKCS#11 interface
-  - YubiKey integration
-  - Cloud KMS support (AWS, Azure, GCP)
+## Future Roadmap
 
-## Medium Priority
+### v0.2.0 - Extended Methods & Signatures (Q1 2026 - Expanded)
+- [ ] Additional DID methods (`did:ethr`, `did:ion`, `did:pkh`)
+- [ ] JWS signature support (JsonWebSignature2020)
+- [ ] Additional signature suites (ES256K, RS256, BBS+)
+- [ ] Key rotation mechanism
+- [ ] Revocation lists
+- [ ] Hardware Security Module (HSM) support
+- [ ] Cloud KMS integration (AWS, Azure, GCP)
+- [ ] ZKP-based selective disclosure
+- [ ] RDF integration (DID Documents as RDF)
+- [ ] oxirs-shacl integration for VC validation
 
-- [ ] **Additional Signature Suites**:
-  - [ ] ES256K (secp256k1)
-  - [ ] RS256 (RSA)
-  - [ ] BBS+ (selective disclosure)
+### v1.0.0 - LTS Release (Q2 2026)
+- [ ] W3C test suite compliance
+- [ ] Long-term support guarantees
+- [ ] Enterprise security features
+- [ ] Comprehensive audit logging
 
-- [ ] **DID Resolution Caching**:
-  - Persistent cache (SQLite/RocksDB)
-  - TTL with HTTP cache headers
-  - Cache invalidation strategies
+## Contributing
 
-- [ ] **Verifiable Presentation Protocols**:
-  - DIDComm for presentation exchange
-  - OpenID Connect for Verifiable Presentations (OIDC4VP)
-  - CHAPI (Credential Handler API) support
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
-- [ ] **Advanced VC Features**:
-  - Credential schemas with JSON Schema
-  - Credential refresh
-  - Credential suspension/revocation
-  - Status lists
+---
 
-## Low Priority
-
-- [ ] **DID Method Registry**:
-  - Plugin system for custom methods
-  - Dynamic method loading
-  - Method capability discovery
-
-- [ ] **Batch Operations**:
-  - Batch VC issuance
-  - Batch verification
-  - Parallel signature verification
-
-- [ ] **Interoperability Testing**:
-  - W3C test suite compliance
-  - Cross-implementation testing
-  - DIF Universal Resolver integration
-
-## Security Enhancements
-
-- [ ] **Key Encryption**:
-  - Encrypt stored keys (AES-256-GCM)
-  - Key derivation (PBKDF2, Argon2)
-  - Secure key wiping on drop
-
-- [ ] **ZKP Integration**:
-  - Zero-knowledge proofs for selective disclosure
-  - BBS+ signatures
-  - Anonymous credentials
-
-- [ ] **Audit Logging**:
-  - All signature operations logged
-  - Tamper-evident logs
-  - Integration with W3C PROV-O
-
-## RDF Integration
-
-- [ ] **DID as RDF**:
-  - Serialize DID Document to RDF
-  - Store DIDs in SPARQL endpoint
-  - Query DID Documents with SPARQL
-
-- [ ] **VC in Knowledge Graphs**:
-  - Automatic VC → RDF conversion
-  - SPARQL queries over credentials
-  - Trust graph construction from VCs
-
-- [ ] **Integration with oxirs-shacl**:
-  - SHACL shapes for DID Documents
-  - VC validation with SHACL
-  - Automated shape generation
-
-## Standards Tracking
-
-- [ ] Monitor W3C DID updates
-- [ ] Track VC 2.0 errata
-- [ ] Follow RDFC-1.0 updates
-- [ ] Watch for new signature suites
-
-## Testing & Quality
-
-- [ ] Fuzzing for parsers (did:key, did:web)
-- [ ] Property-based testing for canonicalization
-- [ ] Security audit (external)
-- [ ] Timing attack resistance verification
-
-## Documentation
-
-- [ ] Tutorial: Implementing SSI with OxiRS
-- [ ] Guide: Signing knowledge graphs
-- [ ] Comparison: DID methods (key vs web vs ion)
-- [ ] Security best practices
-
-## Performance
-
-- [ ] Benchmark against other Rust DID libraries
-- [ ] Optimize canonicalization (parallel sorting)
-- [ ] SIMD for Ed25519 batch verification
-- [ ] GPU acceleration for bulk operations
-
-## Dependencies to Consider
-
-- `zeroize` - Secure key wiping
-- `secrecy` - Secret type wrappers
-- `subtle` - Constant-time operations
+*OxiRS DID v0.1.0 - Decentralized identity for semantic web*

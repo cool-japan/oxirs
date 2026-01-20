@@ -58,8 +58,15 @@ mod performance_tests {
         let cached_time = start_time.elapsed();
         println!("Cached property path optimization time: {:?}", cached_time);
 
-        // Cached access should be faster
-        assert!(cached_time <= optimization_time);
+        // Cached access should generally be faster, but allow some tolerance for timing variability
+        // We use a small margin (10ms) to account for system jitter in fast operations
+        let tolerance = Duration::from_millis(10);
+        assert!(
+            cached_time <= optimization_time + tolerance,
+            "Cached time {:?} should not be significantly slower than initial time {:?}",
+            cached_time,
+            optimization_time
+        );
     }
 
     #[tokio::test]

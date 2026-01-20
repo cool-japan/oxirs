@@ -56,7 +56,7 @@ impl From<crate::streaming::KafkaConfig> for KafkaConfig {
 pub struct KafkaProducer {
     config: KafkaConfig,
     // Future enhancement: Add actual Kafka producer (requires rdkafka/kafka-rust crate).
-    // For 0.1.0-rc.1: Stub implementation provides API surface for future Kafka integration.
+    // For v0.1.0: Stub implementation provides API surface for future Kafka integration.
 }
 
 impl KafkaProducer {
@@ -65,7 +65,7 @@ impl KafkaProducer {
         tracing::info!("Creating Kafka producer with brokers: {:?}", config.brokers);
 
         // Future enhancement: Initialize rdkafka producer with config.
-        // For 0.1.0-rc.1: Stub allows testing of streaming pipeline without Kafka dependency.
+        // For v0.1.0: Stub allows testing of streaming pipeline without Kafka dependency.
         Ok(Self { config })
     }
 }
@@ -76,7 +76,7 @@ impl StreamProducer for KafkaProducer {
         tracing::debug!("Sending RDF event to Kafka");
 
         // Future enhancement: Implement rdkafka message sending.
-        // For 0.1.0-rc.1: Logs events for debugging. Full Kafka integration is optional.
+        // For v0.1.0: Logs events for debugging. Full Kafka integration is optional.
         // For now, just log the event
         tracing::info!("Would send to Kafka: {:?}", event);
 
@@ -87,7 +87,7 @@ impl StreamProducer for KafkaProducer {
         tracing::debug!("Sending batch of {} RDF events to Kafka", events.len());
 
         // Future enhancement: Implement rdkafka batch sending for better throughput.
-        // For 0.1.0-rc.1: Logs individual events. Batch optimization is future work.
+        // For v0.1.0: Logs individual events. Batch optimization is future work.
         for event in events {
             self.send(event).await?;
         }
@@ -98,7 +98,7 @@ impl StreamProducer for KafkaProducer {
     async fn flush(&self) -> FusekiResult<()> {
         tracing::debug!("Flushing Kafka producer");
         // Future enhancement: Implement rdkafka flush for guaranteed delivery.
-        // For 0.1.0-rc.1: No-op. Full Kafka integration is optional.
+        // For v0.1.0: No-op. Full Kafka integration is optional.
         Ok(())
     }
 }
@@ -107,7 +107,7 @@ impl StreamProducer for KafkaProducer {
 pub struct KafkaConsumer {
     config: KafkaConfig,
     // Future enhancement: Add actual Kafka consumer (requires rdkafka/kafka-rust crate).
-    // For 0.1.0-rc.1: Stub implementation provides API surface for future Kafka integration.
+    // For v0.1.0: Stub implementation provides API surface for future Kafka integration.
 }
 
 impl KafkaConsumer {
@@ -116,7 +116,7 @@ impl KafkaConsumer {
         tracing::info!("Creating Kafka consumer with brokers: {:?}", config.brokers);
 
         // Future enhancement: Initialize rdkafka consumer with config.
-        // For 0.1.0-rc.1: Stub allows testing of streaming pipeline without Kafka dependency.
+        // For v0.1.0: Stub allows testing of streaming pipeline without Kafka dependency.
         Ok(Self { config })
     }
 }
@@ -130,7 +130,7 @@ impl StreamConsumer for KafkaConsumer {
         tracing::info!("Subscribing to Kafka events with handler");
 
         // Future enhancement: Implement rdkafka topic subscription.
-        // For 0.1.0-rc.1: No-op. Full Kafka integration is optional.
+        // For v0.1.0: No-op. Full Kafka integration is optional.
         // For now, just store the handler reference
         Ok(())
     }
@@ -139,14 +139,14 @@ impl StreamConsumer for KafkaConsumer {
         tracing::info!("Unsubscribing from Kafka events");
 
         // Future enhancement: Implement rdkafka unsubscribe.
-        // For 0.1.0-rc.1: No-op. Full Kafka integration is optional.
+        // For v0.1.0: No-op. Full Kafka integration is optional.
         Ok(())
     }
 
     async fn commit(&self) -> FusekiResult<()> {
         tracing::debug!("Committing Kafka consumer offsets");
         // Future enhancement: Implement rdkafka offset commit.
-        // For 0.1.0-rc.1: No-op. Full Kafka integration is optional.
+        // For v0.1.0: No-op. Full Kafka integration is optional.
         Ok(())
     }
 }

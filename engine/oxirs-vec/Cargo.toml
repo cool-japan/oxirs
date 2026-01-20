@@ -40,7 +40,7 @@ crossbeam-utils = "0.8"
 libc = "0.2"
 nalgebra = "0.33"
 petgraph = "0.8"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { workspace = true }
 tokio = { version = "1.47", features = ["rt", "time"] }
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 regex = "1.12"
@@ -57,8 +57,8 @@ cuda-runtime-sys = { version = "0.3.0-alpha.1", optional = true }
 cudarc = { version = "0.18", features = ["cuda-12000"], optional = true }
 candle-core = { version = "0.9", optional = true }
 # Python bindings
-pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
-numpy = { version = "0.25", optional = true }
+pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
+numpy = { version = "0.27", optional = true }
 uuid = { version = "1.19", features = ["v4"] }
 num_cpus = "1.17"
 humantime = "2.3"

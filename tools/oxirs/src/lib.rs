@@ -1,9 +1,9 @@
 //! # OxiRS CLI Tool
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs/badge.svg)](https://docs.rs/oxirs)
 //!
-//! **Status**: Beta Release (v0.1.0-rc.1)
+//! **Status**: Production Release (v0.1.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Command-line interface for OxiRS providing import, export, SPARQL queries,
@@ -28,7 +28,7 @@
 //! - `serve`: Start the OxiRS SPARQL server
 //! - `benchmark`: Run performance benchmarks
 //!
-//! ### Phase D: Industrial Connectivity (0.1.0-rc.1)
+//! ### Phase D: Industrial Connectivity
 //! - `tsdb`: Time-series database operations with SPARQL temporal extensions
 //! - `modbus`: Modbus TCP/RTU monitoring and RDF mapping
 //! - `canbus`: CANbus/J1939 monitoring, DBC parsing, SAMM generation
@@ -99,12 +99,12 @@
 //!                   WHERE { ?s <http://example.org/name> ?name }"
 //! ```
 //!
-//! ## Phase D: Industrial Connectivity Examples (0.1.0-rc.1)
+//! ## Phase D: Industrial Connectivity Examples (0.1.0)
 //!
 //! ### Time-Series Operations
 //! ```bash
 //! # Query time-series with aggregation
-//! oxirs tsdb query mykg --series 1 --start 2025-12-01T00:00:00Z --end 2025-12-25T23:59:59Z --aggregate avg
+//! oxirs tsdb query mykg --series 1 --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z --aggregate avg
 //!
 //! # Insert data point
 //! oxirs tsdb insert mykg --series 1 --value 22.5
@@ -930,7 +930,7 @@ pub enum Commands {
         top: usize,
     },
 
-    // === Phase D: Industrial Connectivity (0.1.0-rc.1) ===
+    // === Phase D: Industrial Connectivity ===
     /// Time-series database operations
     Tsdb {
         #[command(subcommand)]
@@ -1795,7 +1795,7 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
 
-        // === Phase D: Industrial Connectivity CLI Handlers (0.1.0-rc.1) ===
+        // === Phase D: Industrial Connectivity CLI Handlers (0.1.0) ===
         Commands::Tsdb { action } => commands::tsdb::execute(action, &ctx)
             .await
             .map_err(|e| e.into()),

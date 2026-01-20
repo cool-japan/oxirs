@@ -1,10 +1,10 @@
 # OxiRS Rule Engine
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Release Candidate (v0.1.0-rc.2) - Released December 26, 2025
+**Status**: Production Release (v0.1.0) - Released January 7, 2026
 
-✨ **Release Candidate**: Production-ready with API stability guarantees and comprehensive testing.
+✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
 A high-performance, comprehensive reasoning engine for Semantic Web applications, implementing forward chaining, backward chaining, RETE networks, RDFS, OWL RL, and SWRL rule processing.
 
@@ -36,7 +36,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-rule = "0.1.0-rc.2"
+oxirs-rule = "0.1.0"
 ```
 
 ## Quick Start
@@ -347,7 +347,7 @@ Licensed under the Apache License, Version 2.0 or the MIT License, at your optio
 
 ## Status
 
-🚀 **Release Candidate (v0.1.0-rc.2)** – December 26, 2025
+🚀 **Production Release (v0.1.0)** – January 7, 2026
 
 Highlights:
 - ✅ Forward/backward chaining over persisted datasets with automatic inference snapshots

@@ -349,7 +349,7 @@ Contributions are welcome! Areas for improvement:
 
 ## Changelog
 
-### v0.1.0-rc.2 (2025-10-11)
+### v0.1.0 (2026-01-06)
 - ✅ Initial release with full AAS → SAMM conversion
 - ✅ XML, JSON, and AASX format support
 - ✅ Type mapping (xs: → xsd:)

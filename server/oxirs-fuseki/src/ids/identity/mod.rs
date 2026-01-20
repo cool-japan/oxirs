@@ -4,9 +4,18 @@ pub mod daps;
 pub mod gaiax_registry;
 pub mod verifiable_credentials;
 
-pub use daps::{DapsClient, DapsToken};
-pub use gaiax_registry::GaiaxRegistry;
-pub use verifiable_credentials::{CredentialSubject, VerifiableCredential};
+pub use daps::{
+    DapsClient, DapsCredentials, DapsToken, DapsTokenClaims, DapsTokenResponse,
+    TokenValidationOptions,
+};
+pub use gaiax_registry::{
+    Address, ComplianceResult, GaiaxProof, GaiaxRegistry, GaiaxSelfDescription, LegalRegistration,
+    ParticipantCredentialSubject, TermsAndConditions,
+};
+pub use verifiable_credentials::{
+    CredentialIssuer, CredentialSubject, CredentialVerifier, Proof, ProofPurpose,
+    VerifiableCredential, VerifiableCredentialBuilder, VerificationChecks, VerificationResult,
+};
 
 use crate::ids::types::{IdsUri, Party};
 

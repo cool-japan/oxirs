@@ -1,6 +1,6 @@
-//! OxiRS v0.2.0 Features Overview
+//! OxiRS Federation Advanced Features Overview
 //!
-//! This example provides an overview of the new v0.2.0 Phase 1 features:
+//! This example provides an overview of advanced federation features:
 //! - GPU-accelerated query processing
 //! - SIMD-optimized join operations
 //! - JIT query compilation
@@ -9,7 +9,7 @@
 //! Note: This is a conceptual demonstration showing the architecture.
 //! For actual implementation details, see the module documentation.
 //!
-//! Run with: `cargo run --example v0_2_0_features_overview --all-features`
+//! Run with: `cargo run --example federation_features_overview --all-features`
 
 use anyhow::Result;
 use tracing::info;
@@ -19,8 +19,8 @@ async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
-    info!("🚀 OxiRS v0.2.0 Features Overview");
-    info!("==================================\n");
+    info!("🚀 OxiRS Federation Advanced Features");
+    info!("======================================\n");
 
     demonstrate_gpu_acceleration();
     demonstrate_simd_optimization();
@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     demonstrate_memory_efficiency();
     demonstrate_performance_comparison();
 
-    info!("\n✅ v0.2.0 features overview completed!");
+    info!("\n✅ Advanced features overview completed!");
     info!("\n📚 For detailed usage, see:");
     info!("   - GPU: src/gpu_accelerated_query.rs");
     info!("   - SIMD: src/simd_optimized_joins.rs");
@@ -39,8 +39,8 @@ async fn main() -> Result<()> {
 }
 
 fn demonstrate_gpu_acceleration() {
-    info!("🎮 GPU Acceleration (v0.2.0 Phase 1)");
-    info!("-------------------------------------");
+    info!("🎮 GPU Acceleration");
+    info!("-------------------");
     info!("  Using: scirs2-core::gpu module");
     info!("\n  Features:");
     info!("    ✅ Multi-backend support:");
@@ -61,8 +61,8 @@ fn demonstrate_gpu_acceleration() {
 }
 
 fn demonstrate_simd_optimization() {
-    info!("⚡ SIMD Optimization (v0.2.0 Phase 1)");
-    info!("--------------------------------------");
+    info!("⚡ SIMD Optimization");
+    info!("--------------------");
     info!("  Using: scirs2-core::simd_ops module");
     info!("\n  Features:");
     info!("    ✅ Cross-platform SIMD:");
@@ -82,8 +82,8 @@ fn demonstrate_simd_optimization() {
 }
 
 fn demonstrate_jit_compilation() {
-    info!("🔥 JIT Query Compilation (v0.2.0 Phase 1)");
-    info!("-------------------------------------------");
+    info!("🔥 JIT Query Compilation");
+    info!("------------------------");
     info!("  Using: scirs2-core::jit module");
     info!("\n  Features:");
     info!("    ✅ Just-In-Time SPARQL compilation");
@@ -104,8 +104,8 @@ fn demonstrate_jit_compilation() {
 }
 
 fn demonstrate_memory_efficiency() {
-    info!("💾 Memory-Efficient Datasets (v0.2.0 Phase 1)");
-    info!("----------------------------------------------");
+    info!("💾 Memory-Efficient Datasets");
+    info!("----------------------------");
     info!("  Using: scirs2-core::memory_efficient module");
     info!("\n  Features:");
     info!("    ✅ Memory-mapped arrays (MemoryMappedArray)");

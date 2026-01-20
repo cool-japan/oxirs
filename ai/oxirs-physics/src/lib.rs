@@ -1,4 +1,8 @@
-//! OxiRS Physics-Informed Digital Twin Bridge
+//! # OxiRS Physics - Physics-Informed Digital Twin Bridge
+//!
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//!
+//! **Status**: Production Release (v0.1.0)
 //!
 //! Connects RDF knowledge graphs with SciRS2 physics simulations.
 //!

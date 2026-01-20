@@ -894,27 +894,32 @@ mod tests {
         let source_dir = temp_dir.join("source");
         let backup_dir = temp_dir.join("backups");
 
-        // Create source with initial data
+        // Create source with substantial initial data for reliable size comparison
         fs::create_dir_all(&source_dir).unwrap();
-        fs::write(source_dir.join("data1.tdb"), b"initial data").unwrap();
+        // Create multiple files with significant data for full backup
+        let large_data = vec![0u8; 10_000]; // 10KB of data
+        fs::write(source_dir.join("data1.tdb"), &large_data).unwrap();
+        fs::write(source_dir.join("data2.tdb"), &large_data).unwrap();
+        fs::write(source_dir.join("data3.tdb"), &large_data).unwrap();
 
         let mut manager = BackupManager::default();
 
-        // Create full backup
+        // Create full backup (should be ~30KB)
         let full_backup = manager.create_backup(&source_dir, &backup_dir).unwrap();
         assert_eq!(full_backup.backup_type, BackupType::Full);
 
-        // Modify data (add new file)
+        // Modify data (add one small new file)
         std::thread::sleep(std::time::Duration::from_millis(10));
-        fs::write(source_dir.join("data2.tdb"), b"new data").unwrap();
+        fs::write(source_dir.join("data4.tdb"), b"new data").unwrap();
 
-        // Create incremental backup
+        // Create incremental backup (should only contain the new small file)
         let inc_backup = manager
             .create_incremental_backup(&source_dir, &backup_dir)
             .unwrap();
         assert_eq!(inc_backup.backup_type, BackupType::Incremental);
         assert!(inc_backup.parent_backup.is_some());
-        assert!(inc_backup.size_bytes < full_backup.size_bytes); // Should be smaller
+        // Incremental backup should be much smaller since it only includes changed files
+        assert!(inc_backup.size_bytes < full_backup.size_bytes);
 
         fs::remove_dir_all(&temp_dir).ok();
     }

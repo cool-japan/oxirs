@@ -349,7 +349,7 @@ impl QueryCoordinator {
     /// Send query to a specific node
     async fn send_query_to_node(&self, node_id: &str, query: DistributedQuery) -> FusekiResult<()> {
         // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For 0.1.0-rc.1: Executes locally. Coordinator logic and consistency levels are production-ready.
+        // For v0.1.0: Executes locally. Coordinator logic and consistency levels are production-ready.
         let start = Instant::now();
 
         let result = self.execute_local_query(&query).await?;
@@ -374,7 +374,7 @@ impl QueryCoordinator {
     /// Send write to a specific node
     async fn send_write_to_node(&self, node_id: &str, write: DistributedWrite) -> FusekiResult<()> {
         // Future enhancement: Implement actual network communication (gRPC/HTTP).
-        // For 0.1.0-rc.1: Executes locally. Write coordination logic is production-ready.
+        // For v0.1.0: Executes locally. Write coordination logic is production-ready.
         let success = self.execute_local_write(&write).await.is_ok();
 
         let response = WriteResponse {
@@ -399,14 +399,14 @@ impl QueryCoordinator {
     /// Execute query locally
     async fn execute_local_query(&self, _query: &DistributedQuery) -> FusekiResult<QueryResult> {
         // Future enhancement: Integrate with actual SPARQL query engine.
-        // For 0.1.0-rc.1: Returns mock result. Query distribution logic is complete.
+        // For v0.1.0: Returns mock result. Query distribution logic is complete.
         Ok(QueryResult::Boolean(false))
     }
 
     /// Execute write locally
     async fn execute_local_write(&self, _write: &DistributedWrite) -> FusekiResult<()> {
         // Future enhancement: Integrate with actual RDF store write operations.
-        // For 0.1.0-rc.1: Returns success. Write distribution logic is complete.
+        // For v0.1.0: Returns success. Write distribution logic is complete.
         Ok(())
     }
 

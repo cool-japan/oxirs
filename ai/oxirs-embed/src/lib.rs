@@ -1,9 +1,9 @@
 //! # OxiRS Embed: Advanced Knowledge Graph Embeddings
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed)
 //!
-//! **Status**: Beta Release (v0.1.0-rc.1)
+//! **Status**: Production Release (v0.1.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! State-of-the-art knowledge graph embedding methods including TransE, DistMult, ComplEx,
@@ -171,7 +171,7 @@ pub mod quantum_circuits;
 pub mod real_time_fine_tuning;
 pub mod real_time_optimization;
 pub mod research_networks;
-// pub mod revolutionary_optimization; // Partially enabled - awaiting scirs2-core v0.2.0 API stabilization
+// pub mod revolutionary_optimization; // Disabled - awaiting scirs2-core API stabilization
 pub mod sparql_extension;
 pub mod storage_backend;
 pub mod temporal_embeddings;

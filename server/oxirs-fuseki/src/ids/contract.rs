@@ -3,9 +3,13 @@
 //! Implements automated contract negotiation following IDS Reference Architecture.
 
 use super::policy::odrl_parser::PolicyType;
-use super::policy::OdrlPolicy;
+use super::policy::{OdrlPolicy, Permission};
 use super::types::{IdsError, IdsResult, IdsUri, Party, SecurityProfile};
+use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
+use ring::digest::{Context as DigestContext, SHA256};
+use ring::rand::SystemRandom;
+use ring::signature::{self, Ed25519KeyPair, KeyPair};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -106,6 +110,117 @@ pub struct DigitalSignature {
 
     /// Certificate chain (optional)
     pub certificate_chain: Option<Vec<String>>,
+}
+
+/// Contract Signer for creating and verifying digital signatures
+pub struct ContractSigner {
+    /// Ed25519 key pair for signing
+    key_pair: Ed25519KeyPair,
+    /// Signer identity
+    signer_id: IdsUri,
+}
+
+impl ContractSigner {
+    /// Create a new contract signer with a generated key pair
+    pub fn new(signer_id: IdsUri) -> IdsResult<Self> {
+        let rng = SystemRandom::new();
+        let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rng)
+            .map_err(|e| IdsError::InternalError(format!("Failed to generate key pair: {}", e)))?;
+
+        let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref())
+            .map_err(|e| IdsError::InternalError(format!("Failed to parse key pair: {}", e)))?;
+
+        Ok(Self {
+            key_pair,
+            signer_id,
+        })
+    }
+
+    /// Create a contract signer from an existing PKCS#8 encoded private key
+    pub fn from_pkcs8(signer_id: IdsUri, pkcs8_bytes: &[u8]) -> IdsResult<Self> {
+        let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_bytes)
+            .map_err(|e| IdsError::InternalError(format!("Failed to parse key pair: {}", e)))?;
+
+        Ok(Self {
+            key_pair,
+            signer_id,
+        })
+    }
+
+    /// Get the public key bytes
+    pub fn public_key(&self) -> &[u8] {
+        self.key_pair.public_key().as_ref()
+    }
+
+    /// Get the public key as base64
+    pub fn public_key_base64(&self) -> String {
+        base64::engine::general_purpose::STANDARD.encode(self.public_key())
+    }
+
+    /// Compute SHA-256 hash of contract content
+    fn compute_contract_hash(contract: &DataContract) -> IdsResult<Vec<u8>> {
+        let contract_json = serde_json::to_string(contract).map_err(|e| {
+            IdsError::SerializationError(format!("Failed to serialize contract: {}", e))
+        })?;
+
+        let mut context = DigestContext::new(&SHA256);
+        context.update(contract_json.as_bytes());
+        Ok(context.finish().as_ref().to_vec())
+    }
+
+    /// Sign a contract
+    pub fn sign_contract(&self, contract: &DataContract) -> IdsResult<DigitalSignature> {
+        let hash = Self::compute_contract_hash(contract)?;
+        let sig = self.key_pair.sign(&hash);
+
+        Ok(DigitalSignature {
+            signer: self.signer_id.clone(),
+            algorithm: "Ed25519".to_string(),
+            signature: base64::engine::general_purpose::STANDARD.encode(sig.as_ref()),
+            signed_at: Utc::now(),
+            certificate_chain: None,
+        })
+    }
+
+    /// Verify a contract signature
+    pub fn verify_signature(
+        contract: &DataContract,
+        signature: &DigitalSignature,
+        public_key: &[u8],
+    ) -> IdsResult<bool> {
+        if signature.algorithm != "Ed25519" {
+            return Err(IdsError::InternalError(format!(
+                "Unsupported signature algorithm: {}",
+                signature.algorithm
+            )));
+        }
+
+        let hash = Self::compute_contract_hash(contract)?;
+
+        let sig_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&signature.signature)
+            .map_err(|e| IdsError::InternalError(format!("Invalid signature encoding: {}", e)))?;
+
+        let public_key = signature::UnparsedPublicKey::new(&signature::ED25519, public_key);
+
+        match public_key.verify(&hash, &sig_bytes) {
+            Ok(()) => Ok(true),
+            Err(_) => Ok(false),
+        }
+    }
+}
+
+/// Signature verification result
+#[derive(Debug, Clone)]
+pub struct SignatureVerificationResult {
+    /// Whether the signature is valid
+    pub valid: bool,
+    /// Signer ID
+    pub signer: IdsUri,
+    /// Verification timestamp
+    pub verified_at: DateTime<Utc>,
+    /// Error message if invalid
+    pub error: Option<String>,
 }
 
 /// Contract State
@@ -507,9 +622,20 @@ impl ContractManager {
         }
     }
 
-    /// Get contract by ID
+    /// Get contract by string ID
     pub async fn get_contract(&self, contract_id: &str) -> Option<DataContract> {
         self.contracts.read().await.get(contract_id).cloned()
+    }
+
+    /// Get contract by IdsUri
+    ///
+    /// This is the preferred method when you have an IdsUri.
+    pub async fn get_contract_uri(&self, contract_id: &IdsUri) -> Option<DataContract> {
+        self.contracts
+            .read()
+            .await
+            .get(contract_id.as_str())
+            .cloned()
     }
 
     /// Check if contract is valid for use
@@ -557,6 +683,254 @@ impl ContractManager {
     pub fn negotiator(&self) -> Arc<dyn ContractNegotiator> {
         Arc::clone(&self.negotiator)
     }
+
+    /// Get contract by IdsUri
+    pub async fn get_contract_by_uri(&self, contract_id: &IdsUri) -> Option<DataContract> {
+        self.get_contract(contract_id.as_str()).await
+    }
+
+    /// List all contracts
+    pub async fn list_contracts(&self) -> Vec<DataContract> {
+        self.contracts.read().await.values().cloned().collect()
+    }
+
+    /// Initiate contract negotiation
+    ///
+    /// Creates a new contract offer and starts the negotiation process.
+    pub async fn initiate_negotiation(
+        &self,
+        provider_id: IdsUri,
+        asset_id: IdsUri,
+        consumer: Party,
+    ) -> IdsResult<DataContract> {
+        // Get resource info from catalog (if available, otherwise use minimal info)
+        let asset = AssetDescription {
+            asset_id: asset_id.clone(),
+            title: format!("Asset {}", asset_id.as_str()),
+            description: None,
+            content_type: None,
+            file_size: None,
+            checksum: None,
+            version: None,
+            keywords: Vec::new(),
+            language: None,
+        };
+
+        // Create provider party
+        let provider = Party {
+            id: provider_id.clone(),
+            name: format!("Provider {}", provider_id.as_str()),
+            legal_name: None,
+            description: None,
+            contact: None,
+            gaiax_participant_id: None,
+        };
+
+        // Create a default usage policy
+        let asset_target = super::policy::odrl_parser::AssetTarget {
+            uid: asset_id.clone(),
+            asset_type: None,
+            title: Some(asset.title.clone()),
+            description: asset.description.clone(),
+        };
+
+        let policy = super::policy::OdrlPolicy {
+            uid: IdsUri::new(format!("urn:ids:policy:{}", uuid::Uuid::new_v4()))
+                .unwrap_or_else(|_| IdsUri::new("urn:ids:policy:default").expect("valid")),
+            policy_type: PolicyType::Offer,
+            context: None,
+            profile: None,
+            assigner: Some(provider.clone()),
+            assignee: Some(consumer.clone()),
+            targets: vec![asset_target.clone()],
+            permissions: vec![Permission {
+                uid: None,
+                action: super::policy::OdrlAction::Use,
+                target: Some(asset_target),
+                assigner: Some(provider.clone()),
+                assignee: Some(consumer.clone()),
+                constraints: Vec::new(),
+                duties: Vec::new(),
+            }],
+            prohibitions: Vec::new(),
+            obligations: Vec::new(),
+            inherits_from: None,
+            conflict: None,
+        };
+
+        let offer = ContractOffer {
+            provider,
+            consumer,
+            asset,
+            policy,
+            duration_days: Some(super::super::ids::DEFAULT_CONTRACT_VALIDITY_DAYS),
+            metadata: HashMap::new(),
+        };
+
+        // Initiate negotiation via the negotiator
+        let negotiation_id = self.negotiator.initiate_negotiation(offer).await?;
+
+        // Accept the contract immediately (for simplified flow)
+        let contract = self.negotiator.accept(negotiation_id).await?;
+
+        // Store the contract
+        self.contracts
+            .write()
+            .await
+            .insert(contract.contract_id.as_str().to_string(), contract.clone());
+
+        Ok(contract)
+    }
+
+    /// Accept a contract
+    pub async fn accept_contract(&self, contract_id: &IdsUri) -> IdsResult<DataContract> {
+        let mut contracts = self.contracts.write().await;
+        let id_str = contract_id.as_str();
+
+        let contract = contracts
+            .get_mut(id_str)
+            .ok_or_else(|| IdsError::ContractNotFound(id_str.to_string()))?;
+
+        if !contract.state.is_modifiable() && contract.state != ContractState::Offered {
+            return Err(IdsError::InvalidContractState {
+                expected: "Offered or Negotiating".to_string(),
+                actual: format!("{:?}", contract.state),
+            });
+        }
+
+        contract.state = ContractState::Accepted;
+        contract.modified_at = Utc::now();
+
+        // Add acceptance to negotiation history
+        contract.negotiation_history.push(NegotiationMessage {
+            message_id: uuid::Uuid::new_v4().to_string(),
+            message_type: NegotiationMessageType::ContractAcceptance,
+            sender: contract.consumer.id.clone(),
+            receiver: contract.provider.id.clone(),
+            timestamp: Utc::now(),
+            policy: None,
+            message: Some("Contract accepted".to_string()),
+        });
+
+        Ok(contract.clone())
+    }
+
+    /// Reject a contract
+    pub async fn reject_contract(&self, contract_id: &IdsUri) -> IdsResult<DataContract> {
+        let mut contracts = self.contracts.write().await;
+        let id_str = contract_id.as_str();
+
+        let contract = contracts
+            .get_mut(id_str)
+            .ok_or_else(|| IdsError::ContractNotFound(id_str.to_string()))?;
+
+        if contract.state.is_terminated() {
+            return Err(IdsError::InvalidContractState {
+                expected: "Not terminated".to_string(),
+                actual: format!("{:?}", contract.state),
+            });
+        }
+
+        contract.state = ContractState::Rejected;
+        contract.modified_at = Utc::now();
+
+        // Add rejection to negotiation history
+        contract.negotiation_history.push(NegotiationMessage {
+            message_id: uuid::Uuid::new_v4().to_string(),
+            message_type: NegotiationMessageType::ContractRejection,
+            sender: contract.consumer.id.clone(),
+            receiver: contract.provider.id.clone(),
+            timestamp: Utc::now(),
+            policy: None,
+            message: Some("Contract rejected".to_string()),
+        });
+
+        Ok(contract.clone())
+    }
+
+    /// Terminate a contract
+    pub async fn terminate_contract(&self, contract_id: &IdsUri) -> IdsResult<DataContract> {
+        let mut contracts = self.contracts.write().await;
+        let id_str = contract_id.as_str();
+
+        let contract = contracts
+            .get_mut(id_str)
+            .ok_or_else(|| IdsError::ContractNotFound(id_str.to_string()))?;
+
+        if contract.state.is_terminated() {
+            return Err(IdsError::InvalidContractState {
+                expected: "Not already terminated".to_string(),
+                actual: format!("{:?}", contract.state),
+            });
+        }
+
+        contract.state = ContractState::Terminated;
+        contract.modified_at = Utc::now();
+
+        Ok(contract.clone())
+    }
+
+    /// Store a contract directly (for imports or external negotiations)
+    pub async fn store_contract(&self, contract: DataContract) {
+        self.contracts
+            .write()
+            .await
+            .insert(contract.contract_id.as_str().to_string(), contract);
+    }
+
+    /// Get contract count
+    pub async fn count(&self) -> usize {
+        self.contracts.read().await.len()
+    }
+
+    /// Check if contract exists
+    pub async fn contains(&self, contract_id: &str) -> bool {
+        self.contracts.read().await.contains_key(contract_id)
+    }
+
+    /// Filter contracts by state
+    pub async fn filter_by_state(&self, state: ContractState) -> Vec<DataContract> {
+        self.contracts
+            .read()
+            .await
+            .values()
+            .filter(|c| c.state == state)
+            .cloned()
+            .collect()
+    }
+
+    /// Get active contracts only
+    pub async fn list_active(&self) -> Vec<DataContract> {
+        self.contracts
+            .read()
+            .await
+            .values()
+            .filter(|c| c.state.is_active())
+            .cloned()
+            .collect()
+    }
+
+    /// Remove expired contracts
+    pub async fn cleanup_expired(&self) -> usize {
+        let mut contracts = self.contracts.write().await;
+        let now = Utc::now();
+
+        let expired: Vec<String> = contracts
+            .iter()
+            .filter(|(_, c)| c.contract_end.map(|end| now > end).unwrap_or(false))
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        let count = expired.len();
+        for id in expired {
+            if let Some(contract) = contracts.get_mut(&id) {
+                contract.state = ContractState::Expired;
+                contract.modified_at = now;
+            }
+        }
+
+        count
+    }
 }
 
 #[cfg(test)]
@@ -566,9 +940,10 @@ mod tests {
 
     fn create_test_party(name: &str) -> Party {
         Party {
-            id: IdsUri::new(format!("https://{}.example.org", name)).unwrap(),
+            id: IdsUri::new(format!("https://{}.example.org", name)).expect("valid uri"),
             name: name.to_string(),
-            organization: None,
+            legal_name: None,
+            description: None,
             contact: None,
             gaiax_participant_id: None,
         }
@@ -740,5 +1115,108 @@ mod tests {
         let retrieved = manager.get_contract(contract_id.as_str()).await;
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().state, ContractState::Active);
+    }
+
+    #[tokio::test]
+    async fn test_contract_signing() {
+        let negotiator = Arc::new(InMemoryNegotiator::new());
+
+        let provider = create_test_party("provider");
+        let consumer = create_test_party("consumer");
+        let asset = create_test_asset();
+
+        let policy = OdrlParser::create_read_permission(
+            IdsUri::new("https://example.org/policy/read").expect("valid URI"),
+            provider.clone(),
+            consumer.clone(),
+            super::super::policy::odrl_parser::AssetTarget {
+                uid: asset.asset_id.clone(),
+                asset_type: None,
+                title: Some(asset.title.clone()),
+                description: asset.description.clone(),
+            },
+        );
+
+        let offer = ContractOffer {
+            provider: provider.clone(),
+            consumer,
+            asset,
+            policy,
+            duration_days: Some(90),
+            metadata: HashMap::new(),
+        };
+
+        // Create and accept contract
+        let negotiation_id = negotiator
+            .initiate_negotiation(offer)
+            .await
+            .expect("initiate");
+        let mut contract = negotiator.accept(negotiation_id).await.expect("accept");
+
+        // Create signer and sign the contract
+        let signer = ContractSigner::new(provider.id.clone()).expect("create signer");
+        let signature = signer.sign_contract(&contract).expect("sign contract");
+
+        // Verify the signature before adding it to the contract
+        // (the hash is computed from the contract without signatures)
+        let is_valid = ContractSigner::verify_signature(&contract, &signature, signer.public_key())
+            .expect("verify signature");
+
+        assert!(is_valid);
+        assert_eq!(signature.algorithm, "Ed25519");
+        assert_eq!(signature.signer, provider.id);
+
+        // Now add the signature to the contract
+        contract.signatures.push(signature);
+    }
+
+    #[tokio::test]
+    async fn test_contract_signature_tampering_detection() {
+        let negotiator = Arc::new(InMemoryNegotiator::new());
+
+        let provider = create_test_party("provider");
+        let consumer = create_test_party("consumer");
+        let asset = create_test_asset();
+
+        let policy = OdrlParser::create_read_permission(
+            IdsUri::new("https://example.org/policy/read").expect("valid URI"),
+            provider.clone(),
+            consumer.clone(),
+            super::super::policy::odrl_parser::AssetTarget {
+                uid: asset.asset_id.clone(),
+                asset_type: None,
+                title: Some(asset.title.clone()),
+                description: asset.description.clone(),
+            },
+        );
+
+        let offer = ContractOffer {
+            provider: provider.clone(),
+            consumer,
+            asset,
+            policy,
+            duration_days: Some(90),
+            metadata: HashMap::new(),
+        };
+
+        let negotiation_id = negotiator
+            .initiate_negotiation(offer)
+            .await
+            .expect("initiate");
+        let mut contract = negotiator.accept(negotiation_id).await.expect("accept");
+
+        // Sign the contract
+        let signer = ContractSigner::new(provider.id.clone()).expect("create signer");
+        let signature = signer.sign_contract(&contract).expect("sign contract");
+        contract.signatures.push(signature.clone());
+
+        // Tamper with the contract
+        contract.contract_type = "ids:TamperedContract".to_string();
+
+        // Verification should fail for tampered contract
+        let is_valid = ContractSigner::verify_signature(&contract, &signature, signer.public_key())
+            .expect("verify signature");
+
+        assert!(!is_valid, "Tampered contract should fail verification");
     }
 }

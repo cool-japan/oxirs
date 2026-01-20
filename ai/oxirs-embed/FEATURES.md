@@ -1,6 +1,6 @@
 # OxiRS Embed - Feature Documentation
 
-*Last Updated: October 31, 2025*
+*Last Updated: 2026-01-06*
 
 ## Overview
 

@@ -200,7 +200,7 @@ impl PyVectorStore {
         limit: usize,
         threshold: Option<f64>,
         metric: &str,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let _similarity_metric = parse_similarity_metric(metric)?;
 
         let store = self
@@ -234,7 +234,7 @@ impl PyVectorStore {
         limit: usize,
         threshold: Option<f64>,
         metric: &str,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let (query_data, _offset) = query_vector.as_array().to_owned().into_raw_vec_and_offset();
         let query_obj = Vector::new(query_data);
         let _similarity_metric = parse_similarity_metric(metric)?;
@@ -261,7 +261,7 @@ impl PyVectorStore {
     }
 
     /// Get vector by ID
-    fn get_vector(&self, py: Python, vector_id: &str) -> PyResult<Option<PyObject>> {
+    fn get_vector(&self, py: Python, vector_id: &str) -> PyResult<Option<Py<PyAny>>> {
         let store = self
             .store
             .read()
@@ -282,7 +282,7 @@ impl PyVectorStore {
         py: Python,
         query: &str,
         limit: Option<usize>,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let limit = limit.unwrap_or(10);
         let store = self
             .store
@@ -367,7 +367,11 @@ impl PyVectorStore {
     }
 
     /// Export all vectors to DataFrame format
-    fn export_to_dataframe(&self, py: Python, include_vectors: Option<bool>) -> PyResult<PyObject> {
+    fn export_to_dataframe(
+        &self,
+        py: Python,
+        include_vectors: Option<bool>,
+    ) -> PyResult<Py<PyAny>> {
         let include_vectors = include_vectors.unwrap_or(false);
         let store = self
             .store
@@ -420,7 +424,7 @@ impl PyVectorStore {
     }
 
     /// Get store statistics
-    fn get_stats(&self, py: Python) -> PyResult<PyObject> {
+    fn get_stats(&self, py: Python) -> PyResult<Py<PyAny>> {
         let store = self
             .store
             .read()
@@ -512,7 +516,7 @@ impl PyVectorAnalytics {
         py: Python,
         vectors: PyReadonlyArray2<f32>,
         _labels: Option<Vec<String>>,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let vectors_array = vectors.as_array();
         let vector_data: Vec<Vec<f32>> = vectors_array
             .rows()
@@ -538,7 +542,7 @@ impl PyVectorAnalytics {
     }
 
     /// Get optimization recommendations
-    fn get_recommendations(&self, py: Python) -> PyResult<PyObject> {
+    fn get_recommendations(&self, py: Python) -> PyResult<Py<PyAny>> {
         let recommendations = self.engine.generate_optimization_recommendations();
 
         let py_recommendations = PyList::empty(py);
@@ -576,7 +580,7 @@ impl PySparqlVectorSearch {
     }
 
     /// Execute SPARQL query with vector extensions
-    fn execute_query(&mut self, py: Python, query: &str) -> PyResult<PyObject> {
+    fn execute_query(&mut self, py: Python, query: &str) -> PyResult<Py<PyAny>> {
         // For now, return a placeholder - full SPARQL parsing would be needed
         let py_results = PyDict::new(py);
         py_results.set_item("bindings", PyList::empty(py))?;
@@ -639,7 +643,7 @@ impl PyRealTimeEmbeddingPipeline {
     }
 
     /// Get real-time embedding for content
-    fn get_embedding(&self, py: Python, _content_id: &str) -> PyResult<Option<PyObject>> {
+    fn get_embedding(&self, py: Python, _content_id: &str) -> PyResult<Option<Py<PyAny>>> {
         // Return a sample embedding for demonstration
         let sample_embedding = vec![0.1f32; 384];
         let numpy_array = PyArray1::from_vec(py, sample_embedding);
@@ -659,7 +663,7 @@ impl PyRealTimeEmbeddingPipeline {
     }
 
     /// Get processing statistics
-    fn get_stats(&self, py: Python) -> PyResult<PyObject> {
+    fn get_stats(&self, py: Python) -> PyResult<Py<PyAny>> {
         let py_stats = PyDict::new(py);
         py_stats.set_item("total_processed", 0)?;
         py_stats.set_item("processing_rate", 10.0)?;
@@ -741,7 +745,7 @@ impl PyMLFrameworkIntegration {
     }
 
     /// Get model performance metrics
-    fn get_performance_metrics(&self, py: Python) -> PyResult<PyObject> {
+    fn get_performance_metrics(&self, py: Python) -> PyResult<Py<PyAny>> {
         let py_metrics = PyDict::new(py);
         py_metrics.set_item("accuracy", 0.95)?;
         py_metrics.set_item("f1_score", 0.93)?;
@@ -760,7 +764,7 @@ impl PyMLFrameworkIntegration {
         embeddings: PyReadonlyArray2<f32>,
         source_format: &str,
         target_format: &str,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let input_array = embeddings.as_array();
         println!(
             "Converting embeddings from {} to {} format",
@@ -812,7 +816,7 @@ impl PyJupyterVectorTools {
         py: Python,
         vector_ids: Vec<String>,
         metric: Option<&str>,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let metric = metric.unwrap_or("cosine");
         let similarity_metric = parse_similarity_metric(metric)?;
 
@@ -865,7 +869,7 @@ impl PyJupyterVectorTools {
         method: Option<&str>,
         n_components: Option<usize>,
         max_vectors: Option<usize>,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let method = method.unwrap_or("tsne");
         let n_components = n_components.unwrap_or(2);
         let max_vectors = max_vectors.unwrap_or(1000);
@@ -913,7 +917,7 @@ impl PyJupyterVectorTools {
         py: Python,
         n_clusters: Option<usize>,
         max_vectors: Option<usize>,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let n_clusters = n_clusters.unwrap_or(5);
         let max_vectors = max_vectors.unwrap_or(1000);
 
@@ -1004,7 +1008,7 @@ impl PyJupyterVectorTools {
         query: &str,
         limit: Option<usize>,
         include_query_vector: Option<bool>,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let limit = limit.unwrap_or(10);
         let include_query = include_query_vector.unwrap_or(true);
 
@@ -1039,7 +1043,7 @@ impl PyJupyterVectorTools {
     }
 
     /// Generate performance dashboard data
-    fn generate_performance_dashboard(&self, py: Python) -> PyResult<PyObject> {
+    fn generate_performance_dashboard(&self, py: Python) -> PyResult<Py<PyAny>> {
         let store = self
             .vector_store
             .read()
@@ -1113,7 +1117,7 @@ impl PyJupyterVectorTools {
     }
 
     /// Get current visualization configuration
-    fn get_visualization_config(&self, py: Python) -> PyResult<PyObject> {
+    fn get_visualization_config(&self, py: Python) -> PyResult<Py<PyAny>> {
         let py_config = PyDict::new(py);
 
         for (key, value) in &self.config {
@@ -1163,7 +1167,7 @@ impl PyAdvancedNeuralEmbeddings {
         py: Python,
         content: Vec<String>,
         batch_size: Option<usize>,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         let batch_size = batch_size.unwrap_or(32);
         println!(
             "Generating {} embeddings for {} items with batch size {}",
@@ -1240,7 +1244,7 @@ impl PyAdvancedNeuralEmbeddings {
     }
 
     /// Get model capabilities and specifications
-    fn get_model_info(&self, py: Python) -> PyResult<PyObject> {
+    fn get_model_info(&self, py: Python) -> PyResult<Py<PyAny>> {
         let py_info = PyDict::new(py);
         py_info.set_item("model_type", &self.model_type)?;
 
@@ -1274,7 +1278,7 @@ impl PyAdvancedNeuralEmbeddings {
         text_content: Option<Vec<String>>,
         image_paths: Option<Vec<String>>,
         audio_paths: Option<Vec<String>>,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
         if !["gpt4", "clip", "dall_e"].contains(&self.model_type.as_str()) {
             return Err(VectorSearchError::new_err(format!(
                 "Model {} does not support multimodal embeddings",
@@ -1362,7 +1366,7 @@ fn compute_similarity(
 }
 
 #[pyfunction]
-fn normalize_vector(py: Python, vector: PyReadonlyArray1<f32>) -> PyResult<PyObject> {
+fn normalize_vector(py: Python, vector: PyReadonlyArray1<f32>) -> PyResult<Py<PyAny>> {
     let (mut v, _offset) = vector.as_array().to_owned().into_raw_vec_and_offset();
     crate::similarity::normalize_vector(&mut v)
         .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
@@ -1371,7 +1375,7 @@ fn normalize_vector(py: Python, vector: PyReadonlyArray1<f32>) -> PyResult<PyObj
 }
 
 #[pyfunction]
-fn batch_normalize(py: Python, vectors: PyReadonlyArray2<f32>) -> PyResult<PyObject> {
+fn batch_normalize(py: Python, vectors: PyReadonlyArray2<f32>) -> PyResult<Py<PyAny>> {
     let vectors_array = vectors.as_array();
     let mut normalized_vectors = Vec::new();
 

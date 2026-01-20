@@ -584,7 +584,7 @@ pub enum PackageAction {
     },
 }
 
-// === Phase D: Industrial Connectivity CLI Actions (0.1.0-rc.1) ===
+// === Phase D: Industrial Connectivity CLI Actions (0.1.0) ===
 
 /// Time-series database operations
 #[derive(Subcommand)]

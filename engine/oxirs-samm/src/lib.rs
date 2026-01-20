@@ -1,9 +1,9 @@
 //! # OxiRS SAMM - Semantic Aspect Meta Model Implementation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Beta.1 Release (v0.1.0-rc.1)
-//! ✅ All public APIs documented. API stability guarantees in place.
+//! **Status**: Production Release (v0.1.0)
+//! ✅ All public APIs documented. Production-ready with API stability guarantees.
 //!
 //! This crate provides a Rust implementation of the Semantic Aspect Meta Model (SAMM),
 //! which enables the creation of models to describe the semantics of digital twins.

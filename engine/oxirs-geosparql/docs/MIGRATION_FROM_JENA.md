@@ -1,6 +1,6 @@
 # Migration Guide: Apache Jena GeoSPARQL → OxiRS GeoSPARQL
 
-*Last Updated: December 2025*
+*Last Updated: January 2026*
 
 ## Overview
 
@@ -72,7 +72,7 @@ This guide helps you migrate from Apache Jena's GeoSPARQL implementation to OxiR
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-geosparql = { version = "0.1.0-rc.2", features = ["performance"] }
+oxirs-geosparql = { version = "0.1.0", features = ["performance"] }
 ```
 
 ### Hello World Comparison

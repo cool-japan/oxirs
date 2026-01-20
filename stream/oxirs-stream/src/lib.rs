@@ -1,9 +1,9 @@
 //! # OxiRS Stream - Ultra-High Performance RDF Streaming Platform
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-stream/badge.svg)](https://docs.rs/oxirs-stream)
 //!
-//! **Status**: Beta Release (v0.1.0-rc.1)
+//! **Status**: Production Release (v0.1.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Real-time streaming support with Kafka/NATS/Redis I/O, RDF Patch, SPARQL Update delta,
@@ -260,7 +260,7 @@ pub use zero_copy::{
     ZeroCopyBuffer, ZeroCopyConfig, ZeroCopyManager, ZeroCopyStats,
 };
 
-// New v0.1.0-rc.3 exports for developer experience and performance
+// New v0.1.0 exports for developer experience and performance
 pub use numa_processing::{
     CpuAffinityMode, HugePageSize, MemoryBandwidthMonitor, MemoryInterleavePolicy, NodeBufferStats,
     NodeProcessorStats, NumaAllocationStrategy, NumaBuffer, NumaBufferPool, NumaBufferPoolConfig,
@@ -291,7 +291,7 @@ pub use testing_framework::{
     TestHarnessConfig, TestMetrics, TestReport, TestStatus,
 };
 
-// New v0.1.0-rc.4 exports for ML, versioning, and migration
+// New v0.1.0 exports for ML, versioning, and migration
 pub use anomaly_detection::{
     Anomaly, AnomalyAlert, AnomalyConfig, AnomalyDetector as AdaptiveAnomalyDetector,
     AnomalySeverity, AnomalyStats as AdaptiveAnomalyStats, DetectorType, MultiDimensionalDetector,
@@ -456,14 +456,14 @@ pub mod stream_replay;
 pub mod transactional_processing;
 pub mod zero_copy;
 
-// New v0.1.0-rc.3 modules for developer experience and performance
+// New v0.1.0 modules for developer experience and performance
 pub mod numa_processing;
 pub mod out_of_order;
 pub mod performance_profiler;
 pub mod stream_sql;
 pub mod testing_framework;
 
-// New v0.1.0-rc.4 modules for ML, versioning, and migration
+// New v0.1.0 modules for ML, versioning, and migration
 pub mod anomaly_detection;
 pub mod migration_tools;
 pub mod online_learning;

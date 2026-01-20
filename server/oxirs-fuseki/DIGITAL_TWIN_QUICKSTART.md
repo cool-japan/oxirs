@@ -1,7 +1,7 @@
 # OxiRS Digital Twin Platform - Quick Start Guide
 
-**Version:** 0.1.0-rc.2
-**Last Updated:** 2025-12-25
+**Version:** 0.1.0
+**Last Updated:** 2026-01-06
 
 This guide demonstrates how to use OxiRS as an **Industrial Digital Twin Platform** with smart city, manufacturing, and data sovereignty capabilities.
 
@@ -401,7 +401,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         resource_catalog: vec![
             ResourceDescription {
                 id: "urn:dataset:battery-production:2025-12".to_string(),
-                title: "Battery Production Data December 2025".to_string(),
+                title: "Battery Production Data January 2026".to_string(),
                 description: "Temperature, voltage, and production metrics".to_string(),
                 format: vec!["application/ld+json".to_string()],
                 temporal_coverage: TemporalRange {

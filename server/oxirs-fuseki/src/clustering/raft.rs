@@ -606,7 +606,7 @@ impl RaftNode {
         }
 
         // Future enhancement: Implement snapshot installation for log compaction.
-        // For 0.1.0-rc.1: Basic Raft consensus works without snapshots.
+        // For v0.1.0: Basic Raft consensus works without snapshots.
         // Snapshot installation is needed for long-running clusters with large logs.
 
         InstallSnapshotResponse { term: req.term }
@@ -652,17 +652,17 @@ impl RaftNode {
                 match &entry.command {
                     Command::Set { key, value: _ } => {
                         // Future enhancement: Apply to actual RDF store.
-                        // For 0.1.0-rc.1: Raft replication logic is complete, store integration pending.
+                        // For v0.1.0: Raft replication logic is complete, store integration pending.
                         tracing::debug!("Applied Set({}, ...)", key);
                     }
                     Command::Delete { key } => {
                         // Future enhancement: Apply to actual RDF store.
-                        // For 0.1.0-rc.1: Raft replication logic is complete, store integration pending.
+                        // For v0.1.0: Raft replication logic is complete, store integration pending.
                         tracing::debug!("Applied Delete({})", key);
                     }
                     Command::ConfigChange { config: _ } => {
                         // Future enhancement: Apply cluster configuration changes.
-                        // For 0.1.0-rc.1: Static cluster configuration is sufficient.
+                        // For v0.1.0: Static cluster configuration is sufficient.
                         tracing::debug!("Applied ConfigChange");
                     }
                     Command::NoOp => {
@@ -679,7 +679,7 @@ impl RaftNode {
     /// Send RPC to another node
     async fn send_rpc(&self, target: &str, message: RpcMessage) -> FusekiResult<()> {
         // Future enhancement: Implement actual network RPC (gRPC/HTTP).
-        // For 0.1.0-rc.1: Simulated for local testing. Raft protocol logic is production-ready.
+        // For v0.1.0: Simulated for local testing. Raft protocol logic is production-ready.
         tracing::debug!("Sending {:?} to {}", message, target);
         Ok(())
     }

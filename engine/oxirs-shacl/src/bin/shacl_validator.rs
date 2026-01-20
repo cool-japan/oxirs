@@ -10,11 +10,15 @@ use std::time::Instant;
 use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
 
-use oxirs_core::{ConcreteStore, Store};
+use oxirs_core::{
+    graph::Graph,
+    parser::{Parser, RdfFormat},
+    ConcreteStore, Store,
+};
 use oxirs_shacl::{
     optimization::ValidationStrategy,
     report::{ReportFormat, ValidationReport},
-    shapes::ShapeValidator,
+    shapes::{ShapeParser, ShapeValidator},
     validation::ValidationEngine,
     Shape, ShapeId, ValidationConfig,
 };
@@ -93,7 +97,7 @@ fn main() -> Result<()> {
     }
 
     // Load data store
-    let store = load_data_store(&args.data_file)?;
+    let store = load_data_store(&args.data_file, args.verbose)?;
 
     // Configure validation engine
     let config = create_validation_config(&args);
@@ -249,27 +253,68 @@ fn load_shapes(args: &Args) -> Result<IndexMap<ShapeId, Shape>> {
         return Err(anyhow!("Shapes file not found: {:?}", args.shapes_file));
     }
 
-    let _shapes_content = fs::read_to_string(&args.shapes_file)?;
+    let shapes_content = fs::read_to_string(&args.shapes_file)?;
 
-    // Create a simple in-memory store for shapes parsing
-    let _store = ConcreteStore::new();
+    // Detect RDF format from file extension
+    let extension = args
+        .shapes_file
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("ttl");
+    let rdf_format = detect_rdf_format(extension)?;
 
-    // Parse shapes content - using simplified approach for demo
-    // TODO: Implement proper RDF parsing and shape extraction
-    // This should parse the RDF graph and extract SHACL shapes using oxirs-core parser
+    // Parse RDF content using oxirs-core parser
+    let rdf_parser = Parser::new(rdf_format);
+    let quads = rdf_parser
+        .parse_str_to_quads(&shapes_content)
+        .map_err(|e| anyhow!("Failed to parse RDF shapes file: {}", e))?;
+
+    if args.verbose {
+        println!("   Parsed {} quads from shapes file", quads.len());
+    }
+
+    // Convert quads to a Graph structure
+    let mut graph = Graph::new();
+    for quad in quads {
+        graph.insert(quad.to_triple());
+    }
+
+    // Use ShapeParser to extract SHACL shapes from the RDF graph
+    let mut shape_parser = ShapeParser::new();
+    let shapes_vec = shape_parser
+        .parse_shapes_from_graph(&graph)
+        .map_err(|e| anyhow!("Failed to parse SHACL shapes: {}", e))?;
+
+    // Convert Vec<Shape> to IndexMap<ShapeId, Shape>
     let mut shapes = IndexMap::new();
-
-    // Create a demonstration shape showing typical SHACL structure
-    let shape_id = ShapeId::new("http://example.org/PersonShape");
-    let shape = Shape::node_shape(shape_id.clone());
-    shapes.insert(shape_id, shape);
+    for shape in shapes_vec {
+        shapes.insert(shape.id.clone(), shape);
+    }
 
     if args.verbose {
         println!("✅ Loaded {} shapes", shapes.len());
-        println!("   NOTE: Using simplified shape loading for demonstration");
+        for (id, shape) in &shapes {
+            println!(
+                "   - {} ({:?}, {} constraints, {} targets)",
+                id.as_str(),
+                shape.shape_type,
+                shape.constraints.len(),
+                shape.targets.len()
+            );
+        }
     }
 
     Ok(shapes)
+}
+
+/// Detect RDF format from file extension
+fn detect_rdf_format(extension: &str) -> Result<RdfFormat> {
+    RdfFormat::from_extension(extension).ok_or_else(|| {
+        anyhow!(
+            "Unknown RDF format for extension: {}. Supported: ttl, nt, trig, nq, rdf, jsonld",
+            extension
+        )
+    })
 }
 
 fn validate_shapes_graph(shapes: &IndexMap<ShapeId, Shape>, verbose: bool) -> Result<()> {
@@ -319,40 +364,56 @@ fn validate_shapes_graph(shapes: &IndexMap<ShapeId, Shape>, verbose: bool) -> Re
     Ok(())
 }
 
-fn load_data_store(data_file: &PathBuf) -> Result<Box<dyn Store>> {
+fn load_data_store(data_file: &PathBuf, verbose: bool) -> Result<Box<dyn Store>> {
     if !data_file.exists() {
         return Err(anyhow!("Data file not found: {:?}", data_file));
     }
 
-    // Validate file extension for supported formats
+    // Detect RDF format from file extension
     let extension = data_file.extension().and_then(|s| s.to_str()).unwrap_or("");
 
-    match extension.to_lowercase().as_str() {
-        "ttl" | "turtle" | "nt" | "ntriples" | "rdf" | "owl" | "n3" => {
-            // Supported RDF formats
+    let rdf_format = match extension.to_lowercase().as_str() {
+        "ttl" | "turtle" => RdfFormat::Turtle,
+        "nt" | "ntriples" => RdfFormat::NTriples,
+        "trig" => RdfFormat::TriG,
+        "nq" | "nquads" => RdfFormat::NQuads,
+        "rdf" | "xml" | "owl" => RdfFormat::RdfXml,
+        "jsonld" | "json-ld" => RdfFormat::JsonLd,
+        "n3" => {
+            // N3 is a superset of Turtle - use Turtle parser
+            RdfFormat::Turtle
         }
         _ => {
             return Err(anyhow!(
-                "Unsupported file format: {}. Supported formats: .ttl, .nt, .rdf, .owl, .n3",
+                "Unsupported file format: {}. Supported formats: .ttl, .nt, .trig, .nq, .rdf, .owl, .n3, .jsonld",
                 extension
             ));
         }
+    };
+
+    // Read file content
+    let data_content = fs::read_to_string(data_file)?;
+
+    // Parse RDF data using oxirs-core parser
+    let parser = Parser::new(rdf_format);
+    let quads = parser
+        .parse_str_to_quads(&data_content)
+        .map_err(|e| anyhow!("Failed to parse RDF data file: {}", e))?;
+
+    if verbose {
+        println!("   Parsed {} quads from data file", quads.len());
     }
 
-    // Create in-memory store
+    // Create in-memory store and load the quads
     let store = ConcreteStore::new()?;
+    for quad in quads {
+        store.insert_quad(quad)?;
+    }
 
-    // TODO: Implement proper RDF parsing and loading
-    // This should use oxirs-core parsers to load the RDF data:
-    // 1. Detect format from file extension
-    // 2. Parse RDF triples/quads from the file
-    // 3. Load parsed data into the store
-    // Example:
-    // let parser = get_parser_for_format(extension)?;
-    // let triples = parser.parse_file(data_file)?;
-    // for triple in triples {
-    //     store.insert_triple(triple)?;
-    // }
+    if verbose {
+        let triple_count = store.len().unwrap_or(0);
+        println!("   Loaded {} triples into store", triple_count);
+    }
 
     Ok(Box::new(store) as Box<dyn Store>)
 }

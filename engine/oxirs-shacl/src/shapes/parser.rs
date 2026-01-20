@@ -14,14 +14,16 @@ use crate::{
     constraints::{
         cardinality_constraints::{MaxCountConstraint, MinCountConstraint},
         comparison_constraints::{
-            DisjointConstraint, EqualsConstraint, LessThanConstraint, LessThanOrEqualsConstraint,
+            DisjointConstraint, EqualsConstraint, HasValueConstraint, InConstraint,
+            LessThanConstraint, LessThanOrEqualsConstraint,
         },
         range_constraints::{
             MaxExclusiveConstraint, MaxInclusiveConstraint, MinExclusiveConstraint,
             MinInclusiveConstraint,
         },
         string_constraints::{
-            MaxLengthConstraint, MinLengthConstraint, PatternConstraint, UniqueLangConstraint,
+            LanguageInConstraint, MaxLengthConstraint, MinLengthConstraint, PatternConstraint,
+            UniqueLangConstraint,
         },
         value_constraints::{ClassConstraint, DatatypeConstraint, NodeKindConstraint},
         Constraint,
@@ -47,6 +49,12 @@ pub struct ShapeParser {
 
     /// Parsing statistics
     stats: ShapeParsingStats,
+
+    /// Inline property shapes discovered during parsing
+    inline_property_shapes: Vec<Shape>,
+
+    /// Counter for generating unique blank node IDs
+    blank_node_counter: usize,
 }
 
 impl ShapeParser {
@@ -57,6 +65,8 @@ impl ShapeParser {
             strict_mode: false,
             max_depth: 50,
             stats: ShapeParsingStats::new(),
+            inline_property_shapes: Vec::new(),
+            blank_node_counter: 0,
         }
     }
 
@@ -169,6 +179,9 @@ impl ShapeParser {
 
     /// Parse shapes from an RDF graph
     pub fn parse_shapes_from_graph(&mut self, graph: &Graph) -> Result<Vec<Shape>> {
+        // Clear inline property shapes from previous parsing
+        self.inline_property_shapes.clear();
+
         let mut shapes = Vec::new();
         let mut visited = HashSet::new();
 
@@ -181,6 +194,9 @@ impl ShapeParser {
                 shapes.push(shape);
             }
         }
+
+        // Add inline property shapes discovered during parsing
+        shapes.append(&mut self.inline_property_shapes);
 
         Ok(shapes)
     }
@@ -300,6 +316,9 @@ impl ShapeParser {
 
         // Parse constraints from the graph
         self.parse_constraints_from_graph(graph, &shape_node, &mut shape)?;
+
+        // Parse inline property shapes (sh:property)
+        self.parse_property_shapes_from_graph(graph, &shape_node, &mut shape)?;
 
         // Parse shape metadata (labels, descriptions, etc.)
         self.parse_shape_metadata_from_graph(graph, &shape_node, &mut shape)?;
@@ -627,6 +646,41 @@ impl ShapeParser {
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
+        // Parse sh:in constraint (value enumeration)
+        let in_values =
+            self.parse_rdf_list_as_terms(graph, &shape_subject, &SHACL_VOCAB.in_list)?;
+        if !in_values.is_empty() {
+            let constraint = Constraint::In(InConstraint { values: in_values });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        // Parse sh:hasValue constraint
+        let has_value_triples = graph.query_triples(
+            Some(&shape_subject),
+            Some(&Predicate::NamedNode(SHACL_VOCAB.has_value.clone())),
+            None,
+        );
+        for triple in has_value_triples {
+            let value_term = match triple.object() {
+                Object::NamedNode(node) => Term::NamedNode(node.clone()),
+                Object::BlankNode(node) => Term::BlankNode(node.clone()),
+                Object::Literal(lit) => Term::Literal(lit.clone()),
+                Object::Variable(_) | Object::QuotedTriple(_) => continue,
+            };
+            let constraint = Constraint::HasValue(HasValueConstraint { value: value_term });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        // Parse sh:languageIn constraint
+        let language_in_values =
+            self.parse_rdf_list_as_strings(graph, &shape_subject, &SHACL_VOCAB.language_in)?;
+        if !language_in_values.is_empty() {
+            let constraint = Constraint::LanguageIn(LanguageInConstraint {
+                languages: language_in_values,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
         // Parse shape metadata (will be implemented separately)
         // Parse logical constraints (will be implemented separately)
         // Parse shape-based constraints (will be implemented separately)
@@ -682,6 +736,401 @@ impl ShapeParser {
         }
 
         Ok(())
+    }
+
+    /// Parse inline property shapes defined via sh:property
+    fn parse_property_shapes_from_graph(
+        &mut self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        parent_shape: &mut Shape,
+    ) -> Result<()> {
+        let shape_subject = Subject::NamedNode(shape_node.clone());
+
+        // Find all sh:property triples for this shape
+        let property_triples = graph.query_triples(
+            Some(&shape_subject),
+            Some(&Predicate::NamedNode(SHACL_VOCAB.property.clone())),
+            None,
+        );
+
+        for triple in property_triples {
+            // Parse the property shape (can be blank node or named node)
+            match triple.object() {
+                Object::BlankNode(blank_node) => {
+                    // Generate a unique IRI for this inline property shape
+                    let generated_iri = format!(
+                        "{}#_property_{}",
+                        shape_node.as_str(),
+                        self.blank_node_counter
+                    );
+                    self.blank_node_counter += 1;
+
+                    // Parse the blank node as a property shape
+                    let property_shape =
+                        self.parse_blank_node_property_shape(graph, blank_node, &generated_iri)?;
+
+                    // Record the property shape ID in the parent shape
+                    parent_shape
+                        .property_shapes
+                        .push(ShapeId::new(&generated_iri));
+
+                    // Add to inline property shapes collection
+                    self.inline_property_shapes.push(property_shape);
+                }
+                Object::NamedNode(property_shape_node) => {
+                    // The property shape is a named node - record it in parent
+                    parent_shape
+                        .property_shapes
+                        .push(ShapeId::new(property_shape_node.as_str()));
+                    tracing::debug!(
+                        "Found named property shape reference: {}",
+                        property_shape_node.as_str()
+                    );
+                }
+                _ => {
+                    tracing::warn!("Unexpected object type for sh:property");
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Parse a blank node as a PropertyShape
+    fn parse_blank_node_property_shape(
+        &mut self,
+        graph: &Graph,
+        blank_node: &BlankNode,
+        generated_iri: &str,
+    ) -> Result<Shape> {
+        let blank_subject = Subject::BlankNode(blank_node.clone());
+
+        // Create a new PropertyShape
+        let mut shape = Shape::new(ShapeId::new(generated_iri), ShapeType::PropertyShape);
+
+        // Parse sh:path (required for PropertyShape)
+        if let Some(path) = self.parse_property_path_for_blank_node(graph, &blank_subject)? {
+            shape.path = Some(path);
+        } else {
+            return Err(ShaclError::ShapeParsing(format!(
+                "PropertyShape {} is missing sh:path",
+                generated_iri
+            )));
+        }
+
+        // Parse constraints from the blank node
+        self.parse_constraints_from_blank_node(graph, &blank_subject, &mut shape)?;
+
+        // Parse metadata
+        self.parse_metadata_from_blank_node(graph, &blank_subject, &mut shape)?;
+
+        tracing::debug!(
+            "Parsed inline PropertyShape {} with {} constraints",
+            generated_iri,
+            shape.constraints.len()
+        );
+
+        Ok(shape)
+    }
+
+    /// Parse property path for a blank node subject
+    fn parse_property_path_for_blank_node(
+        &self,
+        graph: &Graph,
+        blank_subject: &Subject,
+    ) -> Result<Option<PropertyPath>> {
+        let path_triples = graph.query_triples(
+            Some(blank_subject),
+            Some(&Predicate::NamedNode(SHACL_VOCAB.path.clone())),
+            None,
+        );
+
+        for triple in path_triples {
+            match triple.object() {
+                Object::NamedNode(path_node) => {
+                    return Ok(Some(PropertyPath::Predicate(path_node.clone())));
+                }
+                Object::BlankNode(path_blank) => {
+                    // Complex path - try to parse it
+                    let path = self.parse_property_path_object(
+                        graph,
+                        &Object::BlankNode(path_blank.clone()),
+                    )?;
+                    return Ok(Some(path));
+                }
+                _ => {}
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Parse constraints from a blank node (PropertyShape)
+    fn parse_constraints_from_blank_node(
+        &self,
+        graph: &Graph,
+        blank_subject: &Subject,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        // Parse cardinality constraints
+        if let Some(min_count) =
+            self.get_integer_object_for_subject(graph, blank_subject, &SHACL_VOCAB.min_count)?
+        {
+            let constraint = Constraint::MinCount(MinCountConstraint {
+                min_count: min_count as u32,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        if let Some(max_count) =
+            self.get_integer_object_for_subject(graph, blank_subject, &SHACL_VOCAB.max_count)?
+        {
+            let constraint = Constraint::MaxCount(MaxCountConstraint {
+                max_count: max_count as u32,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        // Parse datatype constraint
+        if let Some(datatype_node) =
+            self.get_named_node_object_for_subject(graph, blank_subject, &SHACL_VOCAB.datatype)?
+        {
+            let constraint = Constraint::Datatype(DatatypeConstraint {
+                datatype_iri: datatype_node,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        // Parse nodeKind constraint
+        if let Some(node_kind_iri) =
+            self.get_named_node_object_for_subject(graph, blank_subject, &SHACL_VOCAB.node_kind)?
+        {
+            if let Ok(node_kind) = self.parse_node_kind(&node_kind_iri) {
+                let constraint = Constraint::NodeKind(NodeKindConstraint { node_kind });
+                shape.add_constraint(constraint.component_id(), constraint);
+            }
+        }
+
+        // Parse pattern constraint
+        if let Some(pattern) =
+            self.get_string_object_for_subject(graph, blank_subject, &SHACL_VOCAB.pattern)?
+        {
+            let flags =
+                self.get_string_object_for_subject(graph, blank_subject, &SHACL_VOCAB.flags)?;
+            let constraint = Constraint::Pattern(PatternConstraint {
+                pattern,
+                flags,
+                message: None,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        // Parse class constraint
+        if let Some(class_node) =
+            self.get_named_node_object_for_subject(graph, blank_subject, &SHACL_VOCAB.class)?
+        {
+            let constraint = Constraint::Class(ClassConstraint {
+                class_iri: class_node,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        // Parse sh:in constraint
+        let in_values = self.parse_rdf_list_as_terms(graph, blank_subject, &SHACL_VOCAB.in_list)?;
+        if !in_values.is_empty() {
+            let constraint = Constraint::In(InConstraint { values: in_values });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        // Parse sh:hasValue constraint
+        let has_value_triples = graph.query_triples(
+            Some(blank_subject),
+            Some(&Predicate::NamedNode(SHACL_VOCAB.has_value.clone())),
+            None,
+        );
+        for triple in has_value_triples {
+            let value_term = match triple.object() {
+                Object::NamedNode(node) => Term::NamedNode(node.clone()),
+                Object::BlankNode(node) => Term::BlankNode(node.clone()),
+                Object::Literal(lit) => Term::Literal(lit.clone()),
+                Object::Variable(_) | Object::QuotedTriple(_) => continue,
+            };
+            let constraint = Constraint::HasValue(HasValueConstraint { value: value_term });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        // Parse string constraints
+        if let Some(min_length) =
+            self.get_integer_object_for_subject(graph, blank_subject, &SHACL_VOCAB.min_length)?
+        {
+            let constraint = Constraint::MinLength(MinLengthConstraint {
+                min_length: min_length as u32,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        if let Some(max_length) =
+            self.get_integer_object_for_subject(graph, blank_subject, &SHACL_VOCAB.max_length)?
+        {
+            let constraint = Constraint::MaxLength(MaxLengthConstraint {
+                max_length: max_length as u32,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        // Parse range constraints
+        if let Some(min_exclusive) =
+            self.get_numeric_object_for_subject(graph, blank_subject, &SHACL_VOCAB.min_exclusive)?
+        {
+            let constraint = Constraint::MinExclusive(MinExclusiveConstraint {
+                min_value: min_exclusive,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        if let Some(max_exclusive) =
+            self.get_numeric_object_for_subject(graph, blank_subject, &SHACL_VOCAB.max_exclusive)?
+        {
+            let constraint = Constraint::MaxExclusive(MaxExclusiveConstraint {
+                max_value: max_exclusive,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        if let Some(min_inclusive) =
+            self.get_numeric_object_for_subject(graph, blank_subject, &SHACL_VOCAB.min_inclusive)?
+        {
+            let constraint = Constraint::MinInclusive(MinInclusiveConstraint {
+                min_value: min_inclusive,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        if let Some(max_inclusive) =
+            self.get_numeric_object_for_subject(graph, blank_subject, &SHACL_VOCAB.max_inclusive)?
+        {
+            let constraint = Constraint::MaxInclusive(MaxInclusiveConstraint {
+                max_value: max_inclusive,
+            });
+            shape.add_constraint(constraint.component_id(), constraint);
+        }
+
+        Ok(())
+    }
+
+    /// Parse metadata from a blank node
+    fn parse_metadata_from_blank_node(
+        &self,
+        graph: &Graph,
+        blank_subject: &Subject,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        if let Some(label) =
+            self.get_string_object_for_subject(graph, blank_subject, &SHACL_VOCAB.label)?
+        {
+            shape.label = Some(label);
+        }
+
+        if let Some(description) =
+            self.get_string_object_for_subject(graph, blank_subject, &SHACL_VOCAB.description)?
+        {
+            shape.description = Some(description);
+        }
+
+        if let Some(message) =
+            self.get_string_object_for_subject(graph, blank_subject, &SHACL_VOCAB.message)?
+        {
+            shape.messages.insert("".to_string(), message);
+        }
+
+        Ok(())
+    }
+
+    /// Get a named node object for a given subject (including blank nodes)
+    fn get_named_node_object_for_subject(
+        &self,
+        graph: &Graph,
+        subject: &Subject,
+        predicate: &NamedNode,
+    ) -> Result<Option<NamedNode>> {
+        let triples = graph.query_triples(
+            Some(subject),
+            Some(&Predicate::NamedNode(predicate.clone())),
+            None,
+        );
+
+        for triple in triples {
+            if let Object::NamedNode(node) = triple.object() {
+                return Ok(Some(node.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Get a string object for a given subject (including blank nodes)
+    fn get_string_object_for_subject(
+        &self,
+        graph: &Graph,
+        subject: &Subject,
+        predicate: &NamedNode,
+    ) -> Result<Option<String>> {
+        let triples = graph.query_triples(
+            Some(subject),
+            Some(&Predicate::NamedNode(predicate.clone())),
+            None,
+        );
+
+        for triple in triples {
+            if let Object::Literal(literal) = triple.object() {
+                return Ok(Some(literal.value().to_string()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Get an integer object for a given subject (including blank nodes)
+    fn get_integer_object_for_subject(
+        &self,
+        graph: &Graph,
+        subject: &Subject,
+        predicate: &NamedNode,
+    ) -> Result<Option<i64>> {
+        let triples = graph.query_triples(
+            Some(subject),
+            Some(&Predicate::NamedNode(predicate.clone())),
+            None,
+        );
+
+        for triple in triples {
+            if let Object::Literal(literal) = triple.object() {
+                if let Ok(value) = literal.value().parse::<i64>() {
+                    return Ok(Some(value));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// Get a numeric literal object for a given subject (including blank nodes)
+    fn get_numeric_object_for_subject(
+        &self,
+        graph: &Graph,
+        subject: &Subject,
+        predicate: &NamedNode,
+    ) -> Result<Option<oxirs_core::model::Literal>> {
+        let triples = graph.query_triples(
+            Some(subject),
+            Some(&Predicate::NamedNode(predicate.clone())),
+            None,
+        );
+
+        for triple in triples {
+            if let Object::Literal(literal) = triple.object() {
+                return Ok(Some(literal.clone()));
+            }
+        }
+        Ok(None)
     }
 
     /// Helper method to get a named node object from a triple
@@ -1090,6 +1539,116 @@ impl ShapeParser {
         }
 
         Ok(paths)
+    }
+
+    /// Parse an RDF list of terms (for sh:in constraint)
+    fn parse_rdf_list_as_terms(
+        &self,
+        graph: &Graph,
+        subject: &Subject,
+        predicate: &NamedNode,
+    ) -> Result<Vec<Term>> {
+        let mut terms = Vec::new();
+
+        let triples = graph.query_triples(
+            Some(subject),
+            Some(&Predicate::NamedNode(predicate.clone())),
+            None,
+        );
+
+        for triple in triples {
+            let list_terms = self.parse_rdf_list_to_terms(graph, triple.object())?;
+            terms.extend(list_terms);
+        }
+
+        Ok(terms)
+    }
+
+    /// Parse an RDF list into a vector of terms
+    fn parse_rdf_list_to_terms(&self, graph: &Graph, list_object: &Object) -> Result<Vec<Term>> {
+        let mut terms = Vec::new();
+        let mut current = list_object.clone();
+
+        let first_prop = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid first property IRI: {e}")))?;
+        let rest_prop = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid rest property IRI: {e}")))?;
+        let nil_node = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid nil IRI: {e}")))?;
+
+        loop {
+            match &current {
+                Object::BlankNode(blank_node) => {
+                    // Get the first element
+                    let first_triples = graph.query_triples(
+                        Some(&Subject::BlankNode(blank_node.clone())),
+                        Some(&Predicate::NamedNode(first_prop.clone())),
+                        None,
+                    );
+
+                    if let Some(triple) = first_triples.into_iter().next() {
+                        let term = match triple.object() {
+                            Object::NamedNode(node) => Term::NamedNode(node.clone()),
+                            Object::BlankNode(node) => Term::BlankNode(node.clone()),
+                            Object::Literal(lit) => Term::Literal(lit.clone()),
+                            Object::Variable(_) | Object::QuotedTriple(_) => continue,
+                        };
+                        terms.push(term);
+                    } else {
+                        break;
+                    }
+
+                    // Get the rest of the list
+                    let rest_triples = graph.query_triples(
+                        Some(&Subject::BlankNode(blank_node.clone())),
+                        Some(&Predicate::NamedNode(rest_prop.clone())),
+                        None,
+                    );
+
+                    if let Some(triple) = rest_triples.into_iter().next() {
+                        current = triple.object().clone();
+                    } else {
+                        break;
+                    }
+                }
+                Object::NamedNode(node) => {
+                    if *node == nil_node {
+                        break; // End of list
+                    } else {
+                        // Single element, not a list
+                        terms.push(Term::NamedNode(node.clone()));
+                        break;
+                    }
+                }
+                Object::Literal(lit) => {
+                    // Single literal element
+                    terms.push(Term::Literal(lit.clone()));
+                    break;
+                }
+                _ => break,
+            }
+        }
+
+        Ok(terms)
+    }
+
+    /// Parse an RDF list of strings (for sh:languageIn constraint)
+    fn parse_rdf_list_as_strings(
+        &self,
+        graph: &Graph,
+        subject: &Subject,
+        predicate: &NamedNode,
+    ) -> Result<Vec<String>> {
+        let terms = self.parse_rdf_list_as_terms(graph, subject, predicate)?;
+        let mut strings = Vec::new();
+
+        for term in terms {
+            if let Term::Literal(lit) = term {
+                strings.push(lit.value().to_string());
+            }
+        }
+
+        Ok(strings)
     }
 }
 

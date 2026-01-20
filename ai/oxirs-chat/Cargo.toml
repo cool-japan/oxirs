@@ -46,13 +46,12 @@ tokio-tungstenite = "0.28"
 futures-util = "0.3"
 
 # LLM Integration
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { workspace = true, features = ["stream"] }
 async-openai = "0.27"
 async-stream = "0.3"
 # anthropic-sdk = "0.1" # Add when available
 
 # Storage and Caching
-sqlx = { version = "0.9.0-alpha.1", features = ["runtime-tokio", "sqlite"] }
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 uuid = { version = "1.19", features = ["v4", "serde"] }
 
@@ -63,7 +62,7 @@ serde_yaml = "0.9"
 
 # Metrics and Monitoring
 metrics = "0.23"
-metrics-exporter-prometheus = "0.15"
+metrics-exporter-prometheus = "0.18"
 
 # Template Engine for SPARQL
 handlebars = "5.1"

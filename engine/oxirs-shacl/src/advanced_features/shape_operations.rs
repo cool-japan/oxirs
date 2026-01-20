@@ -708,6 +708,7 @@ impl ShapeRefactorer {
                 severity: Severity::Info, // Lower severity for parent
                 messages: IndexMap::new(),
                 extends: Vec::new(),
+                property_shapes: Vec::new(),
                 priority: None,
                 metadata: ShapeMetadata {
                     author: None,

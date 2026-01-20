@@ -1,13 +1,13 @@
 # OxiRS Engine 🚀
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: Release Candidate (v0.1.0-rc.2) - Released December 26, 2025
+**Status**: Production Release (v0.1.0) - Released January 7, 2026
 
-⚠️ **Release Candidate**: This is a release candidate. Some features are experimental. APIs may change without notice.
+✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 **A high-performance, modular RDF processing engine written in Rust, providing SPARQL, SHACL, vector search, reasoning, and advanced semantic web capabilities.**
 
@@ -198,13 +198,13 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # Individual modules (stable features)
-oxirs-arq = "0.1.0-rc.2"
-oxirs-shacl = "0.1.0-rc.2"
+oxirs-arq = "0.1.0"
+oxirs-shacl = "0.1.0"
 
 # Individual modules (experimental features)
-oxirs-vec = "0.1.0-rc.2"
-oxirs-rule = "0.1.0-rc.2"
-oxirs-star = "0.1.0-rc.2"
+oxirs-vec = "0.1.0"
+oxirs-rule = "0.1.0"
+oxirs-star = "0.1.0"
 ```
 
 Note: There is no single `oxirs-engine` crate. Use individual modules as needed.
@@ -447,10 +447,8 @@ at your option.
 
 ### Roadmap
 
-- **Q1 2026**: Complete W3C compliance, federation support
-- **Q2 2026**: Advanced neural integration, distributed processing
-- **Q3 2026**: Enterprise features, comprehensive ecosystem bindings
-- **Q4 2026**: 1.0 release with full specification compliance
+- **Q1 2026**: v0.2.0 - Complete W3C compliance, federation support, full-text search, GeoSPARQL
+- **Q2 2026**: v1.0.0 LTS - Full specification compliance, enterprise features
 
 ---
 

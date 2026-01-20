@@ -34,7 +34,7 @@ tower-http = { version = "0.6", features = ["cors", "trace", "timeout", "compres
 rustls = { version = "0.23", optional = true }
 tokio-rustls = { version = "0.26", optional = true }
 rustls-pemfile = { version = "2.2", optional = true }
-axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
+axum-server = { version = "0.8", features = ["tls-rustls"], optional = true }
 
 # CLI and configuration
 clap = { version = "4.4", features = ["derive", "env"] }
@@ -81,7 +81,7 @@ http-body-util = "0.1"
 prometheus = { version = "0.13", optional = true }
 axum-prometheus = { version = "0.7", optional = true }
 metrics = "0.23"
-metrics-exporter-prometheus = "0.15"
+metrics-exporter-prometheus = "0.18"
 
 # Caching
 lru = "0.16"
@@ -121,7 +121,7 @@ sha1 = "0.10"
 flate2 = "1.1"
 
 # OAuth2 and HTTP client
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { workspace = true }
 percent-encoding = "2.3"
 url = { version = "2.5", features = ["serde"] }
 
@@ -152,11 +152,11 @@ async-trait = "0.1"
 
 # GraphQL
 async-graphql = "7.0"
-async-graphql-axum = "7.1"
+async-graphql-axum = "7.2"
 
 # OpenAPI
 utoipa = { version = "4.2", features = ["chrono"] }
-utoipa-swagger-ui = { version = "7.0", features = ["axum", "vendored"] }
+utoipa-swagger-ui = { version = "9.0", features = ["axum", "vendored"] }
 
 # DNS resolution for service discovery
 trust-dns-resolver = "0.23"
@@ -192,7 +192,7 @@ tempfile = "3.24"
 rstest = "0.26"
 proptest = "1.7"
 insta = "1.46"
-serial_test = "3.2"
+serial_test = "3.3"
 wiremock = "0.6"
 
 [features]

@@ -17,15 +17,15 @@ members = [
     "stream/oxirs-stream",
     "stream/oxirs-federate",
     "ai/oxirs-embed",
-    "ai/oxirs-shacl-ai",  # Re-enabled after major refactoring fixes
+    "ai/oxirs-shacl-ai",
     "ai/oxirs-chat",
-    "ai/oxirs-physics",  # Phase B: Neuro-Symbolic AI Bridge
-    "ai/oxirs-graphrag",  # Phase C: GraphRAG Hybrid Search
-    "security/oxirs-did",  # Phase C: DID/VC Trust Layer
-    "platforms/oxirs-wasm",  # Phase C: WASM Browser/Edge Support
-    "stream/oxirs-modbus",  # Phase D: Modbus TCP/RTU Industrial Connectivity
-    "storage/oxirs-tsdb",  # Phase D: Time-Series Optimization
-    "stream/oxirs-canbus",  # Phase D: CANbus/J1939 Automotive Integration
+    "ai/oxirs-physics",
+    "ai/oxirs-graphrag",
+    "security/oxirs-did",
+    "platforms/oxirs-wasm",
+    "stream/oxirs-modbus",
+    "storage/oxirs-tsdb",
+    "stream/oxirs-canbus",
     "tools/oxirs",
 ]
 exclude = [
@@ -34,7 +34,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.0-rc.2"
+version = "0.1.0"
 authors = ["KitaSan <info@kitasan.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -63,31 +63,31 @@ unsafe_code = "warn"
 
 [workspace.dependencies]
 # Internal OxiRS crates (version inherited from workspace.package)
-oxirs-core = { version = "0.1.0-rc.2", path = "core/oxirs-core" }
-oxirs-fuseki = { version = "0.1.0-rc.2", path = "server/oxirs-fuseki" }
-oxirs-gql = { version = "0.1.0-rc.2", path = "server/oxirs-gql" }
-oxirs-arq = { version = "0.1.0-rc.2", path = "engine/oxirs-arq" }
-oxirs-geosparql = { version = "0.1.0-rc.2", path = "engine/oxirs-geosparql" }
-oxirs-rule = { version = "0.1.0-rc.2", path = "engine/oxirs-rule" }
-oxirs-samm = { version = "0.1.0-rc.2", path = "engine/oxirs-samm" }
-oxirs-shacl = { version = "0.1.0-rc.2", path = "engine/oxirs-shacl" }
-oxirs-star = { version = "0.1.0-rc.2", path = "engine/oxirs-star" }
-oxirs-ttl = { version = "0.1.0-rc.2", path = "engine/oxirs-ttl" }
-oxirs-vec = { version = "0.1.0-rc.2", path = "engine/oxirs-vec" }
-oxirs-tdb = { version = "0.1.0-rc.2", path = "storage/oxirs-tdb" }
-oxirs-cluster = { version = "0.1.0-rc.2", path = "storage/oxirs-cluster" }
-oxirs-stream = { version = "0.1.0-rc.2", path = "stream/oxirs-stream" }
-oxirs-federate = { version = "0.1.0-rc.2", path = "stream/oxirs-federate" }
-oxirs-embed = { version = "0.1.0-rc.2", path = "ai/oxirs-embed" }
-oxirs-shacl-ai = { version = "0.1.0-rc.2", path = "ai/oxirs-shacl-ai" }
-oxirs-chat = { version = "0.1.0-rc.2", path = "ai/oxirs-chat" }
-oxirs-physics = { version = "0.1.0-rc.2", path = "ai/oxirs-physics" }
-oxirs-graphrag = { version = "0.1.0-rc.2", path = "ai/oxirs-graphrag" }
-oxirs-did = { version = "0.1.0-rc.2", path = "security/oxirs-did" }
-oxirs-wasm = { version = "0.1.0-rc.2", path = "platforms/oxirs-wasm" }
-oxirs-modbus = { version = "0.1.0-rc.2", path = "stream/oxirs-modbus" }
-oxirs-tsdb = { version = "0.1.0-rc.2", path = "storage/oxirs-tsdb" }
-oxirs-canbus = { version = "0.1.0-rc.2", path = "stream/oxirs-canbus" }
+oxirs-core = { version = "0.1.0", path = "core/oxirs-core" }
+oxirs-fuseki = { version = "0.1.0", path = "server/oxirs-fuseki" }
+oxirs-gql = { version = "0.1.0", path = "server/oxirs-gql" }
+oxirs-arq = { version = "0.1.0", path = "engine/oxirs-arq" }
+oxirs-geosparql = { version = "0.1.0", path = "engine/oxirs-geosparql" }
+oxirs-rule = { version = "0.1.0", path = "engine/oxirs-rule" }
+oxirs-samm = { version = "0.1.0", path = "engine/oxirs-samm" }
+oxirs-shacl = { version = "0.1.0", path = "engine/oxirs-shacl" }
+oxirs-star = { version = "0.1.0", path = "engine/oxirs-star" }
+oxirs-ttl = { version = "0.1.0", path = "engine/oxirs-ttl" }
+oxirs-vec = { version = "0.1.0", path = "engine/oxirs-vec" }
+oxirs-tdb = { version = "0.1.0", path = "storage/oxirs-tdb" }
+oxirs-cluster = { version = "0.1.0", path = "storage/oxirs-cluster" }
+oxirs-stream = { version = "0.1.0", path = "stream/oxirs-stream" }
+oxirs-federate = { version = "0.1.0", path = "stream/oxirs-federate" }
+oxirs-embed = { version = "0.1.0", path = "ai/oxirs-embed" }
+oxirs-shacl-ai = { version = "0.1.0", path = "ai/oxirs-shacl-ai" }
+oxirs-chat = { version = "0.1.0", path = "ai/oxirs-chat" }
+oxirs-physics = { version = "0.1.0", path = "ai/oxirs-physics" }
+oxirs-graphrag = { version = "0.1.0", path = "ai/oxirs-graphrag" }
+oxirs-did = { version = "0.1.0", path = "security/oxirs-did" }
+oxirs-wasm = { version = "0.1.0", path = "platforms/oxirs-wasm" }
+oxirs-modbus = { version = "0.1.0", path = "stream/oxirs-modbus" }
+oxirs-tsdb = { version = "0.1.0", path = "storage/oxirs-tsdb" }
+oxirs-canbus = { version = "0.1.0", path = "stream/oxirs-canbus" }
 
 # Core RDF and SPARQL functionality (native OxiRS implementations)
 # oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations
@@ -123,7 +123,7 @@ juniper_hyper = "0.10"
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.148"
+serde_json = "1.0.149"
 toml = "0.9"
 
 # Error handling and logging
@@ -159,8 +159,8 @@ tempfile = "3.24"
 # Additional dependencies
 async-trait = "0.1"
 uuid = { version = "1.19", features = ["v4", "serde"] }
-chrono = { version = "0.4.42", features = ["serde"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+chrono = { version = "0.4.43", features = ["serde"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "rustls-native-certs", "json", "form", "query", "multipart", "http2"] }
 bytes = "1.11"  # HTTP body handling
 http = "1.4"    # HTTP types
 
@@ -200,17 +200,17 @@ futures = "0.3"
 
 # SciRS2 dependencies (Scientific Computing Library) - Using 0.1.1 from crates.io
 # Note: scirs2 meta crate removed - we only use specific sub-crates as needed
-scirs2-core = { version = "0.1.1", features = ["random"] }
-scirs2-linalg = { version = "0.1.1" }
-scirs2-stats = { version = "0.1.1" }
-scirs2-neural = { version = "0.1.1" }
-scirs2-graph = { version = "0.1.1" }
-scirs2-metrics = { version = "0.1.1" }
-scirs2-fft = { version = "0.1.1" }
-scirs2-signal = { version = "0.1.1" }
-scirs2-optimize = { version = "0.1.1" }
-scirs2-cluster = { version = "0.1.1" }
-scirs2-text = { version = "0.1.1" }
+scirs2-core = { version = "0.1.2", features = ["random"] }
+scirs2-linalg = { version = "0.1.2" }
+scirs2-stats = { version = "0.1.2" }
+scirs2-neural = { version = "0.1.2" }
+scirs2-graph = { version = "0.1.2" }
+scirs2-metrics = { version = "0.1.2" }
+scirs2-fft = { version = "0.1.2" }
+scirs2-signal = { version = "0.1.2" }
+scirs2-optimize = { version = "0.1.2" }
+scirs2-cluster = { version = "0.1.2" }
+scirs2-text = { version = "0.1.2" }
 # array! macro is now in scirs2-core, scirs2-autograd not needed
 
 # OxiCode - modern binary serialization (replaces bincode per COOLJAPAN Policy)
@@ -229,7 +229,7 @@ fastrand = "2.3.0"
 # Compression libraries
 flate2 = "1.1"     # Gzip compression
 zstd = "0.13"      # Zstandard compression
-lz4_flex = "0.11"  # LZ4 compression
+lz4_flex = "0.12"  # LZ4 compression
 snap = "1.1"       # Snappy compression
 brotli = "8.0"     # Brotli compression
 
@@ -241,7 +241,7 @@ wkt = "0.14"       # Well-Known Text parsing
 
 # Caching
 redis = { version = "0.27.6", features = ["async-std-comp"] }
-lru = "0.16.2"
+lru = "0.16.3"
 
 # Cryptography
 sha2 = { version = "0.10.9", features = ["oid"] }
@@ -253,12 +253,12 @@ multibase = "0.9"
 bs58 = "0.5"
 
 # Graph algorithms (GraphRAG)
-petgraph = "0.6"
+petgraph = "0.8"
 
 # Phase D: Industrial Connectivity Dependencies
 tokio-serial = "5.4"      # Modbus RTU serial port support
 socketcan = "3.5"         # Linux CAN interface
-bit-vec = "0.6"           # Bit manipulation for Gorilla compression
+bit-vec = "0.8"           # Bit manipulation for Gorilla compression
 arrow = "57"              # Apache Arrow for zero-copy Python integration
 deadpool = "0.12"         # Generic async connection pooling
 humantime-serde = "1.1"   # Human-readable duration serialization

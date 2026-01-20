@@ -1,12 +1,12 @@
 # OxiRS Core
 
-[![Version](https://img.shields.io/badge/version-0.1.0--rc.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Zero-dependency, Rust-native RDF data model and SPARQL engine for the OxiRS semantic web platform**
 
-**Status**: Release Candidate (v0.1.0-rc.2) - Released December 26, 2025
+**Status**: Production Release (v0.1.0) - Released January 7, 2026
 
-✨ **Release Candidate**: Production-ready with API stability guarantees. Semantic versioning enforced.
+✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 ## Overview
 
@@ -55,17 +55,17 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.1.0-rc.2"
+oxirs-core = "0.1.0"
 
 # Optional: Enable async streaming support
-oxirs-core = { version = "0.1.0-rc.2", features = ["async"] }
+oxirs-core = { version = "0.1.0", features = ["async"] }
 ```
 
 For maximum performance in production:
 
 ```toml
 [dependencies]
-oxirs-core = { version = "0.1.0-rc.2", features = ["async"] }
+oxirs-core = { version = "0.1.0", features = ["async"] }
 
 [profile.release]
 lto = "fat"                    # Maximum link-time optimization
@@ -539,9 +539,9 @@ at your option.
 
 ## Status
 
-🚀 **Release Candidate (v0.1.0-rc.2)** - Durable RDF core with streaming persistence, SciRS2 telemetry, and federation-ready SPARQL execution
+🚀 **Production Release (v0.1.0)** - Durable RDF core with streaming persistence, SciRS2 telemetry, and federation-ready SPARQL execution
 
-### 🎉 Current Status (December 2025)
+### 🎉 Current Status (January 2026)
 - **Disk Persistence**: ✅ **Delivered** – Native N-Quads save/load powering the CLI and server workflows
 - **Streaming Pipelines**: ✅ **Expanded** – Multi-format import/export/migrate with configurable parallel ingestion
 - **Federation Support**: ✅ **Integrated** – Core algebra updated for `SERVICE` clause execution and robust result merging
@@ -569,12 +569,15 @@ at your option.
 - **AI Production Hardening**: Production-ready AI features
 - **Multi-Region Clustering**: Distributed deployment support
 - **Advanced Caching**: Intelligent query result caching
-
-#### 🏗️ Phase 3: v0.3.0 (Q2 2026)
 - **Full-Text Search**: Tantivy integration
 - **GeoSPARQL Enhancement**: Advanced spatial operations
 - **Bulk Loader**: High-throughput data ingestion
 - **Performance SLAs**: Guaranteed latency targets
+
+#### 🏗️ Phase 3: v1.0.0 LTS (Q2 2026)
+- **Full Jena Parity**: Complete compatibility verification
+- **Enterprise Support**: Long-term support guarantees
+- **Comprehensive Benchmarks**: Industry-standard performance validation
 
 ### 🚀 Architecture Advancement
 OxiRS Core represents a **paradigm shift in RDF processing technology**:

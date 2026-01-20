@@ -424,6 +424,12 @@ pub enum JoinCondition {
         right_var: String,
         op: ComparisonOp,
     },
+    /// Comparison between a variable and a constant value
+    VarConstComparison {
+        var: String,
+        constant: Term,
+        op: ComparisonOp,
+    },
     /// Builtin predicate
     Builtin {
         predicate: String,
@@ -474,8 +480,18 @@ impl BetaJoinNode {
         }
     }
 
+    /// Check if this is a filter-only beta node (same left and right parent)
+    pub fn is_filter_only(&self) -> bool {
+        self.left_parent == self.right_parent
+    }
+
     /// Perform the join operation
     pub fn join(&mut self, token: EnhancedToken, from_left: bool) -> Result<Vec<EnhancedToken>> {
+        // Special handling for filter-only nodes
+        if self.is_filter_only() {
+            return self.apply_filter_only(token);
+        }
+
         let mut results = Vec::new();
 
         if from_left {
@@ -514,6 +530,22 @@ impl BetaJoinNode {
         }
 
         Ok(results)
+    }
+
+    /// Apply filter conditions only (for filter-only beta nodes)
+    /// This is used when the beta node has the same left and right parent
+    fn apply_filter_only(&self, token: EnhancedToken) -> Result<Vec<EnhancedToken>> {
+        // Check all filter conditions against the token
+        // For filter-only nodes, we pass the same token as both left and right
+        for condition in &self.conditions {
+            if !self.evaluate_condition(condition, &token, &token)? {
+                // Filter condition failed, return empty
+                return Ok(Vec::new());
+            }
+        }
+
+        // All conditions passed, return the token
+        Ok(vec![token])
     }
 
     /// Try to join two tokens
@@ -570,6 +602,14 @@ impl BetaJoinNode {
                 Ok(match (left_val, right_val) {
                     (Some(lv), Some(rv)) => evaluate_comparison(lv, rv, *op)?,
                     _ => false,
+                })
+            }
+            JoinCondition::VarConstComparison { var, constant, op } => {
+                // Look up the variable in both left and right token bindings
+                let var_val = left.bindings.get(var).or_else(|| right.bindings.get(var));
+                Ok(match var_val {
+                    Some(val) => evaluate_comparison(val, constant, *op)?,
+                    None => false,
                 })
             }
             JoinCondition::Builtin { predicate, args } => {

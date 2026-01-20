@@ -338,15 +338,14 @@ impl WasmValidator {
         // Create store
         let mut store = Store::new(&engine, ());
 
-        // Instantiate module
+        // Instantiate and start module (wasmi 1.0 API)
         let instance = linker
-            .instantiate(&mut store, &module)
+            .instantiate_and_start(&mut store, &module)
             .map_err(|e| {
-                ShaclError::Configuration(format!("Failed to instantiate WASM module: {}", e))
-            })?
-            .start(&mut store)
-            .map_err(|e| {
-                ShaclError::Configuration(format!("Failed to start WASM instance: {}", e))
+                ShaclError::Configuration(format!(
+                    "Failed to instantiate and start WASM module: {}",
+                    e
+                ))
             })?;
 
         // Get the validation function

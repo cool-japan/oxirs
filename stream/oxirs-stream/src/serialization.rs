@@ -563,7 +563,9 @@ impl EventSerializer {
         encoder.append(avro_value)?;
         encoder.flush()?;
 
-        Ok(writer)
+        // apache-avro 0.21: extract the writer before encoder is dropped
+        let result = encoder.into_inner()?.to_vec();
+        Ok(result)
     }
 
     /// Deserialize from Apache Avro

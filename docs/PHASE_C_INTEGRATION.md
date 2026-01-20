@@ -74,13 +74,13 @@ This guide demonstrates how to integrate all three Phase C features to build a p
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-core = "0.1.0-rc.2"
-oxirs-fuseki = "0.1.0-rc.2"
-oxirs-graphrag = "0.1.0-rc.2"
-oxirs-did = "0.1.0-rc.2"
-oxirs-vec = "0.1.0-rc.2"
-oxirs-embed = "0.1.0-rc.2"
-oxirs-chat = "0.1.0-rc.2"
+oxirs-core = "0.1.0"
+oxirs-fuseki = "0.1.0"
+oxirs-graphrag = "0.1.0"
+oxirs-did = "0.1.0"
+oxirs-vec = "0.1.0"
+oxirs-embed = "0.1.0"
+oxirs-chat = "0.1.0"
 
 tokio = { version = "1.47", features = ["full"] }
 axum = "0.7"
@@ -182,7 +182,7 @@ async fn create_signed_dataset(
         RdfTriple::literal(
             "http://research.pharma/compound-A7",
             "http://schema.org/name",
-            "Compound A7-2025",
+            "Compound A7-2026",
             None
         ),
         RdfTriple::literal(
@@ -201,7 +201,7 @@ async fn create_signed_dataset(
     // Sign the dataset
     let signer = keystore.get_signer(institution_did).await?;
     let signed = SignedGraph::new(
-        "http://research.pharma/datasets/2025-q1",
+        "http://research.pharma/datasets/2026-q1",
         triples,
         institution_did.clone()
     ).sign(&signer)?;
@@ -227,10 +227,10 @@ async fn issue_provenance_credential(
 ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
     // Create credential subject with dataset metadata
     let subject = CredentialSubject::new(None)
-        .with_claim("datasetId", "http://research.pharma/datasets/2025-q1")
+        .with_claim("datasetId", "http://research.pharma/datasets/2026-q1")
         .with_claim("datasetHash", dataset_hash)
         .with_claim("institution", "PharmaCorp Research Division")
-        .with_claim("ethicsApproval", "IRB-2025-001")
+        .with_claim("ethicsApproval", "IRB-2026-001")
         .with_claim("dataType", "in-vitro binding assay")
         .with_claim("sampleSize", 1250)
         .with_claim("peerReviewed", true);
@@ -746,7 +746,7 @@ curl -X POST http://localhost:3030/api/datasets/upload \
   -d @signed_dataset_package.json
 
 # Verify upload
-curl http://localhost:3030/api/datasets/2025-q1/verify
+curl http://localhost:3030/api/datasets/2026-q1/verify
 # Response: { "valid": true, "issuer": "did:key:z6Mk...", ... }
 
 # Query with GraphRAG

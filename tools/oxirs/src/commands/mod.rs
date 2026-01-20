@@ -107,7 +107,7 @@ pub mod rebac_manager;
 /// Command stubs and utilities
 pub mod stubs;
 
-// === Phase D: Industrial Connectivity CLI Commands (0.1.0-rc.1) ===
+// === Phase D: Industrial Connectivity CLI Commands (0.1.0) ===
 
 /// Time-series database commands
 pub mod tsdb;

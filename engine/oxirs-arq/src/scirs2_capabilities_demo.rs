@@ -1,10 +1,9 @@
-//! Demonstration of SciRS2 Beta.3 Revolutionary Capabilities
+//! Demonstration of SciRS2 Advanced Capabilities
 //!
-//! This module showcases the actual features delivered by the SciRS2 team in beta.3,
-//! demonstrating how OxiRS leverages these cutting-edge scientific computing capabilities.
+//! This module showcases how OxiRS leverages SciRS2's cutting-edge scientific computing capabilities.
 
 use anyhow::Result;
-use scirs2_core::array;  // Beta.3 array macro convenience fix
+use scirs2_core::array;  // Array macro from scirs2-core
 use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1};
 use scirs2_core::random::{
     Rng, Random, seeded_rng, ThreadLocalRngPool, ScientificSliceRandom,
@@ -13,8 +12,8 @@ use scirs2_core::random::{
 use scirs2_core::core::scientific::{DeterministicState, ReproducibleSequence};
 use std::sync::Arc;
 
-/// Demonstration of SciRS2 Beta.3 revolutionary capabilities
-pub struct Beta3CapabilitiesDemo {
+/// Demonstration of SciRS2 advanced capabilities
+pub struct SciRS2CapabilitiesDemo {
     rng_pool: Arc<ThreadLocalRngPool>,
     deterministic_state: DeterministicState,
 }
@@ -27,9 +26,9 @@ impl Beta3CapabilitiesDemo {
         }
     }
 
-    /// Demonstrate the array macro convenience fix
-    pub fn demo_array_macro_fix(&self) -> Result<()> {
-        // ✅ Beta.3 Fix: Direct array macro access without scirs2_autograd dependency
+    /// Demonstrate the array macro
+    pub fn demo_array_macro(&self) -> Result<()> {
+        // ✅ Direct array macro access from scirs2-core
         let matrix = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
 
         println!("✅ Array macro works directly: {:?}", matrix.shape());

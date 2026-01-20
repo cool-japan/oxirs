@@ -40,7 +40,7 @@ impl OpcUaClient {
     /// Connect to OPC UA server
     pub async fn connect(&mut self) -> StreamResult<()> {
         // Future enhancement: Implement actual OPC UA connection (requires opcua crate).
-        // For 0.1.0-rc.1: Stub implementation provides API surface for future OPC UA integration.
+        // For v0.1.0: Stub implementation provides API surface for future OPC UA integration.
         // OPC UA is an industrial IoT protocol - integration is optional for initial release.
 
         *self.connected.write().await = true;
@@ -75,7 +75,7 @@ impl OpcUaClient {
     /// Subscribe to nodes with RDF mappings
     pub async fn subscribe_nodes(&self, subscriptions: Vec<NodeSubscription>) -> StreamResult<()> {
         // Future enhancement: Create OPC UA monitored items for subscriptions.
-        // For 0.1.0-rc.1: Tracks subscription count. Full OPC UA monitoring is future work.
+        // For v0.1.0: Tracks subscription count. Full OPC UA monitoring is future work.
 
         // Update stats
         {
