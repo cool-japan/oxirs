@@ -77,7 +77,7 @@ opentelemetry-jaeger = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-semantic-conventions = { workspace = true, optional = true }
 sysinfo = "0.30"
-wasmparser = "0.207"
+wasmparser = "0.244"
 wasmtime = { version = "14.0", optional = true }
 ed25519-dalek = "2.1"
 rsa = { version = "0.9.10", features = ["sha2"] }
