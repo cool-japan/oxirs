@@ -59,7 +59,7 @@ hmac = "0.12"
 sha2 = "0.10"
 hex = "0.4"
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
-prost = "0.13"
+prost = "0.14"
 prost-types = "0.13"
 apache-avro = "0.21"
 tokio-stream = "0.1"
