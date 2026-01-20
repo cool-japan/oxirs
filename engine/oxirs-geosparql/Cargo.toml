@@ -34,7 +34,7 @@ shapefile = { version = "0.7", optional = true }
 geos = { version = "10.0", optional = true }
 proj = { version = "0.31", optional = true }  # PROJ 9.x compatible
 geo-buffer = { version = "0.2", optional = true }
-rusqlite = { version = "0.37", features = ["bundled"], optional = true }
+rusqlite = { version = "0.38", features = ["bundled"], optional = true }
 flatgeobuf = { version = "5.0", optional = true }
 geo-traits = { version = "0.3", optional = true }
 geozero = { version = "0.14", optional = true }
