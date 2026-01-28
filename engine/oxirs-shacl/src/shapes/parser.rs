@@ -721,11 +721,11 @@ impl ShapeParser {
             shape.deactivated = deactivated;
         }
 
-        // Parse sh:message
-        if let Some(message) =
-            self.get_string_object(graph, &shape_subject, &SHACL_VOCAB.message)?
+        // Parse sh:message (preserving language tag if present)
+        if let Some((message, lang_tag)) =
+            self.get_string_with_language(graph, &shape_subject, &SHACL_VOCAB.message)?
         {
-            shape.messages.insert("".to_string(), message); // Default language
+            shape.messages.insert(lang_tag, message);
         }
 
         // Parse sh:severity
@@ -1038,10 +1038,10 @@ impl ShapeParser {
             shape.description = Some(description);
         }
 
-        if let Some(message) =
-            self.get_string_object_for_subject(graph, blank_subject, &SHACL_VOCAB.message)?
+        if let Some((message, lang_tag)) =
+            self.get_string_with_language_for_subject(graph, blank_subject, &SHACL_VOCAB.message)?
         {
-            shape.messages.insert("".to_string(), message);
+            shape.messages.insert(lang_tag, message);
         }
 
         Ok(())
@@ -1084,6 +1084,30 @@ impl ShapeParser {
         for triple in triples {
             if let Object::Literal(literal) = triple.object() {
                 return Ok(Some(literal.value().to_string()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Get a string object with language tag for a given subject (including blank nodes)
+    /// Returns (value, language_tag) where language_tag is empty string if no language tag
+    fn get_string_with_language_for_subject(
+        &self,
+        graph: &Graph,
+        subject: &Subject,
+        predicate: &NamedNode,
+    ) -> Result<Option<(String, String)>> {
+        let triples = graph.query_triples(
+            Some(subject),
+            Some(&Predicate::NamedNode(predicate.clone())),
+            None,
+        );
+
+        for triple in triples {
+            if let Object::Literal(literal) = triple.object() {
+                let value = literal.value().to_string();
+                let lang_tag = literal.language().unwrap_or("").to_string();
+                return Ok(Some((value, lang_tag)));
             }
         }
         Ok(None)
@@ -1184,6 +1208,22 @@ impl ShapeParser {
     ) -> Result<Option<String>> {
         if let Some(literal) = self.get_literal_object(graph, subject, predicate)? {
             return Ok(Some(literal.value().to_string()));
+        }
+        Ok(None)
+    }
+
+    /// Helper method to get a string object with its language tag from a triple
+    /// Returns (value, language_tag) where language_tag is empty string if no language tag
+    fn get_string_with_language(
+        &self,
+        graph: &Graph,
+        subject: &Subject,
+        predicate: &NamedNode,
+    ) -> Result<Option<(String, String)>> {
+        if let Some(literal) = self.get_literal_object(graph, subject, predicate)? {
+            let value = literal.value().to_string();
+            let lang_tag = literal.language().unwrap_or("").to_string();
+            return Ok(Some((value, lang_tag)));
         }
         Ok(None)
     }
