@@ -23,6 +23,236 @@ pub mod vocabulary {
     pub const RDF_PROPERTY: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#Property";
 }
 
+/// Identifiers for RDFS entailment rules
+///
+/// Each variant corresponds to a specific RDFS inference rule from the W3C specification.
+/// Some rules (rdfs1, rdfs4a, rdfs4b, rdfs6, rdfs8, rdfs10) generate large amounts of
+/// trivial inferences and are disabled by default in the Minimal profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RdfsRule {
+    /// rdfs1: `(?s ?p ?o) → (?p rdf:type rdf:Property)` - Every predicate becomes a Property (noisy)
+    Rdfs1,
+    /// rdfs2: `(?p rdfs:domain ?c) ∧ (?x ?p ?y) → (?x rdf:type ?c)` - Domain inference (useful)
+    Rdfs2,
+    /// rdfs3: `(?p rdfs:range ?c) ∧ (?x ?p ?y) → (?y rdf:type ?c)` - Range inference (useful)
+    Rdfs3,
+    /// rdfs4a: `(?s ?p ?o) → (?s rdf:type rdfs:Resource)` - Every subject is Resource (noisy)
+    Rdfs4a,
+    /// rdfs4b: `(?s ?p ?o) → (?o rdf:type rdfs:Resource)` - Every object is Resource (noisy)
+    Rdfs4b,
+    /// rdfs5: `(?p rdfs:subPropertyOf ?q) ∧ (?q rdfs:subPropertyOf ?r) → (?p rdfs:subPropertyOf ?r)` - Property transitivity (useful)
+    Rdfs5,
+    /// rdfs6: `(?p rdf:type rdf:Property) → (?p rdfs:subPropertyOf ?p)` - Reflexive subPropertyOf (noisy)
+    Rdfs6,
+    /// rdfs7: `(?x ?p ?y) ∧ (?p rdfs:subPropertyOf ?q) → (?x ?q ?y)` - Subproperty inheritance (useful)
+    Rdfs7,
+    /// rdfs8: `(?c rdf:type rdfs:Class) → (?c rdfs:subClassOf rdfs:Resource)` - Classes subClassOf Resource (noisy)
+    Rdfs8,
+    /// rdfs9: `(?x rdf:type ?c) ∧ (?c rdfs:subClassOf ?d) → (?x rdf:type ?d)` - Subclass type inheritance (critical)
+    Rdfs9,
+    /// rdfs10: `(?c rdf:type rdfs:Class) → (?c rdfs:subClassOf ?c)` - Reflexive subClassOf (noisy)
+    Rdfs10,
+    /// rdfs11: `(?c rdfs:subClassOf ?d) ∧ (?d rdfs:subClassOf ?e) → (?c rdfs:subClassOf ?e)` - Class transitivity (useful)
+    Rdfs11,
+    /// rdfs13: `(?c rdf:type rdfs:Datatype) → (?c rdfs:subClassOf rdfs:Literal)` - Datatype handling (useful)
+    Rdfs13,
+}
+
+impl RdfsRule {
+    /// Returns all RDFS rules
+    pub fn all() -> &'static [RdfsRule] {
+        &[
+            RdfsRule::Rdfs1,
+            RdfsRule::Rdfs2,
+            RdfsRule::Rdfs3,
+            RdfsRule::Rdfs4a,
+            RdfsRule::Rdfs4b,
+            RdfsRule::Rdfs5,
+            RdfsRule::Rdfs6,
+            RdfsRule::Rdfs7,
+            RdfsRule::Rdfs8,
+            RdfsRule::Rdfs9,
+            RdfsRule::Rdfs10,
+            RdfsRule::Rdfs11,
+            RdfsRule::Rdfs13,
+        ]
+    }
+
+    /// Returns rules that are practical for most use cases (non-noisy)
+    pub fn minimal() -> &'static [RdfsRule] {
+        &[
+            RdfsRule::Rdfs2,
+            RdfsRule::Rdfs3,
+            RdfsRule::Rdfs5,
+            RdfsRule::Rdfs7,
+            RdfsRule::Rdfs9,
+            RdfsRule::Rdfs11,
+            RdfsRule::Rdfs13,
+        ]
+    }
+
+    /// Returns rules that generate exponential/noisy facts
+    pub fn noisy() -> &'static [RdfsRule] {
+        &[
+            RdfsRule::Rdfs1,
+            RdfsRule::Rdfs4a,
+            RdfsRule::Rdfs4b,
+            RdfsRule::Rdfs6,
+            RdfsRule::Rdfs8,
+            RdfsRule::Rdfs10,
+        ]
+    }
+
+    /// Returns the rule name as used in the rule engine
+    pub fn name(&self) -> &'static str {
+        match self {
+            RdfsRule::Rdfs1 => "rdfs1",
+            RdfsRule::Rdfs2 => "rdfs2",
+            RdfsRule::Rdfs3 => "rdfs3",
+            RdfsRule::Rdfs4a => "rdfs4a",
+            RdfsRule::Rdfs4b => "rdfs4b",
+            RdfsRule::Rdfs5 => "rdfs5",
+            RdfsRule::Rdfs6 => "rdfs6",
+            RdfsRule::Rdfs7 => "rdfs7",
+            RdfsRule::Rdfs8 => "rdfs8",
+            RdfsRule::Rdfs9 => "rdfs9",
+            RdfsRule::Rdfs10 => "rdfs10",
+            RdfsRule::Rdfs11 => "rdfs11",
+            RdfsRule::Rdfs13 => "rdfs13",
+        }
+    }
+}
+
+/// Preset profiles for common RDFS configurations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum RdfsProfile {
+    /// Minimal profile: rdfs2, rdfs3, rdfs5, rdfs7, rdfs9, rdfs11, rdfs13
+    /// Practical inference without noise - best for most applications
+    #[default]
+    Minimal,
+    /// Full profile: All 13 RDFS rules for complete W3C RDFS compliance
+    /// Use when strict specification compliance is required
+    Full,
+    /// No rules: Context-only mode for hierarchy queries without rule engine overhead
+    /// The RdfsContext is still populated and can be queried directly
+    None,
+}
+
+/// Configuration for RDFS reasoning
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RdfsConfig {
+    /// Set of enabled RDFS rules
+    pub enabled_rules: HashSet<RdfsRule>,
+}
+
+impl Default for RdfsConfig {
+    fn default() -> Self {
+        Self::from_profile(RdfsProfile::Minimal)
+    }
+}
+
+impl RdfsConfig {
+    /// Create configuration from a preset profile
+    pub fn from_profile(profile: RdfsProfile) -> Self {
+        let enabled_rules = match profile {
+            RdfsProfile::Minimal => RdfsRule::minimal().iter().copied().collect(),
+            RdfsProfile::Full => RdfsRule::all().iter().copied().collect(),
+            RdfsProfile::None => HashSet::new(),
+        };
+        Self { enabled_rules }
+    }
+
+    /// Create configuration with all rules enabled
+    pub fn full() -> Self {
+        Self::from_profile(RdfsProfile::Full)
+    }
+
+    /// Create configuration with minimal (non-noisy) rules
+    pub fn minimal() -> Self {
+        Self::from_profile(RdfsProfile::Minimal)
+    }
+
+    /// Create configuration with no rules (context-only mode)
+    pub fn none() -> Self {
+        Self::from_profile(RdfsProfile::None)
+    }
+
+    /// Check if a specific rule is enabled
+    pub fn is_enabled(&self, rule: RdfsRule) -> bool {
+        self.enabled_rules.contains(&rule)
+    }
+
+    /// Enable a specific rule
+    pub fn enable(&mut self, rule: RdfsRule) {
+        self.enabled_rules.insert(rule);
+    }
+
+    /// Disable a specific rule
+    pub fn disable(&mut self, rule: RdfsRule) {
+        self.enabled_rules.remove(&rule);
+    }
+}
+
+/// Builder for configuring RDFS reasoner
+#[derive(Debug, Clone)]
+pub struct RdfsReasonerBuilder {
+    config: RdfsConfig,
+}
+
+impl Default for RdfsReasonerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RdfsReasonerBuilder {
+    /// Create a new builder starting with the default (Minimal) profile
+    pub fn new() -> Self {
+        Self {
+            config: RdfsConfig::default(),
+        }
+    }
+
+    /// Apply a preset profile, replacing current configuration
+    pub fn with_profile(mut self, profile: RdfsProfile) -> Self {
+        self.config = RdfsConfig::from_profile(profile);
+        self
+    }
+
+    /// Enable a specific rule
+    pub fn enable_rule(mut self, rule: RdfsRule) -> Self {
+        self.config.enable(rule);
+        self
+    }
+
+    /// Disable a specific rule
+    pub fn disable_rule(mut self, rule: RdfsRule) -> Self {
+        self.config.disable(rule);
+        self
+    }
+
+    /// Enable multiple rules
+    pub fn enable_rules(mut self, rules: &[RdfsRule]) -> Self {
+        for rule in rules {
+            self.config.enable(*rule);
+        }
+        self
+    }
+
+    /// Disable multiple rules
+    pub fn disable_rules(mut self, rules: &[RdfsRule]) -> Self {
+        for rule in rules {
+            self.config.disable(*rule);
+        }
+        self
+    }
+
+    /// Build the RDFS reasoner with the configured rules
+    pub fn build(self) -> RdfsReasoner {
+        RdfsReasoner::with_config(self.config)
+    }
+}
+
 /// RDFS inference context
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RdfsContext {
@@ -193,6 +423,8 @@ pub struct RdfsReasoner {
     pub context: RdfsContext,
     /// Rule engine for RDFS rules
     pub rule_engine: RuleEngine,
+    /// Configuration specifying which rules are enabled
+    pub config: RdfsConfig,
 }
 
 impl Default for RdfsReasoner {
@@ -202,268 +434,370 @@ impl Default for RdfsReasoner {
 }
 
 impl RdfsReasoner {
-    /// Create a new RDFS reasoner
+    /// Create a new RDFS reasoner with default (Minimal) profile
+    ///
+    /// The Minimal profile includes practical rules (rdfs2, rdfs3, rdfs5, rdfs7, rdfs9, rdfs11, rdfs13)
+    /// while excluding noisy rules that generate exponential trivial facts.
     pub fn new() -> Self {
+        Self::with_config(RdfsConfig::default())
+    }
+
+    /// Create a new RDFS reasoner with a specific profile
+    ///
+    /// # Example
+    /// ```
+    /// use oxirs_rule::rdfs::{RdfsReasoner, RdfsProfile};
+    ///
+    /// // Full W3C compliance
+    /// let full_reasoner = RdfsReasoner::with_profile(RdfsProfile::Full);
+    ///
+    /// // Minimal (default) - practical inference
+    /// let minimal_reasoner = RdfsReasoner::with_profile(RdfsProfile::Minimal);
+    ///
+    /// // Context-only - no rule engine overhead
+    /// let context_only = RdfsReasoner::with_profile(RdfsProfile::None);
+    /// ```
+    pub fn with_profile(profile: RdfsProfile) -> Self {
+        Self::with_config(RdfsConfig::from_profile(profile))
+    }
+
+    /// Create a new RDFS reasoner with a custom configuration
+    pub fn with_config(config: RdfsConfig) -> Self {
         let mut reasoner = Self {
             context: RdfsContext::default(),
             rule_engine: RuleEngine::new(),
+            config,
         };
 
         reasoner.initialize_rdfs_rules();
         reasoner
     }
 
-    /// Initialize RDFS entailment rules (complete W3C RDFS semantics)
+    /// Create a context-only reasoner (no rules, just hierarchy queries)
+    ///
+    /// This is useful when you only need to query the class/property hierarchy
+    /// without the overhead of the rule engine.
+    ///
+    /// # Example
+    /// ```
+    /// use oxirs_rule::rdfs::RdfsReasoner;
+    ///
+    /// let reasoner = RdfsReasoner::context_only();
+    /// // Can still use: reasoner.context.is_subclass_of(a, b)
+    /// ```
+    pub fn context_only() -> Self {
+        Self::with_profile(RdfsProfile::None)
+    }
+
+    /// Create a builder for custom configuration
+    ///
+    /// # Example
+    /// ```
+    /// use oxirs_rule::rdfs::{RdfsReasoner, RdfsProfile, RdfsRule};
+    ///
+    /// let reasoner = RdfsReasoner::builder()
+    ///     .with_profile(RdfsProfile::Minimal)
+    ///     .enable_rule(RdfsRule::Rdfs8)
+    ///     .build();
+    /// ```
+    pub fn builder() -> RdfsReasonerBuilder {
+        RdfsReasonerBuilder::new()
+    }
+
+    /// Get the current configuration
+    pub fn get_config(&self) -> &RdfsConfig {
+        &self.config
+    }
+
+    /// Check if a specific rule is enabled
+    pub fn is_rule_enabled(&self, rule: RdfsRule) -> bool {
+        self.config.is_enabled(rule)
+    }
+
+    /// Initialize RDFS entailment rules based on configuration
     fn initialize_rdfs_rules(&mut self) {
         use vocabulary::*;
 
         // RDFS Rule 1: Triple (?x ?a ?y) => (?a rdf:type rdf:Property)
-        // Any triple implies that the predicate is a property
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs1".to_string(),
-            body: vec![RuleAtom::Triple {
-                subject: Term::Variable("x".to_string()),
-                predicate: Term::Variable("a".to_string()),
-                object: Term::Variable("y".to_string()),
-            }],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("a".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Constant(RDF_PROPERTY.to_string()),
-            }],
-        });
+        // Any triple implies that the predicate is a property (noisy)
+        if self.config.is_enabled(RdfsRule::Rdfs1) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs1".to_string(),
+                body: vec![RuleAtom::Triple {
+                    subject: Term::Variable("x".to_string()),
+                    predicate: Term::Variable("a".to_string()),
+                    object: Term::Variable("y".to_string()),
+                }],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("a".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Constant(RDF_PROPERTY.to_string()),
+                }],
+            });
+        }
 
         // RDFS Rule 2: Triple (?p rdfs:domain ?c) + (?x ?p ?y) => (?x rdf:type ?c)
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs2".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("p".to_string()),
-                    predicate: Term::Constant(RDFS_DOMAIN.to_string()),
-                    object: Term::Variable("c".to_string()),
-                },
-                RuleAtom::Triple {
-                    subject: Term::Variable("x".to_string()),
-                    predicate: Term::Variable("p".to_string()),
-                    object: Term::Variable("y".to_string()),
-                },
-            ],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("x".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Variable("c".to_string()),
-            }],
-        });
-
-        // RDFS Rule 3: Triple (?p rdfs:range ?c) + (?x ?p ?y) => (?y rdf:type ?c)
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs3".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("p".to_string()),
-                    predicate: Term::Constant(RDFS_RANGE.to_string()),
-                    object: Term::Variable("c".to_string()),
-                },
-                RuleAtom::Triple {
-                    subject: Term::Variable("x".to_string()),
-                    predicate: Term::Variable("p".to_string()),
-                    object: Term::Variable("y".to_string()),
-                },
-            ],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("y".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Variable("c".to_string()),
-            }],
-        });
-
-        // RDFS Rule 5: Triple (?p rdfs:subPropertyOf ?q) + (?q rdfs:subPropertyOf ?r) => (?p rdfs:subPropertyOf ?r)
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs5".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("p".to_string()),
-                    predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
-                    object: Term::Variable("q".to_string()),
-                },
-                RuleAtom::Triple {
-                    subject: Term::Variable("q".to_string()),
-                    predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
-                    object: Term::Variable("r".to_string()),
-                },
-            ],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("p".to_string()),
-                predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
-                object: Term::Variable("r".to_string()),
-            }],
-        });
-
-        // RDFS Rule 7: Triple (?x ?p ?y) + (?p rdfs:subPropertyOf ?q) => (?x ?q ?y)
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs7".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("x".to_string()),
-                    predicate: Term::Variable("p".to_string()),
-                    object: Term::Variable("y".to_string()),
-                },
-                RuleAtom::Triple {
-                    subject: Term::Variable("p".to_string()),
-                    predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
-                    object: Term::Variable("q".to_string()),
-                },
-            ],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("x".to_string()),
-                predicate: Term::Variable("q".to_string()),
-                object: Term::Variable("y".to_string()),
-            }],
-        });
-
-        // RDFS Rule 9: Triple (?x rdf:type ?c) + (?c rdfs:subClassOf ?d) => (?x rdf:type ?d)
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs9".to_string(),
-            body: vec![
-                RuleAtom::Triple {
+        if self.config.is_enabled(RdfsRule::Rdfs2) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs2".to_string(),
+                body: vec![
+                    RuleAtom::Triple {
+                        subject: Term::Variable("p".to_string()),
+                        predicate: Term::Constant(RDFS_DOMAIN.to_string()),
+                        object: Term::Variable("c".to_string()),
+                    },
+                    RuleAtom::Triple {
+                        subject: Term::Variable("x".to_string()),
+                        predicate: Term::Variable("p".to_string()),
+                        object: Term::Variable("y".to_string()),
+                    },
+                ],
+                head: vec![RuleAtom::Triple {
                     subject: Term::Variable("x".to_string()),
                     predicate: Term::Constant(RDF_TYPE.to_string()),
                     object: Term::Variable("c".to_string()),
-                },
-                RuleAtom::Triple {
-                    subject: Term::Variable("c".to_string()),
-                    predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
-                    object: Term::Variable("d".to_string()),
-                },
-            ],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("x".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Variable("d".to_string()),
-            }],
-        });
+                }],
+            });
+        }
 
-        // RDFS Rule 11: Triple (?c rdfs:subClassOf ?d) + (?d rdfs:subClassOf ?e) => (?c rdfs:subClassOf ?e)
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs11".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("c".to_string()),
-                    predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
-                    object: Term::Variable("d".to_string()),
-                },
-                RuleAtom::Triple {
-                    subject: Term::Variable("d".to_string()),
-                    predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
-                    object: Term::Variable("e".to_string()),
-                },
-            ],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("c".to_string()),
-                predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
-                object: Term::Variable("e".to_string()),
-            }],
-        });
+        // RDFS Rule 3: Triple (?p rdfs:range ?c) + (?x ?p ?y) => (?y rdf:type ?c)
+        if self.config.is_enabled(RdfsRule::Rdfs3) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs3".to_string(),
+                body: vec![
+                    RuleAtom::Triple {
+                        subject: Term::Variable("p".to_string()),
+                        predicate: Term::Constant(RDFS_RANGE.to_string()),
+                        object: Term::Variable("c".to_string()),
+                    },
+                    RuleAtom::Triple {
+                        subject: Term::Variable("x".to_string()),
+                        predicate: Term::Variable("p".to_string()),
+                        object: Term::Variable("y".to_string()),
+                    },
+                ],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("y".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Variable("c".to_string()),
+                }],
+            });
+        }
 
         // RDFS Rule 4a: Triple (?x ?a ?y) => (?x rdf:type rdfs:Resource)
-        // Subject of any triple is a resource
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs4a".to_string(),
-            body: vec![RuleAtom::Triple {
-                subject: Term::Variable("x".to_string()),
-                predicate: Term::Variable("a".to_string()),
-                object: Term::Variable("y".to_string()),
-            }],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("x".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Constant(RDFS_RESOURCE.to_string()),
-            }],
-        });
+        // Subject of any triple is a resource (noisy)
+        if self.config.is_enabled(RdfsRule::Rdfs4a) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs4a".to_string(),
+                body: vec![RuleAtom::Triple {
+                    subject: Term::Variable("x".to_string()),
+                    predicate: Term::Variable("a".to_string()),
+                    object: Term::Variable("y".to_string()),
+                }],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("x".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Constant(RDFS_RESOURCE.to_string()),
+                }],
+            });
+        }
 
         // RDFS Rule 4b: Triple (?x ?a ?y) => (?y rdf:type rdfs:Resource) [if y is not a literal]
-        // Object of any triple is a resource (simplified - full version would check for literals)
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs4b".to_string(),
-            body: vec![RuleAtom::Triple {
-                subject: Term::Variable("x".to_string()),
-                predicate: Term::Variable("a".to_string()),
-                object: Term::Variable("y".to_string()),
-            }],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("y".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Constant(RDFS_RESOURCE.to_string()),
-            }],
-        });
+        // Object of any triple is a resource (noisy)
+        if self.config.is_enabled(RdfsRule::Rdfs4b) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs4b".to_string(),
+                body: vec![RuleAtom::Triple {
+                    subject: Term::Variable("x".to_string()),
+                    predicate: Term::Variable("a".to_string()),
+                    object: Term::Variable("y".to_string()),
+                }],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("y".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Constant(RDFS_RESOURCE.to_string()),
+                }],
+            });
+        }
+
+        // RDFS Rule 5: Triple (?p rdfs:subPropertyOf ?q) + (?q rdfs:subPropertyOf ?r) => (?p rdfs:subPropertyOf ?r)
+        if self.config.is_enabled(RdfsRule::Rdfs5) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs5".to_string(),
+                body: vec![
+                    RuleAtom::Triple {
+                        subject: Term::Variable("p".to_string()),
+                        predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
+                        object: Term::Variable("q".to_string()),
+                    },
+                    RuleAtom::Triple {
+                        subject: Term::Variable("q".to_string()),
+                        predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
+                        object: Term::Variable("r".to_string()),
+                    },
+                ],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("p".to_string()),
+                    predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
+                    object: Term::Variable("r".to_string()),
+                }],
+            });
+        }
 
         // RDFS Rule 6: Triple (?p rdf:type rdf:Property) => (?p rdfs:subPropertyOf ?p)
-        // Properties are reflexive with respect to subPropertyOf
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs6".to_string(),
-            body: vec![RuleAtom::Triple {
-                subject: Term::Variable("p".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Constant(RDF_PROPERTY.to_string()),
-            }],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("p".to_string()),
-                predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
-                object: Term::Variable("p".to_string()),
-            }],
-        });
+        // Properties are reflexive with respect to subPropertyOf (noisy)
+        if self.config.is_enabled(RdfsRule::Rdfs6) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs6".to_string(),
+                body: vec![RuleAtom::Triple {
+                    subject: Term::Variable("p".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Constant(RDF_PROPERTY.to_string()),
+                }],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("p".to_string()),
+                    predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
+                    object: Term::Variable("p".to_string()),
+                }],
+            });
+        }
+
+        // RDFS Rule 7: Triple (?x ?p ?y) + (?p rdfs:subPropertyOf ?q) => (?x ?q ?y)
+        if self.config.is_enabled(RdfsRule::Rdfs7) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs7".to_string(),
+                body: vec![
+                    RuleAtom::Triple {
+                        subject: Term::Variable("x".to_string()),
+                        predicate: Term::Variable("p".to_string()),
+                        object: Term::Variable("y".to_string()),
+                    },
+                    RuleAtom::Triple {
+                        subject: Term::Variable("p".to_string()),
+                        predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
+                        object: Term::Variable("q".to_string()),
+                    },
+                ],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("x".to_string()),
+                    predicate: Term::Variable("q".to_string()),
+                    object: Term::Variable("y".to_string()),
+                }],
+            });
+        }
 
         // RDFS Rule 8: Triple (?c rdf:type rdfs:Class) => (?c rdfs:subClassOf rdfs:Resource)
-        // All classes are subclasses of rdfs:Resource
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs8".to_string(),
-            body: vec![RuleAtom::Triple {
-                subject: Term::Variable("c".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Constant(RDFS_CLASS.to_string()),
-            }],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("c".to_string()),
-                predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
-                object: Term::Constant(RDFS_RESOURCE.to_string()),
-            }],
-        });
+        // All classes are subclasses of rdfs:Resource (noisy)
+        if self.config.is_enabled(RdfsRule::Rdfs8) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs8".to_string(),
+                body: vec![RuleAtom::Triple {
+                    subject: Term::Variable("c".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Constant(RDFS_CLASS.to_string()),
+                }],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("c".to_string()),
+                    predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                    object: Term::Constant(RDFS_RESOURCE.to_string()),
+                }],
+            });
+        }
+
+        // RDFS Rule 9: Triple (?x rdf:type ?c) + (?c rdfs:subClassOf ?d) => (?x rdf:type ?d)
+        if self.config.is_enabled(RdfsRule::Rdfs9) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs9".to_string(),
+                body: vec![
+                    RuleAtom::Triple {
+                        subject: Term::Variable("x".to_string()),
+                        predicate: Term::Constant(RDF_TYPE.to_string()),
+                        object: Term::Variable("c".to_string()),
+                    },
+                    RuleAtom::Triple {
+                        subject: Term::Variable("c".to_string()),
+                        predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                        object: Term::Variable("d".to_string()),
+                    },
+                ],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("x".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Variable("d".to_string()),
+                }],
+            });
+        }
 
         // RDFS Rule 10: Triple (?c rdf:type rdfs:Class) => (?c rdfs:subClassOf ?c)
-        // Classes are reflexive with respect to subClassOf
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs10".to_string(),
-            body: vec![RuleAtom::Triple {
-                subject: Term::Variable("c".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Constant(RDFS_CLASS.to_string()),
-            }],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("c".to_string()),
-                predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
-                object: Term::Variable("c".to_string()),
-            }],
-        });
+        // Classes are reflexive with respect to subClassOf (noisy)
+        if self.config.is_enabled(RdfsRule::Rdfs10) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs10".to_string(),
+                body: vec![RuleAtom::Triple {
+                    subject: Term::Variable("c".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Constant(RDFS_CLASS.to_string()),
+                }],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("c".to_string()),
+                    predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                    object: Term::Variable("c".to_string()),
+                }],
+            });
+        }
+
+        // RDFS Rule 11: Triple (?c rdfs:subClassOf ?d) + (?d rdfs:subClassOf ?e) => (?c rdfs:subClassOf ?e)
+        if self.config.is_enabled(RdfsRule::Rdfs11) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs11".to_string(),
+                body: vec![
+                    RuleAtom::Triple {
+                        subject: Term::Variable("c".to_string()),
+                        predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                        object: Term::Variable("d".to_string()),
+                    },
+                    RuleAtom::Triple {
+                        subject: Term::Variable("d".to_string()),
+                        predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                        object: Term::Variable("e".to_string()),
+                    },
+                ],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("c".to_string()),
+                    predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                    object: Term::Variable("e".to_string()),
+                }],
+            });
+        }
 
         // RDFS Rule 13: Triple (?c rdf:type rdfs:Datatype) => (?c rdfs:subClassOf rdfs:Literal)
         // Datatypes are subclasses of rdfs:Literal
-        self.rule_engine.add_rule(Rule {
-            name: "rdfs13".to_string(),
-            body: vec![RuleAtom::Triple {
-                subject: Term::Variable("c".to_string()),
-                predicate: Term::Constant(RDF_TYPE.to_string()),
-                object: Term::Constant(RDFS_DATATYPE.to_string()),
-            }],
-            head: vec![RuleAtom::Triple {
-                subject: Term::Variable("c".to_string()),
-                predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
-                object: Term::Constant(RDFS_LITERAL.to_string()),
-            }],
-        });
+        if self.config.is_enabled(RdfsRule::Rdfs13) {
+            self.rule_engine.add_rule(Rule {
+                name: "rdfs13".to_string(),
+                body: vec![RuleAtom::Triple {
+                    subject: Term::Variable("c".to_string()),
+                    predicate: Term::Constant(RDF_TYPE.to_string()),
+                    object: Term::Constant(RDFS_DATATYPE.to_string()),
+                }],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("c".to_string()),
+                    predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                    object: Term::Constant(RDFS_LITERAL.to_string()),
+                }],
+            });
+        }
 
+        let enabled_count = self.config.enabled_rules.len();
+        let enabled_names: Vec<&str> = self
+            .config
+            .enabled_rules
+            .iter()
+            .map(|r| r.name())
+            .collect();
         info!(
-            "Initialized {} complete W3C RDFS entailment rules (rdfs1-rdfs13)",
-            self.rule_engine.rules.len()
+            "Initialized {} RDFS entailment rules: {:?}",
+            enabled_count, enabled_names
         );
     }
 
@@ -530,39 +864,73 @@ impl RdfsReasoner {
 
         new_facts.push(input_fact);
 
-        // Apply domain/range inference
-        if let Some(domains) = self.context.property_domains.get(predicate) {
-            for domain in domains {
-                new_facts.push(RuleAtom::Triple {
-                    subject: Term::Constant(subject.to_string()),
-                    predicate: Term::Constant(RDF_TYPE.to_string()),
-                    object: Term::Constant(domain.clone()),
-                });
-            }
-        }
-
-        if let Some(ranges) = self.context.property_ranges.get(predicate) {
-            for range in ranges {
-                new_facts.push(RuleAtom::Triple {
-                    subject: Term::Constant(object.to_string()),
-                    predicate: Term::Constant(RDF_TYPE.to_string()),
-                    object: Term::Constant(range.clone()),
-                });
-            }
-        }
-
-        // Apply subproperty inference
-        let superproperties = self.context.get_superproperties(predicate);
-        for superproperty in superproperties {
+        // rdfs1: (?s ?p ?o) → (?p rdf:type rdf:Property)
+        if self.config.is_enabled(RdfsRule::Rdfs1) {
             new_facts.push(RuleAtom::Triple {
-                subject: Term::Constant(subject.to_string()),
-                predicate: Term::Constant(superproperty),
-                object: Term::Constant(object.to_string()),
+                subject: Term::Constant(predicate.to_string()),
+                predicate: Term::Constant(RDF_TYPE.to_string()),
+                object: Term::Constant(RDF_PROPERTY.to_string()),
             });
         }
 
-        // Apply subclass inference for rdf:type triples
-        if predicate == RDF_TYPE {
+        // rdfs4a: (?s ?p ?o) → (?s rdf:type rdfs:Resource)
+        if self.config.is_enabled(RdfsRule::Rdfs4a) {
+            new_facts.push(RuleAtom::Triple {
+                subject: Term::Constant(subject.to_string()),
+                predicate: Term::Constant(RDF_TYPE.to_string()),
+                object: Term::Constant(RDFS_RESOURCE.to_string()),
+            });
+        }
+
+        // rdfs4b: (?s ?p ?o) → (?o rdf:type rdfs:Resource)
+        if self.config.is_enabled(RdfsRule::Rdfs4b) {
+            new_facts.push(RuleAtom::Triple {
+                subject: Term::Constant(object.to_string()),
+                predicate: Term::Constant(RDF_TYPE.to_string()),
+                object: Term::Constant(RDFS_RESOURCE.to_string()),
+            });
+        }
+
+        // rdfs2: Domain inference - (?p rdfs:domain ?c) ∧ (?x ?p ?y) → (?x rdf:type ?c)
+        if self.config.is_enabled(RdfsRule::Rdfs2) {
+            if let Some(domains) = self.context.property_domains.get(predicate) {
+                for domain in domains {
+                    new_facts.push(RuleAtom::Triple {
+                        subject: Term::Constant(subject.to_string()),
+                        predicate: Term::Constant(RDF_TYPE.to_string()),
+                        object: Term::Constant(domain.clone()),
+                    });
+                }
+            }
+        }
+
+        // rdfs3: Range inference - (?p rdfs:range ?c) ∧ (?x ?p ?y) → (?y rdf:type ?c)
+        if self.config.is_enabled(RdfsRule::Rdfs3) {
+            if let Some(ranges) = self.context.property_ranges.get(predicate) {
+                for range in ranges {
+                    new_facts.push(RuleAtom::Triple {
+                        subject: Term::Constant(object.to_string()),
+                        predicate: Term::Constant(RDF_TYPE.to_string()),
+                        object: Term::Constant(range.clone()),
+                    });
+                }
+            }
+        }
+
+        // rdfs7: Subproperty inheritance - (?x ?p ?y) ∧ (?p rdfs:subPropertyOf ?q) → (?x ?q ?y)
+        if self.config.is_enabled(RdfsRule::Rdfs7) {
+            let superproperties = self.context.get_superproperties(predicate);
+            for superproperty in superproperties {
+                new_facts.push(RuleAtom::Triple {
+                    subject: Term::Constant(subject.to_string()),
+                    predicate: Term::Constant(superproperty),
+                    object: Term::Constant(object.to_string()),
+                });
+            }
+        }
+
+        // rdfs9: Subclass type inheritance - (?x rdf:type ?c) ∧ (?c rdfs:subClassOf ?d) → (?x rdf:type ?d)
+        if self.config.is_enabled(RdfsRule::Rdfs9) && predicate == RDF_TYPE {
             let superclasses = self.context.get_superclasses(object);
             for superclass in superclasses {
                 new_facts.push(RuleAtom::Triple {
@@ -571,6 +939,54 @@ impl RdfsReasoner {
                     object: Term::Constant(superclass),
                 });
             }
+        }
+
+        // rdfs6: (?p rdf:type rdf:Property) → (?p rdfs:subPropertyOf ?p)
+        if self.config.is_enabled(RdfsRule::Rdfs6)
+            && predicate == RDF_TYPE
+            && object == RDF_PROPERTY
+        {
+            new_facts.push(RuleAtom::Triple {
+                subject: Term::Constant(subject.to_string()),
+                predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
+                object: Term::Constant(subject.to_string()),
+            });
+        }
+
+        // rdfs8: (?c rdf:type rdfs:Class) → (?c rdfs:subClassOf rdfs:Resource)
+        if self.config.is_enabled(RdfsRule::Rdfs8)
+            && predicate == RDF_TYPE
+            && object == RDFS_CLASS
+        {
+            new_facts.push(RuleAtom::Triple {
+                subject: Term::Constant(subject.to_string()),
+                predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                object: Term::Constant(RDFS_RESOURCE.to_string()),
+            });
+        }
+
+        // rdfs10: (?c rdf:type rdfs:Class) → (?c rdfs:subClassOf ?c)
+        if self.config.is_enabled(RdfsRule::Rdfs10)
+            && predicate == RDF_TYPE
+            && object == RDFS_CLASS
+        {
+            new_facts.push(RuleAtom::Triple {
+                subject: Term::Constant(subject.to_string()),
+                predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                object: Term::Constant(subject.to_string()),
+            });
+        }
+
+        // rdfs13: (?c rdf:type rdfs:Datatype) → (?c rdfs:subClassOf rdfs:Literal)
+        if self.config.is_enabled(RdfsRule::Rdfs13)
+            && predicate == RDF_TYPE
+            && object == RDFS_DATATYPE
+        {
+            new_facts.push(RuleAtom::Triple {
+                subject: Term::Constant(subject.to_string()),
+                predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                object: Term::Constant(RDFS_LITERAL.to_string()),
+            });
         }
 
         Ok(new_facts)
@@ -731,5 +1147,296 @@ mod tests {
         };
 
         assert!(inferred.contains(&expected));
+    }
+
+    #[test]
+    fn test_rdfs_rule_enum() {
+        // Test all() returns all 13 rules
+        assert_eq!(RdfsRule::all().len(), 13);
+
+        // Test minimal() returns 7 non-noisy rules
+        assert_eq!(RdfsRule::minimal().len(), 7);
+        assert!(RdfsRule::minimal().contains(&RdfsRule::Rdfs2));
+        assert!(RdfsRule::minimal().contains(&RdfsRule::Rdfs9));
+        assert!(!RdfsRule::minimal().contains(&RdfsRule::Rdfs1));
+        assert!(!RdfsRule::minimal().contains(&RdfsRule::Rdfs4a));
+
+        // Test noisy() returns 6 noisy rules
+        assert_eq!(RdfsRule::noisy().len(), 6);
+        assert!(RdfsRule::noisy().contains(&RdfsRule::Rdfs1));
+        assert!(RdfsRule::noisy().contains(&RdfsRule::Rdfs4a));
+        assert!(!RdfsRule::noisy().contains(&RdfsRule::Rdfs9));
+
+        // Test name() method
+        assert_eq!(RdfsRule::Rdfs1.name(), "rdfs1");
+        assert_eq!(RdfsRule::Rdfs9.name(), "rdfs9");
+        assert_eq!(RdfsRule::Rdfs13.name(), "rdfs13");
+    }
+
+    #[test]
+    fn test_rdfs_profile_default() {
+        // Default profile should be Minimal
+        assert_eq!(RdfsProfile::default(), RdfsProfile::Minimal);
+    }
+
+    #[test]
+    fn test_rdfs_config_from_profile() {
+        // Test Full profile
+        let full_config = RdfsConfig::from_profile(RdfsProfile::Full);
+        assert_eq!(full_config.enabled_rules.len(), 13);
+        assert!(full_config.is_enabled(RdfsRule::Rdfs1));
+        assert!(full_config.is_enabled(RdfsRule::Rdfs9));
+
+        // Test Minimal profile
+        let minimal_config = RdfsConfig::from_profile(RdfsProfile::Minimal);
+        assert_eq!(minimal_config.enabled_rules.len(), 7);
+        assert!(!minimal_config.is_enabled(RdfsRule::Rdfs1));
+        assert!(minimal_config.is_enabled(RdfsRule::Rdfs9));
+
+        // Test None profile
+        let none_config = RdfsConfig::from_profile(RdfsProfile::None);
+        assert!(none_config.enabled_rules.is_empty());
+    }
+
+    #[test]
+    fn test_rdfs_config_enable_disable() {
+        let mut config = RdfsConfig::none();
+        assert!(!config.is_enabled(RdfsRule::Rdfs9));
+
+        config.enable(RdfsRule::Rdfs9);
+        assert!(config.is_enabled(RdfsRule::Rdfs9));
+
+        config.disable(RdfsRule::Rdfs9);
+        assert!(!config.is_enabled(RdfsRule::Rdfs9));
+    }
+
+    #[test]
+    fn test_rdfs_reasoner_builder_with_profile() {
+        // Builder with Full profile
+        let full_reasoner = RdfsReasoner::builder()
+            .with_profile(RdfsProfile::Full)
+            .build();
+        assert_eq!(full_reasoner.config.enabled_rules.len(), 13);
+
+        // Builder with Minimal profile
+        let minimal_reasoner = RdfsReasoner::builder()
+            .with_profile(RdfsProfile::Minimal)
+            .build();
+        assert_eq!(minimal_reasoner.config.enabled_rules.len(), 7);
+
+        // Builder with None profile
+        let none_reasoner = RdfsReasoner::builder()
+            .with_profile(RdfsProfile::None)
+            .build();
+        assert!(none_reasoner.config.enabled_rules.is_empty());
+    }
+
+    #[test]
+    fn test_rdfs_reasoner_builder_enable_disable() {
+        // Start with Minimal, add a noisy rule
+        let reasoner = RdfsReasoner::builder()
+            .with_profile(RdfsProfile::Minimal)
+            .enable_rule(RdfsRule::Rdfs8)
+            .build();
+        assert!(reasoner.is_rule_enabled(RdfsRule::Rdfs8));
+        assert!(reasoner.is_rule_enabled(RdfsRule::Rdfs9));
+        assert_eq!(reasoner.config.enabled_rules.len(), 8);
+
+        // Start with Full, disable noisy rules
+        let reasoner2 = RdfsReasoner::builder()
+            .with_profile(RdfsProfile::Full)
+            .disable_rules(RdfsRule::noisy())
+            .build();
+        assert!(!reasoner2.is_rule_enabled(RdfsRule::Rdfs1));
+        assert!(reasoner2.is_rule_enabled(RdfsRule::Rdfs9));
+        assert_eq!(reasoner2.config.enabled_rules.len(), 7);
+
+        // Start from scratch, enable only specific rules
+        let reasoner3 = RdfsReasoner::builder()
+            .with_profile(RdfsProfile::None)
+            .enable_rules(&[RdfsRule::Rdfs9, RdfsRule::Rdfs11])
+            .build();
+        assert!(reasoner3.is_rule_enabled(RdfsRule::Rdfs9));
+        assert!(reasoner3.is_rule_enabled(RdfsRule::Rdfs11));
+        assert!(!reasoner3.is_rule_enabled(RdfsRule::Rdfs2));
+        assert_eq!(reasoner3.config.enabled_rules.len(), 2);
+    }
+
+    #[test]
+    fn test_rdfs_reasoner_with_profile() {
+        // Test with_profile constructor
+        let full_reasoner = RdfsReasoner::with_profile(RdfsProfile::Full);
+        assert_eq!(full_reasoner.config.enabled_rules.len(), 13);
+
+        let minimal_reasoner = RdfsReasoner::with_profile(RdfsProfile::Minimal);
+        assert_eq!(minimal_reasoner.config.enabled_rules.len(), 7);
+    }
+
+    #[test]
+    fn test_rdfs_reasoner_context_only() {
+        // Context-only reasoner should have no rules
+        let reasoner = RdfsReasoner::context_only();
+        assert!(reasoner.config.enabled_rules.is_empty());
+
+        // But context should still work
+        assert!(reasoner.context.classes.contains(vocabulary::RDFS_CLASS));
+        assert!(reasoner.context.is_subclass_of(
+            vocabulary::RDFS_DATATYPE,
+            vocabulary::RDFS_CLASS
+        ));
+    }
+
+    #[test]
+    fn test_rdfs_reasoner_default_is_minimal() {
+        // new() should use Minimal profile by default
+        let reasoner = RdfsReasoner::new();
+        assert_eq!(reasoner.config.enabled_rules.len(), 7);
+        assert!(!reasoner.is_rule_enabled(RdfsRule::Rdfs1));
+        assert!(reasoner.is_rule_enabled(RdfsRule::Rdfs9));
+    }
+
+    #[test]
+    fn test_disabled_rules_not_generating_facts() {
+        use vocabulary::*;
+
+        // Create reasoner with only rdfs9 enabled
+        let mut reasoner = RdfsReasoner::builder()
+            .with_profile(RdfsProfile::None)
+            .enable_rule(RdfsRule::Rdfs9)
+            .build();
+
+        let facts = vec![
+            RuleAtom::Triple {
+                subject: Term::Constant("Person".to_string()),
+                predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                object: Term::Constant("Agent".to_string()),
+            },
+            RuleAtom::Triple {
+                subject: Term::Constant("john".to_string()),
+                predicate: Term::Constant(RDF_TYPE.to_string()),
+                object: Term::Constant("Person".to_string()),
+            },
+        ];
+
+        let inferred = reasoner.infer(&facts).unwrap();
+
+        // Should infer john is type Agent (rdfs9 is enabled)
+        let expected_agent = RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant(RDF_TYPE.to_string()),
+            object: Term::Constant("Agent".to_string()),
+        };
+        assert!(inferred.contains(&expected_agent));
+
+        // Should NOT infer john is type Resource (rdfs4a is disabled)
+        let unexpected_resource = RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant(RDF_TYPE.to_string()),
+            object: Term::Constant(RDFS_RESOURCE.to_string()),
+        };
+        assert!(!inferred.contains(&unexpected_resource));
+    }
+
+    #[test]
+    fn test_full_profile_generates_noisy_facts() {
+        use vocabulary::*;
+
+        // Create reasoner with Full profile
+        let mut reasoner = RdfsReasoner::with_profile(RdfsProfile::Full);
+
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant("http://example.org/knows".to_string()),
+            object: Term::Constant("mary".to_string()),
+        }];
+
+        let inferred = reasoner.infer(&facts).unwrap();
+
+        // Full profile should generate Resource types (rdfs4a/rdfs4b)
+        let john_resource = RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant(RDF_TYPE.to_string()),
+            object: Term::Constant(RDFS_RESOURCE.to_string()),
+        };
+        let mary_resource = RuleAtom::Triple {
+            subject: Term::Constant("mary".to_string()),
+            predicate: Term::Constant(RDF_TYPE.to_string()),
+            object: Term::Constant(RDFS_RESOURCE.to_string()),
+        };
+
+        assert!(inferred.contains(&john_resource));
+        assert!(inferred.contains(&mary_resource));
+    }
+
+    #[test]
+    fn test_minimal_profile_skips_noisy_facts() {
+        use vocabulary::*;
+
+        // Create reasoner with Minimal profile (default)
+        let mut reasoner = RdfsReasoner::new();
+
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant("http://example.org/knows".to_string()),
+            object: Term::Constant("mary".to_string()),
+        }];
+
+        let inferred = reasoner.infer(&facts).unwrap();
+
+        // Minimal profile should NOT generate Resource types
+        let john_resource = RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant(RDF_TYPE.to_string()),
+            object: Term::Constant(RDFS_RESOURCE.to_string()),
+        };
+
+        assert!(!inferred.contains(&john_resource));
+    }
+
+    /// Benchmark test: Compare fact counts between profiles
+    #[test]
+    fn bench_profile_comparison() {
+        // Generate test triples
+        let mut triples = Vec::new();
+        for i in 0..100 {
+            triples.push(RuleAtom::Triple {
+                subject: Term::Constant(format!("entity_{i}")),
+                predicate: Term::Constant("http://example.org/property".to_string()),
+                object: Term::Constant(format!("value_{i}")),
+            });
+        }
+
+        // Test Minimal profile
+        let mut minimal_reasoner = RdfsReasoner::with_profile(RdfsProfile::Minimal);
+        let minimal_start = std::time::Instant::now();
+        let minimal_result = minimal_reasoner.infer(&triples).unwrap();
+        let minimal_duration = minimal_start.elapsed();
+
+        // Test Full profile
+        let mut full_reasoner = RdfsReasoner::with_profile(RdfsProfile::Full);
+        let full_start = std::time::Instant::now();
+        let full_result = full_reasoner.infer(&triples).unwrap();
+        let full_duration = full_start.elapsed();
+
+        println!(
+            "Minimal profile: {} facts in {:?}",
+            minimal_result.len(),
+            minimal_duration
+        );
+        println!(
+            "Full profile: {} facts in {:?}",
+            full_result.len(),
+            full_duration
+        );
+
+        // Full profile should generate significantly more facts
+        assert!(full_result.len() > minimal_result.len());
+
+        // Minimal should be faster (or at least not significantly slower)
+        // Note: This is a soft assertion for documentation purposes
+        println!(
+            "Full profile generated {}x more facts",
+            full_result.len() as f64 / minimal_result.len() as f64
+        );
     }
 }
