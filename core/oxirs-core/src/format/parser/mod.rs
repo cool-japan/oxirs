@@ -3,7 +3,7 @@
 //! Provides a consistent API for parsing all supported RDF formats.
 //! Extracted and adapted from OxiGraph with OxiRS enhancements.
 
-mod helpers;
+pub(crate) mod helpers;
 mod jsonld;
 mod ntriples;
 mod rdfxml;

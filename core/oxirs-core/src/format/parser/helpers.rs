@@ -315,7 +315,7 @@ fn unescape_literal(s: &str) -> ParseResult<String> {
 }
 
 /// Convert oxrdf Quad to oxirs Quad (for use with oxttl/oxrdfxml/oxjsonld parsers)
-pub(super) fn convert_quad(oxrdf_quad: oxrdf::Quad) -> ParseResult<crate::model::Quad> {
+pub(crate) fn convert_quad(oxrdf_quad: oxrdf::Quad) -> ParseResult<crate::model::Quad> {
     use crate::model::{BlankNode, GraphName, Object, Predicate, Subject};
 
     // Convert subject

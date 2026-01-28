@@ -4,9 +4,9 @@
 //! Based on W3C Turtle specification: <https://www.w3.org/TR/turtle/>
 
 use super::error::SerializeResult;
-use super::error::{ParseResult, RdfParseError, TextPosition};
+use super::error::{ParseResult, RdfParseError};
 use super::serializer::QuadSerializer;
-use crate::model::{NamedNode, QuadRef, Subject, Term, Triple, TripleRef};
+use crate::model::{QuadRef, Triple, TripleRef};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
@@ -70,242 +70,51 @@ impl TurtleParser {
 
     /// Parse Turtle from a string
     pub fn parse_str(&self, input: &str) -> ParseResult<Vec<Triple>> {
+        use super::parser::helpers::convert_quad;
+        use std::io::Cursor;
+
+        // Build oxttl parser with configuration
+        let mut oxttl_parser = oxttl::TurtleParser::new();
+
+        // Apply base IRI if set
+        if let Some(ref base) = self.base_iri {
+            oxttl_parser = oxttl_parser
+                .with_base_iri(base.as_str())
+                .unwrap_or_else(|_| oxttl::TurtleParser::new());
+        }
+
+        // Enable lenient mode if requested
+        if self.lenient {
+            oxttl_parser = oxttl_parser.lenient();
+        }
+
+        // Parse and collect triples
+        let reader = Cursor::new(input.as_bytes());
         let mut triples = Vec::new();
-        let mut line_number = 1;
-        let mut current_prefixes = self.prefixes.clone();
-        let mut current_base = self.base_iri.clone();
 
-        // Add standard prefixes
-        current_prefixes.insert(
-            "rdf".to_string(),
-            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
-        );
-        current_prefixes.insert(
-            "rdfs".to_string(),
-            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
-        );
-        current_prefixes.insert(
-            "xsd".to_string(),
-            "http://www.w3.org/2001/XMLSchema#".to_string(),
-        );
-
-        for line in input.lines() {
-            let trimmed = line.trim();
-
-            // Skip empty lines and comments
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                line_number += 1;
-                continue;
+        for result in oxttl_parser.for_reader(reader) {
+            match result {
+                Ok(triple) => {
+                    // Convert oxrdf Triple to oxirs Triple via Quad
+                    let quad = oxrdf::Quad::new(
+                        triple.subject,
+                        triple.predicate,
+                        triple.object,
+                        oxrdf::GraphName::DefaultGraph,
+                    );
+                    let oxirs_quad = convert_quad(quad)?;
+                    triples.push(oxirs_quad.to_triple());
+                }
+                Err(e) => {
+                    if !self.lenient {
+                        return Err(RdfParseError::syntax(e.to_string()));
+                    }
+                    // In lenient mode, skip errors
+                }
             }
-
-            // Handle directives
-            if trimmed.starts_with("@prefix") {
-                self.parse_prefix_directive(trimmed, &mut current_prefixes, line_number)?;
-            } else if trimmed.starts_with("@base") {
-                current_base = self.parse_base_directive(trimmed, line_number)?;
-            } else {
-                // Parse triple statement
-                let parsed_triples = self.parse_triple_statement(
-                    trimmed,
-                    &current_prefixes,
-                    &current_base,
-                    line_number,
-                )?;
-                triples.extend(parsed_triples);
-                // This would handle:
-                // - Subject parsing (IRI, blank node, or variable)
-                // - Predicate parsing (IRI or 'a' for rdf:type)
-                // - Object parsing (IRI, blank node, literal, or variable)
-                // - Proper handling of punctuation (. ; ,)
-            }
-
-            line_number += 1;
         }
 
         Ok(triples)
-    }
-
-    /// Parse a @prefix directive
-    fn parse_prefix_directive(
-        &self,
-        line: &str,
-        prefixes: &mut HashMap<String, String>,
-        line_number: usize,
-    ) -> ParseResult<()> {
-        // Format: @prefix prefix: <iri> .
-        // Basic implementation handles standard prefix declarations
-
-        if let Some(rest) = line.strip_prefix("@prefix") {
-            let rest = rest.trim();
-            if let Some(colon_pos) = rest.find(':') {
-                let prefix = rest[..colon_pos].trim().to_string();
-                let rest = rest[colon_pos + 1..].trim();
-
-                if let Some(iri_start) = rest.find('<') {
-                    if let Some(iri_end) = rest.find('>') {
-                        if iri_start < iri_end {
-                            let iri = rest[iri_start + 1..iri_end].to_string();
-                            prefixes.insert(prefix, iri);
-                            return Ok(());
-                        }
-                    }
-                }
-            }
-        }
-
-        Err(RdfParseError::syntax_at(
-            "Invalid @prefix directive",
-            TextPosition::new(line_number, 1, 0),
-        ))
-    }
-
-    /// Parse a @base directive
-    fn parse_base_directive(&self, line: &str, line_number: usize) -> ParseResult<Option<String>> {
-        // Format: @base <iri> .
-        if let Some(rest) = line.strip_prefix("@base") {
-            let rest = rest.trim();
-            if let Some(iri_start) = rest.find('<') {
-                if let Some(iri_end) = rest.find('>') {
-                    if iri_start < iri_end {
-                        let iri = rest[iri_start + 1..iri_end].to_string();
-                        return Ok(Some(iri));
-                    }
-                }
-            }
-        }
-
-        Err(RdfParseError::syntax_at(
-            "Invalid @base directive",
-            TextPosition::new(line_number, 1, 0),
-        ))
-    }
-
-    /// Parse a triple statement
-    fn parse_triple_statement(
-        &self,
-        line: &str,
-        prefixes: &HashMap<String, String>,
-        _base: &Option<String>,
-        line_number: usize,
-    ) -> ParseResult<Vec<Triple>> {
-        use crate::model::Term;
-
-        // Basic triple parsing - simplified for demonstration
-        // Real implementation would handle complex Turtle syntax
-
-        // Remove trailing dot if present
-        let line = line.trim_end_matches('.').trim();
-
-        // Split on whitespace (very basic - real parser would handle quoted strings)
-        let parts: Vec<&str> = line.split_whitespace().collect();
-
-        if parts.len() < 3 {
-            return Err(RdfParseError::syntax_at(
-                "Triple must have subject, predicate, and object",
-                TextPosition::new(line_number, 1, 0),
-            ));
-        }
-
-        let subject = self.parse_term(parts[0], prefixes, line_number)?;
-        let predicate = self.parse_predicate(parts[1], prefixes, line_number)?;
-        let object = self.parse_term(parts[2], prefixes, line_number)?;
-
-        // Convert to subject and object terms
-        let subject_term = match subject {
-            Term::NamedNode(n) => Subject::NamedNode(n),
-            Term::BlankNode(b) => Subject::BlankNode(b),
-            _ => {
-                return Err(RdfParseError::syntax_at(
-                    "Subject must be IRI or blank node",
-                    TextPosition::new(line_number, 1, 0),
-                ))
-            }
-        };
-
-        let triple = Triple::new(subject_term, predicate, object);
-        Ok(vec![triple])
-    }
-
-    /// Parse a term (IRI, blank node, or literal)
-    fn parse_term(
-        &self,
-        term_str: &str,
-        prefixes: &HashMap<String, String>,
-        line_number: usize,
-    ) -> ParseResult<Term> {
-        use crate::model::{BlankNode, Literal, NamedNode, Term};
-
-        // IRI in angle brackets
-        if term_str.starts_with('<') && term_str.ends_with('>') {
-            let iri = &term_str[1..term_str.len() - 1];
-            return Ok(Term::NamedNode(NamedNode::new(iri).map_err(|e| {
-                RdfParseError::syntax_at(
-                    format!("Invalid IRI: {e}"),
-                    TextPosition::new(line_number, 1, 0),
-                )
-            })?));
-        }
-
-        // Prefixed name
-        if let Some(colon_pos) = term_str.find(':') {
-            let prefix = &term_str[..colon_pos];
-            let local = &term_str[colon_pos + 1..];
-
-            if let Some(namespace) = prefixes.get(prefix) {
-                let full_iri = format!("{namespace}{local}");
-                return Ok(Term::NamedNode(NamedNode::new(&full_iri).map_err(|e| {
-                    RdfParseError::syntax_at(
-                        format!("Invalid prefixed IRI: {e}"),
-                        TextPosition::new(line_number, 1, 0),
-                    )
-                })?));
-            }
-        }
-
-        // Blank node
-        if let Some(id) = term_str.strip_prefix("_:") {
-            return Ok(Term::BlankNode(BlankNode::new(id).map_err(|e| {
-                RdfParseError::syntax_at(
-                    format!("Invalid blank node: {e}"),
-                    TextPosition::new(line_number, 1, 0),
-                )
-            })?));
-        }
-
-        // String literal (very basic)
-        if term_str.starts_with('"') && term_str.ends_with('"') {
-            let value = &term_str[1..term_str.len() - 1];
-            return Ok(Term::Literal(Literal::new(value)));
-        }
-
-        Err(RdfParseError::syntax_at(
-            format!("Unrecognized term: {term_str}"),
-            TextPosition::new(line_number, 1, 0),
-        ))
-    }
-
-    /// Parse a predicate (IRI or 'a' for rdf:type)
-    fn parse_predicate(
-        &self,
-        pred_str: &str,
-        prefixes: &HashMap<String, String>,
-        line_number: usize,
-    ) -> ParseResult<NamedNode> {
-        use crate::model::NamedNode;
-
-        // Handle 'a' as shorthand for rdf:type
-        if pred_str == "a" {
-            return Ok(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap());
-        }
-
-        // Parse as regular term and ensure it's a NamedNode
-        match self.parse_term(pred_str, prefixes, line_number)? {
-            Term::NamedNode(n) => Ok(n),
-            _ => Err(RdfParseError::syntax_at(
-                "Predicate must be an IRI",
-                TextPosition::new(line_number, 1, 0),
-            )),
-        }
     }
 
     /// Get current prefixes
@@ -739,25 +548,4 @@ mod tests {
         assert!(result.unwrap().is_empty());
     }
 
-    #[test]
-    fn test_prefix_directive_parsing() {
-        let parser = TurtleParser::new();
-        let mut prefixes = HashMap::new();
-
-        let result =
-            parser.parse_prefix_directive("@prefix ex: <http://example.org/> .", &mut prefixes, 1);
-
-        assert!(result.is_ok());
-        assert_eq!(prefixes.get("ex"), Some(&"http://example.org/".to_string()));
-    }
-
-    #[test]
-    fn test_base_directive_parsing() {
-        let parser = TurtleParser::new();
-
-        let result = parser.parse_base_directive("@base <http://example.org/> .", 1);
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Some("http://example.org/".to_string()));
-    }
 }
