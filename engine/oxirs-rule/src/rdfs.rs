@@ -130,8 +130,10 @@ pub enum RdfsProfile {
     /// Practical inference without noise - best for most applications
     #[default]
     Minimal,
-    /// Full profile: All 13 RDFS rules for complete W3C RDFS compliance
-    /// Use when strict specification compliance is required
+    /// Full profile: 13 of the W3C RDFS rules (excluding rdfs12, which handles
+    /// container membership properties)
+    /// Use when maximal RDFS inference (excluding container membership properties)
+    /// is required
     Full,
     /// No rules: Context-only mode for hierarchy queries without rule engine overhead
     /// The RdfsContext is still populated and can be queried directly
