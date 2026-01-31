@@ -471,8 +471,6 @@ impl ReteNetwork {
 
     /// Create an alpha node for pattern matching
     fn create_alpha_node(&mut self, pattern: RuleAtom, _parent: NodeId) -> Result<NodeId> {
-        println!("Creating alpha node for pattern: {pattern:?}");
-
         // Check if alpha node already exists for this pattern
         let pattern_key = self.pattern_key(&pattern);
         if let Some(existing_nodes) = self.pattern_index.get(&pattern_key) {
@@ -1344,15 +1342,26 @@ impl ReteNetwork {
         let retracted_facts = Vec::new();
 
         // Find and remove from alpha memories
-        let pattern_key = self.pattern_key(fact);
-        if let Some(alpha_nodes) = self.pattern_index.get(&pattern_key).cloned() {
-            for &alpha_id in &alpha_nodes {
-                if let Some(memory) = self.alpha_memory.get_mut(&alpha_id) {
-                    if memory.remove(fact) {
-                        // Fact was removed, need to retract dependent facts
-                        // This would require a more sophisticated implementation
-                        // with dependency tracking
-                    }
+        // Similar to add_fact, we need to iterate through all alpha nodes
+        // and use unification to find matching patterns
+        let mut matching_alphas = Vec::new();
+
+        for (&node_id, node) in &self.nodes {
+            if let ReteNode::Alpha { pattern, .. } = node {
+                // Check if the fact matches this alpha node's pattern
+                if self.unify_atoms(pattern, fact, &HashMap::new())?.is_some() {
+                    matching_alphas.push(node_id);
+                }
+            }
+        }
+
+        // Now remove from matching alpha memories
+        for alpha_id in matching_alphas {
+            if let Some(memory) = self.alpha_memory.get_mut(&alpha_id) {
+                if memory.remove(fact) {
+                    // Fact was removed, need to retract dependent facts
+                    // This would require a more sophisticated implementation
+                    // with dependency tracking
                 }
             }
         }
@@ -2079,6 +2088,165 @@ mod tests {
             "Did not expect {:?} to be in {:?}",
             not_expected,
             result
+        );
+    }
+
+    #[test]
+    fn test_remove_fact() {
+        // Test that facts can be removed from the RETE network
+        let mut network = ReteNetwork::new();
+
+        // Create a rule: if ?X :type human, then ?X :type mortal
+        let rule = Rule {
+            name: "test_rule".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(":type".to_string()),
+                object: Term::Constant("human".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(":type".to_string()),
+                object: Term::Constant("mortal".to_string()),
+            }],
+        };
+
+        network.add_rule(&rule).unwrap();
+
+        // Add initial fact: Socrates :type human
+        let initial_fact = RuleAtom::Triple {
+            subject: Term::Constant("Socrates".to_string()),
+            predicate: Term::Constant(":type".to_string()),
+            object: Term::Literal("human".to_string()),
+        };
+
+        let facts = vec![initial_fact.clone()];
+        let result = network.forward_chain(facts).unwrap();
+
+        // Should derive: Socrates :type mortal
+        let expected_derived = RuleAtom::Triple {
+            subject: Term::Constant("Socrates".to_string()),
+            predicate: Term::Constant(":type".to_string()),
+            object: Term::Constant("mortal".to_string()),
+        };
+
+        assert!(
+            result.contains(&initial_fact),
+            "Expected initial fact {:?} to be in result {:?}",
+            initial_fact,
+            result
+        );
+        assert!(
+            result.contains(&expected_derived),
+            "Expected derived fact {:?} to be in result {:?}",
+            expected_derived,
+            result
+        );
+
+        // Get facts before removal
+        let facts_before = network.get_facts();
+        assert_eq!(
+            facts_before.len(),
+            1,
+            "Should have 1 fact before removal: {:?}",
+            facts_before
+        );
+        assert!(
+            facts_before.contains(&initial_fact),
+            "Should contain initial fact before removal"
+        );
+
+        // Remove the fact
+        let fact_to_remove = RuleAtom::Triple {
+            subject: Term::Constant("Socrates".to_string()),
+            predicate: Term::Constant(":type".to_string()),
+            object: Term::Literal("human".to_string()),
+        };
+
+        let remove_result = network.remove_fact(&fact_to_remove);
+        assert!(
+            remove_result.is_ok(),
+            "remove_fact should succeed: {:?}",
+            remove_result
+        );
+
+        // Get facts after removal
+        let facts_after = network.get_facts();
+        assert_eq!(
+            facts_after.len(),
+            0,
+            "Should have 0 facts after removal, but got: {:?}",
+            facts_after
+        );
+        assert!(
+            !facts_after.contains(&initial_fact),
+            "Should not contain initial fact after removal"
+        );
+    }
+
+    #[test]
+    fn test_remove_fact_with_multiple_patterns() {
+        // Test fact removal when multiple alpha nodes could match
+        let mut network = ReteNetwork::new();
+
+        // Rule 1: if ?X :type human, then ?X :category person
+        let rule1 = Rule {
+            name: "rule1".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(":type".to_string()),
+                object: Term::Constant("human".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(":category".to_string()),
+                object: Term::Constant("person".to_string()),
+            }],
+        };
+
+        // Rule 2: if ?Y :type human, then ?Y :status alive
+        let rule2 = Rule {
+            name: "rule2".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("Y".to_string()),
+                predicate: Term::Constant(":type".to_string()),
+                object: Term::Constant("human".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Y".to_string()),
+                predicate: Term::Constant(":status".to_string()),
+                object: Term::Constant("alive".to_string()),
+            }],
+        };
+
+        network.add_rule(&rule1).unwrap();
+        network.add_rule(&rule2).unwrap();
+
+        // Add fact
+        let fact = RuleAtom::Triple {
+            subject: Term::Constant("Alice".to_string()),
+            predicate: Term::Constant(":type".to_string()),
+            object: Term::Constant("human".to_string()),
+        };
+
+        let result = network.forward_chain(vec![fact.clone()]).unwrap();
+        assert_eq!(result.len(), 3, "Should have 3 facts after forward chain");
+
+        // Verify fact is in memory
+        let facts_before = network.get_facts();
+        assert!(
+            facts_before.contains(&fact),
+            "Should contain fact before removal"
+        );
+
+        // Remove fact
+        network.remove_fact(&fact).unwrap();
+
+        // Verify fact is removed
+        let facts_after = network.get_facts();
+        assert!(
+            !facts_after.contains(&fact),
+            "Should not contain fact after removal"
         );
     }
 }
