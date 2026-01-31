@@ -1339,6 +1339,8 @@ impl ReteNetwork {
             debug!("Removing fact from RETE network: {:?}", fact);
         }
 
+        // TODO: Implement dependency tracking to retract derived facts
+        // For now, we only remove the fact from alpha memories
         let retracted_facts = Vec::new();
 
         // Find and remove from alpha memories
@@ -1358,11 +1360,8 @@ impl ReteNetwork {
         // Now remove from matching alpha memories
         for alpha_id in matching_alphas {
             if let Some(memory) = self.alpha_memory.get_mut(&alpha_id) {
-                if memory.remove(fact) {
-                    // Fact was removed, need to retract dependent facts
-                    // This would require a more sophisticated implementation
-                    // with dependency tracking
-                }
+                memory.remove(fact);
+                // TODO: Track and retract dependent facts that were derived from this fact
             }
         }
 
@@ -2113,11 +2112,11 @@ mod tests {
 
         network.add_rule(&rule).unwrap();
 
-        // Add initial fact: Socrates :type human
+        // Add initial fact: Socrates :type human (using Constant to match rule pattern)
         let initial_fact = RuleAtom::Triple {
             subject: Term::Constant("Socrates".to_string()),
             predicate: Term::Constant(":type".to_string()),
-            object: Term::Literal("human".to_string()),
+            object: Term::Constant("human".to_string()),
         };
 
         let facts = vec![initial_fact.clone()];
@@ -2160,7 +2159,7 @@ mod tests {
         let fact_to_remove = RuleAtom::Triple {
             subject: Term::Constant("Socrates".to_string()),
             predicate: Term::Constant(":type".to_string()),
-            object: Term::Literal("human".to_string()),
+            object: Term::Constant("human".to_string()),
         };
 
         let remove_result = network.remove_fact(&fact_to_remove);
