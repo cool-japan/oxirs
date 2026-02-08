@@ -9,6 +9,8 @@
 
 🎉 **Production Ready**: Complete SPARQL 1.1/1.2 implementation with **3.8x faster optimizer**, industrial IoT support, and AI-powered features. 13,123 tests passing with zero warnings.
 
+⚠️ **AI Features Status (Updated February 2026)**: The AI modules (`oxirs-embed`, `oxirs-shacl-ai`, `oxirs-chat`, `oxirs-physics`, `oxirs-graphrag`) are under active development and refactoring. Recent cleanup removed 27,000+ lines of unverified/speculative code (issue #61) to ensure honest claims. These features are functional but APIs may evolve. Use with appropriate testing in production environments.
+
 ## Vision
 
 OxiRS aims to be a **Rust-first, JVM-free** alternative to Apache Jena + Fuseki and to Juniper, providing:
@@ -52,6 +54,7 @@ OxiRS v0.1.0 is the first production-ready release, delivering a complete, Rust-
 - ✅ **Zero compilation warnings** across all 22 crates
 - ✅ **95%+ test coverage** and documentation coverage
 - ✅ **Production validated** in industrial deployments
+- 🔄 **Code quality initiative**: Recently removed 27,000+ lines of unverified AI code (issue #61) to ensure honest feature claims
 
 ---
 
@@ -149,15 +152,15 @@ All crates are published to [crates.io](https://crates.io) and documented on [do
 [oxirs-stream]: https://crates.io/crates/oxirs-stream
 [oxirs-federate]: https://crates.io/crates/oxirs-federate
 
-### AI
+### AI (⚠️ Experimental - Under Active Refactoring)
 
 | Crate | Version | Docs | Description |
 |-------|---------|------|-------------|
-| **[oxirs-embed]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-embed.svg)](https://crates.io/crates/oxirs-embed) | [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed) | Knowledge graph embeddings |
-| **[oxirs-shacl-ai]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-shacl-ai.svg)](https://crates.io/crates/oxirs-shacl-ai) | [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai) | AI-powered SHACL |
-| **[oxirs-chat]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-chat.svg)](https://crates.io/crates/oxirs-chat) | [![docs.rs](https://docs.rs/oxirs-chat/badge.svg)](https://docs.rs/oxirs-chat) | RAG chat API |
-| **[oxirs-physics]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-physics.svg)](https://crates.io/crates/oxirs-physics) | [![docs.rs](https://docs.rs/oxirs-physics/badge.svg)](https://docs.rs/oxirs-physics) | Physics-informed AI |
-| **[oxirs-graphrag]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-graphrag.svg)](https://crates.io/crates/oxirs-graphrag) | [![docs.rs](https://docs.rs/oxirs-graphrag/badge.svg)](https://docs.rs/oxirs-graphrag) | GraphRAG hybrid search |
+| **[oxirs-embed]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-embed.svg)](https://crates.io/crates/oxirs-embed) | [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed) | Knowledge graph embeddings (⚠️ APIs evolving) |
+| **[oxirs-shacl-ai]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-shacl-ai.svg)](https://crates.io/crates/oxirs-shacl-ai) | [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai) | AI-powered SHACL (⚠️ Recently cleaned) |
+| **[oxirs-chat]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-chat.svg)](https://crates.io/crates/oxirs-chat) | [![docs.rs](https://docs.rs/oxirs-chat/badge.svg)](https://docs.rs/oxirs-chat) | RAG chat API (⚠️ Experimental) |
+| **[oxirs-physics]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-physics.svg)](https://crates.io/crates/oxirs-physics) | [![docs.rs](https://docs.rs/oxirs-physics/badge.svg)](https://docs.rs/oxirs-physics) | Physics-informed AI (⚠️ Experimental) |
+| **[oxirs-graphrag]** | [![Crates.io](https://img.shields.io/crates/v/oxirs-graphrag.svg)](https://crates.io/crates/oxirs-graphrag) | [![docs.rs](https://docs.rs/oxirs-graphrag/badge.svg)](https://docs.rs/oxirs-graphrag) | GraphRAG hybrid search (⚠️ Experimental) |
 
 [oxirs-embed]: https://crates.io/crates/oxirs-embed
 [oxirs-shacl-ai]: https://crates.io/crates/oxirs-shacl-ai
@@ -257,10 +260,11 @@ oxirs/                  # Cargo workspace root
 | TDB2-compatible storage | `oxirs-tdb` | ✅ Stable (250+ tests) | ✅ |
 | Distributed / HA store (Raft) | `oxirs-cluster` (`cluster`) | ✅ Stable | 🔸 (Jena + external) |
 | **AI & Advanced Features** | | | |
-| RAG chat API (LLM integration) | `oxirs-chat` | ✅ Stable | ❌ |
-| AI-powered SHACL validation | `oxirs-shacl-ai` | ✅ Stable (350+ tests) | ❌ |
-| GraphRAG hybrid search (Vector × Graph) | `oxirs-graphrag` | ✅ Stable (23 tests) | ❌ |
-| Physics-informed digital twins | `oxirs-physics` | ✅ Stable | ❌ |
+| RAG chat API (LLM integration) | `oxirs-chat` | 🔄 Experimental (under refactoring) | ❌ |
+| AI-powered SHACL validation | `oxirs-shacl-ai` | 🔄 Experimental (recently cleaned) | ❌ |
+| GraphRAG hybrid search (Vector × Graph) | `oxirs-graphrag` | 🔄 Experimental (23 tests) | ❌ |
+| Physics-informed digital twins | `oxirs-physics` | 🔄 Experimental | ❌ |
+| Knowledge graph embeddings (TransE, etc.) | `oxirs-embed` | 🔄 Experimental (recently cleaned) | ❌ |
 | **Security & Trust** | | | |
 | W3C DID & Verifiable Credentials | `oxirs-did` | ✅ Stable (43 tests) | ❌ |
 | Signed RDF graphs (RDFC-1.0) | `oxirs-did` | ✅ Stable | ❌ |
@@ -538,6 +542,7 @@ See [LICENSE](LICENSE) for details.
 ### Known Issues
 - Large dataset (>100M triples) performance optimization ongoing (v0.2.0)
 - Full-text search (`oxirs-textsearch`) planned for v0.2.0
+- AI modules under active refactoring (February 2026): Removed 27,000+ lines of unverified code to improve stability and maintainability (issue #61)
 
 ### Quality Metrics (v0.1.0)
 - ✅ **Zero warnings** - Strict `-D warnings` enforced across all 22 crates
