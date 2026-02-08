@@ -431,11 +431,7 @@ pub mod bias_detection;
 pub mod biological_neural_integration;
 pub mod blockchain_validation;
 pub mod collaborative_development;
-pub mod collective_consciousness;
-pub mod consciousness_guided_neuroplasticity;
-pub mod consciousness_validation;
 pub mod constraint_generation;
-pub mod cosmic_scale_processing;
 pub mod crosslingual_transfer;
 pub mod deployment;
 pub mod edge_deployment;
@@ -455,7 +451,6 @@ pub mod interactive_labeling;
 pub mod knowledge_distillation;
 // Temporarily disabled problematic modules for compilation
 pub mod automated_retraining;
-pub mod interdimensional_patterns;
 pub mod learning;
 pub mod meta_learning;
 pub mod ml;
@@ -469,25 +464,17 @@ pub mod neural_cost_estimation;
 pub mod neural_patterns;
 pub mod neural_transformer_pattern_integration;
 pub mod neuromorphic_validation;
-pub mod omniscient_validation;
 pub mod optimization;
 pub mod optimization_engine;
 pub mod owl_to_shacl;
 pub mod patterns;
 pub mod performance_analytics;
 pub mod performance_benchmarking;
-pub mod photonic_computing;
 pub mod prediction;
 pub mod predictive_analytics;
 pub mod production_deployment;
 pub mod production_monitoring;
 pub mod quality;
-pub mod quantum_consciousness_entanglement;
-pub mod quantum_consciousness_synthesis;
-pub mod quantum_enhanced_pattern_optimizer;
-pub mod quantum_neural_patterns;
-pub mod quantum_neuromorphic_fusion;
-pub mod reality_synthesis;
 pub mod realtime_adaptive_query_optimizer;
 pub mod realtime_anomaly_streams;
 pub mod recommendation_systems;
@@ -499,11 +486,7 @@ pub mod shape;
 pub mod shape_management;
 pub mod sophisticated_validation_optimization;
 pub mod streaming_adaptation;
-pub mod swarm_neuromorphic_networks;
 pub mod system_monitoring;
-pub mod temporal_paradox_resolution;
-pub mod time_space_validation;
-pub mod universal_knowledge_integration;
 pub mod validation_performance;
 pub mod version_control;
 
@@ -750,15 +733,6 @@ pub use performance_benchmarking::{
     PerformanceBenchmarkFramework, PrecisionLevel, ResourceUsageSummary as ResourceMetrics,
     SuccessCriteria, TargetComponent, ThroughputSummary as ThroughputMetrics, WorkloadConfig,
 };
-pub use photonic_computing::{
-    CoherenceProperties, ConnectionType, GateType,
-    InterferencePattern as PhotonicInterferencePattern, InterferenceProcessor, JunctionType,
-    LightSpeedComputationManager, MaterialType, NetworkTopology, NonlinearProperties,
-    OpticalMemoryBank, OpticalProcessingState, OpticalProcessingUnit, PatternType,
-    PhotonNumberState, PhotonicComputingEngine, PhotonicEntanglementNetwork, PhotonicGate,
-    PhotonicQuantumCircuit, PhotonicQubit, PolarizationState, SpatialMode,
-    ValidationResult as PhotonicValidationResult, WavelengthRange,
-};
 pub use prediction::*;
 pub use predictive_analytics::*;
 pub use production_deployment::*;
@@ -768,23 +742,6 @@ pub use production_monitoring::{
     PredictionMetrics, ProductionMonitor, SLA,
 };
 pub use quality::*;
-pub use quantum_consciousness_entanglement::{
-    BellState, EntanglementId, EntanglementPair, EntanglementStatus, MeasurementBasis,
-    QuantumConsciousnessEntanglement, QuantumEntanglementConfig, QuantumEntanglementState,
-    QuantumEntanglementValidationResult, QuantumInformation,
-};
-pub use quantum_consciousness_synthesis::{
-    ConsciousnessLevel as QuantumConsciousnessLevel, ConsciousnessStateSynthesizer,
-    MultiDimensionalAwarenessSystem, QuantumCognitionEnhancer, QuantumConsciousnessProcessor,
-    QuantumConsciousnessSynthesisEngine, QuantumConsciousnessValidationResult,
-    QuantumIntuitionEngine, SentientReasoningValidator, SyntheticMind, ValidationOutcome,
-};
-pub use quantum_enhanced_pattern_optimizer::{
-    AnnealingSchedule, NeuralPredictor, PerformanceRecord, QuantumAnnealer,
-    QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig, QuantumOptimizerStats,
-    QuantumSuperpositionStates, RealTimeLearningAdapter,
-};
-pub use quantum_neural_patterns::*;
 pub use realtime_adaptive_query_optimizer::{
     AdaptationRecommendation, AdaptiveOptimizerConfig, AdaptiveOptimizerStats, AdaptivePlanCache,
     CacheStatistics, ComplexityAnalysis, ComplexityFactor, ExecutionMetrics, FeedbackProcessor,
@@ -822,24 +779,6 @@ pub use blockchain_validation::{
     CrossChainAggregation, CrossChainValidationResult, PrivacyLevel, PrivateValidationResult,
     SmartContractValidationResult, ValidationMode,
 };
-pub use collective_consciousness::{
-    AgentCapabilities, AgentStats, AgentStatus, CollectiveConfig, CollectiveConsciousnessNetwork,
-    CollectiveInsight, CollectiveMetrics, CollectiveValidationResult, ConsciousnessAgent,
-    ConsciousnessId, ConsensusDecision, ConsensusResult, ConsensusType, InterdimensionalPattern,
-    QuantumEffect, Reality, SynthesizedReality,
-    ValidationContext as InterdimensionalValidationContext, ValidationSpecialization,
-};
-pub use consciousness_validation::{
-    ConsciousnessLevel as ValidatorConsciousnessLevel, ConsciousnessValidationResult,
-    ConsciousnessValidator, ConsciousnessValidatorConfig, ConsciousnessValidatorStats,
-    DreamInsight, DreamState, Emotion, EmotionalContext, IntuitiveInsight, IntuitiveInsightType,
-    ValidationStrategy as ConsciousnessValidationStrategy,
-};
-pub use cosmic_scale_processing::{
-    CosmicNetworkInitResult, CosmicScaleConfig, CosmicScaleProcessor, CosmicStatistics,
-    CosmicValidationResult, CosmicValidationScope, GalaxyId, IntergalacticCoordinates,
-    StellarCoordinates, StellarNodeId,
-};
 pub use crosslingual_transfer::{
     CrosslingualConfig, CrosslingualShapeTransfer, CrosslingualStats, Language, TranslatedShape,
     TranslationQuality,
@@ -862,12 +801,6 @@ pub use federated_learning::{
     AggregationStrategy, ConsensusAlgorithm, FederatedLearningCoordinator, FederatedNode,
     FederationStats, PrivacyLevel as FederatedPrivacyLevel,
 };
-pub use interdimensional_patterns::{
-    BridgeType, CausalDirection, DimensionType, DimensionalBridge, DimensionalCorrelation,
-    DiscoveredPattern, InterdimensionalConfig, InterdimensionalPatternEngine,
-    InterdimensionalPatternResult, PatternType as InterdimensionalPatternType, PhysicsVariant,
-    RealityDimension,
-};
 pub use multimodal_validation::{
     ContentType, MultiModalConfig, MultiModalValidationReport, MultiModalValidator,
     ValidationResult,
@@ -880,19 +813,6 @@ pub use streaming_adaptation::{
     AdaptationEvent, AdaptationEventType, RealTimeAdaptationStats, RealTimeMetrics, StreamType,
     StreamingAdaptationEngine, StreamingConfig,
 };
-pub use temporal_paradox_resolution::{
-    CausalRelationship as TemporalCausalRelationship, CausalityAnalysisResult,
-    MultiTimelineValidator, ParadoxDetectionResult, ParadoxResolutionResult, QuantumTemporalEngine,
-    TemporalConsistencyEnforcer, TemporalConstraint as TemporalParadoxConstraint,
-    TemporalParadoxResolutionEngine, TemporalValidationProcessor, TemporalValidationResult,
-    Timeline as TemporalTimeline, TimelineContext as TemporalParadoxTimelineContext,
-};
-pub use time_space_validation::{
-    CoordinateSystem, InterferencePattern as SpacetimeInterferencePattern,
-    MultiTimelineValidationResult, ReferenceFrame, SpacetimeContext, SpacetimeInitResult,
-    SpacetimeStatistics, SpacetimeValidationResult, SpatialCoordinates, TemporalCoordinate,
-    TimeSpaceConfig, TimeSpaceValidator, Timeline as SpacetimeTimeline,
-};
 
 // Version 2.1 Features - Neuromorphic Evolution
 pub use biological_neural_integration::{
@@ -902,12 +822,6 @@ pub use biological_neural_integration::{
     EnergyEfficiencyRequirements, NeuralStimulationParameters, NeurotransmitterConfig,
     OrganoidConfig, OrganoidId, PlasticityConfig, SignalProcessingConfig, StimulationPattern,
 };
-pub use consciousness_guided_neuroplasticity::{
-    ConsciousnessGoal, ConsciousnessGuidedNeuroplasticity, ConsciousnessPlasticityConfig,
-    ConsciousnessPlasticityContext, ConsciousnessPlasticityInitResult,
-    ConsciousnessPlasticityMetrics, ConsciousnessPlasticityResult, EffectivenessThresholds,
-    LearningObjective,
-};
 pub use evolutionary_neural_architecture::{
     ArchitecturePerformanceMetrics, ConvergenceMetrics, DiversityRequirements, EvolutionaryConfig,
     EvolutionaryInitResult, EvolutionaryMetrics, EvolutionaryNeuralArchitecture,
@@ -915,39 +829,11 @@ pub use evolutionary_neural_architecture::{
     NASSearchStrategy, NeuralArchitecture, PerformanceTargets, ResourceConstraints,
     TopologyType as ArchTopologyType,
 };
-pub use quantum_neuromorphic_fusion::{
-    CoherenceRequirements, EntanglementRequirements, QuantumBiologicalValidationContext,
-    QuantumBiologicalValidationResult, QuantumFusionConfig, QuantumFusionInitResult,
-    QuantumFusionMetrics, QuantumNeuromorphicFusion, QuantumResourceInventory,
-};
-pub use swarm_neuromorphic_networks::{
-    EmergentBehaviorInsight, SwarmInitResult, SwarmIntelligenceType, SwarmNetworkConfig,
-    SwarmNeuromorphicNetwork, SwarmNodeCapabilities, SwarmNodeId, SwarmStatistics,
-    SwarmValidationContext, SwarmValidationResult, TopologyType as SwarmTopologyType,
-};
 
 // Version 2.2 Features - Transcendent AI Capabilities
-pub use omniscient_validation::{
-    AbsoluteTruthValidator, InfiniteKnowledgeProcessor, OmniscientConfig, OmniscientMetrics,
-    OmniscientValidation, OmniscientValidationResult, PerfectReasoningEngine,
-    TranscendentConsciousnessValidator, UniversalKnowledgeOmniscience,
-};
 pub use owl_to_shacl::{
     GeneratedShape, OwlClass, OwlConstructType, OwlProperty, OwlPropertyCharacteristic,
     OwlRestriction, OwlRestrictionType, OwlToShaclConfig, OwlToShaclTransfer, TransferStats,
-};
-pub use reality_synthesis::{
-    CrossRealityValidator, DimensionalConstructor, MultiDimensionalCoordinator,
-    PossibilityMaterializer, RealityCoherenceManager, RealityGenerationEngine,
-    RealityQualityPerfector, RealitySynthesis, RealitySynthesisConfig, RealitySynthesisMetrics,
-    RealitySynthesisResult, TemporalRealityOrchestrator, UniversalRealityHarmonizer,
-};
-pub use universal_knowledge_integration::{
-    ArtisticKnowledgeIntegrator, CulturalKnowledgeIntegrator, HistoricalKnowledgeIntegrator,
-    KnowledgeQualityAssurance, KnowledgeSynthesisEngine, LinguisticKnowledgeIntegrator,
-    MathematicalKnowledgeIntegrator, PhilosophicalKnowledgeIntegrator, RealTimeKnowledgeUpdater,
-    ScientificKnowledgeIntegrator, TechnicalKnowledgeIntegrator, UniversalKnowledgeConfig,
-    UniversalKnowledgeIntegration, UniversalKnowledgeMetrics, UniversalOntologyMapper,
 };
 
 // Re-export configuration types

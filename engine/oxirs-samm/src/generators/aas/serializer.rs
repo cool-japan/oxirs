@@ -2,11 +2,9 @@
 
 use super::environment::{AssetAdministrationShell, Environment, Submodel, SubmodelElement};
 use crate::error::SammError;
+use oxiarc_archive::{ZipCompressionLevel, ZipWriter};
 use quick_xml::se::to_string as xml_to_string;
-use std::io::Write;
 use std::path::Path;
-use zip::write::{FileOptions, ZipWriter};
-use zip::CompressionMethod;
 
 #[cfg(feature = "aasx-thumbnails")]
 use image::{imageops, DynamicImage, ImageFormat};
@@ -277,23 +275,18 @@ pub fn serialize_aasx_with_options(
 ) -> Result<Vec<u8>, SammError> {
     let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
 
-    let file_options: FileOptions<()> = FileOptions::default()
-        .compression_method(CompressionMethod::Deflated)
-        .unix_permissions(0o644);
+    // Set compression level
+    zip.set_compression(ZipCompressionLevel::Normal);
 
     // Add XML content
     let xml_content = serialize_xml(env)?;
-    zip.start_file("aasx/xml/content.xml", file_options)
-        .map_err(|e| SammError::Generation(format!("Failed to create AASX XML entry: {}", e)))?;
-    zip.write_all(xml_content.as_bytes())
-        .map_err(|e| SammError::Generation(format!("Failed to write AASX XML: {}", e)))?;
+    zip.add_file("aasx/xml/content.xml", xml_content.as_bytes())
+        .map_err(|e| SammError::Generation(format!("Failed to add AASX XML: {}", e)))?;
 
     // Add AASX manifest
     let manifest = create_aasx_manifest()?;
-    zip.start_file("aasx/aasx-origin", file_options)
-        .map_err(|e| SammError::Generation(format!("Failed to create manifest entry: {}", e)))?;
-    zip.write_all(manifest.as_bytes())
-        .map_err(|e| SammError::Generation(format!("Failed to write manifest: {}", e)))?;
+    zip.add_file("aasx/aasx-origin", manifest.as_bytes())
+        .map_err(|e| SammError::Generation(format!("Failed to add manifest: {}", e)))?;
 
     // Add thumbnail (custom or default)
     let thumbnail = if let Some(thumbnail_path) = &aasx_options.thumbnail_path {
@@ -302,14 +295,12 @@ pub fn serialize_aasx_with_options(
         create_thumbnail_placeholder()
     };
 
-    zip.start_file("aasx/thumbnail.png", file_options)
-        .map_err(|e| SammError::Generation(format!("Failed to create thumbnail entry: {}", e)))?;
-    zip.write_all(&thumbnail)
-        .map_err(|e| SammError::Generation(format!("Failed to write thumbnail: {}", e)))?;
+    zip.add_file("aasx/thumbnail.png", &thumbnail)
+        .map_err(|e| SammError::Generation(format!("Failed to add thumbnail: {}", e)))?;
 
     // Finish the ZIP and extract the inner Vec
     let cursor = zip
-        .finish()
+        .into_inner()
         .map_err(|e| SammError::Generation(format!("Failed to finalize AASX: {}", e)))?;
 
     Ok(cursor.into_inner())

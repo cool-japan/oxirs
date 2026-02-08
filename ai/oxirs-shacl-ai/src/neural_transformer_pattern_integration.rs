@@ -5,7 +5,6 @@
 
 use crate::{
     neural_patterns::{NeuralPatternConfig, NeuralPatternRecognizer},
-    quantum_enhanced_pattern_optimizer::QuantumEnhancedPatternOptimizer,
     Result, ShaclAiError,
 };
 
@@ -39,9 +38,6 @@ pub struct NeuralTransformerPatternIntegration {
 
     /// Neural pattern recognizer integration
     neural_recognizer: Arc<Mutex<NeuralPatternRecognizer>>,
-
-    /// Quantum optimizer integration
-    quantum_optimizer: Option<Arc<Mutex<QuantumEnhancedPatternOptimizer>>>,
 
     /// Position encoding for sequential patterns
     positional_encoder: Arc<Mutex<PositionalEncoder>>,
@@ -939,7 +935,6 @@ impl NeuralTransformerPatternIntegration {
             pattern_embedder,
             attention_cost_predictor,
             neural_recognizer,
-            quantum_optimizer: None,
             positional_encoder,
             pattern_memory,
             config,

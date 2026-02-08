@@ -18,7 +18,6 @@ use oxirs_shacl::Shape;
 
 use crate::learning::ShapeLearner;
 use crate::neural_patterns::NeuralPatternRecognizer;
-use crate::quantum_neural_patterns::QuantumNeuralPatternRecognizer;
 use crate::{Result, ShaclAiError};
 
 /// Federated learning node representing a knowledge graph participant
@@ -231,8 +230,6 @@ pub struct FederatedLearningCoordinator {
     shape_learner: Arc<Mutex<ShapeLearner>>,
     /// Neural pattern recognizer
     pattern_recognizer: Arc<Mutex<NeuralPatternRecognizer>>,
-    /// Quantum pattern recognizer
-    quantum_recognizer: Arc<Mutex<QuantumNeuralPatternRecognizer>>,
     /// Consensus manager
     consensus: Arc<Mutex<ConsensusManager>>,
 }
@@ -256,7 +253,6 @@ impl FederatedLearningCoordinator {
             pattern_recognizer: Arc::new(Mutex::new(NeuralPatternRecognizer::new(
                 crate::neural_patterns::types::NeuralPatternConfig::default(),
             ))),
-            quantum_recognizer: Arc::new(Mutex::new(QuantumNeuralPatternRecognizer::new(8, 4))),
             consensus: Arc::new(Mutex::new(ConsensusManager::new())),
         }
     }

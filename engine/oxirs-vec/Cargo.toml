@@ -45,7 +45,7 @@ tokio = { version = "1.47", features = ["rt", "time"] }
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 regex = "1.12"
 pdf-extract = { version = "0.10", optional = true }
-zip = { version = "1.1", optional = true }
+oxiarc-archive = { path = "../../../oxiarc/oxiarc-archive", optional = true }
 quick-xml = { version = "0.38", optional = true }
 base64 = "0.22"
 image = { version = "0.25", optional = true }
@@ -85,7 +85,7 @@ cuda = ["dep:cuda-runtime-sys", "dep:cudarc"]
 candle-gpu = ["candle-core"]
 gpu-full = ["cuda", "candle-gpu", "gpu"]
 images = ["image"]
-content-processing = ["pdf-extract", "zip", "quick-xml", "images"]
+content-processing = ["pdf-extract", "oxiarc-archive", "quick-xml", "images"]
 python = ["pyo3", "numpy"]
 huggingface = ["tokenizers", "hf-hub"]
 

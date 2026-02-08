@@ -6,9 +6,8 @@
 use super::models::AasEnvironment;
 use super::{json, xml};
 use crate::error::{Result, SammError};
-use std::io::Read;
+use oxiarc_archive::ZipReader;
 use std::path::Path;
-use zip::ZipArchive;
 
 /// Parse an AASX file (ZIP package)
 ///
@@ -31,7 +30,7 @@ pub async fn parse_aasx_file(path: &Path) -> Result<AasEnvironment> {
     let file = std::fs::File::open(path)
         .map_err(|e| SammError::ParseError(format!("Failed to open AASX file: {}", e)))?;
 
-    let mut archive = ZipArchive::new(file)
+    let mut archive = ZipReader::new(file)
         .map_err(|e| SammError::ParseError(format!("Failed to read AASX as ZIP: {}", e)))?;
 
     // Try to find the content file (XML or JSON)
@@ -53,11 +52,14 @@ pub async fn parse_aasx_file(path: &Path) -> Result<AasEnvironment> {
     ];
 
     for xml_path in xml_paths {
-        if let Ok(mut file) = archive.by_name(xml_path) {
-            let mut content = String::new();
-            file.read_to_string(&mut content).map_err(|e| {
+        if let Some(entry) = archive.entry_by_name(xml_path) {
+            let entry = entry.clone();
+            let data = archive.extract(&entry).map_err(|e| {
                 SammError::ParseError(format!("Failed to read XML from AASX: {}", e))
             })?;
+
+            let content = String::from_utf8(data)
+                .map_err(|e| SammError::ParseError(format!("Invalid UTF-8 in XML: {}", e)))?;
 
             env = Some(xml::parse_xml_string(&content)?);
             break;
@@ -73,11 +75,14 @@ pub async fn parse_aasx_file(path: &Path) -> Result<AasEnvironment> {
         ];
 
         for json_path in json_paths {
-            if let Ok(mut file) = archive.by_name(json_path) {
-                let mut content = String::new();
-                file.read_to_string(&mut content).map_err(|e| {
+            if let Some(entry) = archive.entry_by_name(json_path) {
+                let entry = entry.clone();
+                let data = archive.extract(&entry).map_err(|e| {
                     SammError::ParseError(format!("Failed to read JSON from AASX: {}", e))
                 })?;
+
+                let content = String::from_utf8(data)
+                    .map_err(|e| SammError::ParseError(format!("Invalid UTF-8 in JSON: {}", e)))?;
 
                 env = Some(json::parse_json_string(&content)?);
                 break;
@@ -99,6 +104,30 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[tokio::test]
+    async fn test_basic_zip_round_trip() {
+        // Test basic ZIP creation and reading
+        let content = b"Hello, World!";
+
+        // Create ZIP
+        let mut zip = oxiarc_archive::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        zip.set_compression(oxiarc_archive::ZipCompressionLevel::Normal);
+        zip.add_file("test.txt", content).unwrap();
+        let cursor = zip.into_inner().unwrap();
+        let zip_data = cursor.into_inner();
+
+        eprintln!("Created ZIP with {} bytes", zip_data.len());
+
+        // Read ZIP
+        let mut reader = oxiarc_archive::ZipReader::new(std::io::Cursor::new(&zip_data)).unwrap();
+        eprintln!("ZIP has {} entries", reader.entries().len());
+
+        let entry = reader.entry_by_name("test.txt").unwrap().clone();
+        let data = reader.extract(&entry).unwrap();
+
+        assert_eq!(data, content);
+    }
+
+    #[tokio::test]
     async fn test_parse_aasx_with_json() {
         // Create a temporary AASX file (ZIP) with JSON content
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -115,24 +144,29 @@ mod tests {
             "conceptDescriptions": []
         }"#;
 
-        // Create ZIP archive
-        {
-            let file = temp_file.as_file_mut();
-            let mut zip = zip::ZipWriter::new(file);
+        // Create ZIP archive in memory first
+        let zip_data = {
+            let mut zip = oxiarc_archive::ZipWriter::new(std::io::Cursor::new(Vec::new()));
 
-            let options = zip::write::FileOptions::<()>::default()
-                .compression_method(zip::CompressionMethod::Deflated);
+            // Use normal deflate compression (bug fixed in oxiarc-archive 0.3.0)
+            zip.set_compression(oxiarc_archive::ZipCompressionLevel::Normal);
 
             // Add JSON content file
-            zip.start_file("aasx/json/content.json", options).unwrap();
-            zip.write_all(json_content.as_bytes()).unwrap();
+            zip.add_file("aasx/json/content.json", json_content.as_bytes())
+                .unwrap();
 
-            zip.finish().unwrap();
-        }
+            // Get the ZIP data
+            let cursor = zip.into_inner().unwrap();
+            cursor.into_inner()
+        };
+
+        // Write ZIP data to temp file
+        temp_file.write_all(&zip_data).unwrap();
+        temp_file.flush().unwrap();
 
         // Parse the AASX file
         let result = parse_aasx_file(temp_file.path()).await;
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Failed to parse AASX: {:?}", result.err());
 
         let env = result.unwrap();
         assert_eq!(env.submodels.len(), 1);

@@ -26,13 +26,11 @@
 
 use crate::error::{Result, SammError};
 use crate::performance::profiling;
+use oxiarc_archive::{ZipCompressionLevel, ZipReader, ZipWriter};
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tokio::fs as async_fs;
-use zip::write::FileOptions;
-use zip::{ZipArchive, ZipWriter};
 
 /// Result of a package import operation
 #[derive(Debug, Clone)]
@@ -138,30 +136,24 @@ async fn import_package_impl(
     let file = std::fs::File::open(package_path)
         .map_err(|e| SammError::ParseError(format!("Failed to open package file: {}", e)))?;
 
-    let mut archive = ZipArchive::new(file)
+    let mut archive = ZipReader::new(file)
         .map_err(|e| SammError::ParseError(format!("Invalid ZIP package: {}", e)))?;
 
     let mut namespaces: HashMap<String, Vec<ModelInfo>> = HashMap::new();
     let mut total_models = 0;
     let mut skipped = 0;
 
-    // Iterate through ZIP entries
-    for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
-            .map_err(|e| SammError::ParseError(format!("Failed to read ZIP entry: {}", e)))?;
+    // First, collect entry information (to avoid borrowing issues)
+    let entries_to_process: Vec<_> = archive
+        .entries()
+        .iter()
+        .filter(|entry| !entry.is_dir() && entry.name.ends_with(".ttl"))
+        .cloned()
+        .collect();
 
-        // Skip directories
-        if file.is_dir() {
-            continue;
-        }
-
-        let file_path = file.name().to_string();
-
-        // Skip non-TTL files
-        if !file_path.ends_with(".ttl") {
-            continue;
-        }
+    // Process each entry
+    for entry in entries_to_process {
+        let file_path = entry.name.clone();
 
         // Parse the path: namespace/version/filename.ttl
         let parts: Vec<&str> = file_path.split('/').collect();
@@ -209,9 +201,8 @@ async fn import_package_impl(
             }
 
             // Read content from ZIP
-            let mut content = Vec::new();
-            file.read_to_end(&mut content).map_err(|e| {
-                SammError::ParseError(format!("Failed to read file from ZIP: {}", e))
+            let content = archive.extract(&entry).map_err(|e| {
+                SammError::ParseError(format!("Failed to extract file from ZIP: {}", e))
             })?;
 
             // Write to target path
@@ -290,23 +281,20 @@ async fn export_from_file_impl(model_file: &str, output_path: &Path) -> Result<E
     let zip_file = std::fs::File::create(output_path).map_err(SammError::Io)?;
 
     let mut zip = ZipWriter::new(zip_file);
-    let options: FileOptions<()> = FileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated)
-        .unix_permissions(0o644);
+
+    // Set compression level
+    zip.set_compression(ZipCompressionLevel::Normal);
 
     // Add file to ZIP with proper structure: namespace/version/filename.ttl
     let zip_path = format!("{}/{}/{}.ttl", namespace, version, model_name);
-    zip.start_file(&*zip_path, options)
-        .map_err(|e| SammError::ParseError(format!("Failed to create ZIP entry: {}", e)))?;
+    zip.add_file(&zip_path, content.as_bytes())
+        .map_err(|e| SammError::ParseError(format!("Failed to add ZIP entry: {}", e)))?;
 
-    zip.write_all(content.as_bytes()).map_err(SammError::Io)?;
+    let file = zip
+        .into_inner()
+        .map_err(|e| SammError::ParseError(format!("Failed to finalize ZIP: {}", e)))?;
 
-    let size_bytes = zip
-        .finish()
-        .map_err(|e| SammError::ParseError(format!("Failed to finalize ZIP: {}", e)))?
-        .metadata()
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let size_bytes = file.metadata().map(|m| m.len()).unwrap_or(0);
 
     Ok(ExportResult {
         namespace,
@@ -430,9 +418,9 @@ async fn export_from_urn_impl(
     let zip_file = std::fs::File::create(output_path).map_err(SammError::Io)?;
 
     let mut zip = ZipWriter::new(zip_file);
-    let options: FileOptions<()> = FileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated)
-        .unix_permissions(0o644);
+
+    // Set compression level
+    zip.set_compression(ZipCompressionLevel::Normal);
 
     let mut model_names = Vec::new();
 
@@ -452,18 +440,15 @@ async fn export_from_urn_impl(
 
         // Add file to ZIP with proper structure: namespace/version/filename.ttl
         let zip_path = format!("{}/{}/{}.ttl", namespace, final_version, model_name);
-        zip.start_file(&*zip_path, options)
-            .map_err(|e| SammError::ParseError(format!("Failed to create ZIP entry: {}", e)))?;
-
-        zip.write_all(content.as_bytes()).map_err(SammError::Io)?;
+        zip.add_file(&zip_path, content.as_bytes())
+            .map_err(|e| SammError::ParseError(format!("Failed to add ZIP entry: {}", e)))?;
     }
 
-    let size_bytes = zip
-        .finish()
-        .map_err(|e| SammError::ParseError(format!("Failed to finalize ZIP: {}", e)))?
-        .metadata()
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let file = zip
+        .into_inner()
+        .map_err(|e| SammError::ParseError(format!("Failed to finalize ZIP: {}", e)))?;
+
+    let size_bytes = file.metadata().map(|m| m.len()).unwrap_or(0);
 
     Ok(ExportResult {
         namespace,

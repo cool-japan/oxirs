@@ -15,7 +15,6 @@ use crate::{
     neural_transformer_pattern_integration::{
         NeuralTransformerConfig, NeuralTransformerPatternIntegration,
     },
-    quantum_enhanced_pattern_optimizer::{QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig},
     Result,
 };
 
@@ -39,9 +38,6 @@ pub use performance::{
 pub struct RealTimeAdaptiveQueryOptimizer {
     /// Classical pattern optimizer
     pattern_optimizer: Arc<PatternOptimizer>,
-
-    /// Quantum-enhanced optimizer
-    quantum_optimizer: Option<Arc<Mutex<QuantumEnhancedPatternOptimizer>>>,
 
     /// Neural transformer integration
     neural_transformer: Arc<Mutex<NeuralTransformerPatternIntegration>>,
@@ -363,14 +359,6 @@ impl RealTimeAdaptiveQueryOptimizer {
     pub fn new(config: AdaptiveOptimizerConfig) -> Result<Self> {
         Ok(Self {
             pattern_optimizer: Arc::new(PatternOptimizer::new(Arc::new(IndexStats::new()))),
-            quantum_optimizer: if config.enable_quantum_optimization {
-                Some(Arc::new(Mutex::new(QuantumEnhancedPatternOptimizer::new(
-                    Arc::new(PatternOptimizer::new(Arc::new(IndexStats::new()))),
-                    QuantumOptimizerConfig::default(),
-                )?)))
-            } else {
-                None
-            },
             neural_transformer: Arc::new(Mutex::new(NeuralTransformerPatternIntegration::new(
                 NeuralTransformerConfig::default(),
             )?)),

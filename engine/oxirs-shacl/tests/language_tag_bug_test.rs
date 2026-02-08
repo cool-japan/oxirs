@@ -19,13 +19,16 @@ shapes:LatitudeProperty a sh:PropertyShape ;
 
     let mut validator = Validator::new();
     let result = validator.load_shapes_from_rdf(shapes, "turtle", None);
-    
+
     match &result {
         Ok(count) => println!("SUCCESS: Loaded {} shapes", count),
         Err(e) => println!("ERROR: {:?}", e),
     }
-    
-    assert!(result.is_ok(), "Should load shapes with language-tagged sh:name");
+
+    assert!(
+        result.is_ok(),
+        "Should load shapes with language-tagged sh:name"
+    );
 }
 
 #[test]
@@ -42,13 +45,16 @@ shapes:TestShape a sh:NodeShape ;
 
     let mut validator = Validator::new();
     let result = validator.load_shapes_from_rdf(shapes, "turtle", None);
-    
+
     match &result {
         Ok(count) => println!("SUCCESS: Loaded {} shapes", count),
         Err(e) => println!("ERROR: {:?}", e),
     }
-    
-    assert!(result.is_ok(), "Should load shapes with language-tagged sh:message");
+
+    assert!(
+        result.is_ok(),
+        "Should load shapes with language-tagged sh:message"
+    );
 }
 
 #[test]
@@ -65,11 +71,11 @@ shapes:TestShape a sh:NodeShape ;
 
     let mut validator = Validator::new();
     let result = validator.load_shapes_from_rdf(shapes, "turtle", None);
-    
+
     match &result {
         Ok(count) => println!("SUCCESS: Loaded {} shapes", count),
         Err(e) => println!("ERROR: {:?}", e),
     }
-    
+
     assert!(result.is_ok(), "Should load shapes with plain sh:message");
 }

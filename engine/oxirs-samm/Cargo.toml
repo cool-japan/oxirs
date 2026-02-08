@@ -44,7 +44,7 @@ futures = "0.3"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 quick-xml = { version = "0.38", features = ["serialize"] }
-zip = { version = "1.1", default-features = false, features = ["deflate"] }
+oxiarc-archive = { path = "../../../oxiarc/oxiarc-archive" }
 base64 = "0.22"
 
 # Error handling and logging
