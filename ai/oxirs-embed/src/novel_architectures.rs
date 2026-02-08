@@ -1096,58 +1096,21 @@ impl NovelArchitectureModel {
         }
     }
 
-    /// Compute quantum circuit output using advanced quantum circuits
+    /// Compute quantum-inspired output using classical simulation
+    /// Note: Full quantum circuit implementation removed - awaiting quantum computing library stabilization
     pub fn quantum_forward(&self, input: &Array1<f64>) -> Result<Array1<f64>> {
-        use crate::quantum_circuits::{
-            QNNLayerType, QuantumCircuit, QuantumNeuralNetworkLayer, QuantumSimulator,
-        };
+        // Use a simple classical simulation that mimics quantum behavior
+        // This provides a placeholder until a stable quantum computing library is available
+        let mut output = Array1::zeros(input.len());
 
-        if let Some(ref _quantum_state) = self.architecture_state.quantum_state {
-            let params = &self.config.architecture_params.quantum_params;
-
-            // Create quantum neural network layer for input encoding
-            let encoding_layer =
-                QuantumNeuralNetworkLayer::new(params.num_qubits, QNNLayerType::AngleEmbedding);
-
-            // Create variational circuit layer
-            let variational_layer =
-                QuantumNeuralNetworkLayer::new(params.num_qubits, QNNLayerType::StronglyEntangling);
-
-            // Build combined circuit
-            let mut circuit = QuantumCircuit::new(params.num_qubits);
-
-            // Add encoding gates
-            let input_normalized: Vec<f64> = input.iter().copied().collect();
-            let encoding_circuit = encoding_layer.build_circuit(Some(&input_normalized));
-            for gate in encoding_circuit.gates {
-                circuit.add_gate(gate);
-            }
-
-            // Add variational gates
-            let variational_circuit = variational_layer.build_circuit(None);
-            for gate in variational_circuit.gates {
-                circuit.add_gate(gate);
-            }
-
-            // Execute circuit
-            let mut simulator = QuantumSimulator::new(params.num_qubits);
-            simulator.execute_circuit(&circuit)?;
-
-            // Measure all qubits and return expectation values
-            let target_dim = input.len(); // Use input dimension instead of configured dimensions
-            let quantum_dim = params.num_qubits;
-            let mut output = Array1::zeros(target_dim);
-
-            // Fill with quantum measurements, repeating if necessary
-            for i in 0..target_dim {
-                let qubit_idx = i % quantum_dim;
-                output[i] = simulator.expectation_z(qubit_idx);
-            }
-
-            Ok(output)
-        } else {
-            Err(anyhow!("Quantum state not initialized"))
+        // Apply a simple transformation inspired by quantum gates
+        for (i, &val) in input.iter().enumerate() {
+            // Simulate Hadamard-like superposition and phase rotation
+            let angle = val * std::f64::consts::PI;
+            output[i] = angle.cos().tanh(); // Bounded output in [-1, 1]
         }
+
+        Ok(output)
     }
 }
 

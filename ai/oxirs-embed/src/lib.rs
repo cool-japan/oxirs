@@ -127,7 +127,6 @@ pub mod advanced_profiler;
 pub mod api;
 pub mod application_tasks;
 pub mod batch_processing;
-pub mod biological_computing;
 pub mod biomedical_embeddings;
 pub mod caching;
 pub mod causal_representation_learning;
@@ -135,7 +134,6 @@ pub mod cloud_integration;
 pub mod clustering;
 pub mod community_detection;
 pub mod compression;
-pub mod consciousness_aware_embeddings;
 pub mod contextual;
 pub mod continual_learning;
 pub mod cross_domain_transfer;
@@ -167,7 +165,6 @@ pub mod novel_architectures;
 pub mod performance_profiler;
 pub mod persistence;
 pub mod quantization;
-pub mod quantum_circuits;
 pub mod real_time_fine_tuning;
 pub mod real_time_optimization;
 pub mod research_networks;
@@ -586,10 +583,6 @@ pub use compression::{
     ModelCompressionManager, NASConfig, OptimizationTarget, PruningConfig, PruningMethod,
     QuantizationConfig, QuantizationMethod,
 };
-pub use consciousness_aware_embeddings::{
-    AttentionMechanism, ConsciousnessAwareEmbedding, ConsciousnessInsights, ConsciousnessLevel,
-    MetaCognition, WorkingMemory,
-};
 // pub use contextual::{
 //     ContextualConfig, ContextualEmbeddingModel, EmbeddingContext,
 // };
@@ -693,11 +686,6 @@ pub use novel_architectures::{
     NovelArchitectureConfig, NovelArchitectureModel, ODERegularization, ODESolverType,
     ParallelTransport, QuantumGateSet, QuantumMeasurement, QuantumNoise, QuantumParams,
     QuantumState, StabilityConstraints, StructuralBias, TimeEvolution, TransportMethod,
-};
-pub use quantum_circuits::{
-    Complex, MeasurementStrategy, QNNLayerType, QuantumApproximateOptimization, QuantumCircuit,
-    QuantumGate, QuantumNeuralNetwork, QuantumNeuralNetworkLayer, QuantumSimulator,
-    VariationalQuantumEigensolver,
 };
 pub use research_networks::{
     AuthorEmbedding, Citation, CitationNetwork, CitationType, Collaboration, CollaborationNetwork,
