@@ -340,16 +340,6 @@ fn parse_rdf_content(
     Ok(count)
 }
 
-// Old match-based implementation removed - using unified parser API
-fn _old_parse_rdf_content_match(
-    _content: &str,
-    _format: RdfFormat,
-    _store: &mut ConcreteStore,
-) -> Result<usize, Box<dyn std::error::Error>> {
-    // Keeping this as reference - old match-based approach
-    unimplemented!("Use parse_rdf_content() instead")
-}
-
 /// Add sample RDF data for demonstration when no dataset is provided
 fn add_sample_data(store: &mut ConcreteStore) -> Result<(), Box<dyn std::error::Error>> {
     let sample_triples = vec![
