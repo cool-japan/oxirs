@@ -795,7 +795,8 @@ impl Validator {
 
         // Validate messages (check for valid language tags)
         for (lang_tag, _message) in &shape.messages {
-            if !self.is_valid_language_tag(lang_tag) {
+            // Empty string means "no language tag" - this is valid for plain literals
+            if !lang_tag.is_empty() && !self.is_valid_language_tag(lang_tag) {
                 return Err(ShaclError::ShapeParsing(format!(
                     "Shape '{}' has invalid language tag: '{}'",
                     shape.id, lang_tag
