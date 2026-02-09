@@ -239,7 +239,10 @@ impl W3cRdfTestSuiteRunner {
                 if self.config.verbose_logging {
                     println!(
                         "Loaded {} tests for {}",
-                        self.manifests.get(format).unwrap().len(),
+                        self.manifests
+                            .get(format)
+                            .expect("format just inserted into manifests")
+                            .len(),
                         format
                     );
                 }

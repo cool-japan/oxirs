@@ -517,7 +517,13 @@ pub mod namespaces {
             // Clean up the segment to make a valid prefix
             let cleaned: String = segment.chars().filter(|c| c.is_alphanumeric()).collect();
 
-            if !cleaned.is_empty() && cleaned.chars().next().unwrap().is_alphabetic() {
+            if !cleaned.is_empty()
+                && cleaned
+                    .chars()
+                    .next()
+                    .expect("cleaned string validated to be non-empty")
+                    .is_alphabetic()
+            {
                 return cleaned.to_lowercase();
             }
         }

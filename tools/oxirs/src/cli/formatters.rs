@@ -715,12 +715,14 @@ fn escape_markdown(s: &str) -> String {
 }
 
 /// Excel (.xlsx) spreadsheet formatter
+#[cfg(feature = "excel-export")]
 pub struct ExcelFormatter {
     pub sheet_name: String,
     pub auto_filter: bool,
     pub freeze_header: bool,
 }
 
+#[cfg(feature = "excel-export")]
 impl Default for ExcelFormatter {
     fn default() -> Self {
         Self {
@@ -731,6 +733,7 @@ impl Default for ExcelFormatter {
     }
 }
 
+#[cfg(feature = "excel-export")]
 impl ResultFormatter for ExcelFormatter {
     fn format(&self, results: &QueryResults, writer: &mut dyn Write) -> std::io::Result<()> {
         use rust_xlsxwriter::{Format, Workbook};
@@ -1013,7 +1016,13 @@ pub fn create_formatter(format: &str) -> Option<Box<dyn ResultFormatter>> {
         })),
         "markdown" | "md" => Some(Box::new(MarkdownFormatter::default())),
         "markdown-compact" | "md-compact" => Some(Box::new(MarkdownFormatter { aligned: false })),
+        #[cfg(feature = "excel-export")]
         "xlsx" | "excel" => Some(Box::new(ExcelFormatter::default())),
+        #[cfg(not(feature = "excel-export"))]
+        "xlsx" | "excel" => {
+            eprintln!("Excel export requires the 'excel-export' feature");
+            None
+        }
         "pdf" => Some(Box::new(PdfFormatter::default())),
         // Template presets
         "template-html" => TemplateFormatter::from_string(
@@ -1368,6 +1377,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "excel-export")]
     fn test_excel_formatter() {
         let results = create_test_results();
         let formatter = ExcelFormatter::default();
@@ -1386,6 +1396,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "excel-export")]
     fn test_excel_formatter_empty_results() {
         let results = QueryResults {
             variables: vec!["s".to_string()],
@@ -1402,10 +1413,20 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "excel-export")]
     fn test_formatter_factory_excel() {
         assert!(create_formatter("xlsx").is_some());
         assert!(create_formatter("excel").is_some());
         assert!(create_formatter("XLSX").is_some());
+    }
+
+    #[test]
+    #[cfg(not(feature = "excel-export"))]
+    fn test_formatter_factory_excel_without_feature() {
+        // Without excel-export feature, Excel formatters should return None
+        assert!(create_formatter("xlsx").is_none());
+        assert!(create_formatter("excel").is_none());
+        assert!(create_formatter("XLSX").is_none());
     }
 
     #[test]

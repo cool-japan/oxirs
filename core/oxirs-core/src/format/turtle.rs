@@ -414,7 +414,10 @@ fn is_valid_local_name(local: &str) -> bool {
     }
 
     // First character must be a name start char or underscore
-    let first_char = local.chars().next().unwrap();
+    let first_char = local
+        .chars()
+        .next()
+        .expect("local name validated to be non-empty");
     if !is_pn_chars_base(first_char) && first_char != '_' {
         return false;
     }

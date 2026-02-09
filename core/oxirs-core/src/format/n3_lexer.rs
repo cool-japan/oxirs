@@ -525,7 +525,11 @@ impl N3Lexer {
 
         // Handle optional sign
         if matches!(buffer.current(), Some('+') | Some('-')) {
-            number_str.push(buffer.current().unwrap());
+            number_str.push(
+                buffer
+                    .current()
+                    .expect("sign character validated by matches!"),
+            );
             buffer.advance();
         }
 
@@ -559,12 +563,20 @@ impl N3Lexer {
         // Check for exponent
         if matches!(buffer.current(), Some('e') | Some('E')) {
             has_exponent = true;
-            number_str.push(buffer.current().unwrap());
+            number_str.push(
+                buffer
+                    .current()
+                    .expect("exponent character validated by matches!"),
+            );
             buffer.advance();
 
             // Handle optional sign in exponent
             if matches!(buffer.current(), Some('+') | Some('-')) {
-                number_str.push(buffer.current().unwrap());
+                number_str.push(
+                    buffer
+                        .current()
+                        .expect("sign character validated by matches!"),
+                );
                 buffer.advance();
             }
 
@@ -798,7 +810,9 @@ impl TokenRecognizer for N3Lexer {
 
                 // Variables (for SPARQL compatibility)
                 Some('?') | Some('$') if self.parse_variables => {
-                    let _var_char = buffer.current().unwrap();
+                    let _var_char = buffer
+                        .current()
+                        .expect("variable start character validated by matches!");
                     buffer.advance();
                     let mut var_name = String::new();
                     while let Some(ch) = buffer.current() {

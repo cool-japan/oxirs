@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
+#[cfg(feature = "excel-export")]
 use rust_xlsxwriter::{Format, Workbook};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -481,7 +482,16 @@ impl DashboardAnalytics {
         match format {
             ExportFormat::Json => self.export_json(time_range).await,
             ExportFormat::Csv => self.export_csv(time_range).await,
-            ExportFormat::Excel => self.export_excel(time_range).await,
+            ExportFormat::Excel => {
+                #[cfg(feature = "excel-export")]
+                {
+                    self.export_excel(time_range).await
+                }
+                #[cfg(not(feature = "excel-export"))]
+                {
+                    anyhow::bail!("Excel export requires the 'excel-export' feature to be enabled")
+                }
+            }
         }
     }
 
@@ -627,6 +637,7 @@ impl DashboardAnalytics {
         Ok(csv_output.into_bytes())
     }
 
+    #[cfg(feature = "excel-export")]
     async fn export_excel(&self, time_range: TimeRange) -> Result<Vec<u8>> {
         let query_analytics = self.get_query_analytics(time_range).await;
         let user_analytics = self.get_user_analytics(time_range).await;
@@ -877,6 +888,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "excel-export")]
     async fn test_excel_export_with_data() {
         let config = DashboardConfig::default();
         let dashboard = DashboardAnalytics::new(config);

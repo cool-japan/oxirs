@@ -18,7 +18,7 @@ oxirs-core.workspace = true
 scirs2-cluster = { workspace = true }
 scirs2-optimize = { workspace = true }
 scirs2-stats = { workspace = true }
-scirs2-core = { workspace = true, features = ["all"] }
+scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
 # oxirs-tdb = { path = "../oxirs-tdb" }  # Temporarily commented out due to compilation issues
 openraft = { workspace = true, optional = true }
 tokio.workspace = true

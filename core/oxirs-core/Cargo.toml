@@ -23,33 +23,33 @@ oxjsonld.workspace = true      # JSON-LD parser (v0.2.1)
 oxrdf.workspace = true         # RDF data model (v0.3.1)
 
 json-event-parser = { version = "0.2", features = ["async-tokio"] }
-quick-xml = { version = "0.38", features = ["async-tokio"] }
+quick-xml = { workspace = true, features = ["async-tokio"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-url = "2.5.8"
-regex = "1.12"
+url.workspace = true
+regex.workspace = true
 lazy_static = "1.5"
-once_cell = "1.21"
+once_cell.workspace = true
 
 # Ultra performance dependencies
-rayon = { version = "1.10", optional = true }
+rayon = { workspace = true, optional = true }
 crossbeam = "0.8"
 crossbeam-epoch = "0.9"
 crossbeam-utils = "0.8"
 crossbeam-deque = "0.8"
-dashmap = "6.1"
+dashmap.workspace = true
 bumpalo = "3.14"
-memmap2 = "0.9"
-parking_lot = "0.12"
+memmap2.workspace = true
+parking_lot.workspace = true
 ahash = "0.8"
 simd-json = "0.14"
 wide = { version = "0.7", optional = true }
-num_cpus = "1.17"
+num_cpus.workspace = true
 sys-info = "0.9"
-libc = "0.2"
+libc.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-util"] }
 async-trait = "0.1"
 smallvec = "1.15"
@@ -59,22 +59,22 @@ futures = "0.3"
 reqwest = { workspace = true, features = ["stream"] }
 
 # Hash function dependencies for SPARQL 1.2
-sha1 = "0.10"
-sha2 = "0.10"
-md5 = "0.8"
+sha1.workspace = true
+sha2.workspace = true
+md5.workspace = true
 siphasher = "1.0"  # For optimized term encoding
 
 # Additional dependencies for SPARQL functions
-chrono = { version = "0.4", features = ["serde"] }
+chrono.workspace = true
 # rand replaced with scirs2-core random generation
-fastrand = "2.3"
-uuid = { version = "1.19", features = ["v4", "serde"] }
-urlencoding = "2.1"
+fastrand.workspace = true
+uuid.workspace = true
+urlencoding.workspace = true
 
 # Storage engine dependencies
 rocksdb = { workspace = true, optional = true }
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
-lru = "0.16"
+lru.workspace = true
 glob = "0.3"
 
 # Columnar storage dependencies (temporarily disabled due to chrono conflicts)
@@ -84,7 +84,7 @@ glob = "0.3"
 
 # Compression dependencies
 lz4 = "1.28"
-zstd = "0.13"
+zstd.workspace = true
 
 # Cryptographic dependencies
 blake3 = "1.8"

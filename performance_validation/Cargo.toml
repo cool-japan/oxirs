@@ -9,7 +9,7 @@ description = "Revolutionary performance validation and benchmarking suite for O
 
 [dependencies]
 # SciRS2 Core Dependencies (Full Usage - MANDATORY)
-scirs2-core = { workspace = true, features = ["all"] }
+scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
 scirs2-graph = { workspace = true }
 scirs2-linalg = { workspace = true }
 scirs2-stats = { workspace = true }

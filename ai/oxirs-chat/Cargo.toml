@@ -35,7 +35,7 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 clap = { version = "4.4", features = ["derive"] }
-chrono = { version = "0.4", features = ["serde"] }
+chrono.workspace = true
 
 # HTTP Server and WebSocket
 axum = { version = "0.7", features = ["ws"] }
@@ -53,12 +53,12 @@ async-stream = "0.3"
 
 # Storage and Caching
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
-uuid = { version = "1.19", features = ["v4", "serde"] }
+uuid.workspace = true
 
 # Configuration
 config = "0.14"
 toml = "0.9"
-serde_yaml = "0.9"
+serde_yaml.workspace = true
 
 # Metrics and Monitoring
 metrics = "0.23"
@@ -66,7 +66,7 @@ metrics-exporter-prometheus = "0.18"
 
 # Template Engine for SPARQL
 handlebars = "5.1"
-regex = "1.12"
+regex.workspace = true
 
 # Async traits
 async-trait = "0.1"
@@ -78,11 +78,11 @@ sha2 = "0.10"
 # Session persistence and state management
 sled = "0.34"
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
-zstd = "0.13"
+zstd.workspace = true
 
 # Encryption
-aes-gcm = "0.10"
-argon2 = "0.5"
+aes-gcm.workspace = true
+argon2.workspace = true
 base64 = "0.22"
 
 # Natural Language Processing
@@ -96,10 +96,10 @@ opentelemetry-prometheus = "0.27"
 governor = "0.10"
 
 # Random number generation removed - use scirs2-core::random instead
-fastrand = "2.3"
+fastrand.workspace = true
 
-# Excel export
-rust_xlsxwriter = "0.79"
+# Excel export (feature-gated for Pure Rust policy)
+rust_xlsxwriter = { version = "0.79", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -109,6 +109,7 @@ tempfile = "3.24"
 default = []
 llm-integration = []
 nl2sparql = []
+excel-export = ["rust_xlsxwriter"]
 
 [[bin]]
 name = "oxirs-chat"

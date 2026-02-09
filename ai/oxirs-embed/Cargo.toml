@@ -47,7 +47,7 @@ oxirs-vec.workspace = true
 # SciRS2 AI/ML dependencies for enhanced embeddings with full feature support
 # Note: array! macro is now in scirs2_core::ndarray_ext, no need for scirs2-autograd
 # Note: rand and rand_distr replaced by scirs2_core::random
-scirs2-core = { workspace = true, features = ["all"] }
+scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
 scirs2-neural = { workspace = true }
 scirs2-stats = { workspace = true }
 scirs2-metrics = { workspace = true }

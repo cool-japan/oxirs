@@ -268,6 +268,7 @@ impl From<toml::de::Error> for CliError {
     }
 }
 
+#[cfg(feature = "excel-export")]
 impl From<rust_xlsxwriter::XlsxError> for CliError {
     fn from(err: rust_xlsxwriter::XlsxError) -> Self {
         Self::new(CliErrorKind::SerializationError(err.to_string()))
