@@ -184,7 +184,7 @@ dotenv = "0.15"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 tokio-test = "0.4"
-axum-test = "14.10"
+axum-test = "18.7"
 http = { workspace = true }
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
