@@ -43,7 +43,7 @@ serde_json = "1.0"
 serde_yaml = "0.9"
 serde_urlencoded = "0.7"
 toml = "0.9"
-config = "0.14"
+config = "0.15"
 figment = { version = "0.10", features = ["toml", "yaml", "env"] }
 
 # Error handling
