@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.1] - 2026-02-09
+
+### Added
+- **Excel Export** - Added Excel export functionality with related dependencies for data export capabilities
+
+### Changed
+- **RDFS Rules** - Configurable RDFS rules via builder pattern for flexible reasoning configuration (#59)
+- **Documentation** - Updated README with honest AI feature status and disclaimers to clarify implementation status
+
+### Fixed
+- **Turtle Parser** - Fixed Turtle parser by delegating to oxttl for full Turtle syntax support (#57)
+- **SHACL Language Tags** - Fixed SHACL language tag handling for proper RDF validation (#58)
+- **RETE Engine** - Fixed RETE remove_fact to use unification matching instead of hash lookup for correct rule retraction (#60)
+
+### Removed
+- **Vaporware Cleanup** - Removed 27,237 lines of unimplemented code across multiple modules:
+  - Quantum-related modules and references (quantum consciousness, quantum computing features)
+  - Quantum/biological modules from oxirs-embed
+  - Dead code with unimplemented!() macros from oxirs-chat
+  - AI slop modules that were not production-ready
+
+---
+
 ## [0.1.0] - 2026-01-07
 
 ### Overview

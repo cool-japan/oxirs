@@ -34,7 +34,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 authors = ["KitaSan <info@kitasan.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -163,7 +163,7 @@ async-trait = "0.1"
 uuid = { version = "1.19", features = ["v4", "serde"] }
 chrono = { version = "0.4.43", features = ["serde"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "rustls-native-certs", "json", "form", "query", "multipart", "http2"] }
-bytes = "1.11"  # HTTP body handling
+bytes = "1.11.1"  # HTTP body handling - CVE-2026-25541 fix
 http = "1.4"    # HTTP types
 
 # Arrow crates (temporarily disabled due to chrono compatibility issues)

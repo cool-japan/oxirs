@@ -42,7 +42,7 @@ regex = "1.12"
 indexmap = "2.11"
 uuid = { version = "1.19", features = ["v4", "serde"] }
 threadpool = "1.8"
-sysinfo = "0.30"
+sysinfo.workspace = true  # Updated to 0.33 to fix objc2-core-foundation conflict
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
 num-complex = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"

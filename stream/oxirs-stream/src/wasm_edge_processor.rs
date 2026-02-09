@@ -13,6 +13,10 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use wasmparser::{Validator, WasmFeatures};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+// SECURITY WARNING: RSA crate (v0.9.10) has CVE-2023-49092 - Timing attack vulnerability
+// No patch available as of 2026-02-09. Consider migrating to constant-time alternatives.
+// Current usage: WASM module signature verification (non-critical timing path)
+// TODO: Evaluate migration to RustCrypto's newer RSA implementation when available
 use rsa::{RsaPublicKey, pkcs1v15::VerifyingKey as RsaVerifyingKey, signature::Verifier as RsaVerifier};
 
 /// WebAssembly edge processor for distributed streaming

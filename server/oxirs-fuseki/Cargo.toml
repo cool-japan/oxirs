@@ -137,7 +137,7 @@ ldap3 = { version = "0.12", optional = true }
 
 # System utilities
 libc.workspace = true
-sysinfo = "0.33"
+sysinfo.workspace = true  # System monitoring
 
 # Kubernetes operator support (optional)
 kube = { version = "0.96", default-features = false, features = ["client", "rustls-tls", "runtime", "derive"], optional = true }
