@@ -7,12 +7,11 @@ use scirs2_core::profiling::Profiler;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
+use tracing::{error, info, warn};
 
 use super::functions::CloudStorageProvider;
-
-use std::collections::{HashMap, VecDeque};
 
 /// Storage tier for cost optimization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,7 +68,7 @@ pub struct CostPrediction {
     pub timestamp: u64,
 }
 /// GCS client (simulated)
-struct GCSClient {
+pub(super) struct GCSClient {
     #[allow(dead_code)]
     project: String,
     #[allow(dead_code)]
@@ -131,7 +130,7 @@ impl CloudOperationProfiler {
     }
 }
 /// GCS metrics
-struct GCSMetrics {
+pub(super) struct GCSMetrics {
     pub(super) uploads: Counter,
     pub(super) downloads: Counter,
     pub(super) errors: Counter,
@@ -842,7 +841,7 @@ impl GpuCompressor {
     }
 }
 /// Azure metrics
-struct AzureMetrics {
+pub(super) struct AzureMetrics {
     pub(super) uploads: Counter,
     pub(super) downloads: Counter,
     pub(super) errors: Counter,
@@ -978,7 +977,7 @@ impl S3Backend {
     }
 }
 /// Azure client (simulated)
-struct AzureClient {
+pub(super) struct AzureClient {
     #[allow(dead_code)]
     account: String,
     #[allow(dead_code)]
@@ -1001,7 +1000,7 @@ pub struct ScalingEvent {
     pub error: Option<String>,
 }
 /// S3 client (simulated for implementation)
-struct S3Client {
+pub(super) struct S3Client {
     #[allow(dead_code)]
     endpoint: String,
     #[allow(dead_code)]

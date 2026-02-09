@@ -2,14 +2,12 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 use tokio::sync::RwLock;
 
 use super::types::{ClusterMetrics, ElasticScalingConfig, NodeInstance, ScalingEvent};
-
-use std::collections::VecDeque;
 
 /// Elastic scaling manager for cloud-based auto-scaling
 pub struct ElasticScalingManager {

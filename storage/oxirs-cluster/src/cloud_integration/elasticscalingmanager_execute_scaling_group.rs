@@ -4,7 +4,8 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use tracing::info;
 
 use super::types::{CloudError, NodeInstance, ScalingDecision, ScalingEvent};
 

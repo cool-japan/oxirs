@@ -2,16 +2,8 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
-use super::elasticscalingmanager_type::ElasticScalingManager;
 use super::types::{
-    AzureBlobBackend, CloudError, CloudOperationProfiler, CloudProvider, CloudStorageConfig,
-    ClusterMetrics, CostOptimization, CostPrediction, CostTrainingData, DisasterRecoveryConfig,
-    DisasterRecoveryManager, ElasticScalingConfig, ElasticScalingStatus, GCSBackend, GpuCompressor,
-    HealthStatus, MLCostOptimizer, NodeInstance, ObjectMetadata, OperationMetrics, S3Backend,
-    ScalingDecision, StorageOperationResult, StorageTier, Trend,
+    CloudError, CloudProvider, HealthStatus, ObjectMetadata, StorageOperationResult, StorageTier,
 };
 
 /// Cloud storage provider trait
@@ -57,7 +49,7 @@ pub trait CloudStorageProvider: Send + Sync {
     async fn health_check(&self) -> Result<HealthStatus, CloudError>;
 }
 /// Simple MD5-like hash for simulation (not cryptographic)
-fn md5_hash(data: &[u8]) -> u64 {
+pub(super) fn md5_hash(data: &[u8]) -> u64 {
     let mut hash: u64 = 0;
     for (i, &byte) in data.iter().enumerate() {
         hash = hash.wrapping_add((byte as u64).wrapping_mul(31_u64.pow((i % 8) as u32)));

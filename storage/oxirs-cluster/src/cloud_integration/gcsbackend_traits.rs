@@ -8,10 +8,10 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::collections::HashMap;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use super::functions::CloudStorageProvider;
+use super::functions::{md5_hash, CloudStorageProvider};
 use super::types::{
     CloudError, CloudProvider, GCSBackend, HealthStatus, ObjectMetadata, StorageOperationResult,
     StorageTier,
