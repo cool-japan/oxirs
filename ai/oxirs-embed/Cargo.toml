@@ -84,7 +84,7 @@ api-server = ["dep:axum", "dep:tower", "dep:tower-http"]
 graphql = []  # GraphQL API support
 
 # High-performance acceleration features
-gpu = ["scirs2-linalg/gpu", "scirs2-neural/gpu"]
+gpu = ["scirs2-core/gpu", "scirs2-linalg/gpu", "scirs2-neural/gpu"]
 cuda = ["scirs2-linalg/cuda"]
 opencl = ["scirs2-linalg/opencl"]
 rocm = ["scirs2-linalg/rocm"]
@@ -106,3 +106,11 @@ name = "temporal_embeddings_demo"
 [[example]]
 name = "storage_backend_demo"
 required-features = ["basic-models"]
+
+[[example]]
+name = "gpu_acceleration_demo"
+required-features = ["gpu"]
+
+[[example]]
+name = "integrated_ai_platform_demo"
+required-features = ["gpu"]

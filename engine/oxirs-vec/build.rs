@@ -10,6 +10,7 @@ fn main() {
 
     // Detect CUDA availability and set cfg flag
     // This allows conditional compilation for CUDA-dependent code
+    // Per COOLJAPAN Pure Rust Policy: CUDA is optional and must be feature-gated
     #[cfg(feature = "cuda")]
     {
         // Check if CUDA is actually available
@@ -21,14 +22,13 @@ fn main() {
 
         if cuda_available {
             println!("cargo:rustc-cfg=cuda_runtime_available");
+            println!("cargo:warning=CUDA toolkit detected - GPU acceleration will be available");
         } else {
-            println!("cargo:warning=CUDA feature enabled but CUDA toolkit not found - CUDA-dependent tests/examples will be skipped");
-            println!("cargo:warning=Compilation will likely fail due to missing CUDA libraries");
-            println!(
-                "cargo:warning=To fix: either install CUDA toolkit or build without --all-features"
-            );
-            // cuda-runtime-sys will fail to link - this is expected behavior
-            // Users should not enable cuda feature without CUDA toolkit
+            // CUDA not available - build will succeed with CPU fallbacks
+            println!("cargo:warning=CUDA feature enabled but toolkit not found");
+            println!("cargo:warning=GPU operations will fall back to CPU implementations");
+            println!("cargo:warning=For GPU acceleration, install CUDA toolkit from https://developer.nvidia.com/cuda-downloads");
+            println!("cargo:warning=Or build without CUDA feature: cargo build -p oxirs-vec (default features are Pure Rust)");
         }
     }
 }

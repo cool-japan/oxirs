@@ -38,7 +38,9 @@ pub mod retrieval;
 pub mod sparql;
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -47,8 +49,9 @@ use thiserror::Error;
 use tokio::sync::RwLock;
 
 // Re-exports
-pub use config::GraphRAGConfig;
-pub use graph::community::CommunityDetector;
+pub use config::{CacheConfiguration, GraphRAGConfig};
+pub use graph::community::{CommunityAlgorithm, CommunityConfig, CommunityDetector};
+pub use graph::embeddings::{CommunityAwareEmbeddings, CommunityStructure, EmbeddingConfig};
 pub use graph::traversal::GraphTraversal;
 pub use query::planner::QueryPlanner;
 pub use retrieval::fusion::FusionStrategy;
@@ -240,6 +243,48 @@ pub trait LlmClientTrait: Send + Sync {
     ) -> GraphRAGResult<String>;
 }
 
+/// Cached result with metadata
+#[derive(Debug, Clone)]
+struct CachedResult {
+    result: GraphRAGResult2,
+    timestamp: SystemTime,
+    ttl: Duration,
+}
+
+impl CachedResult {
+    /// Check if the cached result is still fresh
+    fn is_fresh(&self) -> bool {
+        self.timestamp
+            .elapsed()
+            .map(|elapsed| elapsed < self.ttl)
+            .unwrap_or(false)
+    }
+}
+
+/// Cache configuration
+#[derive(Debug, Clone)]
+pub struct CacheConfig {
+    /// Base TTL in seconds (default: 3600 = 1 hour)
+    pub base_ttl_seconds: u64,
+    /// Minimum TTL in seconds (default: 300 = 5 minutes)
+    pub min_ttl_seconds: u64,
+    /// Maximum TTL in seconds (default: 86400 = 24 hours)
+    pub max_ttl_seconds: u64,
+    /// Enable adaptive TTL based on update frequency
+    pub adaptive: bool,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            base_ttl_seconds: 3600,
+            min_ttl_seconds: 300,
+            max_ttl_seconds: 86400,
+            adaptive: true,
+        }
+    }
+}
+
 /// Main GraphRAG engine
 pub struct GraphRAGEngine<V, E, S, L>
 where
@@ -258,8 +303,12 @@ where
     llm_client: Arc<L>,
     /// Configuration
     config: GraphRAGConfig,
-    /// Query result cache
-    cache: Arc<RwLock<lru::LruCache<String, GraphRAGResult2>>>,
+    /// Query result cache with adaptive TTL
+    cache: Arc<RwLock<lru::LruCache<String, CachedResult>>>,
+    /// Cache configuration
+    cache_config: CacheConfig,
+    /// Graph update counter for adaptive TTL
+    graph_update_count: Arc<AtomicU64>,
     /// Community detector (lazy initialized)
     community_detector: Option<Arc<CommunityDetector>>,
 }
@@ -279,6 +328,32 @@ where
         llm_client: Arc<L>,
         config: GraphRAGConfig,
     ) -> Self {
+        let cache_config = CacheConfig {
+            base_ttl_seconds: config.cache_config.base_ttl_seconds,
+            min_ttl_seconds: config.cache_config.min_ttl_seconds,
+            max_ttl_seconds: config.cache_config.max_ttl_seconds,
+            adaptive: config.cache_config.adaptive,
+        };
+
+        Self::with_cache_config(
+            vec_index,
+            embedding_model,
+            sparql_engine,
+            llm_client,
+            config,
+            cache_config,
+        )
+    }
+
+    /// Create a new GraphRAG engine with custom cache configuration
+    pub fn with_cache_config(
+        vec_index: Arc<V>,
+        embedding_model: Arc<E>,
+        sparql_engine: Arc<S>,
+        llm_client: Arc<L>,
+        config: GraphRAGConfig,
+        cache_config: CacheConfig,
+    ) -> Self {
         const DEFAULT_CACHE_SIZE: std::num::NonZeroUsize = match std::num::NonZeroUsize::new(1000) {
             Some(size) => size,
             None => panic!("constant is non-zero"),
@@ -296,17 +371,55 @@ where
             llm_client,
             config,
             cache: Arc::new(RwLock::new(lru::LruCache::new(cache_size))),
+            cache_config,
+            graph_update_count: Arc::new(AtomicU64::new(0)),
             community_detector: None,
         }
+    }
+
+    /// Calculate adaptive TTL based on graph update frequency
+    fn calculate_ttl(&self) -> Duration {
+        if !self.cache_config.adaptive {
+            return Duration::from_secs(self.cache_config.base_ttl_seconds);
+        }
+
+        let updates_per_hour = self.graph_update_count.load(Ordering::Relaxed) as f64;
+
+        // More updates = shorter TTL
+        let ttl_secs = if updates_per_hour > 100.0 {
+            self.cache_config.min_ttl_seconds // High update rate: 5 min TTL
+        } else if updates_per_hour > 10.0 {
+            self.cache_config.base_ttl_seconds / 2 // Medium: 30 min TTL
+        } else {
+            self.cache_config.max_ttl_seconds // Low update rate: 24 hour TTL
+        };
+
+        Duration::from_secs(ttl_secs)
+    }
+
+    /// Record graph update for adaptive TTL calculation
+    pub fn record_graph_update(&self) {
+        self.graph_update_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Get current cache hit rate for monitoring
+    pub async fn get_cache_stats(&self) -> (usize, usize) {
+        let cache = self.cache.read().await;
+        (cache.len(), cache.cap().get())
     }
 
     /// Execute a GraphRAG query
     pub async fn query(&self, query: &str) -> GraphRAGResult<GraphRAGResult2> {
         let start_time = std::time::Instant::now();
 
-        // Check cache
-        if let Some(cached) = self.cache.read().await.peek(&query.to_string()) {
-            return Ok(cached.clone());
+        // Check cache with freshness validation
+        {
+            let cache = self.cache.read().await;
+            if let Some(cached) = cache.peek(&query.to_string()) {
+                if cached.is_fresh() {
+                    return Ok(cached.result.clone());
+                }
+            }
         }
 
         // 1. Embed query
@@ -360,11 +473,17 @@ where
             confidence,
         };
 
-        // Update cache
+        // Update cache with adaptive TTL
+        let ttl = self.calculate_ttl();
+        let cached = CachedResult {
+            result: result.clone(),
+            timestamp: SystemTime::now(),
+            ttl,
+        };
         self.cache
             .write()
             .await
-            .put(query.to_string(), result.clone());
+            .put(query.to_string(), cached);
 
         Ok(result)
     }

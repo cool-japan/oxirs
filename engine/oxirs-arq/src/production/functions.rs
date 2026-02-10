@@ -8,7 +8,8 @@ use std::sync::{Arc, RwLock};
 pub(super) type CancellationCallbacks = Arc<RwLock<Vec<Box<dyn Fn() + Send + Sync>>>>;
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::production::*;
+    use std::time::{Duration, SystemTime};
     #[test]
     fn test_cancellation_token() {
         let token = QueryCancellationToken::new();

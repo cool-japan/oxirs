@@ -5,14 +5,15 @@
 //! region-aware leader election, and optimized cross-region communication.
 
 use crate::discovery::NodeMetadata;
+use crate::error::Result as ClusterResult;
 use crate::raft::OxirsNodeId;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Geographic region configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -69,6 +70,16 @@ pub struct RegionConfig {
     pub prefer_local_leader: bool,
     /// Enable cross-region backup consensus
     pub enable_cross_region_backup: bool,
+    /// Enable relay routing for high-latency paths
+    pub enable_relay: bool,
+    /// Relay latency threshold (ms) - use relay if improvement > threshold
+    pub relay_latency_threshold_ms: f64,
+    /// Enable compression for cross-region data
+    pub enable_compression: bool,
+    /// Enable read-local routing (route reads to nearest replica)
+    pub enable_read_local: bool,
+    /// Routing strategy to use
+    pub routing_strategy: RoutingStrategy,
     /// Custom region properties
     pub properties: HashMap<String, String>,
 }
@@ -97,6 +108,11 @@ impl Default for RegionConfig {
             max_regional_latency_ms: 100,
             prefer_local_leader: true,
             enable_cross_region_backup: true,
+            enable_relay: true,
+            relay_latency_threshold_ms: 200.0,
+            enable_compression: true,
+            enable_read_local: true,
+            routing_strategy: RoutingStrategy::default(),
             properties: HashMap::new(),
         }
     }
@@ -124,8 +140,8 @@ pub struct RegionTopology {
     pub regions: HashMap<String, Region>,
     /// Node placement mapping
     pub node_placements: HashMap<OxirsNodeId, NodePlacement>,
-    /// Inter-region latency matrix (in milliseconds)
-    pub latency_matrix: HashMap<(String, String), u64>,
+    /// Inter-region latency matrix (in milliseconds, f64 for precision)
+    pub latency_matrix: HashMap<(String, String), f64>,
     /// Region-to-region connectivity status
     pub connectivity_status: HashMap<(String, String), ConnectivityStatus>,
 }
@@ -141,6 +157,47 @@ pub enum ConnectivityStatus {
     Unstable { error_rate: f64 },
     /// No connectivity
     Disconnected,
+}
+
+/// Routing strategy for cross-region communication
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RoutingStrategy {
+    /// Always use direct connection
+    Direct,
+    /// Use Dijkstra for minimum latency path
+    LatencyAware,
+    /// Consider both latency and bandwidth
+    BandwidthAware,
+    /// Minimize cross-region data transfer costs
+    CostAware,
+}
+
+impl Default for RoutingStrategy {
+    fn default() -> Self {
+        Self::LatencyAware
+    }
+}
+
+/// Route between regions
+#[derive(Debug, Clone)]
+pub struct Route {
+    /// Hops in the route (e.g., [us-west, us-east, eu-central])
+    pub hops: Vec<String>,
+    /// Total latency of the route in milliseconds
+    pub total_latency: f64,
+    /// Whether to use compression for this route
+    pub use_compression: bool,
+}
+
+impl Route {
+    /// Create a direct route between two regions
+    pub fn direct(source: String, dest: String) -> Self {
+        Self {
+            hops: vec![source, dest],
+            total_latency: 0.0,
+            use_compression: true,
+        }
+    }
 }
 
 /// Multi-region consensus strategy
@@ -265,11 +322,11 @@ impl Default for RegionPerformanceMetrics {
 /// Latency statistics
 #[derive(Debug, Default)]
 pub struct LatencyStats {
-    pub min_ms: u64,
-    pub max_ms: u64,
-    pub avg_ms: u64,
-    pub p95_ms: u64,
-    pub p99_ms: u64,
+    pub min_ms: f64,
+    pub max_ms: f64,
+    pub avg_ms: f64,
+    pub p95_ms: f64,
+    pub p99_ms: f64,
     pub sample_count: u64,
 }
 
@@ -424,7 +481,7 @@ impl RegionManager {
                 let region_pair = (region_ids[i].clone(), region_ids[j].clone());
 
                 if i == j {
-                    topology.latency_matrix.insert(region_pair.clone(), 0);
+                    topology.latency_matrix.insert(region_pair.clone(), 0.0);
                     topology
                         .connectivity_status
                         .insert(region_pair, ConnectivityStatus::Optimal);
@@ -434,11 +491,11 @@ impl RegionManager {
                     topology.latency_matrix.insert(region_pair.clone(), latency);
                     topology.connectivity_status.insert(
                         region_pair,
-                        if latency < 50 {
+                        if latency < 50.0 {
                             ConnectivityStatus::Optimal
                         } else {
                             ConnectivityStatus::Degraded {
-                                latency_ms: latency,
+                                latency_ms: latency as u64,
                             }
                         },
                     );
@@ -724,7 +781,7 @@ impl RegionManager {
     }
 
     /// Estimate latency between regions based on coordinates
-    fn estimate_latency(&self, region_a: &str, region_b: &str, topology: &RegionTopology) -> u64 {
+    fn estimate_latency(&self, region_a: &str, region_b: &str, topology: &RegionTopology) -> f64 {
         let region_a_info = topology.regions.get(region_a);
         let region_b_info = topology.regions.get(region_b);
 
@@ -734,13 +791,13 @@ impl RegionManager {
                     // Simple distance-based latency estimation
                     let distance = self.calculate_distance(coord_a, coord_b);
                     // Approximate 1ms per 200km + base 10ms overhead
-                    ((distance / 200.0) + 10.0) as u64
+                    (distance / 200.0) + 10.0
                 } else {
                     // Default inter-region latency
-                    100
+                    100.0
                 }
             }
-            _ => 1000, // Very high latency for unknown regions
+            _ => 1000.0, // Very high latency for unknown regions
         }
     }
 
@@ -769,7 +826,7 @@ impl RegionManager {
             .map(|((_, to), latency)| (to.clone(), *latency))
             .collect();
 
-        region_latencies.sort_by_key(|(_, latency)| *latency);
+        region_latencies.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         region_latencies
             .into_iter()
             .map(|(region, _)| region)
@@ -777,7 +834,7 @@ impl RegionManager {
     }
 
     /// Measure actual inter-region latency
-    async fn measure_inter_region_latency(&self, region_a: &str, region_b: &str) -> Result<u64> {
+    async fn measure_inter_region_latency(&self, region_a: &str, region_b: &str) -> Result<f64> {
         use std::time::Instant;
         use tokio::time::timeout;
 
@@ -792,7 +849,7 @@ impl RegionManager {
                 .latency_matrix
                 .get(&(region_a.to_string(), region_b.to_string()))
                 .copied()
-                .unwrap_or(1000));
+                .unwrap_or(1000.0));
         }
 
         // Get node addresses for latency measurement
@@ -814,7 +871,7 @@ impl RegionManager {
                     // Perform health check / ping to measure latency
                     match timeout(measurement_timeout, self.ping_node(*addr_b)).await {
                         Ok(Ok(_)) => {
-                            let latency = start.elapsed().as_millis() as u64;
+                            let latency = start.elapsed().as_secs_f64() * 1000.0;
                             measurements.push(latency);
                         }
                         Ok(Err(_)) | Err(_) => {
@@ -840,12 +897,12 @@ impl RegionManager {
                 .latency_matrix
                 .get(&(region_a.to_string(), region_b.to_string()))
                 .copied()
-                .unwrap_or(1000));
+                .unwrap_or(1000.0));
         }
 
         // Calculate statistics from measurements
-        measurements.sort_unstable();
-        let avg_latency = measurements.iter().sum::<u64>() / measurements.len() as u64;
+        measurements.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let avg_latency = measurements.iter().sum::<f64>() / measurements.len() as f64;
 
         // Update the latency matrix with the measured value
         {
@@ -1223,7 +1280,7 @@ impl RegionManager {
     }
 
     /// Update latency statistics
-    fn update_latency_stats(&self, stats: &mut LatencyStats, new_latency: u64) {
+    fn update_latency_stats(&self, stats: &mut LatencyStats, new_latency: f64) {
         if stats.sample_count == 0 {
             stats.min_ms = new_latency;
             stats.max_ms = new_latency;
@@ -1236,14 +1293,14 @@ impl RegionManager {
 
             // Simple moving average (in production, use proper percentile calculation)
             stats.avg_ms =
-                (stats.avg_ms * stats.sample_count + new_latency) / (stats.sample_count + 1);
+                (stats.avg_ms * stats.sample_count as f64 + new_latency) / (stats.sample_count as f64 + 1.0);
 
             // Simplified percentile estimation
             if new_latency > stats.p95_ms {
-                stats.p95_ms = (stats.p95_ms * 19 + new_latency) / 20;
+                stats.p95_ms = (stats.p95_ms * 19.0 + new_latency) / 20.0;
             }
             if new_latency > stats.p99_ms {
-                stats.p99_ms = (stats.p99_ms * 99 + new_latency) / 100;
+                stats.p99_ms = (stats.p99_ms * 99.0 + new_latency) / 100.0;
             }
         }
 
@@ -1315,6 +1372,350 @@ impl RegionManager {
         );
 
         Ok((healthy_count, total_nodes))
+    }
+
+    /// Find optimal route between regions using configured routing strategy
+    pub async fn find_route(&self, source: &str, dest: &str) -> ClusterResult<Route> {
+        let topology = self.topology.read().await;
+
+        // Validate regions exist
+        if !topology.regions.contains_key(source) {
+            return Err(crate::error::ClusterError::Config(format!(
+                "Source region {} not found",
+                source
+            )));
+        }
+        if !topology.regions.contains_key(dest) {
+            return Err(crate::error::ClusterError::Config(format!(
+                "Destination region {} not found",
+                dest
+            )));
+        }
+
+        let source_region = topology.regions.get(source).ok_or_else(|| {
+            crate::error::ClusterError::Config(format!("Source region {} not found", source))
+        })?;
+
+        match source_region.config.routing_strategy {
+            RoutingStrategy::Direct => {
+                Ok(Route::direct(source.to_string(), dest.to_string()))
+            }
+            RoutingStrategy::LatencyAware => {
+                self.find_latency_optimal_route(source, dest, &topology).await
+            }
+            RoutingStrategy::BandwidthAware => {
+                self.find_bandwidth_optimal_route(source, dest, &topology).await
+            }
+            RoutingStrategy::CostAware => {
+                self.find_cost_optimal_route(source, dest, &topology).await
+            }
+        }
+    }
+
+    /// Find latency-optimal route using Dijkstra's algorithm
+    async fn find_latency_optimal_route(
+        &self,
+        source: &str,
+        dest: &str,
+        topology: &RegionTopology,
+    ) -> ClusterResult<Route> {
+        // Build graph: Regions as nodes, latencies as edge weights
+        let region_ids: Vec<String> = topology.regions.keys().cloned().collect();
+        let num_regions = region_ids.len();
+
+        // Create region ID to index mapping
+        let region_to_idx: HashMap<String, usize> = region_ids
+            .iter()
+            .enumerate()
+            .map(|(idx, id)| (id.clone(), idx))
+            .collect();
+
+        // Build adjacency matrix for Dijkstra
+        let mut graph = vec![vec![f64::INFINITY; num_regions]; num_regions];
+
+        // Set diagonal to 0
+        for i in 0..num_regions {
+            graph[i][i] = 0.0;
+        }
+
+        // Fill in latencies from the latency matrix
+        for ((from, to), &latency) in &topology.latency_matrix {
+            if let (Some(&from_idx), Some(&to_idx)) =
+                (region_to_idx.get(from), region_to_idx.get(to))
+            {
+                graph[from_idx][to_idx] = latency;
+            }
+        }
+
+        // Use Dijkstra to find shortest path
+        let source_idx = region_to_idx.get(source).ok_or_else(|| {
+            crate::error::ClusterError::Config(format!("Source region {} not found", source))
+        })?;
+        let dest_idx = region_to_idx.get(dest).ok_or_else(|| {
+            crate::error::ClusterError::Config(format!("Destination region {} not found", dest))
+        })?;
+
+        let (distances, predecessors) = self.dijkstra(&graph, *source_idx)?;
+
+        // Reconstruct path
+        let path = self.reconstruct_path(&predecessors, *source_idx, *dest_idx, &region_ids)?;
+        let total_latency = distances[*dest_idx];
+
+        // Check if relay is beneficial
+        let direct_latency = topology
+            .latency_matrix
+            .get(&(source.to_string(), dest.to_string()))
+            .copied()
+            .unwrap_or(f64::INFINITY);
+
+        let source_region = topology.regions.get(source).ok_or_else(|| {
+            crate::error::ClusterError::Config(format!("Source region {} not found", source))
+        })?;
+
+        if source_region.config.enable_relay
+            && path.len() > 2
+            && total_latency < direct_latency * 0.8
+        {
+            // Use relay route (>20% improvement)
+            info!(
+                "Using relay route from {} to {}: {:?} ({}ms vs {}ms direct)",
+                source, dest, path, total_latency, direct_latency
+            );
+            Ok(Route {
+                hops: path,
+                total_latency,
+                use_compression: source_region.config.enable_compression,
+            })
+        } else {
+            // Direct route is better or comparable
+            Ok(Route::direct(source.to_string(), dest.to_string()))
+        }
+    }
+
+    /// Dijkstra's algorithm implementation
+    /// Returns (distances, predecessors)
+    fn dijkstra(
+        &self,
+        graph: &[Vec<f64>],
+        source: usize,
+    ) -> ClusterResult<(Vec<f64>, Vec<Option<usize>>)> {
+        let n = graph.len();
+        let mut distances = vec![f64::INFINITY; n];
+        let mut predecessors = vec![None; n];
+        let mut visited = vec![false; n];
+
+        distances[source] = 0.0;
+
+        for _ in 0..n {
+            // Find unvisited node with minimum distance
+            let mut min_dist = f64::INFINITY;
+            let mut min_node = None;
+
+            for i in 0..n {
+                if !visited[i] && distances[i] < min_dist {
+                    min_dist = distances[i];
+                    min_node = Some(i);
+                }
+            }
+
+            let Some(u) = min_node else {
+                break;
+            };
+
+            visited[u] = true;
+
+            // Update distances to neighbors
+            for v in 0..n {
+                if !visited[v] && graph[u][v] != f64::INFINITY {
+                    let alt = distances[u] + graph[u][v];
+                    if alt < distances[v] {
+                        distances[v] = alt;
+                        predecessors[v] = Some(u);
+                    }
+                }
+            }
+        }
+
+        Ok((distances, predecessors))
+    }
+
+    /// Reconstruct path from predecessors
+    fn reconstruct_path(
+        &self,
+        predecessors: &[Option<usize>],
+        source: usize,
+        dest: usize,
+        region_ids: &[String],
+    ) -> ClusterResult<Vec<String>> {
+        let mut path = Vec::new();
+        let mut current = dest;
+
+        // Backtrack from destination to source
+        while current != source {
+            path.push(region_ids[current].clone());
+            match predecessors[current] {
+                Some(pred) => current = pred,
+                None => {
+                    return Err(crate::error::ClusterError::Network(format!(
+                        "No path found from {} to {}",
+                        region_ids[source], region_ids[dest]
+                    )));
+                }
+            }
+        }
+
+        path.push(region_ids[source].clone());
+        path.reverse();
+
+        Ok(path)
+    }
+
+    /// Find bandwidth-optimal route (considers both latency and bandwidth)
+    async fn find_bandwidth_optimal_route(
+        &self,
+        source: &str,
+        dest: &str,
+        _topology: &RegionTopology,
+    ) -> ClusterResult<Route> {
+        // For now, fall back to latency-aware routing
+        // In a full implementation, this would consider bandwidth metrics
+        self.find_latency_optimal_route(source, dest, _topology).await
+    }
+
+    /// Find cost-optimal route (minimizes cross-region data transfer costs)
+    async fn find_cost_optimal_route(
+        &self,
+        source: &str,
+        dest: &str,
+        _topology: &RegionTopology,
+    ) -> ClusterResult<Route> {
+        // For now, fall back to latency-aware routing
+        // In a full implementation, this would consider cost metrics
+        self.find_latency_optimal_route(source, dest, _topology).await
+    }
+
+    /// Route read request to nearest replica
+    pub async fn route_read(
+        &self,
+        client_region: &str,
+        available_replicas: &[String],
+    ) -> ClusterResult<String> {
+        if available_replicas.is_empty() {
+            return Err(crate::error::ClusterError::Config(
+                "No replicas available".to_string(),
+            ));
+        }
+
+        let topology = self.topology.read().await;
+        let source_region = topology.regions.get(client_region).ok_or_else(|| {
+            crate::error::ClusterError::Config(format!("Client region {} not found", client_region))
+        })?;
+
+        if !source_region.config.enable_read_local {
+            // Use first replica (primary)
+            return Ok(available_replicas[0].clone());
+        }
+
+        // Find replica with minimum latency
+        let mut best_replica = available_replicas[0].clone();
+        let mut best_latency = f64::INFINITY;
+
+        for replica in available_replicas {
+            let latency = topology
+                .latency_matrix
+                .get(&(client_region.to_string(), replica.clone()))
+                .copied()
+                .unwrap_or(f64::INFINITY);
+
+            if latency < best_latency {
+                best_latency = latency;
+                best_replica = replica.clone();
+            }
+        }
+
+        info!(
+            "Routed read from {} to {} ({}ms)",
+            client_region, best_replica, best_latency
+        );
+        Ok(best_replica)
+    }
+
+    /// Measure latency between two regions
+    pub async fn measure_latency(&self, from: &str, to: &str) -> ClusterResult<f64> {
+        let topology = self.topology.read().await;
+
+        // Get nodes in both regions
+        let from_nodes: Vec<OxirsNodeId> = topology
+            .node_placements
+            .iter()
+            .filter(|(_, p)| p.region_id == from)
+            .map(|(id, _)| *id)
+            .collect();
+
+        let to_nodes: Vec<OxirsNodeId> = topology
+            .node_placements
+            .iter()
+            .filter(|(_, p)| p.region_id == to)
+            .map(|(id, _)| *id)
+            .collect();
+
+        if from_nodes.is_empty() || to_nodes.is_empty() {
+            return Err(crate::error::ClusterError::Config(format!(
+                "No nodes available in region {} or {}",
+                from, to
+            )));
+        }
+
+        // Pick first node from each region for ping
+        let to_node = to_nodes[0];
+
+        // Send ping
+        let start = Instant::now();
+        self.ping_node_by_id(to_node).await?;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        // Update latency matrix
+        drop(topology); // Release read lock
+        let mut topology = self.topology.write().await;
+        topology
+            .latency_matrix
+            .insert((from.to_string(), to.to_string()), latency_ms);
+
+        Ok(latency_ms)
+    }
+
+    /// Ping a node by ID
+    async fn ping_node_by_id(&self, node_id: OxirsNodeId) -> ClusterResult<()> {
+        let addr = self
+            .get_node_address(node_id)
+            .await
+            .map_err(|e| crate::error::ClusterError::Network(e.to_string()))?
+            .ok_or_else(|| {
+                crate::error::ClusterError::Network(format!("No address for node {}", node_id))
+            })?;
+
+        self.ping_node(addr)
+            .await
+            .map_err(|e| crate::error::ClusterError::Network(e.to_string()))
+    }
+
+    /// Compress data for cross-region transfer using zstd
+    pub fn compress_for_transfer(&self, data: &[u8]) -> ClusterResult<Vec<u8>> {
+        use zstd::bulk::compress;
+
+        // Use compression level 3 for balance of speed and ratio
+        compress(data, 3).map_err(|e| crate::error::ClusterError::Compression(e.to_string()))
+    }
+
+    /// Decompress data received from cross-region transfer
+    pub fn decompress_from_transfer(&self, data: &[u8]) -> ClusterResult<Vec<u8>> {
+        use zstd::bulk::decompress;
+
+        // Limit decompression to 100MB to prevent decompression bombs
+        const MAX_DECOMPRESSED_SIZE: usize = 100 * 1024 * 1024;
+
+        decompress(data, MAX_DECOMPRESSED_SIZE)
+            .map_err(|e| crate::error::ClusterError::Compression(e.to_string()))
     }
 }
 

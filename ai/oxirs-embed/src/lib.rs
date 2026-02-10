@@ -146,6 +146,7 @@ pub mod entity_linking;
 pub mod evaluation;
 pub mod federated_learning;
 pub mod fine_tuning;
+#[cfg(feature = "gpu")]
 pub mod gpu_acceleration;
 pub mod graphql_api;
 pub mod inference;
@@ -633,6 +634,7 @@ pub use federated_learning::{
     SecurityFeature, SecurityManager, TrainingConfig, VerificationEngine, VerificationMechanism,
     VerificationResult, WeightingScheme,
 };
+#[cfg(feature = "gpu")]
 pub use gpu_acceleration::{
     GpuAccelerationConfig, GpuAccelerationManager, GpuMemoryPool, GpuPerformanceStats,
     MixedPrecisionProcessor, MultiStreamProcessor, TensorCache,

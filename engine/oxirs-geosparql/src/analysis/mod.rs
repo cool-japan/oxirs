@@ -5,10 +5,12 @@
 //! - Spatial clustering (DBSCAN, K-means)
 //! - Spatial interpolation (IDW, Kriging)
 //! - Spatial statistics (Moran's I, Getis-Ord)
+//! - Spatial aggregations (union, convex hull, centroid, envelope)
 //!
 //! All algorithms leverage SciRS2 for high-performance numerical computations
 //! with SIMD, parallel processing, and GPU acceleration where applicable.
 
+pub mod aggregations;
 pub mod clustering;
 pub mod heatmap;
 pub mod interpolation;
@@ -17,6 +19,10 @@ pub mod statistics;
 pub mod triangulation;
 pub mod voronoi;
 
+pub use aggregations::{
+    aggregate_centroid, aggregate_convex_hull, aggregate_envelope, aggregate_union, spatial_centroid,
+    spatial_convex_hull, spatial_dbscan, spatial_envelope, spatial_union, ClusterId,
+};
 pub use clustering::{
     dbscan_clustering, kmeans_clustering, ClusteringResult, DbscanParams, KmeansParams,
 };

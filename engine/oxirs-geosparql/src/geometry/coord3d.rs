@@ -3,8 +3,11 @@
 //! This module provides support for Z and M coordinates in geometries.
 //! Since geo_types only supports 2D coordinates (x, y), we store Z and M
 //! values separately and handle them during parsing/serialization.
+//!
+//! Additionally provides true 3D coordinate operations for spatial analysis.
 
 use serde::{Deserialize, Serialize};
+use scirs2_core::ndarray_ext::Array2;
 
 /// Coordinate dimension type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -220,6 +223,254 @@ impl Default for Coord3D {
     }
 }
 
+// ============================================================================
+// TRUE 3D COORDINATE OPERATIONS
+// ============================================================================
+
+/// A true 3D point with x, y, z coordinates
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Coord3DPoint {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+impl Coord3DPoint {
+    /// Create a new 3D coordinate
+    pub fn new(x: f64, y: f64, z: f64) -> Self {
+        Self { x, y, z }
+    }
+
+    /// Calculate 3D Euclidean distance to another point
+    pub fn distance_3d(&self, other: &Coord3DPoint) -> f64 {
+        let dx = self.x - other.x;
+        let dy = self.y - other.y;
+        let dz = self.z - other.z;
+        (dx * dx + dy * dy + dz * dz).sqrt()
+    }
+
+    /// Calculate dot product with another 3D vector
+    pub fn dot_product(&self, other: &Coord3DPoint) -> f64 {
+        self.x * other.x + self.y * other.y + self.z * other.z
+    }
+
+    /// Calculate cross product with another 3D vector
+    pub fn cross_product(&self, other: &Coord3DPoint) -> Coord3DPoint {
+        Coord3DPoint {
+            x: self.y * other.z - self.z * other.y,
+            y: self.z * other.x - self.x * other.z,
+            z: self.x * other.y - self.y * other.x,
+        }
+    }
+
+    /// Calculate magnitude (length) of this vector
+    pub fn magnitude(&self) -> f64 {
+        (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+    }
+
+    /// Normalize this vector to unit length
+    pub fn normalize(&self) -> Coord3DPoint {
+        let mag = self.magnitude();
+        if mag < 1e-10 {
+            return *self;
+        }
+        Coord3DPoint {
+            x: self.x / mag,
+            y: self.y / mag,
+            z: self.z / mag,
+        }
+    }
+
+    /// Convert to array
+    pub fn to_array(&self) -> [f64; 3] {
+        [self.x, self.y, self.z]
+    }
+
+    /// Convert from array
+    pub fn from_array(arr: [f64; 3]) -> Self {
+        Self {
+            x: arr[0],
+            y: arr[1],
+            z: arr[2],
+        }
+    }
+}
+
+/// 3D geometry type enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Geometry3DType {
+    /// Single 3D point
+    Point3D,
+    /// Line string in 3D
+    LineString3D,
+    /// Polygon in 3D
+    Polygon3D,
+    /// Multiple 3D points
+    MultiPoint3D,
+    /// Multiple 3D line strings
+    MultiLineString3D,
+    /// Multiple 3D polygons
+    MultiPolygon3D,
+    /// Polyhedral surface (collection of polygons)
+    PolyhedralSurface,
+    /// 3D solid (volumetric geometry)
+    Solid,
+}
+
+/// Complete 3D geometry structure
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Geometry3D {
+    /// 3D coordinates
+    pub coords: Vec<Coord3DPoint>,
+    /// Geometry type
+    pub geometry_type: Geometry3DType,
+}
+
+impl Geometry3D {
+    /// Create a new 3D geometry
+    pub fn new(coords: Vec<Coord3DPoint>, geometry_type: Geometry3DType) -> Self {
+        Self {
+            coords,
+            geometry_type,
+        }
+    }
+
+    /// Create a 3D point
+    pub fn point(x: f64, y: f64, z: f64) -> Self {
+        Self {
+            coords: vec![Coord3DPoint::new(x, y, z)],
+            geometry_type: Geometry3DType::Point3D,
+        }
+    }
+
+    /// Create a 3D line string
+    pub fn linestring(coords: Vec<Coord3DPoint>) -> Self {
+        Self {
+            coords,
+            geometry_type: Geometry3DType::LineString3D,
+        }
+    }
+
+    /// Create a 3D polygon
+    pub fn polygon(coords: Vec<Coord3DPoint>) -> Self {
+        Self {
+            coords,
+            geometry_type: Geometry3DType::Polygon3D,
+        }
+    }
+
+    /// Get the centroid of this geometry
+    pub fn centroid_3d(&self) -> Option<Coord3DPoint> {
+        if self.coords.is_empty() {
+            return None;
+        }
+
+        let n = self.coords.len() as f64;
+        let sum_x: f64 = self.coords.iter().map(|c| c.x).sum();
+        let sum_y: f64 = self.coords.iter().map(|c| c.y).sum();
+        let sum_z: f64 = self.coords.iter().map(|c| c.z).sum();
+
+        Some(Coord3DPoint::new(sum_x / n, sum_y / n, sum_z / n))
+    }
+
+    /// Get 3D bounding box (min, max)
+    pub fn bbox_3d(&self) -> Option<(Coord3DPoint, Coord3DPoint)> {
+        if self.coords.is_empty() {
+            return None;
+        }
+
+        let mut min_x = f64::INFINITY;
+        let mut min_y = f64::INFINITY;
+        let mut min_z = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+        let mut max_z = f64::NEG_INFINITY;
+
+        for coord in &self.coords {
+            min_x = min_x.min(coord.x);
+            min_y = min_y.min(coord.y);
+            min_z = min_z.min(coord.z);
+            max_x = max_x.max(coord.x);
+            max_y = max_y.max(coord.y);
+            max_z = max_z.max(coord.z);
+        }
+
+        Some((
+            Coord3DPoint::new(min_x, min_y, min_z),
+            Coord3DPoint::new(max_x, max_y, max_z),
+        ))
+    }
+
+    /// Calculate volume (for 3D solid geometries)
+    pub fn volume(&self) -> f64 {
+        match self.geometry_type {
+            Geometry3DType::Solid => {
+                // Simplified volume calculation using bounding box
+                if let Some((min, max)) = self.bbox_3d() {
+                    (max.x - min.x) * (max.y - min.y) * (max.z - min.z)
+                } else {
+                    0.0
+                }
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// Calculate surface area (for 3D geometries)
+    pub fn surface_area(&self) -> f64 {
+        match self.geometry_type {
+            Geometry3DType::Polygon3D | Geometry3DType::PolyhedralSurface => {
+                // Simplified surface area calculation
+                if self.coords.len() < 3 {
+                    return 0.0;
+                }
+
+                let mut area = 0.0;
+                for i in 1..self.coords.len() - 1 {
+                    let v1 = Coord3DPoint::new(
+                        self.coords[i].x - self.coords[0].x,
+                        self.coords[i].y - self.coords[0].y,
+                        self.coords[i].z - self.coords[0].z,
+                    );
+                    let v2 = Coord3DPoint::new(
+                        self.coords[i + 1].x - self.coords[0].x,
+                        self.coords[i + 1].y - self.coords[0].y,
+                        self.coords[i + 1].z - self.coords[0].z,
+                    );
+                    let cross = v1.cross_product(&v2);
+                    area += cross.magnitude() / 2.0;
+                }
+                area
+            }
+            Geometry3DType::Solid => {
+                // Simplified: surface area of bounding box
+                if let Some((min, max)) = self.bbox_3d() {
+                    let dx = max.x - min.x;
+                    let dy = max.y - min.y;
+                    let dz = max.z - min.z;
+                    2.0 * (dx * dy + dy * dz + dz * dx)
+                } else {
+                    0.0
+                }
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// Convert coordinates to ndarray for batch processing
+    pub fn to_array(&self) -> Result<Array2<f64>, String> {
+        let n = self.coords.len();
+        let mut data = vec![0.0; n * 3];
+        for (i, coord) in self.coords.iter().enumerate() {
+            data[i * 3] = coord.x;
+            data[i * 3 + 1] = coord.y;
+            data[i * 3 + 2] = coord.z;
+        }
+        Array2::from_shape_vec((n, 3), data)
+            .map_err(|e| format!("Array conversion failed: {}", e))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,5 +557,125 @@ mod tests {
         let coord = Coord3D::xyz(vec![1.0, 2.0, 3.0]);
         assert!(coord.validate(3).is_ok());
         assert!(coord.validate(2).is_err());
+    }
+
+    // Tests for true 3D operations
+
+    #[test]
+    fn test_coord3d_point_creation() {
+        let p = Coord3DPoint::new(1.0, 2.0, 3.0);
+        assert_eq!(p.x, 1.0);
+        assert_eq!(p.y, 2.0);
+        assert_eq!(p.z, 3.0);
+    }
+
+    #[test]
+    fn test_distance_3d() {
+        let p1 = Coord3DPoint::new(0.0, 0.0, 0.0);
+        let p2 = Coord3DPoint::new(3.0, 4.0, 0.0);
+        assert!((p1.distance_3d(&p2) - 5.0).abs() < 1e-10);
+
+        let p3 = Coord3DPoint::new(3.0, 4.0, 12.0);
+        assert!((p1.distance_3d(&p3) - 13.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_dot_product() {
+        let v1 = Coord3DPoint::new(1.0, 2.0, 3.0);
+        let v2 = Coord3DPoint::new(4.0, 5.0, 6.0);
+        // 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
+        assert!((v1.dot_product(&v2) - 32.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_cross_product() {
+        let v1 = Coord3DPoint::new(1.0, 0.0, 0.0);
+        let v2 = Coord3DPoint::new(0.0, 1.0, 0.0);
+        let cross = v1.cross_product(&v2);
+        assert!((cross.x - 0.0).abs() < 1e-10);
+        assert!((cross.y - 0.0).abs() < 1e-10);
+        assert!((cross.z - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_magnitude() {
+        let v = Coord3DPoint::new(3.0, 4.0, 0.0);
+        assert!((v.magnitude() - 5.0).abs() < 1e-10);
+
+        let v2 = Coord3DPoint::new(1.0, 2.0, 2.0);
+        assert!((v2.magnitude() - 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_normalize() {
+        let v = Coord3DPoint::new(3.0, 4.0, 0.0);
+        let normalized = v.normalize();
+        assert!((normalized.magnitude() - 1.0).abs() < 1e-10);
+        assert!((normalized.x - 0.6).abs() < 1e-10);
+        assert!((normalized.y - 0.8).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_geometry3d_point() {
+        let geom = Geometry3D::point(1.0, 2.0, 3.0);
+        assert_eq!(geom.geometry_type, Geometry3DType::Point3D);
+        assert_eq!(geom.coords.len(), 1);
+        assert_eq!(geom.coords[0].x, 1.0);
+    }
+
+    #[test]
+    fn test_geometry3d_centroid() {
+        let coords = vec![
+            Coord3DPoint::new(0.0, 0.0, 0.0),
+            Coord3DPoint::new(2.0, 0.0, 0.0),
+            Coord3DPoint::new(2.0, 2.0, 0.0),
+            Coord3DPoint::new(0.0, 2.0, 0.0),
+        ];
+        let geom = Geometry3D::polygon(coords);
+        let centroid = geom.centroid_3d().expect("should have centroid");
+        assert!((centroid.x - 1.0).abs() < 1e-10);
+        assert!((centroid.y - 1.0).abs() < 1e-10);
+        assert!((centroid.z - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_geometry3d_bbox() {
+        let coords = vec![
+            Coord3DPoint::new(1.0, 2.0, 3.0),
+            Coord3DPoint::new(5.0, 6.0, 7.0),
+            Coord3DPoint::new(2.0, 3.0, 4.0),
+        ];
+        let geom = Geometry3D::linestring(coords);
+        let (min, max) = geom.bbox_3d().expect("should have bbox");
+        assert_eq!(min.x, 1.0);
+        assert_eq!(min.y, 2.0);
+        assert_eq!(min.z, 3.0);
+        assert_eq!(max.x, 5.0);
+        assert_eq!(max.y, 6.0);
+        assert_eq!(max.z, 7.0);
+    }
+
+    #[test]
+    fn test_geometry3d_volume() {
+        let coords = vec![
+            Coord3DPoint::new(0.0, 0.0, 0.0),
+            Coord3DPoint::new(2.0, 3.0, 4.0),
+        ];
+        let mut geom = Geometry3D::new(coords, Geometry3DType::Solid);
+        let volume = geom.volume();
+        assert!((volume - 24.0).abs() < 1e-10); // 2 * 3 * 4 = 24
+    }
+
+    #[test]
+    fn test_geometry3d_surface_area() {
+        let coords = vec![
+            Coord3DPoint::new(0.0, 0.0, 0.0),
+            Coord3DPoint::new(1.0, 0.0, 0.0),
+            Coord3DPoint::new(1.0, 1.0, 0.0),
+            Coord3DPoint::new(0.0, 1.0, 0.0),
+        ];
+        let geom = Geometry3D::polygon(coords);
+        let area = geom.surface_area();
+        assert!(area > 0.0);
     }
 }

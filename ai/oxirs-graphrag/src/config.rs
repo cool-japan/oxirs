@@ -57,6 +57,10 @@ pub struct GraphRAGConfig {
     #[serde(default)]
     pub cache_size: Option<usize>,
 
+    /// Cache configuration
+    #[serde(default)]
+    pub cache_config: CacheConfiguration,
+
     /// Enable query expansion
     #[serde(default)]
     pub enable_query_expansion: bool,
@@ -98,6 +102,7 @@ impl Default for GraphRAGConfig {
             path_patterns: vec![],
             similarity_threshold: default_similarity_threshold(),
             cache_size: Some(1000),
+            cache_config: CacheConfiguration::default(),
             enable_query_expansion: false,
             enable_hierarchical_summary: false,
             max_community_levels: default_max_community_levels(),
@@ -136,6 +141,34 @@ pub enum FusionStrategy {
     LearningToRank,
 }
 
+/// Cache configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheConfiguration {
+    /// Base TTL in seconds (default: 3600 = 1 hour)
+    #[serde(default = "default_base_ttl_seconds")]
+    pub base_ttl_seconds: u64,
+    /// Minimum TTL in seconds (default: 300 = 5 minutes)
+    #[serde(default = "default_min_ttl_seconds")]
+    pub min_ttl_seconds: u64,
+    /// Maximum TTL in seconds (default: 86400 = 24 hours)
+    #[serde(default = "default_max_ttl_seconds")]
+    pub max_ttl_seconds: u64,
+    /// Enable adaptive TTL based on update frequency
+    #[serde(default = "default_adaptive_ttl")]
+    pub adaptive: bool,
+}
+
+impl Default for CacheConfiguration {
+    fn default() -> Self {
+        Self {
+            base_ttl_seconds: default_base_ttl_seconds(),
+            min_ttl_seconds: default_min_ttl_seconds(),
+            max_ttl_seconds: default_max_ttl_seconds(),
+            adaptive: default_adaptive_ttl(),
+        }
+    }
+}
+
 // Default value functions
 fn default_top_k() -> usize {
     20
@@ -172,6 +205,18 @@ fn default_temperature() -> f32 {
 }
 fn default_max_tokens() -> usize {
     2048
+}
+fn default_base_ttl_seconds() -> u64 {
+    3600
+}
+fn default_min_ttl_seconds() -> u64 {
+    300
+}
+fn default_max_ttl_seconds() -> u64 {
+    86400
+}
+fn default_adaptive_ttl() -> bool {
+    true
 }
 
 #[cfg(test)]

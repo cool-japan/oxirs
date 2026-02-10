@@ -236,7 +236,7 @@ libc = "0.2"
 
 # Compression libraries
 flate2 = "1.1"     # Gzip compression
-zstd = "0.13"      # Zstandard compression
+zstd = { version = "0.13", default-features = false }      # Zstandard compression
 lz4_flex = "0.12"  # LZ4 compression
 snap = "1.1"       # Snappy compression
 brotli = "8.0"     # Brotli compression

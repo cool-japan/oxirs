@@ -78,7 +78,7 @@ pub struct ChatMessage {
     pub metadata: Option<HashMap<String, serde_json::Value>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 pub enum ChatRole {
     System,
     User,

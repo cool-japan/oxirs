@@ -50,9 +50,9 @@ quick-xml = { workspace = true, optional = true }
 base64 = "0.22"
 image = { version = "0.25", optional = true }
 chrono.workspace = true
-# CUDA dependencies - require CUDA toolkit to be installed
-# Note: cuda-runtime-sys may fail to link if CUDA toolkit not installed
-# cudarc handles dynamic loading more gracefully
+# CUDA dependencies (optional - for GPU acceleration)
+# These are only pulled in when "cuda" feature is enabled
+# Code falls back to CPU implementations when CUDA toolkit is not available
 cuda-runtime-sys = { version = "0.3.0-alpha.1", optional = true }
 cudarc = { version = "0.18", features = ["cuda-12000"], optional = true }
 candle-core = { version = "0.9", optional = true }
@@ -66,10 +66,13 @@ indicatif = "0.18"
 # HuggingFace integration
 tokenizers = { version = "0.22", optional = true }
 hf-hub = { version = "0.4", optional = true }
+# Tantivy full-text search
+tantivy = { version = "0.22", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
 tempfile = "3.24"
+uuid.workspace = true
 
 [features]
 default = []
@@ -78,9 +81,10 @@ simd = ["oxirs-core/simd"]
 parallel = ["oxirs-core/parallel"]
 gpu = ["oxirs-core/gpu"]
 blas = ["oxirs-core/blas"]
-# CUDA feature requires CUDA toolkit installed
-# WARNING: Will fail to link if CUDA toolkit not available
-# Do NOT use with --all-features unless CUDA is installed
+# CUDA feature for GPU acceleration (OPTIONAL - follows Pure Rust Policy)
+# When enabled without CUDA toolkit: falls back to CPU implementations
+# When enabled with CUDA toolkit: enables GPU-accelerated operations
+# Default features are 100% Pure Rust (no CUDA required)
 cuda = ["dep:cuda-runtime-sys", "dep:cudarc"]
 candle-gpu = ["candle-core"]
 gpu-full = ["cuda", "candle-gpu", "gpu"]
@@ -88,4 +92,6 @@ images = ["image"]
 content-processing = ["pdf-extract", "oxiarc-archive", "quick-xml", "images"]
 python = ["pyo3", "numpy"]
 huggingface = ["tokenizers", "hf-hub"]
+# Tantivy full-text search (Pure Rust, optional)
+tantivy-search = ["tantivy"]
 

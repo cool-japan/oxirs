@@ -18,6 +18,7 @@ oxirs-core.workspace = true
 scirs2-cluster = { workspace = true }
 scirs2-optimize = { workspace = true }
 scirs2-stats = { workspace = true }
+scirs2-graph = { workspace = true }
 scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
 # oxirs-tdb = { path = "../oxirs-tdb" }  # Temporarily commented out due to compilation issues
 openraft = { workspace = true, optional = true }
@@ -61,6 +62,7 @@ base64 = "0.22"
 flate2 = "1.1"
 zstd = "0.13"
 lz4_flex.workspace = true
+xz2 = "0.1"  # LZMA compression for high-ratio compression
 crc32fast = "1.5"
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 rmp-serde = "1.3"

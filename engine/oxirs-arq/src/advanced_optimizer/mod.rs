@@ -6,15 +6,19 @@
 
 pub mod index_advisor;
 pub mod ml_predictor;
+pub mod model_manager;
 pub mod optimization_cache;
 pub mod streaming_analyzer;
+pub mod training_collector;
 
 pub use index_advisor::*;
 pub use ml_predictor::*;
+pub use model_manager::*;
 pub use optimization_cache::*;
 pub use streaming_analyzer::*;
+pub use training_collector::*;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use anyhow::Result;
 
@@ -30,6 +34,8 @@ pub struct AdvancedOptimizer {
     index_advisor: IndexAdvisor,
     streaming_analyzer: StreamingAnalyzer,
     ml_predictor: Option<MLPredictor>,
+    training_collector: Option<Arc<RwLock<TrainingCollector>>>,
+    model_manager: Option<Arc<RwLock<ModelManager>>>,
     optimization_cache: OptimizationCache,
 }
 
@@ -83,20 +89,48 @@ impl AdvancedOptimizer {
         };
 
         let ml_predictor = if config.enable_ml_optimization {
-            Some(MLPredictor::new(MLModelType::LinearRegression))
+            // Create predictor with default config, ignore errors for now
+            MLPredictor::from_model_type(MLModelType::LinearRegression).ok()
         } else {
             None
         };
 
+        let streaming_config = StreamingConfig {
+            enable_streaming: config.enable_streaming,
+            memory_threshold_mb: config.max_memory_usage / (1024 * 1024),
+            spill_threshold_percent: 0.8,
+            streaming_batch_size: 1000,
+        };
+
         Self {
             index_advisor: IndexAdvisor::new(),
-            streaming_analyzer: StreamingAnalyzer::new(config.max_memory_usage),
+            streaming_analyzer: StreamingAnalyzer::new(streaming_config),
             ml_predictor,
+            training_collector: None,
+            model_manager: None,
             optimization_cache: OptimizationCache::new(cache_config),
             config,
             cost_model,
             statistics,
         }
+    }
+
+    /// Add training collector for online learning
+    pub fn with_training_collector(
+        mut self,
+        collector: Arc<RwLock<TrainingCollector>>,
+    ) -> Self {
+        self.training_collector = Some(collector);
+        self
+    }
+
+    /// Add model manager for lifecycle management
+    pub fn with_model_manager(
+        mut self,
+        manager: Arc<RwLock<ModelManager>>,
+    ) -> Self {
+        self.model_manager = Some(manager);
+        self
     }
 
     /// Optimize a query algebra
@@ -179,9 +213,97 @@ impl AdvancedOptimizer {
         Ok(algebra)
     }
 
-    fn estimate_cost(&self, _algebra: &Algebra) -> Result<f64> {
-        // Implementation would estimate cost using cost model
-        Ok(1.0)
+    fn estimate_cost(&self, algebra: &Algebra) -> Result<f64> {
+        // Try ML prediction first if available and confident
+        if let Some(ref model_manager) = self.model_manager {
+            if let Ok(manager) = model_manager.read() {
+                if manager.should_use_ml() {
+                    // ML predictor has high confidence, use it
+                    if let Some(ref ml_predictor) = self.ml_predictor {
+                        if let Ok(prediction) = ml_predictor.clone().predict_cost(algebra) {
+                            return Ok(prediction.predicted_cost);
+                        }
+                    }
+                }
+            }
+        } else if let Some(ref ml_predictor) = self.ml_predictor {
+            // No model manager, use ML predictor directly if available
+            if ml_predictor.should_use_ml() {
+                if let Ok(prediction) = ml_predictor.clone().predict_cost(algebra) {
+                    if prediction.confidence >= 0.7 {
+                        return Ok(prediction.predicted_cost);
+                    }
+                }
+            }
+        }
+
+        // Fall back to cost model
+        let cost_model = self.cost_model.lock()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire cost model lock: {}", e))?;
+
+        // Simple cost estimation based on query structure
+        // In production, this would use the actual cost model
+        Ok(self.heuristic_cost_estimate(algebra))
+    }
+
+    /// Heuristic cost estimation (fallback when ML not available/confident)
+    fn heuristic_cost_estimate(&self, _algebra: &Algebra) -> f64 {
+        // Simple heuristic - would be more sophisticated in production
+        100.0
+    }
+
+    /// Record execution result for online learning
+    pub fn record_execution(&mut self, algebra: &Algebra, actual_cost: f64) -> Result<()> {
+        // Update ML predictor with actual cost
+        if let Some(ref mut ml_predictor) = self.ml_predictor {
+            ml_predictor.update_from_execution(algebra, actual_cost)?;
+        }
+
+        // Update training collector
+        if let Some(ref collector) = self.training_collector {
+            if let Ok(mut collector_guard) = collector.write() {
+                // Extract features and characteristics
+                if let Some(ref ml_predictor) = self.ml_predictor {
+                    let features = ml_predictor.extract_features(algebra);
+                    let characteristics = QueryCharacteristics {
+                        triple_pattern_count: 1,  // Would extract from algebra
+                        join_count: 0,
+                        filter_count: 0,
+                        optional_count: 0,
+                        has_aggregation: false,
+                        has_sorting: false,
+                        estimated_cardinality: 100,
+                        complexity_score: 1.0,
+                        query_graph_diameter: 1,
+                        avg_degree: 0.0,
+                        max_degree: 0,
+                    };
+
+                    collector_guard.record_execution(
+                        algebra,
+                        features,
+                        characteristics,
+                        actual_cost,
+                    )?;
+                }
+            }
+        }
+
+        // Update model manager with prediction result
+        if let Some(ref manager) = self.model_manager {
+            if let Ok(manager_guard) = manager.read() {
+                if let Some(ref ml_predictor) = self.ml_predictor {
+                    if let Ok(prediction) = ml_predictor.clone().predict_cost(algebra) {
+                        manager_guard.record_prediction(
+                            prediction.predicted_cost,
+                            actual_cost,
+                        )?;
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Optimize multiple queries in parallel for improved throughput
@@ -268,6 +390,8 @@ impl AdvancedOptimizer {
             index_advisor: self.index_advisor.clone(),
             streaming_analyzer: self.streaming_analyzer.clone(),
             ml_predictor: self.ml_predictor.clone(),
+            training_collector: self.training_collector.as_ref().map(Arc::clone),
+            model_manager: self.model_manager.as_ref().map(Arc::clone),
             optimization_cache: self.optimization_cache.clone(),
         }
     }

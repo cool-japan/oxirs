@@ -10,6 +10,7 @@ use uuid;
 
 use super::{
     anthropic_provider::AnthropicProvider,
+    cache::{CacheConfig, ResponseCache},
     circuit_breaker::CircuitBreaker,
     config::LLMConfig,
     cross_modal_reasoning::{
@@ -17,6 +18,7 @@ use super::{
     },
     federated_learning::{FederatedCoordinator, FederatedLearningConfig},
     fine_tuning::{FineTuningConfig, FineTuningEngine},
+    health_checker::{HealthCheckConfig, HealthChecker},
     local_provider::LocalModelProvider,
     neural_architecture_search::{ArchitectureSearch, ArchitectureSearchConfig},
     openai_provider::OpenAIProvider,
@@ -26,6 +28,7 @@ use super::{
     },
     providers::LLMProvider,
     real_time_adaptation::{AdaptationConfig, InteractionData, RealTimeAdaptation},
+    token_budget::{BudgetConfig, TokenBudget},
     types::{LLMRequest, LLMResponse, Priority, UseCase},
 };
 
@@ -408,26 +411,50 @@ pub struct RateLimitStatus {
     pub reset_time: Option<std::time::Instant>,
 }
 
-/// Main LLM manager
+/// Main LLM manager with fallback chain support
 pub struct LLMManager {
     config: LLMConfig,
     providers: HashMap<String, Box<dyn LLMProvider + Send + Sync>>,
     circuit_breakers: HashMap<String, Arc<CircuitBreaker>>,
     usage_tracker: TokioMutex<UsageTracker>,
+    // Phase 4.1: Fallback chain components
+    response_cache: Arc<ResponseCache>,
+    health_checker: Arc<HealthChecker>,
+    token_budget: Arc<TokenBudget>,
 }
 
 impl LLMManager {
     pub fn new(config: LLMConfig) -> Result<Self> {
+        // Initialize Phase 4.1 components
+        let response_cache = Arc::new(ResponseCache::new(CacheConfig::default()));
+        let health_checker = Arc::new(HealthChecker::new(HealthCheckConfig::default()));
+        let token_budget = Arc::new(TokenBudget::new(BudgetConfig::default()));
+
         let mut manager = Self {
             providers: HashMap::new(),
             circuit_breakers: HashMap::new(),
             usage_tracker: TokioMutex::new(UsageTracker::new()),
+            response_cache,
+            health_checker,
+            token_budget,
             config,
         };
 
         manager.initialize_providers()?;
         manager.initialize_circuit_breakers();
+        manager.initialize_health_monitoring();
         Ok(manager)
+    }
+
+    fn initialize_health_monitoring(&self) {
+        // Register all providers with health checker
+        for provider_name in self.providers.keys() {
+            let health_checker = Arc::clone(&self.health_checker);
+            let provider_id = provider_name.clone();
+            tokio::spawn(async move {
+                health_checker.register_provider(provider_id).await;
+            });
+        }
     }
 
     fn initialize_providers(&mut self) -> Result<()> {
@@ -467,53 +494,180 @@ impl LLMManager {
         }
     }
 
-    /// Generate response using optimal provider selection
+    /// Generate response with fallback chain: OpenAI → Anthropic → Ollama (local)
     pub async fn generate_response(&mut self, request: LLMRequest) -> Result<LLMResponse> {
-        // For now, simplified implementation - use first available provider
-        let provider_name = self
-            .providers
-            .keys()
-            .next()
-            .ok_or_else(|| anyhow!("No providers configured"))?
-            .clone();
+        let start_time = std::time::Instant::now();
 
-        let model = self
-            .config
-            .providers
-            .get(&provider_name)
-            .and_then(|p| p.models.first())
-            .map(|m| m.name.as_str())
-            .unwrap_or("default");
+        // Step 1: Check cache
+        if let Some(cached_response) = self.response_cache.get(&request).await {
+            debug!("Cache hit for request");
+            return Ok(cached_response);
+        }
 
-        // Check circuit breaker
-        if let Some(circuit_breaker) = self.circuit_breakers.get(&provider_name) {
-            if !circuit_breaker.can_execute().await {
-                return Err(anyhow!(
-                    "Circuit breaker is open for provider: {}",
-                    provider_name
-                ));
+        // Step 2: Check token budget (use default user for now)
+        let user_id = "default_user".to_string();
+        let estimated_tokens = self.estimate_input_tokens(&request) + request.max_tokens.unwrap_or(1000);
+
+        if let Err(e) = self.token_budget.check_budget(&user_id, estimated_tokens as u64).await {
+            warn!("Token budget exceeded: {}", e);
+            return Err(e);
+        }
+
+        // Step 3: Get provider fallback chain (ordered by priority)
+        let provider_chain = self.get_provider_fallback_chain().await;
+
+        if provider_chain.is_empty() {
+            return Err(anyhow!("No providers available"));
+        }
+
+        // Step 4: Try each provider in the chain
+        let mut last_error: Option<anyhow::Error> = None;
+
+        for (provider_name, model_name) in provider_chain {
+            info!("Attempting provider: {} with model: {}", provider_name, model_name);
+
+            // Check if circuit breaker allows execution
+            if let Some(circuit_breaker) = self.circuit_breakers.get(&provider_name) {
+                if !circuit_breaker.can_execute().await {
+                    warn!("Circuit breaker is open for provider: {}", provider_name);
+                    continue; // Try next provider
+                }
+            }
+
+            // Check if provider is healthy
+            if !self.health_checker.is_provider_healthy(&provider_name).await {
+                warn!("Provider {} is unhealthy, skipping", provider_name);
+                continue; // Try next provider
+            }
+
+            // Try to generate response
+            match self.try_provider(&provider_name, &model_name, &request).await {
+                Ok(response) => {
+                    let elapsed = start_time.elapsed();
+
+                    // Record success
+                    self.record_success(&provider_name, elapsed).await;
+
+                    // Cache response
+                    self.response_cache
+                        .put(&request, response.clone(), provider_name.clone())
+                        .await;
+
+                    // Track token usage
+                    self.token_budget
+                        .record_usage(&user_id, response.usage.total_tokens as u64)
+                        .await?;
+
+                    // Track provider usage
+                    {
+                        let mut tracker = self.usage_tracker.lock().await;
+                        tracker.track_usage(
+                            &provider_name,
+                            response.usage.total_tokens,
+                            response.usage.cost,
+                        );
+                    }
+
+                    info!(
+                        "Successfully generated response using provider {} in {:?}",
+                        provider_name, elapsed
+                    );
+
+                    return Ok(response);
+                }
+                Err(e) => {
+                    let elapsed = start_time.elapsed();
+
+                    // Record failure
+                    self.record_failure(&provider_name, elapsed).await;
+
+                    warn!("Provider {} failed: {}", provider_name, e);
+                    last_error = Some(e);
+
+                    // Automatic failover check (<500ms requirement)
+                    if elapsed.as_millis() < 500 {
+                        debug!("Fast failover to next provider ({}ms)", elapsed.as_millis());
+                    }
+
+                    // Continue to next provider
+                    continue;
+                }
             }
         }
 
-        // Get the provider and generate response
+        // All providers failed
+        Err(last_error.unwrap_or_else(|| anyhow!("All providers failed")))
+    }
+
+    /// Try a specific provider
+    async fn try_provider(
+        &self,
+        provider_name: &str,
+        model_name: &str,
+        request: &LLMRequest,
+    ) -> Result<LLMResponse> {
         let provider = self
             .providers
-            .get(&provider_name)
+            .get(provider_name)
             .ok_or_else(|| anyhow!("Provider {} not found", provider_name))?;
 
-        let response = provider.generate(model, &request).await?;
+        let response = provider.generate(model_name, request).await?;
+        Ok(response)
+    }
 
-        // Track usage
-        {
-            let mut tracker = self.usage_tracker.lock().await;
-            tracker.track_usage(
-                &provider_name,
-                response.usage.total_tokens,
-                response.usage.cost,
-            );
+    /// Get provider fallback chain ordered by: OpenAI → Anthropic → Ollama (local)
+    async fn get_provider_fallback_chain(&self) -> Vec<(String, String)> {
+        let mut chain = Vec::new();
+
+        // Priority order: openai, anthropic, local (ollama)
+        let priority_order = vec!["openai", "anthropic", "local"];
+
+        for provider_name in priority_order {
+            if let Some(provider_config) = self.config.providers.get(provider_name) {
+                if provider_config.enabled && self.providers.contains_key(provider_name) {
+                    // Get first available model for this provider
+                    if let Some(model) = provider_config.models.first() {
+                        chain.push((provider_name.to_string(), model.name.clone()));
+                    }
+                }
+            }
         }
 
-        Ok(response)
+        chain
+    }
+
+    /// Record successful provider call
+    async fn record_success(&self, provider_name: &str, latency: Duration) {
+        // Update circuit breaker
+        if let Some(circuit_breaker) = self.circuit_breakers.get(provider_name) {
+            circuit_breaker.record_result(true, latency).await;
+        }
+
+        // Update health checker
+        let provider_id = provider_name.to_string();
+        if let Err(e) = self.health_checker
+            .record_call(&provider_id, true, latency)
+            .await
+        {
+            error!("Failed to record success for {}: {}", provider_name, e);
+        }
+    }
+
+    /// Record failed provider call
+    async fn record_failure(&self, provider_name: &str, latency: Duration) {
+        // Update circuit breaker
+        if let Some(circuit_breaker) = self.circuit_breakers.get(provider_name) {
+            circuit_breaker.record_result(false, latency).await;
+        }
+
+        // Update health checker
+        let provider_id = provider_name.to_string();
+        if let Err(e) = self.health_checker
+            .record_call(&provider_id, false, latency)
+            .await
+        {
+            error!("Failed to record failure for {}: {}", provider_name, e);
+        }
     }
 
     pub fn estimate_input_tokens(&self, request: &LLMRequest) -> usize {

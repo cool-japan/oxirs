@@ -5,6 +5,16 @@
 //! - Batch vector operations
 //! - Parallel search algorithms
 //! - Matrix operations for embeddings
+//!
+//! # CUDA Feature Gating (Pure Rust Policy)
+//!
+//! GPU acceleration is **optional** and properly feature-gated:
+//! - **Default build**: 100% Pure Rust, no CUDA required, CPU implementations only
+//! - **With `cuda` feature**: GPU acceleration when CUDA toolkit is installed
+//! - **With `cuda` feature but no toolkit**: Graceful fallback to CPU implementations
+//!
+//! All CUDA-dependent code is gated with `#[cfg(all(feature = "cuda", cuda_runtime_available))]`
+//! to ensure the crate builds successfully regardless of CUDA availability.
 
 pub mod device;
 pub mod buffer;

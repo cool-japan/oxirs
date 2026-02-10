@@ -53,6 +53,53 @@
 //!
 //! println!("Found {} matching resources", results.len());
 //! ```
+//!
+//! ## Cargo Features
+//!
+//! This crate follows the **COOLJAPAN Pure Rust Policy**: default features are 100% Pure Rust
+//! with no C/Fortran/CUDA dependencies. Optional features requiring system libraries are
+//! properly feature-gated.
+//!
+//! ### Core Features (Pure Rust)
+//!
+//! - `hnsw` - HNSW index support (default: disabled, Pure Rust)
+//! - `simd` - SIMD optimizations for vector operations (Pure Rust)
+//! - `parallel` - Parallel processing support (Pure Rust)
+//!
+//! ### Optional Features (with system dependencies)
+//!
+//! - `gpu` - GPU acceleration abstractions (Pure Rust, uses scirs2-core GPU backend)
+//! - `blas` - BLAS acceleration (requires system BLAS library)
+//! - `cuda` - CUDA GPU acceleration (requires NVIDIA CUDA Toolkit)
+//!   - When CUDA toolkit is installed: enables GPU-accelerated operations
+//!   - When CUDA toolkit is missing: gracefully falls back to CPU implementations
+//!   - Install CUDA from: <https://developer.nvidia.com/cuda-downloads>
+//! - `candle-gpu` - Candle GPU backend (Pure Rust)
+//! - `gpu-full` - All GPU features combined (`cuda` + `candle-gpu` + `gpu`)
+//!
+//! ### Content Processing
+//!
+//! - `images` - Image processing support
+//! - `content-processing` - Full content processing (PDF, archives, XML, images)
+//!
+//! ### Language Integration
+//!
+//! - `python` - Python bindings via PyO3
+//! - `huggingface` - HuggingFace Hub integration
+//!
+//! ### Default Build
+//!
+//! ```toml
+//! [dependencies]
+//! oxirs-vec = "0.1"  # 100% Pure Rust, no system dependencies
+//! ```
+//!
+//! ### GPU-Accelerated Build (requires CUDA toolkit)
+//!
+//! ```toml
+//! [dependencies]
+//! oxirs-vec = { version = "0.1", features = ["gpu-full"] }
+//! ```
 
 use anyhow::Result;
 use std::collections::HashMap;
@@ -277,6 +324,11 @@ pub use hybrid_search::{
     KeywordAlgorithm, KeywordMatch, KeywordSearcher, QueryExpander, RankFusion, RankFusionStrategy,
     SearchMode, SearchWeights, TfidfScorer,
 };
+
+#[cfg(feature = "tantivy-search")]
+pub use hybrid_search::{
+    IndexStats, RdfDocument, TantivyConfig, TantivySearchResult, TantivySearcher,
+};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use ivf::{IvfConfig, IvfIndex, IvfStats, QuantizationStrategy};
 pub use joint_embedding_spaces::{
@@ -362,6 +414,11 @@ pub use sparql_integration::{
     CrossLanguageProcessor, FederatedQueryResult, QueryExecutor, SparqlVectorFunctions,
     SparqlVectorService, VectorOperation, VectorQuery, VectorQueryResult, VectorServiceArg,
     VectorServiceConfig, VectorServiceResult,
+};
+
+#[cfg(feature = "tantivy-search")]
+pub use sparql_integration::{
+    RdfLiteral, SearchStats, SparqlSearchResult, SparqlTextFunctions,
 };
 pub use sparql_service_endpoint::{
     AuthenticationInfo, AuthenticationType, CustomFunctionRegistry, FederatedOperation,

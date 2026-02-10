@@ -2,19 +2,26 @@
 //!
 //! This module provides the core query execution engine broken down into logical components.
 
+pub mod adaptive_executor;
 pub mod config;
 pub mod dataset;
 pub mod parallel;
 pub mod parallel_optimized;
+pub mod spill_manager;
 pub mod stats;
 pub mod streaming;
 // pub mod vectorized; // Temporarily disabled - requires scirs2-core beta.4 APIs
 
 // Re-export main types for convenience
+pub use adaptive_executor::{
+    AdaptiveConfig, AdaptiveExecutor, BatchResult, CheckpointedExecutor, OperatorId,
+    OperatorResult, OperatorStats, QueryPlan, QueryResults, RuntimeStatistics,
+};
 pub use config::{ExecutionContext, ParallelConfig, StreamingConfig, ThreadPoolConfig};
 pub use dataset::{
     convert_property_path, ConcreteStoreDataset, Dataset, DatasetPathAdapter, InMemoryDataset,
 };
+pub use spill_manager::{SpillConfig, SpillManager, SpillStatistics};
 pub use stats::ExecutionStats;
 // pub use vectorized::{VectorizedConfig, VectorizedExecutor, VectorizedExecutionContext, ColumnarData, VectorizedPerformanceReport};
 

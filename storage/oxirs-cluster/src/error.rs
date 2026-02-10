@@ -56,6 +56,14 @@ pub enum ClusterError {
     #[error("Circuit breaker is open - too many failures")]
     CircuitOpen,
 
+    /// Compression error
+    #[error("Compression error: {0}")]
+    Compression(String),
+
+    /// Encryption error
+    #[error("Encryption error: {0}")]
+    Encryption(String),
+
     /// Generic error
     #[error("{0}")]
     Other(String),

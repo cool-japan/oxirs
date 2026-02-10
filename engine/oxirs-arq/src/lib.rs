@@ -49,6 +49,7 @@ pub mod bgp_optimizer_types;
 pub mod buffer_management;
 pub mod builtin;
 pub mod builtin_fixed;
+pub mod cache;
 pub mod cache_integration;
 pub mod cardinality_estimator;
 pub mod cost_model;
@@ -324,6 +325,11 @@ pub use query_regression_testing::{
 pub use query_result_cache::{
     CacheConfig as ResultCacheConfig, CacheStatistics as ResultCacheStatistics, QueryResultCache,
     QueryResultCacheBuilder,
+};
+// Cache invalidation system (v0.2.0 Phase 1.1)
+pub use cache::{
+    CacheCoordinator, CacheLevel, DependencyGraph, InvalidationConfig, InvalidationEngine,
+    InvalidationStatistics, InvalidationStrategy, RdfUpdateListener,
 };
 pub use simd_query_ops::{
     ComparisonOp, JoinStats, SimdAggregations, SimdConfig, SimdFilterEvaluator, SimdHashJoin,

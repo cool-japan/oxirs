@@ -5,12 +5,14 @@
 
 // Module declarations
 pub mod anthropic_provider;
+pub mod cache; // NEW: Response caching for fallback chains
 pub mod chain_of_thought; // NEW: Chain-of-Thought reasoning
 pub mod circuit_breaker;
 pub mod config;
 pub mod cross_modal_reasoning;
 pub mod federated_learning;
 pub mod fine_tuning;
+pub mod health_checker; // NEW: Provider health monitoring
 pub mod local_provider;
 pub mod manager;
 pub mod neural_architecture_search;
@@ -19,11 +21,13 @@ pub mod performance_optimization;
 pub mod providers;
 pub mod real_time_adaptation;
 pub mod reasoning;
+pub mod token_budget; // NEW: Token budget management
 pub mod tree_of_thoughts; // NEW: Tree-of-Thoughts reasoning
 pub mod types;
 
 // Re-export commonly used types
 pub use anthropic_provider::AnthropicProvider;
+pub use cache::{CacheConfig, CacheMetrics, CachedResponse, ResponseCache};
 pub use chain_of_thought::{
     ChainOfThought, ChainOfThoughtConfig, ChainOfThoughtEngine, StepType, ThoughtStep,
 };
@@ -44,6 +48,7 @@ pub use fine_tuning::{
     FineTuningConfig, FineTuningEngine, FineTuningJob, FineTuningStatistics, JobStatus,
     TrainingExample, TrainingParameters,
 };
+pub use health_checker::{HealthCheckConfig, HealthChecker, HealthStatus, ProviderHealth};
 pub use local_provider::LocalModelProvider;
 pub use manager::{EnhancedLLMManager, LLMManager};
 pub use neural_architecture_search::{
@@ -59,6 +64,7 @@ pub use providers::LLMProvider;
 pub use real_time_adaptation::{
     AdaptationConfig, AdaptationMetrics, AdaptationStrategy, RealTimeAdaptation,
 };
+pub use token_budget::{BudgetConfig, TokenBudget, UsageStats as TokenUsageStats, UserBudget};
 pub use tree_of_thoughts::{
     SearchStrategy, ThoughtNode, TreeOfThoughts, TreeOfThoughtsConfig, TreeOfThoughtsEngine,
 };

@@ -2,11 +2,13 @@
 
 pub mod parameter_extraction;
 pub mod result_injection;
+pub mod samm_parser;
 pub mod scirs2_thermal;
 pub mod simulation_runner;
 
 pub use parameter_extraction::{ParameterExtractor, SimulationParameters};
 pub use result_injection::{ResultInjector, SimulationResult};
+pub use samm_parser::{AspectModel, SammParser};
 pub use scirs2_thermal::SciRS2ThermalSimulation;
 pub use simulation_runner::{PhysicsSimulation, SimulationRunner};
 

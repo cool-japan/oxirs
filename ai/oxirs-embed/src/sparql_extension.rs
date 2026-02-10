@@ -136,7 +136,7 @@ impl SparqlExtension {
         let emb1 = model.get_entity_embedding(entity1)?;
         let emb2 = model.get_entity_embedding(entity2)?;
 
-        let similarity = cosine_similarity(&emb1, &emb2)?;
+        let similarity = normalized_cosine_similarity(&emb1, &emb2)?;
 
         // Cache result
         if self.config.enable_semantic_caching {
@@ -637,6 +637,7 @@ fn parse_sparql_query(query: &str) -> Result<ParsedQuery> {
 }
 
 /// Compute cosine similarity between two vectors
+/// Returns standard cosine similarity in [-1.0, 1.0] range
 fn cosine_similarity(v1: &Vector, v2: &Vector) -> Result<f32> {
     if v1.dimensions != v2.dimensions {
         return Err(anyhow!(
@@ -660,7 +661,19 @@ fn cosine_similarity(v1: &Vector, v2: &Vector) -> Result<f32> {
         return Ok(0.0);
     }
 
-    Ok(dot_product / (norm1 * norm2))
+    // Standard cosine similarity in [-1.0, 1.0]
+    let cosine_sim = dot_product / (norm1 * norm2);
+
+    Ok(cosine_sim)
+}
+
+/// Compute normalized cosine similarity between two vectors
+/// Returns normalized similarity in [0.0, 1.0] range
+/// This is useful for SPARQL similarity queries where positive-only scores are expected
+fn normalized_cosine_similarity(v1: &Vector, v2: &Vector) -> Result<f32> {
+    let cosine_sim = cosine_similarity(v1, v2)?;
+    // Normalize from [-1.0, 1.0] to [0.0, 1.0]
+    Ok((cosine_sim + 1.0) / 2.0)
 }
 
 /// Compute fuzzy match score using Levenshtein-like distance
