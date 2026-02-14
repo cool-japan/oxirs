@@ -1262,7 +1262,9 @@ mod tests {
             ex:MyOntology owl:imports <http://example.org/other-shapes.ttl> .
         "#;
 
-        let directives = manager.extract_import_directives(rdf_content).unwrap();
+        let directives = manager
+            .extract_import_directives(rdf_content)
+            .expect("import should succeed");
         assert_eq!(directives.len(), 1);
         assert_eq!(
             directives[0].source_iri,
@@ -1283,7 +1285,9 @@ mod tests {
             ex:MyShapes sh:imports <http://example.org/additional-shapes.ttl> .
         "#;
 
-        let directives = manager.extract_import_directives(rdf_content).unwrap();
+        let directives = manager
+            .extract_import_directives(rdf_content)
+            .expect("import should succeed");
         assert_eq!(directives.len(), 2);
 
         // Check that we have both include and imports directives

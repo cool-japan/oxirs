@@ -987,7 +987,9 @@ mod tests {
     fn test_html_generation() {
         let aspect = create_test_aspect();
         let generator = DocumentationGenerator::new();
-        let html = generator.generate(&aspect).unwrap();
+        let html = generator
+            .generate(&aspect)
+            .expect("generation should succeed");
 
         assert!(html.contains("<!DOCTYPE html>"));
         assert!(html.contains("Test Aspect"));
@@ -999,7 +1001,9 @@ mod tests {
     fn test_markdown_generation() {
         let aspect = create_test_aspect();
         let generator = DocumentationGenerator::new().with_format(DocumentationFormat::Markdown);
-        let md = generator.generate(&aspect).unwrap();
+        let md = generator
+            .generate(&aspect)
+            .expect("generation should succeed");
 
         assert!(md.contains("# Test Aspect"));
         assert!(md.contains("## Properties"));
@@ -1010,7 +1014,9 @@ mod tests {
     fn test_json_generation() {
         let aspect = create_test_aspect();
         let generator = DocumentationGenerator::new().with_format(DocumentationFormat::Json);
-        let json = generator.generate(&aspect).unwrap();
+        let json = generator
+            .generate(&aspect)
+            .expect("generation should succeed");
 
         assert!(json.contains("\"name\""));
         assert!(json.contains("TestAspect"));
@@ -1021,7 +1027,9 @@ mod tests {
     fn test_without_analytics() {
         let aspect = create_test_aspect();
         let generator = DocumentationGenerator::new().with_analytics(false);
-        let html = generator.generate(&aspect).unwrap();
+        let html = generator
+            .generate(&aspect)
+            .expect("generation should succeed");
 
         assert!(!html.contains("Quality Analytics"));
     }
@@ -1031,7 +1039,9 @@ mod tests {
         let aspect = create_test_aspect();
         let generator =
             DocumentationGenerator::new().with_title("Custom Documentation".to_string());
-        let html = generator.generate(&aspect).unwrap();
+        let html = generator
+            .generate(&aspect)
+            .expect("generation should succeed");
 
         assert!(html.contains("Custom Documentation"));
     }
@@ -1040,7 +1050,9 @@ mod tests {
     fn test_custom_footer() {
         let aspect = create_test_aspect();
         let generator = DocumentationGenerator::new().with_footer("Custom Footer Text".to_string());
-        let html = generator.generate(&aspect).unwrap();
+        let html = generator
+            .generate(&aspect)
+            .expect("generation should succeed");
 
         assert!(html.contains("Custom Footer Text"));
     }
@@ -1069,7 +1081,9 @@ mod tests {
     fn test_empty_aspect() {
         let aspect = Aspect::new("urn:samm:org.test:1.0.0#Empty".to_string());
         let generator = DocumentationGenerator::new();
-        let html = generator.generate(&aspect).unwrap();
+        let html = generator
+            .generate(&aspect)
+            .expect("generation should succeed");
 
         assert!(html.contains("No properties defined"));
     }

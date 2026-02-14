@@ -77,9 +77,9 @@ impl CoherenceProtocol {
     /// Get the expected coherence rate for this protocol
     pub fn expected_coherence_rate(&self) -> f64 {
         match self {
-            CoherenceProtocol::PubSub => 0.99,        // 99% coherence
-            CoherenceProtocol::WriteThrough => 1.0,   // 100% coherence
-            CoherenceProtocol::WriteBehind => 0.95,   // 95% coherence
+            CoherenceProtocol::PubSub => 0.99,      // 99% coherence
+            CoherenceProtocol::WriteThrough => 1.0, // 100% coherence
+            CoherenceProtocol::WriteBehind => 0.95, // 95% coherence
         }
     }
 }
@@ -346,8 +346,8 @@ impl CoherenceStatistics {
 
         // Update running average
         let alpha = 0.1; // Exponential moving average factor
-        self.avg_coherence_rate = alpha * report.coherence_rate
-            + (1.0 - alpha) * self.avg_coherence_rate;
+        self.avg_coherence_rate =
+            alpha * report.coherence_rate + (1.0 - alpha) * self.avg_coherence_rate;
 
         self.last_check = Some(SystemTime::now());
     }
@@ -365,8 +365,14 @@ mod tests {
     #[test]
     fn test_coherence_protocol_expected_rate() {
         assert_eq!(CoherenceProtocol::PubSub.expected_coherence_rate(), 0.99);
-        assert_eq!(CoherenceProtocol::WriteThrough.expected_coherence_rate(), 1.0);
-        assert_eq!(CoherenceProtocol::WriteBehind.expected_coherence_rate(), 0.95);
+        assert_eq!(
+            CoherenceProtocol::WriteThrough.expected_coherence_rate(),
+            1.0
+        );
+        assert_eq!(
+            CoherenceProtocol::WriteBehind.expected_coherence_rate(),
+            0.95
+        );
     }
 
     #[test]
@@ -429,21 +435,33 @@ mod tests {
             consistency_level: ConsistencyLevel::Strong,
             max_staleness_seconds: 60,
         };
-        let protocol_strong = CacheCoherenceProtocol::new(CoherenceProtocol::WriteThrough, config_strong);
-        assert_eq!(protocol_strong.recommended_refresh_interval(), Duration::from_secs(0));
+        let protocol_strong =
+            CacheCoherenceProtocol::new(CoherenceProtocol::WriteThrough, config_strong);
+        assert_eq!(
+            protocol_strong.recommended_refresh_interval(),
+            Duration::from_secs(0)
+        );
 
         let config_bounded = CoherenceConfig {
             consistency_level: ConsistencyLevel::BoundedStaleness,
             max_staleness_seconds: 60,
         };
-        let protocol_bounded = CacheCoherenceProtocol::new(CoherenceProtocol::PubSub, config_bounded);
-        assert_eq!(protocol_bounded.recommended_refresh_interval(), Duration::from_secs(30));
+        let protocol_bounded =
+            CacheCoherenceProtocol::new(CoherenceProtocol::PubSub, config_bounded);
+        assert_eq!(
+            protocol_bounded.recommended_refresh_interval(),
+            Duration::from_secs(30)
+        );
 
         let config_eventual = CoherenceConfig {
             consistency_level: ConsistencyLevel::Eventual,
             max_staleness_seconds: 60,
         };
-        let protocol_eventual = CacheCoherenceProtocol::new(CoherenceProtocol::WriteBehind, config_eventual);
-        assert_eq!(protocol_eventual.recommended_refresh_interval(), Duration::from_secs(300));
+        let protocol_eventual =
+            CacheCoherenceProtocol::new(CoherenceProtocol::WriteBehind, config_eventual);
+        assert_eq!(
+            protocol_eventual.recommended_refresh_interval(),
+            Duration::from_secs(300)
+        );
     }
 }

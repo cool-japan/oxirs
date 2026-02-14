@@ -15,16 +15,20 @@ use std::sync::Arc;
 
 /// Create test RDF store with physics data
 fn create_test_store() -> PhysicsResult<Arc<RdfStore>> {
-    let mut store = RdfStore::new()
-        .map_err(|e| oxirs_physics::error::PhysicsError::RdfQuery(format!("Failed to create store: {}", e)))?;
+    let mut store = RdfStore::new().map_err(|e| {
+        oxirs_physics::error::PhysicsError::RdfQuery(format!("Failed to create store: {}", e))
+    })?;
 
     // Create test entity
-    let entity = NamedNode::new("http://example.org/entity1")
-        .map_err(|e| oxirs_physics::error::PhysicsError::ParameterExtraction(format!("Invalid IRI: {}", e)))?;
-    let mass_pred = NamedNode::new("http://oxirs.org/physics#mass")
-        .map_err(|e| oxirs_physics::error::PhysicsError::ParameterExtraction(format!("Invalid IRI: {}", e)))?;
-    let temp_pred = NamedNode::new("http://oxirs.org/physics#temperature")
-        .map_err(|e| oxirs_physics::error::PhysicsError::ParameterExtraction(format!("Invalid IRI: {}", e)))?;
+    let entity = NamedNode::new("http://example.org/entity1").map_err(|e| {
+        oxirs_physics::error::PhysicsError::ParameterExtraction(format!("Invalid IRI: {}", e))
+    })?;
+    let mass_pred = NamedNode::new("http://oxirs.org/physics#mass").map_err(|e| {
+        oxirs_physics::error::PhysicsError::ParameterExtraction(format!("Invalid IRI: {}", e))
+    })?;
+    let temp_pred = NamedNode::new("http://oxirs.org/physics#temperature").map_err(|e| {
+        oxirs_physics::error::PhysicsError::ParameterExtraction(format!("Invalid IRI: {}", e))
+    })?;
 
     // Insert mass triple
     let mass_triple = Triple::new(
@@ -32,8 +36,9 @@ fn create_test_store() -> PhysicsResult<Arc<RdfStore>> {
         Predicate::NamedNode(mass_pred),
         Object::Literal(Literal::new("10.5")),
     );
-    store.insert_triple(mass_triple)
-        .map_err(|e| oxirs_physics::error::PhysicsError::RdfQuery(format!("Failed to insert: {}", e)))?;
+    store.insert_triple(mass_triple).map_err(|e| {
+        oxirs_physics::error::PhysicsError::RdfQuery(format!("Failed to insert: {}", e))
+    })?;
 
     // Insert temperature triple
     let temp_triple = Triple::new(
@@ -41,8 +46,9 @@ fn create_test_store() -> PhysicsResult<Arc<RdfStore>> {
         Predicate::NamedNode(temp_pred),
         Object::Literal(Literal::new("293.15")),
     );
-    store.insert_triple(temp_triple)
-        .map_err(|e| oxirs_physics::error::PhysicsError::RdfQuery(format!("Failed to insert: {}", e)))?;
+    store.insert_triple(temp_triple).map_err(|e| {
+        oxirs_physics::error::PhysicsError::RdfQuery(format!("Failed to insert: {}", e))
+    })?;
 
     Ok(Arc::new(store))
 }
@@ -123,17 +129,26 @@ async fn test_result_injection_validation() {
     // Test empty entity IRI
     let mut result = create_test_simulation_result();
     result.entity_iri = String::new();
-    assert!(injector.inject(&result).await.is_err(), "Should fail with empty entity IRI");
+    assert!(
+        injector.inject(&result).await.is_err(),
+        "Should fail with empty entity IRI"
+    );
 
     // Test empty run ID
     let mut result = create_test_simulation_result();
     result.simulation_run_id = String::new();
-    assert!(injector.inject(&result).await.is_err(), "Should fail with empty run ID");
+    assert!(
+        injector.inject(&result).await.is_err(),
+        "Should fail with empty run ID"
+    );
 
     // Test empty trajectory
     let mut result = create_test_simulation_result();
     result.state_trajectory.clear();
-    assert!(injector.inject(&result).await.is_err(), "Should fail with empty trajectory");
+    assert!(
+        injector.inject(&result).await.is_err(),
+        "Should fail with empty trajectory"
+    );
 }
 
 #[tokio::test]
@@ -185,10 +200,16 @@ async fn test_timestamped_results() {
     let result = create_test_simulation_result();
 
     // Verify timestamp is present
-    assert!(result.timestamp.timestamp() > 0, "Result should have valid timestamp");
+    assert!(
+        result.timestamp.timestamp() > 0,
+        "Result should have valid timestamp"
+    );
 
     // Verify provenance timestamp
-    assert!(result.provenance.executed_at.timestamp() > 0, "Provenance should have valid timestamp");
+    assert!(
+        result.provenance.executed_at.timestamp() > 0,
+        "Provenance should have valid timestamp"
+    );
 }
 
 #[tokio::test]

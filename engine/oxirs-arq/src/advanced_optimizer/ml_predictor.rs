@@ -14,10 +14,316 @@ use serde::{Deserialize, Serialize};
 
 // SciRS2 imports for ML and statistics
 use scirs2_core::metrics::{Counter, Histogram, MetricsRegistry, Timer};
-use scirs2_core::ndarray::{Array1, Array2};
+use scirs2_core::ndarray_ext::{Array1, Array2};
 use scirs2_stats::regression::{linear_regression, ridge_regression, RegressionResults};
 
 use crate::algebra::Algebra;
+
+/// Value histogram for cardinality estimation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValueHistogram {
+    /// Histogram buckets (value ranges)
+    pub buckets: Vec<HistogramBucket>,
+    /// Total number of values
+    pub total_count: usize,
+    /// Number of distinct values
+    pub distinct_count: usize,
+    /// Min value seen
+    pub min_value: f64,
+    /// Max value seen
+    pub max_value: f64,
+}
+
+/// A single histogram bucket
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistogramBucket {
+    /// Lower bound of this bucket (inclusive)
+    pub lower_bound: f64,
+    /// Upper bound of this bucket (exclusive)
+    pub upper_bound: f64,
+    /// Number of values in this bucket
+    pub count: usize,
+    /// Number of distinct values in this bucket
+    pub distinct_count: usize,
+}
+
+impl ValueHistogram {
+    /// Create a new histogram from data with specified number of buckets
+    pub fn from_data(data: &[f64], num_buckets: usize) -> Self {
+        if data.is_empty() {
+            return Self::empty();
+        }
+
+        let min_value = data.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_value = data.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+
+        if (max_value - min_value).abs() < 1e-10 {
+            // All values are the same
+            return Self {
+                buckets: vec![HistogramBucket {
+                    lower_bound: min_value,
+                    upper_bound: max_value,
+                    count: data.len(),
+                    distinct_count: 1,
+                }],
+                total_count: data.len(),
+                distinct_count: 1,
+                min_value,
+                max_value,
+            };
+        }
+
+        let bucket_width = (max_value - min_value) / num_buckets as f64;
+        let mut buckets = Vec::with_capacity(num_buckets);
+
+        for i in 0..num_buckets {
+            let lower = min_value + i as f64 * bucket_width;
+            let upper = if i == num_buckets - 1 {
+                max_value + 1e-10 // Include max value in last bucket
+            } else {
+                min_value + (i + 1) as f64 * bucket_width
+            };
+
+            buckets.push(HistogramBucket {
+                lower_bound: lower,
+                upper_bound: upper,
+                count: 0,
+                distinct_count: 0,
+            });
+        }
+
+        // Fill buckets
+        use std::collections::HashSet;
+        let mut bucket_distinct: Vec<HashSet<u64>> = vec![HashSet::new(); num_buckets];
+
+        for &value in data {
+            let bucket_idx = if value >= max_value {
+                num_buckets - 1
+            } else {
+                ((value - min_value) / bucket_width).floor() as usize
+            };
+
+            if bucket_idx < num_buckets {
+                buckets[bucket_idx].count += 1;
+                // Use integer representation for distinct counting
+                let value_bits = value.to_bits();
+                bucket_distinct[bucket_idx].insert(value_bits);
+            }
+        }
+
+        // Update distinct counts
+        for (i, bucket) in buckets.iter_mut().enumerate() {
+            bucket.distinct_count = bucket_distinct[i].len();
+        }
+
+        let distinct_count = bucket_distinct.iter().map(|s| s.len()).sum();
+
+        Self {
+            buckets,
+            total_count: data.len(),
+            distinct_count,
+            min_value,
+            max_value,
+        }
+    }
+
+    /// Create an empty histogram
+    pub fn empty() -> Self {
+        Self {
+            buckets: Vec::new(),
+            total_count: 0,
+            distinct_count: 0,
+            min_value: 0.0,
+            max_value: 0.0,
+        }
+    }
+
+    /// Estimate selectivity for equality predicate (value = x)
+    pub fn estimate_equality_selectivity(&self, value: f64) -> f64 {
+        if self.total_count == 0 {
+            return 0.0;
+        }
+
+        // Find the bucket containing this value
+        for bucket in &self.buckets {
+            if value >= bucket.lower_bound && value < bucket.upper_bound {
+                if bucket.distinct_count == 0 {
+                    return 0.0;
+                }
+                // Assume uniform distribution within bucket
+                let selectivity =
+                    bucket.count as f64 / bucket.distinct_count as f64 / self.total_count as f64;
+                return selectivity.min(1.0);
+            }
+        }
+
+        // Value not in histogram range
+        0.0
+    }
+
+    /// Estimate selectivity for range predicate (lower <= value < upper)
+    pub fn estimate_range_selectivity(&self, lower: f64, upper: f64) -> f64 {
+        if self.total_count == 0 || upper <= lower {
+            return 0.0;
+        }
+
+        let mut selected_count = 0.0;
+
+        for bucket in &self.buckets {
+            // Check overlap between bucket and query range
+            let overlap_lower = bucket.lower_bound.max(lower);
+            let overlap_upper = bucket.upper_bound.min(upper);
+
+            if overlap_upper > overlap_lower {
+                let bucket_width = bucket.upper_bound - bucket.lower_bound;
+                let overlap_width = overlap_upper - overlap_lower;
+
+                if bucket_width > 1e-10 {
+                    // Fraction of bucket that overlaps with query range
+                    let fraction = overlap_width / bucket_width;
+                    selected_count += bucket.count as f64 * fraction;
+                }
+            }
+        }
+
+        (selected_count / self.total_count as f64).min(1.0)
+    }
+
+    /// Estimate cardinality for a predicate
+    pub fn estimate_cardinality(&self, selectivity: f64) -> usize {
+        (self.total_count as f64 * selectivity).ceil() as usize
+    }
+
+    /// Get average bucket size
+    pub fn avg_bucket_size(&self) -> f64 {
+        if self.buckets.is_empty() {
+            return 0.0;
+        }
+        self.total_count as f64 / self.buckets.len() as f64
+    }
+}
+
+/// Histogram-based cardinality estimator
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistogramCardinalityEstimator {
+    /// Histograms for different features (indexed by feature name)
+    pub histograms: HashMap<String, ValueHistogram>,
+    /// Configuration
+    pub config: HistogramConfig,
+}
+
+/// Configuration for histogram-based estimation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistogramConfig {
+    /// Number of buckets per histogram
+    pub num_buckets: usize,
+    /// Enable histogram-based estimation
+    pub enabled: bool,
+}
+
+impl Default for HistogramConfig {
+    fn default() -> Self {
+        Self {
+            num_buckets: 100,
+            enabled: true,
+        }
+    }
+}
+
+impl HistogramCardinalityEstimator {
+    /// Create a new histogram estimator
+    pub fn new(config: HistogramConfig) -> Self {
+        Self {
+            histograms: HashMap::new(),
+            config,
+        }
+    }
+
+    /// Build histograms from training data
+    pub fn build_from_training_data(&mut self, training_data: &[TrainingExample]) {
+        if !self.config.enabled || training_data.is_empty() {
+            return;
+        }
+
+        let n_features = training_data[0].features.len();
+
+        // Build histogram for each feature
+        for feature_idx in 0..n_features {
+            let feature_values: Vec<f64> = training_data
+                .iter()
+                .map(|example| example.features.get(feature_idx).copied().unwrap_or(0.0))
+                .collect();
+
+            let histogram = ValueHistogram::from_data(&feature_values, self.config.num_buckets);
+            let feature_name = format!("feature_{}", feature_idx);
+            self.histograms.insert(feature_name, histogram);
+        }
+    }
+
+    /// Estimate cardinality using histogram-based selectivity
+    pub fn estimate_cardinality_with_histogram(&self, features: &[f64]) -> Option<f64> {
+        if !self.config.enabled || self.histograms.is_empty() {
+            return None;
+        }
+
+        // Use geometric mean of selectivities (assumes independence)
+        let mut product = 1.0;
+        let mut count = 0;
+
+        for (i, &feature_value) in features.iter().enumerate() {
+            let feature_name = format!("feature_{}", i);
+            if let Some(histogram) = self.histograms.get(&feature_name) {
+                let selectivity = histogram.estimate_equality_selectivity(feature_value);
+                if selectivity > 0.0 {
+                    product *= selectivity;
+                    count += 1;
+                }
+            }
+        }
+
+        if count > 0 {
+            let geometric_mean = product.powf(1.0 / count as f64);
+            // Estimate based on average total count across histograms
+            let avg_total: f64 = self
+                .histograms
+                .values()
+                .map(|h| h.total_count as f64)
+                .sum::<f64>()
+                / self.histograms.len() as f64;
+            Some(avg_total * geometric_mean)
+        } else {
+            None
+        }
+    }
+
+    /// Get histogram statistics
+    pub fn get_statistics(&self) -> HistogramStatistics {
+        let total_buckets: usize = self.histograms.values().map(|h| h.buckets.len()).sum();
+        let avg_distinct: f64 = if !self.histograms.is_empty() {
+            self.histograms
+                .values()
+                .map(|h| h.distinct_count as f64)
+                .sum::<f64>()
+                / self.histograms.len() as f64
+        } else {
+            0.0
+        };
+
+        HistogramStatistics {
+            num_histograms: self.histograms.len(),
+            total_buckets,
+            avg_distinct_values: avg_distinct,
+        }
+    }
+}
+
+/// Statistics about histogram estimator
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistogramStatistics {
+    pub num_histograms: usize,
+    pub total_buckets: usize,
+    pub avg_distinct_values: f64,
+}
 
 /// Configuration for ML predictor
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +370,7 @@ pub struct MLPredictor {
     config: MLConfig,
     metrics_collector: Arc<MetricsRegistry>,
     last_training: Option<SystemTime>,
+    histogram_estimator: HistogramCardinalityEstimator,
 
     // Metrics
     prediction_counter: Counter,
@@ -194,7 +501,8 @@ impl MLPredictor {
 
         let prediction_counter = Counter::new("ml_predictor_predictions_total".to_string());
         let prediction_timer = Timer::new("ml_predictor_prediction_duration_seconds".to_string());
-        let prediction_histogram = Histogram::new("ml_predictor_prediction_distribution".to_string());
+        let prediction_histogram =
+            Histogram::new("ml_predictor_prediction_distribution".to_string());
 
         Ok(Self {
             model: MLModel {
@@ -217,6 +525,7 @@ impl MLPredictor {
             config,
             metrics_collector,
             last_training: None,
+            histogram_estimator: HistogramCardinalityEstimator::new(HistogramConfig::default()),
             prediction_counter,
             prediction_timer,
             prediction_histogram,
@@ -251,8 +560,7 @@ impl MLPredictor {
                 .with_context(|| format!("Failed to create directory {:?}", parent))?;
         }
 
-        let contents = serde_json::to_string_pretty(self)
-            .context("Failed to serialize model")?;
+        let contents = serde_json::to_string_pretty(self).context("Failed to serialize model")?;
 
         std::fs::write(path, contents)
             .with_context(|| format!("Failed to write model to {:?}", path))?;
@@ -264,14 +572,7 @@ impl MLPredictor {
     pub fn confidence(&self) -> f64 {
         // Confidence based on R² score
         let r_squared = self.model.accuracy_metrics.r_squared;
-
-        if r_squared < 0.0 {
-            0.0
-        } else if r_squared > 1.0 {
-            1.0
-        } else {
-            r_squared
-        }
+        r_squared.clamp(0.0, 1.0)
     }
 
     /// Check if ML model should be used
@@ -300,10 +601,18 @@ impl MLPredictor {
         features.push(characteristics.optional_count as f64);
 
         // 5. Has aggregation
-        features.push(if characteristics.has_aggregation { 1.0 } else { 0.0 });
+        features.push(if characteristics.has_aggregation {
+            1.0
+        } else {
+            0.0
+        });
 
         // 6. Has sorting
-        features.push(if characteristics.has_sorting { 1.0 } else { 0.0 });
+        features.push(if characteristics.has_sorting {
+            1.0
+        } else {
+            0.0
+        });
 
         // 7. Estimated cardinality
         features.push(characteristics.estimated_cardinality as f64);
@@ -442,7 +751,9 @@ impl MLPredictor {
         }
 
         // Cardinality factor
-        let cardinality_log = (characteristics.estimated_cardinality as f64).log10().max(1.0);
+        let cardinality_log = (characteristics.estimated_cardinality as f64)
+            .log10()
+            .max(1.0);
         score *= cardinality_log;
 
         score
@@ -470,7 +781,9 @@ impl MLPredictor {
             0.0
         };
 
-        let max_degree = characteristics.join_count.min(characteristics.triple_pattern_count);
+        let max_degree = characteristics
+            .join_count
+            .min(characteristics.triple_pattern_count);
 
         (avg_degree, max_degree)
     }
@@ -490,7 +803,9 @@ impl MLPredictor {
         use crate::algebra::Algebra;
 
         match algebra {
-            Algebra::Join { left, right, .. } | Algebra::LeftJoin { left, right, .. } | Algebra::Union { left, right } => {
+            Algebra::Join { left, right, .. }
+            | Algebra::LeftJoin { left, right, .. }
+            | Algebra::Union { left, right } => {
                 let left_depth = self.calculate_depth_recursive(left, current_depth + 1);
                 let right_depth = self.calculate_depth_recursive(right, current_depth + 1);
                 left_depth.max(right_depth)
@@ -519,7 +834,9 @@ impl MLPredictor {
 
         match algebra {
             Algebra::Group { .. } => 1,
-            Algebra::Join { left, right, .. } | Algebra::LeftJoin { left, right, .. } | Algebra::Union { left, right } => {
+            Algebra::Join { left, right, .. }
+            | Algebra::LeftJoin { left, right, .. }
+            | Algebra::Union { left, right } => {
                 self.count_aggregations(left) + self.count_aggregations(right)
             }
             Algebra::Filter { pattern, .. }
@@ -819,10 +1136,8 @@ impl MLPredictor {
 
         // Train model based on type
         let results = match self.model.model_type {
-            MLModelType::LinearRegression => {
-                linear_regression(&x.view(), &y.view(), None)
-                    .map_err(|e| anyhow::anyhow!("Linear regression failed: {:?}", e))?
-            }
+            MLModelType::LinearRegression => linear_regression(&x.view(), &y.view(), None)
+                .map_err(|e| anyhow::anyhow!("Linear regression failed: {:?}", e))?,
             MLModelType::Ridge => {
                 let alpha = Some(1.0); // Regularization parameter
                 ridge_regression(
@@ -849,6 +1164,10 @@ impl MLPredictor {
 
         // Update accuracy metrics
         self.update_accuracy_metrics(&results, &x, &y)?;
+
+        // Build histograms for improved cardinality estimation
+        self.histogram_estimator
+            .build_from_training_data(&self.training_data);
 
         // Update last training time
         self.last_training = Some(SystemTime::now());
@@ -880,9 +1199,7 @@ impl MLPredictor {
             means[j] = mean;
 
             // Std dev
-            let variance: f64 = column.iter()
-                .map(|&x| (x - mean).powi(2))
-                .sum::<f64>() / n;
+            let variance: f64 = column.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / n;
             std_devs[j] = variance.sqrt();
 
             // Min/Max
@@ -911,8 +1228,8 @@ impl MLPredictor {
     fn update_accuracy_metrics(
         &mut self,
         results: &RegressionResults<f64>,
-        x: &Array2<f64>,
-        y: &Array1<f64>,
+        _x: &Array2<f64>,
+        _y: &Array1<f64>,
     ) -> Result<()> {
         // Use metrics from RegressionResults
         let r_squared = results.r_squared;
@@ -954,6 +1271,69 @@ impl MLPredictor {
     /// Get training data count
     pub fn training_data_count(&self) -> usize {
         self.training_data.len()
+    }
+
+    /// Get improved cardinality estimate using histogram statistics
+    pub fn estimate_cardinality_with_histogram(&self, features: &[f64]) -> Option<f64> {
+        self.histogram_estimator
+            .estimate_cardinality_with_histogram(features)
+    }
+
+    /// Get histogram statistics
+    pub fn get_histogram_statistics(&self) -> HistogramStatistics {
+        self.histogram_estimator.get_statistics()
+    }
+
+    /// Predict with enhanced histogram-based cardinality estimation
+    pub fn predict_cost_with_histogram(&mut self, query: &Algebra) -> Result<MLPrediction> {
+        let _guard = self.prediction_timer.start();
+        self.prediction_counter.inc();
+
+        let features = self.extract_features(query);
+        let query_hash = self.hash_query(query);
+
+        // Check cache
+        if let Some(cached) = self.prediction_cache.get(&query_hash) {
+            return Ok(cached.clone());
+        }
+
+        // Make prediction with histogram enhancement
+        let (mut predicted_cost, mut confidence) = if self.should_use_ml() {
+            self.predict_with_model(&features)?
+        } else {
+            self.heuristic_prediction(&features)?
+        };
+
+        // Enhance with histogram-based cardinality if available
+        if let Some(histogram_cardinality) = self.estimate_cardinality_with_histogram(&features) {
+            // Blend ML prediction with histogram-based estimate
+            let blend_weight = 0.3; // 30% histogram, 70% ML
+            predicted_cost =
+                predicted_cost * (1.0 - blend_weight) + histogram_cardinality * blend_weight;
+
+            // Increase confidence if histogram estimate agrees
+            let agreement =
+                1.0 - ((predicted_cost - histogram_cardinality).abs() / (predicted_cost + 1.0));
+            confidence = (confidence + agreement * 0.2).min(1.0);
+        }
+
+        self.prediction_histogram.observe(predicted_cost);
+
+        // Generate recommendations and feature importance
+        let recommendation = self.generate_recommendation(&features, predicted_cost);
+        let feature_importance = self.calculate_feature_importance(&features);
+
+        let prediction = MLPrediction {
+            predicted_cost,
+            confidence,
+            recommendation,
+            feature_importance,
+        };
+
+        // Cache prediction
+        self.prediction_cache.insert(query_hash, prediction.clone());
+
+        Ok(prediction)
     }
 
     /// Hash query for caching
@@ -1032,11 +1412,12 @@ impl Serialize for MLPredictor {
     {
         use serde::ser::SerializeStruct;
 
-        let mut state = serializer.serialize_struct("MLPredictor", 4)?;
+        let mut state = serializer.serialize_struct("MLPredictor", 5)?;
         state.serialize_field("model", &self.model)?;
         state.serialize_field("training_data", &self.training_data)?;
         state.serialize_field("feature_extractor", &self.feature_extractor)?;
         state.serialize_field("config", &self.config)?;
+        state.serialize_field("histogram_estimator", &self.histogram_estimator)?;
         state.end()
     }
 }
@@ -1052,6 +1433,8 @@ impl<'de> Deserialize<'de> for MLPredictor {
             training_data: Vec<TrainingExample>,
             feature_extractor: FeatureExtractor,
             config: MLConfig,
+            #[serde(default)]
+            histogram_estimator: Option<HistogramCardinalityEstimator>,
         }
 
         let data = MLPredictorData::deserialize(deserializer)?;
@@ -1059,7 +1442,8 @@ impl<'de> Deserialize<'de> for MLPredictor {
         let metrics_collector = Arc::new(MetricsRegistry::new());
         let prediction_counter = Counter::new("ml_predictor_predictions_total".to_string());
         let prediction_timer = Timer::new("ml_predictor_prediction_duration_seconds".to_string());
-        let prediction_histogram = Histogram::new("ml_predictor_prediction_distribution".to_string());
+        let prediction_histogram =
+            Histogram::new("ml_predictor_prediction_distribution".to_string());
 
         Ok(MLPredictor {
             model: data.model,
@@ -1069,6 +1453,9 @@ impl<'de> Deserialize<'de> for MLPredictor {
             config: data.config,
             metrics_collector,
             last_training: None,
+            histogram_estimator: data
+                .histogram_estimator
+                .unwrap_or_else(|| HistogramCardinalityEstimator::new(HistogramConfig::default())),
             prediction_counter,
             prediction_timer,
             prediction_histogram,
@@ -1086,9 +1473,12 @@ impl Clone for MLPredictor {
             config: self.config.clone(),
             metrics_collector: Arc::clone(&self.metrics_collector),
             last_training: self.last_training,
+            histogram_estimator: self.histogram_estimator.clone(),
             prediction_counter: Counter::new("ml_predictor_predictions_total".to_string()),
             prediction_timer: Timer::new("ml_predictor_prediction_duration_seconds".to_string()),
-            prediction_histogram: Histogram::new("ml_predictor_prediction_distribution".to_string()),
+            prediction_histogram: Histogram::new(
+                "ml_predictor_prediction_distribution".to_string(),
+            ),
         }
     }
 }
@@ -1130,10 +1520,245 @@ mod tests {
         let serialized = serde_json::to_string(&predictor)?;
         let deserialized: MLPredictor = serde_json::from_str(&serialized)?;
 
-        assert_eq!(
-            predictor.config.model_type,
-            deserialized.config.model_type
-        );
+        assert_eq!(predictor.config.model_type, deserialized.config.model_type);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_value_histogram_creation() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let histogram = ValueHistogram::from_data(&data, 5);
+
+        assert_eq!(histogram.total_count, 10);
+        assert_eq!(histogram.buckets.len(), 5);
+        assert_eq!(histogram.min_value, 1.0);
+        assert_eq!(histogram.max_value, 10.0);
+    }
+
+    #[test]
+    fn test_value_histogram_empty() {
+        let histogram = ValueHistogram::empty();
+        assert_eq!(histogram.total_count, 0);
+        assert_eq!(histogram.buckets.len(), 0);
+    }
+
+    #[test]
+    fn test_value_histogram_uniform() {
+        let data = vec![5.0; 100]; // All same value
+        let histogram = ValueHistogram::from_data(&data, 10);
+
+        assert_eq!(histogram.total_count, 100);
+        assert_eq!(histogram.distinct_count, 1);
+        assert_eq!(histogram.buckets.len(), 1);
+    }
+
+    #[test]
+    fn test_histogram_equality_selectivity() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let histogram = ValueHistogram::from_data(&data, 5);
+
+        // Test selectivity for values in the dataset
+        let selectivity_5 = histogram.estimate_equality_selectivity(5.0);
+        assert!(selectivity_5 > 0.0);
+        assert!(selectivity_5 <= 1.0);
+
+        // Test selectivity for value outside range
+        let selectivity_100 = histogram.estimate_equality_selectivity(100.0);
+        assert_eq!(selectivity_100, 0.0);
+    }
+
+    #[test]
+    fn test_histogram_range_selectivity() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let histogram = ValueHistogram::from_data(&data, 5);
+
+        // Full range should have selectivity ~1.0
+        let selectivity_full = histogram.estimate_range_selectivity(1.0, 11.0);
+        assert!(selectivity_full >= 0.9);
+        assert!(selectivity_full <= 1.0);
+
+        // Half range should have selectivity ~0.5
+        let selectivity_half = histogram.estimate_range_selectivity(1.0, 5.5);
+        assert!(selectivity_half >= 0.4);
+        assert!(selectivity_half <= 0.6);
+
+        // No overlap should have selectivity 0
+        let selectivity_none = histogram.estimate_range_selectivity(100.0, 200.0);
+        assert_eq!(selectivity_none, 0.0);
+    }
+
+    #[test]
+    fn test_histogram_cardinality_estimation() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let histogram = ValueHistogram::from_data(&data, 5);
+
+        let selectivity = 0.5;
+        let estimated_cardinality = histogram.estimate_cardinality(selectivity);
+        assert_eq!(estimated_cardinality, 5);
+    }
+
+    #[test]
+    fn test_histogram_estimator_build() -> Result<()> {
+        let config = MLConfig::default();
+        let mut predictor = MLPredictor::new(config)?;
+
+        // Add training examples
+        let query_characteristics = QueryCharacteristics {
+            triple_pattern_count: 5,
+            join_count: 2,
+            filter_count: 1,
+            optional_count: 0,
+            has_aggregation: false,
+            has_sorting: false,
+            estimated_cardinality: 1000,
+            complexity_score: 10.0,
+            query_graph_diameter: 2,
+            avg_degree: 1.5,
+            max_degree: 2,
+        };
+
+        for i in 0..100 {
+            let features = vec![
+                (i % 10) as f64,
+                (i % 5) as f64,
+                (i % 3) as f64,
+                0.0,
+                0.0,
+                0.0,
+                1000.0,
+                2.0,
+                1.5,
+                2.0,
+                0.0,
+                0.0,
+                0.0,
+            ];
+            let example = TrainingExample {
+                features,
+                target_cost: (i * 10) as f64,
+                actual_cost: (i * 10) as f64,
+                query_characteristics: query_characteristics.clone(),
+                timestamp: SystemTime::now(),
+            };
+            predictor.add_training_example(example);
+        }
+
+        // Train model (which builds histograms)
+        predictor.train_model()?;
+
+        // Check histogram statistics
+        let stats = predictor.get_histogram_statistics();
+        assert!(stats.num_histograms > 0);
+        assert!(stats.total_buckets > 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_histogram_enhanced_prediction() -> Result<()> {
+        let config = MLConfig::default();
+        let mut predictor = MLPredictor::new(config)?;
+
+        // Add training examples
+        let query_characteristics = QueryCharacteristics {
+            triple_pattern_count: 5,
+            join_count: 2,
+            filter_count: 1,
+            optional_count: 0,
+            has_aggregation: false,
+            has_sorting: false,
+            estimated_cardinality: 1000,
+            complexity_score: 10.0,
+            query_graph_diameter: 2,
+            avg_degree: 1.5,
+            max_degree: 2,
+        };
+
+        for i in 0..100 {
+            let features = vec![
+                (i % 10) as f64,
+                (i % 5) as f64,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1000.0,
+                2.0,
+                1.5,
+                2.0,
+                0.0,
+                0.0,
+                0.0,
+            ];
+            let example = TrainingExample {
+                features,
+                target_cost: (i * 10) as f64,
+                actual_cost: (i * 10) as f64,
+                query_characteristics: query_characteristics.clone(),
+                timestamp: SystemTime::now(),
+            };
+            predictor.add_training_example(example);
+        }
+
+        // Train model
+        predictor.train_model()?;
+
+        // Make prediction with histogram enhancement
+        let query = Algebra::Empty;
+        let prediction = predictor.predict_cost_with_histogram(&query)?;
+
+        assert!(prediction.predicted_cost >= 0.0);
+        assert!(prediction.confidence >= 0.0);
+        assert!(prediction.confidence <= 1.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_histogram_cardinality_blending() -> Result<()> {
+        let config = MLConfig::default();
+        let mut predictor = MLPredictor::new(config)?;
+
+        // Build some training data
+        let query_characteristics = QueryCharacteristics {
+            triple_pattern_count: 5,
+            join_count: 2,
+            filter_count: 1,
+            optional_count: 0,
+            has_aggregation: false,
+            has_sorting: false,
+            estimated_cardinality: 1000,
+            complexity_score: 10.0,
+            query_graph_diameter: 2,
+            avg_degree: 1.5,
+            max_degree: 2,
+        };
+
+        for i in 0..150 {
+            let features = vec![
+                5.0, 2.0, 1.0, 0.0, 0.0, 0.0, 1000.0, 2.0, 1.5, 2.0, 0.0, 0.0, 0.0,
+            ];
+            let example = TrainingExample {
+                features,
+                target_cost: 100.0 + i as f64,
+                actual_cost: 100.0 + i as f64,
+                query_characteristics: query_characteristics.clone(),
+                timestamp: SystemTime::now(),
+            };
+            predictor.add_training_example(example);
+        }
+
+        predictor.train_model()?;
+
+        // Get histogram-based estimate
+        let features = vec![
+            5.0, 2.0, 1.0, 0.0, 0.0, 0.0, 1000.0, 2.0, 1.5, 2.0, 0.0, 0.0, 0.0,
+        ];
+        let histogram_estimate = predictor.estimate_cardinality_with_histogram(&features);
+
+        assert!(histogram_estimate.is_some());
+        assert!(histogram_estimate.unwrap() > 0.0);
 
         Ok(())
     }

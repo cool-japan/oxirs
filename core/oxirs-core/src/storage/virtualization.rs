@@ -465,10 +465,13 @@ impl VirtualStorage {
             })),
             cache: Arc::new(RwLock::new(StorageCache {
                 triple_cache: lru::LruCache::new(
-                    std::num::NonZeroUsize::new(cache_size)
-                        .unwrap_or(std::num::NonZeroUsize::new(10000).unwrap()),
+                    std::num::NonZeroUsize::new(cache_size).unwrap_or(
+                        std::num::NonZeroUsize::new(10000).expect("constant is non-zero"),
+                    ),
                 ),
-                query_cache: lru::LruCache::new(std::num::NonZeroUsize::new(1000).unwrap()),
+                query_cache: lru::LruCache::new(
+                    std::num::NonZeroUsize::new(1000).expect("constant is non-zero"),
+                ),
                 stats: CacheStats::default(),
             })),
             stats: Arc::new(RwLock::new(VirtualStorageStats::default())),
@@ -490,7 +493,7 @@ impl VirtualStorage {
                     healthy: true,
                     last_check: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("SystemTime should be after UNIX_EPOCH")
                         .as_secs(),
                     failure_count: 0,
                     avg_response_time_ms: 0.0,
@@ -526,7 +529,7 @@ impl VirtualStorage {
             },
             start_time: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             status: MigrationStatus::Pending,
         };
@@ -735,7 +738,7 @@ impl VirtualStorage {
                     if let Some(health) = routing.backend_health.get_mut(name) {
                         health.last_check = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
+                            .expect("SystemTime should be after UNIX_EPOCH")
                             .as_secs();
                         health.avg_response_time_ms = elapsed.as_millis() as f64;
 

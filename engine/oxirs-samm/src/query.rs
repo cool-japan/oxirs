@@ -774,7 +774,7 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
             ]
             .iter()
             .min()
-            .unwrap();
+            .expect("operation should succeed");
         }
     }
 
@@ -925,8 +925,8 @@ mod tests {
         let query = ModelQuery::new(&aspect);
         let groups = query.group_properties_by_characteristic_type();
 
-        assert_eq!(groups.get("List").unwrap().len(), 2);
-        assert_eq!(groups.get("Trait").unwrap().len(), 1);
+        assert_eq!(groups.get("List").expect("key should exist").len(), 2);
+        assert_eq!(groups.get("Trait").expect("key should exist").len(), 1);
     }
 
     #[test]

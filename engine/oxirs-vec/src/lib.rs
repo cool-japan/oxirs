@@ -417,9 +417,7 @@ pub use sparql_integration::{
 };
 
 #[cfg(feature = "tantivy-search")]
-pub use sparql_integration::{
-    RdfLiteral, SearchStats, SparqlSearchResult, SparqlTextFunctions,
-};
+pub use sparql_integration::{RdfLiteral, SearchStats, SparqlSearchResult, SparqlTextFunctions};
 pub use sparql_service_endpoint::{
     AuthenticationInfo, AuthenticationType, CustomFunctionRegistry, FederatedOperation,
     FederatedSearchResult, FederatedServiceEndpoint, FederatedVectorQuery, FunctionMetadata,
@@ -997,7 +995,7 @@ impl VectorIndex for MemoryVectorIndex {
             })
             .collect();
 
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         similarities.truncate(k);
 
         Ok(similarities)

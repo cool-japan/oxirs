@@ -7,14 +7,12 @@ use super::invalidation_engine::{
     InvalidationEngine, InvalidationStatistics, InvalidationStrategy, RdfUpdateListener,
 };
 use crate::algebra::TriplePattern;
-use crate::query_plan_cache::{QueryPlanCache, CacheStats as PlanCacheStats};
-use crate::query_result_cache::{QueryResultCache, CacheStatistics as ResultCacheStatistics};
+use crate::query_plan_cache::{CacheStats as PlanCacheStats, QueryPlanCache};
+use crate::query_result_cache::{CacheStatistics as ResultCacheStatistics, QueryResultCache};
 use anyhow::{Context, Result};
-use scirs2_core::error::CoreError;
-use scirs2_core::metrics::{Counter, HistogramStats, Timer};
+use scirs2_core::metrics::{Counter, Timer};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
@@ -78,6 +76,7 @@ pub struct CacheCoordinator {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct CacheEntryMetadata {
     level: CacheLevel,
     cache_key: String,
@@ -109,7 +108,9 @@ impl CoordinatorMetrics {
             total_invalidations: Arc::new(Counter::new("cache_total_invalidations".to_string())),
             result_invalidations: Arc::new(Counter::new("cache_result_invalidations".to_string())),
             plan_invalidations: Arc::new(Counter::new("cache_plan_invalidations".to_string())),
-            optimizer_invalidations: Arc::new(Counter::new("cache_optimizer_invalidations".to_string())),
+            optimizer_invalidations: Arc::new(Counter::new(
+                "cache_optimizer_invalidations".to_string(),
+            )),
             coordination_overhead: Arc::new(Timer::new("cache_coordination_overhead".to_string())),
             coherence_checks: Arc::new(Counter::new("cache_coherence_checks".to_string())),
             coherence_violations: Arc::new(Counter::new("cache_coherence_violations".to_string())),
@@ -126,6 +127,9 @@ impl CacheCoordinator {
                 enable_metrics: config.enable_metrics,
                 max_pending_batches: config.max_batch_size,
                 aggressive_matching: false,
+                default_ttl: None,         // Coordinator can override this later
+                enable_ttl_cleanup: false, // Disabled by default in coordinator
+                ttl_cleanup_interval_secs: 300,
             },
         ));
 
@@ -228,12 +232,8 @@ impl CacheCoordinator {
         // Update metrics
         if self.config.enable_metrics {
             let elapsed = start_time.elapsed();
-            self.metrics
-                .coordination_overhead
-                .observe(elapsed);
-            self.metrics
-                .total_invalidations
-                .add(affected.len() as u64);
+            self.metrics.coordination_overhead.observe(elapsed);
+            self.metrics.total_invalidations.add(affected.len() as u64);
         }
 
         Ok(())
@@ -248,9 +248,7 @@ impl CacheCoordinator {
                     .context("Failed to invalidate result cache entry")?;
                 self.remove_metadata(key)?;
             }
-            self.metrics
-                .result_invalidations
-                .add(keys.len() as u64);
+            self.metrics.result_invalidations.add(keys.len() as u64);
         }
         Ok(())
     }
@@ -282,9 +280,7 @@ impl CacheCoordinator {
             self.remove_metadata(key)?;
         }
 
-        self.metrics
-            .optimizer_invalidations
-            .add(keys.len() as u64);
+        self.metrics.optimizer_invalidations.add(keys.len() as u64);
         Ok(())
     }
 
@@ -560,7 +556,12 @@ mod tests {
         let cache_key = "test_key".to_string();
 
         coordinator
-            .register_cache_entry(CacheLevel::Result, cache_key.clone(), vec![pattern.clone()], 100)
+            .register_cache_entry(
+                CacheLevel::Result,
+                cache_key.clone(),
+                vec![pattern.clone()],
+                100,
+            )
             .unwrap();
 
         coordinator.invalidate_on_update(&pattern).unwrap();
@@ -612,10 +613,20 @@ mod tests {
 
         // Register entries at different levels
         coordinator
-            .register_cache_entry(CacheLevel::Result, "result_key".to_string(), vec![pattern.clone()], 100)
+            .register_cache_entry(
+                CacheLevel::Result,
+                "result_key".to_string(),
+                vec![pattern.clone()],
+                100,
+            )
             .unwrap();
         coordinator
-            .register_cache_entry(CacheLevel::Plan, "plan_key".to_string(), vec![pattern.clone()], 50)
+            .register_cache_entry(
+                CacheLevel::Plan,
+                "plan_key".to_string(),
+                vec![pattern.clone()],
+                50,
+            )
             .unwrap();
 
         // Invalidate

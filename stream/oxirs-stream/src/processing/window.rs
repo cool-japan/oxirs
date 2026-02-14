@@ -139,7 +139,7 @@ impl EventWindow {
             condition if condition.starts_with("time_elapsed:") => {
                 if let Ok(seconds) = condition
                     .strip_prefix("time_elapsed:")
-                    .unwrap()
+                    .expect("strip_prefix should succeed after starts_with check")
                     .parse::<i64>()
                 {
                     let duration = ChronoDuration::seconds(seconds);
@@ -151,7 +151,7 @@ impl EventWindow {
             condition if condition.starts_with("count_gte:") => {
                 if let Ok(count) = condition
                     .strip_prefix("count_gte:")
-                    .unwrap()
+                    .expect("strip_prefix should succeed after starts_with check")
                     .parse::<usize>()
                 {
                     self.event_count >= count
@@ -162,7 +162,7 @@ impl EventWindow {
             condition if condition.starts_with("count_eq:") => {
                 if let Ok(count) = condition
                     .strip_prefix("count_eq:")
-                    .unwrap()
+                    .expect("strip_prefix should succeed after starts_with check")
                     .parse::<usize>()
                 {
                     self.event_count == count

@@ -168,7 +168,9 @@ impl ConstraintEvaluationResult {
                     "http://example.org/constraint",
                 ),
                 source_shape: ShapeId::new("http://example.org/shape"),
-                focus_node: Term::NamedNode(NamedNode::new("http://example.org/focus").unwrap()),
+                focus_node: Term::NamedNode(
+                    NamedNode::new("http://example.org/focus").expect("valid IRI"),
+                ),
                 result_path: None,
                 result_severity: Severity::Violation,
                 result_message: message,

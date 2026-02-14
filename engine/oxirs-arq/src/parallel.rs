@@ -29,6 +29,9 @@ pub struct ParallelQueryExecutor {
     thread_pool: rayon::ThreadPool,
 }
 
+/// Type alias for backward compatibility
+pub type ParallelExecutor = ParallelQueryExecutor;
+
 /// Parallel execution statistics
 #[derive(Debug, Default)]
 pub struct ParallelStats {
@@ -1100,7 +1103,8 @@ impl ParallelQueryExecutor {
                 .par_iter()
                 .flat_map(|current_node| {
                     // Find all nodes reachable in one step
-                    let next_var = Variable::new(format!("?__next_{depth}")).unwrap();
+                    let next_var = Variable::new(format!("?__next_{depth}"))
+                        .expect("generated variable name should be valid");
                     let next_term = AlgebraTerm::Variable(next_var.clone());
 
                     let mut local_stats = ExecutionStats::new();

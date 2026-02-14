@@ -889,7 +889,11 @@ impl RifParser {
             if self.check("\\") {
                 self.pos += 1;
                 if self.pos < self.input.len() {
-                    let c = self.input.chars().nth(self.pos).unwrap();
+                    let c = self
+                        .input
+                        .chars()
+                        .nth(self.pos)
+                        .expect("position is within input bounds");
                     match c {
                         'n' => value.push('\n'),
                         't' => value.push('\t'),
@@ -901,7 +905,12 @@ impl RifParser {
                     self.pos += 1;
                 }
             } else {
-                value.push(self.input.chars().nth(self.pos).unwrap());
+                value.push(
+                    self.input
+                        .chars()
+                        .nth(self.pos)
+                        .expect("position is within input bounds"),
+                );
                 self.pos += 1;
             }
         }
@@ -968,7 +977,11 @@ impl RifParser {
     fn parse_name(&mut self) -> Result<String> {
         let start = self.pos;
         while self.pos < self.input.len() {
-            let c = self.input.chars().nth(self.pos).unwrap();
+            let c = self
+                .input
+                .chars()
+                .nth(self.pos)
+                .expect("position is within input bounds");
             if c.is_alphanumeric() || c == '_' || c == '-' {
                 self.pos += 1;
             } else {
@@ -1041,7 +1054,11 @@ impl RifParser {
 
     fn skip_ws(&mut self) {
         while self.pos < self.input.len() {
-            let c = self.input.chars().nth(self.pos).unwrap();
+            let c = self
+                .input
+                .chars()
+                .nth(self.pos)
+                .expect("position is within input bounds");
             if c.is_whitespace() {
                 self.pos += 1;
             } else if c == '(' && self.input[self.pos..].starts_with("(*") {
@@ -1114,7 +1131,11 @@ impl RifParser {
         // Look ahead for [
         let mut i = self.pos;
         while i < self.input.len() {
-            let c = self.input.chars().nth(i).unwrap();
+            let c = self
+                .input
+                .chars()
+                .nth(i)
+                .expect("index is within input bounds");
             if c == '[' {
                 return true;
             }
@@ -1130,7 +1151,11 @@ impl RifParser {
         let mut i = self.pos;
         let mut depth = 0;
         while i < self.input.len() {
-            let c = self.input.chars().nth(i).unwrap();
+            let c = self
+                .input
+                .chars()
+                .nth(i)
+                .expect("index is within input bounds");
             if c == '(' {
                 depth += 1;
             }
@@ -1154,7 +1179,11 @@ impl RifParser {
             if self.input[i..].starts_with("##") {
                 return true;
             }
-            let c = self.input.chars().nth(i).unwrap();
+            let c = self
+                .input
+                .chars()
+                .nth(i)
+                .expect("index is within input bounds");
             if c.is_whitespace() || c == ')' || c == ',' {
                 break;
             }
@@ -1382,7 +1411,10 @@ impl RifConverter {
         let formulas: Vec<RifFormula> = atoms.iter().map(|a| self.atom_to_rif(a)).collect();
 
         if formulas.len() == 1 {
-            formulas.into_iter().next().unwrap()
+            formulas
+                .into_iter()
+                .next()
+                .expect("formulas validated to have exactly one element")
         } else {
             RifFormula::And(formulas)
         }
@@ -1723,7 +1755,7 @@ fn uuid_simple() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .expect("SystemTime should be after UNIX_EPOCH")
         .as_nanos();
     format!("{:x}", now)
 }

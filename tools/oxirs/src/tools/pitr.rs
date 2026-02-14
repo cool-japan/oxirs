@@ -235,7 +235,7 @@ impl TransactionLog {
             let path = entry.path();
 
             if path.extension().and_then(|s| s.to_str()) == Some("wal") {
-                let filename = path.file_name().unwrap();
+                let filename = path.file_name().expect("file path should have a file name");
                 let archive_path = self.config.archive_dir.join(filename);
 
                 fs::rename(&path, &archive_path)?;

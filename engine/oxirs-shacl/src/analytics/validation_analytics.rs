@@ -120,11 +120,11 @@ impl ValidationAnalytics {
         let hour_timestamp = event
             .timestamp
             .with_minute(0)
-            .unwrap()
+            .expect("operation should succeed")
             .with_second(0)
-            .unwrap()
+            .expect("operation should succeed")
             .with_nanosecond(0)
-            .unwrap();
+            .expect("operation should succeed");
 
         // Find or create temporal data for this hour
         if let Some(data) = self

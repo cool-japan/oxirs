@@ -239,11 +239,15 @@ fn evaluate_custom_expression(expression: &str, event: &StreamEvent) -> Result<O
     // This is a simplified implementation
     match expression {
         expr if expr.starts_with("field:") => {
-            let field = expr.strip_prefix("field:").unwrap();
+            let field = expr
+                .strip_prefix("field:")
+                .expect("strip_prefix should succeed after starts_with check");
             extract_numeric_field(event, field)
         }
         expr if expr.starts_with("const:") => {
-            let value = expr.strip_prefix("const:").unwrap();
+            let value = expr
+                .strip_prefix("const:")
+                .expect("strip_prefix should succeed after starts_with check");
             match value.parse::<f64>() {
                 Ok(n) => Ok(Some(n)),
                 Err(_) => Ok(None),

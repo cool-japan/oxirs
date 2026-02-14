@@ -549,22 +549,24 @@ mod tests {
 
     #[test]
     fn test_parse_urn_with_version() {
-        let (namespace, version) =
-            parse_urn("urn:samm:org.eclipse.example:1.0.0#Movement").unwrap();
+        let (namespace, version) = parse_urn("urn:samm:org.eclipse.example:1.0.0#Movement")
+            .expect("parsing should succeed");
         assert_eq!(namespace, "org.eclipse.example");
         assert_eq!(version, "1.0.0");
     }
 
     #[test]
     fn test_parse_urn_without_element() {
-        let (namespace, version) = parse_urn("urn:samm:org.eclipse.example:2.1.0").unwrap();
+        let (namespace, version) =
+            parse_urn("urn:samm:org.eclipse.example:2.1.0").expect("parsing should succeed");
         assert_eq!(namespace, "org.eclipse.example");
         assert_eq!(version, "2.1.0");
     }
 
     #[test]
     fn test_parse_urn_without_version() {
-        let (namespace, version) = parse_urn("urn:samm:org.eclipse.example").unwrap();
+        let (namespace, version) =
+            parse_urn("urn:samm:org.eclipse.example").expect("parsing should succeed");
         assert_eq!(namespace, "org.eclipse.example");
         assert_eq!(version, "1.0.0"); // Default version
     }
@@ -582,7 +584,8 @@ mod tests {
 
 <urn:samm:org.eclipse.example:1.0.0#Movement> a samm:Aspect .
 "#;
-        let (namespace, version) = extract_namespace_from_content(content).unwrap();
+        let (namespace, version) =
+            extract_namespace_from_content(content).expect("operation should succeed");
         assert_eq!(namespace, "org.eclipse.example");
         assert_eq!(version, "1.0.0");
     }

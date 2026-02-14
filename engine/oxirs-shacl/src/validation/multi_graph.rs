@@ -543,7 +543,10 @@ impl MultiGraphValidationEngine {
         &self,
         stores: &HashMap<GraphName, Arc<dyn Store>>,
     ) -> Result<HashSet<GraphName>> {
-        let shapes = self.shapes.read().unwrap();
+        let shapes = self
+            .shapes
+            .read()
+            .expect("read lock should not be poisoned");
         let mut selected_graphs = HashSet::new();
 
         for (graph_name, store) in stores {
@@ -593,7 +596,10 @@ impl MultiGraphValidationEngine {
                 let timeout = self.config.graph_timeout;
 
                 let task = tokio::spawn(async move {
-                    let _permit = semaphore.acquire().await.unwrap();
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .expect("semaphore acquire should succeed");
 
                     let result = tokio::time::timeout(
                         timeout,
@@ -648,7 +654,7 @@ impl MultiGraphValidationEngine {
     ) -> Result<GraphValidationResult> {
         let start_time = Instant::now();
 
-        let shapes_guard = shapes.read().unwrap();
+        let shapes_guard = shapes.read().expect("read lock should not be poisoned");
         let mut engine = ValidationEngine::new(&shapes_guard, config);
         let report = engine.validate_store(store.as_ref())?;
 
@@ -683,7 +689,10 @@ impl MultiGraphValidationEngine {
 
         // Clone the shapes data we need before any await calls
         let cross_graph_shapes: Vec<_> = {
-            let shapes = self.shapes.read().unwrap();
+            let shapes = self
+                .shapes
+                .read()
+                .expect("read lock should not be poisoned");
 
             tracing::info!(
                 "Evaluating cross-graph constraints across {} graphs",
@@ -1354,15 +1363,21 @@ mod tests {
         let shapes = IndexMap::new();
         let config = MultiGraphValidationConfig::default();
 
-        let engine = MultiGraphValidationEngine::new(shapes, config).unwrap();
+        let engine =
+            MultiGraphValidationEngine::new(shapes, config).expect("construction should succeed");
 
         // Create test stores
         let mut stores: HashMap<GraphName, Arc<dyn Store>> = HashMap::new();
-        let store1 = Arc::new(ConcreteStore::new().unwrap()) as Arc<dyn Store>;
-        let graph1 = GraphName::NamedNode(NamedNode::new("http://example.org/graph1").unwrap());
+        let store1 = Arc::new(ConcreteStore::new().expect("store creation should succeed"))
+            as Arc<dyn Store>;
+        let graph1 =
+            GraphName::NamedNode(NamedNode::new("http://example.org/graph1").expect("valid IRI"));
         stores.insert(graph1, store1);
 
-        let result = engine.validate_multi_graph(&stores).await.unwrap();
+        let result = engine
+            .validate_multi_graph(&stores)
+            .await
+            .expect("async operation should succeed");
 
         assert_eq!(result.overall_stats.total_graphs, 1);
         assert_eq!(result.overall_stats.successful_graphs, 1);

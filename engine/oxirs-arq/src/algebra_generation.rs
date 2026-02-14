@@ -336,7 +336,11 @@ impl AlgebraGenerator {
             }
         }
 
-        Ok(candidates.into_iter().next().unwrap().algebra)
+        Ok(candidates
+            .into_iter()
+            .next()
+            .expect("candidates validated to be non-empty")
+            .algebra)
     }
 
     /// Generate optimal join order using dynamic programming

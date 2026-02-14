@@ -82,7 +82,7 @@ pub struct UsageStatistics {
 impl Default for UsageStatistics {
     fn default() -> Self {
         Self {
-            contract_id: IdsUri::new("urn:ids:usage:unknown").unwrap(),
+            contract_id: IdsUri::new("urn:ids:usage:unknown").expect("default URI should be valid"),
             total_count: 0,
             by_action: HashMap::new(),
             first_used_at: None,

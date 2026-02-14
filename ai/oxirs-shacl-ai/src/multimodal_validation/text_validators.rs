@@ -311,7 +311,13 @@ impl EntityExtractionValidator {
 
         for word in text.split_whitespace() {
             let clean_word = word.trim_matches(|c: char| !c.is_alphabetic());
-            if clean_word.len() > 2 && clean_word.chars().next().unwrap().is_uppercase() {
+            if clean_word.len() > 2
+                && clean_word
+                    .chars()
+                    .next()
+                    .expect("non-empty string should have first char")
+                    .is_uppercase()
+            {
                 entities.push(clean_word.to_string());
             }
         }

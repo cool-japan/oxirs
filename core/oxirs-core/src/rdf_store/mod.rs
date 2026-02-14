@@ -1231,7 +1231,7 @@ impl RdfStore {
 
 impl Default for RdfStore {
     fn default() -> Self {
-        RdfStore::new().unwrap()
+        RdfStore::new().expect("RdfStore::new() should not fail")
     }
 }
 

@@ -264,7 +264,7 @@ impl EnhancedPerformanceMonitor {
             report
                 .timestamp
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs()
         ));
 
@@ -274,7 +274,7 @@ impl EnhancedPerformanceMonitor {
             report
                 .timestamp
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs()
         ));
 

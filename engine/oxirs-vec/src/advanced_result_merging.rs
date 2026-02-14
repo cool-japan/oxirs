@@ -297,7 +297,11 @@ impl AdvancedResultMerger {
         }
 
         // Step 8: Sort by final score
-        merged_results.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap());
+        merged_results.sort_by(|a, b| {
+            b.final_score
+                .partial_cmp(&a.final_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(merged_results)
     }

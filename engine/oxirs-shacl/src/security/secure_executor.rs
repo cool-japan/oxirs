@@ -512,9 +512,11 @@ mod tests {
 
     #[test]
     fn test_factory_configurations() {
-        let default_exec = SecureExecutorFactory::create_default().unwrap();
-        let strict_exec = SecureExecutorFactory::create_strict().unwrap();
-        let relaxed_exec = SecureExecutorFactory::create_relaxed().unwrap();
+        let default_exec =
+            SecureExecutorFactory::create_default().expect("operation should succeed");
+        let strict_exec = SecureExecutorFactory::create_strict().expect("operation should succeed");
+        let relaxed_exec =
+            SecureExecutorFactory::create_relaxed().expect("operation should succeed");
 
         // Basic validation that different configurations were created
         assert_eq!(
@@ -533,7 +535,8 @@ mod tests {
 
     #[test]
     fn test_context_creation_utils() {
-        let mut executor = SecureExecutorFactory::create_default().unwrap();
+        let mut executor =
+            SecureExecutorFactory::create_default().expect("operation should succeed");
 
         let user_context = utils::create_standard_user_context(&mut executor, "test_user");
         assert!(user_context.is_ok());
@@ -547,12 +550,12 @@ mod tests {
         let safe_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
         let result = utils::quick_security_check(safe_query);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("operation should succeed"));
 
         let dangerous_query = "DROP GRAPH <http://example.org/graph>";
         let result = utils::quick_security_check(dangerous_query);
         assert!(result.is_ok());
-        assert!(!result.unwrap());
+        assert!(!result.expect("operation should succeed"));
     }
 
     #[test]
@@ -565,7 +568,7 @@ mod tests {
 
         let sanitized = utils::sanitize_query(query_with_comments);
         assert!(sanitized.is_ok());
-        assert!(!sanitized.unwrap().contains('#'));
+        assert!(!sanitized.expect("operation should succeed").contains('#'));
     }
 
     #[test]

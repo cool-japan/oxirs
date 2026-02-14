@@ -1454,8 +1454,8 @@ impl<'a> PatternAlgorithms<'a> {
             // Calculate statistics for each property
             for (property, counts) in property_counts {
                 if !counts.is_empty() {
-                    let min_count = *counts.iter().min().unwrap();
-                    let max_count = *counts.iter().max().unwrap();
+                    let min_count = *counts.iter().min().expect("counts should not be empty");
+                    let max_count = *counts.iter().max().expect("counts should not be empty");
                     let avg_count = counts.iter().sum::<u32>() as f64 / counts.len() as f64;
                     let support = counts.len() as f64 / 100.0; // Simplified support calculation
                     let confidence = if avg_count > 1.0 { 0.8 } else { 0.9 };

@@ -3,14 +3,12 @@
 //! Core system for tracking cache dependencies and automatically invalidating stale entries
 //! when RDF updates occur. Provides multiple invalidation strategies with <1% overhead target.
 
-use crate::algebra::{Term, TriplePattern};
-use anyhow::{Context, Result};
+use crate::algebra::TriplePattern;
+use anyhow::Result;
 use dashmap::DashMap;
-use scirs2_core::error::CoreError;
-use scirs2_core::metrics::{Counter, Histogram, HistogramStats, Timer};
-use scirs2_core::ndarray_ext::{Array2, ArrayView2};
+use scirs2_core::metrics::{Counter, Histogram, Timer};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
@@ -73,13 +71,47 @@ impl TriplePatternHash {
 /// Cache key identifier
 pub type CacheKey = String;
 
+/// Cache entry metadata with TTL support
+#[derive(Debug, Clone)]
+pub struct CacheEntryMetadata {
+    /// Timestamp when entry was created
+    pub created_at: Instant,
+    /// Time-to-live duration (None = no expiration)
+    pub ttl: Option<Duration>,
+    /// Triple pattern dependencies
+    pub dependencies: HashSet<TriplePatternHash>,
+}
+
+impl CacheEntryMetadata {
+    /// Check if entry has expired based on TTL
+    pub fn is_expired(&self) -> bool {
+        if let Some(ttl) = self.ttl {
+            self.created_at.elapsed() >= ttl
+        } else {
+            false
+        }
+    }
+
+    /// Get remaining time to live
+    pub fn remaining_ttl(&self) -> Option<Duration> {
+        self.ttl.and_then(|ttl| {
+            let elapsed = self.created_at.elapsed();
+            if elapsed < ttl {
+                Some(ttl - elapsed)
+            } else {
+                None
+            }
+        })
+    }
+}
+
 /// Dependency graph tracking which cache entries depend on which triple patterns
 #[derive(Debug, Clone)]
 pub struct DependencyGraph {
     /// Map: TriplePattern → Set of cache entries that depend on it
     pattern_to_entries: Arc<DashMap<TriplePatternHash, HashSet<CacheKey>>>,
-    /// Map: CacheEntry → Set of triple patterns it depends on
-    entry_to_patterns: Arc<DashMap<CacheKey, HashSet<TriplePatternHash>>>,
+    /// Map: CacheEntry → Metadata (dependencies + TTL)
+    entry_metadata: Arc<DashMap<CacheKey, CacheEntryMetadata>>,
     /// Statistics
     stats: Arc<DependencyGraphStats>,
 }
@@ -101,16 +133,26 @@ impl DependencyGraph {
     pub fn new() -> Self {
         Self {
             pattern_to_entries: Arc::new(DashMap::new()),
-            entry_to_patterns: Arc::new(DashMap::new()),
+            entry_metadata: Arc::new(DashMap::new()),
             stats: Arc::new(DependencyGraphStats::default()),
         }
     }
 
-    /// Register dependencies for a cache entry
+    /// Register dependencies for a cache entry with optional TTL
     pub fn register_dependencies(
         &self,
         cache_key: CacheKey,
         patterns: Vec<TriplePattern>,
+    ) -> Result<()> {
+        self.register_dependencies_with_ttl(cache_key, patterns, None)
+    }
+
+    /// Register dependencies for a cache entry with TTL
+    pub fn register_dependencies_with_ttl(
+        &self,
+        cache_key: CacheKey,
+        patterns: Vec<TriplePattern>,
+        ttl: Option<Duration>,
     ) -> Result<()> {
         if patterns.is_empty() {
             return Ok(());
@@ -118,19 +160,25 @@ impl DependencyGraph {
 
         let pattern_hashes: HashSet<TriplePatternHash> = patterns
             .iter()
-            .map(|p| TriplePatternHash::from_pattern(p))
+            .map(TriplePatternHash::from_pattern)
             .collect();
 
-        // Update entry → patterns mapping
-        let is_new_entry = !self.entry_to_patterns.contains_key(&cache_key);
-        self.entry_to_patterns
-            .insert(cache_key.clone(), pattern_hashes.clone());
+        // Create metadata
+        let metadata = CacheEntryMetadata {
+            created_at: Instant::now(),
+            ttl,
+            dependencies: pattern_hashes.clone(),
+        };
+
+        // Update entry metadata
+        let is_new_entry = !self.entry_metadata.contains_key(&cache_key);
+        self.entry_metadata.insert(cache_key.clone(), metadata);
 
         // Update pattern → entries mapping
         for pattern_hash in &pattern_hashes {
             self.pattern_to_entries
                 .entry(*pattern_hash)
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(cache_key.clone());
         }
 
@@ -148,10 +196,10 @@ impl DependencyGraph {
 
     /// Remove a cache entry and its dependencies
     pub fn remove_entry(&self, cache_key: &CacheKey) -> Result<()> {
-        // Get patterns this entry depends on
-        if let Some((_, patterns)) = self.entry_to_patterns.remove(cache_key) {
+        // Get metadata for this entry
+        if let Some((_, metadata)) = self.entry_metadata.remove(cache_key) {
             // Remove entry from all pattern mappings
-            for pattern_hash in &patterns {
+            for pattern_hash in &metadata.dependencies {
                 if let Some(mut entries) = self.pattern_to_entries.get_mut(pattern_hash) {
                     entries.remove(cache_key);
                     if entries.is_empty() {
@@ -165,11 +213,34 @@ impl DependencyGraph {
             self.stats.entry_count.fetch_sub(1, Ordering::Relaxed);
             self.stats
                 .edge_count
-                .fetch_sub(patterns.len(), Ordering::Relaxed);
+                .fetch_sub(metadata.dependencies.len(), Ordering::Relaxed);
             self.update_avg_deps();
         }
 
         Ok(())
+    }
+
+    /// Find all expired cache entries based on TTL
+    pub fn find_expired_entries(&self) -> Vec<CacheKey> {
+        self.entry_metadata
+            .iter()
+            .filter_map(|entry| {
+                if entry.value().is_expired() {
+                    Some(entry.key().clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get TTL information for a cache entry
+    pub fn get_ttl_info(&self, cache_key: &CacheKey) -> Option<(Duration, Option<Duration>)> {
+        self.entry_metadata.get(cache_key).and_then(|metadata| {
+            let elapsed = metadata.created_at.elapsed();
+            let remaining = metadata.remaining_ttl();
+            metadata.ttl.map(|_| (elapsed, remaining))
+        })
     }
 
     /// Find all cache entries affected by a triple pattern
@@ -195,7 +266,11 @@ impl DependencyGraph {
     }
 
     /// Check if a pattern matches (considering variables)
-    fn pattern_matches(&self, stored_hash: TriplePatternHash, query_pattern: &TriplePattern) -> bool {
+    fn pattern_matches(
+        &self,
+        stored_hash: TriplePatternHash,
+        query_pattern: &TriplePattern,
+    ) -> bool {
         // This is a simplified version
         // In practice, you'd need to reconstruct the pattern or store metadata
         // For now, we use exact hash matching
@@ -208,7 +283,9 @@ impl DependencyGraph {
             pattern_count: self.stats.pattern_count.load(Ordering::Relaxed),
             entry_count: self.stats.entry_count.load(Ordering::Relaxed),
             edge_count: self.stats.edge_count.load(Ordering::Relaxed),
-            avg_deps_per_entry: f64::from_bits(self.stats.avg_deps_per_entry.load(Ordering::Relaxed)),
+            avg_deps_per_entry: f64::from_bits(
+                self.stats.avg_deps_per_entry.load(Ordering::Relaxed),
+            ),
         }
     }
 
@@ -227,7 +304,7 @@ impl DependencyGraph {
     /// Clear all dependencies
     pub fn clear(&self) {
         self.pattern_to_entries.clear();
-        self.entry_to_patterns.clear();
+        self.entry_metadata.clear();
         self.stats.pattern_count.store(0, Ordering::Relaxed);
         self.stats.entry_count.store(0, Ordering::Relaxed);
         self.stats.edge_count.store(0, Ordering::Relaxed);
@@ -371,6 +448,10 @@ struct InvalidationMetrics {
     overhead_ratio: Arc<Histogram>,
     /// Cache entries invalidated per update
     entries_per_update: Arc<Histogram>,
+    /// TTL-based evictions
+    ttl_evictions: Arc<Counter>,
+    /// Time spent in TTL cleanup
+    ttl_cleanup_time: Arc<Timer>,
 }
 
 impl InvalidationMetrics {
@@ -379,7 +460,11 @@ impl InvalidationMetrics {
             total_invalidations: Arc::new(Counter::new("invalidation_total".to_string())),
             invalidation_time: Arc::new(Timer::new("invalidation_time".to_string())),
             overhead_ratio: Arc::new(Histogram::new("invalidation_overhead".to_string())),
-            entries_per_update: Arc::new(Histogram::new("invalidation_entries_per_update".to_string())),
+            entries_per_update: Arc::new(Histogram::new(
+                "invalidation_entries_per_update".to_string(),
+            )),
+            ttl_evictions: Arc::new(Counter::new("invalidation_ttl_evictions".to_string())),
+            ttl_cleanup_time: Arc::new(Timer::new("invalidation_ttl_cleanup_time".to_string())),
         }
     }
 }
@@ -392,6 +477,12 @@ pub struct InvalidationConfig {
     pub max_pending_batches: usize,
     /// Enable aggressive pattern matching
     pub aggressive_matching: bool,
+    /// Default TTL for cache entries (None = no expiration)
+    pub default_ttl: Option<Duration>,
+    /// Enable automatic TTL-based cleanup
+    pub enable_ttl_cleanup: bool,
+    /// TTL cleanup interval in seconds
+    pub ttl_cleanup_interval_secs: u64,
 }
 
 impl Default for InvalidationConfig {
@@ -400,6 +491,9 @@ impl Default for InvalidationConfig {
             enable_metrics: true,
             max_pending_batches: 100,
             aggressive_matching: false,
+            default_ttl: Some(Duration::from_secs(3600)), // 1 hour default
+            enable_ttl_cleanup: true,
+            ttl_cleanup_interval_secs: 300, // 5 minutes
         }
     }
 }
@@ -433,15 +527,26 @@ impl InvalidationEngine {
         }
     }
 
-    /// Register dependencies for a cache entry
+    /// Register dependencies for a cache entry with default TTL
     pub fn register_dependencies(
         &self,
         cache_key: CacheKey,
         patterns: Vec<TriplePattern>,
     ) -> Result<()> {
-        // Add to dependency graph
+        let ttl = self.config.default_ttl;
+        self.register_dependencies_with_ttl(cache_key, patterns, ttl)
+    }
+
+    /// Register dependencies for a cache entry with custom TTL
+    pub fn register_dependencies_with_ttl(
+        &self,
+        cache_key: CacheKey,
+        patterns: Vec<TriplePattern>,
+        ttl: Option<Duration>,
+    ) -> Result<()> {
+        // Add to dependency graph with TTL
         self.dependency_graph
-            .register_dependencies(cache_key, patterns.clone())?;
+            .register_dependencies_with_ttl(cache_key, patterns.clone(), ttl)?;
 
         // Add to bloom filter if using that strategy
         if let Some(bloom) = &self.bloom_filter {
@@ -451,6 +556,60 @@ impl InvalidationEngine {
         }
 
         Ok(())
+    }
+
+    /// Clean up expired cache entries based on TTL
+    pub fn cleanup_expired<F>(&self, mut invalidate_fn: F) -> Result<usize>
+    where
+        F: FnMut(&CacheKey) -> Result<()>,
+    {
+        if !self.config.enable_ttl_cleanup {
+            return Ok(0);
+        }
+
+        let start_time = Instant::now();
+        let expired_entries = self.dependency_graph.find_expired_entries();
+        let expired_count = expired_entries.len();
+
+        // Invalidate expired entries
+        for cache_key in &expired_entries {
+            invalidate_fn(cache_key)?;
+            self.dependency_graph.remove_entry(cache_key)?;
+        }
+
+        // Track metrics
+        if self.config.enable_metrics {
+            let elapsed = start_time.elapsed();
+            self.metrics.ttl_cleanup_time.observe(elapsed);
+            self.metrics.ttl_evictions.add(expired_count as u64);
+        }
+
+        Ok(expired_count)
+    }
+
+    /// Start background TTL cleanup task
+    pub fn start_ttl_cleanup_task<F>(&self, invalidate_fn: F)
+    where
+        F: Fn(&CacheKey) -> Result<()> + Send + Sync + 'static,
+    {
+        if !self.config.enable_ttl_cleanup {
+            return;
+        }
+
+        let engine_clone = self.clone();
+        let interval_secs = self.config.ttl_cleanup_interval_secs;
+        let invalidate_fn = Arc::new(invalidate_fn);
+
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(interval_secs));
+
+            let fn_clone = Arc::clone(&invalidate_fn);
+            if let Ok(count) = engine_clone.cleanup_expired(|key| fn_clone(key)) {
+                if count > 0 {
+                    tracing::debug!("TTL cleanup removed {} expired cache entries", count);
+                }
+            }
+        });
     }
 
     /// Remove cache entry and its dependencies
@@ -482,9 +641,7 @@ impl InvalidationEngine {
         // Track metrics
         if self.config.enable_metrics {
             let elapsed = start_time.elapsed();
-            self.metrics
-                .invalidation_time
-                .observe(elapsed);
+            self.metrics.invalidation_time.observe(elapsed);
             self.metrics
                 .entries_per_update
                 .observe(affected.len() as f64);
@@ -536,9 +693,7 @@ impl InvalidationEngine {
 
         // Update metrics
         if self.config.enable_metrics {
-            self.metrics
-                .total_invalidations
-                .add(affected_count as u64);
+            self.metrics.total_invalidations.add(affected_count as u64);
         }
 
         Ok(())
@@ -625,6 +780,7 @@ impl InvalidationEngine {
         let time_stats = self.metrics.invalidation_time.get_stats();
         let overhead_stats = self.metrics.overhead_ratio.get_stats();
         let entries_stats = self.metrics.entries_per_update.get_stats();
+        let ttl_cleanup_stats = self.metrics.ttl_cleanup_time.get_stats();
 
         InvalidationStatistics {
             strategy: self.strategy,
@@ -632,6 +788,8 @@ impl InvalidationEngine {
             avg_invalidation_time_us: time_stats.mean,
             overhead_ratio: overhead_stats.mean,
             avg_entries_per_update: entries_stats.mean,
+            ttl_evictions: self.metrics.ttl_evictions.get(),
+            avg_ttl_cleanup_time_us: ttl_cleanup_stats.mean,
             dependency_graph: graph_stats,
             memory_usage_bytes: self.dependency_graph.memory_usage(),
         }
@@ -660,8 +818,23 @@ pub struct InvalidationStatistics {
     pub avg_invalidation_time_us: f64,
     pub overhead_ratio: f64,
     pub avg_entries_per_update: f64,
+    pub ttl_evictions: u64,
+    pub avg_ttl_cleanup_time_us: f64,
     pub dependency_graph: DependencyGraphStatistics,
     pub memory_usage_bytes: usize,
+}
+
+impl Clone for InvalidationEngine {
+    fn clone(&self) -> Self {
+        Self {
+            dependency_graph: self.dependency_graph.clone(),
+            strategy: self.strategy,
+            bloom_filter: self.bloom_filter.clone(),
+            pending_invalidations: Arc::new(RwLock::new(VecDeque::new())),
+            metrics: self.metrics.clone(),
+            config: self.config.clone(),
+        }
+    }
 }
 
 /// RDF update listener trait
@@ -692,7 +865,7 @@ pub trait RdfUpdateListener {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::Variable;
+    use crate::algebra::{Term, Variable};
 
     fn create_test_pattern(s: &str, p: &str, o: &str) -> TriplePattern {
         TriplePattern {
@@ -817,5 +990,193 @@ mod tests {
         let affected2 = engine.find_affected_entries(&pattern2).unwrap();
         assert_eq!(affected2.len(), 1);
         assert!(affected2.contains("key2"));
+    }
+
+    #[test]
+    fn test_ttl_registration() {
+        let config = InvalidationConfig {
+            default_ttl: Some(Duration::from_secs(10)),
+            ..Default::default()
+        };
+        let engine = InvalidationEngine::with_config(InvalidationStrategy::Immediate, config);
+
+        let pattern = create_test_pattern("s", "p", "o");
+
+        // Register with default TTL
+        engine
+            .register_dependencies("key1".to_string(), vec![pattern.clone()])
+            .unwrap();
+
+        // Register with custom TTL
+        engine
+            .register_dependencies_with_ttl(
+                "key2".to_string(),
+                vec![pattern.clone()],
+                Some(Duration::from_secs(5)),
+            )
+            .unwrap();
+
+        // Both entries should exist
+        let stats = engine.statistics();
+        assert_eq!(stats.dependency_graph.entry_count, 2);
+    }
+
+    #[test]
+    fn test_ttl_expiration() {
+        let config = InvalidationConfig {
+            default_ttl: Some(Duration::from_millis(100)),
+            enable_ttl_cleanup: true,
+            ..Default::default()
+        };
+        let engine = InvalidationEngine::with_config(InvalidationStrategy::Immediate, config);
+
+        let pattern = create_test_pattern("s", "p", "o");
+
+        // Register entry with short TTL
+        engine
+            .register_dependencies_with_ttl(
+                "key1".to_string(),
+                vec![pattern.clone()],
+                Some(Duration::from_millis(50)),
+            )
+            .unwrap();
+
+        // Entry should exist initially
+        let expired = engine.dependency_graph.find_expired_entries();
+        assert_eq!(expired.len(), 0);
+
+        // Wait for expiration
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Entry should be expired now
+        let expired = engine.dependency_graph.find_expired_entries();
+        assert_eq!(expired.len(), 1);
+        assert!(expired.contains(&"key1".to_string()));
+    }
+
+    #[test]
+    fn test_ttl_cleanup() {
+        let config = InvalidationConfig {
+            default_ttl: Some(Duration::from_millis(50)),
+            enable_ttl_cleanup: true,
+            ..Default::default()
+        };
+        let engine = InvalidationEngine::with_config(InvalidationStrategy::Immediate, config);
+
+        let pattern = create_test_pattern("s", "p", "o");
+
+        // Register multiple entries
+        for i in 0..5 {
+            engine
+                .register_dependencies(format!("key{}", i), vec![pattern.clone()])
+                .unwrap();
+        }
+
+        // All entries should exist
+        assert_eq!(engine.dependency_graph.statistics().entry_count, 5);
+
+        // Wait for expiration
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Run cleanup
+        let mut removed_keys = Vec::new();
+        let count = engine
+            .cleanup_expired(|key| {
+                removed_keys.push(key.clone());
+                Ok(())
+            })
+            .unwrap();
+
+        // All entries should be cleaned up
+        assert_eq!(count, 5);
+        assert_eq!(removed_keys.len(), 5);
+        assert_eq!(engine.dependency_graph.statistics().entry_count, 0);
+    }
+
+    #[test]
+    fn test_ttl_metadata() {
+        let graph = DependencyGraph::new();
+
+        let pattern = create_test_pattern("s", "p", "o");
+        let ttl = Duration::from_secs(60);
+
+        graph
+            .register_dependencies_with_ttl("key1".to_string(), vec![pattern], Some(ttl))
+            .unwrap();
+
+        // Check TTL info
+        let ttl_info = graph.get_ttl_info(&"key1".to_string());
+        assert!(ttl_info.is_some());
+
+        let (elapsed, remaining) = ttl_info.unwrap();
+        assert!(elapsed < ttl);
+        assert!(remaining.is_some());
+        assert!(remaining.unwrap() <= ttl);
+    }
+
+    #[test]
+    fn test_mixed_ttl_no_ttl() {
+        let config = InvalidationConfig {
+            default_ttl: None,
+            enable_ttl_cleanup: true,
+            ..Default::default()
+        };
+        let engine = InvalidationEngine::with_config(InvalidationStrategy::Immediate, config);
+
+        let pattern = create_test_pattern("s", "p", "o");
+
+        // Register entry with no TTL
+        engine
+            .register_dependencies("key_no_ttl".to_string(), vec![pattern.clone()])
+            .unwrap();
+
+        // Register entry with TTL
+        engine
+            .register_dependencies_with_ttl(
+                "key_with_ttl".to_string(),
+                vec![pattern.clone()],
+                Some(Duration::from_millis(50)),
+            )
+            .unwrap();
+
+        // Wait for TTL expiration
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Only one should expire
+        let expired = engine.dependency_graph.find_expired_entries();
+        assert_eq!(expired.len(), 1);
+        assert!(expired.contains(&"key_with_ttl".to_string()));
+        assert!(!expired.contains(&"key_no_ttl".to_string()));
+    }
+
+    #[test]
+    fn test_ttl_statistics() {
+        let config = InvalidationConfig {
+            default_ttl: Some(Duration::from_millis(50)),
+            enable_ttl_cleanup: true,
+            enable_metrics: true,
+            ..Default::default()
+        };
+        let engine = InvalidationEngine::with_config(InvalidationStrategy::Immediate, config);
+
+        let pattern = create_test_pattern("s", "p", "o");
+
+        // Register entries
+        for i in 0..3 {
+            engine
+                .register_dependencies(format!("key{}", i), vec![pattern.clone()])
+                .unwrap();
+        }
+
+        // Wait for expiration
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Run cleanup
+        let _count = engine.cleanup_expired(|_| Ok(())).unwrap();
+
+        // Check statistics
+        let stats = engine.statistics();
+        assert_eq!(stats.ttl_evictions, 3);
+        assert!(stats.avg_ttl_cleanup_time_us > 0.0);
     }
 }

@@ -272,7 +272,7 @@ impl RealTimeMonitor {
                         metric_name,
                         SystemTime::now()
                             .duration_since(SystemTime::UNIX_EPOCH)
-                            .unwrap()
+                            .expect("SystemTime should be after UNIX_EPOCH")
                             .as_secs()
                     ),
                     severity: severity.clone(),

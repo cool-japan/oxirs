@@ -386,8 +386,8 @@ mod tests {
     #[test]
     fn test_validate_triple_valid() {
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             Literal::new("value"),
         );
 
@@ -398,7 +398,8 @@ mod tests {
 
     #[test]
     fn test_validate_literal() {
-        let lit = Literal::new_language_tagged_literal("Hello", "en").unwrap();
+        let lit =
+            Literal::new_language_tagged_literal("Hello", "en").expect("validation should succeed");
         let issue = validate_literal(&lit);
         assert!(issue.is_none());
     }
@@ -406,8 +407,8 @@ mod tests {
     #[test]
     fn test_check_duplicates() {
         let triple1 = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             Literal::new("value"),
         );
         let triple2 = triple1.clone();
@@ -420,13 +421,13 @@ mod tests {
     fn test_compute_stats() {
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/s1").unwrap(),
-                NamedNode::new("http://example.org/p").unwrap(),
+                NamedNode::new("http://example.org/s1").expect("valid IRI"),
+                NamedNode::new("http://example.org/p").expect("valid IRI"),
                 Literal::new("value1"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/s2").unwrap(),
-                NamedNode::new("http://example.org/p").unwrap(),
+                NamedNode::new("http://example.org/s2").expect("valid IRI"),
+                NamedNode::new("http://example.org/p").expect("valid IRI"),
                 Literal::new("value2"),
             ),
         ];

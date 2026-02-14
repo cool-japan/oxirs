@@ -26,11 +26,17 @@ use regex::Regex;
 /// ```
 pub fn parse_ewkt(ewkt: &str) -> Result<Geometry> {
     // Extract SRID if present (format: SRID=4326;GEOMETRY)
-    let re = Regex::new(r"^SRID=(\d+);(.+)$").unwrap();
+    let re = Regex::new(r"^SRID=(\d+);(.+)$").expect("regex pattern should be valid");
 
     if let Some(caps) = re.captures(ewkt.trim()) {
-        let srid_str = caps.get(1).unwrap().as_str();
-        let wkt_geom = caps.get(2).unwrap().as_str();
+        let srid_str = caps
+            .get(1)
+            .expect("capture group 1 should exist after successful match")
+            .as_str();
+        let wkt_geom = caps
+            .get(2)
+            .expect("capture group 2 should exist after successful match")
+            .as_str();
 
         let srid: u32 = srid_str
             .parse()

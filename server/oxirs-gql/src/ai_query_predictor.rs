@@ -538,7 +538,7 @@ impl AIQueryPredictor {
                 state_features[i % state_features.len()] * (i as f64 + 1.0) * 0.2;
             let future_reward = state_features
                 .iter()
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                 .unwrap_or(&0.0)
                 * 0.9; // γ = 0.9
             let q_value = immediate_reward + future_reward;
@@ -549,7 +549,7 @@ impl AIQueryPredictor {
         let exploration_factor = config.exploration_rate;
         let best_q_value = q_values
             .values()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(&0.0);
 
         // Apply epsilon-greedy policy with adaptive exploration
@@ -613,7 +613,7 @@ impl AIQueryPredictor {
                     "RL suggests action: {}",
                     q_values
                         .iter()
-                        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
                         .map(|(action, _)| action.as_str())
                         .unwrap_or("default")
                 ),
@@ -868,11 +868,11 @@ impl AIQueryPredictor {
         let graph_representation = node_embeddings.iter().sum::<f64>() / num_nodes as f64;
         let max_activation = node_embeddings
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(&0.0);
         let min_activation = node_embeddings
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(&0.0);
 
         // Graph connectivity analysis

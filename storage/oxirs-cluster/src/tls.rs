@@ -539,7 +539,7 @@ impl EncryptionManager {
     pub fn new() -> Self {
         let rng = ring::rand::SystemRandom::new();
         let mut key = [0u8; 32];
-        rng.fill(&mut key).unwrap();
+        rng.fill(&mut key).expect("random fill should succeed");
 
         Self {
             key,
@@ -606,7 +606,7 @@ impl EncryptionManager {
     /// Generate new encryption key
     pub fn rotate_key(&mut self) {
         let rng = ring::rand::SystemRandom::new();
-        rng.fill(&mut self.key).unwrap();
+        rng.fill(&mut self.key).expect("random fill should succeed");
     }
 
     /// Export key for backup (use with caution)

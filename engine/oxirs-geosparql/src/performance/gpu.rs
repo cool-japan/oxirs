@@ -38,7 +38,7 @@ use crate::geometry::Geometry;
 use geo::Centroid;
 use geo_types::Point;
 use scirs2_core::gpu::GpuBackend;
-use scirs2_core::ndarray_ext::{Array1, Array2};
+use scirs2_core::ndarray_ext::Array2;
 
 /// GPU context for accelerated geometric operations
 ///
@@ -467,15 +467,11 @@ impl GpuGeometryContext {
         }
 
         // Extract centroids for distance calculation
-        let centroids1: Vec<Coord3DPoint> = geometries1
-            .iter()
-            .filter_map(|g| g.centroid_3d())
-            .collect();
+        let centroids1: Vec<Coord3DPoint> =
+            geometries1.iter().filter_map(|g| g.centroid_3d()).collect();
 
-        let centroids2: Vec<Coord3DPoint> = geometries2
-            .iter()
-            .filter_map(|g| g.centroid_3d())
-            .collect();
+        let centroids2: Vec<Coord3DPoint> =
+            geometries2.iter().filter_map(|g| g.centroid_3d()).collect();
 
         // Compute distances
         let distances = self.batch_distance_3d_gpu(&centroids1, &centroids2)?;

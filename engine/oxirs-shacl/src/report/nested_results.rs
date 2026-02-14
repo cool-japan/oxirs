@@ -609,7 +609,7 @@ mod tests {
     fn test_nested_violation_builder() {
         let violation = ValidationViolation {
             focus_node: oxirs_core::model::Term::NamedNode(
-                NamedNode::new("http://example.org/test").unwrap(),
+                NamedNode::new("http://example.org/test").expect("valid IRI"),
             ),
             result_severity: Severity::Violation,
             source_shape: ShapeId::new("TestShape"),
@@ -652,7 +652,7 @@ mod tests {
     fn test_nested_violation_hierarchy() {
         let root_violation = ValidationViolation {
             focus_node: oxirs_core::model::Term::NamedNode(
-                NamedNode::new("http://example.org/root").unwrap(),
+                NamedNode::new("http://example.org/root").expect("valid IRI"),
             ),
             result_severity: Severity::Violation,
             source_shape: ShapeId::new("RootShape"),
@@ -666,7 +666,7 @@ mod tests {
 
         let child_violation = ValidationViolation {
             focus_node: oxirs_core::model::Term::NamedNode(
-                NamedNode::new("http://example.org/child").unwrap(),
+                NamedNode::new("http://example.org/child").expect("valid IRI"),
             ),
             result_severity: Severity::Violation,
             source_shape: ShapeId::new("ChildShape"),
@@ -700,7 +700,7 @@ mod tests {
     fn test_tree_string_generation() {
         let root_violation = ValidationViolation {
             focus_node: oxirs_core::model::Term::NamedNode(
-                NamedNode::new("http://example.org/root").unwrap(),
+                NamedNode::new("http://example.org/root").expect("valid IRI"),
             ),
             result_severity: Severity::Violation,
             source_shape: ShapeId::new("RootShape"),

@@ -1264,7 +1264,10 @@ impl GraphNeuralNetwork {
     ) -> Array2<f64> {
         match aggregation {
             AggregationFunction::Sum => features.sum_axis(Axis(0)).insert_axis(Axis(0)),
-            AggregationFunction::Mean => features.mean_axis(Axis(0)).unwrap().insert_axis(Axis(0)),
+            AggregationFunction::Mean => features
+                .mean_axis(Axis(0))
+                .expect("mean_axis should succeed for non-empty features")
+                .insert_axis(Axis(0)),
             AggregationFunction::Max => features
                 .fold_axis(Axis(0), f64::NEG_INFINITY, |&a, &b| a.max(b))
                 .insert_axis(Axis(0)),
@@ -1273,7 +1276,10 @@ impl GraphNeuralNetwork {
                 .insert_axis(Axis(0)),
             AggregationFunction::Attention => {
                 // Simplified attention pooling
-                features.mean_axis(Axis(0)).unwrap().insert_axis(Axis(0))
+                features
+                    .mean_axis(Axis(0))
+                    .expect("mean_axis should succeed for non-empty features")
+                    .insert_axis(Axis(0))
             }
         }
     }
@@ -1297,7 +1303,7 @@ impl GraphNeuralNetwork {
             .enumerate()
             .map(|(i, &score)| (i, score))
             .collect();
-        shape_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        shape_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         for (shape_idx, shape_confidence) in shape_scores.iter().take(3) {
             if *shape_confidence < 0.1 {
@@ -1315,7 +1321,7 @@ impl GraphNeuralNetwork {
                 let max_idx = constraint_probs
                     .iter()
                     .enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .map(|(idx, _)| idx)
                     .unwrap_or(0);
 

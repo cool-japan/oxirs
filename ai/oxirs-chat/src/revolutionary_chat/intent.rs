@@ -130,7 +130,7 @@ impl QuantumContextProcessor {
 
         // Store optimized embedding
         {
-            let mut embeddings = self.context_embeddings.write().unwrap();
+            let mut embeddings = self.context_embeddings.write().expect("write lock should not be poisoned");
             embeddings.insert(context.session_id.clone(), optimized_embedding.clone());
         }
 
@@ -244,7 +244,7 @@ impl ChatMemoryManager {
     }
 
     async fn cleanup_conversation_cache(&self) -> Result<()> {
-        let mut cache = self.conversation_cache.write().unwrap();
+        let mut cache = self.conversation_cache.write().expect("write lock should not be poisoned");
         let current_time = SystemTime::now();
 
         // Remove entries older than 1 hour

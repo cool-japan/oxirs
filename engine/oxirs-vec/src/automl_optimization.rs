@@ -316,7 +316,10 @@ impl AutoMLOptimizer {
                     if primary_score > best_score {
                         best_score = primary_score;
                         {
-                            let mut best_trial = self.best_trial.write().unwrap();
+                            let mut best_trial = self
+                                .best_trial
+                                .write()
+                                .expect("best_trial lock should not be poisoned");
                             *best_trial = Some(trial_result.clone());
                         } // Drop the mutex guard before await
 
@@ -358,12 +361,18 @@ impl AutoMLOptimizer {
 
         // Store results in history
         {
-            let mut history = self.trial_history.write().unwrap();
+            let mut history = self
+                .trial_history
+                .write()
+                .expect("trial_history lock should not be poisoned");
             history.extend(results.clone());
         }
 
         // Generate final results
-        let best_trial = self.best_trial.read().unwrap();
+        let best_trial = self
+            .best_trial
+            .read()
+            .expect("best_trial lock should not be poisoned");
         let best_configuration = best_trial
             .as_ref()
             .map(|r| r.trial.clone())
@@ -811,8 +820,14 @@ impl AutoMLOptimizer {
 
     /// Get optimization statistics
     pub fn get_optimization_statistics(&self) -> AutoMLStatistics {
-        let history = self.trial_history.read().unwrap();
-        let best_trial = self.best_trial.read().unwrap();
+        let history = self
+            .trial_history
+            .read()
+            .expect("trial_history lock should not be poisoned");
+        let best_trial = self
+            .best_trial
+            .read()
+            .expect("best_trial lock should not be poisoned");
 
         let total_trials = history.len();
         let successful_trials = history.iter().filter(|r| r.success).count();

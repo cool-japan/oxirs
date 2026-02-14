@@ -451,9 +451,13 @@ impl ShardManager {
             let triple = Triple::new(
                 subj.clone(),
                 predicate.cloned().unwrap_or_else(|| {
-                    Predicate::NamedNode(NamedNode::new("http://example.org/dummy").unwrap())
+                    Predicate::NamedNode(
+                        NamedNode::new("http://example.org/dummy").expect("dummy IRI is valid"),
+                    )
                 }),
-                Object::NamedNode(NamedNode::new("http://example.org/dummy").unwrap()),
+                Object::NamedNode(
+                    NamedNode::new("http://example.org/dummy").expect("dummy IRI is valid"),
+                ),
             );
             vec![self.get_shard_for_triple(&triple)]
         } else if let Some(pred) = predicate {

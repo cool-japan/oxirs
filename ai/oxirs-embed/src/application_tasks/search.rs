@@ -176,7 +176,10 @@ impl SearchEvaluator {
         query: &str,
         model: &dyn EmbeddingModel,
     ) -> Result<QueryResults> {
-        let judgments = self.query_relevance.get(query).unwrap();
+        let judgments = self
+            .query_relevance
+            .get(query)
+            .expect("query should exist in query_relevance");
 
         // Get search results (simplified - would use actual search system)
         let search_results = self.perform_search(query, model).await?;

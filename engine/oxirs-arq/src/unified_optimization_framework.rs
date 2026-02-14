@@ -215,7 +215,7 @@ impl UnifiedOptimizationCoordinator {
         let start_time = Instant::now();
 
         // Get current optimization state
-        let current_state = self.optimization_state.read().unwrap().clone();
+        let current_state = self.optimization_state.read().expect("read lock should not be poisoned").clone();
 
         // Determine optimal coordination strategy
         let strategy = self.coordination_ai.determine_strategy(query, &current_state).await?;
@@ -539,7 +539,7 @@ impl UnifiedOptimizationCoordinator {
 
     /// Get comprehensive system statistics
     pub fn get_unified_statistics(&self) -> UnifiedStatistics {
-        let state = self.optimization_state.read().unwrap();
+        let state = self.optimization_state.read().expect("read lock should not be poisoned");
 
         UnifiedStatistics {
             total_optimizations: state.total_optimizations,
@@ -555,7 +555,7 @@ impl UnifiedOptimizationCoordinator {
 
     /// Calculate overall system efficiency
     fn calculate_system_efficiency(&self) -> f64 {
-        let state = self.optimization_state.read().unwrap();
+        let state = self.optimization_state.read().expect("read lock should not be poisoned");
 
         // Combine various efficiency metrics
         let performance_factor = state.average_performance.min(1.0);

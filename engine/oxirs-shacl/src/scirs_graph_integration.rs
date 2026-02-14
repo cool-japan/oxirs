@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn test_add_triple() {
         let config = GraphValidationConfig::default();
-        let mut validator = SciRS2GraphValidator::new(config).unwrap();
+        let mut validator = SciRS2GraphValidator::new(config).expect("construction should succeed");
 
         assert!(validator.add_triple("alice", "knows", "bob").is_ok());
         assert!(validator.add_triple("bob", "knows", "charlie").is_ok());
@@ -192,17 +192,23 @@ mod tests {
     #[test]
     fn test_scirs2_integration_demo() {
         let config = GraphValidationConfig::default();
-        let mut validator = SciRS2GraphValidator::new(config).unwrap();
+        let mut validator = SciRS2GraphValidator::new(config).expect("construction should succeed");
 
         // Add some triples
-        validator.add_triple("a", "rel1", "b").unwrap();
-        validator.add_triple("b", "rel2", "c").unwrap();
-        validator.add_triple("c", "rel3", "a").unwrap();
+        validator
+            .add_triple("a", "rel1", "b")
+            .expect("validation should succeed");
+        validator
+            .add_triple("b", "rel2", "c")
+            .expect("validation should succeed");
+        validator
+            .add_triple("c", "rel3", "a")
+            .expect("validation should succeed");
 
         let result = validator.demonstrate_scirs2_integration();
         assert!(result.is_ok());
 
-        let validation_result = result.unwrap();
+        let validation_result = result.expect("validation should succeed");
         assert!(validation_result.connectivity_analysis.is_some());
         assert!(validation_result.basic_metrics.is_some());
     }

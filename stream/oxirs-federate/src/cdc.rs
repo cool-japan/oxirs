@@ -767,7 +767,10 @@ impl CdcProcessor {
             .iter()
             .position(|c| c.change_id == change_id)
         {
-            let mut change = resolver.manual_resolution_queue.remove(pos).unwrap();
+            let mut change = resolver
+                .manual_resolution_queue
+                .remove(pos)
+                .expect("resolution should succeed");
 
             // Mark as resolved
             if let Some(ref mut conflict_info) = change.conflict_info {
@@ -1123,7 +1126,10 @@ mod tests {
             retry_count: 0,
         };
 
-        processor.record_change(change).await.unwrap();
+        processor
+            .record_change(change)
+            .await
+            .expect("record change should succeed");
 
         let stats = processor.get_statistics().await;
         assert_eq!(stats.total_changes_processed, 1);
@@ -1152,13 +1158,16 @@ mod tests {
             retry_count: 0,
         };
 
-        processor.record_change(change).await.unwrap();
+        processor
+            .record_change(change)
+            .await
+            .expect("record change should succeed");
 
         // Get incremental update
         let update = processor
             .get_incremental_update("test-service", None, None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert_eq!(update.added.len(), 1);
         assert_eq!(update.statistics.total_changes, 1);
     }
@@ -1187,7 +1196,7 @@ mod tests {
         let _change_stream = processor
             .subscribe_to_changes("test-service")
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Record a change
         let change = ChangeRecord {
@@ -1208,7 +1217,10 @@ mod tests {
             retry_count: 0,
         };
 
-        processor.record_change(change).await.unwrap();
+        processor
+            .record_change(change)
+            .await
+            .expect("record change should succeed");
 
         // Change should be published to subscribers
     }

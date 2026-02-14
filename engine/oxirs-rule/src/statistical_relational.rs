@@ -139,7 +139,7 @@ impl StatisticalRelationalModel {
                 let prob = self.predict_class_probability(features, &class);
                 (class, prob)
             })
-            .max_by(|(_, p1), (_, p2)| p1.partial_cmp(p2).unwrap())
+            .max_by(|(_, p1), (_, p2)| p1.partial_cmp(p2).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(class, _)| class)
     }
 }

@@ -158,7 +158,7 @@ impl ProfileSample {
     pub fn new(stack_trace: StackTrace) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         Self {
@@ -204,7 +204,7 @@ impl ProfileData {
     pub fn new(id: String, profile_type: ProfileType) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         Self {
@@ -228,7 +228,7 @@ impl ProfileData {
     pub fn finish(&mut self) {
         self.end_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
     }
 
@@ -387,7 +387,7 @@ impl Profiler {
         let retention_secs = self.config.retention_period.as_secs();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         while let Some(front) = completed.front() {

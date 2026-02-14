@@ -83,12 +83,8 @@ impl LlmClientTrait for MockLlmClient {
     }
 }
 
-fn create_mock_engine() -> GraphRAGEngine<
-    MockVectorIndex,
-    MockEmbeddingModel,
-    MockSparqlEngine,
-    MockLlmClient,
-> {
+fn create_mock_engine(
+) -> GraphRAGEngine<MockVectorIndex, MockEmbeddingModel, MockSparqlEngine, MockLlmClient> {
     let vec_index = Arc::new(MockVectorIndex {
         results: vec![
             ("http://entity1".to_string(), 0.9),
@@ -113,7 +109,13 @@ fn create_mock_engine() -> GraphRAGEngine<
         ..Default::default()
     };
 
-    GraphRAGEngine::new(vec_index, embedding_model, sparql_engine, llm_client, config)
+    GraphRAGEngine::new(
+        vec_index,
+        embedding_model,
+        sparql_engine,
+        llm_client,
+        config,
+    )
 }
 
 /// Test adaptive TTL calculation

@@ -33,9 +33,11 @@ fn generate_text_data(size: usize) -> Vec<u8> {
 
 fn generate_random_data(size: usize) -> Vec<u8> {
     // Random data - not compressible
-    let mut rng = Random::seed(std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs()));
+    let mut rng = Random::seed(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs()),
+    );
     let mut data = vec![0u8; size];
     rng.fill_bytes(&mut data);
     data
@@ -143,7 +145,10 @@ fn test_lz4_compression_speed() {
     let elapsed = start.elapsed().as_nanos();
 
     let throughput = measure_throughput_mbps(data.len(), elapsed);
-    println!("LZ4 compression speed: {:.1} MB/s (target: >500 MB/s)", throughput);
+    println!(
+        "LZ4 compression speed: {:.1} MB/s (target: >500 MB/s)",
+        throughput
+    );
 
     // LZ4 should be fast (>100 MB/s even in debug mode)
     assert!(
@@ -373,6 +378,9 @@ async fn test_key_rotation_backward_compatibility() {
         key_rotation_days: 90,
         hsm_enabled: false,
         hsm_provider: None,
+        enable_validation: true,
+        require_encryption: true,
+        allowed_algorithms: vec![oxirs_cluster::encryption::EncryptionAlgorithm::Aes256Gcm],
     };
     let mut manager = EncryptionManager::new(config).expect("Failed to create manager");
 
@@ -453,9 +461,7 @@ async fn test_compression_then_encryption() {
     let original = generate_text_data(100_000);
 
     // Compress first
-    let compressed = compression
-        .compress(&original)
-        .expect("Compression failed");
+    let compressed = compression.compress(&original).expect("Compression failed");
     println!(
         "Compression ratio: {:.1}%",
         (1.0 - compressed.data.len() as f64 / original.len() as f64) * 100.0
@@ -542,6 +548,9 @@ async fn test_hsm_aws_kms_config() {
             region: "us-west-2".to_string(),
             key_arn: "arn:aws:kms:us-west-2:123456789012:key/test".to_string(),
         }),
+        enable_validation: true,
+        require_encryption: true,
+        allowed_algorithms: vec![oxirs_cluster::encryption::EncryptionAlgorithm::Aes256Gcm],
     };
 
     // Should fall back to local key generation
@@ -566,6 +575,9 @@ async fn test_hsm_azure_config() {
             vault_url: "https://test-vault.vault.azure.net".to_string(),
             key_name: "test-key".to_string(),
         }),
+        enable_validation: true,
+        require_encryption: true,
+        allowed_algorithms: vec![oxirs_cluster::encryption::EncryptionAlgorithm::Aes256Gcm],
     };
 
     let manager = EncryptionManager::new(config).expect("Failed to create manager");
@@ -591,6 +603,9 @@ async fn test_hsm_gcp_config() {
             key_ring: "test-keyring".to_string(),
             key_name: "test-key".to_string(),
         }),
+        enable_validation: true,
+        require_encryption: true,
+        allowed_algorithms: vec![oxirs_cluster::encryption::EncryptionAlgorithm::Aes256Gcm],
     };
 
     let manager = EncryptionManager::new(config).expect("Failed to create manager");
@@ -613,9 +628,7 @@ fn test_compression_large_data() {
 
     // Test with 100 MB of data
     let large_data = generate_text_data(100_000_000);
-    let compressed = strategy
-        .compress(&large_data)
-        .expect("Compression failed");
+    let compressed = strategy.compress(&large_data).expect("Compression failed");
     let decompressed = strategy
         .decompress(&compressed)
         .expect("Decompression failed");

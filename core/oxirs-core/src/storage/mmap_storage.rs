@@ -334,7 +334,11 @@ impl MmapTripleStore {
         let header = &bytes[0..HEADER_SIZE];
 
         // Read and validate magic number
-        let magic = u32::from_le_bytes(header[0..4].try_into().unwrap());
+        let magic = u32::from_le_bytes(
+            header[0..4]
+                .try_into()
+                .expect("slice length matches array size"),
+        );
         if magic != MAGIC_NUMBER {
             return Err(OxirsError::Store(
                 "Invalid file format (magic number mismatch)".to_string(),
@@ -342,7 +346,11 @@ impl MmapTripleStore {
         }
 
         // Read format version
-        let version = u32::from_le_bytes(header[4..8].try_into().unwrap());
+        let version = u32::from_le_bytes(
+            header[4..8]
+                .try_into()
+                .expect("slice length matches array size"),
+        );
         if version != FORMAT_VERSION {
             return Err(OxirsError::Store(format!(
                 "Unsupported format version: {}",
@@ -351,13 +359,25 @@ impl MmapTripleStore {
         }
 
         // Read capacity
-        let capacity = u64::from_le_bytes(header[8..16].try_into().unwrap()) as usize;
+        let capacity = u64::from_le_bytes(
+            header[8..16]
+                .try_into()
+                .expect("slice length matches array size"),
+        ) as usize;
 
         // Read count
-        let count = u64::from_le_bytes(header[16..24].try_into().unwrap());
+        let count = u64::from_le_bytes(
+            header[16..24]
+                .try_into()
+                .expect("slice length matches array size"),
+        );
 
         // Read triple size
-        let triple_size = u64::from_le_bytes(header[24..32].try_into().unwrap()) as usize;
+        let triple_size = u64::from_le_bytes(
+            header[24..32]
+                .try_into()
+                .expect("slice length matches array size"),
+        ) as usize;
 
         Ok((capacity, count, triple_size))
     }

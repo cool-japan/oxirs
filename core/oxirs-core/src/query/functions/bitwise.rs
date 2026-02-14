@@ -24,7 +24,8 @@ pub(super) fn fn_bitand(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num1 & num2;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer IRI is valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -54,7 +55,8 @@ pub(super) fn fn_bitor(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num1 | num2;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer IRI is valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -84,7 +86,8 @@ pub(super) fn fn_bitxor(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num1 ^ num2;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer IRI is valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -110,7 +113,8 @@ pub(super) fn fn_bitnot(args: &[Term]) -> Result<Term, OxirsError> {
             let result = !num;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer IRI is valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -145,7 +149,8 @@ pub(super) fn fn_lshift(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num << shift;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer IRI is valid"),
             )))
         }
         _ => Err(OxirsError::Query(
@@ -180,7 +185,8 @@ pub(super) fn fn_rshift(args: &[Term]) -> Result<Term, OxirsError> {
             let result = num >> shift;
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
+                    .expect("XSD integer IRI is valid"),
             )))
         }
         _ => Err(OxirsError::Query(

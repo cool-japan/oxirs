@@ -5,7 +5,6 @@
 
 use crate::algebra::Algebra;
 use anyhow::Result;
-use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -20,9 +19,9 @@ pub struct StreamingAnalyzer {
 #[derive(Debug, Clone)]
 pub struct StreamingConfig {
     pub enable_streaming: bool,
-    pub memory_threshold_mb: usize,    // 2048 MB default
-    pub spill_threshold_percent: f64,  // 0.8 (80%)
-    pub streaming_batch_size: usize,   // 1000 rows
+    pub memory_threshold_mb: usize,   // 2048 MB default
+    pub spill_threshold_percent: f64, // 0.8 (80%)
+    pub streaming_batch_size: usize,  // 1000 rows
 }
 
 impl Default for StreamingConfig {
@@ -117,8 +116,10 @@ impl QueryPlan {
         match algebra {
             Algebra::Bgp(patterns) => {
                 let id = self.next_id();
-                self.operators
-                    .push(Operator::Scan(ScanOperator { id, patterns: patterns.len() }));
+                self.operators.push(Operator::Scan(ScanOperator {
+                    id,
+                    patterns: patterns.len(),
+                }));
             }
             Algebra::Filter { pattern, .. } => {
                 self.build_from_algebra(pattern);
@@ -178,7 +179,8 @@ impl QueryPlan {
             _ => {
                 // Handle other operators generically
                 let id = self.next_id();
-                self.operators.push(Operator::Generic(GenericOperator { id }));
+                self.operators
+                    .push(Operator::Generic(GenericOperator { id }));
             }
         }
     }
@@ -354,7 +356,11 @@ impl StreamingAnalyzer {
     }
 
     /// Check if input to operator is streamable
-    fn is_input_streamable(&self, _operator: &Operator, opportunities: &StreamingOpportunities) -> bool {
+    fn is_input_streamable(
+        &self,
+        _operator: &Operator,
+        opportunities: &StreamingOpportunities,
+    ) -> bool {
         // Simplified: Check if most upstream operators are streamable
         !opportunities.streamable_scans.is_empty() || !opportunities.streamable_filters.is_empty()
     }
@@ -395,7 +401,10 @@ impl StreamingAnalyzer {
     fn is_pipeline_breaker(&self, op: &Operator) -> bool {
         matches!(
             op,
-            Operator::Sort(_) | Operator::Aggregation(_) | Operator::Distinct(_) | Operator::Union(_)
+            Operator::Sort(_)
+                | Operator::Aggregation(_)
+                | Operator::Distinct(_)
+                | Operator::Union(_)
         )
     }
 
@@ -417,7 +426,10 @@ impl StreamingAnalyzer {
     }
 
     /// Analyze streaming potential for query
-    pub fn analyze_streaming_potential(&self, algebra: &Algebra) -> Result<Option<StreamingStrategy>> {
+    pub fn analyze_streaming_potential(
+        &self,
+        algebra: &Algebra,
+    ) -> Result<Option<StreamingStrategy>> {
         let plan = QueryPlan::from_algebra(algebra);
         let opportunities = self.analyze(&plan);
 
@@ -474,7 +486,8 @@ impl StreamingAnalyzer {
     /// Check if should spill to disk
     pub fn should_spill(&self) -> bool {
         let current_usage = self.current_memory_usage();
-        let threshold = (self.memory_threshold() as f64 * self.config.spill_threshold_percent) as usize;
+        let threshold =
+            (self.memory_threshold() as f64 * self.config.spill_threshold_percent) as usize;
         current_usage > threshold
     }
 
@@ -490,7 +503,9 @@ impl StreamingAnalyzer {
             Algebra::Bgp(patterns) => {
                 complexity.num_patterns += patterns.len();
             }
-            Algebra::Join { left, right } | Algebra::Union { left, right } | Algebra::LeftJoin { left, right, .. } => {
+            Algebra::Join { left, right }
+            | Algebra::Union { left, right }
+            | Algebra::LeftJoin { left, right, .. } => {
                 complexity.num_joins += 1;
                 self.compute_complexity(left, complexity);
                 self.compute_complexity(right, complexity);
@@ -554,16 +569,22 @@ mod tests {
         let analyzer = StreamingAnalyzer::new(config);
 
         // Small data should not stream
-        assert!(!analyzer.should_stream(&Operator::Scan(ScanOperator {
-            id: OperatorId::new(1),
-            patterns: 1
-        }), 100 * 1024 * 1024));
+        assert!(!analyzer.should_stream(
+            &Operator::Scan(ScanOperator {
+                id: OperatorId::new(1),
+                patterns: 1
+            }),
+            100 * 1024 * 1024
+        ));
 
         // Large data should stream
-        assert!(analyzer.should_stream(&Operator::Scan(ScanOperator {
-            id: OperatorId::new(1),
-            patterns: 1
-        }), 2048 * 1024 * 1024));
+        assert!(analyzer.should_stream(
+            &Operator::Scan(ScanOperator {
+                id: OperatorId::new(1),
+                patterns: 1
+            }),
+            2048 * 1024 * 1024
+        ));
     }
 
     #[test]
@@ -574,11 +595,15 @@ mod tests {
         assert!(analyzer.is_pipeline_breaker(&Operator::Sort(SortOperator {
             id: OperatorId::new(1)
         })));
-        assert!(analyzer.is_pipeline_breaker(&Operator::Aggregation(AggregationOperator {
-            id: OperatorId::new(2)
-        })));
-        assert!(!analyzer.is_pipeline_breaker(&Operator::Filter(FilterOperator {
-            id: OperatorId::new(3)
-        })));
+        assert!(
+            analyzer.is_pipeline_breaker(&Operator::Aggregation(AggregationOperator {
+                id: OperatorId::new(2)
+            }))
+        );
+        assert!(
+            !analyzer.is_pipeline_breaker(&Operator::Filter(FilterOperator {
+                id: OperatorId::new(3)
+            }))
+        );
     }
 }

@@ -415,7 +415,11 @@ impl PossibilisticReasoner {
             .get_formulas()
             .iter()
             .filter(|f| f.is_fact())
-            .max_by(|a, b| a.certainty.partial_cmp(&b.certainty).unwrap())
+            .max_by(|a, b| {
+                a.certainty
+                    .partial_cmp(&b.certainty)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|f| (f.formula.clone(), f.certainty))
     }
 }

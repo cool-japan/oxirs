@@ -314,7 +314,7 @@ mod tests {
         let result = parser.parse_str_async(turtle).await;
 
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("result should be Ok");
         assert_eq!(triples.len(), 2);
     }
 
@@ -327,7 +327,7 @@ mod tests {
         let result = parser.parse_str_async(nt).await;
 
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("result should be Ok");
         assert_eq!(triples.len(), 2);
     }
 
@@ -347,7 +347,7 @@ mod tests {
         let triples = parser.collect_all_async().await;
 
         assert!(triples.is_ok());
-        assert_eq!(triples.unwrap().len(), 3);
+        assert_eq!(triples.expect("operation should succeed").len(), 3);
     }
 
     #[tokio::test]

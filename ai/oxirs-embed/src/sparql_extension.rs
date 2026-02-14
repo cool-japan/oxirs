@@ -605,8 +605,10 @@ fn parse_sparql_query(query: &str) -> Result<ParsedQuery> {
     let mut variables = HashSet::new();
 
     // Compile regex patterns once outside the loop
-    let uri_pattern = regex::Regex::new(r"<(https?://[^>]+)>").unwrap();
-    let var_pattern = regex::Regex::new(r"\?(\w+)").unwrap();
+    let uri_pattern =
+        regex::Regex::new(r"<(https?://[^>]+)>").expect("regex should compile for valid pattern");
+    let var_pattern =
+        regex::Regex::new(r"\?(\w+)").expect("regex should compile for valid pattern");
 
     for line in query.lines() {
         // Extract URIs (entities and relations)

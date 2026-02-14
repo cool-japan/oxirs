@@ -99,6 +99,7 @@ pub mod health_monitoring;
 pub mod memory_optimization;
 pub mod merkle_tree;
 pub mod ml_optimization;
+pub mod multi_tenant;
 pub mod mvcc;
 pub mod mvcc_storage;
 pub mod network;

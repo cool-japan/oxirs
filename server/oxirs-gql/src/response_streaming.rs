@@ -636,7 +636,11 @@ impl MultipartFormatter {
             "errors": if chunk.has_errors { Some(&chunk.errors) } else { None },
         });
 
-        output.extend_from_slice(serde_json::to_string(&body).unwrap().as_bytes());
+        output.extend_from_slice(
+            serde_json::to_string(&body)
+                .expect("serializing JSON body should succeed")
+                .as_bytes(),
+        );
         output.extend_from_slice(b"\r\n");
 
         output

@@ -566,7 +566,10 @@ impl FormatDetector {
         }
 
         if results.len() == 1 {
-            return Ok(results.into_iter().next().unwrap());
+            return Ok(results
+                .into_iter()
+                .next()
+                .expect("collection should not be empty"));
         }
 
         // Weight results by detection method reliability
@@ -595,7 +598,7 @@ impl FormatDetector {
         combined_result.detection_method = DetectionMethod::CombinedHeuristics;
         combined_result.confidence = weighted_scores
             .values()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .copied()
             .unwrap_or(0.0);
 

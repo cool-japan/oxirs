@@ -405,7 +405,11 @@ impl EdgeCache {
         for word in query.split_whitespace() {
             let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
             if !clean.is_empty()
-                && clean.chars().next().unwrap().is_uppercase()
+                && clean
+                    .chars()
+                    .next()
+                    .expect("clean should not be empty after non-empty check")
+                    .is_uppercase()
                 && !["Query", "Mutation", "Subscription"].contains(&clean)
             {
                 types.push(clean.to_string());

@@ -480,10 +480,7 @@ where
             timestamp: SystemTime::now(),
             ttl,
         };
-        self.cache
-            .write()
-            .await
-            .put(query.to_string(), cached);
+        self.cache.write().await.put(query.to_string(), cached);
 
         Ok(result)
     }

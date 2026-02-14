@@ -55,7 +55,8 @@ impl GeneratedTriple {
             if let Ok(pred) = NamedNode::new(&prov_time) {
                 let lit = Literal::new_typed(
                     self.timestamp.to_rfc3339(),
-                    NamedNode::new(format!("{}dateTime", ns::XSD)).unwrap(),
+                    NamedNode::new(format!("{}dateTime", ns::XSD))
+                        .expect("XSD dateTime IRI should be valid"),
                 );
                 triples.push(Triple::new(subject.clone(), pred, lit));
             }
@@ -247,23 +248,28 @@ impl ModbusTripleGenerator {
         // Create typed literal
         let literal = match value {
             ModbusValue::Int(v) => {
-                let datatype = NamedNode::new(mapping.data_type.xsd_datatype()).unwrap();
+                let datatype = NamedNode::new(mapping.data_type.xsd_datatype())
+                    .expect("XSD datatype IRI should be valid");
                 Literal::new_typed(v.to_string(), datatype)
             }
             ModbusValue::Uint(v) => {
-                let datatype = NamedNode::new(mapping.data_type.xsd_datatype()).unwrap();
+                let datatype = NamedNode::new(mapping.data_type.xsd_datatype())
+                    .expect("XSD datatype IRI should be valid");
                 Literal::new_typed(v.to_string(), datatype)
             }
             ModbusValue::Float(v) => {
-                let datatype = NamedNode::new(format!("{}float", ns::XSD)).unwrap();
+                let datatype = NamedNode::new(format!("{}float", ns::XSD))
+                    .expect("XSD float IRI should be valid");
                 Literal::new_typed(format!("{}", v), datatype)
             }
             ModbusValue::Bool(v) => {
-                let datatype = NamedNode::new(format!("{}boolean", ns::XSD)).unwrap();
+                let datatype = NamedNode::new(format!("{}boolean", ns::XSD))
+                    .expect("XSD boolean IRI should be valid");
                 Literal::new_typed(if *v { "true" } else { "false" }, datatype)
             }
             ModbusValue::String(s) => {
-                let datatype = NamedNode::new(format!("{}string", ns::XSD)).unwrap();
+                let datatype = NamedNode::new(format!("{}string", ns::XSD))
+                    .expect("XSD string IRI should be valid");
                 Literal::new_typed(s.clone(), datatype)
             }
         };

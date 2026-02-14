@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{remove_file, File};
 use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
@@ -23,12 +23,7 @@ struct SerializableBinding(Vec<(String, Term)>);
 
 impl From<&Solution> for SerializableSolution {
     fn from(solution: &Solution) -> Self {
-        SerializableSolution(
-            solution
-                .iter()
-                .map(|binding| SerializableBinding::from(binding))
-                .collect(),
-        )
+        SerializableSolution(solution.iter().map(SerializableBinding::from).collect())
     }
 }
 
@@ -277,7 +272,11 @@ impl SpillManager {
         for (_, spill) in spills.drain() {
             if spill.path.exists() {
                 if let Err(e) = remove_file(&spill.path) {
-                    tracing::warn!("Failed to remove spill file {}: {}", spill.path.display(), e);
+                    tracing::warn!(
+                        "Failed to remove spill file {}: {}",
+                        spill.path.display(),
+                        e
+                    );
                 }
             }
         }
@@ -389,7 +388,8 @@ impl SpillIterator {
             use flate2::read::GzDecoder;
             let decoder = GzDecoder::new(reader);
             let mut decompressed_reader = BufReader::new(decoder);
-            let serializable: SerializableSolution = serde_json::from_reader(&mut decompressed_reader)?;
+            let serializable: SerializableSolution =
+                serde_json::from_reader(&mut decompressed_reader)?;
             Solution::from(serializable)
         } else {
             let serializable: SerializableSolution = serde_json::from_reader(&mut reader)?;
@@ -437,9 +437,9 @@ mod tests {
         for i in 0..size {
             let mut binding = Binding::new();
             binding.insert(
-                Variable::new(&format!("x{}", i)).expect("valid variable name"),
+                Variable::new(format!("x{}", i)).expect("valid variable name"),
                 crate::algebra::Term::Iri(
-                    oxirs_core::model::NamedNode::new(&format!("http://example.org/item{}", i))
+                    oxirs_core::model::NamedNode::new(format!("http://example.org/item{}", i))
                         .expect("valid IRI"),
                 ),
             );

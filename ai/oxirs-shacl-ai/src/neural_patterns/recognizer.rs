@@ -1059,7 +1059,8 @@ impl MemoryManager {
             pool.pool_stats.pool_misses += 1;
             let pattern = Pattern::ClassUsage {
                 id: "default".to_string(),
-                class: NamedNode::new("http://www.w3.org/2000/01/rdf-schema#Resource").unwrap(),
+                class: NamedNode::new("http://www.w3.org/2000/01/rdf-schema#Resource")
+                    .expect("valid IRI constant for rdfs:Resource"),
                 instance_count: 0,
                 support: 0.0,
                 confidence: 0.0,
@@ -1079,7 +1080,8 @@ impl MemoryManager {
             // Reset pattern state for reuse
             let pattern = Pattern::ClassUsage {
                 id: "default".to_string(),
-                class: NamedNode::new("http://www.w3.org/2000/01/rdf-schema#Resource").unwrap(),
+                class: NamedNode::new("http://www.w3.org/2000/01/rdf-schema#Resource")
+                    .expect("valid IRI constant for rdfs:Resource"),
                 instance_count: 0,
                 support: 0.0,
                 confidence: 0.0,

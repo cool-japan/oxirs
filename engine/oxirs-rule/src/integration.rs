@@ -50,7 +50,7 @@ impl RuleIntegration {
 
         Self {
             rule_engine: RuleEngine::new(),
-            store: oxirs_core::RdfStore::new().unwrap(),
+            store: oxirs_core::RdfStore::new().expect("RdfStore::new should not fail"),
             namespace_prefixes: prefixes,
         }
     }

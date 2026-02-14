@@ -782,7 +782,10 @@ impl ExternalServicesManager {
         audio_data: &[u8],
         language: &str,
     ) -> Result<SpeechResult> {
-        let url = config.speech_to_text_url.as_ref().unwrap();
+        let url = config
+            .speech_to_text_url
+            .as_ref()
+            .expect("speech_to_text_url should be configured");
 
         let form = reqwest::multipart::Form::new()
             .part(
@@ -851,7 +854,10 @@ impl ExternalServicesManager {
         text: &str,
         language: &str,
     ) -> Result<Vec<u8>> {
-        let url = config.text_to_speech_url.as_ref().unwrap();
+        let url = config
+            .text_to_speech_url
+            .as_ref()
+            .expect("text_to_speech_url should be configured");
 
         let mut request = self.client.post(url).json(&serde_json::json!({
             "text": text,
@@ -889,14 +895,14 @@ impl RateLimiter {
         let now = std::time::Instant::now();
 
         {
-            let mut last_reset = self.last_reset.lock().unwrap();
+            let mut last_reset = self.last_reset.lock().expect("lock should not be poisoned");
             if now.duration_since(*last_reset) >= Duration::from_secs(60) {
                 *last_reset = now;
-                *self.calls_made.lock().unwrap() = 0;
+                *self.calls_made.lock().expect("lock should not be poisoned") = 0;
             }
         }
 
-        let mut calls = self.calls_made.lock().unwrap();
+        let mut calls = self.calls_made.lock().expect("lock should not be poisoned");
         if *calls >= self.limit_per_minute {
             return Err(anyhow!("Rate limit exceeded"));
         }

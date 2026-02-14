@@ -599,7 +599,10 @@ impl ParallelServiceExecutor {
             let timeout = self.timeout;
 
             let task = tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
+                let _permit = semaphore
+                    .acquire()
+                    .await
+                    .expect("semaphore should not be closed");
                 Self::execute_single_request(request, retry_policy, timeout).await
             });
 

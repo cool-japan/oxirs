@@ -166,7 +166,9 @@ impl SchemaStitcher {
                         "Introspection attempt {} failed for endpoint {}: {}",
                         attempt + 1,
                         endpoint.id,
-                        last_error.as_ref().unwrap()
+                        last_error
+                            .as_ref()
+                            .expect("last_error should be set after failed attempt")
                     );
                 }
             }

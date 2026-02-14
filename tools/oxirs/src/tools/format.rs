@@ -143,7 +143,7 @@ impl FormatDetector {
         }
 
         // Sort by confidence (highest first)
-        detections.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        detections.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
 
         // Remove duplicates, keeping highest confidence
         let mut seen = std::collections::HashSet::new();

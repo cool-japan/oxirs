@@ -780,7 +780,13 @@ impl EncryptionManager {
         keys.retain(|key| key.expires_at > now);
 
         // Generate new key if needed
-        if keys.is_empty() || keys.last().unwrap().expires_at < now + chrono::Duration::days(7) {
+        if keys.is_empty()
+            || keys
+                .last()
+                .expect("collection validated to be non-empty")
+                .expires_at
+                < now + chrono::Duration::days(7)
+        {
             drop(keys); // Release lock before calling generate_key
             self.generate_key().await?;
         }
@@ -1375,11 +1381,20 @@ mod tests {
         let limiter = AdvancedRateLimiter::new(config);
 
         // First 2 requests should pass
-        assert!(limiter.check_rate_limit("192.168.1.1").await.unwrap());
-        assert!(limiter.check_rate_limit("192.168.1.1").await.unwrap());
+        assert!(limiter
+            .check_rate_limit("192.168.1.1")
+            .await
+            .expect("async operation should succeed"));
+        assert!(limiter
+            .check_rate_limit("192.168.1.1")
+            .await
+            .expect("async operation should succeed"));
 
         // Third request should be blocked
-        assert!(!limiter.check_rate_limit("192.168.1.1").await.unwrap());
+        assert!(!limiter
+            .check_rate_limit("192.168.1.1")
+            .await
+            .expect("async operation should succeed"));
     }
 
     #[tokio::test]
@@ -1391,14 +1406,14 @@ mod tests {
         let result = ids
             .analyze_request("SELECT ?s ?p ?o WHERE { ?s ?p ?o }", "192.168.1.1")
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(result.threats_detected.is_empty());
 
         // SQL injection attempt
         let result = ids
             .analyze_request("SELECT * FROM users WHERE id = 1 OR 1=1", "192.168.1.1")
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(!result.threats_detected.is_empty());
         assert!(result.should_block);
     }
@@ -1416,7 +1431,10 @@ mod tests {
             request_metadata: HashMap::new(),
         };
 
-        let score = zero_trust.calculate_trust_score(&context).await.unwrap();
+        let score = zero_trust
+            .calculate_trust_score(&context)
+            .await
+            .expect("async operation should succeed");
         assert!(score > 0.7); // Should have high trust with mTLS
     }
 
@@ -1425,7 +1443,10 @@ mod tests {
         let frameworks = vec![ComplianceFramework::GDPR, ComplianceFramework::SOC2];
         let checker = ComplianceChecker::new(frameworks);
 
-        let results = checker.check_compliance().await.unwrap();
+        let results = checker
+            .check_compliance()
+            .await
+            .expect("async operation should succeed");
         assert_eq!(results.len(), 2);
         assert!(results.contains_key(&ComplianceFramework::GDPR));
         assert!(results.contains_key(&ComplianceFramework::SOC2));
@@ -1436,7 +1457,10 @@ mod tests {
         let config = EncryptionConfig::default();
         let manager = EncryptionManager::new(config);
 
-        let key = manager.generate_key().await.unwrap();
+        let key = manager
+            .generate_key()
+            .await
+            .expect("async operation should succeed");
         assert!(!key.id.is_empty());
         assert!(!key.key_data.is_empty());
     }
@@ -1456,7 +1480,10 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        logger.log_event(event).await.unwrap();
+        logger
+            .log_event(event)
+            .await
+            .expect("async operation should succeed");
 
         let logs = logger
             .query_logs(Utc::now() - chrono::Duration::hours(1), Utc::now())
@@ -1476,7 +1503,7 @@ mod tests {
         let result = security
             .check_request_security("SELECT ?s ?p ?o WHERE { ?s ?p ?o }", "192.168.1.1", None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(result.allowed);
 
@@ -1488,7 +1515,7 @@ mod tests {
                 None,
             )
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(!result.allowed);
     }

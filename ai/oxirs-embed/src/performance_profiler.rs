@@ -162,14 +162,17 @@ impl PerformanceProfiler {
         }
 
         // Update stats
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().expect("lock should not be poisoned");
         stats
             .entry(operation_type.clone())
             .or_insert_with(|| OperationStats::new(operation_type.clone()))
             .update(duration, is_error);
 
         // Store duration for percentile calculation
-        let mut durations = self.durations_buffer.write().unwrap();
+        let mut durations = self
+            .durations_buffer
+            .write()
+            .expect("lock should not be poisoned");
         durations
             .entry(operation_type.clone())
             .or_default()
@@ -185,20 +188,23 @@ impl PerformanceProfiler {
 
     /// Get statistics for a specific operation type
     pub fn get_stats(&self, operation_type: OperationType) -> Option<OperationStats> {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("read lock should not be poisoned");
         stats.get(&operation_type).cloned()
     }
 
     /// Get all statistics
     pub fn get_all_stats(&self) -> HashMap<OperationType, OperationStats> {
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().expect("read lock should not be poisoned");
         stats.clone()
     }
 
     /// Calculate percentiles for an operation type
     pub fn calculate_percentiles(&self, operation_type: OperationType) -> Option<OperationStats> {
-        let durations = self.durations_buffer.read().unwrap();
-        let mut stats = self.stats.write().unwrap();
+        let durations = self
+            .durations_buffer
+            .read()
+            .expect("read lock should not be poisoned");
+        let mut stats = self.stats.write().expect("lock should not be poisoned");
 
         if let Some(durations_vec) = durations.get(&operation_type) {
             if let Some(op_stats) = stats.get_mut(&operation_type) {
@@ -224,8 +230,11 @@ impl PerformanceProfiler {
 
     /// Reset all statistics
     pub fn reset(&self) {
-        let mut stats = self.stats.write().unwrap();
-        let mut durations = self.durations_buffer.write().unwrap();
+        let mut stats = self.stats.write().expect("lock should not be poisoned");
+        let mut durations = self
+            .durations_buffer
+            .write()
+            .expect("lock should not be poisoned");
         stats.clear();
         durations.clear();
     }

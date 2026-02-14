@@ -176,12 +176,18 @@ impl MaterializedResults {
             }
             MaterializationStrategy::Lazy => {
                 if self.lazy_cache.contains_key(&index) {
-                    let mut stats = self.stats.write().unwrap();
+                    let mut stats = self
+                        .stats
+                        .write()
+                        .expect("write lock should not be poisoned");
                     stats.cache_hits += 1;
                     drop(stats);
                     self.lazy_cache.get(&index)
                 } else {
-                    let mut stats = self.stats.write().unwrap();
+                    let mut stats = self
+                        .stats
+                        .write()
+                        .expect("write lock should not be poisoned");
                     stats.cache_misses += 1;
                     None
                 }
@@ -252,7 +258,10 @@ impl MaterializedResults {
         self.in_memory.clear();
         self.strategy = MaterializationStrategy::MemoryMapped;
 
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self
+            .stats
+            .write()
+            .expect("write lock should not be poisoned");
         stats.strategy_used = Some(MaterializationStrategy::MemoryMapped);
         stats.disk_used = serialized.len();
 
@@ -261,7 +270,10 @@ impl MaterializedResults {
 
     /// Update statistics
     fn update_stats(&self) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self
+            .stats
+            .write()
+            .expect("write lock should not be poisoned");
         stats.total_results = self.len();
         // Estimate memory usage (simplified)
         stats.memory_used = self.in_memory.len() * std::mem::size_of::<Solution>();
@@ -269,7 +281,10 @@ impl MaterializedResults {
 
     /// Get statistics
     pub fn get_stats(&self) -> MaterializationStats {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("read lock should not be poisoned")
+            .clone()
     }
 
     /// Analyze result patterns using scirs2-stats

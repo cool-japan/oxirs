@@ -1,5 +1,6 @@
 //! Service discovery for federated SPARQL endpoints
 
+use hickory_resolver::{config::*, Resolver};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -7,7 +8,6 @@ use tokio::{
     sync::{Notify, RwLock},
     time::interval,
 };
-use trust_dns_resolver::{config::*, Resolver};
 use url::Url;
 
 use crate::{
@@ -64,7 +64,7 @@ impl ServiceDiscovery {
             http_client: Client::builder()
                 .timeout(Duration::from_secs(10))
                 .build()
-                .unwrap(),
+                .expect("HTTP client build should succeed"),
             shutdown: Arc::new(Notify::new()),
         }
     }

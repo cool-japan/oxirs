@@ -809,7 +809,9 @@ mod tests {
 
         // Record some failures
         for _ in 0..60 {
-            cb.record_execution(false).await.unwrap();
+            cb.record_execution(false)
+                .await
+                .expect("async operation should succeed");
         }
 
         // Circuit should open
@@ -822,7 +824,10 @@ mod tests {
         let mut limiter = AdaptiveRateLimiter::new(10);
 
         // Should allow first request
-        assert!(limiter.allow_request("client1").await.unwrap());
+        assert!(limiter
+            .allow_request("client1")
+            .await
+            .expect("async operation should succeed"));
 
         // Adapt rate based on load
         limiter.adapt_rate(0.9);
@@ -834,12 +839,16 @@ mod tests {
         let analyzer = QueryComplexityAnalyzer::new(1000.0);
 
         let simple_query = "SELECT * WHERE { ?s ?p ?o }";
-        let result = analyzer.analyze(simple_query).unwrap();
+        let result = analyzer
+            .analyze(simple_query)
+            .expect("analysis should succeed");
         assert!(result.score < 100.0);
 
         let complex_query =
             "SELECT * WHERE { ?s ?p ?o . ?o ?p2 ?o2 FILTER(?x > 10) OPTIONAL { ?o2 ?p3 ?o3 } }";
-        let result2 = analyzer.analyze(complex_query).unwrap();
+        let result2 = analyzer
+            .analyze(complex_query)
+            .expect("analysis should succeed");
         assert!(result2.score > result.score);
     }
 
@@ -866,12 +875,22 @@ mod tests {
     fn test_quota_manager() {
         let mut manager = ResourceQuotaManager::new();
 
-        assert!(manager.check_quota("client1").unwrap());
+        assert!(manager
+            .check_quota("client1")
+            .expect("check should succeed"));
 
-        manager.record_usage("client1", 5000).unwrap();
-        assert!(manager.check_quota("client1").unwrap());
+        manager
+            .record_usage("client1", 5000)
+            .expect("recording should succeed");
+        assert!(manager
+            .check_quota("client1")
+            .expect("check should succeed"));
 
-        manager.record_usage("client1", 6000).unwrap();
-        assert!(!manager.check_quota("client1").unwrap());
+        manager
+            .record_usage("client1", 6000)
+            .expect("recording should succeed");
+        assert!(!manager
+            .check_quota("client1")
+            .expect("check should succeed"));
     }
 }

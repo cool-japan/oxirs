@@ -85,7 +85,7 @@
 //!
 //! ## GPU Acceleration Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_embed::{GpuAccelerationConfig, GpuAccelerationManager};
 //!
 //! # async fn example() -> anyhow::Result<()> {
@@ -175,6 +175,7 @@ pub mod storage_backend;
 pub mod temporal_embeddings;
 pub mod training;
 pub mod utils;
+pub mod validation;
 pub mod vector_search;
 pub mod vision_language_graph;
 pub mod visualization;

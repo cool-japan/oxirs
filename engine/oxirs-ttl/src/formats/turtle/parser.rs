@@ -206,7 +206,10 @@ impl TurtleParser {
                     Ok(None) // Empty triple list
                 } else if triples.len() == 1 {
                     Ok(Some(TurtleStatement::Triple(
-                        triples.into_iter().next().unwrap(),
+                        triples
+                            .into_iter()
+                            .next()
+                            .expect("iterator should have next element"),
                     )))
                 } else {
                     Ok(Some(TurtleStatement::Triples(triples)))

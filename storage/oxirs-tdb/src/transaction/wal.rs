@@ -331,7 +331,10 @@ mod tests {
         .unwrap();
         wal.flush().unwrap();
 
-        let flushed = *wal.last_flushed_lsn.read().unwrap();
+        let flushed = *wal
+            .last_flushed_lsn
+            .read()
+            .expect("lock should not be poisoned");
         assert_eq!(flushed.as_u64(), 0);
 
         std::fs::remove_dir_all(&temp_dir).ok();

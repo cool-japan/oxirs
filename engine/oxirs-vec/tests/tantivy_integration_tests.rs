@@ -87,7 +87,8 @@ fn test_phrase_search() -> Result<()> {
     let docs = vec![
         RdfDocument {
             uri: "http://example.org/article1".to_string(),
-            content: "Natural language processing is a subfield of artificial intelligence".to_string(),
+            content: "Natural language processing is a subfield of artificial intelligence"
+                .to_string(),
             language: Some("en".to_string()),
             datatype: None,
         },
@@ -524,14 +525,8 @@ fn test_limit_parameter() -> Result<()> {
     let results_5 = searcher.text_search("learning", 5, 0.0)?;
     let results_10 = searcher.text_search("learning", 10, 0.0)?;
 
-    assert!(
-        results_5.len() <= 5,
-        "Should return at most 5 results"
-    );
-    assert!(
-        results_10.len() <= 10,
-        "Should return at most 10 results"
-    );
+    assert!(results_5.len() <= 5, "Should return at most 5 results");
+    assert!(results_10.len() <= 10, "Should return at most 10 results");
 
     Ok(())
 }

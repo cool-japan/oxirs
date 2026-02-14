@@ -154,7 +154,7 @@ impl JuniperGraphQLServer {
                         r#"{{"errors": [{{ "message": "{}" }}]}}"#,
                         err.to_string().replace('"', "\\\"")
                     ))
-                    .unwrap()
+                    .expect("building error response should succeed")
             }
         };
 
@@ -201,14 +201,21 @@ impl JuniperGraphQLServer {
                 // Add CORS headers to GraphQL response
                 if config.cors_enabled {
                     let headers = response.headers_mut();
-                    headers.insert("Access-Control-Allow-Origin", "*".parse().unwrap());
+                    headers.insert(
+                        "Access-Control-Allow-Origin",
+                        "*".parse().expect("parse should succeed for valid input"),
+                    );
                     headers.insert(
                         "Access-Control-Allow-Methods",
-                        "GET, POST, OPTIONS".parse().unwrap(),
+                        "GET, POST, OPTIONS"
+                            .parse()
+                            .expect("parse should succeed for valid input"),
                     );
                     headers.insert(
                         "Access-Control-Allow-Headers",
-                        "Content-Type, Authorization".parse().unwrap(),
+                        "Content-Type, Authorization"
+                            .parse()
+                            .expect("parse should succeed for valid input"),
                     );
                 }
                 Ok(response)

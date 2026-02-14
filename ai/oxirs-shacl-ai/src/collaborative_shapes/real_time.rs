@@ -267,14 +267,14 @@ impl PresenceManager {
 
     /// Update user presence
     pub async fn update_presence(&mut self, presence: UserPresenceData) -> Result<()> {
-        let mut user_presence = self.user_presence.write().unwrap();
+        let mut user_presence = self.user_presence.write().expect("write lock should not be poisoned");
         user_presence.insert(presence.user_id.clone(), presence);
         Ok(())
     }
 
     /// Get active users in workspace
     pub async fn get_active_users(&self, _workspace_id: &str) -> Result<Vec<UserPresenceData>> {
-        let user_presence = self.user_presence.read().unwrap();
+        let user_presence = self.user_presence.read().expect("read lock should not be poisoned");
         let active_users = user_presence
             .values()
             .filter(|presence| matches!(presence.status, PresenceStatus::Online))

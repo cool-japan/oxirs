@@ -384,14 +384,7 @@ impl CommunityDetector {
                 }
 
                 // Try to split and refine
-                self.refine_community(
-                    graph,
-                    &mut community,
-                    &comm_nodes,
-                    comm_id,
-                    m,
-                    &degree,
-                )?;
+                self.refine_community(graph, &mut community, &comm_nodes, comm_id, m, &degree)?;
             }
 
             // Check modularity improvement
@@ -410,10 +403,7 @@ impl CommunityDetector {
 
         // Verify target: modularity > 0.75
         if best_modularity < 0.75 {
-            tracing::warn!(
-                "Leiden modularity {:.3} below target 0.75",
-                best_modularity
-            );
+            tracing::warn!("Leiden modularity {:.3} below target 0.75", best_modularity);
         } else {
             tracing::info!("Leiden achieved modularity: {:.3}", best_modularity);
         }
@@ -458,9 +448,10 @@ impl CommunityDetector {
             }
 
             // Find best subcommunity
-            if let Some((&best_sub, _)) = sub_edges.iter().max_by(|(_, a), (_, b)| {
-                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-            }) {
+            if let Some((&best_sub, _)) = sub_edges
+                .iter()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            {
                 if best_sub != current_sub {
                     subcomm.insert(node, best_sub);
                     changed = true;

@@ -999,7 +999,10 @@ impl RdfXmlBufferPool {
 
     #[allow(dead_code)]
     fn get_xml_buffer(&self) -> Vec<u8> {
-        let mut buffers = self.xml_buffers.lock().unwrap();
+        let mut buffers = self
+            .xml_buffers
+            .lock()
+            .expect("lock should not be poisoned");
         buffers
             .pop()
             .unwrap_or_else(|| Vec::with_capacity(self.buffer_size))
@@ -1008,7 +1011,10 @@ impl RdfXmlBufferPool {
     #[allow(dead_code)]
     fn return_xml_buffer(&self, mut buffer: Vec<u8>) {
         buffer.clear();
-        let mut buffers = self.xml_buffers.lock().unwrap();
+        let mut buffers = self
+            .xml_buffers
+            .lock()
+            .expect("lock should not be poisoned");
         if buffers.len() < self.max_buffers {
             buffers.push(buffer);
         }
@@ -1044,11 +1050,17 @@ impl MemoryRdfXmlSink {
     }
 
     pub fn get_triples(&self) -> Vec<Triple> {
-        self.triples.lock().unwrap().clone()
+        self.triples
+            .lock()
+            .expect("lock should not be poisoned")
+            .clone()
     }
 
     pub fn get_namespaces(&self) -> HashMap<String, String> {
-        self.namespaces.lock().unwrap().clone()
+        self.namespaces
+            .lock()
+            .expect("lock should not be poisoned")
+            .clone()
     }
 }
 
@@ -1076,13 +1088,13 @@ impl RdfXmlStreamingSink for MemoryRdfXmlSink {
     async fn process_triple_stream(&mut self, triples: Vec<Triple>) -> Result<(), Self::Error> {
         let count = triples.len();
         {
-            let mut triple_vec = self.triples.lock().unwrap();
+            let mut triple_vec = self.triples.lock().expect("lock should not be poisoned");
             triple_vec.extend(triples);
         }
 
         // Update statistics
         {
-            let mut stats = self.statistics.lock().unwrap();
+            let mut stats = self.statistics.lock().expect("lock should not be poisoned");
             stats.triples_processed += count;
         }
 
@@ -1098,13 +1110,13 @@ impl RdfXmlStreamingSink for MemoryRdfXmlSink {
         let namespace = namespace.to_string();
         async move {
             {
-                let mut namespaces = self.namespaces.lock().unwrap();
+                let mut namespaces = self.namespaces.lock().expect("lock should not be poisoned");
                 namespaces.insert(prefix, namespace);
             }
 
             // Update statistics
             {
-                let mut stats = self.statistics.lock().unwrap();
+                let mut stats = self.statistics.lock().expect("lock should not be poisoned");
                 stats.namespaces_declared += 1;
             }
 
@@ -1118,7 +1130,10 @@ impl RdfXmlStreamingSink for MemoryRdfXmlSink {
     }
 
     fn get_statistics(&self) -> RdfXmlSinkStatistics {
-        self.statistics.lock().unwrap().clone()
+        self.statistics
+            .lock()
+            .expect("lock should not be poisoned")
+            .clone()
     }
 }
 

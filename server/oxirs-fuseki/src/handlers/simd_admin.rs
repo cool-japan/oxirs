@@ -251,7 +251,7 @@ mod tests {
 
         // Add some test triples
         {
-            let mut m = matcher.write().unwrap();
+            let mut m = matcher.write().expect("lock should not be poisoned");
             for i in 0..10 {
                 m.add_triple(Triple::new(
                     format!("s{}", i),
@@ -288,7 +288,7 @@ mod tests {
             .await
             .unwrap();
 
-        let m = matcher.read().unwrap();
+        let m = matcher.read().expect("lock should not be poisoned");
         let stats = m.get_statistics();
         assert_eq!(stats.total_triples, 2);
     }
@@ -299,7 +299,7 @@ mod tests {
 
         // Add triples
         {
-            let mut m = matcher.write().unwrap();
+            let mut m = matcher.write().expect("lock should not be poisoned");
             m.add_triple(Triple::new(
                 "s1".to_string(),
                 "p1".to_string(),
@@ -328,7 +328,7 @@ mod tests {
 
         // Add triples
         {
-            let mut m = matcher.write().unwrap();
+            let mut m = matcher.write().expect("lock should not be poisoned");
             for i in 0..5 {
                 m.add_triple(Triple::new(
                     format!("s{}", i),
@@ -338,11 +338,25 @@ mod tests {
             }
         }
 
-        assert_eq!(matcher.read().unwrap().get_statistics().total_triples, 5);
+        assert_eq!(
+            matcher
+                .read()
+                .expect("lock should not be poisoned")
+                .get_statistics()
+                .total_triples,
+            5
+        );
 
         clear_matcher(State(matcher.clone())).await.unwrap();
 
-        assert_eq!(matcher.read().unwrap().get_statistics().total_triples, 0);
+        assert_eq!(
+            matcher
+                .read()
+                .expect("lock should not be poisoned")
+                .get_statistics()
+                .total_triples,
+            0
+        );
     }
 
     #[tokio::test]

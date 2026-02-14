@@ -165,7 +165,9 @@ impl GeographicQueryRouter {
             .min_by(|(_, loc1), (_, loc2)| {
                 let dist1 = self.haversine_distance(&user_location, loc1);
                 let dist2 = self.haversine_distance(&user_location, loc2);
-                dist1.partial_cmp(&dist2).unwrap()
+                dist1
+                    .partial_cmp(&dist2)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|(url, _)| url.clone())
     }
@@ -233,7 +235,9 @@ impl EdgeComputingManager {
                 let router = GeographicQueryRouter::new();
                 let dist1 = router.haversine_distance(&location, &n1.location);
                 let dist2 = router.haversine_distance(&location, &n2.location);
-                dist1.partial_cmp(&dist2).unwrap()
+                dist1
+                    .partial_cmp(&dist2)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .cloned()
     }
@@ -620,7 +624,7 @@ mod tests {
 
         let lineage = tracker.get_lineage("node1").await;
         assert!(lineage.is_ok());
-        assert_eq!(lineage.unwrap().len(), 1);
+        assert_eq!(lineage.expect("operation should succeed").len(), 1);
     }
 
     #[tokio::test]
@@ -648,7 +652,7 @@ mod tests {
         let encrypted = security.encrypt(data);
         assert!(encrypted.is_ok());
 
-        let decrypted = security.decrypt(&encrypted.unwrap());
+        let decrypted = security.decrypt(&encrypted.expect("operation should succeed"));
         assert!(decrypted.is_ok());
     }
 

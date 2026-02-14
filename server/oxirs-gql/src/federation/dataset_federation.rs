@@ -402,7 +402,8 @@ impl JoinOptimizer {
     /// Find common variables between two SPARQL queries
     fn find_common_variables(&self, query_a: &str, query_b: &str) -> Vec<String> {
         // Simple regex-based variable extraction
-        let var_regex = regex::Regex::new(r"\?(\w+)").unwrap();
+        let var_regex =
+            regex::Regex::new(r"\?(\w+)").expect("parse should succeed for valid input");
 
         let vars_a: HashSet<String> = var_regex
             .captures_iter(query_a)

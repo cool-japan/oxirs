@@ -651,8 +651,8 @@ impl TriGParser {
 
         if term == "a" {
             // Handle rdf:type abbreviation
-            let rdf_type =
-                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+            let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                .expect("valid IRI");
             Ok(Predicate::NamedNode(rdf_type))
         } else if term.starts_with('<') && term.ends_with('>') {
             let iri = term.trim_start_matches('<').trim_end_matches('>');

@@ -293,7 +293,8 @@ impl FederatedServiceRegistry {
         // Initialize rate limiter if specified
         if let Some(rate_limit) = &service.performance.rate_limit {
             let quota = Quota::per_minute(
-                std::num::NonZeroU32::new(rate_limit.requests_per_minute as u32).unwrap(),
+                std::num::NonZeroU32::new(rate_limit.requests_per_minute as u32)
+                    .expect("construction should succeed"),
             );
             let limiter = RateLimiter::direct(quota);
             self.rate_limiters
@@ -734,11 +735,11 @@ impl FederatedServiceRegistry {
             active_connections: 0,
             created_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs(),
             last_used: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs(),
         };
 
@@ -1584,7 +1585,8 @@ mod tests {
         let auth_value = base64::engine::general_purpose::STANDARD.encode("user:pass");
         headers.insert(
             AUTHORIZATION,
-            HeaderValue::from_str(&format!("Basic {auth_value}")).unwrap(),
+            HeaderValue::from_str(&format!("Basic {auth_value}"))
+                .expect("conversion should succeed"),
         );
 
         assert!(headers.contains_key(AUTHORIZATION));

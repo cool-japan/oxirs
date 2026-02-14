@@ -75,7 +75,11 @@ impl EntityLinker {
 
         // Build entity index for fast lookup
         let mut entity_index = Vec::with_capacity(entity_count);
-        let embedding_dim = entity_embeddings.values().next().unwrap().len();
+        let embedding_dim = entity_embeddings
+            .values()
+            .next()
+            .expect("entity_embeddings should not be empty")
+            .len();
         let mut embedding_matrix = Array2::zeros((entity_count, embedding_dim));
 
         for (idx, (entity_id, embedding)) in entity_embeddings.iter().enumerate() {
@@ -112,7 +116,7 @@ impl EntityLinker {
             .map(|(idx, &sim)| (idx, sim))
             .collect();
 
-        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         candidates.truncate(self.config.max_candidates);
 
         // Apply context if available
@@ -349,7 +353,11 @@ impl RelationPredictor {
             .collect();
 
         // Sort by score descending
-        predictions.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        predictions.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         predictions.truncate(self.config.max_predictions);
 
         Ok(predictions)
@@ -392,7 +400,11 @@ impl RelationPredictor {
             .filter(|pred| pred.score >= self.config.score_threshold)
             .collect();
 
-        predictions.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        predictions.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         predictions.truncate(self.config.max_predictions);
 
         Ok(predictions)

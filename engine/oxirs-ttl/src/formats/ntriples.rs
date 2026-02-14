@@ -605,7 +605,10 @@ mod tests {
         let parser = NTriplesParser::new();
         let input = r#"<http://example.org/subject> <http://example.org/predicate> "object" ."#;
 
-        let triple = parser.parse_line(input, 1).unwrap().unwrap();
+        let triple = parser
+            .parse_line(input, 1)
+            .expect("parsing should succeed")
+            .expect("parsing should succeed");
 
         if let Subject::NamedNode(subject) = triple.subject() {
             assert_eq!(subject.as_str(), "http://example.org/subject");
@@ -621,23 +624,29 @@ mod tests {
 <http://example.org/s2> <http://example.org/p2> "o2" .
 "#;
 
-        let triples = parser.parse(Cursor::new(input)).unwrap();
+        let triples = parser
+            .parse(Cursor::new(input))
+            .expect("parsing should succeed");
         assert_eq!(triples.len(), 2);
     }
 
     #[test]
     fn test_serialize_triple() {
         let serializer = NTriplesSerializer::new();
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/subject").unwrap());
-        let predicate =
-            Predicate::NamedNode(NamedNode::new("http://example.org/predicate").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/subject").expect("valid IRI"));
+        let predicate = Predicate::NamedNode(
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
+        );
         let object = Object::Literal(Literal::new_simple_literal("object"));
         let triple = Triple::new(subject, predicate, object);
 
         let mut output = Vec::new();
-        serializer.serialize(&[triple], &mut output).unwrap();
+        serializer
+            .serialize(&[triple], &mut output)
+            .expect("serialization should succeed");
 
-        let output_str = String::from_utf8(output).unwrap();
+        let output_str = String::from_utf8(output).expect("valid UTF-8");
         assert!(output_str.contains("<http://example.org/subject>"));
         assert!(output_str.contains("\"object\""));
     }

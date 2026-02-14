@@ -361,7 +361,7 @@ fn dtmi_to_urn(dtmi: &str) -> Result<String, SammError> {
         )));
     }
 
-    let name = path_parts.last().unwrap();
+    let name = path_parts.last().expect("collection should not be empty");
     let namespace_parts = &path_parts[..path_parts.len() - 1];
 
     // Convert namespace (com:example → com.example)
@@ -466,17 +466,17 @@ mod tests {
     #[test]
     fn test_dtmi_to_urn_conversion() {
         assert_eq!(
-            dtmi_to_urn("dtmi:com:example:Movement;1").unwrap(),
+            dtmi_to_urn("dtmi:com:example:Movement;1").expect("operation should succeed"),
             "urn:samm:com.example:1.0.0#Movement"
         );
 
         assert_eq!(
-            dtmi_to_urn("dtmi:org:eclipse:esmf:Aspect;2").unwrap(),
+            dtmi_to_urn("dtmi:org:eclipse:esmf:Aspect;2").expect("operation should succeed"),
             "urn:samm:org.eclipse.esmf:2.0.0#Aspect"
         );
 
         assert_eq!(
-            dtmi_to_urn("dtmi:io:github:oxirs:TestAspect;0").unwrap(),
+            dtmi_to_urn("dtmi:io:github:oxirs:TestAspect;0").expect("operation should succeed"),
             "urn:samm:io.github.oxirs:0.0.0#TestAspect"
         );
     }
@@ -519,7 +519,7 @@ mod tests {
             "displayName": "Movement"
         }"#;
 
-        let aspect = parse_dtdl_interface(dtdl).unwrap();
+        let aspect = parse_dtdl_interface(dtdl).expect("DTDL parsing should succeed");
         assert_eq!(aspect.name(), "Movement");
         assert_eq!(aspect.metadata.urn, "urn:samm:com.example:1.0.0#Movement");
     }
@@ -534,7 +534,7 @@ mod tests {
             "description": "Vehicle movement tracking"
         }"#;
 
-        let aspect = parse_dtdl_interface(dtdl).unwrap();
+        let aspect = parse_dtdl_interface(dtdl).expect("DTDL parsing should succeed");
         let desc = aspect.metadata.get_description("en");
         assert_eq!(desc, Some("Vehicle movement tracking"));
     }
@@ -557,7 +557,7 @@ mod tests {
             ]
         }"#;
 
-        let aspect = parse_dtdl_interface(dtdl).unwrap();
+        let aspect = parse_dtdl_interface(dtdl).expect("DTDL parsing should succeed");
         assert_eq!(aspect.properties().len(), 1);
 
         let prop = &aspect.properties()[0];
@@ -565,7 +565,10 @@ mod tests {
         assert!(!prop.optional); // Property is writable, not optional
         assert!(prop.characteristic.is_some());
 
-        let char = prop.characteristic.as_ref().unwrap();
+        let char = prop
+            .characteristic
+            .as_ref()
+            .expect("reference should be available");
         assert_eq!(char.data_type, Some("xsd:float".to_string()));
     }
 
@@ -585,7 +588,7 @@ mod tests {
             ]
         }"#;
 
-        let aspect = parse_dtdl_interface(dtdl).unwrap();
+        let aspect = parse_dtdl_interface(dtdl).expect("DTDL parsing should succeed");
         assert_eq!(aspect.properties().len(), 1);
 
         let prop = &aspect.properties()[0];
@@ -610,7 +613,7 @@ mod tests {
             ]
         }"#;
 
-        let aspect = parse_dtdl_interface(dtdl).unwrap();
+        let aspect = parse_dtdl_interface(dtdl).expect("DTDL parsing should succeed");
         assert_eq!(aspect.operations().len(), 1);
 
         let op = &aspect.operations()[0];

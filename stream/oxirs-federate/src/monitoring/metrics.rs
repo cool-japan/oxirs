@@ -166,7 +166,7 @@ impl MLPerformancePredictor {
     }
 
     fn update_pattern_stats(&mut self, pattern: &str, _duration: Duration) {
-        let history = self.historical_data.get(pattern).unwrap();
+        let history = self.historical_data.get(pattern).expect("key should exist");
         let count = history.len();
 
         if count == 0 {
@@ -190,8 +190,8 @@ impl MLPerformancePredictor {
         let std_deviation = variance.sqrt();
 
         // Find min and max
-        let min_duration = *history.iter().min().unwrap();
-        let max_duration = *history.iter().max().unwrap();
+        let min_duration = *history.iter().min().expect("operation should succeed");
+        let max_duration = *history.iter().max().expect("operation should succeed");
 
         self.pattern_performance.insert(
             pattern.to_string(),
@@ -362,7 +362,7 @@ impl AdvancedAlertingSystem {
     pub fn check_metrics(&mut self, metrics: &FederationMetrics) {
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("operation should succeed")
             .as_secs();
 
         // Check response time
@@ -417,7 +417,7 @@ impl AdvancedAlertingSystem {
                 action: AlertAction::Acknowledged,
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .as_secs(),
             };
             self.alert_history.push(event);

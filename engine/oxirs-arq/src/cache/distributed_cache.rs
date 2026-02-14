@@ -63,8 +63,8 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
-use scirs2_core::metrics::{Counter, MetricsRegistry};
 use futures::StreamExt;
+use scirs2_core::metrics::{Counter, MetricsRegistry};
 
 /// Distributed cache error types
 #[derive(Error, Debug)]
@@ -236,8 +236,12 @@ impl DistributedCacheMetrics {
             l1_misses: Arc::new(Counter::new("distributed_cache_l1_misses".to_string())),
             l2_hits: Arc::new(Counter::new("distributed_cache_l2_hits".to_string())),
             l2_misses: Arc::new(Counter::new("distributed_cache_l2_misses".to_string())),
-            invalidations_sent: Arc::new(Counter::new("distributed_cache_invalidations_sent".to_string())),
-            invalidations_received: Arc::new(Counter::new("distributed_cache_invalidations_received".to_string())),
+            invalidations_sent: Arc::new(Counter::new(
+                "distributed_cache_invalidations_sent".to_string(),
+            )),
+            invalidations_received: Arc::new(Counter::new(
+                "distributed_cache_invalidations_received".to_string(),
+            )),
             compression_ratio: Arc::new(RwLock::new(1.0)),
         }
     }
@@ -308,10 +312,11 @@ impl DistributedCache {
 
         // Create L1 cache with fixed size
         let l1_cache = Arc::new(RwLock::new(lru::LruCache::new(
-            std::num::NonZeroUsize::new(config.l1_max_size)
-                .ok_or_else(|| DistributedCacheError::InvalidConfig(
-                    "l1_max_size must be greater than 0".to_string()
-                ))?,
+            std::num::NonZeroUsize::new(config.l1_max_size).ok_or_else(|| {
+                DistributedCacheError::InvalidConfig(
+                    "l1_max_size must be greater than 0".to_string(),
+                )
+            })?,
         )));
 
         // Generate unique node ID
@@ -479,7 +484,10 @@ impl DistributedCache {
             }
         });
 
-        info!("Started invalidation listener on channel: {}", channel_for_log);
+        info!(
+            "Started invalidation listener on channel: {}",
+            channel_for_log
+        );
         Ok(())
     }
 
@@ -550,13 +558,15 @@ impl DistributedCache {
     }
 
     fn serialize_value(&self, value: &CacheValue) -> Result<Vec<u8>> {
-        let serialized = oxicode::serde::encode_to_vec(value, oxicode::config::standard()).map_err(|e| {
-            DistributedCacheError::Serialization(format!("oxicode serialization failed: {}", e))
-        })?;
+        let serialized = oxicode::serde::encode_to_vec(value, oxicode::config::standard())
+            .map_err(|e| {
+                DistributedCacheError::Serialization(format!("oxicode serialization failed: {}", e))
+            })?;
 
         if self.config.compression && serialized.len() > 1024 {
             // Compress large values using gzip
-            let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            let mut encoder =
+                flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
             use std::io::Write;
             encoder.write_all(&serialized).map_err(|e| {
                 DistributedCacheError::Compression(format!("Compression failed: {}", e))
@@ -599,7 +609,10 @@ impl DistributedCache {
         oxicode::serde::decode_from_slice(&decompressed, oxicode::config::standard())
             .map(|(value, _)| value)
             .map_err(|e| {
-                DistributedCacheError::Deserialization(format!("oxicode deserialization failed: {}", e))
+                DistributedCacheError::Deserialization(format!(
+                    "oxicode deserialization failed: {}",
+                    e
+                ))
             })
     }
 

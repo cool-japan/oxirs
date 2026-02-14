@@ -519,7 +519,7 @@ impl AdvancedReificator {
         Self {
             strategy,
             contexts: HashMap::new(),
-            cache: lru::LruCache::new(std::num::NonZeroUsize::new(1000).unwrap()),
+            cache: lru::LruCache::new(std::num::NonZeroUsize::new(1000).expect("1000 is non-zero")),
             statistics: ReificationStatistics::default(),
         }
     }
@@ -703,7 +703,10 @@ impl AdvancedReificator {
         }
 
         // Create a temporary reificator for this strategy
-        let context = self.contexts.get_mut(&context_key).unwrap();
+        let context = self
+            .contexts
+            .get_mut(&context_key)
+            .expect("context should exist after insertion");
         let mut temp_reificator = Reificator {
             context: ReificationContext::new(strategy.clone(), None),
         };

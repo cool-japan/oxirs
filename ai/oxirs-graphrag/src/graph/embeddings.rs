@@ -18,10 +18,7 @@ pub struct CommunityStructure {
 
 impl CommunityStructure {
     /// Create from community assignments
-    pub fn from_assignments(
-        assignments: &[(String, usize)],
-        modularity: f64,
-    ) -> Self {
+    pub fn from_assignments(assignments: &[(String, usize)], modularity: f64) -> Self {
         let mut node_to_community = HashMap::new();
         let mut community_to_nodes: HashMap<usize, HashSet<String>> = HashMap::new();
 
@@ -126,8 +123,7 @@ impl CommunityAwareEmbeddings {
 
                 for neighbor_idx in graph.neighbors(node_idx) {
                     if let Some(neighbor_label) = graph.node_weight(neighbor_idx) {
-                        let neighbor_community =
-                            communities.node_to_community.get(neighbor_label);
+                        let neighbor_community = communities.node_to_community.get(neighbor_label);
 
                         if node_community == neighbor_community {
                             same_comm_neighbors.push(neighbor_label.clone());
@@ -336,12 +332,11 @@ impl CommunityAwareEmbeddings {
                     let start = i.saturating_sub(self.config.window_size);
                     let end = (i + self.config.window_size + 1).min(walk.len());
 
-                    for j in start..end {
+                    for (offset, context) in walk[start..end].iter().enumerate() {
+                        let j = start + offset;
                         if i == j {
                             continue;
                         }
-
-                        let context = &walk[j];
 
                         // Update embeddings to be similar
                         if let (Some(target_emb), Some(context_emb)) =
@@ -434,7 +429,9 @@ mod tests {
         };
 
         let mut embedder = CommunityAwareEmbeddings::new(config);
-        let embeddings = embedder.embed_graphsage(&triples, &communities).expect("embeddings failed");
+        let embeddings = embedder
+            .embed_graphsage(&triples, &communities)
+            .expect("embeddings failed");
 
         assert_eq!(embeddings.len(), 3);
         for emb in embeddings.values() {
@@ -467,7 +464,9 @@ mod tests {
         };
 
         let mut embedder = CommunityAwareEmbeddings::new(config);
-        let embeddings = embedder.embed_node2vec(&triples, &communities).expect("embeddings failed");
+        let embeddings = embedder
+            .embed_node2vec(&triples, &communities)
+            .expect("embeddings failed");
 
         assert_eq!(embeddings.len(), 4);
     }

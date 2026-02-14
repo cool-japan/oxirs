@@ -172,7 +172,7 @@ impl SchemaAligner {
             }
 
             // Sort by similarity (highest first)
-            candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
             // Take top N suggestions
             for (target_prop, confidence) in candidates
@@ -218,7 +218,7 @@ impl SchemaAligner {
             }
 
             // Sort by similarity
-            candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
             // Take top N suggestions
             for (target_class, confidence) in candidates
@@ -775,7 +775,7 @@ mod tests {
             },
         ];
 
-        let predictor = MappingPredictor::train(examples).unwrap();
+        let predictor = MappingPredictor::train(examples).expect("training should succeed");
         assert!(!predictor.weights.is_empty());
     }
 }

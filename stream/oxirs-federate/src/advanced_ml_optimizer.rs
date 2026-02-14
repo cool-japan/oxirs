@@ -132,7 +132,10 @@ impl DeepCardinalityEstimator {
         // Create hidden layers
         for &hidden_size in &config.hidden_layers {
             let weights = Array2::from_shape_fn((prev_size, hidden_size), |_| {
-                rng.sample(Normal::new(0.0, (2.0 / prev_size as f64).sqrt()).unwrap())
+                rng.sample(
+                    Normal::new(0.0, (2.0 / prev_size as f64).sqrt())
+                        .expect("valid distribution parameters"),
+                )
             });
             let biases = Array1::zeros(hidden_size);
             layers.push(Layer {
@@ -145,7 +148,10 @@ impl DeepCardinalityEstimator {
 
         // Output layer
         let weights = Array2::from_shape_fn((prev_size, output_size), |_| {
-            rng.sample(Normal::new(0.0, (2.0 / prev_size as f64).sqrt()).unwrap())
+            rng.sample(
+                Normal::new(0.0, (2.0 / prev_size as f64).sqrt())
+                    .expect("valid distribution parameters"),
+            )
         });
         let biases = Array1::zeros(output_size);
         layers.push(Layer {
@@ -445,8 +451,9 @@ impl RLJoinOptimizer {
     /// Get best action from Q-table
     fn best_action(&mut self, state_key: &str, state: &JoinState) -> Result<JoinAction> {
         if let Some(actions) = self.q_table.get(state_key) {
-            if let Some((best_action_key, _)) =
-                actions.iter().max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            if let Some((best_action_key, _)) = actions
+                .iter()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             {
                 // Parse action from key
                 return self.parse_action(best_action_key, state);
@@ -482,7 +489,11 @@ impl RLJoinOptimizer {
         let max_next_q = self
             .q_table
             .get(&next_state_key)
-            .and_then(|actions| actions.values().max_by(|a, b| a.partial_cmp(b).unwrap()))
+            .and_then(|actions| {
+                actions
+                    .values()
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            })
             .copied()
             .unwrap_or(0.0);
 
@@ -672,7 +683,7 @@ impl NeuralArchitectureSearch {
 
             self.best_architectures.push((architecture.clone(), score));
             self.best_architectures
-                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
             if self.best_architectures.len() > 10 {
                 self.best_architectures.truncate(10);
@@ -1020,7 +1031,7 @@ impl AutoML {
 
             self.best_configs.push((config, score));
             self.best_configs
-                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
             if self.best_configs.len() > 10 {
                 self.best_configs.truncate(10);
@@ -1264,7 +1275,7 @@ mod tests {
         let result = estimator.estimate_cardinality(&features);
 
         assert!(result.is_ok());
-        assert!(result.unwrap() > 0.0);
+        assert!(result.expect("operation should succeed") > 0.0);
     }
 
     #[tokio::test]

@@ -640,7 +640,7 @@ impl MultiModalSearchEngine {
 
         // Sort by fused score
         let mut fused_results: Vec<(f32, SearchResult)> = score_map.into_values().collect();
-        fused_results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        fused_results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
         // Update scores and return top k
         Ok(fused_results
@@ -678,7 +678,7 @@ impl MultiModalSearchEngine {
 
         // Sort by fused score
         let mut fused_results: Vec<(f32, SearchResult)> = score_map.into_values().collect();
-        fused_results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        fused_results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
         // Update scores
         Ok(fused_results
@@ -1038,9 +1038,12 @@ impl ProductionVideoEncoder {
             all_features.extend(first_features);
 
             if video.frames.len() > 1 {
-                let last_features = self
-                    .image_encoder
-                    .extract_image_features(video.frames.last().unwrap())?;
+                let last_features = self.image_encoder.extract_image_features(
+                    video
+                        .frames
+                        .last()
+                        .expect("video frames validated to have more than one element"),
+                )?;
                 all_features.extend(last_features);
             }
         }

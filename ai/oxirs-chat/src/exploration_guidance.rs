@@ -148,7 +148,11 @@ impl ExplorationGuidance {
         suggestions.retain(|s| s.relevance >= self.config.min_relevance_score);
 
         // Sort by relevance
-        suggestions.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap());
+        suggestions.sort_by(|a, b| {
+            b.relevance
+                .partial_cmp(&a.relevance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Limit to max suggestions
         suggestions.truncate(self.config.max_suggestions);

@@ -116,7 +116,12 @@ impl AnalyticsEngine {
             insights.trend_analysis = Some(trends);
             tracing::debug!(
                 "Generated trend analysis with {} trends",
-                insights.trend_analysis.as_ref().unwrap().trends.len()
+                insights
+                    .trend_analysis
+                    .as_ref()
+                    .expect("trend_analysis should be Some after assignment")
+                    .trends
+                    .len()
             );
         }
 

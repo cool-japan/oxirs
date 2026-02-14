@@ -4,9 +4,9 @@
 //! with circuit breakers, health monitoring, caching, and token budgets.
 
 use oxirs_chat::llm::{
-    BudgetConfig, CacheConfig, CircuitBreakerConfig, HealthCheckConfig, LLMConfig, LLMManager,
-    LLMRequest, LLMResponse, ProviderConfig, ResponseCache, TokenBudget, HealthChecker,
-    ChatMessage, ChatRole, Priority, Usage, UseCase,
+    BudgetConfig, CacheConfig, ChatMessage, ChatRole, CircuitBreakerConfig, HealthCheckConfig,
+    HealthChecker, LLMConfig, LLMManager, LLMRequest, LLMResponse, Priority, ResponseCache,
+    TokenBudget, Usage, UseCase,
 };
 use std::time::Duration;
 
@@ -68,7 +68,9 @@ async fn test_cache_hit() {
         metadata: std::collections::HashMap::new(),
     };
 
-    cache.put(&request, test_response.clone(), "test-provider".to_string()).await;
+    cache
+        .put(&request, test_response.clone(), "test-provider".to_string())
+        .await;
 
     // Second request - cache hit
     let cached = cache.get(&request).await;
@@ -117,7 +119,9 @@ async fn test_cache_high_hit_rate() {
     };
 
     // Store once
-    cache.put(&request, test_response, "test-provider".to_string()).await;
+    cache
+        .put(&request, test_response, "test-provider".to_string())
+        .await;
 
     // Request 10 times (9 hits + 1 miss from initial storage = 90% hit rate)
     for _ in 0..10 {
@@ -133,8 +137,10 @@ async fn test_cache_high_hit_rate() {
 async fn test_circuit_breaker_opens() {
     use oxirs_chat::llm::CircuitBreaker;
 
-    let mut config = CircuitBreakerConfig::default();
-    config.failure_threshold = 3;
+    let config = CircuitBreakerConfig {
+        failure_threshold: 3,
+        ..Default::default()
+    };
 
     let circuit_breaker = CircuitBreaker::new(config);
 
@@ -143,7 +149,9 @@ async fn test_circuit_breaker_opens() {
 
     // Record 3 failures
     for _ in 0..3 {
-        circuit_breaker.record_result(false, Duration::from_millis(100)).await;
+        circuit_breaker
+            .record_result(false, Duration::from_millis(100))
+            .await;
     }
 
     // Should be open now
@@ -156,15 +164,19 @@ async fn test_circuit_breaker_opens() {
 async fn test_circuit_breaker_half_open() {
     use oxirs_chat::llm::CircuitBreaker;
 
-    let mut config = CircuitBreakerConfig::default();
-    config.failure_threshold = 2;
-    config.timeout_duration = Duration::from_secs(1);
+    let config = CircuitBreakerConfig {
+        failure_threshold: 2,
+        timeout_duration: Duration::from_secs(1),
+        ..Default::default()
+    };
 
     let circuit_breaker = CircuitBreaker::new(config);
 
     // Trigger circuit to open
     for _ in 0..2 {
-        circuit_breaker.record_result(false, Duration::from_millis(100)).await;
+        circuit_breaker
+            .record_result(false, Duration::from_millis(100))
+            .await;
     }
 
     // Wait for timeout
@@ -215,10 +227,7 @@ async fn test_token_budget_exceeded() {
         .unwrap();
 
     // Use 900 tokens
-    budget_manager
-        .record_usage(&user_id, 900)
-        .await
-        .unwrap();
+    budget_manager.record_usage(&user_id, 900).await.unwrap();
 
     // Requesting 200 tokens should fail
     let result = budget_manager.check_budget(&user_id, 200).await;
@@ -237,10 +246,7 @@ async fn test_token_budget_sufficient() {
         .unwrap();
 
     // Use 5000 tokens
-    budget_manager
-        .record_usage(&user_id, 5000)
-        .await
-        .unwrap();
+    budget_manager.record_usage(&user_id, 5000).await.unwrap();
 
     // Requesting 2000 tokens should succeed
     let result = budget_manager.check_budget(&user_id, 2000).await;
@@ -272,7 +278,10 @@ async fn test_failover_latency() {
     let elapsed = start.elapsed();
 
     // Recording and failover decision should be fast
-    assert!(elapsed < Duration::from_millis(500), "Failover should be <500ms");
+    assert!(
+        elapsed < Duration::from_millis(500),
+        "Failover should be <500ms"
+    );
 }
 
 /// Test 11: All providers fail - Error returned
@@ -299,8 +308,10 @@ async fn test_all_providers_fail() {
 /// Test 12: Health status transitions - Healthy → Degraded → Unhealthy
 #[tokio::test]
 async fn test_health_status_transitions() {
-    let mut config = HealthCheckConfig::default();
-    config.latency_threshold_ms = 100;
+    let config = HealthCheckConfig {
+        latency_threshold_ms: 100,
+        ..Default::default()
+    };
 
     let health_checker = HealthChecker::new(config);
     let provider_id = "provider".to_string();
@@ -317,7 +328,10 @@ async fn test_health_status_transitions() {
             .unwrap();
     }
 
-    let health = health_checker.get_health_status(&provider_id).await.unwrap();
+    let health = health_checker
+        .get_health_status(&provider_id)
+        .await
+        .unwrap();
     assert_eq!(health.status, oxirs_chat::llm::HealthStatus::Degraded);
 
     // Unhealthy (failures)
@@ -355,7 +369,9 @@ async fn test_cache_reduces_api_calls() {
     // First call - cache miss
     assert!(cache.get(&request).await.is_none());
 
-    cache.put(&request, test_response.clone(), "provider".to_string()).await;
+    cache
+        .put(&request, test_response.clone(), "provider".to_string())
+        .await;
 
     // Subsequent calls - cache hits (no API calls)
     for _ in 0..100 {
@@ -371,8 +387,10 @@ async fn test_cache_reduces_api_calls() {
 /// Test 14: LRU eviction works correctly
 #[tokio::test]
 async fn test_lru_eviction() {
-    let mut config = CacheConfig::default();
-    config.max_size = 3;
+    let config = CacheConfig {
+        max_size: 3,
+        ..Default::default()
+    };
 
     let cache = ResponseCache::new(config);
 
@@ -394,7 +412,9 @@ async fn test_lru_eviction() {
     // Add 3 entries
     for i in 1..=3 {
         let request = create_test_request(&format!("query {}", i));
-        cache.put(&request, response.clone(), "provider".to_string()).await;
+        cache
+            .put(&request, response.clone(), "provider".to_string())
+            .await;
     }
 
     // Access entry 1 to make it recently used
@@ -403,12 +423,20 @@ async fn test_lru_eviction() {
 
     // Add 4th entry - should evict entry 2 (LRU)
     let req4 = create_test_request("query 4");
-    cache.put(&req4, response.clone(), "provider".to_string()).await;
+    cache
+        .put(&req4, response.clone(), "provider".to_string())
+        .await;
 
     // Entry 1 and 3 should exist, entry 2 should be evicted
     assert!(cache.get(&req1).await.is_some(), "Entry 1 should exist");
-    assert!(cache.get(&create_test_request("query 2")).await.is_none(), "Entry 2 should be evicted");
-    assert!(cache.get(&create_test_request("query 3")).await.is_some(), "Entry 3 should exist");
+    assert!(
+        cache.get(&create_test_request("query 2")).await.is_none(),
+        "Entry 2 should be evicted"
+    );
+    assert!(
+        cache.get(&create_test_request("query 3")).await.is_some(),
+        "Entry 3 should exist"
+    );
     assert!(cache.get(&req4).await.is_some(), "Entry 4 should exist");
 }
 
@@ -424,10 +452,7 @@ async fn test_token_budget_reset() {
         .unwrap();
 
     // Use all tokens
-    budget_manager
-        .record_usage(&user_id, 1000)
-        .await
-        .unwrap();
+    budget_manager.record_usage(&user_id, 1000).await.unwrap();
 
     let stats = budget_manager.get_usage_stats(&user_id).await.unwrap();
     assert_eq!(stats.remaining_tokens, 0);

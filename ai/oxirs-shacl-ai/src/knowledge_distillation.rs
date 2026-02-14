@@ -553,7 +553,10 @@ impl KnowledgeDistiller {
 
     /// Calculate compression metrics
     fn calculate_compression_metrics(&self) -> Result<CompressionMetrics> {
-        let teacher = self.teacher_models.first().unwrap();
+        let teacher = self
+            .teacher_models
+            .first()
+            .expect("collection validated to be non-empty");
         let teacher_params = teacher.architecture.total_parameters;
         let student_params = self.student_model.architecture.total_parameters;
 
@@ -572,7 +575,10 @@ impl KnowledgeDistiller {
 
     /// Analyze knowledge transfer
     fn analyze_knowledge_transfer(&self) -> Result<KnowledgeTransferAnalysis> {
-        let teacher = self.teacher_models.first().unwrap();
+        let teacher = self
+            .teacher_models
+            .first()
+            .expect("collection validated to be non-empty");
         let retention_rate = self
             .performance_tracker
             .student_accuracy_history

@@ -381,7 +381,7 @@ impl HyperparameterOptimizer {
             } else {
                 let sorted_history: Vec<_> = {
                     let mut h = history.clone();
-                    h.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                    h.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                     h
                 };
                 let good_count = (sorted_history.len() as f32 * percentile) as usize;

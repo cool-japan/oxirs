@@ -757,19 +757,28 @@ mod tests {
     #[test]
     fn test_extract_namespace() {
         let urn = "urn:samm:org.eclipse.examples:1.0.0#Movement";
-        assert_eq!(urn::extract_namespace(urn).unwrap(), "org.eclipse.examples");
+        assert_eq!(
+            urn::extract_namespace(urn).expect("operation should succeed"),
+            "org.eclipse.examples"
+        );
     }
 
     #[test]
     fn test_extract_version() {
         let urn = "urn:samm:org.eclipse.examples:1.0.0#Movement";
-        assert_eq!(urn::extract_version(urn).unwrap(), "1.0.0");
+        assert_eq!(
+            urn::extract_version(urn).expect("operation should succeed"),
+            "1.0.0"
+        );
     }
 
     #[test]
     fn test_extract_element() {
         let urn = "urn:samm:org.eclipse.examples:1.0.0#Movement";
-        assert_eq!(urn::extract_element(urn).unwrap(), "Movement");
+        assert_eq!(
+            urn::extract_element(urn).expect("operation should succeed"),
+            "Movement"
+        );
     }
 
     #[test]
@@ -797,7 +806,7 @@ mod tests {
     fn test_is_same_namespace() {
         let urn1 = "urn:samm:org.eclipse:1.0.0#Test1";
         let urn2 = "urn:samm:org.eclipse:2.0.0#Test2";
-        assert!(urn::is_same_namespace(urn1, urn2).unwrap());
+        assert!(urn::is_same_namespace(urn1, urn2).expect("operation should succeed"));
     }
 
     #[test]
@@ -889,7 +898,7 @@ mod tests {
     fn test_serialization_to_json() {
         let aspect = Aspect::new("urn:samm:test:1.0.0#Test".to_string());
 
-        let json = serialization::to_json_string(&aspect).unwrap();
+        let json = serialization::to_json_string(&aspect).expect("operation should succeed");
         assert!(json.contains("Test"));
         assert!(json.contains("urn:samm:test:1.0.0"));
     }

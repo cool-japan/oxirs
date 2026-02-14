@@ -331,8 +331,8 @@ impl GpuBenchmarkSuite {
             let max_speedup = speedups
                 .iter()
                 .copied()
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
-                .unwrap();
+                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .expect("speedups validated to be non-empty");
 
             report.push_str(&format!("  Average speedup: {:.2}x\n", avg_speedup));
             report.push_str(&format!("  Maximum speedup: {:.2}x\n", max_speedup));

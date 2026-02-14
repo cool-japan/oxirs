@@ -252,7 +252,7 @@ impl TaskSampler {
         
         use scirs2_core::random::{seq::SliceRandom, thread_rng};
         let mut rng = rand::rng();
-        Ok(self.config.domains.choose(&mut rng).unwrap().clone())
+        Ok(self.config.domains.choose(&mut rng).expect("domains should not be empty").clone())
     }
 
     fn sample_difficulty(&self) -> f32 {

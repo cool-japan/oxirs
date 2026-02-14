@@ -35,7 +35,12 @@ pub fn perform_sparql_entity_resolution(
     for (_, group_bindings) in entity_groups {
         if group_bindings.len() == 1 {
             // Single binding, no merging needed
-            resolved_bindings.push(group_bindings.into_iter().next().unwrap());
+            resolved_bindings.push(
+                group_bindings
+                    .into_iter()
+                    .next()
+                    .expect("iterator should have next element"),
+            );
         } else {
             // Multiple bindings for same entity, merge them
             let merged_binding = merge_sparql_bindings(&group_bindings)?;
@@ -285,7 +290,12 @@ fn resolve_entity_array(
     let mut resolved_entities = Vec::new();
     for (_, group) in entity_groups {
         if group.len() == 1 {
-            resolved_entities.push(group.into_iter().next().unwrap());
+            resolved_entities.push(
+                group
+                    .into_iter()
+                    .next()
+                    .expect("iterator should have next element"),
+            );
         } else {
             let merged_entity = merge_json_entities(&group, merge_strategy)?;
             resolved_entities.push(merged_entity);

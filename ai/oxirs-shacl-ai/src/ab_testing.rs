@@ -331,7 +331,7 @@ impl ABTestFramework {
 
         self.assignments
             .get_mut(experiment_id)
-            .unwrap()
+            .expect("experiment assignments should exist")
             .insert(user_id.to_string(), variant_id.clone());
 
         Ok(variant_id)
@@ -394,8 +394,14 @@ impl ABTestFramework {
                 }
 
                 // Run statistical test
-                let control_data = control.metrics.get(metric_name).unwrap();
-                let variant_data = variant.metrics.get(metric_name).unwrap();
+                let control_data = control
+                    .metrics
+                    .get(metric_name)
+                    .expect("control metrics should contain metric_name");
+                let variant_data = variant
+                    .metrics
+                    .get(metric_name)
+                    .expect("variant metrics should contain metric_name");
 
                 let test = self.run_statistical_test(
                     control_data,
@@ -418,7 +424,10 @@ impl ABTestFramework {
             }
 
             // Summary for control
-            let control_data = control.metrics.get(metric_name).unwrap();
+            let control_data = control
+                .metrics
+                .get(metric_name)
+                .expect("control metrics should contain metric_name");
             let control_summary = self.calculate_metric_summary(control_data);
             metric_summaries
                 .entry(control.id.clone())
@@ -498,7 +507,11 @@ impl ABTestFramework {
             }
         }
         // Fallback to first variant
-        traffic_allocation.keys().next().unwrap().clone()
+        traffic_allocation
+            .keys()
+            .next()
+            .expect("traffic_allocation should not be empty")
+            .clone()
     }
 
     fn run_statistical_test(
@@ -572,7 +585,7 @@ impl ABTestFramework {
         let std_dev = Self::variance(data, mean).sqrt();
 
         let mut sorted = data.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         MetricSummary {
             count: data.len(),
@@ -626,7 +639,10 @@ impl ABTestFramework {
                 continue;
             }
 
-            let data = variant.metrics.get(primary_metric).unwrap();
+            let data = variant
+                .metrics
+                .get(primary_metric)
+                .expect("variant should have primary metric data");
             let score = Self::mean(data);
 
             // Check if improvement is statistically significant
@@ -848,7 +864,7 @@ mod tests {
         assert!((variance - 2.5).abs() < 0.01);
 
         let mut sorted = data.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let median = ABTestFramework::percentile(&sorted, 50.0);
         assert_eq!(median, 3.0);
     }

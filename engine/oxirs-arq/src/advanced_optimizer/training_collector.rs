@@ -79,17 +79,22 @@ impl TrainingCollector {
     /// Create collector and load existing data from disk
     pub fn load_or_create(config: CollectorConfig) -> Result<Self> {
         let persistence_path = config.persistence_path.clone();
-        let mut collector = Self::new(config);
+        let collector = Self::new(config);
 
         if let Some(ref path) = persistence_path {
             if path.exists() {
                 match TrainingDataset::load(path) {
                     Ok(dataset) => {
-                        *collector.dataset.write()
-                            .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))? = dataset;
+                        *collector.dataset.write().map_err(|e| {
+                            anyhow::anyhow!("Failed to acquire write lock: {}", e)
+                        })? = dataset;
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to load training data from {:?}: {}. Starting fresh.", path, e);
+                        tracing::warn!(
+                            "Failed to load training data from {:?}: {}. Starting fresh.",
+                            path,
+                            e
+                        );
                     }
                 }
             }
@@ -101,7 +106,7 @@ impl TrainingCollector {
     /// Record a query execution result
     pub fn record_execution(
         &mut self,
-        query: &Algebra,
+        _query: &Algebra,
         features: Vec<f64>,
         characteristics: QueryCharacteristics,
         actual_cost: f64,
@@ -130,7 +135,9 @@ impl TrainingCollector {
             return Ok(());
         }
 
-        let mut dataset = self.dataset.write()
+        let mut dataset = self
+            .dataset
+            .write()
             .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
 
         for example in self.buffer.drain(..) {
@@ -147,7 +154,9 @@ impl TrainingCollector {
 
     /// Get a batch of training examples
     pub fn get_training_batch(&self, size: usize) -> Result<Vec<TrainingExample>> {
-        let dataset = self.dataset.read()
+        let dataset = self
+            .dataset
+            .read()
             .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
 
         Ok(dataset.get_batch(size))
@@ -155,7 +164,9 @@ impl TrainingCollector {
 
     /// Get all training examples
     pub fn get_all_examples(&self) -> Result<Vec<TrainingExample>> {
-        let dataset = self.dataset.read()
+        let dataset = self
+            .dataset
+            .read()
             .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
 
         Ok(dataset.examples.clone())
@@ -163,9 +174,7 @@ impl TrainingCollector {
 
     /// Get total count of examples (including buffer)
     pub fn len(&self) -> usize {
-        let dataset_len = self.dataset.read()
-            .map(|d| d.len())
-            .unwrap_or(0);
+        let dataset_len = self.dataset.read().map(|d| d.len()).unwrap_or(0);
 
         dataset_len + self.buffer.len()
     }
@@ -177,7 +186,9 @@ impl TrainingCollector {
 
     /// Clear old examples based on window strategy
     pub fn clear_old_examples(&mut self) -> Result<()> {
-        let mut dataset = self.dataset.write()
+        let mut dataset = self
+            .dataset
+            .write()
             .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
 
         dataset.evict_old_examples();
@@ -198,7 +209,9 @@ impl TrainingCollector {
     /// Save dataset to disk
     pub fn save(&self) -> Result<()> {
         if let Some(ref path) = self.config.persistence_path {
-            let dataset = self.dataset.read()
+            let dataset = self
+                .dataset
+                .read()
                 .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
 
             dataset.save(path)?;
@@ -324,8 +337,8 @@ impl TrainingDataset {
                 .with_context(|| format!("Failed to create directory {:?}", parent))?;
         }
 
-        let contents = serde_json::to_string_pretty(self)
-            .context("Failed to serialize training dataset")?;
+        let contents =
+            serde_json::to_string_pretty(self).context("Failed to serialize training dataset")?;
 
         std::fs::write(path, contents)
             .with_context(|| format!("Failed to write training data to {:?}", path))?;
@@ -369,21 +382,25 @@ impl TrainingDataset {
         let mean_cost = total_cost / self.examples.len() as f64;
 
         // Calculate variance
-        let variance = self.examples
+        let variance = self
+            .examples
             .iter()
             .map(|e| (e.actual_cost - mean_cost).powi(2))
-            .sum::<f64>() / self.examples.len() as f64;
+            .sum::<f64>()
+            / self.examples.len() as f64;
 
         let std_dev = variance.sqrt();
 
         // Find oldest and newest examples
-        let oldest = self.examples
+        let oldest = self
+            .examples
             .iter()
             .min_by_key(|e| e.timestamp)
             .and_then(|e| e.timestamp.duration_since(SystemTime::UNIX_EPOCH).ok())
             .map(|d| d.as_secs());
 
-        let newest = self.examples
+        let newest = self
+            .examples
             .iter()
             .max_by_key(|e| e.timestamp)
             .and_then(|e| e.timestamp.duration_since(SystemTime::UNIX_EPOCH).ok())
@@ -523,9 +540,11 @@ mod tests {
 
     #[test]
     fn test_buffer_flush() -> Result<()> {
-        let mut config = CollectorConfig::default();
-        config.buffer_size = 5;
-        config.auto_flush = false;
+        let config = CollectorConfig {
+            buffer_size: 5,
+            auto_flush: false,
+            ..Default::default()
+        };
 
         let mut collector = TrainingCollector::new(config);
 
@@ -553,9 +572,11 @@ mod tests {
 
     #[test]
     fn test_auto_flush() -> Result<()> {
-        let mut config = CollectorConfig::default();
-        config.buffer_size = 2;
-        config.auto_flush = true;
+        let config = CollectorConfig {
+            buffer_size: 2,
+            auto_flush: true,
+            ..Default::default()
+        };
 
         let mut collector = TrainingCollector::new(config);
 

@@ -273,7 +273,7 @@ impl DataCollector for PerformanceMetricsCollector {
         // Collect performance metrics as time series
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs_f64();
 
         let series = vec![

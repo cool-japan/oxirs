@@ -30,7 +30,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_property_path_creation() {
-        let predicate = NamedNode::new("http://example.org/knows").unwrap();
+        let predicate = NamedNode::new("http://example.org/knows").expect("valid IRI");
         let path = PropertyPath::predicate(predicate.clone());
         assert!(path.is_predicate());
         assert_eq!(path.as_predicate(), Some(&predicate));
@@ -39,7 +39,7 @@ mod tests {
     }
     #[test]
     fn test_inverse_path() {
-        let predicate = NamedNode::new("http://example.org/knows").unwrap();
+        let predicate = NamedNode::new("http://example.org/knows").expect("valid IRI");
         let path = PropertyPath::inverse(PropertyPath::predicate(predicate));
         assert!(!path.is_predicate());
         assert!(path.is_complex());
@@ -47,8 +47,8 @@ mod tests {
     }
     #[test]
     fn test_sequence_path() {
-        let pred1 = NamedNode::new("http://example.org/knows").unwrap();
-        let pred2 = NamedNode::new("http://example.org/friend").unwrap();
+        let pred1 = NamedNode::new("http://example.org/knows").expect("valid IRI");
+        let pred2 = NamedNode::new("http://example.org/friend").expect("valid IRI");
         let path = PropertyPath::sequence(vec![
             PropertyPath::predicate(pred1),
             PropertyPath::predicate(pred2),
@@ -59,7 +59,7 @@ mod tests {
     }
     #[test]
     fn test_zero_or_more_path() {
-        let predicate = NamedNode::new("http://example.org/knows").unwrap();
+        let predicate = NamedNode::new("http://example.org/knows").expect("valid IRI");
         let path = PropertyPath::zero_or_more(PropertyPath::predicate(predicate));
         assert!(!path.is_predicate());
         assert!(path.is_complex());
@@ -67,8 +67,8 @@ mod tests {
     }
     #[test]
     fn test_alternative_path() {
-        let pred1 = NamedNode::new("http://example.org/knows").unwrap();
-        let pred2 = NamedNode::new("http://example.org/friend").unwrap();
+        let pred1 = NamedNode::new("http://example.org/knows").expect("valid IRI");
+        let pred2 = NamedNode::new("http://example.org/friend").expect("valid IRI");
         let path = PropertyPath::alternative(vec![
             PropertyPath::predicate(pred1),
             PropertyPath::predicate(pred2),
@@ -103,13 +103,14 @@ mod tests {
     #[test]
     fn test_sparql_path_query_generation() {
         let evaluator = PropertyPathEvaluator::new();
-        let start_node = Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap());
-        let predicate = NamedNode::new("http://example.org/knows").unwrap();
+        let start_node =
+            Term::NamedNode(NamedNode::new("http://example.org/person1").expect("valid IRI"));
+        let predicate = NamedNode::new("http://example.org/knows").expect("valid IRI");
         let path = PropertyPath::predicate(predicate);
         let hints = PathOptimizationHints::default();
         let query = evaluator
             .generate_optimized_sparql_query(&start_node, &path, None, &hints)
-            .unwrap();
+            .expect("generation should succeed");
         assert!(query.contains("SELECT DISTINCT ?value"));
         assert!(query.contains("<http://example.org/person1>"));
         assert!(query.contains("<http://example.org/knows>"));
@@ -118,9 +119,10 @@ mod tests {
     #[test]
     fn test_sequence_path_query_generation() {
         let evaluator = PropertyPathEvaluator::new();
-        let start_node = Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap());
-        let pred1 = NamedNode::new("http://example.org/knows").unwrap();
-        let pred2 = NamedNode::new("http://example.org/friend").unwrap();
+        let start_node =
+            Term::NamedNode(NamedNode::new("http://example.org/person1").expect("valid IRI"));
+        let pred1 = NamedNode::new("http://example.org/knows").expect("valid IRI");
+        let pred2 = NamedNode::new("http://example.org/friend").expect("valid IRI");
         let path = PropertyPath::sequence(vec![
             PropertyPath::predicate(pred1),
             PropertyPath::predicate(pred2),
@@ -128,7 +130,7 @@ mod tests {
         let hints = PathOptimizationHints::default();
         let query = evaluator
             .generate_optimized_sparql_query(&start_node, &path, None, &hints)
-            .unwrap();
+            .expect("generation should succeed");
         assert!(query.contains("SELECT DISTINCT ?value"));
         assert!(query.contains("?start"));
         assert!(query.contains("?inter1"));
@@ -137,9 +139,10 @@ mod tests {
     #[test]
     fn test_alternative_path_query_generation() {
         let evaluator = PropertyPathEvaluator::new();
-        let start_node = Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap());
-        let pred1 = NamedNode::new("http://example.org/knows").unwrap();
-        let pred2 = NamedNode::new("http://example.org/friend").unwrap();
+        let start_node =
+            Term::NamedNode(NamedNode::new("http://example.org/person1").expect("valid IRI"));
+        let pred1 = NamedNode::new("http://example.org/knows").expect("valid IRI");
+        let pred2 = NamedNode::new("http://example.org/friend").expect("valid IRI");
         let path = PropertyPath::alternative(vec![
             PropertyPath::predicate(pred1),
             PropertyPath::predicate(pred2),
@@ -147,7 +150,7 @@ mod tests {
         let hints = PathOptimizationHints::default();
         let query = evaluator
             .generate_optimized_sparql_query(&start_node, &path, None, &hints)
-            .unwrap();
+            .expect("generation should succeed");
         assert!(query.contains("SELECT DISTINCT ?value"));
         assert!(query.contains("UNION"));
         assert!(query.contains("<http://example.org/knows>"));
@@ -156,13 +159,14 @@ mod tests {
     #[test]
     fn test_recursive_path_query_generation() {
         let evaluator = PropertyPathEvaluator::new();
-        let start_node = Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap());
-        let predicate = NamedNode::new("http://example.org/knows").unwrap();
+        let start_node =
+            Term::NamedNode(NamedNode::new("http://example.org/person1").expect("valid IRI"));
+        let predicate = NamedNode::new("http://example.org/knows").expect("valid IRI");
         let path = PropertyPath::one_or_more(PropertyPath::predicate(predicate));
         let hints = PathOptimizationHints::default();
         let query = evaluator
             .generate_optimized_sparql_query(&start_node, &path, None, &hints)
-            .unwrap();
+            .expect("generation should succeed");
         assert!(query.contains("SELECT DISTINCT ?value"));
         assert!(query.contains("+"));
         assert!(query.contains("MAX_RECURSION_DEPTH"));
@@ -171,16 +175,16 @@ mod tests {
     fn test_path_optimization() {
         let evaluator = PropertyPathEvaluator::new();
         let simple_path =
-            PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap());
+            PropertyPath::predicate(NamedNode::new("http://example.org/knows").expect("valid IRI"));
         let optimized = evaluator.optimize_path(&simple_path);
         assert_eq!(
             optimized.optimization_strategy,
             PathOptimizationStrategy::SparqlPath
         );
         let complex_path = PropertyPath::sequence(vec![
-            PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap()),
+            PropertyPath::predicate(NamedNode::new("http://example.org/knows").expect("valid IRI")),
             PropertyPath::zero_or_more(PropertyPath::predicate(
-                NamedNode::new("http://example.org/friend").unwrap(),
+                NamedNode::new("http://example.org/friend").expect("valid IRI"),
             )),
         ]);
         let optimized = evaluator.optimize_path(&complex_path);
@@ -193,7 +197,7 @@ mod tests {
     fn test_path_validation() {
         let evaluator = PropertyPathEvaluator::new();
         let valid_path =
-            PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap());
+            PropertyPath::predicate(NamedNode::new("http://example.org/knows").expect("valid IRI"));
         let result = evaluator.validate_property_path(&valid_path);
         assert!(result.is_valid);
         assert!(result.errors.is_empty());
@@ -202,7 +206,7 @@ mod tests {
         assert!(!result.is_valid);
         assert!(!result.errors.is_empty());
         let warning_path = PropertyPath::zero_or_more(PropertyPath::predicate(
-            NamedNode::new("http://example.org/knows").unwrap(),
+            NamedNode::new("http://example.org/knows").expect("valid IRI"),
         ));
         let result = evaluator.validate_property_path(&warning_path);
         assert!(result.is_valid);
@@ -211,12 +215,14 @@ mod tests {
     #[test]
     fn test_query_plan_generation() {
         let evaluator = PropertyPathEvaluator::new();
-        let start_node = Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap());
-        let path = PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap());
+        let start_node =
+            Term::NamedNode(NamedNode::new("http://example.org/person1").expect("valid IRI"));
+        let path =
+            PropertyPath::predicate(NamedNode::new("http://example.org/knows").expect("valid IRI"));
         let hints = PathOptimizationHints::default();
         let plan = evaluator
             .generate_query_plan(&start_node, &path, None, &hints)
-            .unwrap();
+            .expect("generation should succeed");
         assert!(!plan.query.is_empty());
         assert_eq!(plan.execution_strategy, PathExecutionStrategy::DirectSparql);
         assert!(plan.estimated_cost > 0.0);

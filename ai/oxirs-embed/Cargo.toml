@@ -41,6 +41,10 @@ regex = "1.12"
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 flate2 = "1.1"
 
+# Model validation dependencies
+sha2 = "0.10"
+blake3 = "1.5"
+
 # Internal OxiRS dependencies
 oxirs-vec.workspace = true
 

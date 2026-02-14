@@ -53,7 +53,11 @@ impl QueryProcessor {
                 } else if cap.get(0).is_some() {
                     constraints.push(QueryConstraint {
                         constraint_type,
-                        value: cap.get(0).unwrap().as_str().to_string(),
+                        value: cap
+                            .get(0)
+                            .expect("capture group 0 should exist")
+                            .as_str()
+                            .to_string(),
                         operator: operator.to_string(),
                     });
                 }

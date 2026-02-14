@@ -168,22 +168,17 @@ impl HealthChecker {
         let call_history = self.call_history.read().await;
         let records = call_history.get(provider_id);
 
-        if records.is_none() || records.unwrap().is_empty() {
-            return Ok(());
-        }
-
-        let records = records.unwrap();
+        let records = match records {
+            Some(r) if !r.is_empty() => r,
+            _ => return Ok(()),
+        };
         let total_calls = records.len() as f64;
         let failed_calls = records.iter().filter(|r| !r.success).count() as f64;
         let error_rate = failed_calls / total_calls;
 
         let avg_latency_ms = records.iter().map(|r| r.latency_ms).sum::<u64>() as f64 / total_calls;
 
-        let consecutive_failures = records
-            .iter()
-            .rev()
-            .take_while(|r| !r.success)
-            .count() as u32;
+        let consecutive_failures = records.iter().rev().take_while(|r| !r.success).count() as u32;
 
         let successful_calls = total_calls - failed_calls;
         let uptime_percentage = (successful_calls / total_calls) * 100.0;
@@ -293,7 +288,10 @@ impl HealthChecker {
         let mut health_status = self.health_status.write().await;
         let mut call_history = self.call_history.write().await;
 
-        health_status.insert(provider_id.clone(), ProviderHealth::new(provider_id.clone()));
+        health_status.insert(
+            provider_id.clone(),
+            ProviderHealth::new(provider_id.clone()),
+        );
         call_history.insert(provider_id.clone(), Vec::new());
 
         info!("Reset health status for provider: {}", provider_id);
@@ -310,7 +308,11 @@ mod tests {
         let checker = HealthChecker::new(HealthCheckConfig::default());
         checker.register_provider("test-provider".to_string()).await;
 
-        assert!(checker.is_provider_healthy(&"test-provider".to_string()).await);
+        assert!(
+            checker
+                .is_provider_healthy(&"test-provider".to_string())
+                .await
+        );
     }
 
     #[tokio::test]
@@ -336,8 +338,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_degraded_status() {
-        let mut config = HealthCheckConfig::default();
-        config.latency_threshold_ms = 100;
+        let config = HealthCheckConfig {
+            latency_threshold_ms: 100,
+            ..Default::default()
+        };
 
         let checker = HealthChecker::new(config);
         let provider_id = "test-provider".to_string();
@@ -376,8 +380,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_consecutive_failures() {
-        let mut config = HealthCheckConfig::default();
-        config.max_consecutive_failures = 3;
+        let config = HealthCheckConfig {
+            max_consecutive_failures: 3,
+            ..Default::default()
+        };
 
         let checker = HealthChecker::new(config);
         let provider_id = "test-provider".to_string();

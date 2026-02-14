@@ -559,7 +559,10 @@ mod tests {
     async fn test_vote_request_handling() {
         let config = ConsensusConfig::default();
         let coordinator = ConsensusCoordinator::new(config, vec![]);
-        coordinator.start().await.unwrap();
+        coordinator
+            .start()
+            .await
+            .expect("async operation should succeed");
 
         let vote_request = VoteRequest {
             term: 1,
@@ -568,7 +571,10 @@ mod tests {
             last_log_term: 0,
         };
 
-        let response = coordinator.request_vote(vote_request).await.unwrap();
+        let response = coordinator
+            .request_vote(vote_request)
+            .await
+            .expect("async operation should succeed");
         assert!(response.vote_granted);
         assert_eq!(response.term, 1);
     }
@@ -577,7 +583,10 @@ mod tests {
     async fn test_append_entries_heartbeat() {
         let config = ConsensusConfig::default();
         let coordinator = ConsensusCoordinator::new(config, vec![]);
-        coordinator.start().await.unwrap();
+        coordinator
+            .start()
+            .await
+            .expect("async operation should succeed");
 
         let append_request = AppendEntriesRequest {
             term: 1,
@@ -588,7 +597,10 @@ mod tests {
             leader_commit: 0,
         };
 
-        let response = coordinator.append_entries(append_request).await.unwrap();
+        let response = coordinator
+            .append_entries(append_request)
+            .await
+            .expect("async operation should succeed");
         assert!(response.success);
 
         let leader = coordinator.get_leader().await;
@@ -613,7 +625,10 @@ mod tests {
             endpoint: "http://node2:8080".to_string(),
         };
 
-        let index = coordinator.submit_command(command).await.unwrap();
+        let index = coordinator
+            .submit_command(command)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(index, 1);
     }
 
@@ -621,7 +636,10 @@ mod tests {
     async fn test_log_replication() {
         let config = ConsensusConfig::default();
         let coordinator = ConsensusCoordinator::new(config, vec![]);
-        coordinator.start().await.unwrap();
+        coordinator
+            .start()
+            .await
+            .expect("async operation should succeed");
 
         let entry = LogEntry {
             term: 1,
@@ -642,7 +660,10 @@ mod tests {
             leader_commit: 0,
         };
 
-        let response = coordinator.append_entries(append_request).await.unwrap();
+        let response = coordinator
+            .append_entries(append_request)
+            .await
+            .expect("async operation should succeed");
         assert!(response.success);
         assert_eq!(response.match_index, 1);
     }
@@ -651,9 +672,15 @@ mod tests {
     async fn test_snapshot_creation() {
         let config = ConsensusConfig::default();
         let coordinator = ConsensusCoordinator::new(config, vec![]);
-        coordinator.start().await.unwrap();
+        coordinator
+            .start()
+            .await
+            .expect("async operation should succeed");
 
-        let snapshot = coordinator.create_snapshot().await.unwrap();
+        let snapshot = coordinator
+            .create_snapshot()
+            .await
+            .expect("async operation should succeed");
         assert_eq!(snapshot.last_included_index, 0);
     }
 

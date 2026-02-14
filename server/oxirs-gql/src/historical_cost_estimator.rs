@@ -594,7 +594,11 @@ mod tests {
     #[test]
     fn test_estimator_creation() {
         let estimator = HistoricalCostEstimator::new();
-        assert!(estimator.historical_data.read().unwrap().is_empty());
+        assert!(estimator
+            .historical_data
+            .read()
+            .expect("lock should not be poisoned")
+            .is_empty());
     }
 
     #[test]
@@ -681,10 +685,18 @@ mod tests {
         estimator
             .record_execution("query { user { name } }", 100.0, 50, 1024)
             .unwrap();
-        assert!(!estimator.historical_data.read().unwrap().is_empty());
+        assert!(!estimator
+            .historical_data
+            .read()
+            .expect("lock should not be poisoned")
+            .is_empty());
 
         estimator.clear().unwrap();
-        assert!(estimator.historical_data.read().unwrap().is_empty());
+        assert!(estimator
+            .historical_data
+            .read()
+            .expect("lock should not be poisoned")
+            .is_empty());
     }
 
     #[test]

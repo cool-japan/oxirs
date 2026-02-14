@@ -234,7 +234,7 @@ impl PerformanceMonitor {
 
         // Update global metrics
         {
-            let mut metrics = self.metrics.write().unwrap();
+            let mut metrics = self.metrics.write().expect("lock should not be poisoned");
             metrics.node_metrics = node_metrics_map;
             // Calculate cluster-wide metrics
             metrics.cluster_metrics = self.calculate_cluster_metrics(&metrics.node_metrics);
@@ -351,7 +351,7 @@ impl PerformanceMonitor {
 
     /// Analyze metrics and generate alerts
     async fn analyze_and_alert(&self) {
-        let metrics = self.metrics.read().unwrap();
+        let metrics = self.metrics.read().expect("lock should not be poisoned");
 
         // Check cluster-wide thresholds
         if metrics.cluster_metrics.average_latency > self.thresholds.max_consensus_latency {
@@ -444,7 +444,7 @@ impl PerformanceMonitor {
         }
 
         // Store alert in metrics
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write().expect("lock should not be poisoned");
         metrics.alerts.push(alert);
 
         // Limit alert history
@@ -456,7 +456,7 @@ impl PerformanceMonitor {
 
     /// Update historical metrics data
     async fn update_historical_data(&self) {
-        let mut metrics = self.metrics.write().unwrap();
+        let mut metrics = self.metrics.write().expect("lock should not be poisoned");
 
         let current_slice = TimeSliceMetrics {
             timestamp: SystemTime::now(),
@@ -510,12 +510,15 @@ impl PerformanceMonitor {
 
     /// Get current cluster metrics
     pub fn get_metrics(&self) -> ClusterMetrics {
-        self.metrics.read().unwrap().clone()
+        self.metrics
+            .read()
+            .expect("lock should not be poisoned")
+            .clone()
     }
 
     /// Get performance summary
     pub fn get_performance_summary(&self) -> PerformanceSummary {
-        let metrics = self.metrics.read().unwrap();
+        let metrics = self.metrics.read().expect("lock should not be poisoned");
 
         PerformanceSummary {
             cluster_health: metrics.cluster_metrics.cluster_health,

@@ -139,7 +139,7 @@ mod tests {
         let result = validator.validate(&aspect).await;
         assert!(result.is_ok());
 
-        let validation_result = result.unwrap();
+        let validation_result = result.expect("validation should succeed");
         // Should be valid (basic structure checks pass)
         assert!(validation_result.is_valid || validation_result.errors.is_empty());
     }
@@ -156,7 +156,7 @@ mod tests {
         let result = validator.validate(&aspect).await;
         assert!(result.is_ok());
 
-        let validation_result = result.unwrap();
+        let validation_result = result.expect("validation should succeed");
         // Should have an error about missing characteristic
         assert!(!validation_result.is_valid);
         assert!(!validation_result.errors.is_empty());
@@ -175,7 +175,7 @@ mod tests {
         let result = validator.validate(&aspect).await;
         assert!(result.is_ok());
 
-        let validation_result = result.unwrap();
+        let validation_result = result.expect("validation should succeed");
         // Should have warnings about no properties/operations and no preferred name
         assert!(!validation_result.warnings.is_empty());
     }
@@ -202,7 +202,7 @@ mod tests {
         let result = validator.validate(&aspect).await;
         assert!(result.is_ok());
 
-        let validation_result = result.unwrap();
+        let validation_result = result.expect("validation should succeed");
         // Should have a warning about property naming
         assert!(!validation_result.warnings.is_empty());
         assert!(validation_result
@@ -241,7 +241,7 @@ mod tests {
         let result = validator.validate(&aspect).await;
         assert!(result.is_ok());
 
-        let validation_result = result.unwrap();
+        let validation_result = result.expect("validation should succeed");
         // Should have an error about duplicate URN
         assert!(!validation_result.is_valid);
         assert!(validation_result

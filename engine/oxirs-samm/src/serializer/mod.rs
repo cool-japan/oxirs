@@ -263,7 +263,7 @@ mod tests {
         let result = serialize_aspect_to_string(&aspect);
         assert!(result.is_ok());
 
-        let ttl = result.unwrap();
+        let ttl = result.expect("result should be Ok");
         assert!(ttl.contains("@prefix samm:"));
         assert!(ttl.contains("urn:example:aspect#TestAspect"));
         assert!(ttl.contains("a samm:Aspect"));

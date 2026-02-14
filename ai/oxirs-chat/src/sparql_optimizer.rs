@@ -415,22 +415,23 @@ impl QueryAnalyzer {
     fn new(config: &OptimizerConfig) -> Self {
         let complexity_patterns = vec![
             ComplexityPattern {
-                pattern: Regex::new(r"(?i)\bUNION\b").unwrap(),
+                pattern: Regex::new(r"(?i)\bUNION\b").expect("regex pattern should be valid"),
                 complexity_weight: 2.0,
                 _description: "UNION operations increase complexity".to_string(),
             },
             ComplexityPattern {
-                pattern: Regex::new(r"(?i)\bOPTIONAL\b").unwrap(),
+                pattern: Regex::new(r"(?i)\bOPTIONAL\b").expect("regex pattern should be valid"),
                 complexity_weight: 1.5,
                 _description: "OPTIONAL patterns add complexity".to_string(),
             },
             ComplexityPattern {
-                pattern: Regex::new(r"(?i)\bFILTER\s+regex\(").unwrap(),
+                pattern: Regex::new(r"(?i)\bFILTER\s+regex\(")
+                    .expect("regex pattern should be valid"),
                 complexity_weight: 3.0,
                 _description: "REGEX filters are expensive".to_string(),
             },
             ComplexityPattern {
-                pattern: Regex::new(r"\{\s*SELECT").unwrap(),
+                pattern: Regex::new(r"\{\s*SELECT").expect("regex pattern should be valid"),
                 complexity_weight: 2.5,
                 _description: "Subqueries increase complexity".to_string(),
             },
@@ -486,7 +487,7 @@ impl QueryAnalyzer {
 
         // Variable count
         let variable_count = Regex::new(r"\?[a-zA-Z][a-zA-Z0-9_]*")
-            .unwrap()
+            .expect("regex pattern should be valid")
             .find_iter(query)
             .count() as f32;
         complexity += variable_count * 0.05;
@@ -530,7 +531,10 @@ impl QueryAnalyzer {
         }
 
         // Check for expensive regex
-        if Regex::new(r"(?i)regex\(").unwrap().is_match(query) {
+        if Regex::new(r"(?i)regex\(")
+            .expect("regex pattern should be valid")
+            .is_match(query)
+        {
             issues.push(QueryIssue {
                 issue_type: QueryIssueType::ComplexRegex,
                 description: "REGEX operations can be expensive".to_string(),
@@ -554,12 +558,15 @@ impl QueryAnalyzer {
         }
 
         // Check for unbound variables in FILTER
-        let filter_regex =
-            Regex::new(r"(?i)FILTER\s*\([^)]*\?([a-zA-Z][a-zA-Z0-9_]*)[^)]*\)").unwrap();
+        let filter_regex = Regex::new(r"(?i)FILTER\s*\([^)]*\?([a-zA-Z][a-zA-Z0-9_]*)[^)]*\)")
+            .expect("regex pattern should be valid");
         if let Some(captures) = filter_regex.captures(query) {
             let var_name = &captures[1];
             let var_pattern = format!(r"\?{var_name}\s+[^?]*\.");
-            if !Regex::new(&var_pattern).unwrap().is_match(query) {
+            if !Regex::new(&var_pattern)
+                .expect("regex pattern should be valid")
+                .is_match(query)
+            {
                 issues.push(QueryIssue {
                     issue_type: QueryIssueType::UnboundVariable,
                     description: format!(

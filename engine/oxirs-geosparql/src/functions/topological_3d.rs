@@ -537,11 +537,7 @@ pub fn buffer_3d(geom: &Geometry, _distance: f64) -> Result<Geometry> {
 
     if let Some(z_coords) = &mut result.coord3d.z_coords {
         // Add buffer distance to Z coordinates
-        z_coords.values = z_coords
-            .values
-            .iter()
-            .map(|z| *z)
-            .collect();
+        z_coords.values = z_coords.values.to_vec();
     }
 
     Ok(result)
@@ -871,7 +867,7 @@ mod tests {
         let (x, y, z) = centroid_3d(&poly).unwrap();
         assert!((x - 1.0).abs() < 1e-6);
         assert!((y - 1.0).abs() < 1e-6);
-        assert!(z >= 0.0 && z <= 10.0);
+        assert!((0.0..=10.0).contains(&z));
     }
 
     #[test]

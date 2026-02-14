@@ -371,7 +371,7 @@ mod tests {
                 "Added constraint".to_string(),
                 None,
             )
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(tracker.current_version, "1.1.0");
     }
@@ -391,7 +391,7 @@ mod tests {
                 "Added constraint".to_string(),
                 None,
             )
-            .unwrap();
+            .expect("operation should succeed");
 
         // Rollback to 1.0.0
         let result = tracker.rollback("1.0.0");

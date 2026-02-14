@@ -576,7 +576,7 @@ pub mod dataset_validation {
         }
 
         // Check for valid characters
-        let valid_pattern = Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap();
+        let valid_pattern = Regex::new(r"^[a-zA-Z0-9_-]+$").expect("regex pattern should be valid");
         if !valid_pattern.is_match(name) {
             return Err(CliError::invalid_arguments(
                 format!("Invalid dataset name: '{name}'. Must contain only letters, numbers, underscores, and hyphens")

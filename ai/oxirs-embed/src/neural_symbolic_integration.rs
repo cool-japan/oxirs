@@ -1501,7 +1501,12 @@ impl EmbeddingModel for NeuralSymbolicModel {
             // Use neural-symbolic integration for encoding
             let input = Array1::from_shape_fn(self.config.base_config.dimensions, |i| {
                 if i < text.len() {
-                    (text.chars().nth(i).unwrap() as u8 as f32) / 255.0
+                    (text
+                        .chars()
+                        .nth(i)
+                        .expect("index should be within text length") as u8
+                        as f32)
+                        / 255.0
                 } else {
                     0.0
                 }

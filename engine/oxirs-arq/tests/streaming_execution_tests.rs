@@ -9,9 +9,7 @@
 //! - Memory usage constraints
 //! - Performance improvements
 
-use oxirs_arq::advanced_optimizer::{
-    QueryComplexity, QueryPlan, StreamingAnalyzer, StreamingConfig, StreamingType,
-};
+use oxirs_arq::advanced_optimizer::{QueryPlan, StreamingAnalyzer, StreamingConfig};
 use oxirs_arq::algebra::{Algebra, Binding, Solution, Term, TriplePattern, Variable};
 use oxirs_arq::executor::{SpillConfig, SpillManager};
 use oxirs_core::model::NamedNode;
@@ -25,10 +23,7 @@ fn create_test_solution(size: usize) -> Solution {
         let iri_string = format!("http://example.org/item{}", i);
         binding.insert(
             Variable::new(&var_name).expect("valid variable name"),
-            Term::Iri(
-                NamedNode::new(&iri_string)
-                    .expect("valid IRI"),
-            ),
+            Term::Iri(NamedNode::new(&iri_string).expect("valid IRI")),
         );
         solution.push(binding);
     }
@@ -40,17 +35,14 @@ fn create_complex_algebra() -> Algebra {
     let pattern1 = TriplePattern {
         subject: Term::Variable(Variable::new("s").expect("valid variable name")),
         predicate: Term::Iri(
-            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                .expect("valid IRI"),
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI"),
         ),
         object: Term::Variable(Variable::new("o").expect("valid variable name")),
     };
 
     let pattern2 = TriplePattern {
         subject: Term::Variable(Variable::new("s").expect("valid variable name")),
-        predicate: Term::Iri(
-            NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI"),
-        ),
+        predicate: Term::Iri(NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI")),
         object: Term::Variable(Variable::new("name").expect("valid variable name")),
     };
 
@@ -69,8 +61,10 @@ fn test_streaming_analyzer_creation() {
 
 #[test]
 fn test_streaming_analyzer_memory_threshold() {
-    let mut config = StreamingConfig::default();
-    config.memory_threshold_mb = 1024;
+    let config = StreamingConfig {
+        memory_threshold_mb: 1024,
+        ..Default::default()
+    };
     let mut analyzer = StreamingAnalyzer::new(config);
 
     assert_eq!(analyzer.memory_threshold(), 1024 * 1024 * 1024);
@@ -153,7 +147,10 @@ fn test_aggregation_pipeline_breaker() {
 fn test_spill_manager_creation() {
     let config = SpillConfig::default();
     let manager = SpillManager::new(config);
-    assert!(manager.is_ok(), "SpillManager should be created successfully");
+    assert!(
+        manager.is_ok(),
+        "SpillManager should be created successfully"
+    );
 }
 
 #[test]
@@ -165,7 +162,11 @@ fn test_spill_and_read_small_data() {
     let spill_id = manager.spill(&test_data).expect("Failed to spill");
 
     let read_data = manager.read_spill(spill_id).expect("Failed to read spill");
-    assert_eq!(test_data.len(), read_data.len(), "Spilled data should match");
+    assert_eq!(
+        test_data.len(),
+        read_data.len(),
+        "Spilled data should match"
+    );
 
     manager.cleanup(spill_id).expect("Failed to cleanup");
 }
@@ -189,15 +190,20 @@ fn test_spill_and_read_large_data() {
     let stats = manager.statistics();
     assert_eq!(stats.num_spills, 1);
     assert_eq!(stats.total_rows, 10_000);
-    assert!(stats.total_size_bytes > 0, "Spill should have non-zero size");
+    assert!(
+        stats.total_size_bytes > 0,
+        "Spill should have non-zero size"
+    );
 
     manager.cleanup(spill_id).expect("Failed to cleanup");
 }
 
 #[test]
 fn test_spill_compression() {
-    let mut config = SpillConfig::default();
-    config.compression = true;
+    let config = SpillConfig {
+        compression: true,
+        ..Default::default()
+    };
 
     let mut manager = SpillManager::new(config).expect("Failed to create manager");
 
@@ -500,14 +506,10 @@ fn test_integrated_streaming_execution() {
 
     // Simulate large result set that needs spilling
     let large_result = create_test_solution(5000);
-    let spill_id = spill_manager
-        .spill(&large_result)
-        .expect("Failed to spill");
+    let spill_id = spill_manager.spill(&large_result).expect("Failed to spill");
 
     // Verify we can read it back
-    let recovered = spill_manager
-        .read_spill(spill_id)
-        .expect("Failed to read");
+    let recovered = spill_manager.read_spill(spill_id).expect("Failed to read");
     assert_eq!(large_result.len(), recovered.len());
 
     spill_manager.cleanup(spill_id).expect("Failed to cleanup");

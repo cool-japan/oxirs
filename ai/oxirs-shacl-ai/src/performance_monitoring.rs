@@ -1186,7 +1186,7 @@ impl MetricsCollector {
     }
 
     fn add_validation_metric(&mut self, metric: ValidationMetric) -> Result<()> {
-        let mut metrics = self.validation_metrics.lock().unwrap();
+        let mut metrics = self.validation_metrics.lock().expect("lock should not be poisoned");
         metrics.push_back(metric);
         
         // Keep only recent metrics

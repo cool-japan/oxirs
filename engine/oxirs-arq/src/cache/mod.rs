@@ -52,27 +52,27 @@
 //! - Memory overhead: ~100 bytes per cache entry
 //! - Throughput: >1M invalidations/second
 
-pub mod invalidation_engine;
 pub mod coordinator;
+pub mod invalidation_engine;
 
-#[cfg(feature = "distributed-cache")]
-pub mod distributed_cache;
 #[cfg(feature = "distributed-cache")]
 pub mod coherence;
-
-pub use invalidation_engine::{
-    InvalidationEngine, InvalidationStrategy, InvalidationStatistics, DependencyGraph,
-    DependencyGraphStatistics, RdfUpdateListener,
-};
-pub use coordinator::{CacheCoordinator, CacheLevel, InvalidationConfig, CoordinatorStatistics};
-
 #[cfg(feature = "distributed-cache")]
-pub use distributed_cache::{
-    DistributedCache, DistributedCacheConfig, DistributedCacheMetrics, CacheKey, CacheValue,
-    DistributedCacheError, InvalidationMessage,
+pub mod distributed_cache;
+
+pub use coordinator::{CacheCoordinator, CacheLevel, CoordinatorStatistics, InvalidationConfig};
+pub use invalidation_engine::{
+    DependencyGraph, DependencyGraphStatistics, InvalidationEngine, InvalidationStatistics,
+    InvalidationStrategy, RdfUpdateListener,
 };
+
 #[cfg(feature = "distributed-cache")]
 pub use coherence::{
-    CacheCoherenceProtocol, CoherenceProtocol, ConsistencyLevel, CoherenceConfig,
-    CoherenceReport, CoherenceStatistics, CoherenceError,
+    CacheCoherenceProtocol, CoherenceConfig, CoherenceError, CoherenceProtocol, CoherenceReport,
+    CoherenceStatistics, ConsistencyLevel,
+};
+#[cfg(feature = "distributed-cache")]
+pub use distributed_cache::{
+    CacheKey, CacheValue, DistributedCache, DistributedCacheConfig, DistributedCacheError,
+    DistributedCacheMetrics, InvalidationMessage,
 };

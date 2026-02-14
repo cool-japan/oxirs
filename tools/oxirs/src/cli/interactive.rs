@@ -211,7 +211,10 @@ impl InteractiveMode {
 
         // Check for special commands
         if trimmed.starts_with("use ") {
-            let dataset = trimmed.strip_prefix("use ").unwrap().trim();
+            let dataset = trimmed
+                .strip_prefix("use ")
+                .expect("prefix should match after starts_with check")
+                .trim();
             self.use_dataset(dataset);
             return Ok(());
         }
@@ -219,7 +222,7 @@ impl InteractiveMode {
         if trimmed.starts_with("set ") {
             let parts: Vec<&str> = trimmed
                 .strip_prefix("set ")
-                .unwrap()
+                .expect("prefix should match after starts_with check")
                 .splitn(2, '=')
                 .collect();
             if parts.len() == 2 {
@@ -263,7 +266,10 @@ impl InteractiveMode {
         }
 
         if trimmed.starts_with("load ") {
-            let name = trimmed.strip_prefix("load ").unwrap().trim();
+            let name = trimmed
+                .strip_prefix("load ")
+                .expect("prefix should match after starts_with check")
+                .trim();
             self.load_query(name);
             return Ok(());
         }
@@ -274,7 +280,10 @@ impl InteractiveMode {
         }
 
         if trimmed.starts_with("delete ") {
-            let name = trimmed.strip_prefix("delete ").unwrap().trim();
+            let name = trimmed
+                .strip_prefix("delete ")
+                .expect("prefix should match after starts_with check")
+                .trim();
             self.delete_query(name);
             return Ok(());
         }
@@ -425,7 +434,7 @@ impl InteractiveMode {
     fn clear_screen(&self) {
         print!("\x1B[2J\x1B[1;1H");
         use std::io::{self, Write};
-        io::stdout().flush().unwrap();
+        let _ = io::stdout().flush();
     }
 
     /// Handle query command

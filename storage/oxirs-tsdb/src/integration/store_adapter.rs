@@ -323,17 +323,17 @@ mod tests {
     #[test]
     fn test_timeseries_predicate_detection() {
         let qudt = Predicate::NamedNode(
-            NamedNode::new("http://qudt.org/schema/qudt/numericValue").unwrap(),
+            NamedNode::new("http://qudt.org/schema/qudt/numericValue").expect("valid IRI"),
         );
         assert!(HybridStore::is_timeseries_predicate(&qudt));
 
         let sosa = Predicate::NamedNode(
-            NamedNode::new("http://www.w3.org/ns/sosa/hasSimpleResult").unwrap(),
+            NamedNode::new("http://www.w3.org/ns/sosa/hasSimpleResult").expect("valid IRI"),
         );
         assert!(HybridStore::is_timeseries_predicate(&sosa));
 
         let rdf_type = Predicate::NamedNode(
-            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI"),
         );
         assert!(!HybridStore::is_timeseries_predicate(&rdf_type));
     }
@@ -341,7 +341,8 @@ mod tests {
     #[test]
     fn test_series_id_mapping() -> TsdbResult<()> {
         let store = HybridStore::new()?;
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/sensor1").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/sensor1").expect("valid IRI"));
 
         let series_id1 = store.get_or_create_series_id(&subject)?;
         let series_id2 = store.get_or_create_series_id(&subject)?;
@@ -351,7 +352,8 @@ mod tests {
             "Should return same ID for same subject"
         );
 
-        let subject2 = Subject::NamedNode(NamedNode::new("http://example.org/sensor2").unwrap());
+        let subject2 =
+            Subject::NamedNode(NamedNode::new("http://example.org/sensor2").expect("valid IRI"));
         let series_id3 = store.get_or_create_series_id(&subject2)?;
 
         assert_ne!(
@@ -422,7 +424,8 @@ mod tests {
     #[test]
     fn test_subject_series_lookup() -> TsdbResult<()> {
         let store = HybridStore::new()?;
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/sensor1").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/sensor1").expect("valid IRI"));
 
         let series_id = store.get_or_create_series_id(&subject)?;
 

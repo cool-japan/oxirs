@@ -992,10 +992,10 @@ impl ShexMigrationEngine {
         let shape_id = ShapeId(shex_shape.id.clone());
 
         // Create target definition - if not specified, no automatic target
-        let target =
-            Target::Class(NamedNode::new(&shex_shape.id).unwrap_or_else(|_| {
-                NamedNode::new(format!("{}Class", self.config.base_iri)).unwrap()
-            }));
+        let target = Target::Class(NamedNode::new(&shex_shape.id).unwrap_or_else(|_| {
+            NamedNode::new(format!("{}Class", self.config.base_iri))
+                .expect("construction should succeed")
+        }));
 
         // Convert expression to constraints
         let mut constraints_vec = Vec::new();
@@ -1184,7 +1184,7 @@ impl ShexMigrationEngine {
                 match v {
                     ValueSetValue::Iri(iri) => {
                         Some(Term::NamedNode(NamedNode::new(iri).unwrap_or_else(|_| {
-                            NamedNode::new("http://example.org/unknown").unwrap()
+                            NamedNode::new("http://example.org/unknown").expect("valid IRI")
                         })))
                     }
                     ValueSetValue::Literal {
@@ -1390,7 +1390,7 @@ ex:Person {
 "#;
 
         let engine = ShexMigrationEngine::new();
-        let schema = engine.parse_shex(shex).unwrap();
+        let schema = engine.parse_shex(shex).expect("parsing should succeed");
 
         assert_eq!(schema.shapes.len(), 1);
         assert_eq!(
@@ -1405,7 +1405,7 @@ ex:Person {
         let result = engine.parse_prefix_line("PREFIX ex: <http://example.org/>");
 
         assert!(result.is_some());
-        let (prefix, iri) = result.unwrap();
+        let (prefix, iri) = result.expect("valid IRI");
         assert_eq!(prefix, "ex");
         assert_eq!(iri, "http://example.org/");
     }
@@ -1461,7 +1461,7 @@ ex:Person {
         };
 
         let mut engine = ShexMigrationEngine::new();
-        let result = engine.migrate(&schema).unwrap();
+        let result = engine.migrate(&schema).expect("migration should succeed");
 
         assert_eq!(result.shapes.len(), 1);
         assert_eq!(result.report.shapes_converted, 1);
@@ -1472,7 +1472,7 @@ ex:Person {
         let engine = ShexMigrationEngine::new();
         let values = engine
             .parse_value_set("[<http://example.org/a> <http://example.org/b>]")
-            .unwrap();
+            .expect("parsing should succeed");
 
         assert_eq!(values.len(), 2);
     }

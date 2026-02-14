@@ -413,7 +413,11 @@ impl EntityClustering {
         }
 
         // Initialize centroids randomly
-        let dim = entity_embeddings.values().next().unwrap().len();
+        let dim = entity_embeddings
+            .values()
+            .next()
+            .expect("entity_embeddings should not be empty")
+            .len();
         let mut centroids: Vec<Array1<f32>> = Vec::new();
 
         // K-Means++ initialization for better convergence
@@ -549,7 +553,11 @@ impl EntityClustering {
         }
 
         // Compute centroids
-        let dim = entity_embeddings.values().next().unwrap().len();
+        let dim = entity_embeddings
+            .values()
+            .next()
+            .expect("entity_embeddings should not be empty")
+            .len();
         let mut centroids = vec![Array1::zeros(dim); self.config.num_clusters];
         let mut counts = vec![0; self.config.num_clusters];
 
@@ -622,7 +630,11 @@ impl EntityClustering {
         }
 
         // Compute centroids for non-noise clusters
-        let dim = entity_embeddings.values().next().unwrap().len();
+        let dim = entity_embeddings
+            .values()
+            .next()
+            .expect("entity_embeddings should not be empty")
+            .len();
         let mut centroids = vec![Array1::zeros(dim); cluster_id];
         let mut counts = vec![0; cluster_id];
 
@@ -682,7 +694,7 @@ impl EntityClustering {
             .iter()
             .enumerate()
             .map(|(i, c)| (i, self.euclidean_distance(embedding, c)))
-            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _)| i)
             .unwrap_or(0)
     }

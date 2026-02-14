@@ -116,19 +116,13 @@ impl AdvancedOptimizer {
     }
 
     /// Add training collector for online learning
-    pub fn with_training_collector(
-        mut self,
-        collector: Arc<RwLock<TrainingCollector>>,
-    ) -> Self {
+    pub fn with_training_collector(mut self, collector: Arc<RwLock<TrainingCollector>>) -> Self {
         self.training_collector = Some(collector);
         self
     }
 
     /// Add model manager for lifecycle management
-    pub fn with_model_manager(
-        mut self,
-        manager: Arc<RwLock<ModelManager>>,
-    ) -> Self {
+    pub fn with_model_manager(mut self, manager: Arc<RwLock<ModelManager>>) -> Self {
         self.model_manager = Some(manager);
         self
     }
@@ -238,7 +232,9 @@ impl AdvancedOptimizer {
         }
 
         // Fall back to cost model
-        let cost_model = self.cost_model.lock()
+        let _cost_model = self
+            .cost_model
+            .lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire cost model lock: {}", e))?;
 
         // Simple cost estimation based on query structure
@@ -266,7 +262,7 @@ impl AdvancedOptimizer {
                 if let Some(ref ml_predictor) = self.ml_predictor {
                     let features = ml_predictor.extract_features(algebra);
                     let characteristics = QueryCharacteristics {
-                        triple_pattern_count: 1,  // Would extract from algebra
+                        triple_pattern_count: 1, // Would extract from algebra
                         join_count: 0,
                         filter_count: 0,
                         optional_count: 0,
@@ -294,10 +290,7 @@ impl AdvancedOptimizer {
             if let Ok(manager_guard) = manager.read() {
                 if let Some(ref ml_predictor) = self.ml_predictor {
                     if let Ok(prediction) = ml_predictor.clone().predict_cost(algebra) {
-                        manager_guard.record_prediction(
-                            prediction.predicted_cost,
-                            actual_cost,
-                        )?;
+                        manager_guard.record_prediction(prediction.predicted_cost, actual_cost)?;
                     }
                 }
             }

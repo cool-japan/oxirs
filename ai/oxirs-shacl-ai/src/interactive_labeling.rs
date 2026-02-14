@@ -356,7 +356,10 @@ impl InteractiveLabelingInterface {
         let agreement = self.calculate_agreement(&annotations);
 
         // Update task status
-        let task = self.tasks.get_mut(task_id).unwrap();
+        let task = self
+            .tasks
+            .get_mut(task_id)
+            .expect("task should exist for given task_id");
         if agreement >= min_threshold {
             // Consensus reached
             task.status = if auto_validate {
@@ -418,7 +421,7 @@ impl InteractiveLabelingInterface {
         // Return label with highest score
         label_scores
             .into_iter()
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(label, _)| label)
     }
 
@@ -496,7 +499,7 @@ impl InteractiveLabelingInterface {
             })
             .collect();
 
-        leaderboard.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        leaderboard.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         leaderboard
     }
 

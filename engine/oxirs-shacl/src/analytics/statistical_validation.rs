@@ -148,7 +148,7 @@ impl StatisticalValidationAnalyzer {
 
             // Calculate percentiles
             let mut sorted = violations.clone();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let p25 = self.percentile(&sorted, 0.25);
             let p75 = self.percentile(&sorted, 0.75);
 
@@ -258,7 +258,7 @@ impl StatisticalValidationAnalyzer {
 
             // Method 2: IQR (Interquartile Range) method - more robust to outliers
             let mut sorted = violations.clone();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
             let q1 = self.percentile(&sorted, 0.25);
             let q3 = self.percentile(&sorted, 0.75);
@@ -617,7 +617,14 @@ mod tests {
         analyzer.record_validation("shape2", 3.0);
 
         assert_eq!(analyzer.violation_counts.len(), 2);
-        assert_eq!(analyzer.violation_counts.get("shape1").unwrap().len(), 2);
+        assert_eq!(
+            analyzer
+                .violation_counts
+                .get("shape1")
+                .expect("key should exist")
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -633,10 +640,12 @@ mod tests {
         let result = analyzer.analyze();
         assert!(result.is_ok());
 
-        let analysis = result.unwrap();
+        let analysis = result.expect("analysis should succeed");
         assert!(analysis.distribution_analysis.is_some());
 
-        let dist = analysis.distribution_analysis.unwrap();
+        let dist = analysis
+            .distribution_analysis
+            .expect("analysis should succeed");
         assert_eq!(dist.shape_statistics.len(), 1);
         assert_eq!(dist.shape_statistics[0].sample_size, 100);
     }
@@ -658,10 +667,10 @@ mod tests {
         // Add anomalies
         analyzer.record_validation("shape1", 50.0); // Anomaly
 
-        let result = analyzer.analyze().unwrap();
+        let result = analyzer.analyze().expect("analysis should succeed");
         assert!(result.anomaly_detection.is_some());
 
-        let anomalies = result.anomaly_detection.unwrap();
+        let anomalies = result.anomaly_detection.expect("detection should succeed");
         assert!(!anomalies.anomalies.is_empty());
     }
 
@@ -680,12 +689,14 @@ mod tests {
             analyzer.record_validation("shape1", 100.0);
         }
 
-        let result = analyzer.analyze().unwrap();
+        let result = analyzer.analyze().expect("analysis should succeed");
         // Check that analysis ran successfully
         assert!(result.distribution_analysis.is_some());
         // Recommendations might be generated depending on data statistics
         // Changed to check that analysis completed rather than specific recommendations
-        let dist = result.distribution_analysis.unwrap();
+        let dist = result
+            .distribution_analysis
+            .expect("analysis should succeed");
         assert!(!dist.shape_statistics.is_empty());
     }
 
@@ -709,7 +720,7 @@ mod tests {
         let result = analyzer.analyze();
         assert!(result.is_ok());
 
-        let analysis = result.unwrap();
+        let analysis = result.expect("analysis should succeed");
         assert!(analysis.distribution_analysis.is_none());
     }
 }

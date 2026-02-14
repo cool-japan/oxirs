@@ -1278,7 +1278,10 @@ mod tests {
     #[tokio::test]
     async fn test_federation_engine_creation() {
         let engine = FederationEngine::new();
-        let stats = engine.get_stats().await.unwrap();
+        let stats = engine
+            .get_stats()
+            .await
+            .expect("async operation should succeed");
 
         assert_eq!(stats.registry.total_sparql_endpoints, 0);
     }
@@ -1287,7 +1290,10 @@ mod tests {
     async fn test_federation_engine_with_config() {
         let config = FederationConfig::default();
         let engine = FederationEngine::with_config(config);
-        let health = engine.health_check().await.unwrap();
+        let health = engine
+            .health_check()
+            .await
+            .expect("async operation should succeed");
 
         assert_eq!(health.overall_status, ServiceStatus::Healthy);
         assert_eq!(health.total_services, 0);

@@ -52,13 +52,19 @@ impl FrameOfReferenceEncoder {
         let start_time = Instant::now();
 
         // Find base value (minimum)
-        let base = *values.iter().min().unwrap();
+        let base = *values
+            .iter()
+            .min()
+            .expect("collection validated to be non-empty");
 
         // Calculate deltas
         let deltas: Vec<u32> = values.iter().map(|&v| v - base).collect();
 
         // Find maximum delta to determine required bits
-        let max_delta = *deltas.iter().max().unwrap();
+        let max_delta = *deltas
+            .iter()
+            .max()
+            .expect("collection validated to be non-empty");
         let required_bits = if max_delta == 0 {
             1
         } else {

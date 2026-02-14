@@ -534,7 +534,7 @@ impl WorkloadBalancer {
             BalancingStrategy::CapacityBased => {
                 // Return users with lowest capacity utilization
                 let mut users: Vec<_> = self.user_workloads.iter().collect();
-                users.sort_by(|a, b| a.1.capacity_utilization.partial_cmp(&b.1.capacity_utilization).unwrap());
+                users.sort_by(|a, b| a.1.capacity_utilization.partial_cmp(&b.1.capacity_utilization).unwrap_or(std::cmp::Ordering::Equal));
                 users.into_iter().map(|(id, _)| id.clone()).collect()
             }
             _ => Vec::new(),
@@ -583,7 +583,7 @@ impl ReviewScheduler {
             // Find corresponding scheduled review
             for (i, review) in self.scheduled_reviews.iter().enumerate() {
                 if review.review_id == priority_review.review_id {
-                    return Some(self.scheduled_reviews.remove(i).unwrap());
+                    return Some(self.scheduled_reviews.remove(i).expect("index should be valid for VecDeque"));
                 }
             }
         }

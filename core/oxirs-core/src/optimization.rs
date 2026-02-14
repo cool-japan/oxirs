@@ -598,21 +598,27 @@ impl OptimizedGraph {
                 for s_entry in &self.spo {
                     let s_intern = s_entry.key();
                     if let Ok(s) = self.unintern_subject(s_intern) {
-                        if subject.is_some() && subject.unwrap() != &s {
-                            continue;
+                        if let Some(subj) = subject {
+                            if subj != &s {
+                                continue;
+                            }
                         }
 
                         for po_entry in s_entry.value().iter() {
                             let p_intern = po_entry.key();
                             if let Ok(p) = self.unintern_predicate(p_intern) {
-                                if predicate.is_some() && predicate.unwrap() != &p {
-                                    continue;
+                                if let Some(pred) = predicate {
+                                    if pred != &p {
+                                        continue;
+                                    }
                                 }
 
                                 for o_intern in po_entry.value().iter() {
                                     if let Ok(o) = self.unintern_object(o_intern) {
-                                        if object.is_some() && object.unwrap() != &o {
-                                            continue;
+                                        if let Some(obj) = object {
+                                            if obj != &o {
+                                                continue;
+                                            }
                                         }
 
                                         let triple = Triple::new(s.clone(), p.clone(), o);
@@ -764,7 +770,7 @@ impl BatchProcessor {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(num_threads)
             .build()
-            .unwrap();
+            .expect("thread pool builder should succeed");
 
         BatchProcessor {
             operation_queue: SegQueue::new(),

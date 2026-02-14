@@ -66,8 +66,8 @@ indicatif = "0.18"
 # HuggingFace integration
 tokenizers = { version = "0.22", optional = true }
 hf-hub = { version = "0.4", optional = true }
-# Tantivy full-text search
-tantivy = { version = "0.22", optional = true }
+# Tantivy full-text search (upgraded to 0.25 for lru security fix)
+tantivy = { version = "0.25", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true

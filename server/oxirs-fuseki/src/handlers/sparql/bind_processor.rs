@@ -301,7 +301,7 @@ impl EnhancedBindProcessor {
                 let mut var_name = String::new();
                 while let Some(&next_ch) = chars.peek() {
                     if next_ch.is_alphanumeric() || next_ch == '_' {
-                        var_name.push(chars.next().unwrap());
+                        var_name.push(chars.next().expect("peek confirmed char exists"));
                     } else {
                         break;
                     }

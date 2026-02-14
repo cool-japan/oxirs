@@ -583,7 +583,7 @@ fn convert_geo_trait_to_geometry<G: GeometryTrait<T = f64>>(geom_trait: &G) -> R
 
     match geom_trait.as_type() {
         GeoTraitType::Point(point) => {
-            let coord = point.coord().unwrap();
+            let coord = point.coord().expect("point should have a coordinate");
             let x = coord.x();
             let y = coord.y();
             let geometry = Geometry::new(geo_types::Geometry::Point(geo_types::Point::new(x, y)));
@@ -646,7 +646,7 @@ fn convert_geo_trait_to_geometry<G: GeometryTrait<T = f64>>(geom_trait: &G) -> R
             let mut points = Vec::new();
 
             for point in multipoint.points() {
-                let coord = point.coord().unwrap();
+                let coord = point.coord().expect("point should have a coordinate");
                 points.push(geo_types::Point::new(coord.x(), coord.y()));
                 // Note: Z coordinates require geozero processing
             }

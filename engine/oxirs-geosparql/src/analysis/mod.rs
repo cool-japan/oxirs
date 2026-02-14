@@ -20,8 +20,9 @@ pub mod triangulation;
 pub mod voronoi;
 
 pub use aggregations::{
-    aggregate_centroid, aggregate_convex_hull, aggregate_envelope, aggregate_union, spatial_centroid,
-    spatial_convex_hull, spatial_dbscan, spatial_envelope, spatial_union, ClusterId,
+    aggregate_centroid, aggregate_convex_hull, aggregate_envelope, aggregate_union,
+    spatial_centroid, spatial_convex_hull, spatial_dbscan, spatial_envelope, spatial_union,
+    ClusterId,
 };
 pub use clustering::{
     dbscan_clustering, kmeans_clustering, ClusteringResult, DbscanParams, KmeansParams,

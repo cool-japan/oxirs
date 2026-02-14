@@ -1061,7 +1061,10 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        processor.publish_event("test-stream", event).await.unwrap();
+        processor
+            .publish_event("test-stream", event)
+            .await
+            .expect("async operation should succeed");
 
         let stats = processor.get_statistics().await;
         assert_eq!(stats.active_streams, 1);
@@ -1092,7 +1095,10 @@ mod tests {
             statistics: QueryStatistics::default(),
         };
 
-        processor.register_continuous_query(query).await.unwrap();
+        processor
+            .register_continuous_query(query)
+            .await
+            .expect("async operation should succeed");
 
         let stats = processor.get_statistics().await;
         assert_eq!(stats.total_continuous_queries, 1);
@@ -1112,7 +1118,10 @@ mod tests {
             output_stream: "joined-stream".to_string(),
         };
 
-        processor.register_stream_join(join).await.unwrap();
+        processor
+            .register_stream_join(join)
+            .await
+            .expect("async operation should succeed");
 
         // Join should be registered
         let joins = processor.active_joins.read().await;
@@ -1136,9 +1145,15 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        processor.publish_event("test-stream", event).await.unwrap();
+        processor
+            .publish_event("test-stream", event)
+            .await
+            .expect("async operation should succeed");
 
         // Should be able to subscribe
-        let _stream = processor.subscribe_to_stream("test-stream").await.unwrap();
+        let _stream = processor
+            .subscribe_to_stream("test-stream")
+            .await
+            .expect("async operation should succeed");
     }
 }

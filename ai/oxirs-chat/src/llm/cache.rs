@@ -337,8 +337,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_expiration() {
-        let mut config = CacheConfig::default();
-        config.ttl_seconds = 1; // 1 second TTL
+        let config = CacheConfig {
+            ttl_seconds: 1, // 1 second TTL
+            ..Default::default()
+        };
 
         let cache = ResponseCache::new(config);
         let request = create_test_request("test query");
@@ -359,8 +361,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_lru_eviction() {
-        let mut config = CacheConfig::default();
-        config.max_size = 2;
+        let config = CacheConfig {
+            max_size: 2,
+            ..Default::default()
+        };
 
         let cache = ResponseCache::new(config);
 
@@ -370,10 +374,18 @@ mod tests {
         let req3 = create_test_request("query 3");
 
         cache
-            .put(&req1, create_test_response("response 1"), "provider1".to_string())
+            .put(
+                &req1,
+                create_test_response("response 1"),
+                "provider1".to_string(),
+            )
             .await;
         cache
-            .put(&req2, create_test_response("response 2"), "provider2".to_string())
+            .put(
+                &req2,
+                create_test_response("response 2"),
+                "provider2".to_string(),
+            )
             .await;
 
         // Access req1 to make it more recent
@@ -381,7 +393,11 @@ mod tests {
 
         // Add req3, should evict req2 (least recently used)
         cache
-            .put(&req3, create_test_response("response 3"), "provider3".to_string())
+            .put(
+                &req3,
+                create_test_response("response 3"),
+                "provider3".to_string(),
+            )
             .await;
 
         // req1 and req3 should exist, req2 should be evicted

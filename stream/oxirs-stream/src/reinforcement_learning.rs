@@ -237,7 +237,8 @@ impl NeuralNetwork {
         let values: Vec<f64> = (0..input_dim * output_dim)
             .map(|_| (rng.random::<f64>() * 2.0 - 1.0) * scale)
             .collect();
-        Array2::from_shape_vec((input_dim, output_dim), values).unwrap()
+        Array2::from_shape_vec((input_dim, output_dim), values)
+            .expect("shape and vector length match")
     }
 
     /// Forward pass
@@ -249,7 +250,11 @@ impl NeuralNetwork {
             activation = activation.dot(w) + b;
 
             // ReLU activation (except last layer)
-            if w != self.weights.last().unwrap() {
+            if w != self
+                .weights
+                .last()
+                .expect("collection validated to be non-empty")
+            {
                 activation.mapv_inplace(|x| x.max(0.0));
             }
         }

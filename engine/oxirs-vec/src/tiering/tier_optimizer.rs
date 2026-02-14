@@ -60,7 +60,11 @@ impl TierOptimizer {
         }
 
         // Sort by priority (highest first)
-        recommendations.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap());
+        recommendations.sort_by(|a, b| {
+            b.priority
+                .partial_cmp(&a.priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         recommendations
     }

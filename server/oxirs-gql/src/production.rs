@@ -232,7 +232,7 @@ impl JwtClaims {
     pub fn new(sub: String, expiration: u64) -> Self {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         Self {
@@ -255,7 +255,7 @@ impl JwtClaims {
     pub fn is_expired(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         now >= self.exp
     }

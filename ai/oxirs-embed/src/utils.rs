@@ -493,7 +493,7 @@ pub mod embedding_analysis {
         let std_dev = variance.sqrt();
 
         let mut sorted_values = flat_values.clone();
-        sorted_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let min_val = sorted_values[0];
         let max_val = sorted_values[sorted_values.len() - 1];
@@ -542,7 +542,7 @@ pub mod embedding_analysis {
             }
         }
 
-        similarities.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        similarities.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let mean_similarity = similarities.iter().sum::<f64>() / similarities.len() as f64;
         let min_similarity = similarities[0];
@@ -903,8 +903,14 @@ pub mod performance_benchmark {
             // Calculate statistics
             let total_duration: Duration = durations.iter().sum();
             let avg_duration = total_duration / durations.len() as u32;
-            let min_duration = *durations.iter().min().unwrap();
-            let max_duration = *durations.iter().max().unwrap();
+            let min_duration = *durations
+                .iter()
+                .min()
+                .expect("durations should not be empty");
+            let max_duration = *durations
+                .iter()
+                .max()
+                .expect("durations should not be empty");
 
             // Calculate standard deviation
             let variance: f64 = durations

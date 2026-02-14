@@ -813,7 +813,7 @@ impl NeuromorphicAnalytics {
         let mut spikes = Vec::new();
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_millis() as f64;
         
         for (i, &feature) in features.iter().enumerate() {

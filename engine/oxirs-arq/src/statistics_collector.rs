@@ -929,7 +929,9 @@ impl StatisticsCollector {
             return Ok(());
         }
 
-        let old_histogram = histogram.unwrap().clone();
+        let old_histogram = histogram
+            .expect("histogram validated to be present")
+            .clone();
 
         // Determine optimal number of buckets using Sturges' rule with modifications
         let optimal_buckets = self.calculate_optimal_buckets(old_histogram.total_count);

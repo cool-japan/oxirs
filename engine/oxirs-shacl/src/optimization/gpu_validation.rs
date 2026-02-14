@@ -514,7 +514,7 @@ mod tests {
         let results = validator.validate_on_cpu(&shapes, &data);
         assert!(results.is_ok());
 
-        let results = results.unwrap();
+        let results = results.expect("result should be Ok");
         assert_eq!(results.len(), 1);
         assert!(results[0].conforms);
     }

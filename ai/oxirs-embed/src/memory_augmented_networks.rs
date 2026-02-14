@@ -383,7 +383,7 @@ impl WriteHead {
     fn allocation_lookup(&self, usage_vector: &Array1<f32>) -> Array1<f32> {
         // Find least used memory locations
         let mut indices: Vec<usize> = (0..usage_vector.len()).collect();
-        indices.sort_by(|&a, &b| usage_vector[a].partial_cmp(&usage_vector[b]).unwrap());
+        indices.sort_by(|&a, &b| usage_vector[a].partial_cmp(&usage_vector[b]).unwrap_or(std::cmp::Ordering::Equal));
         
         let mut allocation = Array1::zeros(usage_vector.len());
         
@@ -489,7 +489,7 @@ impl UsageTracker {
     pub fn get_allocation_weighting(&self, _allocation_gate: f32) -> Array1<f32> {
         // Return weighting favoring least used locations
         let mut sorted_indices: Vec<usize> = (0..self.memory_size).collect();
-        sorted_indices.sort_by(|&a, &b| self.usage[a].partial_cmp(&self.usage[b]).unwrap());
+        sorted_indices.sort_by(|&a, &b| self.usage[a].partial_cmp(&self.usage[b]).unwrap_or(std::cmp::Ordering::Equal));
         
         let mut weights = Array1::zeros(self.memory_size);
         for (rank, &idx) in sorted_indices.iter().enumerate() {
@@ -1129,7 +1129,7 @@ impl EpisodicMemory {
             })
             .collect();
         
-        similarities.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        similarities.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         similarities.into_iter().take(k).map(|(_, episode)| episode).collect()
     }
 
@@ -1405,7 +1405,7 @@ impl SparseAccessMemory {
             })
             .collect();
         
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         similarities.into_iter().take(k).collect()
     }
 

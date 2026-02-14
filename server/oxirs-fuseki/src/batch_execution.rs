@@ -364,7 +364,11 @@ impl BatchExecutor {
         debug!("Executing batch {} with {} queries", batch_id, batch_size);
 
         // Acquire batch execution permit
-        let _permit = self.batch_semaphore.acquire().await.unwrap();
+        let _permit = self
+            .batch_semaphore
+            .acquire()
+            .await
+            .expect("semaphore should not be closed");
 
         self.total_batches.fetch_add(1, Ordering::Relaxed);
 

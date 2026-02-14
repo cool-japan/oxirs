@@ -319,7 +319,9 @@ pub mod profiling {
 
     /// Get global profiler instance for comprehensive profiling
     pub fn get_global_profiler() -> std::sync::MutexGuard<'static, Profiler> {
-        Profiler::global().lock().unwrap()
+        Profiler::global()
+            .lock()
+            .expect("lock should not be poisoned")
     }
 
     /// Start global profiling session
@@ -406,7 +408,7 @@ mod tests {
         let results = processor
             .process_batch(models, |m| Ok(m.len()))
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(results.len(), 3);
         assert_eq!(results[0], 6); // "model1".len()
@@ -427,7 +429,7 @@ mod tests {
         let results = processor
             .process_batch(models, |m| Ok(m.len()))
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(results.len(), 2);
         assert_eq!(processor.num_workers(), num_cpus::get());

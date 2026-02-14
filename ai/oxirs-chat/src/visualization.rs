@@ -266,10 +266,10 @@ impl VisualizationBuilder {
 
     /// Add option
     pub fn option<K: Into<String>, V: Serialize>(mut self, key: K, value: V) -> Self {
-        self.spec
-            .config
-            .options
-            .insert(key.into(), serde_json::to_value(value).unwrap());
+        self.spec.config.options.insert(
+            key.into(),
+            serde_json::to_value(value).expect("serializable value should convert to JSON"),
+        );
         self
     }
 

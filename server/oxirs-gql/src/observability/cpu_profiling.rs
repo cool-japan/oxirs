@@ -76,7 +76,7 @@ impl ResolverCpuProfile {
     pub fn new(resolver_name: String, field_path: String, initial_cpu: f32) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         Self {
@@ -166,7 +166,7 @@ impl CompletedCpuProfile {
     pub fn from_profile(profile: ResolverCpuProfile) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         let duration_ms = profile.elapsed().as_millis() as u64;
@@ -336,7 +336,7 @@ impl CpuProfiler {
         sorted.sort_by(|a, b| {
             b.average_cpu_percent
                 .partial_cmp(&a.average_cpu_percent)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         sorted.truncate(limit);
         sorted
@@ -379,7 +379,7 @@ impl CpuProfiler {
         let retention_secs = self.config.retention_period.as_secs();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         completed.retain(|p| now - p.end_time < retention_secs);

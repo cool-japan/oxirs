@@ -230,7 +230,8 @@ impl FederationManager {
         let mut patterns = Vec::new();
 
         // Simple regex to find SERVICE clauses
-        let service_regex = Regex::new(r"SERVICE\s+<([^>]+)>\s*\{").unwrap();
+        let service_regex =
+            Regex::new(r"SERVICE\s+<([^>]+)>\s*\{").expect("regex pattern should be valid");
 
         for captures in service_regex.captures_iter(query) {
             if let Some(endpoint) = captures.get(1) {

@@ -136,7 +136,7 @@ fn generate_training_dataset(size: usize) -> Vec<TrainingExample> {
             + f3 * 5.0          // optionals are expensive
             + f4 * 30.0         // aggregation is expensive
             + f5 * 10.0         // sorting is expensive
-            + f6.ln() * 2.0;    // cardinality has log impact
+            + f6.ln() * 2.0; // cardinality has log impact
 
         let triple_patterns = f0 as usize;
         let join_count = f1 as usize;
@@ -318,7 +318,7 @@ fn test_training_with_real_queries() -> Result<()> {
     }
 
     // Add real query examples
-    let queries = vec![
+    let queries = [
         create_simple_query(),
         create_complex_query(3),
         create_complex_query(5),
@@ -855,10 +855,7 @@ fn test_model_version_compatibility() -> Result<()> {
 #[test]
 fn test_persistence_path_creation() -> Result<()> {
     let temp_dir = std::env::temp_dir();
-    let nested_path = temp_dir
-        .join("ml_models")
-        .join("test")
-        .join("model.json");
+    let nested_path = temp_dir.join("ml_models").join("test").join("model.json");
 
     let config = MLConfig {
         model_type: MLModelType::Ridge,
@@ -994,10 +991,7 @@ fn test_cache_effectiveness() -> Result<()> {
     let duration2 = start2.elapsed();
 
     // Cached prediction should be faster
-    assert!(
-        duration2 < duration1,
-        "Cached prediction should be faster"
-    );
+    assert!(duration2 < duration1, "Cached prediction should be faster");
     assert_eq!(
         pred1.predicted_cost, pred2.predicted_cost,
         "Cached result should match"

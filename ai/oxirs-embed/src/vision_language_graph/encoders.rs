@@ -106,7 +106,7 @@ impl VisionEncoder {
                 let patch_owned = patch.to_owned();
                 let flattened_patch = patch_owned
                     .into_shape_with_order(c * patch_h * patch_w)
-                    .unwrap();
+                    .expect("reshape should succeed for valid patch dimensions");
 
                 // Project to embedding space
                 if let Some(patch_embedding_matrix) = self.vit_parameters.get("patch_embedding") {
@@ -117,7 +117,9 @@ impl VisionEncoder {
         }
 
         // Global average pooling over patches
-        let global_embedding = patch_embeddings.mean_axis(Axis(0)).unwrap();
+        let global_embedding = patch_embeddings
+            .mean_axis(Axis(0))
+            .expect("mean_axis should succeed for non-empty array");
 
         Ok(global_embedding)
     }
@@ -170,7 +172,9 @@ impl VisionEncoder {
 
         // Global average pooling
         let features_len = features.len();
-        let flattened = features.into_shape_with_order(features_len).unwrap();
+        let flattened = features
+            .into_shape_with_order(features_len)
+            .expect("reshape should succeed for valid features dimensions");
         let mut global_features = vec![0.0; self.config.vision_dim];
 
         for i in 0..global_features.len().min(flattened.len()) {
@@ -284,7 +288,9 @@ impl LanguageEncoder {
         }
 
         // Pool to sentence-level representation (mean pooling)
-        let sentence_embedding = hidden_states.mean_axis(Axis(0)).unwrap();
+        let sentence_embedding = hidden_states
+            .mean_axis(Axis(0))
+            .expect("mean_axis should succeed for non-empty array");
 
         Ok(sentence_embedding)
     }
@@ -422,7 +428,9 @@ impl GraphEncoder {
     /// Graph-level readout
     fn graph_readout(&self, node_embeddings: &Array2<f32>) -> Result<Array1<f32>> {
         let node_level_embedding = match self.config.readout {
-            ReadoutFunction::GlobalMean => node_embeddings.mean_axis(Axis(0)).unwrap(),
+            ReadoutFunction::GlobalMean => node_embeddings
+                .mean_axis(Axis(0))
+                .expect("mean_axis should succeed for non-empty array"),
             ReadoutFunction::GlobalMax => {
                 node_embeddings.fold_axis(Axis(0), f32::NEG_INFINITY, |&a, &b| a.max(b))
             }
@@ -442,10 +450,14 @@ impl GraphEncoder {
                     }
                     weighted_sum
                 } else {
-                    node_embeddings.mean_axis(Axis(0)).unwrap()
+                    node_embeddings
+                        .mean_axis(Axis(0))
+                        .expect("mean_axis should succeed for non-empty array")
                 }
             }
-            _ => node_embeddings.mean_axis(Axis(0)).unwrap(),
+            _ => node_embeddings
+                .mean_axis(Axis(0))
+                .expect("mean_axis should succeed for non-empty array"),
         };
 
         // Project from node_dim to graph_dim

@@ -1458,7 +1458,14 @@ mod tests {
     async fn test_coordinator_creation() {
         let config = CoordinatorConfig::default();
         let coordinator = CrossModulePerformanceCoordinator::new(config);
-        assert_eq!(coordinator.module_monitors.read().unwrap().len(), 0);
+        assert_eq!(
+            coordinator
+                .module_monitors
+                .read()
+                .expect("lock should not be poisoned")
+                .len(),
+            0
+        );
     }
 
     #[tokio::test]
@@ -1468,7 +1475,14 @@ mod tests {
 
         let result = coordinator.register_module("test_module".to_string()).await;
         assert!(result.is_ok());
-        assert_eq!(coordinator.module_monitors.read().unwrap().len(), 1);
+        assert_eq!(
+            coordinator
+                .module_monitors
+                .read()
+                .expect("lock should not be poisoned")
+                .len(),
+            1
+        );
     }
 
     #[tokio::test]

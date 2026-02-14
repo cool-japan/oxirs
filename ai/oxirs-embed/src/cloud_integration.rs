@@ -1843,7 +1843,7 @@ impl CloudIntegrationManager {
             .min_by(|a, b| {
                 a.1.estimated_monthly_cost_usd
                     .partial_cmp(&b.1.estimated_monthly_cost_usd)
-                    .unwrap()
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|(provider, _)| provider.clone());
 

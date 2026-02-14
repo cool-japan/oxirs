@@ -163,8 +163,7 @@ impl CompressionMetrics {
     /// Get average decompression throughput in MB/s
     pub fn decompression_throughput_mbps(&self) -> f64 {
         let bytes = self.total_bytes_out.load(Ordering::Relaxed) as f64;
-        let time_sec =
-            self.decompression_time_ns.load(Ordering::Relaxed) as f64 / 1_000_000_000.0;
+        let time_sec = self.decompression_time_ns.load(Ordering::Relaxed) as f64 / 1_000_000_000.0;
         if time_sec > 0.0 {
             (bytes / 1_000_000.0) / time_sec
         } else {
@@ -232,12 +231,8 @@ impl CompressionStrategy {
         let elapsed_ns = start.elapsed().as_nanos() as u64;
 
         // Update metrics
-        self.metrics.record_compression(
-            data.len(),
-            compressed.len(),
-            algorithm,
-            elapsed_ns,
-        );
+        self.metrics
+            .record_compression(data.len(), compressed.len(), algorithm, elapsed_ns);
 
         Ok(CompressedData {
             data: compressed,
@@ -407,9 +402,11 @@ mod tests {
 
         // Random data (less compressible)
         use scirs2_core::random::{Random, RngCore};
-        let mut rng = Random::seed(std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs()));
+        let mut rng = Random::seed(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
+        );
         let mut random_data = vec![0u8; 1000];
         rng.fill_bytes(&mut random_data);
         let score2 = strategy.estimate_compressibility(&random_data);

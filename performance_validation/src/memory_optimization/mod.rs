@@ -309,7 +309,7 @@ impl AdvancedMemoryOptimizer {
 
                 // Get current memory usage
                 let memory_report = {
-                    let mut profiler_guard = profiler.write().unwrap();
+                    let mut profiler_guard = profiler.write().expect("lock should not be poisoned");
                     profiler_guard.generate_report()
                 };
 
@@ -317,7 +317,7 @@ impl AdvancedMemoryOptimizer {
                 let pressure = current_usage as f64 / config.emergency_memory_threshold as f64;
 
                 // Update optimization state
-                let mut state_guard = state.write().unwrap();
+                let mut state_guard = state.write().expect("lock should not be poisoned");
                 let old_pressure = state_guard.pressure_level.clone();
 
                 state_guard.pressure_level = if pressure >= config.pressure_thresholds.emergency {
@@ -416,7 +416,7 @@ impl AdvancedMemoryOptimizer {
     ) {
         let start_time = Instant::now();
         let pressure_level = {
-            let state_guard = state.read().unwrap();
+            let state_guard = state.read().expect("lock should not be poisoned");
             state_guard.pressure_level.clone()
         };
 
@@ -428,25 +428,25 @@ impl AdvancedMemoryOptimizer {
             match operation.operation_type {
                 OptimizationType::PoolCompaction => {
                     if config.enable_adaptive_pools {
-                        let mut pools = adaptive_pools.write().unwrap();
+                        let mut pools = adaptive_pools.write().expect("lock should not be poisoned");
                         pools.compact_all().await;
                     }
                 }
                 OptimizationType::CacheEviction => {
                     if config.enable_smart_cache {
-                        let mut cache = cache_manager.write().unwrap();
+                        let mut cache = cache_manager.write().expect("lock should not be poisoned");
                         cache.intelligent_eviction().await;
                     }
                 }
                 OptimizationType::GarbageCollection => {
                     if config.enable_gc_coordination {
-                        let mut gc = gc_coordinator.lock().unwrap();
+                        let mut gc = gc_coordinator.lock().expect("lock should not be poisoned");
                         gc.coordinate_collection().await;
                     }
                 }
                 OptimizationType::EmergencyCleanup => {
                     if config.enable_pressure_mitigation {
-                        let mut mitigator = pressure_mitigator.lock().unwrap();
+                        let mut mitigator = pressure_mitigator.lock().expect("lock should not be poisoned");
                         mitigator.emergency_cleanup().await;
                     }
                 }
@@ -458,12 +458,12 @@ impl AdvancedMemoryOptimizer {
 
         // Update statistics
         let optimization_duration = start_time.elapsed();
-        let mut stats_guard = stats.write().unwrap();
+        let mut stats_guard = stats.write().expect("lock should not be poisoned");
         stats_guard.total_optimizations += 1;
         stats_guard.total_optimization_time += optimization_duration;
 
         // Update last optimization time
-        let mut state_guard = state.write().unwrap();
+        let mut state_guard = state.write().expect("lock should not be poisoned");
         state_guard.last_optimization = Some(start_time);
     }
 
@@ -562,12 +562,12 @@ impl AdvancedMemoryOptimizer {
 
     /// Get current optimization statistics
     pub fn get_statistics(&self) -> OptimizationStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().expect("lock should not be poisoned").clone()
     }
 
     /// Get current optimization state
     pub fn get_state(&self) -> OptimizationState {
-        self.optimization_state.read().unwrap().clone()
+        self.optimization_state.read().expect("lock should not be poisoned").clone()
     }
 
     /// Manually trigger optimization
@@ -579,7 +579,7 @@ impl AdvancedMemoryOptimizer {
     pub async fn optimized_allocate(&self, size: usize) -> Result<Vec<u8>, MemoryOptimizationError> {
         // Check current memory pressure
         let pressure_level = {
-            let state = self.optimization_state.read().unwrap();
+            let state = self.optimization_state.read().expect("lock should not be poisoned");
             state.pressure_level.clone()
         };
 
@@ -593,7 +593,7 @@ impl AdvancedMemoryOptimizer {
 
         // Try pool allocation first
         if self.config.enable_adaptive_pools {
-            let pools = self.adaptive_pools.read().unwrap();
+            let pools = self.adaptive_pools.read().expect("lock should not be poisoned");
             if let Ok(memory) = pools.allocate(size).await {
                 return Ok(memory);
             }

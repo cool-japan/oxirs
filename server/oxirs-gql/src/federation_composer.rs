@@ -368,7 +368,7 @@ impl QueryPlanner {
 
         // Determine execution strategy
         let root = if nodes.len() == 1 {
-            nodes.into_iter().next().unwrap()
+            nodes.into_iter().next().expect("nodes should not be empty when len == 1")
         } else if nodes.is_empty() {
             return Err(anyhow!("No subgraphs match this query"));
         } else {

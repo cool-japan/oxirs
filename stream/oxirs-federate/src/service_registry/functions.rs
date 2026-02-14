@@ -46,7 +46,7 @@ mod tests {
         let _endpoint = SparqlEndpoint {
             id: "test-endpoint".to_string(),
             name: "Test SPARQL Endpoint".to_string(),
-            url: Url::parse("http://localhost:3030/test").unwrap(),
+            url: Url::parse("http://localhost:3030/test").expect("valid URL"),
             auth: None,
             capabilities: SparqlCapabilities {
                 sparql_version: SparqlVersion::V11,

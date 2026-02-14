@@ -279,7 +279,11 @@ impl GraphExplorer {
         }
 
         // Sort paths by relevance score
-        paths.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
+        paths.sort_by(|a, b| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(paths)
     }
@@ -537,7 +541,11 @@ impl GraphExplorer {
         }
 
         // Sort by ranking score
-        paths.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
+        paths.sort_by(|a, b| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(())
     }
@@ -588,7 +596,11 @@ impl GraphExplorer {
         });
 
         // Sort by confidence
-        suggestions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        suggestions.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(suggestions)
     }
@@ -646,8 +658,11 @@ impl GraphExplorer {
         }
 
         // Remove duplicates and sort by similarity
-        related_entities
-            .sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap());
+        related_entities.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         related_entities.dedup_by(|a, b| a.entity == b.entity);
 
         Ok(related_entities.into_iter().take(20).collect())
@@ -697,7 +712,11 @@ impl GraphExplorer {
         }
 
         // Sort by confidence and deduplicate
-        guidance.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        guidance.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         guidance.dedup_by(|a, b| a.sparql_template == b.sparql_template);
 
         Ok(guidance.into_iter().take(10).collect())
@@ -940,7 +959,7 @@ impl GraphExplorer {
     async fn extract_entities_from_query(&self, query: &str) -> Result<Vec<String>> {
         // Simple regex-based extraction of URIs from SPARQL query
         // In practice, this would use a proper SPARQL parser
-        let uri_pattern = regex::Regex::new(r"<([^>]+)>").unwrap();
+        let uri_pattern = regex::Regex::new(r"<([^>]+)>").expect("regex pattern should be valid");
         let entities: Vec<String> = uri_pattern
             .captures_iter(query)
             .map(|cap| cap[1].to_string())
@@ -1378,8 +1397,14 @@ impl GraphExplorer {
 
         let mut explanation = format!(
             "Path from {} to {} via",
-            state.path_entities.first().unwrap(),
-            state.path_entities.last().unwrap()
+            state
+                .path_entities
+                .first()
+                .expect("collection validated to be non-empty"),
+            state
+                .path_entities
+                .last()
+                .expect("collection validated to be non-empty")
         );
 
         for (i, relationship) in state.path_relationships.iter().enumerate() {

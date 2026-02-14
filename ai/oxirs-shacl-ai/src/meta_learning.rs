@@ -357,7 +357,9 @@ impl MetaLearner {
         relevant_memories.sort_by(|a, b| {
             let sim_a = self.compute_cosine_similarity(&task_embedding, &a.learned_representation);
             let sim_b = self.compute_cosine_similarity(&task_embedding, &b.learned_representation);
-            sim_b.partial_cmp(&sim_a).unwrap()
+            sim_b
+                .partial_cmp(&sim_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         relevant_memories.truncate(10); // Limit to top 10 most relevant

@@ -384,8 +384,8 @@ mod tests {
 
     #[test]
     fn test_parse_fusion_strategy_default() {
-        let strategy = parse_fusion_strategy(None, None, &[0.33, 0.33, 0.34], &[0.5, 0.7, 0.8])
-            .unwrap();
+        let strategy =
+            parse_fusion_strategy(None, None, &[0.33, 0.33, 0.34], &[0.5, 0.7, 0.8]).unwrap();
 
         match strategy {
             FusionStrategy::RankFusion => {}

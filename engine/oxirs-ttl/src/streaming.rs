@@ -487,10 +487,10 @@ mod tests {
         let reader = Cursor::new(turtle);
         let mut parser = StreamingParser::new(reader);
 
-        let batch = parser.next_batch().unwrap();
+        let batch = parser.next_batch().expect("parsing should succeed");
         assert!(batch.is_some());
 
-        let triples = batch.unwrap();
+        let triples = batch.expect("operation should succeed");
         assert_eq!(triples.len(), 3);
     }
 
@@ -523,7 +523,7 @@ mod tests {
 
         let triples: Result<Vec<_>, _> = parser.triples().collect();
         assert!(triples.is_ok());
-        assert_eq!(triples.unwrap().len(), 2);
+        assert_eq!(triples.expect("operation should succeed").len(), 2);
     }
 
     #[test]
@@ -539,7 +539,7 @@ mod tests {
         let mut parser = StreamingParser::with_config(reader, config);
 
         let mut total_triples = 0;
-        while let Some(batch) = parser.next_batch().unwrap() {
+        while let Some(batch) = parser.next_batch().expect("parsing should succeed") {
             total_triples += batch.len();
         }
 

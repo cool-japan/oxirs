@@ -8,20 +8,16 @@
 use std::time::{Duration, Instant};
 
 use oxirs_arq::cache::{
-    CacheKey, CacheValue, DistributedCache, DistributedCacheConfig,
-    CacheCoherenceProtocol, CoherenceProtocol, CoherenceConfig, ConsistencyLevel,
+    CacheCoherenceProtocol, CacheKey, CacheValue, CoherenceConfig, CoherenceProtocol,
+    ConsistencyLevel, DistributedCache, DistributedCacheConfig,
 };
-use scirs2_core::metrics::MetricsRegistry;
-
 /// Helper to check if Redis is available
 async fn is_redis_available() -> bool {
     match redis::Client::open("redis://localhost:6379") {
-        Ok(client) => {
-            match client.get_multiplexed_async_connection().await {
-                Ok(_) => true,
-                Err(_) => false,
-            }
-        }
+        Ok(client) => match client.get_multiplexed_async_connection().await {
+            Ok(_) => true,
+            Err(_) => false,
+        },
         Err(_) => false,
     }
 }
@@ -272,7 +268,11 @@ async fn test_compression() {
 
     // Check compression ratio
     let ratio = *cache.metrics().compression_ratio.read();
-    assert!(ratio > 1.0, "Compression ratio should be > 1.0, got {}", ratio);
+    assert!(
+        ratio > 1.0,
+        "Compression ratio should be > 1.0, got {}",
+        ratio
+    );
 }
 
 #[tokio::test]
@@ -297,7 +297,11 @@ async fn test_hit_rates() {
 
     // L1 hit rate should be high
     let l1_hit_rate = cache.metrics().l1_hit_rate();
-    assert!(l1_hit_rate > 0.8, "L1 hit rate is {:.2}, expected > 0.8", l1_hit_rate);
+    assert!(
+        l1_hit_rate > 0.8,
+        "L1 hit rate is {:.2}, expected > 0.8",
+        l1_hit_rate
+    );
 }
 
 #[tokio::test]
@@ -372,13 +376,18 @@ async fn test_multi_node_consistency() {
     }
 
     // All nodes should read the same value from L2
-    let results: Vec<_> = futures::future::join_all(
-        caches.iter().map(|cache| cache.get(&key))
-    ).await;
+    let results: Vec<_> =
+        futures::future::join_all(caches.iter().map(|cache| cache.get(&key))).await;
 
     // At least 2 out of 3 should have a value
-    let values_count = results.iter().filter(|r| r.as_ref().ok().and_then(|v| v.as_ref()).is_some()).count();
-    assert!(values_count >= 2, "Expected at least 2 nodes to have the value");
+    let values_count = results
+        .iter()
+        .filter(|r| r.as_ref().ok().and_then(|v| v.as_ref()).is_some())
+        .count();
+    assert!(
+        values_count >= 2,
+        "Expected at least 2 nodes to have the value"
+    );
 }
 
 #[tokio::test]
@@ -409,7 +418,11 @@ async fn test_coherence_verification() {
     let report = protocol.verify_coherence(&cache_refs).await.unwrap();
 
     println!("Coherence report: {}", report.summary());
-    assert!(report.coherence_rate >= 0.8, "Coherence rate should be >= 0.8, got {}", report.coherence_rate);
+    assert!(
+        report.coherence_rate >= 0.8,
+        "Coherence rate should be >= 0.8, got {}",
+        report.coherence_rate
+    );
 }
 
 #[tokio::test]
@@ -540,9 +553,19 @@ async fn bench_distributed_cache() {
     println!("Benchmark results:");
     println!("  L1 hit rate: {:.2}%", l1_hit_rate * 100.0);
     println!("  Throughput: {:.0} ops/sec", throughput);
-    println!("  Average latency: {:.2}ms", elapsed.as_millis() as f64 / num_queries as f64);
+    println!(
+        "  Average latency: {:.2}ms",
+        elapsed.as_millis() as f64 / num_queries as f64
+    );
 
     // Verify performance targets
-    assert!(l1_hit_rate > 0.8, "L1 hit rate should be > 80%, got {:.2}%", l1_hit_rate * 100.0);
-    assert!(elapsed.as_millis() < num_queries * 2, "Average latency should be < 2ms per operation");
+    assert!(
+        l1_hit_rate > 0.8,
+        "L1 hit rate should be > 80%, got {:.2}%",
+        l1_hit_rate * 100.0
+    );
+    assert!(
+        elapsed.as_millis() < num_queries * 2,
+        "Average latency should be < 2ms per operation"
+    );
 }

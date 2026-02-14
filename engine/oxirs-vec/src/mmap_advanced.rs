@@ -168,7 +168,8 @@ impl AdvancedMemoryMap {
             vec![0]
         };
 
-        let cache_size = NonZeroUsize::new(max_pages).unwrap_or(NonZeroUsize::new(1).unwrap());
+        let cache_size = NonZeroUsize::new(max_pages)
+            .unwrap_or(NonZeroUsize::new(1).expect("constant 1 is non-zero"));
 
         Self {
             mmap,
@@ -473,7 +474,7 @@ impl AdvancedMemoryMap {
             })
             .collect();
 
-        scored_pages.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        scored_pages.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         drop(cache);
         drop(freq);

@@ -85,7 +85,10 @@ impl FederatedVectorService {
                     arg_obj.insert("type".to_string(), Value::String("number".to_string()));
                     arg_obj.insert(
                         "value".to_string(),
-                        Value::Number(serde_json::Number::from_f64(*num as f64).unwrap()),
+                        Value::Number(
+                            serde_json::Number::from_f64(*num as f64)
+                                .expect("finite f64 should produce valid JSON number"),
+                        ),
                     );
                     Value::Object(arg_obj)
                 }
@@ -105,7 +108,12 @@ impl FederatedVectorService {
                     let values: Vec<Value> = v
                         .as_slice()
                         .iter()
-                        .map(|&f| Value::Number(serde_json::Number::from_f64(f as f64).unwrap()))
+                        .map(|&f| {
+                            Value::Number(
+                                serde_json::Number::from_f64(f as f64)
+                                    .expect("finite f64 should produce valid JSON number"),
+                            )
+                        })
                         .collect();
                     arg_obj.insert("values".to_string(), Value::Array(values));
                     Value::Object(arg_obj)
@@ -171,7 +179,8 @@ impl FederatedVectorService {
                 let vector_values: Vec<Value> = (0..384)
                     .map(|i| {
                         Value::Number(
-                            serde_json::Number::from_f64((i as f64 * 0.01) % 1.0).unwrap(),
+                            serde_json::Number::from_f64((i as f64 * 0.01) % 1.0)
+                                .expect("finite f64 should produce valid JSON number"),
                         )
                     })
                     .collect();

@@ -687,7 +687,7 @@ mod tests {
         let result = generate_mermaid(&aspect, &style);
         assert!(result.is_ok());
 
-        let mermaid = result.unwrap();
+        let mermaid = result.expect("result should be Ok");
         assert!(mermaid.contains("graph LR"));
         assert!(mermaid.contains("TestAspect"));
         assert!(mermaid.contains("temperature"));
@@ -709,7 +709,7 @@ mod tests {
         let result = generate_mermaid(&aspect, &style);
         assert!(result.is_ok());
 
-        let mermaid = result.unwrap();
+        let mermaid = result.expect("result should be Ok");
         assert!(mermaid.contains("graph TD"));
     }
 
@@ -728,7 +728,7 @@ mod tests {
         let result = generate_mermaid(&aspect, &style);
         assert!(result.is_ok());
 
-        let mermaid = result.unwrap();
+        let mermaid = result.expect("result should be Ok");
         // Should not contain markers when disabled
         assert!(!mermaid.contains("✅"));
         assert!(!mermaid.contains("❓"));
@@ -742,7 +742,7 @@ mod tests {
         let result = generate_plantuml(&aspect, &style);
         assert!(result.is_ok());
 
-        let puml = result.unwrap();
+        let puml = result.expect("result should be Ok");
         assert!(puml.starts_with("@startuml"));
         assert!(puml.ends_with("@enduml\n"));
         assert!(puml.contains("TestAspect"));
@@ -765,7 +765,7 @@ mod tests {
         let result = generate_plantuml(&aspect, &style);
         assert!(result.is_ok());
 
-        let puml = result.unwrap();
+        let puml = result.expect("result should be Ok");
         assert!(puml.contains("note right of"));
         assert!(puml.contains("test aspect"));
     }
@@ -778,7 +778,7 @@ mod tests {
         let result = generate_dot(&aspect, &style);
         assert!(result.is_ok());
 
-        let dot = result.unwrap();
+        let dot = result.expect("result should be Ok");
         assert!(dot.starts_with("digraph SAMM_Aspect"));
         assert!(dot.contains("rankdir=LR"));
         assert!(dot.contains("TestAspect"));
@@ -796,7 +796,7 @@ mod tests {
         let result = generate_html_report(&aspect, &style);
         assert!(result.is_ok());
 
-        let html = result.unwrap();
+        let html = result.expect("result should be Ok");
         assert!(html.contains("<!DOCTYPE html>"));
         assert!(html.contains("TestAspect"));
         assert!(html.contains("mermaid"));
@@ -824,7 +824,7 @@ mod tests {
         for format in formats {
             let result = generate_diagram(&aspect, format);
             assert!(result.is_ok(), "Failed to generate diagram");
-            let output = result.unwrap();
+            let output = result.expect("generation should succeed");
             assert!(!output.is_empty(), "Generated diagram is empty");
         }
     }

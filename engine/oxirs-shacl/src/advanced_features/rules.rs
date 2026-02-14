@@ -464,11 +464,13 @@ mod tests {
 
     #[test]
     fn test_triple_rule_creation() {
-        let subject =
-            PropertyPath::Predicate(NamedNode::new("http://example.org/hasParent").unwrap());
-        let predicate = NamedNode::new("http://example.org/hasAncestor").unwrap();
-        let object =
-            PropertyPath::Predicate(NamedNode::new("http://example.org/hasParent").unwrap());
+        let subject = PropertyPath::Predicate(
+            NamedNode::new("http://example.org/hasParent").expect("valid IRI"),
+        );
+        let predicate = NamedNode::new("http://example.org/hasAncestor").expect("valid IRI");
+        let object = PropertyPath::Predicate(
+            NamedNode::new("http://example.org/hasParent").expect("valid IRI"),
+        );
 
         let rule = ShaclRule::triple_rule("ancestorRule".to_string(), subject, predicate, object);
 
@@ -518,9 +520,15 @@ mod tests {
         let rule2 = ShaclRule::sparql_rule("rule2".to_string(), "".to_string()).with_order(5);
         let rule3 = ShaclRule::sparql_rule("rule3".to_string(), "".to_string()).with_order(15);
 
-        engine.register_rule(rule1).unwrap();
-        engine.register_rule(rule2).unwrap();
-        engine.register_rule(rule3).unwrap();
+        engine
+            .register_rule(rule1)
+            .expect("registration should succeed");
+        engine
+            .register_rule(rule2)
+            .expect("registration should succeed");
+        engine
+            .register_rule(rule3)
+            .expect("registration should succeed");
 
         let active_rules = engine.active_rules();
         assert_eq!(active_rules.len(), 3);

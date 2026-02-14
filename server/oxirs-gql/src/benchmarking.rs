@@ -749,7 +749,11 @@ impl PerformanceBenchmarkSuite {
         }
 
         // Sort rankings by score
-        strategy_rankings.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+        strategy_rankings.sort_by(|a, b| {
+            a.score
+                .partial_cmp(&b.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Generate recommendations
         let recommendations = self.generate_recommendations(&results).await;

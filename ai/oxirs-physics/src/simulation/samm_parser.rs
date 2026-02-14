@@ -43,9 +43,8 @@ impl SammParser {
     /// Parse SAMM TTL file
     pub async fn parse_samm_file(&self, path: &Path) -> PhysicsResult<AspectModel> {
         // Read file content
-        let content = std::fs::read_to_string(path).map_err(|e| {
-            PhysicsError::SammParsing(format!("Failed to read file: {}", e))
-        })?;
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| PhysicsError::SammParsing(format!("Failed to read file: {}", e)))?;
 
         // Parse TTL content
         self.parse_samm_string(&content).await
@@ -60,15 +59,15 @@ impl SammParser {
 
         // Parse Turtle content
         let parser = Parser::new(RdfFormat::Turtle);
-        let quads = parser.parse_str_to_quads(content).map_err(|e| {
-            PhysicsError::SammParsing(format!("Failed to parse Turtle: {}", e))
-        })?;
+        let quads = parser
+            .parse_str_to_quads(content)
+            .map_err(|e| PhysicsError::SammParsing(format!("Failed to parse Turtle: {}", e)))?;
 
         // Insert quads into temporary store
         for quad in quads {
-            temp_store.insert_quad(quad).map_err(|e| {
-                PhysicsError::SammParsing(format!("Failed to insert quad: {}", e))
-            })?;
+            temp_store
+                .insert_quad(quad)
+                .map_err(|e| PhysicsError::SammParsing(format!("Failed to insert quad: {}", e)))?;
         }
 
         // Create a parser with the temporary store
@@ -107,55 +106,57 @@ impl SammParser {
             samm = self.samm_prefix
         );
 
-        let results = self.store.query(&query).map_err(|e| {
-            PhysicsError::SammParsing(format!("Entity query failed: {}", e))
-        })?;
+        let results = self
+            .store
+            .query(&query)
+            .map_err(|e| PhysicsError::SammParsing(format!("Entity query failed: {}", e)))?;
 
         let mut entities_map: HashMap<String, EntityType> = HashMap::new();
 
         if let QueryResults::Bindings(ref bindings) = results.results() {
             for binding in bindings {
                 if let Some(Term::NamedNode(entity_node)) = binding.get("entity") {
-                let entity_uri = entity_node.as_str().to_string();
+                    let entity_uri = entity_node.as_str().to_string();
 
-                let name = binding
-                    .get("name")
-                    .and_then(|t| {
+                    let name = binding
+                        .get("name")
+                        .and_then(|t| {
+                            if let Term::Literal(lit) = t {
+                                Some(lit.value().to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| {
+                            entity_uri
+                                .split('#')
+                                .next_back()
+                                .or_else(|| entity_uri.split('/').next_back())
+                                .unwrap_or("unknown")
+                                .to_string()
+                        });
+
+                    let description = binding.get("description").and_then(|t| {
                         if let Term::Literal(lit) = t {
                             Some(lit.value().to_string())
                         } else {
                             None
                         }
-                    })
-                    .unwrap_or_else(|| {
-                        entity_uri
-                            .split('#')
-                            .last()
-                            .or_else(|| entity_uri.split('/').last())
-                            .unwrap_or("unknown")
-                            .to_string()
                     });
 
-                let description = binding.get("description").and_then(|t| {
-                    if let Term::Literal(lit) = t {
-                        Some(lit.value().to_string())
-                    } else {
-                        None
-                    }
-                });
-
-                let entity = entities_map.entry(entity_uri.clone()).or_insert_with(|| {
-                    EntityType {
-                        uri: entity_node.clone(),
-                        name,
-                        description,
-                        properties: Vec::new(),
-                    }
-                });
+                    let entity =
+                        entities_map
+                            .entry(entity_uri.clone())
+                            .or_insert_with(|| EntityType {
+                                uri: entity_node.clone(),
+                                name,
+                                description,
+                                properties: Vec::new(),
+                            });
 
                     // Add property if present
                     if let Some(Term::NamedNode(prop_node)) = binding.get("property") {
-                        if !entity.properties.contains(&prop_node) {
+                        if !entity.properties.contains(prop_node) {
                             entity.properties.push(prop_node.clone());
                         }
                     }
@@ -186,75 +187,76 @@ impl SammParser {
             samm = self.samm_prefix
         );
 
-        let results = self.store.query(&query).map_err(|e| {
-            PhysicsError::SammParsing(format!("Property query failed: {}", e))
-        })?;
+        let results = self
+            .store
+            .query(&query)
+            .map_err(|e| PhysicsError::SammParsing(format!("Property query failed: {}", e)))?;
 
         let mut properties = Vec::new();
 
         if let QueryResults::Bindings(ref bindings) = results.results() {
             for binding in bindings {
                 if let Some(Term::NamedNode(prop_node)) = binding.get("property") {
-                let name = binding
-                    .get("name")
-                    .and_then(|t| {
+                    let name = binding
+                        .get("name")
+                        .and_then(|t| {
+                            if let Term::Literal(lit) = t {
+                                Some(lit.value().to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| {
+                            prop_node
+                                .as_str()
+                                .split('#')
+                                .next_back()
+                                .or_else(|| prop_node.as_str().split('/').next_back())
+                                .unwrap_or("unknown")
+                                .to_string()
+                        });
+
+                    let datatype = binding
+                        .get("datatype")
+                        .and_then(|t| {
+                            if let Term::NamedNode(dt) = t {
+                                Some(dt.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| {
+                            NamedNode::new("http://www.w3.org/2001/XMLSchema#string")
+                                .expect("Invalid XSD string IRI")
+                        });
+
+                    let unit = binding.get("unit").and_then(|t| {
                         if let Term::Literal(lit) = t {
                             Some(lit.value().to_string())
+                        } else if let Term::NamedNode(node) = t {
+                            Some(
+                                node.as_str()
+                                    .split('#')
+                                    .next_back()
+                                    .or_else(|| node.as_str().split('/').next_back())
+                                    .unwrap_or("dimensionless")
+                                    .to_string(),
+                            )
                         } else {
                             None
                         }
-                    })
-                    .unwrap_or_else(|| {
-                        prop_node
-                            .as_str()
-                            .split('#')
-                            .last()
-                            .or_else(|| prop_node.as_str().split('/').last())
-                            .unwrap_or("unknown")
-                            .to_string()
                     });
 
-                let datatype = binding
-                    .get("datatype")
-                    .and_then(|t| {
-                        if let Term::NamedNode(dt) = t {
-                            Some(dt.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(|| {
-                        NamedNode::new("http://www.w3.org/2001/XMLSchema#string")
-                            .expect("Invalid XSD string IRI")
-                    });
-
-                let unit = binding.get("unit").and_then(|t| {
-                    if let Term::Literal(lit) = t {
-                        Some(lit.value().to_string())
-                    } else if let Term::NamedNode(node) = t {
-                        Some(
-                            node.as_str()
-                                .split('#')
-                                .last()
-                                .or_else(|| node.as_str().split('/').last())
-                                .unwrap_or("dimensionless")
-                                .to_string(),
-                        )
-                    } else {
-                        None
-                    }
-                });
-
-                let optional = binding
-                    .get("optional")
-                    .and_then(|t| {
-                        if let Term::Literal(lit) = t {
-                            lit.value().parse::<bool>().ok()
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(false);
+                    let optional = binding
+                        .get("optional")
+                        .and_then(|t| {
+                            if let Term::Literal(lit) = t {
+                                lit.value().parse::<bool>().ok()
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(false);
 
                     properties.push(PropertyDefinition {
                         uri: prop_node.clone(),
@@ -287,34 +289,41 @@ impl SammParser {
             samm = self.samm_prefix
         );
 
-        let results = self.store.query(&query).map_err(|e| {
-            PhysicsError::SammParsing(format!("Relationship query failed: {}", e))
-        })?;
+        let results = self
+            .store
+            .query(&query)
+            .map_err(|e| PhysicsError::SammParsing(format!("Relationship query failed: {}", e)))?;
 
         let mut relationships = Vec::new();
 
         if let QueryResults::Bindings(ref bindings) = results.results() {
             for binding in bindings {
-                if let (Some(Term::NamedNode(source)), Some(Term::NamedNode(pred)), Some(Term::NamedNode(target))) =
-                    (binding.get("source"), binding.get("predicate"), binding.get("target"))
-                {
-                let name = binding
-                    .get("name")
-                    .and_then(|t| {
-                        if let Term::Literal(lit) = t {
-                            Some(lit.value().to_string())
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(|| {
-                        pred.as_str()
-                            .split('#')
-                            .last()
-                            .or_else(|| pred.as_str().split('/').last())
-                            .unwrap_or("unknown")
-                            .to_string()
-                    });
+                if let (
+                    Some(Term::NamedNode(source)),
+                    Some(Term::NamedNode(pred)),
+                    Some(Term::NamedNode(target)),
+                ) = (
+                    binding.get("source"),
+                    binding.get("predicate"),
+                    binding.get("target"),
+                ) {
+                    let name = binding
+                        .get("name")
+                        .and_then(|t| {
+                            if let Term::Literal(lit) = t {
+                                Some(lit.value().to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| {
+                            pred.as_str()
+                                .split('#')
+                                .next_back()
+                                .or_else(|| pred.as_str().split('/').next_back())
+                                .unwrap_or("unknown")
+                                .to_string()
+                        });
 
                     relationships.push(RelationshipDefinition {
                         source: source.clone(),
@@ -348,9 +357,10 @@ impl SammParser {
             samm = self.samm_prefix
         );
 
-        let results = self.store.query(&query).map_err(|e| {
-            PhysicsError::SammParsing(format!("Constraint query failed: {}", e))
-        })?;
+        let results = self
+            .store
+            .query(&query)
+            .map_err(|e| PhysicsError::SammParsing(format!("Constraint query failed: {}", e)))?;
 
         let mut constraints = Vec::new();
 
@@ -359,50 +369,50 @@ impl SammParser {
                 if let (Some(Term::NamedNode(prop)), Some(Term::NamedNode(constraint_type))) =
                     (binding.get("property"), binding.get("constraint"))
                 {
-                if let Some(value_term) = binding.get("value") {
-                    let constraint_type_str = constraint_type
-                        .as_str()
-                        .split('#')
-                        .last()
-                        .or_else(|| constraint_type.as_str().split('/').last())
-                        .unwrap_or("unknown");
+                    if let Some(value_term) = binding.get("value") {
+                        let constraint_type_str = constraint_type
+                            .as_str()
+                            .split('#')
+                            .next_back()
+                            .or_else(|| constraint_type.as_str().split('/').next_back())
+                            .unwrap_or("unknown");
 
-                    let constraint = match constraint_type_str {
-                        "RangeConstraint" => {
-                            if let Term::Literal(lit) = value_term {
-                                if let Ok(val) = lit.value().parse::<f64>() {
-                                    ConstraintType::Range(val, val) // Simplified, should extract both min and max
+                        let constraint = match constraint_type_str {
+                            "RangeConstraint" => {
+                                if let Term::Literal(lit) = value_term {
+                                    if let Ok(val) = lit.value().parse::<f64>() {
+                                        ConstraintType::Range(val, val) // Simplified, should extract both min and max
+                                    } else {
+                                        continue;
+                                    }
                                 } else {
                                     continue;
                                 }
-                            } else {
-                                continue;
                             }
-                        }
-                        "MinValueConstraint" => {
-                            if let Term::Literal(lit) = value_term {
-                                if let Ok(val) = lit.value().parse::<f64>() {
-                                    ConstraintType::MinValue(val)
+                            "MinValueConstraint" => {
+                                if let Term::Literal(lit) = value_term {
+                                    if let Ok(val) = lit.value().parse::<f64>() {
+                                        ConstraintType::MinValue(val)
+                                    } else {
+                                        continue;
+                                    }
                                 } else {
                                     continue;
                                 }
-                            } else {
-                                continue;
                             }
-                        }
-                        "MaxValueConstraint" => {
-                            if let Term::Literal(lit) = value_term {
-                                if let Ok(val) = lit.value().parse::<f64>() {
-                                    ConstraintType::MaxValue(val)
+                            "MaxValueConstraint" => {
+                                if let Term::Literal(lit) = value_term {
+                                    if let Ok(val) = lit.value().parse::<f64>() {
+                                        ConstraintType::MaxValue(val)
+                                    } else {
+                                        continue;
+                                    }
                                 } else {
                                     continue;
                                 }
-                            } else {
-                                continue;
                             }
-                        }
-                        _ => continue,
-                    };
+                            _ => continue,
+                        };
 
                         constraints.push(ConstraintDefinition {
                             property: prop.clone(),
@@ -429,8 +439,8 @@ impl SammParser {
             let prop_local_name = property
                 .as_str()
                 .split('#')
-                .last()
-                .or_else(|| property.as_str().split('/').last())
+                .next_back()
+                .or_else(|| property.as_str().split('/').next_back())
                 .unwrap_or("unknown");
 
             where_clauses.push(format!("?entity :{} ?{} .", prop_local_name, var_name));
@@ -460,8 +470,8 @@ impl SammParser {
                 .property
                 .as_str()
                 .split('#')
-                .last()
-                .or_else(|| constraint.property.as_str().split('/').last())
+                .next_back()
+                .or_else(|| constraint.property.as_str().split('/').next_back())
                 .unwrap_or("unknown");
 
             if let Some(&value) = property_values.get(prop_name) {
@@ -621,7 +631,10 @@ mod tests {
             .expect("Failed to parse");
 
         // Check entities in the returned model
-        assert!(!model.entities.is_empty(), "Should have at least one entity");
+        assert!(
+            !model.entities.is_empty(),
+            "Should have at least one entity"
+        );
 
         let rigid_body = model.entities.iter().find(|e| e.name == "Rigid Body");
         assert!(rigid_body.is_some(), "Should have RigidBody entity");
@@ -679,7 +692,10 @@ mod tests {
 
         assert!(query.contains("SELECT"), "Query should contain SELECT");
         assert!(query.contains("?entity"), "Query should contain ?entity");
-        assert!(query.contains("RigidBody"), "Query should contain entity name");
+        assert!(
+            query.contains("RigidBody"),
+            "Query should contain entity name"
+        );
     }
 
     #[test]
@@ -691,7 +707,8 @@ mod tests {
         values.insert("temperature".to_string(), 300.0);
 
         let mass_prop = NamedNode::new("http://oxirs.org/physics#mass").expect("Invalid URI");
-        let temp_prop = NamedNode::new("http://oxirs.org/physics#temperature").expect("Invalid URI");
+        let temp_prop =
+            NamedNode::new("http://oxirs.org/physics#temperature").expect("Invalid URI");
 
         let constraints = vec![
             ConstraintDefinition {
@@ -717,7 +734,9 @@ mod tests {
         // Invalid: temperature out of range
         let mut invalid_values2 = values.clone();
         invalid_values2.insert("temperature".to_string(), 1500.0);
-        assert!(parser.validate_data(&invalid_values2, &constraints).is_err());
+        assert!(parser
+            .validate_data(&invalid_values2, &constraints)
+            .is_err());
     }
 
     #[test]

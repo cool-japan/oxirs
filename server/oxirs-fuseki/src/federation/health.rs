@@ -168,7 +168,7 @@ impl HealthMonitor {
             http_client: Client::builder()
                 .timeout(Duration::from_secs(5))
                 .build()
-                .unwrap(),
+                .expect("HTTP client build should succeed"),
             shutdown: Arc::new(Notify::new()),
         }
     }

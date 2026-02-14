@@ -78,7 +78,7 @@ mime = "0.3"
 http-body-util = "0.1"
 
 # Metrics and monitoring
-prometheus = { version = "0.13", optional = true }
+prometheus = { version = "0.14", optional = true }
 axum-prometheus = { version = "0.7", optional = true }
 metrics = "0.23"
 metrics-exporter-prometheus = "0.18"
@@ -158,8 +158,8 @@ async-graphql-axum = "7.2"
 utoipa = { version = "4.2", features = ["chrono"] }
 utoipa-swagger-ui = { version = "9.0", features = ["axum", "vendored"] }
 
-# DNS resolution for service discovery
-trust-dns-resolver = "0.23"
+# DNS resolution for service discovery (migrated from trust-dns to hickory-dns)
+hickory-resolver = "0.24"
 
 # X.509 certificate parsing for client authentication
 x509-parser = "0.18"

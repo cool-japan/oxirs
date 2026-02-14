@@ -62,13 +62,13 @@ pub fn normalize(values: &[f64]) -> Vec<f64> {
     let min_val = values
         .iter()
         .copied()
-        .min_by(|a, b| a.partial_cmp(b).unwrap())
-        .unwrap();
+        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .expect("collection should not be empty");
     let max_val = values
         .iter()
         .copied()
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
-        .unwrap();
+        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .expect("collection should not be empty");
 
     if (max_val - min_val).abs() < 1e-10 {
         // All values are the same

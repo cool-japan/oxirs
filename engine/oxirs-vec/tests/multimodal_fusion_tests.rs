@@ -9,11 +9,8 @@ use oxirs_vec::hybrid_search::multimodal_fusion::{
 use oxirs_vec::hybrid_search::types::DocumentScore;
 
 /// Helper function to create test results for conference venues
-fn create_conference_venue_results() -> (
-    Vec<DocumentScore>,
-    Vec<DocumentScore>,
-    Vec<DocumentScore>,
-) {
+fn create_conference_venue_results() -> (Vec<DocumentScore>, Vec<DocumentScore>, Vec<DocumentScore>)
+{
     // Text search results: Based on keyword matching (BM25-style scores)
     let text = vec![
         DocumentScore {
@@ -113,7 +110,9 @@ fn test_weighted_fusion_balanced() {
     let weights = vec![0.33, 0.33, 0.34];
     let strategy = FusionStrategy::Weighted { weights };
 
-    let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let results = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     assert!(!results.is_empty());
     assert!(results.len() <= 8); // Union of all results
@@ -137,7 +136,9 @@ fn test_weighted_fusion_text_heavy() {
     let weights = vec![0.7, 0.2, 0.1];
     let strategy = FusionStrategy::Weighted { weights };
 
-    let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let results = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     // Top result should be text-focused
     assert!(!results.is_empty());
@@ -157,7 +158,9 @@ fn test_sequential_fusion_text_then_vector() {
     let order = vec![Modality::Text, Modality::Vector];
     let strategy = FusionStrategy::Sequential { order };
 
-    let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let results = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     assert!(!results.is_empty());
 
@@ -173,10 +176,7 @@ fn test_sequential_fusion_text_then_vector() {
 
     // Results should be ranked by vector scores
     // NeurIPS has best vector score among text results
-    let neurips_rank = results
-        .iter()
-        .position(|r| r.uri == "neurips2025")
-        .unwrap();
+    let neurips_rank = results.iter().position(|r| r.uri == "neurips2025").unwrap();
     assert!(
         neurips_rank <= 2,
         "NeurIPS should rank highly in sequential fusion"
@@ -192,7 +192,9 @@ fn test_cascade_fusion_progressive_filtering() {
     let thresholds = vec![0.5, 0.7, 0.8];
     let strategy = FusionStrategy::Cascade { thresholds };
 
-    let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let results = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     // Should have fewer results due to progressive filtering
     assert!(results.len() <= 5);
@@ -215,7 +217,9 @@ fn test_cascade_fusion_lenient_thresholds() {
     let thresholds = vec![0.0, 0.0, 0.0];
     let strategy = FusionStrategy::Cascade { thresholds };
 
-    let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let results = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     // Should have more results with lenient thresholds
     assert!(!results.is_empty());
@@ -227,25 +231,24 @@ fn test_rank_fusion_rrf() {
     let fusion = MultimodalFusion::new(FusionConfig::default());
 
     let strategy = FusionStrategy::RankFusion;
-    let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let results = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     assert!(!results.is_empty());
 
     // NeurIPS appears at good positions in all three lists
     // Should have high RRF score
-    let neurips = results.iter().find(|r| r.uri == "neurips2025").unwrap();
+    let _neurips = results.iter().find(|r| r.uri == "neurips2025").unwrap();
 
     // EMNLP appears only in vector list
-    let emnlp = results
+    let _emnlp = results
         .iter()
         .find(|r| r.uri == "emnlp2025")
         .unwrap_or_else(|| panic!("EMNLP should be in results"));
 
     // NeurIPS should rank higher due to multiple appearances
-    let neurips_rank = results
-        .iter()
-        .position(|r| r.uri == "neurips2025")
-        .unwrap();
+    let neurips_rank = results.iter().position(|r| r.uri == "neurips2025").unwrap();
     let emnlp_rank = results.iter().position(|r| r.uri == "emnlp2025").unwrap();
 
     assert!(
@@ -321,11 +324,8 @@ fn test_normalization_zscore() {
     assert!(mean.abs() < 1e-6, "Z-score mean should be ~0");
 
     // Standard deviation should be ≈ 1
-    let variance: f64 = normalized
-        .iter()
-        .map(|&s| (s - mean).powi(2))
-        .sum::<f64>()
-        / normalized.len() as f64;
+    let variance: f64 =
+        normalized.iter().map(|&s| (s - mean).powi(2)).sum::<f64>() / normalized.len() as f64;
     let std = variance.sqrt();
     assert!((std - 1.0).abs() < 1e-6, "Z-score std should be ~1");
 }
@@ -364,7 +364,10 @@ fn test_normalization_sigmoid() {
     }
 
     // Sigmoid of 0 should be 0.5
-    assert!((normalized[1] - 0.5).abs() < 1e-6, "Sigmoid(0) should be 0.5");
+    assert!(
+        (normalized[1] - 0.5).abs() < 1e-6,
+        "Sigmoid(0) should be 0.5"
+    );
 
     // Sigmoid should be monotonic
     assert!(normalized[0] > normalized[1]);
@@ -377,7 +380,9 @@ fn test_precision_at_k() {
     let fusion = MultimodalFusion::new(FusionConfig::default());
 
     let strategy = FusionStrategy::RankFusion;
-    let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let results = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     // Take top 3 results
     let top_3: Vec<_> = results.iter().take(3).collect();
@@ -413,7 +418,9 @@ fn test_performance_latency() {
     let start = Instant::now();
 
     let strategy = FusionStrategy::RankFusion;
-    let _results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let _results = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     let duration = start.elapsed();
 
@@ -444,9 +451,7 @@ fn test_all_empty_modalities() {
     let fusion = MultimodalFusion::new(FusionConfig::default());
 
     let strategy = FusionStrategy::RankFusion;
-    let results = fusion
-        .fuse(&empty, &empty, &empty, Some(strategy))
-        .unwrap();
+    let results = fusion.fuse(&empty, &empty, &empty, Some(strategy)).unwrap();
 
     assert!(results.is_empty(), "All empty should return empty");
 }
@@ -461,11 +466,7 @@ fn test_single_modality_only() {
     let results = fusion.fuse(&text, &empty, &empty, Some(strategy)).unwrap();
 
     assert!(!results.is_empty(), "Single modality should work");
-    assert_eq!(
-        results.len(),
-        text.len(),
-        "Should return all text results"
-    );
+    assert_eq!(results.len(), text.len(), "Should return all text results");
 }
 
 #[test]
@@ -518,7 +519,9 @@ fn test_real_world_scenario_ml_conference_search() {
     let weights = vec![0.35, 0.35, 0.30]; // Text, Vector, Spatial
     let strategy = FusionStrategy::Weighted { weights };
 
-    let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let results = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     // Top result should be NeurIPS or ICML (good in all modalities)
     assert!(!results.is_empty());
@@ -543,8 +546,12 @@ fn test_score_consistency() {
     let strategy = FusionStrategy::RankFusion;
 
     // Run multiple times - should get consistent results
-    let results1 = fusion.fuse(&text, &vector, &spatial, Some(strategy.clone())).unwrap();
-    let results2 = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+    let results1 = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy.clone()))
+        .unwrap();
+    let results2 = fusion
+        .fuse(&text, &vector, &spatial, Some(strategy))
+        .unwrap();
 
     assert_eq!(results1.len(), results2.len());
     for (r1, r2) in results1.iter().zip(results2.iter()) {

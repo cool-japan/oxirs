@@ -631,7 +631,11 @@ impl SemanticEnhancer {
 
         // Filter by confidence threshold and sort
         predictions.retain(|p| p.confidence >= self.config.confidence_threshold);
-        predictions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        predictions.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         predictions.truncate(limit);
 
         info!(
@@ -682,8 +686,12 @@ impl SemanticEnhancer {
         // Find best match
         let best_match = candidates
             .into_iter()
-            .max_by(|a, b| a.similarity_score.partial_cmp(&b.similarity_score).unwrap())
-            .unwrap();
+            .max_by(|a, b| {
+                a.similarity_score
+                    .partial_cmp(&b.similarity_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .expect("collection should not be empty");
 
         debug!(
             "Resolved entity {} to {} with confidence {:.2}",
@@ -737,7 +745,11 @@ impl SemanticEnhancer {
         }
 
         // Sort by confidence
-        alignments.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        alignments.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         info!("Generated {} schema alignments", alignments.len());
         Ok(alignments)
@@ -887,7 +899,7 @@ impl SemanticEnhancer {
             }
         }
 
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(similarities
             .into_iter()
             .take(limit)
@@ -1208,7 +1220,7 @@ mod tests {
         let predictions = enhancer
             .predict_missing_links("http://example.org/entity1", Some(5))
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Should return empty for new enhancer
         assert!(predictions.is_empty());
@@ -1223,7 +1235,10 @@ mod tests {
             "email": "john@example.com"
         });
 
-        let assessment = enhancer.assess_quality(&data, None).await.unwrap();
+        let assessment = enhancer
+            .assess_quality(&data, None)
+            .await
+            .expect("async operation should succeed");
         assert!(assessment.overall_score > 0.0);
         assert!(assessment.overall_score <= 1.0);
     }
@@ -1237,7 +1252,7 @@ mod tests {
         let alignments = enhancer
             .align_schemas(&source_schema, &target_schema)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Should return empty for basic test
         assert!(alignments.is_empty());

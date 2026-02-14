@@ -883,11 +883,14 @@ mod tests {
         let txn_id = coordinator
             .begin_transaction(participants, operations)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(!txn_id.is_empty());
 
-        let status = coordinator.get_transaction_status(&txn_id).await.unwrap();
+        let status = coordinator
+            .get_transaction_status(&txn_id)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(status, TransactionState::Initiated);
     }
 
@@ -923,9 +926,12 @@ mod tests {
         let txn_id = coordinator
             .begin_transaction(participants, operations)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
-        let result = coordinator.execute_transaction(&txn_id).await.unwrap();
+        let result = coordinator
+            .execute_transaction(&txn_id)
+            .await
+            .expect("async operation should succeed");
 
         assert!(
             result.final_state == TransactionState::Committed
@@ -977,9 +983,12 @@ mod tests {
         let txn_id = coordinator
             .begin_transaction(participants, operations)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
-        let result = coordinator.execute_transaction(&txn_id).await.unwrap();
+        let result = coordinator
+            .execute_transaction(&txn_id)
+            .await
+            .expect("async operation should succeed");
 
         assert!(
             result.final_state == TransactionState::Committed
@@ -1015,13 +1024,13 @@ mod tests {
         let _txn_id = coordinator
             .begin_transaction(participants, operations)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Transactions should not be cleaned up immediately
         let removed = coordinator
             .cleanup_transactions(Duration::from_secs(3600))
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(removed, 0);
     }

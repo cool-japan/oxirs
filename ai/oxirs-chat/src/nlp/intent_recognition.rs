@@ -444,7 +444,7 @@ impl IntentRecognizer {
         // STEP 6: Determine primary intent and confidence
         let (primary_intent, mut confidence) = if let Some((intent, score)) = scores
             .iter()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         {
             (*intent, *score)
         } else {
@@ -461,7 +461,8 @@ impl IntentRecognizer {
             .map(|(intent, score)| (*intent, *score))
             .collect();
 
-        alternatives.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+        alternatives
+            .sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
         alternatives.truncate(self.config.num_alternatives);
 
         // STEP 8: Extract entities using advanced NER

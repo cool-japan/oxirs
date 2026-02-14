@@ -677,7 +677,10 @@ mod tests {
             ..Default::default()
         };
 
-        let _pool = manager.get_pool(&service).await.unwrap();
+        let _pool = manager
+            .get_pool(&service)
+            .await
+            .expect("async operation should succeed");
 
         // Acquire connections
         let permit1 = manager.acquire_connection(&service.id).await;
@@ -710,8 +713,14 @@ mod tests {
             ..Default::default()
         };
 
-        let _pool = manager.get_pool(&service).await.unwrap();
-        let _adjustments = manager.optimize_pools().await.unwrap();
+        let _pool = manager
+            .get_pool(&service)
+            .await
+            .expect("async operation should succeed");
+        let _adjustments = manager
+            .optimize_pools()
+            .await
+            .expect("async operation should succeed");
 
         // Should handle optimization without errors
         // adjustments.len() is always >= 0, so this assertion is unnecessary
@@ -729,8 +738,14 @@ mod tests {
             ..Default::default()
         };
 
-        let _pool = manager.get_pool(&service).await.unwrap();
-        let health_result = manager.health_check().await.unwrap();
+        let _pool = manager
+            .get_pool(&service)
+            .await
+            .expect("async operation should succeed");
+        let health_result = manager
+            .health_check()
+            .await
+            .expect("async operation should succeed");
 
         assert_eq!(health_result.total_services, 1);
         assert!(health_result.overall_healthy);
@@ -752,7 +767,10 @@ mod tests {
             ..Default::default()
         };
 
-        let _pool = manager.get_pool(&service).await.unwrap();
+        let _pool = manager
+            .get_pool(&service)
+            .await
+            .expect("async operation should succeed");
         let result = manager.warm_up_pools().await;
         assert!(result.is_ok());
     }

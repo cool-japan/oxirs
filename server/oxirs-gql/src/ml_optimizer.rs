@@ -454,8 +454,8 @@ impl NeuralNetworkModel {
             let weight_data: Vec<f64> = (0..input_size * output_size)
                 .map(|_| rng.gen_range(-1.0..1.0) * scale)
                 .collect();
-            let weight_matrix =
-                Array2::from_shape_vec((input_size, output_size), weight_data).unwrap();
+            let weight_matrix = Array2::from_shape_vec((input_size, output_size), weight_data)
+                .expect("weight data should match the specified shape dimensions");
             weights.push(weight_matrix);
 
             // Initialize biases to zero

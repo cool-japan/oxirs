@@ -400,7 +400,7 @@ impl ModelCompressor {
                         .compression_tracker
                         .best_compression
                         .as_ref()
-                        .unwrap()
+                        .expect("best_compression should be Some after is_none check")
                         .compression_metrics
                         .compression_ratio
             {
@@ -540,7 +540,7 @@ impl ModelCompressor {
 
         // Compute magnitude threshold
         let mut magnitudes: Vec<f64> = tensor.iter().map(|&x| x.abs()).collect();
-        magnitudes.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        magnitudes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let threshold = magnitudes[num_to_prune.min(magnitudes.len() - 1)];
 
         // Create pruning mask

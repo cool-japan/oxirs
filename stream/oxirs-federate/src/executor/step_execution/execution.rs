@@ -547,7 +547,10 @@ pub async fn execute_result_stitching(
 
     // If only one result, return it
     if input_data_list.len() == 1 {
-        return Ok(input_data_list.into_iter().next().unwrap());
+        return Ok(input_data_list
+            .into_iter()
+            .next()
+            .expect("iterator should have next element"));
     }
 
     // Perform intelligent result stitching based on data types

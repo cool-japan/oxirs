@@ -226,8 +226,12 @@ pub async fn handle_oauth2_callback(
             };
 
             let mut resp = (StatusCode::OK, Json(response)).into_response();
-            resp.headers_mut()
-                .insert(SET_COOKIE, cookie_value.parse().unwrap());
+            resp.headers_mut().insert(
+                SET_COOKIE,
+                cookie_value
+                    .parse()
+                    .expect("cookie value should be valid header"),
+            );
 
             Ok(resp)
         }

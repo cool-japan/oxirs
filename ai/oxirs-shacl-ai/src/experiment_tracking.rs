@@ -474,8 +474,12 @@ impl ExperimentTracker {
         if let Some(mut run) = self.runs.get_mut(run_id) {
             run.status = status.clone();
             run.ended_at = Some(Utc::now());
-            run.duration_seconds =
-                Some((run.ended_at.unwrap() - run.started_at).num_seconds() as f64);
+            run.duration_seconds = Some(
+                (run.ended_at
+                    .expect("ended_at should be set when ending a run")
+                    - run.started_at)
+                    .num_seconds() as f64,
+            );
 
             // Update experiment status
             if let Some(mut experiment) = self.experiments.get_mut(&run.experiment_id) {

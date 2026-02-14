@@ -807,7 +807,7 @@ impl DiagnosticAnalyzer {
         correlations.sort_by(|a, b| {
             b.correlation_strength
                 .partial_cmp(&a.correlation_strength)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         correlations.truncate(10);
 

@@ -92,7 +92,7 @@ impl SparqlClient {
         let rate_limiter = if let Some(rate_limit) = &service.performance.rate_limit {
             let quota = Quota::per_minute(
                 std::num::NonZeroU32::new(rate_limit.requests_per_minute as u32)
-                    .unwrap_or(std::num::NonZeroU32::new(60).unwrap()),
+                    .unwrap_or(std::num::NonZeroU32::new(60).expect("construction should succeed")),
             );
             Some(Arc::new(RateLimiter::direct(quota)))
         } else {
@@ -538,7 +538,7 @@ impl GraphQLClient {
         let rate_limiter = if let Some(rate_limit) = &service.performance.rate_limit {
             let quota = Quota::per_minute(
                 std::num::NonZeroU32::new(rate_limit.requests_per_minute as u32)
-                    .unwrap_or(std::num::NonZeroU32::new(60).unwrap()),
+                    .unwrap_or(std::num::NonZeroU32::new(60).expect("construction should succeed")),
             );
             Some(Arc::new(RateLimiter::direct(quota)))
         } else {

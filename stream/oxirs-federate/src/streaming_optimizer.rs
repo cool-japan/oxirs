@@ -1062,7 +1062,7 @@ mod tests {
         let cursor = optimizer
             .create_cursor("test-service", "SELECT * FROM test", None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(!cursor.cursor_id.is_empty());
         assert_eq!(cursor.position, 0);
@@ -1088,7 +1088,7 @@ mod tests {
         let allocation = controller.allocate(500, AllocationPriority::Normal).await;
         assert!(allocation.is_ok());
 
-        let _alloc = allocation.unwrap();
+        let _alloc = allocation.expect("operation should succeed");
 
         // Should fail for allocation that exceeds limit
         let allocation2 = controller.allocate(600, AllocationPriority::Normal).await;

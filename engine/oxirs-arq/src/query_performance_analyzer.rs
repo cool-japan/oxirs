@@ -131,7 +131,7 @@ impl ExecutionPhases {
         ];
 
         phases.iter()
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|p| p.0)
             .unwrap_or("unknown")
     }
@@ -419,7 +419,7 @@ impl QueryPerformanceAnalyzer {
             .map(|p| p.duration_ms())
             .collect();
 
-        durations.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        durations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let avg = durations.iter().sum::<f64>() / durations.len() as f64;
 

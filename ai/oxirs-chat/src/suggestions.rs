@@ -231,7 +231,11 @@ impl SuggestionEngine {
         suggestions.retain(|s| s.relevance >= self.config.min_relevance);
 
         // Sort by relevance
-        suggestions.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap());
+        suggestions.sort_by(|a, b| {
+            b.relevance
+                .partial_cmp(&a.relevance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Limit results
         suggestions.truncate(self.config.max_suggestions);

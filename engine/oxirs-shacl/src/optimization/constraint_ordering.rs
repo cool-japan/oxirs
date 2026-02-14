@@ -619,13 +619,16 @@ mod tests {
             }),
             ConstraintContext::new(
                 Term::NamedNode(
-                    oxirs_core::model::NamedNode::new("http://example.org/test").unwrap(),
+                    oxirs_core::model::NamedNode::new("http://example.org/test")
+                        .expect("valid IRI"),
                 ),
                 crate::ShapeId::new("test_shape"),
             ),
         )];
 
-        let result = analyzer.order_constraints(constraints).unwrap();
+        let result = analyzer
+            .order_constraints(constraints)
+            .expect("analysis should succeed");
 
         assert!(!result.ordered_constraints.is_empty());
         assert!(result.ordering_time.as_millis() < 100); // Should be fast

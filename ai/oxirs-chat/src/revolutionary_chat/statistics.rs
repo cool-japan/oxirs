@@ -31,19 +31,19 @@ impl AdvancedChatStatisticsCollector {
     async fn collect_message_statistics(&mut self, messages: &[Message]) -> Result<()> {
         // Collect conversation quality metrics
         if self.config.enable_conversation_quality_metrics {
-            let mut metrics = self.conversation_metrics.write().unwrap();
+            let mut metrics = self.conversation_metrics.write().expect("write lock should not be poisoned");
             metrics.update_from_messages(messages);
         }
 
         // Collect user behavior data
         if self.config.enable_user_behavior_analysis {
-            let mut tracker = self.user_behavior_tracker.write().unwrap();
+            let mut tracker = self.user_behavior_tracker.write().expect("write lock should not be poisoned");
             tracker.track_user_behavior(messages);
         }
 
         // Update performance correlations
         if self.config.enable_performance_correlation {
-            let mut correlator = self.performance_correlator.write().unwrap();
+            let mut correlator = self.performance_correlator.write().expect("write lock should not be poisoned");
             correlator.update_correlations(messages);
         }
 
@@ -51,9 +51,9 @@ impl AdvancedChatStatisticsCollector {
     }
 
     async fn get_statistics(&self) -> ConversationStatistics {
-        let metrics = self.conversation_metrics.read().unwrap();
-        let behavior = self.user_behavior_tracker.read().unwrap();
-        let correlations = self.performance_correlator.read().unwrap();
+        let metrics = self.conversation_metrics.read().expect("read lock should not be poisoned");
+        let behavior = self.user_behavior_tracker.read().expect("read lock should not be poisoned");
+        let correlations = self.performance_correlator.read().expect("read lock should not be poisoned");
 
         ConversationStatistics {
             quality_metrics: metrics.clone(),

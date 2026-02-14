@@ -83,7 +83,7 @@ impl TurtleTokenizer {
 
         let start_position = TextPosition::new(self.line, self.column, self.position);
 
-        match self.current_char().unwrap() {
+        match self.current_char().expect("character should be available") {
             '.' => Ok((
                 Token {
                     kind: TokenKind::Dot,
@@ -311,7 +311,10 @@ impl TurtleTokenizer {
         let mut escaped = false;
 
         while end_pos < self.input.len() {
-            let ch = self.input[end_pos..].chars().next().unwrap();
+            let ch = self.input[end_pos..]
+                .chars()
+                .next()
+                .expect("iterator should have next element");
             if escaped {
                 escaped = false;
             } else if ch == '\\' {
@@ -677,7 +680,10 @@ impl TurtleTokenizer {
 
         // Read digits before decimal point or exponent
         while end < remaining.len() {
-            let ch = remaining.chars().nth(end).unwrap();
+            let ch = remaining
+                .chars()
+                .nth(end)
+                .expect("iterator should have element at index");
             if ch.is_ascii_digit() {
                 end += 1;
             } else {
@@ -689,14 +695,20 @@ impl TurtleTokenizer {
         if end < remaining.len() && remaining.chars().nth(end) == Some('.') {
             // Make sure it's not the end-of-statement dot
             if end + 1 < remaining.len() {
-                let next_ch = remaining.chars().nth(end + 1).unwrap();
+                let next_ch = remaining
+                    .chars()
+                    .nth(end + 1)
+                    .expect("iterator should have element at index");
                 if next_ch.is_ascii_digit() {
                     has_decimal_point = true;
                     end += 1; // Skip the decimal point
 
                     // Read fractional digits
                     while end < remaining.len() {
-                        let ch = remaining.chars().nth(end).unwrap();
+                        let ch = remaining
+                            .chars()
+                            .nth(end)
+                            .expect("iterator should have element at index");
                         if ch.is_ascii_digit() {
                             end += 1;
                         } else {
@@ -709,14 +721,20 @@ impl TurtleTokenizer {
 
         // Check for exponent (e or E)
         if end < remaining.len() {
-            let ch = remaining.chars().nth(end).unwrap();
+            let ch = remaining
+                .chars()
+                .nth(end)
+                .expect("iterator should have element at index");
             if ch == 'e' || ch == 'E' {
                 has_exponent = true;
                 end += 1;
 
                 // Handle optional exponent sign
                 if end < remaining.len() {
-                    let sign_ch = remaining.chars().nth(end).unwrap();
+                    let sign_ch = remaining
+                        .chars()
+                        .nth(end)
+                        .expect("iterator should have element at index");
                     if sign_ch == '+' || sign_ch == '-' {
                         end += 1;
                     }
@@ -725,7 +743,10 @@ impl TurtleTokenizer {
                 // Read exponent digits
                 let exponent_start = end;
                 while end < remaining.len() {
-                    let ch = remaining.chars().nth(end).unwrap();
+                    let ch = remaining
+                        .chars()
+                        .nth(end)
+                        .expect("iterator should have element at index");
                     if ch.is_ascii_digit() {
                         end += 1;
                     } else {

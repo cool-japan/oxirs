@@ -155,7 +155,7 @@ impl PublicationNetworkAnalyzer {
 
         // Sort by centrality score
         let mut sorted: Vec<_> = centrality_scores.into_iter().collect();
-        sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         sorted
             .into_iter()

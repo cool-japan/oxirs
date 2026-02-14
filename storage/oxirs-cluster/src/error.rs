@@ -64,6 +64,14 @@ pub enum ClusterError {
     #[error("Encryption error: {0}")]
     Encryption(String),
 
+    /// Invalid tenant error
+    #[error("Invalid tenant: {0}")]
+    InvalidTenant(String),
+
+    /// Resource limit exceeded
+    #[error("Resource limit exceeded: {0}")]
+    ResourceLimit(String),
+
     /// Generic error
     #[error("{0}")]
     Other(String),

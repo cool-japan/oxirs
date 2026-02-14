@@ -747,10 +747,16 @@ impl GpuAcceleratedCluster {
 
         // If we didn't find exact percentiles, use last bucket
         if p95 == 0.0 && !buckets.is_empty() {
-            p95 = buckets.last().unwrap().0;
+            p95 = buckets
+                .last()
+                .expect("collection validated to be non-empty")
+                .0;
         }
         if p99 == 0.0 && !buckets.is_empty() {
-            p99 = buckets.last().unwrap().0;
+            p99 = buckets
+                .last()
+                .expect("collection validated to be non-empty")
+                .0;
         }
 
         (p95, p99)

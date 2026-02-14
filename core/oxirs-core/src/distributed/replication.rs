@@ -574,7 +574,7 @@ impl ReplicationManager {
             version: state.vector_clock.clone(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             origin_region: self.config.region_id.clone(),
             tx_id: Some(uuid::Uuid::new_v4().to_string()),
@@ -923,7 +923,7 @@ impl ReplicationManager {
                     region_id: config.region_id.clone(),
                     timestamp: std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("SystemTime should be after UNIX_EPOCH")
                         .as_secs(),
                     load: LoadMetrics {
                         cpu_percent: 0.0, // Would get actual metrics
@@ -1003,7 +1003,7 @@ impl ReplicationManager {
             seq: wal.entries.len() as u64,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             op: op.clone(),
             checksum: 0, // Would calculate actual checksum

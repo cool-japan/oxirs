@@ -304,7 +304,7 @@ impl NoiseScheduler {
             let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
             samples.push(z0);
         }
-        Array2::from_shape_vec(shape, samples).unwrap()
+        Array2::from_shape_vec(shape, samples).expect("shape should match sample count")
     }
 }
 
@@ -498,9 +498,14 @@ impl DiffusionUNet {
 
     /// Layer normalization
     fn layer_norm(&self, x: &Array2<f64>) -> Result<Array2<f64>> {
-        let mean = x.mean_axis(Axis(1)).unwrap();
+        let mean = x
+            .mean_axis(Axis(1))
+            .expect("mean_axis should succeed for non-empty array");
         let centered = x - &mean.insert_axis(Axis(1));
-        let var = centered.mapv(|x| x.powi(2)).mean_axis(Axis(1)).unwrap();
+        let var = centered
+            .mapv(|x| x.powi(2))
+            .mean_axis(Axis(1))
+            .expect("mean_axis should succeed for non-empty array");
         let std = var.mapv(|x| (x + 1e-5).sqrt());
         Ok(&centered / &std.insert_axis(Axis(1)))
     }
@@ -967,7 +972,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
             }
         }
 
-        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         predictions.truncate(k);
 
         Ok(predictions)
@@ -987,7 +992,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
             }
         }
 
-        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         predictions.truncate(k);
 
         Ok(predictions)
@@ -1007,7 +1012,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
             }
         }
 
-        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        predictions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         predictions.truncate(k);
 
         Ok(predictions)

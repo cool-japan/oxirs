@@ -804,7 +804,8 @@ mod tests {
         assert_eq!(formula.len(), 0);
 
         let subject = N3Term::Variable(N3Variable::universal("x"));
-        let predicate = N3Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap());
+        let predicate =
+            N3Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI"));
         let object = N3Term::Variable(N3Variable::universal("y"));
         let stmt = N3Statement::new(subject, predicate, object);
 
@@ -815,7 +816,8 @@ mod tests {
 
     #[test]
     fn test_n3_term_conversion() {
-        let named = N3Term::NamedNode(NamedNode::new("http://example.org/resource").unwrap());
+        let named =
+            N3Term::NamedNode(NamedNode::new("http://example.org/resource").expect("valid IRI"));
         assert!(named.as_rdf_subject().is_some());
         assert!(named.as_rdf_predicate().is_some());
         assert!(named.as_rdf_object().is_some());
@@ -828,8 +830,10 @@ mod tests {
     #[test]
     fn test_statement_has_variables() {
         let subject = N3Term::Variable(N3Variable::universal("x"));
-        let predicate = N3Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap());
-        let object = N3Term::NamedNode(NamedNode::new("http://example.org/person").unwrap());
+        let predicate =
+            N3Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI"));
+        let object =
+            N3Term::NamedNode(NamedNode::new("http://example.org/person").expect("valid IRI"));
         let stmt = N3Statement::new(subject, predicate, object);
 
         assert!(stmt.has_variables());
@@ -846,8 +850,11 @@ mod tests {
 
         let sum = registry.get("http://www.w3.org/2000/10/swap/math#sum");
         assert!(sum.is_some());
-        assert_eq!(sum.unwrap().name, "sum");
-        assert_eq!(sum.unwrap().category, N3BuiltinCategory::Math);
+        assert_eq!(sum.expect("operation should succeed").name, "sum");
+        assert_eq!(
+            sum.expect("operation should succeed").category,
+            N3BuiltinCategory::Math
+        );
     }
 
     #[test]

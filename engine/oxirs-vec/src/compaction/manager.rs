@@ -249,7 +249,11 @@ impl CompactionManager {
     /// Create batches from candidates
     fn create_batches(&self, mut candidates: Vec<CompactionCandidate>) -> Vec<CompactionBatch> {
         // Sort by priority (highest first)
-        candidates.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap());
+        candidates.sort_by(|a, b| {
+            b.priority
+                .partial_cmp(&a.priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut batches = Vec::new();
         let mut current_batch = Vec::new();

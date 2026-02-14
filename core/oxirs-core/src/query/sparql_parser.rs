@@ -420,12 +420,12 @@ impl AdvancedSparqlParser {
         line: usize,
         column: usize,
     ) -> Result<Token, OxirsError> {
-        let prefix = chars.next().unwrap(); // consume '?' or '$'
+        let prefix = chars.next().expect("char should be available after peek"); // consume '?' or '$'
         let mut name = String::new();
 
         while let Some(&ch) = chars.peek() {
             if ch.is_alphanumeric() || ch == '_' {
-                name.push(chars.next().unwrap());
+                name.push(chars.next().expect("char should be available after peek"));
             } else {
                 break;
             }
@@ -458,7 +458,7 @@ impl AdvancedSparqlParser {
 
         while let Some(&ch) = chars.peek() {
             if ch.is_alphanumeric() || ch == '_' || ch == '-' {
-                label.push(chars.next().unwrap());
+                label.push(chars.next().expect("char should be available after peek"));
             } else {
                 break;
             }
@@ -490,10 +490,10 @@ impl AdvancedSparqlParser {
 
         while let Some(&ch) = chars.peek() {
             if ch.is_ascii_digit() {
-                value.push(chars.next().unwrap());
+                value.push(chars.next().expect("char should be available after peek"));
             } else if ch == '.' && !is_decimal {
                 is_decimal = true;
-                value.push(chars.next().unwrap());
+                value.push(chars.next().expect("char should be available after peek"));
             } else {
                 break;
             }
@@ -517,7 +517,7 @@ impl AdvancedSparqlParser {
 
         while let Some(&ch) = chars.peek() {
             if ch.is_alphanumeric() || ch == '_' || ch == '-' {
-                value.push(chars.next().unwrap());
+                value.push(chars.next().expect("char should be available after peek"));
             } else if ch == ':' {
                 // This might be a prefixed name
                 chars.next(); // consume ':'
@@ -525,7 +525,7 @@ impl AdvancedSparqlParser {
                 
                 while let Some(&ch) = chars.peek() {
                     if ch.is_alphanumeric() || ch == '_' || ch == '-' {
-                        local_name.push(chars.next().unwrap());
+                        local_name.push(chars.next().expect("char should be available after peek"));
                     } else {
                         break;
                     }

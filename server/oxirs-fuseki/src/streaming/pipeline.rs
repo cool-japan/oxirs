@@ -99,7 +99,9 @@ impl WindowAggregator {
         // Check for completed windows
         while let Some(window) = windows.front() {
             if window.end <= *watermark {
-                let completed = windows.pop_front().unwrap();
+                let completed = windows
+                    .pop_front()
+                    .expect("window should exist after front() check");
                 if let Some(result) = (self.aggregation_fn)(&completed.events) {
                     results.push(result);
                 }

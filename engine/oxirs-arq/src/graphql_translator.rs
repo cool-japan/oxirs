@@ -371,7 +371,10 @@ impl GraphQLTranslator {
         let bgp = if patterns.is_empty() {
             Algebra::Bgp(vec![])
         } else if patterns.len() == 1 {
-            patterns.into_iter().next().unwrap()
+            patterns
+                .into_iter()
+                .next()
+                .expect("collection validated to be non-empty")
         } else {
             // Join all patterns
             patterns
@@ -380,7 +383,7 @@ impl GraphQLTranslator {
                     left: Box::new(acc),
                     right: Box::new(pattern),
                 })
-                .unwrap()
+                .expect("collection validated to be non-empty")
         };
 
         // Project the variables collected during translation
@@ -546,7 +549,7 @@ impl GraphQLTranslator {
                     left: Box::new(acc),
                     right: Box::new(pattern),
                 })
-                .unwrap();
+                .expect("nested_patterns validated to be non-empty");
 
             return Ok(Algebra::Join {
                 left: Box::new(triple_pattern),
@@ -569,7 +572,7 @@ impl GraphQLTranslator {
                             right: Box::new(filter),
                         }
                     })
-                    .unwrap();
+                    .expect("filters validated to be non-empty");
 
                 return Ok(Algebra::Join {
                     left: Box::new(triple_pattern),

@@ -1300,7 +1300,9 @@ mod tests {
             violations: Vec::new(),
         };
 
-        let result = visualizer.generate_ascii(&data).unwrap();
+        let result = visualizer
+            .generate_ascii(&data)
+            .expect("generation should succeed");
         assert!(result.contains("SHACL Validation Report"));
         assert!(result.contains("Total Violations: 10"));
     }
@@ -1332,7 +1334,9 @@ mod tests {
             violations: Vec::new(),
         };
 
-        let result = visualizer.generate_markdown(&data).unwrap();
+        let result = visualizer
+            .generate_markdown(&data)
+            .expect("generation should succeed");
         assert!(result.contains("# SHACL Validation Report"));
         assert!(result.contains("| Total Violations | 5 |"));
     }

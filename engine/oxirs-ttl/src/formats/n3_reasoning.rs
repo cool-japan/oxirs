@@ -446,7 +446,8 @@ mod tests {
     #[test]
     fn test_variable_bindings() {
         let mut bindings = VariableBindings::new();
-        let term = N3Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let term =
+            N3Term::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
 
         bindings.bind("x".to_string(), term.clone());
         assert!(bindings.is_bound("x"));
@@ -458,7 +459,7 @@ mod tests {
         let mut bindings = VariableBindings::new();
         bindings.bind(
             "x".to_string(),
-            N3Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI")),
         );
 
         let var_term = N3Term::Variable(N3Variable::universal("x"));
@@ -470,15 +471,15 @@ mod tests {
     fn test_pattern_matching() {
         let pattern = FormulaPattern::new_with_statement(
             N3Term::Variable(N3Variable::universal("x")),
-            N3Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI")),
             N3Term::Variable(N3Variable::universal("y")),
         );
 
         let mut formula = N3Formula::new();
         formula.add_statement(N3Statement::new(
-            N3Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap()),
-            N3Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap()),
-            N3Term::NamedNode(NamedNode::new("http://example.org/bob").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI")),
+            N3Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI")),
+            N3Term::NamedNode(NamedNode::new("http://example.org/bob").expect("valid IRI")),
         ));
 
         let matcher = Matcher::new();
@@ -492,23 +493,23 @@ mod tests {
 
         // Add fact: alice knows bob
         kb.add_fact(N3Statement::new(
-            N3Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap()),
-            N3Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap()),
-            N3Term::NamedNode(NamedNode::new("http://example.org/bob").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI")),
+            N3Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI")),
+            N3Term::NamedNode(NamedNode::new("http://example.org/bob").expect("valid IRI")),
         ));
 
         // Add rule: { ?x :knows ?y } => { ?y :knows ?x }
         let mut antecedent = N3Formula::new();
         antecedent.add_statement(N3Statement::new(
             N3Term::Variable(N3Variable::universal("x")),
-            N3Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI")),
             N3Term::Variable(N3Variable::universal("y")),
         ));
 
         let mut consequent = N3Formula::new();
         consequent.add_statement(N3Statement::new(
             N3Term::Variable(N3Variable::universal("y")),
-            N3Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI")),
             N3Term::Variable(N3Variable::universal("x")),
         ));
 

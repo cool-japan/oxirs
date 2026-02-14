@@ -849,7 +849,7 @@ impl PatternMemoryBank {
             })
             .collect();
 
-        similarities.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        similarities.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
         similarities
             .into_iter()
@@ -1062,7 +1062,7 @@ impl NeuralTransformerPatternIntegration {
             .map(|(i, &cost)| (i, cost))
             .collect();
 
-        indexed_costs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        indexed_costs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Build optimized plan
         for (pattern_idx, cost) in indexed_costs {

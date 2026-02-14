@@ -253,7 +253,10 @@ impl DynamicIndexSelector {
         }
 
         // Update query planner statistics
-        let mut planner = self.query_planner.write().unwrap();
+        let mut planner = self
+            .query_planner
+            .write()
+            .expect("query_planner write lock should not be poisoned");
         planner.update_index_metadata(vector_count, dimensions);
 
         self.is_built = true;
@@ -279,7 +282,10 @@ impl DynamicIndexSelector {
         };
 
         // Get query plan
-        let planner = self.query_planner.read().unwrap();
+        let planner = self
+            .query_planner
+            .read()
+            .expect("query_planner read lock should not be poisoned");
         let plan = planner.plan(&query_chars)?;
         drop(planner); // Release read lock
 
@@ -295,16 +301,22 @@ impl DynamicIndexSelector {
 
         // Record performance if learning is enabled
         if self.config.enable_learning {
-            let mut stats = self.performance_stats.write().unwrap();
+            let mut stats = self
+                .performance_stats
+                .write()
+                .expect("performance_stats write lock should not be poisoned");
             stats.record(plan.strategy, elapsed, plan.estimated_recall);
             drop(stats);
 
             // Update query planner with actual performance
-            let mut planner = self.query_planner.write().unwrap();
+            let mut planner = self
+                .query_planner
+                .write()
+                .expect("query_planner write lock should not be poisoned");
             if let Some(avg_latency) = self
                 .performance_stats
                 .read()
-                .unwrap()
+                .expect("performance_stats read lock should not be poisoned")
                 .avg_latency(plan.strategy)
             {
                 planner.update_statistics(plan.strategy, avg_latency, plan.estimated_recall);
@@ -360,7 +372,10 @@ impl DynamicIndexSelector {
     /// Get performance statistics
     pub fn get_stats(&self) -> HashMap<String, String> {
         let mut stats = HashMap::new();
-        let perf_stats = self.performance_stats.read().unwrap();
+        let perf_stats = self
+            .performance_stats
+            .read()
+            .expect("performance_stats read lock should not be poisoned");
 
         stats.insert(
             "total_queries".to_string(),

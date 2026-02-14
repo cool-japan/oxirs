@@ -882,9 +882,9 @@ mod tests {
 
         let shape = designer
             .get_design("ex:TestShape")
-            .unwrap()
+            .expect("operation should succeed")
             .build()
-            .unwrap();
+            .expect("operation should succeed");
         assert!(!shape.targets.is_empty());
     }
 

@@ -1046,6 +1046,6 @@ mod tests {
 
         let regression = suite.detect_regression(&current).await;
         assert!(regression.is_ok());
-        assert!(regression.unwrap().is_regression);
+        assert!(regression.expect("operation should succeed").is_regression);
     }
 }

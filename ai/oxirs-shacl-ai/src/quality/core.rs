@@ -1294,13 +1294,14 @@ impl QualityAssessor {
                 }
                 "http://www.w3.org/2001/XMLSchema#date" => {
                     // Simple date validation (YYYY-MM-DD)
-                    let date_regex = regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
+                    let date_regex = regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$")
+                        .expect("date regex pattern should be valid");
                     date_regex.is_match(value_str)
                 }
                 "http://www.w3.org/2001/XMLSchema#dateTime" => {
                     // Simple datetime validation
-                    let datetime_regex =
-                        regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}").unwrap();
+                    let datetime_regex = regex::Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+                        .expect("datetime regex pattern should be valid");
                     datetime_regex.is_match(value_str)
                 }
                 "http://www.w3.org/2001/XMLSchema#anyURI" => {

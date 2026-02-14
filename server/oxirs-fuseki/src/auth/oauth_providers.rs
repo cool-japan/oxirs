@@ -241,7 +241,7 @@ impl GoogleProvider {
     pub fn config(client_id: impl Into<String>, client_secret: impl Into<String>) -> OAuthConfig {
         ProviderConfigBuilder::new(OAuth2Provider::Google, client_id, client_secret)
             .build()
-            .unwrap()
+            .expect("Google OAuth config should be valid")
     }
 
     /// Default scopes for Google OAuth2
@@ -317,7 +317,7 @@ impl GitHubProvider {
     pub fn config(client_id: impl Into<String>, client_secret: impl Into<String>) -> OAuthConfig {
         ProviderConfigBuilder::new(OAuth2Provider::GitHub, client_id, client_secret)
             .build()
-            .unwrap()
+            .expect("GitHub OAuth config should be valid")
     }
 
     /// Default scopes for GitHub OAuth2

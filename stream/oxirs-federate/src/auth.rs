@@ -1075,7 +1075,7 @@ mod tests {
         let result = auth_manager
             .authenticate(AuthMethod::Basic, credentials)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(result.success);
         assert!(result.identity.is_some());
         assert!(result.token.is_some());
@@ -1092,7 +1092,7 @@ mod tests {
         let result = auth_manager
             .authenticate(AuthMethod::ApiKey, credentials)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(result.success);
         assert!(result.identity.is_some());
     }
@@ -1109,7 +1109,7 @@ mod tests {
         let result = auth_manager
             .authenticate(AuthMethod::ServiceToService, credentials)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         if !result.success {
             println!("Authentication failed with error: {:?}", result.error);
@@ -1132,7 +1132,7 @@ mod tests {
         let auth_result = auth_manager
             .authenticate(AuthMethod::Basic, credentials)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         if !auth_result.success {
             println!(
@@ -1142,10 +1142,13 @@ mod tests {
         }
         assert!(auth_result.success);
 
-        let token = auth_result.token.unwrap();
+        let token = auth_result.token.expect("token should be available");
 
         // Now validate the token
-        let validation_result = auth_manager.validate_token(&token.token).await.unwrap();
+        let validation_result = auth_manager
+            .validate_token(&token.token)
+            .await
+            .expect("async operation should succeed");
         if !validation_result.success {
             println!(
                 "Token validation failed with error: {:?}",
@@ -1168,11 +1171,11 @@ mod tests {
             auth_method: AuthMethod::Basic,
             authenticated_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs(),
             expires_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs()
                 + 3600,
             claims: HashMap::new(),
@@ -1200,11 +1203,11 @@ mod tests {
             auth_method: AuthMethod::Basic,
             authenticated_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs(),
             expires_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs()
                 + 3600,
             claims: HashMap::new(),
@@ -1213,13 +1216,13 @@ mod tests {
         let can_query = auth_manager
             .authorize(&identity, "query", "sparql")
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(can_query);
 
         let can_admin = auth_manager
             .authorize(&identity, "admin", "system")
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(!can_admin); // User doesn't have admin permission
     }
 
@@ -1235,14 +1238,20 @@ mod tests {
         let auth_result = auth_manager
             .authenticate(AuthMethod::Basic, credentials)
             .await
-            .unwrap();
-        let token = auth_result.token.unwrap();
+            .expect("operation should succeed");
+        let token = auth_result.token.expect("token should be available");
 
         // Revoke the token
-        auth_manager.revoke_token(&token.token_id).await.unwrap();
+        auth_manager
+            .revoke_token(&token.token_id)
+            .await
+            .expect("async operation should succeed");
 
         // Token validation should fail
-        let validation_result = auth_manager.validate_token(&token.token).await.unwrap();
+        let validation_result = auth_manager
+            .validate_token(&token.token)
+            .await
+            .expect("async operation should succeed");
         assert!(!validation_result.success);
     }
 }

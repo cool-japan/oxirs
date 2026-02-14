@@ -382,7 +382,13 @@ impl NeuralArchitectureSearch {
                 .unwrap_or(std::cmp::Ordering::Equal)
         }) {
             let mut best_candidate = self.best_candidate.write().await;
-            if best_candidate.is_none() || best.fitness > best_candidate.as_ref().unwrap().fitness {
+            if best_candidate.is_none()
+                || best.fitness
+                    > best_candidate
+                        .as_ref()
+                        .expect("best_candidate confirmed Some by is_none check")
+                        .fitness
+            {
                 info!(
                     "New best candidate found! Fitness: {:.4}, Gen: {}",
                     best.fitness, best.generation
@@ -397,7 +403,11 @@ impl NeuralArchitectureSearch {
         let mut population = self.population.write().await;
 
         // Sort by fitness (descending)
-        population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+        population.sort_by(|a, b| {
+            b.fitness
+                .partial_cmp(&a.fitness)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Select elite candidates
         let elite_count = (self.config.population_size as f64 * self.config.elite_ratio) as usize;

@@ -42,7 +42,11 @@ impl AdvancedValidationStrategyManager {
         match self.config.strategy_selection {
             StrategySelectionApproach::Static => {
                 // Return first strategy as default
-                Ok(self.strategies.first().unwrap().as_ref())
+                Ok(self
+                    .strategies
+                    .first()
+                    .expect("collection validated to be non-empty")
+                    .as_ref())
             }
             StrategySelectionApproach::RuleBased => self.select_strategy_rule_based(context),
             StrategySelectionApproach::MLBased | StrategySelectionApproach::AdaptiveMLBased => {
@@ -51,7 +55,11 @@ impl AdvancedValidationStrategyManager {
             StrategySelectionApproach::MultiArmedBandit => self.select_strategy_bandit(context),
             StrategySelectionApproach::Ensemble => {
                 // For simplicity, return first strategy
-                Ok(self.strategies.first().unwrap().as_ref())
+                Ok(self
+                    .strategies
+                    .first()
+                    .expect("collection validated to be non-empty")
+                    .as_ref())
             }
             StrategySelectionApproach::QuantumEnhanced => {
                 self.select_strategy_quantum_enhanced(context)
@@ -114,7 +122,11 @@ impl AdvancedValidationStrategyManager {
                 })?)
         } else {
             // Use sequential strategy as default
-            Ok(self.strategies.first().unwrap().as_ref())
+            Ok(self
+                .strategies
+                .first()
+                .expect("collection validated to be non-empty")
+                .as_ref())
         }
     }
 
@@ -144,7 +156,11 @@ impl AdvancedValidationStrategyManager {
     ) -> Result<&dyn ValidationStrategy> {
         // Multi-armed bandit selection - simplified implementation
         // For now, return first strategy
-        Ok(self.strategies.first().unwrap().as_ref())
+        Ok(self
+            .strategies
+            .first()
+            .expect("collection validated to be non-empty")
+            .as_ref())
     }
 
     fn select_strategy_quantum_enhanced(

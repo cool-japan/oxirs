@@ -6,8 +6,7 @@
 
 use crate::algebra::Algebra;
 use crate::cardinality_estimator::CardinalityEstimator;
-use crate::cost_model::{CostEstimate, CostModel};
-use crate::optimizer::Statistics;
+use crate::cost_model::CostModel;
 use anyhow::{anyhow, Result};
 use scirs2_core::metrics::{Counter, Timer};
 use scirs2_core::profiling::Profiler;
@@ -15,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Adaptive query executor that re-optimizes plans based on runtime feedback
 pub struct AdaptiveExecutor {
@@ -56,7 +55,7 @@ impl Default for AdaptiveConfig {
             re_opt_trigger_seconds: 5,
             min_reopt_interval_seconds: 5,
             plan_switch_threshold: 2.0, // Must be 2x better
-            deviation_threshold: 5.0,    // 5x deviation triggers re-opt
+            deviation_threshold: 5.0,   // 5x deviation triggers re-opt
             max_reoptimizations: 3,
         }
     }
@@ -194,6 +193,7 @@ pub struct QueryPlan {
 }
 
 /// Adaptive optimizer for query re-optimization
+#[allow(dead_code)]
 pub struct AdaptiveOptimizer {
     /// Cardinality estimator
     cardinality_estimator: Arc<RwLock<CardinalityEstimator>>,
@@ -310,8 +310,7 @@ impl AdaptiveExecutor {
 
             // Check if should re-optimize
             let elapsed = start_time.elapsed();
-            let should_reopt =
-                self.should_reoptimize(&stats, elapsed, last_reopt.elapsed())?;
+            let should_reopt = self.should_reoptimize(&stats, elapsed, last_reopt.elapsed())?;
 
             if should_reopt {
                 info!(
@@ -327,7 +326,8 @@ impl AdaptiveExecutor {
 
                 // Check if new plan is significantly better
                 if self.is_plan_significantly_better(&current_plan, &refined_plan, &stats)? {
-                    let improvement = self.estimate_improvement(&current_plan, &refined_plan, &stats)?;
+                    let improvement =
+                        self.estimate_improvement(&current_plan, &refined_plan, &stats)?;
                     info!(
                         "Switching to new plan (estimated {}x improvement)",
                         improvement
@@ -338,8 +338,10 @@ impl AdaptiveExecutor {
 
                     // Switch to new plan
                     current_plan = refined_plan;
-                    executor =
-                        CheckpointedExecutor::new_from_checkpoint(current_plan.clone(), checkpoint)?;
+                    executor = CheckpointedExecutor::new_from_checkpoint(
+                        current_plan.clone(),
+                        checkpoint,
+                    )?;
 
                     self.metrics.plan_switches.inc();
                     last_reopt = Instant::now();
@@ -354,7 +356,7 @@ impl AdaptiveExecutor {
             }
         }
 
-        Ok(executor.finalize()?)
+        executor.finalize()
     }
 
     /// Determine if should trigger re-optimization
@@ -468,6 +470,7 @@ impl AdaptiveExecutor {
 }
 
 /// Executor with checkpointing support
+#[allow(dead_code)]
 pub struct CheckpointedExecutor {
     plan: QueryPlan,
     state: ExecutorState,
@@ -475,24 +478,15 @@ pub struct CheckpointedExecutor {
 }
 
 /// Executor state for checkpointing
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ExecutorState {
     /// Operator states by operator ID
+    #[allow(clippy::derivable_impls)]
     pub operator_states: HashMap<OperatorId, OperatorState>,
     /// Rows processed so far
     pub rows_processed: u64,
     /// Intermediate results
     pub intermediate_results: Vec<u8>, // Serialized results
-}
-
-impl Default for ExecutorState {
-    fn default() -> Self {
-        Self {
-            operator_states: HashMap::new(),
-            rows_processed: 0,
-            intermediate_results: Vec::new(),
-        }
-    }
 }
 
 /// State for a single operator

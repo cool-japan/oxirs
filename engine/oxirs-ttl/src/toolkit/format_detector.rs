@@ -503,7 +503,7 @@ impl FormatDetector {
         // Find format with highest score
         format_scores
             .into_iter()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(format, score)| DetectionResult {
                 format,
                 confidence: (score / results.len() as f64).min(1.0),
@@ -532,7 +532,7 @@ impl FormatScores {
 
         formats
             .iter()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .filter(|(_, score)| *score >= min_confidence)
             .map(|(format, score)| DetectionResult {
                 format: *format,
@@ -550,7 +550,9 @@ mod tests {
     fn test_detect_turtle_from_extension() {
         let detector = FormatDetector::new();
 
-        let result = detector.detect_from_extension("ttl").unwrap();
+        let result = detector
+            .detect_from_extension("ttl")
+            .expect("detection should succeed");
         assert_eq!(result.format, RdfFormat::Turtle);
         assert!(result.confidence > 0.8);
     }
@@ -559,7 +561,9 @@ mod tests {
     fn test_detect_ntriples_from_extension() {
         let detector = FormatDetector::new();
 
-        let result = detector.detect_from_extension("nt").unwrap();
+        let result = detector
+            .detect_from_extension("nt")
+            .expect("detection should succeed");
         assert_eq!(result.format, RdfFormat::NTriples);
     }
 
@@ -568,7 +572,9 @@ mod tests {
         let detector = FormatDetector::new();
         let path = Path::new("test.ttl");
 
-        let result = detector.detect_from_path(path).unwrap();
+        let result = detector
+            .detect_from_path(path)
+            .expect("detection should succeed");
         assert_eq!(result.format, RdfFormat::Turtle);
     }
 
@@ -577,7 +583,9 @@ mod tests {
         let detector = FormatDetector::new();
         let content = b"@prefix ex: <http://example.org/> .\nex:subject ex:predicate ex:object .";
 
-        let result = detector.detect_from_content(content).unwrap();
+        let result = detector
+            .detect_from_content(content)
+            .expect("detection should succeed");
         assert_eq!(result.format, RdfFormat::Turtle);
     }
 
@@ -586,7 +594,9 @@ mod tests {
         let detector = FormatDetector::new();
         let content = b"@prefix ex: <http://example.org/> .\nex:graph { ex:s ex:p ex:o . }";
 
-        let result = detector.detect_from_content(content).unwrap();
+        let result = detector
+            .detect_from_content(content)
+            .expect("detection should succeed");
         assert_eq!(result.format, RdfFormat::TriG);
     }
 
@@ -595,7 +605,9 @@ mod tests {
         let detector = FormatDetector::new();
         let content = b"<http://example.org/s> <http://example.org/p> <http://example.org/o> .\n<http://example.org/s2> <http://example.org/p2> <http://example.org/o2> .";
 
-        let result = detector.detect_from_content(content).unwrap();
+        let result = detector
+            .detect_from_content(content)
+            .expect("detection should succeed");
         assert_eq!(result.format, RdfFormat::NTriples);
     }
 
@@ -603,12 +615,14 @@ mod tests {
     fn test_detect_from_mime_type() {
         let detector = FormatDetector::new();
 
-        let result = detector.detect_from_mime_type("text/turtle").unwrap();
+        let result = detector
+            .detect_from_mime_type("text/turtle")
+            .expect("detection should succeed");
         assert_eq!(result.format, RdfFormat::Turtle);
 
         let result = detector
             .detect_from_mime_type("application/n-triples")
-            .unwrap();
+            .expect("detection should succeed");
         assert_eq!(result.format, RdfFormat::NTriples);
     }
 
@@ -618,7 +632,9 @@ mod tests {
         let path = Path::new("test.ttl");
         let content = b"@prefix ex: <http://example.org/> .";
 
-        let result = detector.detect(Some(path), None, Some(content)).unwrap();
+        let result = detector
+            .detect(Some(path), None, Some(content))
+            .expect("detection should succeed");
         assert_eq!(result.format, RdfFormat::Turtle);
         assert!(result.confidence > 0.8);
     }

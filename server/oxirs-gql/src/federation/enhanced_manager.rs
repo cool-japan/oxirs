@@ -1076,7 +1076,9 @@ impl EnhancedFederationManager {
                         "Query attempt {} failed for service {}: {}",
                         attempt + 1,
                         service.id,
-                        last_error.as_ref().unwrap()
+                        last_error
+                            .as_ref()
+                            .expect("last_error should be set after failed attempt")
                     );
                 }
             }
@@ -1176,7 +1178,11 @@ impl EnhancedFederationManager {
     ) -> Result<serde_json::Value> {
         // Simple merge for now - in a real implementation this would be more sophisticated
         if results.len() == 1 {
-            Ok(results.values().next().unwrap().clone())
+            Ok(results
+                .values()
+                .next()
+                .expect("results should not be empty when len == 1")
+                .clone())
         } else {
             // Merge multiple results
             let mut merged = serde_json::Map::new();

@@ -1066,7 +1066,9 @@ impl ConnectionPool {
     pub async fn release(&self, mut conn: Connection) {
         conn.touch();
         let mut connections = self.connections.write().await;
-        let node_connections = connections.entry(conn.node_id).or_insert_with(VecDeque::new);
+        let node_connections = connections
+            .entry(conn.node_id)
+            .or_insert_with(VecDeque::new);
 
         if node_connections.len() < self.config.max_connections_per_node {
             node_connections.push_back(conn);

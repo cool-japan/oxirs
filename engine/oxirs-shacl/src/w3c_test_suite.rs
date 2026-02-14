@@ -1197,9 +1197,11 @@ mod tests {
     #[test]
     fn test_manifest_creation() {
         let config = W3cTestConfig::default();
-        let runner = W3cTestSuiteRunner::new(config).unwrap();
+        let runner = W3cTestSuiteRunner::new(config).expect("construction should succeed");
 
-        let manifest = runner.create_core_constraints_manifest().unwrap();
+        let manifest = runner
+            .create_core_constraints_manifest()
+            .expect("training should succeed");
         assert_eq!(manifest.id, "core-constraints");
         assert_eq!(manifest.category, TestCategory::Core);
         assert!(!manifest.entries.is_empty());
@@ -1227,7 +1229,7 @@ mod tests {
         validation_report.conforms = true;
 
         let config = W3cTestConfig::default();
-        let runner = W3cTestSuiteRunner::new(config).unwrap();
+        let runner = W3cTestSuiteRunner::new(config).expect("construction should succeed");
 
         let assessment = runner.assess_compliance(&test_entry, &validation_report);
         assert!(assessment.compliant);
@@ -1237,7 +1239,7 @@ mod tests {
     #[tokio::test]
     async fn test_manifest_loading() {
         let config = W3cTestConfig::default();
-        let mut runner = W3cTestSuiteRunner::new(config).unwrap();
+        let mut runner = W3cTestSuiteRunner::new(config).expect("construction should succeed");
 
         let result = runner.load_manifests().await;
         assert!(result.is_ok());

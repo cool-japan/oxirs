@@ -185,7 +185,7 @@ impl<R: Read + Send + Sync + 'static> ParallelStreamingParser<R> {
 
         // Read all batches first and extract prefixes
         loop {
-            let mut reader_guard = self.reader.lock().unwrap();
+            let mut reader_guard = self.reader.lock().expect("lock should not be poisoned");
             let mut batch_content = String::new();
             let mut lines_read = 0;
 
@@ -269,7 +269,7 @@ mod tests {
         let result = parser.parse_all();
 
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("result should be Ok");
         assert_eq!(triples.len(), 3);
     }
 

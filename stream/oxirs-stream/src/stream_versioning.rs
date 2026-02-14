@@ -624,7 +624,10 @@ where
             )));
         }
 
-        let head_version = branches.get(branch_id).unwrap().head_version;
+        let head_version = branches
+            .get(branch_id)
+            .expect("branch should exist after contains_key check")
+            .head_version;
         drop(branches);
 
         let mut current_branch = self.current_branch.write().await;

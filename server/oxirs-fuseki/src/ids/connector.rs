@@ -48,11 +48,13 @@ pub struct IdsConnectorConfig {
 impl Default for IdsConnectorConfig {
     fn default() -> Self {
         Self {
-            connector_id: IdsUri::new("urn:ids:connector:oxirs").unwrap(),
+            connector_id: IdsUri::new("urn:ids:connector:oxirs")
+                .expect("default connector URI should be valid"),
             title: "OxiRS IDS Connector".to_string(),
             description: "Semantic Web Data Space Connector".to_string(),
-            curator: IdsUri::new("https://oxirs.io").unwrap(),
-            maintainer: IdsUri::new("https://oxirs.io").unwrap(),
+            curator: IdsUri::new("https://oxirs.io").expect("default curator URI should be valid"),
+            maintainer: IdsUri::new("https://oxirs.io")
+                .expect("default maintainer URI should be valid"),
             security_profile: SecurityProfile::TrustSecurityProfile,
             daps_url: super::DEFAULT_DAPS_URL.to_string(),
             broker_urls: vec![super::DEFAULT_IDS_BROKER.to_string()],

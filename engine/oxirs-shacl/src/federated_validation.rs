@@ -574,7 +574,7 @@ impl FederatedValidationEngine {
                 endpoint: selected_endpoints
                     .first()
                     .cloned()
-                    .unwrap_or_else(|| Url::parse("http://localhost").unwrap()),
+                    .unwrap_or_else(|| Url::parse("http://localhost").expect("valid URL")),
                 cache_status: CacheStatus::Miss, // TODO: Implement cache logic
                 quality_metrics: QualityMetrics {
                     confidence: 95,
@@ -957,7 +957,10 @@ impl FederatedValidationEngine {
         }
 
         if reports.len() == 1 {
-            return Ok(reports.into_iter().next().unwrap());
+            return Ok(reports
+                .into_iter()
+                .next()
+                .expect("iterator should have next element"));
         }
 
         // Implement simplified report merging logic
@@ -1348,7 +1351,11 @@ mod tests {
         let engine = FederatedValidationEngine::new(config);
 
         // Test basic engine creation
-        assert!(engine.endpoints.read().unwrap().is_empty());
+        assert!(engine
+            .endpoints
+            .read()
+            .expect("read lock should not be poisoned")
+            .is_empty());
     }
 
     #[test]
@@ -1357,7 +1364,7 @@ mod tests {
         let engine = FederatedValidationEngine::new(config);
 
         let endpoint = FederatedEndpoint {
-            url: Url::parse("http://example.com/shacl").unwrap(),
+            url: Url::parse("http://example.com/shacl").expect("valid URL"),
             capabilities: EndpointCapabilities {
                 shacl_core: true,
                 shacl_sparql: false,
@@ -1399,9 +1406,9 @@ mod tests {
         let load_balancer = LoadBalancer::new(LoadBalancingStrategy::RoundRobin);
 
         let endpoints = vec![
-            Url::parse("http://endpoint1.com").unwrap(),
-            Url::parse("http://endpoint2.com").unwrap(),
-            Url::parse("http://endpoint3.com").unwrap(),
+            Url::parse("http://endpoint1.com").expect("valid URL"),
+            Url::parse("http://endpoint2.com").expect("valid URL"),
+            Url::parse("http://endpoint3.com").expect("valid URL"),
         ];
 
         let selected = load_balancer.select_endpoints(&endpoints, 2);

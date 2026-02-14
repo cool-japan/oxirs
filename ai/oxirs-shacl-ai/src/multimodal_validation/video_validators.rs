@@ -50,9 +50,12 @@ impl VideoValidator for VideoFormatValidator {
         let format = self.detect_video_format(&content.data);
         let size_valid = content.data.len() <= self.max_file_size;
         let format_valid = format.is_some()
-            && self
-                .supported_formats
-                .contains(&format.as_ref().unwrap().to_lowercase());
+            && self.supported_formats.contains(
+                &format
+                    .as_ref()
+                    .expect("format should be Some after is_some check")
+                    .to_lowercase(),
+            );
 
         let is_valid = format_valid && size_valid;
 

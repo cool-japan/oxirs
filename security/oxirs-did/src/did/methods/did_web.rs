@@ -131,8 +131,8 @@ mod tests {
     fn test_did_to_url_simple() {
         let method = DidWebMethod::new();
 
-        let did = Did::new("did:web:example.com").unwrap();
-        let url = method.did_to_url(&did).unwrap();
+        let did = Did::new("did:web:example.com").expect("valid did:web DID");
+        let url = method.did_to_url(&did).expect("valid URL from did:web DID");
 
         assert_eq!(url, "https://example.com/.well-known/did.json");
     }
@@ -141,8 +141,10 @@ mod tests {
     fn test_did_to_url_with_path() {
         let method = DidWebMethod::new();
 
-        let did = Did::new("did:web:example.com:users:alice").unwrap();
-        let url = method.did_to_url(&did).unwrap();
+        let did = Did::new("did:web:example.com:users:alice").expect("valid did:web DID with path");
+        let url = method
+            .did_to_url(&did)
+            .expect("valid URL from did:web DID with path");
 
         assert_eq!(url, "https://example.com/users/alice/did.json");
     }
@@ -151,8 +153,10 @@ mod tests {
     fn test_did_to_url_with_port() {
         let method = DidWebMethod::new();
 
-        let did = Did::new("did:web:example.com%3A8080").unwrap();
-        let url = method.did_to_url(&did).unwrap();
+        let did = Did::new("did:web:example.com%3A8080").expect("valid did:web DID with port");
+        let url = method
+            .did_to_url(&did)
+            .expect("valid URL from did:web DID with port");
 
         assert_eq!(url, "https://example.com:8080/.well-known/did.json");
     }

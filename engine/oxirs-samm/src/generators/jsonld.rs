@@ -184,7 +184,11 @@ fn to_camel_case(s: &str) -> String {
         if ch == '_' {
             capitalize_next = true;
         } else if capitalize_next {
-            result.push(ch.to_uppercase().next().unwrap());
+            result.push(
+                ch.to_uppercase()
+                    .next()
+                    .expect("uppercase should produce a character"),
+            );
             capitalize_next = false;
         } else {
             result.push(ch);

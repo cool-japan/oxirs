@@ -395,7 +395,7 @@ impl CloudStorageBackend for MemoryBackend {
     }
 
     async fn download(&self, key: &str) -> std::result::Result<Vec<u8>, String> {
-        let storage = self.storage.lock().unwrap();
+        let storage = self.storage.lock().expect("lock should not be poisoned");
         storage
             .get(key)
             .cloned()
@@ -403,7 +403,7 @@ impl CloudStorageBackend for MemoryBackend {
     }
 
     async fn exists(&self, key: &str) -> std::result::Result<bool, String> {
-        let storage = self.storage.lock().unwrap();
+        let storage = self.storage.lock().expect("lock should not be poisoned");
         Ok(storage.contains_key(key))
     }
 
@@ -417,7 +417,7 @@ impl CloudStorageBackend for MemoryBackend {
     }
 
     async fn list(&self, prefix: &str) -> std::result::Result<Vec<String>, String> {
-        let storage = self.storage.lock().unwrap();
+        let storage = self.storage.lock().expect("lock should not be poisoned");
         Ok(storage
             .keys()
             .filter(|k| k.starts_with(prefix))
@@ -426,7 +426,7 @@ impl CloudStorageBackend for MemoryBackend {
     }
 
     async fn get_metadata(&self, key: &str) -> std::result::Result<ObjectMetadata, String> {
-        let storage = self.storage.lock().unwrap();
+        let storage = self.storage.lock().expect("lock should not be poisoned");
         storage
             .get(key)
             .map(|data| ObjectMetadata {
@@ -528,25 +528,52 @@ mod tests {
 
         // Test upload
         let data = b"test data".to_vec();
-        backend.upload("test.txt", data.clone()).await.unwrap();
+        backend
+            .upload("test.txt", data.clone())
+            .await
+            .expect("async operation should succeed");
 
         // Test exists
-        assert!(backend.exists("test.txt").await.unwrap());
-        assert!(!backend.exists("nonexistent.txt").await.unwrap());
+        assert!(backend
+            .exists("test.txt")
+            .await
+            .expect("async operation should succeed"));
+        assert!(!backend
+            .exists("nonexistent.txt")
+            .await
+            .expect("async operation should succeed"));
 
         // Test download
-        let downloaded = backend.download("test.txt").await.unwrap();
+        let downloaded = backend
+            .download("test.txt")
+            .await
+            .expect("async operation should succeed");
         assert_eq!(downloaded, data);
 
         // Test list
-        backend.upload("dir/file1.txt", vec![]).await.unwrap();
-        backend.upload("dir/file2.txt", vec![]).await.unwrap();
-        let files = backend.list("dir/").await.unwrap();
+        backend
+            .upload("dir/file1.txt", vec![])
+            .await
+            .expect("async operation should succeed");
+        backend
+            .upload("dir/file2.txt", vec![])
+            .await
+            .expect("async operation should succeed");
+        let files = backend
+            .list("dir/")
+            .await
+            .expect("async operation should succeed");
         assert_eq!(files.len(), 2);
 
         // Test delete
-        backend.delete("test.txt").await.unwrap();
-        assert!(!backend.exists("test.txt").await.unwrap());
+        backend
+            .delete("test.txt")
+            .await
+            .expect("async operation should succeed");
+        assert!(!backend
+            .exists("test.txt")
+            .await
+            .expect("async operation should succeed"));
     }
 
     #[tokio::test]
@@ -561,22 +588,37 @@ mod tests {
         storage
             .upload_model("models/test.ttl", &aspect)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Test exists
-        assert!(storage.model_exists("models/test.ttl").await.unwrap());
+        assert!(storage
+            .model_exists("models/test.ttl")
+            .await
+            .expect("async operation should succeed"));
 
         // Test download
-        let downloaded = storage.download_model("models/test.ttl").await.unwrap();
+        let downloaded = storage
+            .download_model("models/test.ttl")
+            .await
+            .expect("async operation should succeed");
         assert_eq!(downloaded.name(), aspect.name());
 
         // Test list
-        let models = storage.list_models("models/").await.unwrap();
+        let models = storage
+            .list_models("models/")
+            .await
+            .expect("async operation should succeed");
         assert_eq!(models.len(), 1);
 
         // Test delete
-        storage.delete_model("models/test.ttl").await.unwrap();
-        assert!(!storage.model_exists("models/test.ttl").await.unwrap());
+        storage
+            .delete_model("models/test.ttl")
+            .await
+            .expect("async operation should succeed");
+        assert!(!storage
+            .model_exists("models/test.ttl")
+            .await
+            .expect("async operation should succeed"));
     }
 
     #[tokio::test]
@@ -590,21 +632,27 @@ mod tests {
         storage
             .upload_model("cached/model.ttl", &aspect)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // First download (from backend)
-        let _first = storage.download_model("cached/model.ttl").await.unwrap();
+        let _first = storage
+            .download_model("cached/model.ttl")
+            .await
+            .expect("async operation should succeed");
 
         // Check cache stats
-        let stats = storage.cache_stats().unwrap();
+        let stats = storage.cache_stats().expect("operation should succeed");
         assert_eq!(stats.entries, 1);
 
         // Second download (from cache)
-        let _second = storage.download_model("cached/model.ttl").await.unwrap();
+        let _second = storage
+            .download_model("cached/model.ttl")
+            .await
+            .expect("async operation should succeed");
 
         // Clear cache
         storage.clear_cache();
-        let stats_after_clear = storage.cache_stats().unwrap();
+        let stats_after_clear = storage.cache_stats().expect("clear should succeed");
         assert_eq!(stats_after_clear.entries, 0);
     }
 }

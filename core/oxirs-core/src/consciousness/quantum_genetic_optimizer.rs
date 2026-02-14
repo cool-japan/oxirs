@@ -159,20 +159,22 @@ impl QuantumGeneticOptimizer {
         // Adjust amplitudes based on pattern complexity
         if pattern_complexity > 0.8 {
             // High complexity patterns benefit from quantum tunneling and intuitive leaps
-            *strategy_amplitudes
-                .get_mut(&OptimizationStrategy::QuantumTunneling)
-                .unwrap() *= 1.3;
-            *strategy_amplitudes
-                .get_mut(&OptimizationStrategy::IntuitiveLeap)
-                .unwrap() *= 1.2;
+            if let Some(v) = strategy_amplitudes.get_mut(&OptimizationStrategy::QuantumTunneling) {
+                *v *= 1.3;
+            }
+            if let Some(v) = strategy_amplitudes.get_mut(&OptimizationStrategy::IntuitiveLeap) {
+                *v *= 1.2;
+            }
         } else if pattern_complexity < 0.3 {
             // Simple patterns benefit from consciousness guidance and emotional resonance
-            *strategy_amplitudes
-                .get_mut(&OptimizationStrategy::ConsciousnessGuided)
-                .unwrap() *= 1.3;
-            *strategy_amplitudes
-                .get_mut(&OptimizationStrategy::EmotionalResonance)
-                .unwrap() *= 1.2;
+            if let Some(v) = strategy_amplitudes.get_mut(&OptimizationStrategy::ConsciousnessGuided)
+            {
+                *v *= 1.3;
+            }
+            if let Some(v) = strategy_amplitudes.get_mut(&OptimizationStrategy::EmotionalResonance)
+            {
+                *v *= 1.2;
+            }
         }
 
         // Renormalize amplitudes to maintain quantum probability conservation

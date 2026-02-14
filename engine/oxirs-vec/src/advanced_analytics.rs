@@ -332,19 +332,19 @@ impl VectorAnalyticsEngine {
             (Priority::Critical, Priority::Critical) => b
                 .expected_improvement
                 .partial_cmp(&a.expected_improvement)
-                .unwrap(),
+                .unwrap_or(std::cmp::Ordering::Equal),
             (Priority::Critical, _) => std::cmp::Ordering::Less,
             (_, Priority::Critical) => std::cmp::Ordering::Greater,
             (Priority::High, Priority::High) => b
                 .expected_improvement
                 .partial_cmp(&a.expected_improvement)
-                .unwrap(),
+                .unwrap_or(std::cmp::Ordering::Equal),
             (Priority::High, _) => std::cmp::Ordering::Less,
             (_, Priority::High) => std::cmp::Ordering::Greater,
             _ => b
                 .expected_improvement
                 .partial_cmp(&a.expected_improvement)
-                .unwrap(),
+                .unwrap_or(std::cmp::Ordering::Equal),
         });
 
         recommendations
@@ -534,7 +534,7 @@ impl VectorAnalyticsEngine {
             distances.push(euclidean_distance(vector, &centroid));
         }
 
-        distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        distances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let q3_index = (distances.len() as f32 * 0.75) as usize;
         let q1_index = (distances.len() as f32 * 0.25) as usize;
 
@@ -833,12 +833,12 @@ impl VectorAnalyticsEngine {
             let variance = calculate_variance(&values);
             let range = values
                 .iter()
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
-                .unwrap()
+                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .expect("values vector should not be empty")
                 - values
                     .iter()
-                    .min_by(|a, b| a.partial_cmp(b).unwrap())
-                    .unwrap();
+                    .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .expect("values vector should not be empty");
 
             // Quality based on variance and range (higher is better for meaningful dimensions)
             quality_scores[dim] = (variance * range).min(1.0);

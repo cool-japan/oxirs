@@ -550,7 +550,7 @@ impl MultiRegionReplicationManager {
                         .conflicting_events
                         .iter()
                         .max_by_key(|e| e.metadata().timestamp)
-                        .unwrap()
+                        .expect("conflicting_events should not be empty")
                         .clone(),
                 );
                 conflict_info.resolved_at = Some(Utc::now());

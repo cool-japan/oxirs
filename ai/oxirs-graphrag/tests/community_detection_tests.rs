@@ -26,8 +26,8 @@ fn test_leiden_modularity_target() {
     assert!(!communities.is_empty(), "Should detect communities");
 
     // Check modularity target
-    let avg_modularity: f64 = communities.iter().map(|c| c.modularity).sum::<f64>()
-        / communities.len().max(1) as f64;
+    let avg_modularity: f64 =
+        communities.iter().map(|c| c.modularity).sum::<f64>() / communities.len().max(1) as f64;
 
     println!("Leiden modularity: {:.3}", avg_modularity);
 
@@ -65,9 +65,11 @@ fn test_louvain_baseline() {
 
     assert!(!louvain_communities.is_empty());
 
-    let louvain_modularity: f64 =
-        louvain_communities.iter().map(|c| c.modularity).sum::<f64>()
-            / louvain_communities.len().max(1) as f64;
+    let louvain_modularity: f64 = louvain_communities
+        .iter()
+        .map(|c| c.modularity)
+        .sum::<f64>()
+        / louvain_communities.len().max(1) as f64;
 
     println!("Louvain modularity: {:.3}", louvain_modularity);
     assert!(louvain_modularity > 0.0);
@@ -135,12 +137,11 @@ fn test_hierarchical_detection() {
     assert!(!communities.is_empty());
 
     // Should have multiple levels
-    let levels: std::collections::HashSet<u32> =
-        communities.iter().map(|c| c.level).collect();
+    let levels: std::collections::HashSet<u32> = communities.iter().map(|c| c.level).collect();
     println!("Detected {} hierarchical levels", levels.len());
 
     // At least 2 levels for hierarchical
-    assert!(levels.len() >= 1);
+    assert!(!levels.is_empty());
 }
 
 /// Test 5: Community Size - Verify min_community_size respected
@@ -340,16 +341,8 @@ fn create_karate_club_graph() -> Vec<Triple> {
     }
 
     // Bridge nodes
-    triples.push(Triple::new(
-        "http://node0",
-        "http://link",
-        "http://node33",
-    ));
-    triples.push(Triple::new(
-        "http://node8",
-        "http://link",
-        "http://node25",
-    ));
+    triples.push(Triple::new("http://node0", "http://link", "http://node33"));
+    triples.push(Triple::new("http://node8", "http://link", "http://node25"));
 
     triples
 }

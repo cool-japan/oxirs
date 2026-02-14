@@ -318,7 +318,7 @@ mod tests {
 
         let federation = VectorSimilarityFederation::new(config, service_registry)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let metadata = VectorServiceMetadata {
             base_metadata: FederatedService {
@@ -357,12 +357,12 @@ mod tests {
 
         let federation = VectorSimilarityFederation::new(config, service_registry)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let embedding = federation
             .generate_query_embedding("test query")
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert_eq!(embedding.dimensions, 384);
     }
 
@@ -373,12 +373,12 @@ mod tests {
 
         let federation = VectorSimilarityFederation::new(config, service_registry)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let analysis = federation
             .analyze_query_for_vectors("SELECT * WHERE { ?s ?p ?o . FILTER CONTAINS(?o, 'test') }")
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(analysis.has_text_search);
         assert!(!analysis.has_similarity_predicates);
@@ -391,9 +391,12 @@ mod tests {
 
         let federation = VectorSimilarityFederation::new(config, service_registry)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
-        let stats = federation.get_statistics().await.unwrap();
+        let stats = federation
+            .get_statistics()
+            .await
+            .expect("async operation should succeed");
         assert_eq!(stats.total_vector_services, 0);
     }
 }

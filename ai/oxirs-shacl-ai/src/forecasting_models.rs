@@ -1024,7 +1024,10 @@ impl QualityForecastingModel {
                     .unwrap_or(&24.0) as usize;
 
                 if train_data.len() < sequence_length {
-                    return Ok(train_data.last().unwrap().value);
+                    return Ok(train_data
+                        .last()
+                        .expect("collection validated to be non-empty")
+                        .value);
                 }
 
                 // Get recent sequence

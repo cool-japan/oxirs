@@ -639,8 +639,8 @@ fn count_update_operations(update: &str) -> usize {
 
     // Count DELETE/INSERT (or DELETE WHERE/INSERT) patterns
     // This is trickier as DELETE and INSERT might be separate or combined
-    let delete_insert_pattern =
-        regex::Regex::new(r"DELETE\s+(?:WHERE\s+)?\{[^}]*\}\s*INSERT\s+\{").unwrap();
+    let delete_insert_pattern = regex::Regex::new(r"DELETE\s+(?:WHERE\s+)?\{[^}]*\}\s*INSERT\s+\{")
+        .expect("regex pattern should be valid");
     count += delete_insert_pattern.find_iter(&update_upper).count();
 
     // Count standalone DELETE WHERE operations (not part of DELETE/INSERT)
@@ -770,7 +770,9 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
             let mut response = json_response;
             response.headers_mut().insert(
                 "content-type",
-                "application/sparql-results+json".parse().unwrap(),
+                "application/sparql-results+json"
+                    .parse()
+                    .expect("content-type header should be valid"),
             );
             response
         }
@@ -820,7 +822,9 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
             let mut response = xml_response;
             response.headers_mut().insert(
                 "content-type",
-                "application/sparql-results+xml".parse().unwrap(),
+                "application/sparql-results+xml"
+                    .parse()
+                    .expect("content-type header should be valid"),
             );
             response
         }
@@ -828,9 +832,12 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
             // Return CSV format with proper content type
             let csv_response = "CSV format not yet implemented".to_string().into_response();
             let mut response = csv_response;
-            response
-                .headers_mut()
-                .insert("content-type", "text/csv".parse().unwrap());
+            response.headers_mut().insert(
+                "content-type",
+                "text/csv"
+                    .parse()
+                    .expect("content-type header should be valid"),
+            );
             response
         }
         _ => {

@@ -203,7 +203,11 @@ impl QueryRefiner {
         suggestions.retain(|s| s.confidence >= self.config.min_confidence);
 
         // Sort by confidence
-        suggestions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        suggestions.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Limit results
         suggestions.truncate(self.config.max_suggestions);

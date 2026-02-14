@@ -403,7 +403,9 @@ mod tests {
         let mut optimizer = SparqlQueryOptimizer::new(config);
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . FILTER (?o > 10) }";
-        let optimized = optimizer.optimize_query(query).unwrap();
+        let optimized = optimizer
+            .optimize_query(query)
+            .expect("optimization should succeed");
 
         assert!(optimized.estimated_cost <= 1.0);
         assert!(!optimized.optimizations_applied.is_empty());
@@ -417,12 +419,16 @@ mod tests {
         let query = "SELECT ?s WHERE { ?s a ?type }";
 
         // First optimization - cache miss
-        optimizer.optimize_query(query).unwrap();
+        optimizer
+            .optimize_query(query)
+            .expect("optimization should succeed");
         assert_eq!(optimizer.optimization_stats().cache_misses, 1);
         assert_eq!(optimizer.optimization_stats().cache_hits, 0);
 
         // Second optimization - cache hit
-        optimizer.optimize_query(query).unwrap();
+        optimizer
+            .optimize_query(query)
+            .expect("optimization should succeed");
         assert_eq!(optimizer.optimization_stats().cache_hits, 1);
     }
 
@@ -445,7 +451,9 @@ mod tests {
         let generator = QueryPlanGenerator::new(config);
 
         let simple_query = "SELECT ?s WHERE { ?s a ?type }";
-        let plan = generator.generate_plan(simple_query).unwrap();
+        let plan = generator
+            .generate_plan(simple_query)
+            .expect("generation should succeed");
 
         assert_eq!(plan.execution_strategy, ExecutionStrategy::Sequential);
         assert!(plan.estimated_time < Duration::from_secs(1));

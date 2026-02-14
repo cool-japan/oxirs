@@ -205,9 +205,14 @@ impl PerformanceProfiler {
             let time_span = self
                 .resource_history
                 .last()
-                .unwrap()
+                .expect("resource_history should not be empty")
                 .timestamp
-                .duration_since(self.resource_history.first().unwrap().timestamp);
+                .duration_since(
+                    self.resource_history
+                        .first()
+                        .expect("collection validated to be non-empty")
+                        .timestamp,
+                );
             self.metrics.throughput =
                 self.metrics.total_operations as f64 / time_span.as_secs_f64();
         }

@@ -451,7 +451,9 @@ fn to_dtmi(urn: &str) -> Result<String, SammError> {
         )));
     }
 
-    let without_prefix = urn.strip_prefix("urn:samm:").unwrap();
+    let without_prefix = urn
+        .strip_prefix("urn:samm:")
+        .expect("prefix should be present");
 
     // Split by '#'
     let parts: Vec<&str> = without_prefix.split('#').collect();
@@ -502,7 +504,11 @@ fn to_camel_case(s: &str) -> String {
         if ch == '_' || ch == '-' {
             capitalize_next = true;
         } else if capitalize_next {
-            result.push(ch.to_uppercase().next().unwrap());
+            result.push(
+                ch.to_uppercase()
+                    .next()
+                    .expect("uppercase should produce a character"),
+            );
             capitalize_next = false;
         } else {
             result.push(ch);
@@ -529,17 +535,19 @@ mod tests {
     #[test]
     fn test_to_dtmi_conversion() {
         assert_eq!(
-            to_dtmi("urn:samm:com.example:1.0.0#Movement").unwrap(),
+            to_dtmi("urn:samm:com.example:1.0.0#Movement").expect("DTMI conversion should succeed"),
             "dtmi:com:example:Movement;1"
         );
 
         assert_eq!(
-            to_dtmi("urn:samm:org.eclipse.esmf:2.3.0#Aspect").unwrap(),
+            to_dtmi("urn:samm:org.eclipse.esmf:2.3.0#Aspect")
+                .expect("DTMI conversion should succeed"),
             "dtmi:org:eclipse:esmf:Aspect;2"
         );
 
         assert_eq!(
-            to_dtmi("urn:samm:io.github.oxirs:0.1.0#TestAspect").unwrap(),
+            to_dtmi("urn:samm:io.github.oxirs:0.1.0#TestAspect")
+                .expect("DTMI conversion should succeed"),
             "dtmi:io:github:oxirs:TestAspect;0"
         );
     }
@@ -562,15 +570,37 @@ mod tests {
 
     #[test]
     fn test_xsd_to_dtdl_schema_mapping() {
-        assert_eq!(map_xsd_to_dtdl_schema("string").unwrap(), "string");
-        assert_eq!(map_xsd_to_dtdl_schema("int").unwrap(), "integer");
-        assert_eq!(map_xsd_to_dtdl_schema("xsd:int").unwrap(), "integer");
-        assert_eq!(map_xsd_to_dtdl_schema("float").unwrap(), "float");
-        assert_eq!(map_xsd_to_dtdl_schema("xsd:float").unwrap(), "float");
-        assert_eq!(map_xsd_to_dtdl_schema("boolean").unwrap(), "boolean");
-        assert_eq!(map_xsd_to_dtdl_schema("dateTime").unwrap(), "dateTime");
         assert_eq!(
-            map_xsd_to_dtdl_schema("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+            map_xsd_to_dtdl_schema("string").expect("XSD mapping should succeed"),
+            "string"
+        );
+        assert_eq!(
+            map_xsd_to_dtdl_schema("int").expect("XSD mapping should succeed"),
+            "integer"
+        );
+        assert_eq!(
+            map_xsd_to_dtdl_schema("xsd:int").expect("XSD mapping should succeed"),
+            "integer"
+        );
+        assert_eq!(
+            map_xsd_to_dtdl_schema("float").expect("XSD mapping should succeed"),
+            "float"
+        );
+        assert_eq!(
+            map_xsd_to_dtdl_schema("xsd:float").expect("XSD mapping should succeed"),
+            "float"
+        );
+        assert_eq!(
+            map_xsd_to_dtdl_schema("boolean").expect("XSD mapping should succeed"),
+            "boolean"
+        );
+        assert_eq!(
+            map_xsd_to_dtdl_schema("dateTime").expect("XSD mapping should succeed"),
+            "dateTime"
+        );
+        assert_eq!(
+            map_xsd_to_dtdl_schema("http://www.w3.org/2001/XMLSchema#double")
+                .expect("XSD mapping should succeed"),
             "double"
         );
     }
@@ -586,7 +616,7 @@ mod tests {
     #[test]
     fn test_basic_aspect_generation() {
         let aspect = Aspect::new("urn:samm:com.example:1.0.0#Movement".to_string());
-        let dtdl = generate_dtdl(&aspect).unwrap();
+        let dtdl = generate_dtdl(&aspect).expect("DTDL generation should succeed");
 
         assert!(dtdl.contains("\"@context\": \"dtmi:dtdl:context;3\""));
         assert!(dtdl.contains("\"@id\": \"dtmi:com:example:Movement;1\""));
@@ -609,7 +639,7 @@ mod tests {
 
         aspect.add_property(prop);
 
-        let dtdl = generate_dtdl(&aspect).unwrap();
+        let dtdl = generate_dtdl(&aspect).expect("DTDL generation should succeed");
 
         assert!(dtdl.contains("\"name\": \"speed\""));
         assert!(dtdl.contains("\"schema\": \"float\""));
@@ -622,7 +652,7 @@ mod tests {
         let op = Operation::new("urn:samm:com.example:1.0.0#stop".to_string());
         aspect.add_operation(op);
 
-        let dtdl = generate_dtdl(&aspect).unwrap();
+        let dtdl = generate_dtdl(&aspect).expect("DTDL generation should succeed");
 
         assert!(dtdl.contains("\"@type\": \"Command\""));
         assert!(dtdl.contains("\"name\": \"stop\""));
@@ -635,7 +665,7 @@ mod tests {
             compact: true,
             ..Default::default()
         };
-        let dtdl = generate_dtdl_with_options(&aspect, options).unwrap();
+        let dtdl = generate_dtdl_with_options(&aspect, options).expect("generation should succeed");
 
         // Compact JSON should not have indentation
         assert!(!dtdl.contains("  "));
@@ -652,7 +682,7 @@ mod tests {
             include_descriptions: true,
             ..Default::default()
         };
-        let dtdl = generate_dtdl_with_options(&aspect, options).unwrap();
+        let dtdl = generate_dtdl_with_options(&aspect, options).expect("generation should succeed");
 
         assert!(dtdl.contains("\"description\": \"Movement tracking aspect\""));
 
@@ -660,7 +690,8 @@ mod tests {
             include_descriptions: false,
             ..Default::default()
         };
-        let dtdl_no_desc = generate_dtdl_with_options(&aspect, options_no_desc).unwrap();
+        let dtdl_no_desc = generate_dtdl_with_options(&aspect, options_no_desc)
+            .expect("generation should succeed");
 
         assert!(!dtdl_no_desc.contains("\"description\""));
     }

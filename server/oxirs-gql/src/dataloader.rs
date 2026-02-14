@@ -511,8 +511,14 @@ impl BatchLoadFn<String, serde_json::Value> for SubjectBatchLoader {
                     let mut triples = Vec::new();
                     for solution in solutions {
                         if let (Some(p), Some(o)) = (
-                            solution.get(&oxirs_core::model::Variable::new("p").unwrap()),
-                            solution.get(&oxirs_core::model::Variable::new("o").unwrap()),
+                            solution.get(
+                                &oxirs_core::model::Variable::new("p")
+                                    .expect("parse should succeed for valid input"),
+                            ),
+                            solution.get(
+                                &oxirs_core::model::Variable::new("o")
+                                    .expect("parse should succeed for valid input"),
+                            ),
                         ) {
                             triples.push(serde_json::json!({
                                 "predicate": p.to_string(),
@@ -551,9 +557,10 @@ impl BatchLoadFn<String, Vec<String>> for PredicateBatchLoader {
                 Ok(crate::QueryResults::Solutions(solutions)) => {
                     let mut subjects = Vec::new();
                     for solution in solutions {
-                        if let Some(s) =
-                            solution.get(&oxirs_core::model::Variable::new("s").unwrap())
-                        {
+                        if let Some(s) = solution.get(
+                            &oxirs_core::model::Variable::new("s")
+                                .expect("parse should succeed for valid input"),
+                        ) {
                             subjects.push(s.to_string());
                         }
                     }

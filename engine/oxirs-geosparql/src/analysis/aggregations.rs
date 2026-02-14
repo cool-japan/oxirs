@@ -166,12 +166,8 @@ pub fn spatial_convex_hull(geometries: &[Geometry]) -> Result<Geometry> {
     }
 
     // Create MultiPoint and compute convex hull
-    let multipoint = geo_types::MultiPoint::from(
-        all_coords
-            .into_iter()
-            .map(Point::from)
-            .collect::<Vec<_>>(),
-    );
+    let multipoint =
+        geo_types::MultiPoint::from(all_coords.into_iter().map(Point::from).collect::<Vec<_>>());
 
     let hull = multipoint.convex_hull();
     Ok(Geometry::new(geo_types::Geometry::Polygon(hull)))

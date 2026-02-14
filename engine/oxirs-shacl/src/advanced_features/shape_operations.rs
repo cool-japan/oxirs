@@ -939,7 +939,11 @@ impl ShapeEvolutionTracker {
         let version = if version_history.is_empty() {
             1
         } else {
-            version_history.last().unwrap().version + 1
+            version_history
+                .last()
+                .expect("collection should not be empty")
+                .version
+                + 1
         };
 
         let version_entry = ShapeVersion {
@@ -1011,7 +1015,10 @@ impl ShapeEvolutionTracker {
         // Count modified constraints (same ID but different content)
         let modified = old_ids
             .intersection(&new_ids)
-            .filter(|&&id| old.constraints.get(id).unwrap() != new.constraints.get(id).unwrap())
+            .filter(|&&id| {
+                old.constraints.get(id).expect("key should exist")
+                    != new.constraints.get(id).expect("key should exist")
+            })
             .count();
 
         // Compute restrictiveness delta
@@ -1092,7 +1099,12 @@ impl ShapeEvolutionTracker {
             .sum::<f64>()
             / total_changes as f64;
 
-        let current_complexity = self.compute_complexity_score(&history.last().unwrap().shape);
+        let current_complexity = self.compute_complexity_score(
+            &history
+                .last()
+                .expect("collection should not be empty")
+                .shape,
+        );
 
         Some(ShapeEvolutionStats {
             total_versions: total_changes,
@@ -1181,7 +1193,7 @@ mod tests {
         let result = merger.merge(std::slice::from_ref(&shape));
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().id, shape.id);
+        assert_eq!(result.expect("operation should succeed").id, shape.id);
     }
 
     #[test]
@@ -1243,7 +1255,7 @@ mod tests {
         // Version 1
         tracker
             .record_change(&shape, ShapeOperation::Created, "v1".to_string(), None)
-            .unwrap();
+            .expect("recording should succeed");
 
         // Version 2
         shape.severity = crate::Severity::Violation;
@@ -1255,9 +1267,11 @@ mod tests {
                 "v2".to_string(),
                 prev.as_ref(),
             )
-            .unwrap();
+            .expect("operation should succeed");
 
-        let history = tracker.get_history(&shape_id).unwrap();
+        let history = tracker
+            .get_history(&shape_id)
+            .expect("operation should succeed");
         assert_eq!(history.len(), 2);
         assert_eq!(history[0].version, 1);
         assert_eq!(history[1].version, 2);
@@ -1271,11 +1285,11 @@ mod tests {
 
         tracker
             .record_change(&shape, ShapeOperation::Created, "v1".to_string(), None)
-            .unwrap();
+            .expect("recording should succeed");
 
         let rolled_back = tracker.rollback(&shape_id, 1);
         assert!(rolled_back.is_ok());
-        assert_eq!(rolled_back.unwrap().id, shape_id);
+        assert_eq!(rolled_back.expect("operation should succeed").id, shape_id);
     }
 
     #[test]
@@ -1286,7 +1300,7 @@ mod tests {
 
         tracker
             .record_change(&shape, ShapeOperation::Created, "created".to_string(), None)
-            .unwrap();
+            .expect("recording should succeed");
 
         tracker
             .record_change(
@@ -1295,9 +1309,11 @@ mod tests {
                 "generalized".to_string(),
                 Some(&shape),
             )
-            .unwrap();
+            .expect("operation should succeed");
 
-        let stats = tracker.get_evolution_stats(&shape_id).unwrap();
+        let stats = tracker
+            .get_evolution_stats(&shape_id)
+            .expect("operation should succeed");
         assert_eq!(stats.total_versions, 2);
         assert_eq!(stats.generalizations, 1);
     }

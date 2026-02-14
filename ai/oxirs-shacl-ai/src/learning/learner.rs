@@ -142,7 +142,8 @@ impl ShapeLearner {
             // For now, we'll fall back to sequential processing but with better batching
             pool.execute(move || {
                 let result: (usize, NamedNode, Result<()>) = (idx, class, Ok(()));
-                tx.send(result).unwrap();
+                tx.send(result)
+                    .expect("channel receiver should still be alive");
             });
         }
 

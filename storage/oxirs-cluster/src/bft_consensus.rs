@@ -168,7 +168,7 @@ impl BftConsensusManager {
             operation,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             signature: None,
         };

@@ -623,7 +623,8 @@ mod tests {
             memory_limit_mb: 100,
             ..Default::default()
         };
-        let handler = MemoryEfficientDatasetHandler::new(config).unwrap();
+        let handler =
+            MemoryEfficientDatasetHandler::new(config).expect("construction should succeed");
 
         // 10MB should fit
         assert!(handler.can_fit_in_memory(10 * 1024 * 1024).await);
@@ -640,7 +641,8 @@ mod tests {
             enable_lazy: true,
             ..Default::default()
         };
-        let handler = MemoryEfficientDatasetHandler::new(config).unwrap();
+        let handler =
+            MemoryEfficientDatasetHandler::new(config).expect("construction should succeed");
 
         // Small dataset: in-memory
         let strategy = handler.recommend_storage_strategy(10 * 1024 * 1024).await;
@@ -660,7 +662,8 @@ mod tests {
             adaptive_chunking: false,
             ..Default::default()
         };
-        let handler = MemoryEfficientDatasetHandler::new(config).unwrap();
+        let handler =
+            MemoryEfficientDatasetHandler::new(config).expect("construction should succeed");
 
         let data = Array2::from_shape_fn((1000, 10), |(i, j)| (i * 10 + j) as f64);
 
@@ -669,7 +672,7 @@ mod tests {
             .await;
 
         assert!(result.is_ok());
-        let processed = result.unwrap();
+        let processed = result.expect("processing should succeed");
         assert_eq!(processed.nrows(), data.nrows());
         assert_eq!(processed.ncols(), data.ncols());
     }
@@ -677,14 +680,15 @@ mod tests {
     #[tokio::test]
     async fn test_zero_copy_transform() {
         let config = MemoryEfficientConfig::default();
-        let handler = MemoryEfficientDatasetHandler::new(config).unwrap();
+        let handler =
+            MemoryEfficientDatasetHandler::new(config).expect("construction should succeed");
 
         let data = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
 
         let result = handler.zero_copy_transform(&data, |x| x * 2.0).await;
 
         assert!(result.is_ok());
-        let transformed = result.unwrap();
+        let transformed = result.expect("result should be Ok");
         assert_eq!(transformed[[0, 0]], 2.0);
         assert_eq!(transformed[[1, 2]], 12.0);
     }
@@ -692,7 +696,8 @@ mod tests {
     #[tokio::test]
     async fn test_memory_optimization() {
         let config = MemoryEfficientConfig::default();
-        let handler = MemoryEfficientDatasetHandler::new(config).unwrap();
+        let handler =
+            MemoryEfficientDatasetHandler::new(config).expect("construction should succeed");
 
         let result = handler.optimize_memory().await;
         assert!(result.is_ok());
@@ -705,7 +710,8 @@ mod tests {
     #[tokio::test]
     async fn test_stats_tracking() {
         let config = MemoryEfficientConfig::default();
-        let handler = MemoryEfficientDatasetHandler::new(config).unwrap();
+        let handler =
+            MemoryEfficientDatasetHandler::new(config).expect("construction should succeed");
 
         let data = Array2::from_shape_fn((100, 10), |(i, j)| (i * 10 + j) as f64);
         let _ = handler
@@ -722,7 +728,8 @@ mod tests {
             enable_profiling: true,
             ..Default::default()
         };
-        let handler = MemoryEfficientDatasetHandler::new(config).unwrap();
+        let handler =
+            MemoryEfficientDatasetHandler::new(config).expect("construction should succeed");
 
         let data = Array2::from_shape_fn((100, 10), |(i, j)| (i * 10 + j) as f64);
         let _ = handler.zero_copy_transform(&data, |x| x * 2.0).await;
@@ -738,7 +745,8 @@ mod tests {
             memory_limit_mb: 100,
             ..Default::default()
         };
-        let handler = MemoryEfficientDatasetHandler::new(config).unwrap();
+        let handler =
+            MemoryEfficientDatasetHandler::new(config).expect("construction should succeed");
 
         let strategy = handler.adaptive_chunking_strategy(10000).await;
         // Should return a fixed strategy with calculated chunk size

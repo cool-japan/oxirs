@@ -400,7 +400,7 @@ impl RollingUpgradeManager {
         if self.config.leader_last {
             // Sort so leader is last
             order.sort_by_key(|id| {
-                let node = nodes.get(id).unwrap();
+                let node = nodes.get(id).expect("node should exist in nodes map");
                 if node.is_leader {
                     1
                 } else {

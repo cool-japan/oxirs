@@ -259,7 +259,9 @@ impl Lexer {
 
     /// Read string literal
     fn read_string(&mut self) -> String {
-        let quote = self.current_char.unwrap();
+        let quote = self
+            .current_char
+            .expect("current_char should be Some when read_string is called");
         self.advance(); // Skip opening quote
         let mut result = String::new();
         while let Some(c) = self.current_char {

@@ -704,7 +704,8 @@ impl QuerySanitizer {
     /// Check directives against allowed/blocked lists
     fn check_directives(&self, query: &str, issues: &mut Vec<SanitizationIssue>) {
         // Extract directive names from query
-        let directive_regex = regex::Regex::new(r"@(\w+)").unwrap();
+        let directive_regex =
+            regex::Regex::new(r"@(\w+)").expect("parse should succeed for valid input");
 
         for cap in directive_regex.captures_iter(query) {
             let directive_name = &cap[1];
@@ -738,8 +739,10 @@ impl QuerySanitizer {
     /// Detect circular fragment references
     fn detect_circular_fragments(&self, query: &str) -> bool {
         // Extract fragment definitions and their spreads
-        let fragment_def_regex = regex::Regex::new(r"fragment\s+(\w+)\s+on").unwrap();
-        let fragment_spread_regex = regex::Regex::new(r"\.\.\.(\w+)").unwrap();
+        let fragment_def_regex = regex::Regex::new(r"fragment\s+(\w+)\s+on")
+            .expect("parse should succeed for valid input");
+        let fragment_spread_regex =
+            regex::Regex::new(r"\.\.\.(\w+)").expect("parse should succeed for valid input");
 
         let mut fragment_deps: HashMap<String, Vec<String>> = HashMap::new();
 

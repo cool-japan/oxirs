@@ -584,7 +584,8 @@ impl QuantumSPARQLOptimizer {
         if params.len() < 2 * layers {
             // Initialize parameters using proper RNG
             let mut rng = self.rng.write().await;
-            let uniform = rand_distr::Uniform::new(0.0, std::f64::consts::PI).unwrap();
+            let uniform = rand_distr::Uniform::new(0.0, std::f64::consts::PI)
+                .expect("valid range for Uniform distribution");
             *params = (0..2 * layers).map(|_| rng.sample(uniform)).collect();
         }
 
@@ -640,7 +641,8 @@ impl QuantumSPARQLOptimizer {
             // Simple gradient-free parameter update (coordinate descent)
             if iteration % 10 == 0 {
                 let mut rng_mut = self.rng.write().await;
-                let uniform = rand_distr::Uniform::new(-0.1, 0.1).unwrap();
+                let uniform = rand_distr::Uniform::new(-0.1, 0.1)
+                    .expect("valid range for Uniform distribution");
                 for param in params.iter_mut() {
                     *param += rng_mut.sample(uniform);
                     *param = param.clamp(0.0, std::f64::consts::PI);
@@ -735,7 +737,8 @@ impl QuantumSPARQLOptimizer {
         let mut params = self.variational_parameters.write().await;
         if params.len() < num_params {
             let mut rng = self.rng.write().await;
-            let uniform = rand_distr::Uniform::new(0.0, 2.0 * std::f64::consts::PI).unwrap();
+            let uniform = rand_distr::Uniform::new(0.0, 2.0 * std::f64::consts::PI)
+                .expect("valid range for Uniform distribution");
             *params = (0..num_params).map(|_| rng.sample(uniform)).collect();
         }
 
@@ -801,7 +804,8 @@ impl QuantumSPARQLOptimizer {
             // Parameter optimization using simple gradient descent
             if iteration % 10 == 0 {
                 let mut rng_mut = self.rng.write().await;
-                let uniform = rand_distr::Uniform::new(-0.05, 0.05).unwrap();
+                let uniform = rand_distr::Uniform::new(-0.05, 0.05)
+                    .expect("valid range for Uniform distribution");
                 for param in params.iter_mut() {
                     let gradient_estimate = rng_mut.sample(uniform);
                     *param -= 0.1 * gradient_estimate; // Learning rate = 0.1

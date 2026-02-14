@@ -540,7 +540,10 @@ async fn enroll_hardware_mfa(
     Ok(Json(MfaSetupResponse {
         success: true,
         mfa_type: MfaType::Hardware,
-        secret: Some(serde_json::to_string(&registration_options).unwrap()),
+        secret: Some(
+            serde_json::to_string(&registration_options)
+                .expect("serialization should succeed for valid options"),
+        ),
         qr_code: None,
         backup_codes: None,
         enrollment_id: Some(format!("webauthn_{}", generate_enrollment_id())),

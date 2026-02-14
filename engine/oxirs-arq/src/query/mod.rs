@@ -1,0 +1,49 @@
+//! Auto-generated module structure
+
+pub mod functions;
+pub mod query_traits;
+pub mod queryparser_check_group;
+pub mod queryparser_classify_identifier_group;
+pub mod queryparser_expect_prefixed_name_group;
+pub mod queryparser_match_additive_operator_group;
+pub mod queryparser_match_equality_operator_group;
+pub mod queryparser_match_multiplicative_operator_group;
+pub mod queryparser_match_relational_operator_group;
+pub mod queryparser_match_unary_operator_group;
+pub mod queryparser_parsing;
+pub mod queryparser_parsing_1;
+pub mod queryparser_parsing_10;
+pub mod queryparser_parsing_11;
+pub mod queryparser_parsing_12;
+pub mod queryparser_parsing_13;
+pub mod queryparser_parsing_14;
+pub mod queryparser_parsing_15;
+pub mod queryparser_parsing_16;
+pub mod queryparser_parsing_17;
+pub mod queryparser_parsing_18;
+pub mod queryparser_parsing_19;
+pub mod queryparser_parsing_2;
+pub mod queryparser_parsing_20;
+pub mod queryparser_parsing_21;
+pub mod queryparser_parsing_3;
+pub mod queryparser_parsing_4;
+pub mod queryparser_parsing_5;
+pub mod queryparser_parsing_6;
+pub mod queryparser_parsing_7;
+pub mod queryparser_parsing_8;
+pub mod queryparser_parsing_9;
+pub mod queryparser_predicates;
+pub mod queryparser_predicates_1;
+pub mod queryparser_predicates_2;
+pub mod queryparser_predicates_3;
+pub mod queryparser_predicates_4;
+pub mod queryparser_resolve_prefixed_name_group;
+pub mod queryparser_skip_whitespace_group;
+pub mod queryparser_traits;
+pub mod queryparser_type;
+pub mod types;
+
+// Re-export all types
+pub use functions::*;
+pub use queryparser_type::*;
+pub use types::*;

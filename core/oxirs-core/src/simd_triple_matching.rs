@@ -326,7 +326,7 @@ impl SimdTripleMatcher {
 
         let final_matches = match Arc::try_unwrap(matches) {
             Ok(mutex) => mutex.into_inner().unwrap_or_default(),
-            Err(arc) => arc.lock().unwrap().clone(),
+            Err(arc) => arc.lock().expect("lock should not be poisoned").clone(),
         };
 
         self.match_counter.add(final_matches.len() as u64);

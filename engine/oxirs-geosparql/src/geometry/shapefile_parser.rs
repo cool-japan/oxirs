@@ -267,12 +267,10 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
             if polygons.is_empty() {
                 return Ok(None);
             } else if polygons.len() == 1 {
-                GeoGeometry::Polygon(
-                    polygons
-                        .into_iter()
-                        .next()
-                        .expect("polygon vec should have exactly 1 element"),
-                )
+                match polygons.into_iter().next() {
+                    Some(poly) => GeoGeometry::Polygon(poly),
+                    None => return Ok(None),
+                }
             } else {
                 GeoGeometry::MultiPolygon(MultiPolygon(polygons))
             }
@@ -283,12 +281,10 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
             if polygons.is_empty() {
                 return Ok(None);
             } else if polygons.len() == 1 {
-                GeoGeometry::Polygon(
-                    polygons
-                        .into_iter()
-                        .next()
-                        .expect("polygon vec should have exactly 1 element"),
-                )
+                match polygons.into_iter().next() {
+                    Some(poly) => GeoGeometry::Polygon(poly),
+                    None => return Ok(None),
+                }
             } else {
                 GeoGeometry::MultiPolygon(MultiPolygon(polygons))
             }
@@ -299,12 +295,10 @@ fn shape_to_geometry(shape: shapefile::Shape, crs: &Crs) -> Result<Option<Geomet
             if polygons.is_empty() {
                 return Ok(None);
             } else if polygons.len() == 1 {
-                GeoGeometry::Polygon(
-                    polygons
-                        .into_iter()
-                        .next()
-                        .expect("polygon vec should have exactly 1 element"),
-                )
+                match polygons.into_iter().next() {
+                    Some(poly) => GeoGeometry::Polygon(poly),
+                    None => return Ok(None),
+                }
             } else {
                 GeoGeometry::MultiPolygon(MultiPolygon(polygons))
             }

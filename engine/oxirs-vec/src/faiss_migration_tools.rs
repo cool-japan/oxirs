@@ -1023,7 +1023,11 @@ impl FaissMigrationTool {
         state.processed_vectors = current;
         state.total_vectors = total;
 
-        if let Some(ref _progress) = *self.progress.lock().unwrap() {
+        if let Some(ref _progress) = *self
+            .progress
+            .lock()
+            .expect("progress lock should not be poisoned")
+        {
             // Update progress bar (simplified)
             debug!(
                 "Progress: {}/{} ({}%)",
@@ -1043,13 +1047,16 @@ impl FaissMigrationTool {
                 .template(
                     "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
                 )
-                .unwrap()
+                .expect("progress bar template should be valid")
                 .progress_chars("#>-");
 
             let progress_bar = multi_progress.add(ProgressBar::new(100));
             progress_bar.set_style(style);
 
-            *self.progress.lock().unwrap() = Some(multi_progress);
+            *self
+                .progress
+                .lock()
+                .expect("progress lock should not be poisoned") = Some(multi_progress);
         }
         Ok(())
     }
@@ -1193,7 +1200,10 @@ mod tests {
         let config = MigrationConfig::default();
         let tool = FaissMigrationTool::new(config);
 
-        let state = tool.state.read().unwrap();
+        let state = tool
+            .state
+            .read()
+            .expect("state lock should not be poisoned");
         assert_eq!(state.phase, MigrationPhase::Initialization);
         assert_eq!(state.processed_vectors, 0);
     }

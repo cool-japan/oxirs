@@ -60,8 +60,12 @@ pub fn get_best_gpu_device() -> Result<GpuDevice> {
     // Find device with highest performance score
     let best_device = devices
         .into_iter()
-        .max_by(|a, b| a.performance_score().partial_cmp(&b.performance_score()).unwrap())
-        .unwrap();
+        .max_by(|a, b| {
+            a.performance_score()
+                .partial_cmp(&b.performance_score())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .expect("devices validated to be non-empty");
 
     Ok(best_device)
 }

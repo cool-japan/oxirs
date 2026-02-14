@@ -260,7 +260,7 @@ impl QuotedTripleIndex {
                 .nesting_depths
                 .iter()
                 .take(self.triples.len())
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                 .map(|&d| d as usize)
                 .unwrap_or(0),
         }

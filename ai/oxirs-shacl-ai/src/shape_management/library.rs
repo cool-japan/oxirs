@@ -258,7 +258,11 @@ impl ShapeLibrary {
             .values()
             .filter(|entry| entry.rating >= min_rating)
             .collect();
-        shapes.sort_by(|a, b| b.rating.partial_cmp(&a.rating).unwrap());
+        shapes.sort_by(|a, b| {
+            b.rating
+                .partial_cmp(&a.rating)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         shapes.into_iter().take(limit).collect()
     }
 

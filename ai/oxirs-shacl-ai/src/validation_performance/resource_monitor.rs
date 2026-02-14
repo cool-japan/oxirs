@@ -56,7 +56,10 @@ impl ResourceMonitor {
 
     /// Start background monitoring thread
     pub fn start_monitoring(&self) {
-        let mut active = self.monitoring_active.lock().unwrap();
+        let mut active = self
+            .monitoring_active
+            .lock()
+            .expect("lock should not be poisoned");
         if *active {
             return; // Already monitoring
         }
@@ -70,7 +73,9 @@ impl ResourceMonitor {
             loop {
                 // Check if monitoring should continue
                 {
-                    let active = monitoring_active.lock().unwrap();
+                    let active = monitoring_active
+                        .lock()
+                        .expect("lock should not be poisoned");
                     if !*active {
                         break;
                     }

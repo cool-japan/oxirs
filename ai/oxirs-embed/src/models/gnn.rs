@@ -291,7 +291,13 @@ impl GNNEmbedding {
 
         if neighbor_features.is_empty() {
             // Return zero vector if no neighbors
-            return Array1::zeros(node_features.values().next().unwrap().len());
+            return Array1::zeros(
+                node_features
+                    .values()
+                    .next()
+                    .expect("node_features should not be empty")
+                    .len(),
+            );
         }
 
         // Aggregate based on configuration
@@ -415,7 +421,10 @@ impl GNNEmbedding {
         new_features: &mut HashMap<usize, Array1<f32>>,
     ) {
         // Simplified GAT - real implementation would compute attention scores
-        let attention = layer.attention_weights.as_ref().unwrap();
+        let attention = layer
+            .attention_weights
+            .as_ref()
+            .expect("attention_weights should be initialized for GAT layer");
 
         for (node_idx, feature) in node_features {
             // Get neighbors

@@ -255,7 +255,7 @@ impl K8sServiceDiscovery {
             return;
         }
 
-        let service_type = service_type.unwrap();
+        let service_type = service_type.expect("operation should succeed");
 
         // Extract endpoint information
         if let Some(endpoints) = Self::extract_endpoints(service, config, &service_type) {

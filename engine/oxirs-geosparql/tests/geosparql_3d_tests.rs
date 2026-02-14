@@ -9,11 +9,11 @@
 //! - GPU acceleration with CPU fallback
 //! - Real-world 3D datasets
 
+use geo::CoordsIter;
 use oxirs_geosparql::analysis::aggregations::*;
 use oxirs_geosparql::functions::topological_3d::*;
 use oxirs_geosparql::geometry::coord3d::*;
 use oxirs_geosparql::geometry::Geometry;
-use geo::CoordsIter;
 
 #[cfg(feature = "gpu")]
 use oxirs_geosparql::performance::gpu::GpuGeometryContext;
@@ -174,7 +174,7 @@ fn test_3d_surface_area() {
 
     assert!(area > 0.0);
     // Flat square should have area close to 1.0
-    assert!(area >= 0.5 && area <= 1.5);
+    assert!((0.5..=1.5).contains(&area));
 }
 
 // ============================================================================
@@ -204,7 +204,7 @@ fn test_3d_centroid() {
 
     assert!((x - 1.0).abs() < 1e-6);
     assert!((y - 1.0).abs() < 1e-6);
-    assert!(z >= 0.0 && z <= 10.0);
+    assert!((0.0..=10.0).contains(&z));
 }
 
 // ============================================================================

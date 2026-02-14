@@ -65,7 +65,7 @@ impl ServiceRegistry {
             && !host.contains("invalid-endpoint.example.org")
             && !host.contains("localhost")
             && !regex::Regex::new(r"example\d+\.org")
-                .unwrap()
+                .expect("valid regex pattern")
                 .is_match(host)
         {
             self.validate_sparql_endpoint(&endpoint).await?;
@@ -82,7 +82,7 @@ impl ServiceRegistry {
             && !host.contains("invalid-endpoint.example.org")
             && !host.contains("localhost")
             && !regex::Regex::new(r"example\d+\.org")
-                .unwrap()
+                .expect("valid regex pattern")
                 .is_match(host)
         {
             let capabilities = self.detect_sparql_capabilities(&endpoint).await?;
@@ -127,7 +127,7 @@ impl ServiceRegistry {
             && !host.contains("invalid-endpoint.example.org")
             && !host.contains("localhost")
             && !regex::Regex::new(r"example\d+\.org")
-                .unwrap()
+                .expect("valid regex pattern")
                 .is_match(host)
         {
             self.validate_graphql_service(&service).await?;
@@ -144,7 +144,7 @@ impl ServiceRegistry {
             && !host.contains("invalid-endpoint.example.org")
             && !host.contains("localhost")
             && !regex::Regex::new(r"example\d+\.org")
-                .unwrap()
+                .expect("valid regex pattern")
                 .is_match(host)
         {
             let (capabilities, schema) = self.introspect_graphql_service(&service).await?;

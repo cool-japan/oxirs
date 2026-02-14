@@ -789,7 +789,7 @@ impl MetaTranscendenceEngine {
 
     /// Initialize transcendence transcenders
     async fn initialize_transcendence_transcenders(&self) -> Result<(), ShaclAIError> {
-        let mut transcenders = self.transcendence_transcenders.lock().unwrap();
+        let mut transcenders = self.transcendence_transcenders.lock().expect("lock should not be poisoned");
         
         for i in 0..10 {
             let transcender = TranscendenceTranscender {
@@ -835,7 +835,7 @@ impl MetaTranscendenceEngine {
 
     /// Initialize meta-reality generators
     async fn initialize_meta_reality_generators(&self) -> Result<(), ShaclAIError> {
-        let mut generators = self.meta_reality_generators.lock().unwrap();
+        let mut generators = self.meta_reality_generators.lock().expect("lock should not be poisoned");
         
         for i in 0..5 {
             let generator = MetaRealityGenerator {
@@ -871,7 +871,7 @@ impl MetaTranscendenceEngine {
 
     /// Initialize infinite recursion processors
     async fn initialize_infinite_recursion_processors(&self) -> Result<(), ShaclAIError> {
-        let mut processors = self.infinite_recursion_processors.lock().unwrap();
+        let mut processors = self.infinite_recursion_processors.lock().expect("lock should not be poisoned");
         
         for i in 0..8 {
             let processor = InfiniteRecursionProcessor {
@@ -926,7 +926,7 @@ impl MetaTranscendenceEngine {
 
     /// Process transcendence of transcendence itself
     async fn process_transcendence_transcendence(&self, query: &str) -> Result<f64, ShaclAIError> {
-        let transcenders = self.transcendence_transcenders.lock().unwrap();
+        let transcenders = self.transcendence_transcenders.lock().expect("lock should not be poisoned");
         let mut total_power = 0.0;
         
         for transcender in transcenders.iter() {

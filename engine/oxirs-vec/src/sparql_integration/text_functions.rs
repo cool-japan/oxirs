@@ -26,9 +26,9 @@
 use super::super::hybrid_search::tantivy_searcher::{RdfDocument, SearchResult, TantivySearcher};
 
 use anyhow::{anyhow, Context, Result};
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 /// SPARQL text search function executor
 #[cfg(feature = "tantivy-search")]
@@ -63,7 +63,8 @@ impl SparqlTextFunctions {
         let limit = limit.unwrap_or(10);
         let threshold = threshold.unwrap_or(0.0);
 
-        let results = searcher.text_search(query, limit, threshold)
+        let results = searcher
+            .text_search(query, limit, threshold)
             .context("Failed to execute text search")?;
 
         Ok(results.into_iter().map(SparqlSearchResult::from).collect())
@@ -84,7 +85,8 @@ impl SparqlTextFunctions {
         let searcher = self.searcher.read();
         let limit = limit.unwrap_or(10);
 
-        let results = searcher.phrase_search(phrase, limit)
+        let results = searcher
+            .phrase_search(phrase, limit)
             .context("Failed to execute phrase search")?;
 
         Ok(results.into_iter().map(SparqlSearchResult::from).collect())
@@ -108,7 +110,8 @@ impl SparqlTextFunctions {
         let distance = distance.unwrap_or(2);
         let limit = limit.unwrap_or(10);
 
-        let results = searcher.fuzzy_search(query, distance, limit)
+        let results = searcher
+            .fuzzy_search(query, distance, limit)
             .context("Failed to execute fuzzy search")?;
 
         Ok(results.into_iter().map(SparqlSearchResult::from).collect())
@@ -132,7 +135,8 @@ impl SparqlTextFunctions {
         // Parse field query string
         let field_queries = Self::parse_field_query(field_query)?;
 
-        let results = searcher.field_search(&field_queries, limit)
+        let results = searcher
+            .field_search(&field_queries, limit)
             .context("Failed to execute field search")?;
 
         Ok(results.into_iter().map(SparqlSearchResult::from).collect())
@@ -169,7 +173,8 @@ impl SparqlTextFunctions {
     pub fn index_literals(&mut self, literals: Vec<RdfLiteral>) -> Result<()> {
         let mut searcher = self.searcher.write();
 
-        let docs: Vec<RdfDocument> = literals.into_iter()
+        let docs: Vec<RdfDocument> = literals
+            .into_iter()
             .map(|lit| RdfDocument {
                 uri: lit.subject_uri,
                 content: lit.value,
@@ -178,7 +183,8 @@ impl SparqlTextFunctions {
             })
             .collect();
 
-        searcher.index_documents(&docs)
+        searcher
+            .index_documents(&docs)
             .context("Failed to index RDF literals")?;
 
         Ok(())
@@ -393,7 +399,8 @@ mod tests {
     use std::env;
 
     fn create_test_searcher() -> TantivySearcher {
-        let temp_dir = env::temp_dir().join(format!("tantivy_sparql_test_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            env::temp_dir().join(format!("tantivy_sparql_test_{}", uuid::Uuid::new_v4()));
         let config = TantivyConfig {
             index_path: temp_dir,
             heap_size_mb: 50,
@@ -441,14 +448,12 @@ mod tests {
         let searcher = create_test_searcher();
         let mut text_funcs = SparqlTextFunctions::new(searcher);
 
-        let literals = vec![
-            RdfLiteral {
-                subject_uri: "http://example.org/article1".to_string(),
-                value: "The quick brown fox jumps over the lazy dog".to_string(),
-                language: Some("en".to_string()),
-                datatype: None,
-            },
-        ];
+        let literals = vec![RdfLiteral {
+            subject_uri: "http://example.org/article1".to_string(),
+            value: "The quick brown fox jumps over the lazy dog".to_string(),
+            language: Some("en".to_string()),
+            datatype: None,
+        }];
 
         text_funcs.index_literals(literals)?;
 
@@ -465,20 +470,21 @@ mod tests {
         let searcher = create_test_searcher();
         let mut text_funcs = SparqlTextFunctions::new(searcher);
 
-        let literals = vec![
-            RdfLiteral {
-                subject_uri: "http://example.org/doc1".to_string(),
-                value: "Information retrieval systems".to_string(),
-                language: Some("en".to_string()),
-                datatype: None,
-            },
-        ];
+        let literals = vec![RdfLiteral {
+            subject_uri: "http://example.org/doc1".to_string(),
+            value: "Information retrieval systems".to_string(),
+            language: Some("en".to_string()),
+            datatype: None,
+        }];
 
         text_funcs.index_literals(literals)?;
 
         // Test fuzzy search with misspelling
         let results = text_funcs.fuzzy_search("", "retreival", Some(2), Some(10))?;
-        assert!(!results.is_empty(), "Should find fuzzy match for misspelling");
+        assert!(
+            !results.is_empty(),
+            "Should find fuzzy match for misspelling"
+        );
 
         Ok(())
     }
@@ -501,14 +507,12 @@ mod tests {
         let searcher = create_test_searcher();
         let mut text_funcs = SparqlTextFunctions::new(searcher);
 
-        let literals = vec![
-            RdfLiteral {
-                subject_uri: "http://example.org/test".to_string(),
-                value: "Test document".to_string(),
-                language: None,
-                datatype: None,
-            },
-        ];
+        let literals = vec![RdfLiteral {
+            subject_uri: "http://example.org/test".to_string(),
+            value: "Test document".to_string(),
+            language: None,
+            datatype: None,
+        }];
 
         text_funcs.index_literals(literals)?;
 

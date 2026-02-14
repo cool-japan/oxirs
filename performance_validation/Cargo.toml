@@ -6,6 +6,8 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Revolutionary performance validation and benchmarking suite for OxiRS"
+keywords = ["performance", "benchmarking", "validation", "testing", "profiling"]
+categories = ["development-tools", "database"]
 
 [dependencies]
 # SciRS2 Core Dependencies (Full Usage - MANDATORY)

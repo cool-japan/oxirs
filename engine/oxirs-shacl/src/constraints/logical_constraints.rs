@@ -920,7 +920,7 @@ impl XoneConstraint {
                             Some(value.clone()),
                             Some(format!(
                                 "Value violates XONE constraint: conforms to multiple shapes (at least '{}' and '{}')",
-                                first_conforming_shape.as_ref().unwrap().as_str(),
+                                first_conforming_shape.as_ref().expect("training should succeed").as_str(),
                                 shape_id.as_str()
                             )),
                         ));

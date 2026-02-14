@@ -206,7 +206,7 @@ impl MmapIndex {
         };
 
         // Create cache
-        let cache = LruCache::new(NonZeroUsize::new(CACHE_SIZE).unwrap());
+        let cache = LruCache::new(NonZeroUsize::new(CACHE_SIZE).expect("constant is non-zero"));
 
         Ok(Self {
             path,

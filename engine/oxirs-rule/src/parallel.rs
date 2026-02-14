@@ -103,7 +103,7 @@ impl ParallelEngine {
 
     /// Add facts
     pub fn add_facts(&self, facts: Vec<RuleAtom>) {
-        let mut fact_set = self.facts.lock().unwrap();
+        let mut fact_set = self.facts.lock().expect("lock should not be poisoned");
         fact_set.extend(facts);
     }
 
@@ -116,7 +116,7 @@ impl ParallelEngine {
 
         // Initialize facts
         {
-            let mut fact_set = self.facts.lock().unwrap();
+            let mut fact_set = self.facts.lock().expect("lock should not be poisoned");
             fact_set.clear();
             fact_set.extend(initial_facts.iter().cloned());
         }
@@ -133,7 +133,7 @@ impl ParallelEngine {
             let derived = self.process_rules_parallel()?;
 
             // Add new facts
-            let mut fact_set = self.facts.lock().unwrap();
+            let mut fact_set = self.facts.lock().expect("lock should not be poisoned");
             let initial_size = fact_set.len();
 
             for fact in derived {
@@ -148,7 +148,7 @@ impl ParallelEngine {
             }
         }
 
-        let fact_set = self.facts.lock().unwrap();
+        let fact_set = self.facts.lock().expect("lock should not be poisoned");
         let result = fact_set.iter().cloned().collect();
 
         info!(
@@ -182,7 +182,7 @@ impl ParallelEngine {
 
             let handle = std::thread::spawn(move || {
                 let mut thread_derived = Vec::new();
-                let fact_set = facts.lock().unwrap();
+                let fact_set = facts.lock().expect("lock should not be poisoned");
 
                 for rule in &rules_chunk {
                     // Apply rule to facts
@@ -360,7 +360,11 @@ impl ParallelEngine {
 
     /// Get execution statistics
     pub fn get_stats(&self) -> ParallelStats {
-        let fact_count = self.facts.lock().unwrap().len();
+        let fact_count = self
+            .facts
+            .lock()
+            .expect("lock should not be poisoned")
+            .len();
         ParallelStats {
             num_threads: self.num_threads,
             batch_size: self.batch_size,

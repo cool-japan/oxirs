@@ -210,7 +210,11 @@ impl ResultInjector {
                 run_id = result.simulation_run_id,
                 state_id = state_id
             ));
-            triples.push(format!("<{state_id}> phys:time {time}^^xsd:double .", state_id = state_id, time = state.time));
+            triples.push(format!(
+                "<{state_id}> phys:time {time}^^xsd:double .",
+                state_id = state_id,
+                time = state.time
+            ));
 
             for (key, value) in &state.state {
                 triples.push(format!(
@@ -307,7 +311,11 @@ impl ResultInjector {
                     run_id = result.simulation_run_id,
                     state_id = state_id
                 ));
-                triples.push(format!("<{state_id}> phys:time {time}^^xsd:double .", state_id = state_id, time = state.time));
+                triples.push(format!(
+                    "<{state_id}> phys:time {time}^^xsd:double .",
+                    state_id = state_id,
+                    time = state.time
+                ));
 
                 for (key, value) in &state.state {
                     triples.push(format!(
@@ -334,20 +342,23 @@ impl ResultInjector {
 
             self.execute_update(store, &batch_update).await?;
 
-            tracing::debug!(
-                "Injected batch {} ({} states)",
-                batch_idx + 1,
-                chunk.len()
-            );
+            tracing::debug!("Injected batch {} ({} states)", batch_idx + 1, chunk.len());
         }
 
         Ok(())
     }
 
     /// Create result node IRI
-    pub fn create_result_node(&self, _entity: &NamedNode, property: &str) -> PhysicsResult<NamedNode> {
+    pub fn create_result_node(
+        &self,
+        _entity: &NamedNode,
+        property: &str,
+    ) -> PhysicsResult<NamedNode> {
         let result_id = Uuid::new_v4();
-        let result_iri = format!("{}result_{}_{}", self.config.physics_prefix, property, result_id);
+        let result_iri = format!(
+            "{}result_{}_{}",
+            self.config.physics_prefix, property, result_id
+        );
 
         NamedNode::new(&result_iri)
             .map_err(|e| PhysicsError::ResultInjection(format!("Invalid result IRI: {}", e)))
@@ -461,9 +472,21 @@ impl ResultInjector {
 
                 for (i, (time, value)) in series.iter().enumerate() {
                     let point_id = format!("{}#point_{}", result_node.as_str(), i);
-                    triples.push(format!("<{node}> phys:hasPoint <{point_id}> .", node = result_node.as_str(), point_id = point_id));
-                    triples.push(format!("<{point_id}> phys:time {time}^^xsd:double .", point_id = point_id, time = time));
-                    triples.push(format!("<{point_id}> phys:value {value}^^xsd:double .", point_id = point_id, value = value));
+                    triples.push(format!(
+                        "<{node}> phys:hasPoint <{point_id}> .",
+                        node = result_node.as_str(),
+                        point_id = point_id
+                    ));
+                    triples.push(format!(
+                        "<{point_id}> phys:time {time}^^xsd:double .",
+                        point_id = point_id,
+                        time = time
+                    ));
+                    triples.push(format!(
+                        "<{point_id}> phys:value {value}^^xsd:double .",
+                        point_id = point_id,
+                        value = value
+                    ));
                 }
 
                 format!(
@@ -745,7 +768,8 @@ mod tests {
         let result = create_test_result();
 
         let json = serde_json::to_string(&result).expect("Failed to serialize");
-        let deserialized: SimulationResult = serde_json::from_str(&json).expect("Failed to deserialize");
+        let deserialized: SimulationResult =
+            serde_json::from_str(&json).expect("Failed to deserialize");
 
         assert_eq!(deserialized.entity_iri, result.entity_iri);
         assert_eq!(deserialized.simulation_run_id, result.simulation_run_id);
@@ -825,16 +849,22 @@ mod tests {
         let injector = ResultInjector::new();
         let entity = NamedNode::new("http://example.org/entity1").expect("Failed to create node");
 
-        let result_node = injector.create_result_node(&entity, "displacement").expect("Failed to create result node");
+        let result_node = injector
+            .create_result_node(&entity, "displacement")
+            .expect("Failed to create result node");
 
         assert!(result_node.as_str().contains("displacement"));
-        assert!(result_node.as_str().starts_with("http://oxirs.org/physics#result_"));
+        assert!(result_node
+            .as_str()
+            .starts_with("http://oxirs.org/physics#result_"));
     }
 
     #[test]
     fn test_transaction() {
         let injector = ResultInjector::new();
-        let tx = injector.begin_transaction().expect("Failed to begin transaction");
+        let tx = injector
+            .begin_transaction()
+            .expect("Failed to begin transaction");
 
         assert!(!tx.id.is_empty());
         assert!(tx.updates.is_empty());

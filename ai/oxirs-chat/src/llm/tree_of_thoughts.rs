@@ -198,7 +198,11 @@ impl TreeOfThoughtsEngine {
                 break;
             }
 
-            let node = tree.nodes.get(&node_id).unwrap().clone();
+            let node = tree
+                .nodes
+                .get(&node_id)
+                .expect("node should exist in tree")
+                .clone();
 
             if node.depth >= self.config.max_depth || node.is_terminal {
                 continue;
@@ -227,7 +231,11 @@ impl TreeOfThoughtsEngine {
                 break;
             }
 
-            let node = tree.nodes.get(&node_id).unwrap().clone();
+            let node = tree
+                .nodes
+                .get(&node_id)
+                .expect("node should exist in tree")
+                .clone();
 
             if node.depth >= self.config.max_depth || node.is_terminal {
                 continue;
@@ -293,7 +301,11 @@ impl TreeOfThoughtsEngine {
                 break;
             }
 
-            let node = tree.nodes.get(&scored_node.node_id).unwrap().clone();
+            let node = tree
+                .nodes
+                .get(&scored_node.node_id)
+                .expect("node should exist in tree")
+                .clone();
 
             if node.depth >= self.config.max_depth || node.is_terminal {
                 continue;
@@ -330,7 +342,11 @@ impl TreeOfThoughtsEngine {
             let selected_node_id = self.select_node_ucb1(tree)?;
 
             // Expansion: Generate new branches
-            let node = tree.nodes.get(&selected_node_id).unwrap().clone();
+            let node = tree
+                .nodes
+                .get(&selected_node_id)
+                .expect("selected node should exist in tree")
+                .clone();
             if node.depth < self.config.max_depth && !node.is_terminal {
                 let branches = self.generate_branches(&node, context).await?;
 
@@ -440,7 +456,10 @@ impl TreeOfThoughtsEngine {
         score: f32,
     ) -> Result<String> {
         let child_id = uuid::Uuid::new_v4().to_string();
-        let parent = tree.nodes.get(parent_id).unwrap();
+        let parent = tree
+            .nodes
+            .get(parent_id)
+            .expect("parent node should exist in tree");
 
         let child_node = ThoughtNode {
             id: child_id.clone(),

@@ -705,7 +705,9 @@ mod tests {
         let mut engine = ShapeInferenceEngine::new();
         let samples = create_sample_data();
 
-        let result = engine.infer_from_samples(samples).unwrap();
+        let result = engine
+            .infer_from_samples(samples)
+            .expect("inference should succeed");
 
         assert_eq!(result.statistics.total_subjects, 2);
         assert!(!result.types.is_empty());
@@ -717,11 +719,18 @@ mod tests {
         let mut engine = ShapeInferenceEngine::new();
         let samples = create_sample_data();
 
-        let result = engine.infer_from_samples(samples).unwrap();
+        let result = engine
+            .infer_from_samples(samples)
+            .expect("inference should succeed");
 
         let person_type = result.types.iter().find(|t| t.type_iri == "foaf:Person");
         assert!(person_type.is_some());
-        assert_eq!(person_type.unwrap().instance_count, 2);
+        assert_eq!(
+            person_type
+                .expect("operation should succeed")
+                .instance_count,
+            2
+        );
     }
 
     #[test]
@@ -729,12 +738,14 @@ mod tests {
         let mut engine = ShapeInferenceEngine::new();
         let samples = create_sample_data();
 
-        let result = engine.infer_from_samples(samples).unwrap();
+        let result = engine
+            .infer_from_samples(samples)
+            .expect("inference should succeed");
 
         let name_prop = result.properties.get("foaf:name");
         assert!(name_prop.is_some());
 
-        let name_prop = name_prop.unwrap();
+        let name_prop = name_prop.expect("operation should succeed");
         assert_eq!(name_prop.occurrences, 2);
         assert!(name_prop.suggested_hints.contains(&PropertyHint::Required));
     }
@@ -744,7 +755,9 @@ mod tests {
         let mut engine = ShapeInferenceEngine::new();
         let samples = create_sample_data();
 
-        let result = engine.infer_from_samples(samples).unwrap();
+        let result = engine
+            .infer_from_samples(samples)
+            .expect("inference should succeed");
 
         assert!(!result.shapes.is_empty());
 

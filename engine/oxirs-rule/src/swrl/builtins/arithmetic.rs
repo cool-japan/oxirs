@@ -397,7 +397,7 @@ pub(crate) fn builtin_median(args: &[SwrlArgument]) -> Result<bool> {
         return Ok(false);
     }
 
-    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     let median = if values.len() % 2 == 0 {
         let mid = values.len() / 2;

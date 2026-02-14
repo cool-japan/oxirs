@@ -1247,7 +1247,7 @@ mod tests {
         let library = ConstraintLibrary::new();
         let components = library.get_category("identity");
         assert!(components.is_some());
-        assert!(!components.unwrap().is_empty());
+        assert!(!components.expect("operation should succeed").is_empty());
     }
 
     #[test]
@@ -1261,7 +1261,9 @@ mod tests {
     fn test_uuid_validator() {
         let validator = UuidValidator::new();
         let params = HashMap::new();
-        let constraint = validator.create_constraint(params).unwrap();
+        let constraint = validator
+            .create_constraint(params)
+            .expect("validation should succeed");
         assert!(constraint.sparql_query.is_some());
     }
 
@@ -1281,7 +1283,9 @@ mod tests {
         );
         assert!(validator.validate_configuration(&params).is_ok());
 
-        let constraint = validator.create_constraint(params).unwrap();
+        let constraint = validator
+            .create_constraint(params)
+            .expect("validation should succeed");
         assert!(constraint.sparql_query.is_some());
     }
 

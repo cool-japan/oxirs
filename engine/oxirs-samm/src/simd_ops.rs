@@ -431,7 +431,7 @@ mod tests {
             "urn:samm:io.sample:1.5.0#Characteristic",
         ];
 
-        let results = validate_urns_batch(&urns).unwrap();
+        let results = validate_urns_batch(&urns).expect("validation should succeed");
         assert_eq!(results, vec![true, false, true, true]);
     }
 
@@ -492,7 +492,7 @@ mod tests {
             "urn:samm:com.test:2.0.0#Property",
         ];
 
-        let results = extract_urn_parts_batch(&urns).unwrap();
+        let results = extract_urn_parts_batch(&urns).expect("result should be Ok");
         assert_eq!(results[0], Some(("org.example", "1.0.0", "MyAspect")));
         assert_eq!(results[1], Some(("com.test", "2.0.0", "Property")));
     }
@@ -505,7 +505,7 @@ mod tests {
             Invalid urn:bamm:old:1.0.0#Old should be ignored.
         "#;
 
-        let urns = find_urns_in_text(text).unwrap();
+        let urns = find_urns_in_text(text).expect("operation should succeed");
         assert_eq!(urns.len(), 2);
         assert!(urns.contains(&"urn:samm:org.example:1.0.0#MyAspect".to_string()));
         assert!(urns.contains(&"urn:samm:org.example:1.0.0#temperature".to_string()));

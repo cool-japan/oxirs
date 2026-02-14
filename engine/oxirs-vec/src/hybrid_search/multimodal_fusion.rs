@@ -300,9 +300,7 @@ impl MultimodalFusion {
         let vector_map: HashMap<String, f64> = vector
             .iter()
             .zip(vector_norm.iter())
-            .filter(|(r, score)| {
-                candidates.contains_key(&r.doc_id) && **score >= thresholds[1]
-            })
+            .filter(|(r, score)| candidates.contains_key(&r.doc_id) && **score >= thresholds[1])
             .map(|(r, score)| (r.doc_id.clone(), *score))
             .collect();
 
@@ -318,9 +316,7 @@ impl MultimodalFusion {
         let mut results: Vec<FusedResult> = spatial
             .iter()
             .zip(spatial_norm.iter())
-            .filter(|(r, score)| {
-                candidates.contains_key(&r.doc_id) && **score >= thresholds[2]
-            })
+            .filter(|(r, score)| candidates.contains_key(&r.doc_id) && **score >= thresholds[2])
             .map(|(r, score)| {
                 let mut result = FusedResult::new(r.doc_id.clone());
                 result.add_score(Modality::Spatial, *score);
@@ -535,7 +531,9 @@ mod tests {
         let weights = vec![0.4, 0.4, 0.2]; // Text, Vector, Spatial
         let strategy = FusionStrategy::Weighted { weights };
 
-        let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+        let results = fusion
+            .fuse(&text, &vector, &spatial, Some(strategy))
+            .unwrap();
 
         assert!(!results.is_empty());
         assert!(results[0].total_score > 0.0);
@@ -552,11 +550,15 @@ mod tests {
         let order = vec![Modality::Text, Modality::Vector];
         let strategy = FusionStrategy::Sequential { order };
 
-        let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+        let results = fusion
+            .fuse(&text, &vector, &spatial, Some(strategy))
+            .unwrap();
 
         assert!(!results.is_empty());
         // Should only include docs that passed text filter
-        assert!(results.iter().all(|r| ["doc1", "doc2", "doc3"].contains(&r.uri.as_str())));
+        assert!(results
+            .iter()
+            .all(|r| ["doc1", "doc2", "doc3"].contains(&r.uri.as_str())));
     }
 
     #[test]
@@ -567,7 +569,9 @@ mod tests {
         let thresholds = vec![0.0, 0.0, 0.0]; // Accept all for testing
         let strategy = FusionStrategy::Cascade { thresholds };
 
-        let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+        let results = fusion
+            .fuse(&text, &vector, &spatial, Some(strategy))
+            .unwrap();
 
         assert!(!results.is_empty());
         // Should have scores from multiple modalities
@@ -582,7 +586,9 @@ mod tests {
         let fusion = MultimodalFusion::new(FusionConfig::default());
 
         let strategy = FusionStrategy::RankFusion;
-        let results = fusion.fuse(&text, &vector, &spatial, Some(strategy)).unwrap();
+        let results = fusion
+            .fuse(&text, &vector, &spatial, Some(strategy))
+            .unwrap();
 
         assert!(!results.is_empty());
         // doc1 appears in all three lists at good positions

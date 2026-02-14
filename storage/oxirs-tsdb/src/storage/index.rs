@@ -373,51 +373,51 @@ mod tests {
 
     #[test]
     fn test_chunk_entry_contains() {
-        let start = DateTime::from_timestamp(1000, 0).unwrap();
-        let end = DateTime::from_timestamp(2000, 0).unwrap();
+        let start = DateTime::from_timestamp(1000, 0).expect("valid timestamp");
+        let end = DateTime::from_timestamp(2000, 0).expect("valid timestamp");
         let entry = ChunkEntry::new(1, 100, start, end, 50);
 
-        assert!(entry.contains(DateTime::from_timestamp(1500, 0).unwrap()));
+        assert!(entry.contains(DateTime::from_timestamp(1500, 0).expect("valid timestamp")));
         assert!(entry.contains(start));
         assert!(entry.contains(end));
-        assert!(!entry.contains(DateTime::from_timestamp(500, 0).unwrap()));
-        assert!(!entry.contains(DateTime::from_timestamp(2500, 0).unwrap()));
+        assert!(!entry.contains(DateTime::from_timestamp(500, 0).expect("valid timestamp")));
+        assert!(!entry.contains(DateTime::from_timestamp(2500, 0).expect("valid timestamp")));
     }
 
     #[test]
     fn test_chunk_entry_overlaps() {
-        let start = DateTime::from_timestamp(1000, 0).unwrap();
-        let end = DateTime::from_timestamp(2000, 0).unwrap();
+        let start = DateTime::from_timestamp(1000, 0).expect("valid timestamp");
+        let end = DateTime::from_timestamp(2000, 0).expect("valid timestamp");
         let entry = ChunkEntry::new(1, 100, start, end, 50);
 
         // Completely overlaps
         assert!(entry.overlaps(
-            DateTime::from_timestamp(1200, 0).unwrap(),
-            DateTime::from_timestamp(1800, 0).unwrap()
+            DateTime::from_timestamp(1200, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(1800, 0).expect("valid timestamp")
         ));
 
         // Partial overlap (left)
         assert!(entry.overlaps(
-            DateTime::from_timestamp(500, 0).unwrap(),
-            DateTime::from_timestamp(1500, 0).unwrap()
+            DateTime::from_timestamp(500, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(1500, 0).expect("valid timestamp")
         ));
 
         // Partial overlap (right)
         assert!(entry.overlaps(
-            DateTime::from_timestamp(1500, 0).unwrap(),
-            DateTime::from_timestamp(2500, 0).unwrap()
+            DateTime::from_timestamp(1500, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2500, 0).expect("valid timestamp")
         ));
 
         // No overlap (before)
         assert!(!entry.overlaps(
-            DateTime::from_timestamp(0, 0).unwrap(),
-            DateTime::from_timestamp(500, 0).unwrap()
+            DateTime::from_timestamp(0, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(500, 0).expect("valid timestamp")
         ));
 
         // No overlap (after)
         assert!(!entry.overlaps(
-            DateTime::from_timestamp(2500, 0).unwrap(),
-            DateTime::from_timestamp(3000, 0).unwrap()
+            DateTime::from_timestamp(2500, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(3000, 0).expect("valid timestamp")
         ));
     }
 
@@ -426,8 +426,8 @@ mod tests {
         let mut entry = ChunkEntry::new(
             1,
             100,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
 
@@ -444,8 +444,8 @@ mod tests {
         let entry1 = ChunkEntry::new(
             0,
             100,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
 
@@ -454,7 +454,7 @@ mod tests {
 
         let retrieved = index.get_chunk(chunk_id)?;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().series_id, 100);
+        assert_eq!(retrieved.expect("operation should succeed").series_id, 100);
 
         Ok(())
     }
@@ -466,22 +466,22 @@ mod tests {
         let entry1 = ChunkEntry::new(
             0,
             100,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
         let entry2 = ChunkEntry::new(
             0,
             100,
-            DateTime::from_timestamp(3000, 0).unwrap(),
-            DateTime::from_timestamp(4000, 0).unwrap(),
+            DateTime::from_timestamp(3000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(4000, 0).expect("valid timestamp"),
             50,
         );
         let entry3 = ChunkEntry::new(
             0,
             200,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
 
@@ -508,22 +508,22 @@ mod tests {
         let entry1 = ChunkEntry::new(
             0,
             100,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
         let entry2 = ChunkEntry::new(
             0,
             100,
-            DateTime::from_timestamp(3000, 0).unwrap(),
-            DateTime::from_timestamp(4000, 0).unwrap(),
+            DateTime::from_timestamp(3000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(4000, 0).expect("valid timestamp"),
             50,
         );
         let entry3 = ChunkEntry::new(
             0,
             100,
-            DateTime::from_timestamp(5000, 0).unwrap(),
-            DateTime::from_timestamp(6000, 0).unwrap(),
+            DateTime::from_timestamp(5000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(6000, 0).expect("valid timestamp"),
             50,
         );
 
@@ -534,24 +534,24 @@ mod tests {
         // Query range that overlaps first two chunks
         let chunks = index.get_chunks_in_range(
             100,
-            DateTime::from_timestamp(1500, 0).unwrap(),
-            DateTime::from_timestamp(3500, 0).unwrap(),
+            DateTime::from_timestamp(1500, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(3500, 0).expect("valid timestamp"),
         )?;
         assert_eq!(chunks.len(), 2);
 
         // Query range that overlaps all chunks
         let chunks = index.get_chunks_in_range(
             100,
-            DateTime::from_timestamp(0, 0).unwrap(),
-            DateTime::from_timestamp(10000, 0).unwrap(),
+            DateTime::from_timestamp(0, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(10000, 0).expect("valid timestamp"),
         )?;
         assert_eq!(chunks.len(), 3);
 
         // Query range with no overlap
         let chunks = index.get_chunks_in_range(
             100,
-            DateTime::from_timestamp(7000, 0).unwrap(),
-            DateTime::from_timestamp(8000, 0).unwrap(),
+            DateTime::from_timestamp(7000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(8000, 0).expect("valid timestamp"),
         )?;
         assert_eq!(chunks.len(), 0);
 
@@ -565,8 +565,8 @@ mod tests {
         let entry = ChunkEntry::new(
             0,
             100,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
 
@@ -593,15 +593,15 @@ mod tests {
         let entry1 = ChunkEntry::new(
             0,
             100,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
         let entry2 = ChunkEntry::new(
             0,
             200,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
 
@@ -624,8 +624,8 @@ mod tests {
             let entry = ChunkEntry::new(
                 0,
                 100,
-                DateTime::from_timestamp(1000, 0).unwrap(),
-                DateTime::from_timestamp(2000, 0).unwrap(),
+                DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+                DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
                 50,
             );
             index.insert_chunk(entry)?;
@@ -652,22 +652,22 @@ mod tests {
         let entry1 = ChunkEntry::new(
             0,
             100,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
         let entry2 = ChunkEntry::new(
             0,
             200,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
         let entry3 = ChunkEntry::new(
             0,
             300,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
             50,
         );
 

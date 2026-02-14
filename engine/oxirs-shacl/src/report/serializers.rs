@@ -577,7 +577,7 @@ mod tests {
 
         let result = serializer.serialize(&report);
         assert!(result.is_ok());
-        let html = result.unwrap();
+        let html = result.expect("result should be Ok");
         assert!(html.contains("<!DOCTYPE html>"));
         assert!(html.contains("Validation Passed"));
     }
@@ -590,7 +590,7 @@ mod tests {
 
         let result = serializer.serialize(&report);
         assert!(result.is_ok());
-        let csv = result.unwrap();
+        let csv = result.expect("result should be Ok");
         assert!(csv.contains("Index,Severity,Focus Node"));
     }
 
@@ -602,7 +602,7 @@ mod tests {
 
         let result = serializer.serialize(&report);
         assert!(result.is_ok());
-        let turtle = result.unwrap();
+        let turtle = result.expect("result should be Ok");
         assert!(turtle.contains("@prefix sh:"));
         assert!(turtle.contains("sh:ValidationReport"));
     }
@@ -615,7 +615,7 @@ mod tests {
 
         let result = serializer.serialize(&report);
         assert!(result.is_ok());
-        let metrics = result.unwrap();
+        let metrics = result.expect("result should be Ok");
         assert!(metrics.contains("# HELP shacl_validation_conforms"));
         assert!(metrics.contains("# TYPE shacl_validation_conforms gauge"));
         assert!(metrics.contains("shacl_validation_conforms 1"));

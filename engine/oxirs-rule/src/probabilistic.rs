@@ -344,7 +344,7 @@ impl BayesianNetwork {
         domain: &[String],
         rng: &mut impl RngCore,
     ) -> String {
-        let uniform = Uniform::new(0.0, 1.0).unwrap();
+        let uniform = Uniform::new(0.0, 1.0).expect("distribution parameters are valid");
         let u: f64 = uniform.sample(rng);
 
         let mut cumulative = 0.0;
@@ -372,8 +372,13 @@ impl BayesianNetwork {
 
         // Build adjacency list and in-degrees
         for (from, to) in &self.edges {
-            adj_list.get_mut(from).unwrap().push(to.clone());
-            *in_degree.get_mut(to).unwrap() += 1;
+            adj_list
+                .get_mut(from)
+                .expect("variable should exist in adjacency list")
+                .push(to.clone());
+            *in_degree
+                .get_mut(to)
+                .expect("variable should exist in in_degree map") += 1;
         }
 
         // Kahn's algorithm
@@ -390,7 +395,9 @@ impl BayesianNetwork {
 
             if let Some(neighbors) = adj_list.get(&node) {
                 for neighbor in neighbors {
-                    let deg = in_degree.get_mut(neighbor).unwrap();
+                    let deg = in_degree
+                        .get_mut(neighbor)
+                        .expect("neighbor should exist in in_degree map");
                     *deg -= 1;
                     if *deg == 0 {
                         queue.push(neighbor.clone());
@@ -654,8 +661,14 @@ impl ProbabilisticRuleEngine {
     /// Add a weighted rule
     pub fn add_weighted_rule(&mut self, rule: Rule, weight: f64) {
         self.weighted_rules.push(WeightedRule { rule, weight });
-        self.mln
-            .add_weighted_rule(self.weighted_rules.last().unwrap().rule.clone(), weight);
+        self.mln.add_weighted_rule(
+            self.weighted_rules
+                .last()
+                .expect("weighted_rules should not be empty after push")
+                .rule
+                .clone(),
+            weight,
+        );
     }
 
     /// Perform probabilistic forward chaining

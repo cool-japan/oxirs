@@ -65,7 +65,7 @@ impl ColumnarStore {
             index,
             chunk_duration,
             chunk_cache: Arc::new(RwLock::new(lru::LruCache::new(
-                std::num::NonZeroUsize::new(cache_size).unwrap(),
+                std::num::NonZeroUsize::new(cache_size).expect("construction should succeed"),
             ))),
             fsync_enabled: true,
         })
@@ -205,10 +205,16 @@ impl ColumnarStore {
             return Err(TsdbError::Decompression("Invalid magic bytes".to_string()));
         }
 
-        let series_id = u64::from_le_bytes(data[8..16].try_into().unwrap());
-        let count = u32::from_le_bytes(data[16..20].try_into().unwrap()) as usize;
-        let timestamps_size = u32::from_le_bytes(data[20..24].try_into().unwrap()) as usize;
-        let values_size = u32::from_le_bytes(data[24..28].try_into().unwrap()) as usize;
+        let series_id =
+            u64::from_le_bytes(data[8..16].try_into().expect("conversion should succeed"));
+        let count = u32::from_le_bytes(data[16..20].try_into().expect("conversion should succeed"))
+            as usize;
+        let timestamps_size =
+            u32::from_le_bytes(data[20..24].try_into().expect("conversion should succeed"))
+                as usize;
+        let values_size =
+            u32::from_le_bytes(data[24..28].try_into().expect("conversion should succeed"))
+                as usize;
 
         // Extract compressed data
         let mut offset = 32;
@@ -218,8 +224,11 @@ impl ColumnarStore {
         offset += values_size;
 
         // Parse metadata
-        let metadata_size =
-            u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+        let metadata_size = u32::from_le_bytes(
+            data[offset..offset + 4]
+                .try_into()
+                .expect("conversion should succeed"),
+        ) as usize;
         offset += 4;
         let metadata_json = &data[offset..offset + metadata_size];
         let metadata = serde_json::from_slice(metadata_json)
@@ -313,7 +322,7 @@ mod tests {
         start_timestamp: i64,
         count: usize,
     ) -> TsdbResult<TimeChunk> {
-        let start_time = DateTime::from_timestamp(start_timestamp, 0).unwrap();
+        let start_time = DateTime::from_timestamp(start_timestamp, 0).expect("valid timestamp");
         let mut points = Vec::new();
 
         for i in 0..count {
@@ -378,8 +387,8 @@ mod tests {
         // Query across both chunks
         let points = store.query_range(
             100,
-            DateTime::from_timestamp(1000, 0).unwrap(),
-            DateTime::from_timestamp(2100, 0).unwrap(),
+            DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2100, 0).expect("valid timestamp"),
         )?;
 
         // Should include points from both chunks (50 from chunk1, some from chunk2)
@@ -443,18 +452,18 @@ mod tests {
         // Query each series
         let points1 = store.query_range(
             100,
-            DateTime::from_timestamp(0, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(0, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
         )?;
         let points2 = store.query_range(
             200,
-            DateTime::from_timestamp(0, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(0, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
         )?;
         let points3 = store.query_range(
             300,
-            DateTime::from_timestamp(0, 0).unwrap(),
-            DateTime::from_timestamp(2000, 0).unwrap(),
+            DateTime::from_timestamp(0, 0).expect("valid timestamp"),
+            DateTime::from_timestamp(2000, 0).expect("valid timestamp"),
         )?;
 
         assert_eq!(points1.len(), 50);

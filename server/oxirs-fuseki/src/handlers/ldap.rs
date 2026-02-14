@@ -244,7 +244,10 @@ pub async fn test_ldap_connection(
                 message: "LDAP connection successful".to_string(),
                 details: Some(format!(
                     "Connected to LDAP server at {}",
-                    auth_service.ldap_config().unwrap().server
+                    auth_service
+                        .ldap_config()
+                        .expect("LDAP config should be available")
+                        .server
                 )),
             };
             Ok((StatusCode::OK, Json(response)).into_response())

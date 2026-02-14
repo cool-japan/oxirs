@@ -394,10 +394,12 @@ mod tests {
     fn test_jsonld_serialization_basic() {
         let aspect = create_test_aspect();
         let serializer = JsonLdSerializer::new();
-        let jsonld = serializer.serialize_to_string(&aspect).unwrap();
+        let jsonld = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // Verify it's valid JSON
-        let parsed: Value = serde_json::from_str(&jsonld).unwrap();
+        let parsed: Value = serde_json::from_str(&jsonld).expect("valid JSON");
 
         // Check @context
         assert!(parsed.get("@context").is_some());
@@ -419,7 +421,9 @@ mod tests {
     fn test_jsonld_contains_metadata() {
         let aspect = create_test_aspect();
         let serializer = JsonLdSerializer::new();
-        let jsonld = serializer.serialize_to_string(&aspect).unwrap();
+        let jsonld = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         assert!(jsonld.contains("samm:preferredName"));
         assert!(jsonld.contains("Test Aspect"));
@@ -433,7 +437,9 @@ mod tests {
     fn test_jsonld_contains_properties() {
         let aspect = create_test_aspect();
         let serializer = JsonLdSerializer::new();
-        let jsonld = serializer.serialize_to_string(&aspect).unwrap();
+        let jsonld = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         assert!(jsonld.contains("samm:properties"));
         assert!(jsonld.contains("urn:samm:org.example:1.0.0#property1"));
@@ -443,10 +449,12 @@ mod tests {
     fn test_jsonld_context_namespaces() {
         let aspect = create_test_aspect();
         let serializer = JsonLdSerializer::new();
-        let jsonld = serializer.serialize_to_string(&aspect).unwrap();
+        let jsonld = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
-        let parsed: Value = serde_json::from_str(&jsonld).unwrap();
-        let context = parsed.get("@context").unwrap();
+        let parsed: Value = serde_json::from_str(&jsonld).expect("valid JSON");
+        let context = parsed.get("@context").expect("key should exist");
 
         assert!(context.get("samm").is_some());
         assert!(context.get("samm-c").is_some());
@@ -463,8 +471,12 @@ mod tests {
         let pretty = JsonLdSerializer::new().with_pretty(true);
         let compact = JsonLdSerializer::new().with_pretty(false);
 
-        let pretty_output = pretty.serialize_to_string(&aspect).unwrap();
-        let compact_output = compact.serialize_to_string(&aspect).unwrap();
+        let pretty_output = pretty
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
+        let compact_output = compact
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // Pretty output should have newlines and indentation
         assert!(pretty_output.contains('\n'));
@@ -492,7 +504,9 @@ mod tests {
         };
 
         let serializer = JsonLdSerializer::new();
-        let jsonld = serializer.serialize_to_string(&aspect).unwrap();
+        let jsonld = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // All languages should be present
         assert!(jsonld.contains("@en"));
@@ -516,9 +530,11 @@ mod tests {
         };
 
         let serializer = JsonLdSerializer::new();
-        let jsonld = serializer.serialize_to_string(&aspect).unwrap();
+        let jsonld = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
-        let parsed: Value = serde_json::from_str(&jsonld).unwrap();
+        let parsed: Value = serde_json::from_str(&jsonld).expect("valid JSON");
 
         assert!(parsed.get("@context").is_some());
         assert!(parsed.get("@id").is_some());
@@ -548,15 +564,24 @@ mod tests {
         };
 
         let serializer = JsonLdSerializer::new();
-        let jsonld = serializer.serialize_to_string(&aspect).unwrap();
+        let jsonld = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
-        let parsed: Value = serde_json::from_str(&jsonld).unwrap();
-        let properties = parsed.get("samm:properties").unwrap().as_array().unwrap();
+        let parsed: Value = serde_json::from_str(&jsonld).expect("valid JSON");
+        let properties = parsed
+            .get("samm:properties")
+            .expect("key should exist")
+            .as_array()
+            .expect("should be a valid array");
 
         // First property should have optional: true
         assert!(properties[0].get("samm:optional").is_some());
         assert_eq!(
-            properties[0].get("samm:optional").unwrap().as_bool(),
+            properties[0]
+                .get("samm:optional")
+                .expect("key should exist")
+                .as_bool(),
             Some(true)
         );
 
@@ -568,10 +593,12 @@ mod tests {
     fn test_jsonld_roundtrip_parse() {
         let aspect = create_test_aspect();
         let serializer = JsonLdSerializer::new();
-        let jsonld = serializer.serialize_to_string(&aspect).unwrap();
+        let jsonld = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // Parse it back as JSON to ensure it's valid
-        let parsed: Value = serde_json::from_str(&jsonld).unwrap();
+        let parsed: Value = serde_json::from_str(&jsonld).expect("valid JSON");
 
         // Verify key fields
         assert_eq!(

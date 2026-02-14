@@ -8,10 +8,9 @@
 
 use oxirs_arq::algebra::{Term, TriplePattern, Variable};
 use oxirs_arq::cache::{
-    CacheCoordinator, CacheLevel, InvalidationConfig, InvalidationEngine, InvalidationStrategy,
-    RdfUpdateListener,
+    CacheCoordinator, CacheLevel, InvalidationConfig, InvalidationStrategy, RdfUpdateListener,
 };
-use oxirs_arq::query_plan_cache::{CachingConfig, QueryPlanCache};
+use oxirs_arq::query_plan_cache::QueryPlanCache;
 use oxirs_arq::query_result_cache::{CacheConfig, QueryResultCache};
 use std::sync::Arc;
 use std::time::Instant;
@@ -25,7 +24,7 @@ fn create_pattern(s: &str, p: &str, o: &str) -> TriplePattern {
     }
 }
 
-fn create_iri_pattern(s: &str, p: &str, o: &str) -> TriplePattern {
+fn _create_iri_pattern(s: &str, p: &str, o: &str) -> TriplePattern {
     use oxirs_core::model::NamedNode;
     TriplePattern {
         subject: Term::Iri(NamedNode::new(s).expect("valid IRI")),
@@ -52,7 +51,12 @@ fn test_no_stale_entries_returned() {
 
     // Register cache entry
     coordinator
-        .register_cache_entry(CacheLevel::Result, cache_key.clone(), vec![pattern.clone()], 100)
+        .register_cache_entry(
+            CacheLevel::Result,
+            cache_key.clone(),
+            vec![pattern.clone()],
+            100,
+        )
         .expect("registration failed");
 
     // Simulate RDF update
@@ -93,7 +97,9 @@ fn test_insert_invalidates_affected_queries() {
         .expect("failed");
 
     // Insert affecting pattern1 (use invalidate_on_update since it doesn't require mut)
-    coordinator.invalidate_on_update(&pattern1).expect("insert failed");
+    coordinator
+        .invalidate_on_update(&pattern1)
+        .expect("insert failed");
 
     let stats = coordinator.statistics();
     assert!(
@@ -110,11 +116,18 @@ fn test_delete_invalidates_affected_queries() {
     let pattern = create_pattern("s", "p", "o");
 
     coordinator
-        .register_cache_entry(CacheLevel::Result, "key1".to_string(), vec![pattern.clone()], 100)
+        .register_cache_entry(
+            CacheLevel::Result,
+            "key1".to_string(),
+            vec![pattern.clone()],
+            100,
+        )
         .expect("failed");
 
     // Delete affecting the pattern (use invalidate_on_update)
-    coordinator.invalidate_on_update(&pattern).expect("delete failed");
+    coordinator
+        .invalidate_on_update(&pattern)
+        .expect("delete failed");
 
     let stats = coordinator.statistics();
     assert!(
@@ -231,7 +244,8 @@ fn test_invalidation_overhead_under_1_percent() {
     // Simulate query execution time (assume 10ms for a cached query)
     let typical_query_time = std::time::Duration::from_millis(10);
 
-    let overhead_ratio = invalidation_time.as_micros() as f64 / typical_query_time.as_micros() as f64;
+    let overhead_ratio =
+        invalidation_time.as_micros() as f64 / typical_query_time.as_micros() as f64;
 
     // Overhead should be < 5% in debug builds (< 1% in release builds)
     // Debug builds have more overhead due to lack of optimization
@@ -375,7 +389,10 @@ fn test_concurrent_invalidation() {
 
     let handle1 = thread::spawn(move || coord.invalidate_on_update(&pat));
 
-    handle1.join().expect("thread panicked").expect("invalidation failed");
+    handle1
+        .join()
+        .expect("thread panicked")
+        .expect("invalidation failed");
 
     let stats = coordinator.statistics();
     assert!(stats.total_invalidations > 0);
@@ -396,7 +413,12 @@ fn test_immediate_strategy() {
     let pattern = create_pattern("s", "p", "o");
 
     coordinator
-        .register_cache_entry(CacheLevel::Result, "key1".to_string(), vec![pattern.clone()], 100)
+        .register_cache_entry(
+            CacheLevel::Result,
+            "key1".to_string(),
+            vec![pattern.clone()],
+            100,
+        )
         .expect("failed");
 
     // With immediate strategy, invalidation should happen instantly
@@ -501,7 +523,12 @@ fn test_cost_based_strategy() {
     let pattern = create_pattern("s", "p", "o");
 
     coordinator
-        .register_cache_entry(CacheLevel::Result, "key1".to_string(), vec![pattern.clone()], 100)
+        .register_cache_entry(
+            CacheLevel::Result,
+            "key1".to_string(),
+            vec![pattern.clone()],
+            100,
+        )
         .expect("failed");
 
     coordinator
@@ -510,7 +537,7 @@ fn test_cost_based_strategy() {
 
     let stats = coordinator.statistics();
     // Cost-based should make decision based on cost
-    assert!(stats.total_invalidations >= 0); // Conservative: always invalidate for now
+    let _total = stats.total_invalidations; // Conservative: always invalidate for now
 }
 
 // ============================================================================
@@ -544,17 +571,15 @@ fn test_large_dependency_graphs() {
             .collect();
 
         coordinator
-            .register_cache_entry(
-                CacheLevel::Result,
-                format!("key_{}", i),
-                patterns,
-                100,
-            )
+            .register_cache_entry(CacheLevel::Result, format!("key_{}", i), patterns, 100)
             .expect("failed");
     }
 
     let stats = coordinator.statistics();
-    assert_eq!(stats.invalidation_engine_stats.dependency_graph.entry_count, 1000);
+    assert_eq!(
+        stats.invalidation_engine_stats.dependency_graph.entry_count,
+        1000
+    );
 
     // Should handle large graphs efficiently
     let pattern = create_pattern("s5", "p5", "o5");
@@ -671,7 +696,12 @@ fn test_coordinator_integration() {
     // Register at all levels
     for level in &[CacheLevel::Result, CacheLevel::Plan, CacheLevel::Optimizer] {
         coordinator
-            .register_cache_entry(*level, format!("{:?}_key", level), vec![pattern.clone()], 100)
+            .register_cache_entry(
+                *level,
+                format!("{:?}_key", level),
+                vec![pattern.clone()],
+                100,
+            )
             .expect("failed");
     }
 
@@ -691,7 +721,7 @@ fn test_coordinator_integration() {
 
 #[test]
 fn test_configuration_changes() {
-    let mut config = InvalidationConfig {
+    let config = InvalidationConfig {
         strategy: InvalidationStrategy::Immediate,
         ..Default::default()
     };
@@ -701,7 +731,12 @@ fn test_configuration_changes() {
     let pattern = create_pattern("s", "p", "o");
 
     coordinator
-        .register_cache_entry(CacheLevel::Result, "key1".to_string(), vec![pattern.clone()], 100)
+        .register_cache_entry(
+            CacheLevel::Result,
+            "key1".to_string(),
+            vec![pattern.clone()],
+            100,
+        )
         .expect("failed");
 
     coordinator
@@ -711,7 +746,10 @@ fn test_configuration_changes() {
     // Configuration is set at creation time; changing strategy would require new coordinator
     // This test verifies that the current strategy works as expected
     let stats = coordinator.statistics();
-    assert_eq!(stats.invalidation_engine_stats.strategy, InvalidationStrategy::Immediate);
+    assert_eq!(
+        stats.invalidation_engine_stats.strategy,
+        InvalidationStrategy::Immediate
+    );
 }
 
 // ============================================================================
@@ -751,7 +789,10 @@ fn bench_invalidation_throughput() {
     let throughput = iterations as f64 / elapsed.as_secs_f64();
 
     println!("Invalidation throughput: {:.2} ops/sec", throughput);
-    println!("Average latency: {:.2} ms", elapsed.as_millis() as f64 / iterations as f64);
+    println!(
+        "Average latency: {:.2} ms",
+        elapsed.as_millis() as f64 / iterations as f64
+    );
 
     // Target: >1000 invalidations/second
     assert!(throughput > 1000.0, "Throughput too low: {}", throughput);

@@ -233,8 +233,8 @@ impl IsolationForest {
             return depth + self.c_factor(tree.size) as usize;
         }
 
-        let feature = tree.split_feature.unwrap();
-        let value = tree.split_value.unwrap();
+        let feature = tree.split_feature.expect("operation should succeed");
+        let value = tree.split_value.expect("split value should exist");
 
         if sample[feature] < value {
             if let Some(ref left) = tree.left {
@@ -274,25 +274,25 @@ impl LSTMPredictor {
         weights.insert(
             "Wf".to_string(),
             Array2::from_shape_fn((hidden_size, input_size + hidden_size), |_| {
-                rng.sample(Normal::new(0.0, 0.1).unwrap())
+                rng.sample(Normal::new(0.0, 0.1).expect("valid distribution parameters"))
             }),
         );
         weights.insert(
             "Wi".to_string(),
             Array2::from_shape_fn((hidden_size, input_size + hidden_size), |_| {
-                rng.sample(Normal::new(0.0, 0.1).unwrap())
+                rng.sample(Normal::new(0.0, 0.1).expect("valid distribution parameters"))
             }),
         );
         weights.insert(
             "Wo".to_string(),
             Array2::from_shape_fn((hidden_size, input_size + hidden_size), |_| {
-                rng.sample(Normal::new(0.0, 0.1).unwrap())
+                rng.sample(Normal::new(0.0, 0.1).expect("valid distribution parameters"))
             }),
         );
         weights.insert(
             "Wc".to_string(),
             Array2::from_shape_fn((hidden_size, input_size + hidden_size), |_| {
-                rng.sample(Normal::new(0.0, 0.1).unwrap())
+                rng.sample(Normal::new(0.0, 0.1).expect("valid distribution parameters"))
             }),
         );
 
@@ -761,7 +761,7 @@ mod tests {
 
         let analysis = analyzer.analyze("test-anomaly".to_string(), &metrics).await;
         assert!(analysis.is_ok());
-        let result = analysis.unwrap();
+        let result = analysis.expect("analysis should succeed");
         assert!(!result.root_causes.is_empty());
     }
 

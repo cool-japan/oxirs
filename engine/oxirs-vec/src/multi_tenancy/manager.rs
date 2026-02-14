@@ -387,7 +387,10 @@ impl MultiTenantManager {
             .record_operation(operation);
 
         if operation == TenantOperation::VectorSearch {
-            stats.get_mut(tenant_id).unwrap().record_query(latency_ms);
+            stats
+                .get_mut(tenant_id)
+                .expect("tenant stats entry was just inserted via or_insert_with")
+                .record_query(latency_ms);
         }
 
         // Record billing

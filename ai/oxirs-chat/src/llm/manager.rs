@@ -506,9 +506,14 @@ impl LLMManager {
 
         // Step 2: Check token budget (use default user for now)
         let user_id = "default_user".to_string();
-        let estimated_tokens = self.estimate_input_tokens(&request) + request.max_tokens.unwrap_or(1000);
+        let estimated_tokens =
+            self.estimate_input_tokens(&request) + request.max_tokens.unwrap_or(1000);
 
-        if let Err(e) = self.token_budget.check_budget(&user_id, estimated_tokens as u64).await {
+        if let Err(e) = self
+            .token_budget
+            .check_budget(&user_id, estimated_tokens as u64)
+            .await
+        {
             warn!("Token budget exceeded: {}", e);
             return Err(e);
         }
@@ -524,7 +529,10 @@ impl LLMManager {
         let mut last_error: Option<anyhow::Error> = None;
 
         for (provider_name, model_name) in provider_chain {
-            info!("Attempting provider: {} with model: {}", provider_name, model_name);
+            info!(
+                "Attempting provider: {} with model: {}",
+                provider_name, model_name
+            );
 
             // Check if circuit breaker allows execution
             if let Some(circuit_breaker) = self.circuit_breakers.get(&provider_name) {
@@ -535,13 +543,20 @@ impl LLMManager {
             }
 
             // Check if provider is healthy
-            if !self.health_checker.is_provider_healthy(&provider_name).await {
+            if !self
+                .health_checker
+                .is_provider_healthy(&provider_name)
+                .await
+            {
                 warn!("Provider {} is unhealthy, skipping", provider_name);
                 continue; // Try next provider
             }
 
             // Try to generate response
-            match self.try_provider(&provider_name, &model_name, &request).await {
+            match self
+                .try_provider(&provider_name, &model_name, &request)
+                .await
+            {
                 Ok(response) => {
                     let elapsed = start_time.elapsed();
 
@@ -645,7 +660,8 @@ impl LLMManager {
 
         // Update health checker
         let provider_id = provider_name.to_string();
-        if let Err(e) = self.health_checker
+        if let Err(e) = self
+            .health_checker
             .record_call(&provider_id, true, latency)
             .await
         {
@@ -662,7 +678,8 @@ impl LLMManager {
 
         // Update health checker
         let provider_id = provider_name.to_string();
-        if let Err(e) = self.health_checker
+        if let Err(e) = self
+            .health_checker
             .record_call(&provider_id, false, latency)
             .await
         {

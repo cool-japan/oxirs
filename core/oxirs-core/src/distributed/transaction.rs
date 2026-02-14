@@ -468,7 +468,12 @@ impl TransactionCoordinator {
         // Process votes
         let mut all_yes = true;
         for (i, vote) in votes.iter().enumerate() {
-            let shard_id = *transaction.participants.read().iter().nth(i).unwrap();
+            let shard_id = *transaction
+                .participants
+                .read()
+                .iter()
+                .nth(i)
+                .expect("participant index should be valid");
             transaction.votes.insert(shard_id, *vote);
 
             // Log vote
@@ -881,7 +886,10 @@ impl LockManager {
                     }
                 } else if rec_stack.contains(&neighbor) {
                     // Found cycle
-                    let cycle_start = path.iter().position(|&n| n == neighbor).unwrap();
+                    let cycle_start = path
+                        .iter()
+                        .position(|&n| n == neighbor)
+                        .expect("neighbor should exist in path when cycle detected");
                     cycles.push(path[cycle_start..].to_vec());
                     return true;
                 }

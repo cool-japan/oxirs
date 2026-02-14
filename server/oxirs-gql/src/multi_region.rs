@@ -715,7 +715,10 @@ impl MultiRegionManager {
 
         for region in regions {
             let distance = region.location.distance_to(&client_loc);
-            if best_region.is_none() || distance < best_region.unwrap().1 {
+            if best_region
+                .as_ref()
+                .map_or(true, |(_, best_dist)| distance < *best_dist)
+            {
                 best_region = Some((region, distance));
             }
         }
@@ -772,7 +775,9 @@ impl MultiRegionManager {
         }
 
         // Fallback to first region
-        let region = regions.first().unwrap();
+        let region = regions
+            .first()
+            .expect("collection validated to be non-empty");
         Ok(RoutingDecision {
             region_id: region.id.clone(),
             endpoint: region.endpoint.clone(),

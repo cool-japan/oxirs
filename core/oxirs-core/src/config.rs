@@ -1361,13 +1361,13 @@ impl ConfigurationManager {
 
     /// Get current configuration
     pub fn get_config(&self) -> OxirsConfig {
-        self.config.read().unwrap().clone()
+        self.config.read().expect("lock should not be poisoned").clone()
     }
 
     /// Update configuration
     pub fn update_config(&mut self, new_config: OxirsConfig) -> Result<(), ConfigError> {
         self.validate_config(&new_config)?;
-        *self.config.write().unwrap() = new_config;
+        *self.config.write().expect("lock should not be poisoned") = new_config;
         Ok(())
     }
 

@@ -858,8 +858,8 @@ impl ParallelRuleEngine {
 
         // Get a snapshot of rules and facts
         let (local_rules, local_facts) = {
-            let rules_guard = rules.lock().unwrap();
-            let facts_guard = facts.lock().unwrap();
+            let rules_guard = rules.lock().expect("lock should not be poisoned");
+            let facts_guard = facts.lock().expect("lock should not be poisoned");
             (rules_guard.clone(), facts_guard.clone())
         };
 

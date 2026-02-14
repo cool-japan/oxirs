@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -78,10 +78,7 @@ impl ModelManager {
     }
 
     /// Create model manager with training collector
-    pub fn with_training_collector(
-        mut self,
-        collector: Arc<RwLock<TrainingCollector>>,
-    ) -> Self {
+    pub fn with_training_collector(mut self, collector: Arc<RwLock<TrainingCollector>>) -> Self {
         self.training_collector = Some(collector);
         self
     }
@@ -93,7 +90,9 @@ impl ModelManager {
 
     /// Record a prediction result
     pub fn record_prediction(&self, predicted: f64, actual: f64) -> Result<()> {
-        let mut tracker = self.performance_tracker.write()
+        let mut tracker = self
+            .performance_tracker
+            .write()
             .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
 
         tracker.record(PredictionResult {
@@ -108,7 +107,9 @@ impl ModelManager {
 
     /// Evaluate current model quality
     pub fn evaluate_model_quality(&self) -> Result<ModelQuality> {
-        let tracker = self.performance_tracker.read()
+        let tracker = self
+            .performance_tracker
+            .read()
             .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
 
         let quality = tracker.calculate_quality();
@@ -161,12 +162,11 @@ impl ModelManager {
     /// Trigger model retraining
     pub fn trigger_retraining(&mut self) -> Result<()> {
         // Set retraining flag
-        if self.retraining_in_progress.compare_exchange(
-            false,
-            true,
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-        ).is_err() {
+        if self
+            .retraining_in_progress
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
             return Err(anyhow::anyhow!("Retraining already in progress"));
         }
 
@@ -182,11 +182,14 @@ impl ModelManager {
     /// Internal retraining implementation
     fn retrain_internal(&mut self) -> Result<()> {
         // Get training data
-        let training_collector = self.training_collector.as_ref()
+        let training_collector = self
+            .training_collector
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No training collector available"))?;
 
         let examples = {
-            let collector = training_collector.read()
+            let collector = training_collector
+                .read()
                 .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
             collector.get_all_examples()?
         };
@@ -201,7 +204,9 @@ impl ModelManager {
 
         // Save current model as previous (for rollback)
         if self.config.enable_rollback {
-            let current = self.active_model.read()
+            let current = self
+                .active_model
+                .read()
                 .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
 
             self.previous_model = Some(Arc::new(RwLock::new(current.clone())));
@@ -212,7 +217,9 @@ impl ModelManager {
 
         // Train new model
         {
-            let mut model = self.active_model.write()
+            let mut model = self
+                .active_model
+                .write()
                 .map_err(|e| anyhow::anyhow!("Failed to acquire write lock: {}", e))?;
 
             // Add training examples to model
@@ -221,8 +228,7 @@ impl ModelManager {
             }
 
             // Train
-            model.train_model()
-                .context("Failed to train model")?;
+            model.train_model().context("Failed to train model")?;
         }
 
         // Evaluate new model quality
@@ -254,7 +260,9 @@ impl ModelManager {
 
     /// Rollback to previous model
     pub fn rollback_to_previous(&mut self) -> Result<()> {
-        let previous = self.previous_model.take()
+        let previous = self
+            .previous_model
+            .take()
             .ok_or_else(|| anyhow::anyhow!("No previous model available for rollback"))?;
 
         self.active_model = previous;
@@ -266,10 +274,13 @@ impl ModelManager {
 
     /// Save model checkpoint
     pub fn save_checkpoint(&self, path: &Path) -> Result<()> {
-        let model = self.active_model.read()
+        let model = self
+            .active_model
+            .read()
             .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
 
-        model.save_model(path)
+        model
+            .save_model(path)
             .context("Failed to save model checkpoint")?;
 
         Ok(())
@@ -277,18 +288,22 @@ impl ModelManager {
 
     /// Load model from checkpoint
     pub fn load_checkpoint(path: &Path, config: ManagerConfig) -> Result<Self> {
-        let predictor = MLPredictor::load_model(path)
-            .context("Failed to load model from checkpoint")?;
+        let predictor =
+            MLPredictor::load_model(path).context("Failed to load model from checkpoint")?;
 
         Ok(Self::new(predictor, config))
     }
 
     /// Get performance metrics
     pub fn get_performance_metrics(&self) -> Result<PerformanceMetrics> {
-        let tracker = self.performance_tracker.read()
+        let tracker = self
+            .performance_tracker
+            .read()
             .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
 
-        let model = self.active_model.read()
+        let model = self
+            .active_model
+            .read()
             .map_err(|e| anyhow::anyhow!("Failed to acquire read lock: {}", e))?;
 
         Ok(PerformanceMetrics {
@@ -340,7 +355,8 @@ impl PerformanceTracker {
 
     /// Update performance metrics
     pub fn update_metrics(&mut self) {
-        let valid_predictions: Vec<&PredictionResult> = self.predictions
+        let valid_predictions: Vec<&PredictionResult> = self
+            .predictions
             .iter()
             .filter(|p| p.actual_cost.is_some())
             .collect();
@@ -352,10 +368,7 @@ impl PerformanceTracker {
         let n = valid_predictions.len() as f64;
 
         // Calculate MAE
-        let total_error: f64 = valid_predictions
-            .iter()
-            .filter_map(|p| p.error)
-            .sum();
+        let total_error: f64 = valid_predictions.iter().filter_map(|p| p.error).sum();
         self.mae = total_error / n;
 
         // Calculate RMSE
@@ -369,7 +382,8 @@ impl PerformanceTracker {
         let mean_actual: f64 = valid_predictions
             .iter()
             .filter_map(|p| p.actual_cost)
-            .sum::<f64>() / n;
+            .sum::<f64>()
+            / n;
 
         let ss_tot: f64 = valid_predictions
             .iter()
@@ -379,7 +393,7 @@ impl PerformanceTracker {
         let ss_res: f64 = valid_predictions
             .iter()
             .filter_map(|p| {
-                if let (Some(actual), Some(error)) = (p.actual_cost, p.error) {
+                if let (Some(_actual), Some(error)) = (p.actual_cost, p.error) {
                     Some(error.powi(2))
                 } else {
                     None
@@ -467,7 +481,7 @@ pub struct PerformanceMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::advanced_optimizer::ml_predictor::{MLConfig, MLModelType};
+    use crate::advanced_optimizer::ml_predictor::MLModelType;
 
     #[test]
     fn test_model_manager_creation() -> Result<()> {

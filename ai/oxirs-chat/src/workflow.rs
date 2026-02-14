@@ -674,7 +674,12 @@ impl AuditLogger {
     async fn log_approval_request(&self, request: &ApprovalRequest) -> Result<()> {
         let entry = AuditEntry {
             id: Uuid::new_v4().to_string(),
-            entity_id: request.id.as_ref().unwrap().0.clone(),
+            entity_id: request
+                .id
+                .as_ref()
+                .expect("request should have an id")
+                .0
+                .clone(),
             action: AuditAction::ApprovalRequested,
             actor: request.requester.clone(),
             timestamp: SystemTime::now(),
@@ -801,7 +806,10 @@ impl NotificationService {
     }
 
     async fn notify_approval_decision(&self, request: &ApprovalRequest) -> Result<()> {
-        let decision = request.decision.as_ref().unwrap();
+        let decision = request
+            .decision
+            .as_ref()
+            .expect("request should have a decision");
         let notification = Notification {
             recipient: request.requester.clone(),
             notification_type: NotificationType::ApprovalDecision,

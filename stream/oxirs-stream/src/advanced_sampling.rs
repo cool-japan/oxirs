@@ -523,8 +523,11 @@ impl TDigest {
         }
 
         // Sort by mean
-        self.centroids
-            .sort_by(|a, b| a.mean.partial_cmp(&b.mean).unwrap());
+        self.centroids.sort_by(|a, b| {
+            a.mean
+                .partial_cmp(&b.mean)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut compressed = Vec::new();
         let mut current = self.centroids[0];

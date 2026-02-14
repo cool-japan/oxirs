@@ -253,7 +253,10 @@ impl RecommendationEvaluator {
         model: &dyn EmbeddingModel,
         config: &ApplicationEvalConfig,
     ) -> Result<UserRecommendationResults> {
-        let user_interactions = self.user_interactions.get(user_id).unwrap();
+        let user_interactions = self
+            .user_interactions
+            .get(user_id)
+            .expect("user_id should exist in user_interactions");
 
         // Split interactions into training and test sets
         let split_point = (user_interactions.len() as f64 * 0.8) as usize;

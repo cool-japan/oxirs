@@ -105,10 +105,7 @@ fn generate_training_dataset(size: usize) -> Vec<TrainingExample> {
 }
 
 /// Create a trained predictor for benchmarking
-fn create_trained_predictor(
-    model_type: MLModelType,
-    training_size: usize,
-) -> MLPredictor {
+fn create_trained_predictor(model_type: MLModelType, training_size: usize) -> MLPredictor {
     let config = MLConfig {
         model_type,
         min_examples_for_training: 50,
@@ -123,9 +120,7 @@ fn create_trained_predictor(
         predictor.add_training_example(example);
     }
 
-    predictor
-        .train_model()
-        .expect("Failed to train predictor");
+    predictor.train_model().expect("Failed to train predictor");
 
     predictor
 }
@@ -326,7 +321,9 @@ fn bench_batch_prediction(c: &mut Criterion) {
             &batch_size,
             |b, &size| {
                 let mut predictor = create_trained_predictor(MLModelType::Ridge, 200);
-                let queries: Vec<_> = (0..size).map(|i| create_complex_query(i % 10 + 1)).collect();
+                let queries: Vec<_> = (0..size)
+                    .map(|i| create_complex_query(i % 10 + 1))
+                    .collect();
 
                 b.iter(|| {
                     for query in &queries {

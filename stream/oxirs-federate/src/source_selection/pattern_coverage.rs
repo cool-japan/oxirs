@@ -57,8 +57,11 @@ impl PatternCoverageAnalyzer {
             }
 
             // Sort by coverage score
-            covering_sources
-                .sort_by(|a, b| b.coverage_score.partial_cmp(&a.coverage_score).unwrap());
+            covering_sources.sort_by(|a, b| {
+                b.coverage_score
+                    .partial_cmp(&a.coverage_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
 
             let overall_coverage = if covering_sources.is_empty() {
                 0.0

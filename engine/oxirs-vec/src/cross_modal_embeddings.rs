@@ -381,7 +381,10 @@ impl FusionLayer {
     }
 
     fn weighted_average_fusion(&self, embeddings: &HashMap<Modality, Vector>) -> Result<Vector> {
-        let first_embedding = embeddings.values().next().unwrap();
+        let first_embedding = embeddings
+            .values()
+            .next()
+            .expect("embeddings should not be empty for weighted average fusion");
         let dim = first_embedding.dimensions;
         let mut fused = vec![0.0f32; dim];
         let mut total_weight = 0.0f32;
@@ -730,7 +733,7 @@ impl CrossModalEncoder {
         }
 
         // Sort by similarity (descending) and take top k
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         similarities.truncate(top_k);
 
         Ok(similarities)

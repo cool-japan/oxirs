@@ -552,7 +552,11 @@ impl CostBasedOptimizer {
         // Update legacy statistics for backward compatibility
         const ALPHA: f64 = 0.2;
         let pattern_hash = self.compute_pattern_hash(pattern);
-        let mut pattern_stats = self.stats.pattern_stats.write().unwrap();
+        let mut pattern_stats = self
+            .stats
+            .pattern_stats
+            .write()
+            .expect("lock should not be poisoned");
 
         let entry = pattern_stats
             .entry(pattern_hash)
@@ -673,7 +677,11 @@ impl CostBasedOptimizer {
     /// Get learned statistics for a pattern
     pub fn get_learned_cardinality(&self, pattern: &GraphPattern) -> Option<f64> {
         let pattern_hash = self.compute_pattern_hash(pattern);
-        let pattern_stats = self.stats.pattern_stats.read().unwrap();
+        let pattern_stats = self
+            .stats
+            .pattern_stats
+            .read()
+            .expect("lock should not be poisoned");
         pattern_stats.get(&pattern_hash).map(|s| s.avg_cardinality)
     }
 

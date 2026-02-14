@@ -302,7 +302,7 @@ impl PerformanceOptimizer {
         }
 
         // Sort by score (highest first)
-        node_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        node_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Calculate distribution
         let total_score: f64 = node_scores.iter().map(|(_, s)| s).sum();
@@ -358,7 +358,10 @@ impl PerformanceOptimizer {
     // Private helper methods
 
     fn maybe_adjust_cache(&self) {
-        let mut last_adjustment = self.last_adjustment.lock().unwrap();
+        let mut last_adjustment = self
+            .last_adjustment
+            .lock()
+            .expect("lock should not be poisoned");
         let elapsed = last_adjustment.elapsed();
 
         if elapsed < Duration::from_millis(self.config.cache_adjustment_interval_ms) {

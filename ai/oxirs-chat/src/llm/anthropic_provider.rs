@@ -39,8 +39,18 @@ impl AnthropicProvider {
             .unwrap_or_else(|| "https://api.anthropic.com".to_string());
 
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("anthropic-version", "2023-06-01".parse().unwrap());
-        headers.insert("content-type", "application/json".parse().unwrap());
+        headers.insert(
+            "anthropic-version",
+            "2023-06-01"
+                .parse()
+                .expect("parse should succeed for valid input"),
+        );
+        headers.insert(
+            "content-type",
+            "application/json"
+                .parse()
+                .expect("parse should succeed for valid input"),
+        );
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))

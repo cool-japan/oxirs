@@ -132,7 +132,7 @@ impl RuleCompressor {
             data: compressed_data,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
         })
     }
@@ -212,7 +212,11 @@ impl RuleCompressor {
             }
 
             if match_len >= MIN_MATCH_LEN
-                && (best_match.is_none() || match_len > best_match.unwrap().1)
+                && (best_match.is_none()
+                    || match_len
+                        > best_match
+                            .expect("best_match should be Some after is_none check")
+                            .1)
             {
                 best_match = Some((search_pos, match_len));
             }

@@ -244,7 +244,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_hover_provider() {
-        let store = Arc::new(ConcreteStore::new().unwrap());
+        let store = Arc::new(ConcreteStore::new().expect("store creation should succeed"));
         let provider = HoverProvider::new(store);
 
         let text = "sh:targetClass ex:Person";
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn test_word_extraction() {
-        let store = Arc::new(ConcreteStore::new().unwrap());
+        let store = Arc::new(ConcreteStore::new().expect("store creation should succeed"));
         let provider = HoverProvider::new(store);
 
         let word = provider.get_word_at_position("sh:targetClass", Position::new(0, 5));

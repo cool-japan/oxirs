@@ -352,8 +352,14 @@ impl MessageAnalyticsEngine {
             / total_messages as f32;
 
         let conversation_duration = if messages.len() > 1 {
-            let start = messages.first().unwrap().timestamp;
-            let end = messages.last().unwrap().timestamp;
+            let start = messages
+                .first()
+                .expect("collection validated to be non-empty")
+                .timestamp;
+            let end = messages
+                .last()
+                .expect("collection validated to be non-empty")
+                .timestamp;
             end.signed_duration_since(start).num_minutes() as f32
         } else {
             0.0
@@ -531,7 +537,7 @@ impl IntentClassifier {
         // Find primary intent
         let primary_intent = intent_scores
             .iter()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(intent, _)| match intent.as_str() {
                 "Query" => Intent::Query,
                 "Exploration" => Intent::Exploration,
@@ -542,7 +548,7 @@ impl IntentClassifier {
 
         let confidence = intent_scores
             .values()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(&0.0);
 
         Ok(IntentClassification {

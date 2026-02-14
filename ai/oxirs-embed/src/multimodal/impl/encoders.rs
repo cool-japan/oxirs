@@ -51,7 +51,10 @@ impl TextEncoder {
     /// Encode text into embeddings
     pub fn encode(&self, text: &str) -> Result<Array1<f32>> {
         let input_features = self.extract_text_features(text);
-        let projection = self.parameters.get("projection").unwrap();
+        let projection = self
+            .parameters
+            .get("projection")
+            .expect("parameter 'projection' should be initialized");
 
         // Simple linear projection (in real implementation would be full transformer)
         let encoded = projection.dot(&input_features);
@@ -140,7 +143,10 @@ impl KGEncoder {
 
     /// Encode knowledge graph entity
     pub fn encode_entity(&self, entity_embedding: &Array1<f32>) -> Result<Array1<f32>> {
-        let projection = self.parameters.get("entity_projection").unwrap();
+        let projection = self
+            .parameters
+            .get("entity_projection")
+            .expect("parameter 'entity_projection' should be initialized");
 
         // Ensure dimension compatibility for matrix-vector multiplication
         if projection.ncols() != entity_embedding.len() {
@@ -161,7 +167,10 @@ impl KGEncoder {
 
     /// Encode knowledge graph relation
     pub fn encode_relation(&self, relation_embedding: &Array1<f32>) -> Result<Array1<f32>> {
-        let projection = self.parameters.get("relation_projection").unwrap();
+        let projection = self
+            .parameters
+            .get("relation_projection")
+            .expect("parameter 'relation_projection' should be initialized");
 
         // Ensure dimension compatibility for matrix-vector multiplication
         if projection.ncols() != relation_embedding.len() {
@@ -288,17 +297,29 @@ impl AlignmentNetwork {
         kg_emb: &Array1<f32>,
     ) -> Result<(Array1<f32>, f32)> {
         // Process text embedding
-        let text_hidden_matrix = self.parameters.get("text_hidden").unwrap();
+        let text_hidden_matrix = self
+            .parameters
+            .get("text_hidden")
+            .expect("parameter 'text_hidden' should be initialized");
         let text_hidden = text_hidden_matrix.dot(text_emb);
         let text_hidden = text_hidden.mapv(|x| x.max(0.0)); // ReLU activation
-        let text_output_matrix = self.parameters.get("text_output").unwrap();
+        let text_output_matrix = self
+            .parameters
+            .get("text_output")
+            .expect("parameter 'text_output' should be initialized");
         let text_output = text_output_matrix.dot(&text_hidden);
 
         // Process KG embedding
-        let kg_hidden_matrix = self.parameters.get("kg_hidden").unwrap();
+        let kg_hidden_matrix = self
+            .parameters
+            .get("kg_hidden")
+            .expect("parameter 'kg_hidden' should be initialized");
         let kg_hidden = kg_hidden_matrix.dot(kg_emb);
         let kg_hidden = kg_hidden.mapv(|x| x.max(0.0)); // ReLU activation
-        let kg_output_matrix = self.parameters.get("kg_output").unwrap();
+        let kg_output_matrix = self
+            .parameters
+            .get("kg_output")
+            .expect("parameter 'kg_output' should be initialized");
         let kg_output = kg_output_matrix.dot(&kg_hidden);
 
         // Cross-modal attention

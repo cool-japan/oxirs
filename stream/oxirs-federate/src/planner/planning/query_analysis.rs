@@ -691,7 +691,8 @@ fn parse_conditional_fragment(content: &str) -> Result<Option<Selection>> {
             directives.push(part.to_string());
         } else if part.starts_with('{') {
             // Start of selection set
-            remaining_content = content[content.find('{').unwrap()..].to_string();
+            remaining_content =
+                content[content.find('{').expect("element should be found")..].to_string();
             break;
         } else if type_condition.is_none() && !part.starts_with('@') {
             // Type condition

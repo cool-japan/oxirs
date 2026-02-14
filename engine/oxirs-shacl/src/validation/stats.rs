@@ -573,11 +573,15 @@ impl PerformanceAnalytics {
         self.evaluation_times.push(duration);
         self.total_evaluation_time += duration;
 
-        if self.min_evaluation_time.is_none() || duration < self.min_evaluation_time.unwrap() {
+        if self.min_evaluation_time.is_none()
+            || duration < self.min_evaluation_time.expect("operation should succeed")
+        {
             self.min_evaluation_time = Some(duration);
         }
 
-        if self.max_evaluation_time.is_none() || duration > self.max_evaluation_time.unwrap() {
+        if self.max_evaluation_time.is_none()
+            || duration > self.max_evaluation_time.expect("operation should succeed")
+        {
             self.max_evaluation_time = Some(duration);
         }
 
@@ -971,7 +975,7 @@ mod tests {
         // Test shape with most violations
         let most_violations = stats.shape_with_most_violations();
         assert!(most_violations.is_some());
-        let (shape_id_result, violation_count) = most_violations.unwrap();
+        let (shape_id_result, violation_count) = most_violations.expect("result should be Ok");
         assert_eq!(shape_id_result, shape_id);
         assert_eq!(violation_count, 3); // Total violations recorded
     }

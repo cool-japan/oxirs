@@ -58,14 +58,14 @@ pub(super) fn md5_hash(data: &[u8]) -> u64 {
 }
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::{
         AzureBlobBackend, CloudOperationProfiler, CloudStorageConfig, ClusterMetrics,
         CostOptimization, CostPrediction, CostTrainingData, DisasterRecoveryConfig,
-        DisasterRecoveryManager, ElasticScalingConfig, ElasticScalingManager,
-        ElasticScalingStatus, GCSBackend, GpuCompressor, MLCostOptimizer, NodeInstance,
-        OperationMetrics, S3Backend, ScalingDecision, Trend,
+        DisasterRecoveryManager, ElasticScalingConfig, ElasticScalingManager, ElasticScalingStatus,
+        GCSBackend, GpuCompressor, MLCostOptimizer, NodeInstance, OperationMetrics, S3Backend,
+        ScalingDecision, Trend,
     };
+    use super::*;
     use std::sync::Arc;
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 

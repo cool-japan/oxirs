@@ -863,7 +863,7 @@ impl JointEmbeddingSpace {
         }
 
         // Sort by similarity (descending) and take top-k
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         similarities.truncate(top_k);
 
         Ok(similarities)

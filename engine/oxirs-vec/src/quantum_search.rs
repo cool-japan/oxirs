@@ -344,18 +344,28 @@ impl QuantumVectorSearch {
         }
 
         // Sort by quantum-enhanced similarity
-        results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+        results.sort_by(|a, b| {
+            b.similarity
+                .partial_cmp(&a.similarity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(k);
 
         // Store quantum state for future use
         {
-            let mut states = self.quantum_states.write().unwrap();
+            let mut states = self
+                .quantum_states
+                .write()
+                .expect("quantum_states lock should not be poisoned");
             states.insert(query_id, quantum_state);
         }
 
         // Store search result in history
         {
-            let mut history = self.search_history.write().unwrap();
+            let mut history = self
+                .search_history
+                .write()
+                .expect("search_history lock should not be poisoned");
             history.extend(results.clone());
         }
 
@@ -458,12 +468,19 @@ impl QuantumVectorSearch {
         let mut all_results: Vec<QuantumSearchResult> = results?.into_iter().flatten().collect();
 
         // Sort by quantum-enhanced similarity
-        all_results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+        all_results.sort_by(|a, b| {
+            b.similarity
+                .partial_cmp(&a.similarity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         all_results.truncate(k);
 
         // Store search result in history
         {
-            let mut history = self.search_history.write().unwrap();
+            let mut history = self
+                .search_history
+                .write()
+                .expect("search_history lock should not be poisoned");
             history.extend(all_results.clone());
         }
 
@@ -551,7 +568,10 @@ impl QuantumVectorSearch {
 
     /// Get quantum search statistics
     pub fn get_quantum_statistics(&self) -> QuantumSearchStatistics {
-        let history = self.search_history.read().unwrap();
+        let history = self
+            .search_history
+            .read()
+            .expect("search_history lock should not be poisoned");
 
         let total_searches = history.len();
         let avg_quantum_probability = if total_searches > 0 {
@@ -649,7 +669,7 @@ impl QuantumVectorSearch {
         let max_probability = quantum_state
             .probabilities
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(&0.0);
 
         (measured_probability * max_probability).sqrt()
@@ -657,18 +677,19 @@ impl QuantumVectorSearch {
 
     fn generate_quantum_fluctuation(&self, temperature: f32) -> f32 {
         // Simulate quantum fluctuation using thermal noise with proper Gaussian distribution
-        let mut rng = self.rng.write().unwrap();
+        let mut rng = self.rng.write().expect("rng lock should not be poisoned");
 
         // Use proper normal distribution for quantum fluctuations
-        let normal =
-            Normal::new(0.0, temperature.sqrt()).unwrap_or_else(|_| Normal::new(0.0, 1.0).unwrap());
+        let normal = Normal::new(0.0, temperature.sqrt()).unwrap_or_else(|_| {
+            Normal::new(0.0, 1.0).expect("fallback normal distribution parameters are valid")
+        });
         normal.sample(&mut *rng)
     }
 
     #[allow(deprecated)]
     fn generate_random(&self) -> f32 {
         // Use proper random number generator
-        let mut rng = self.rng.write().unwrap();
+        let mut rng = self.rng.write().expect("rng lock should not be poisoned");
         rng.gen_range(0.0..1.0)
     }
 }

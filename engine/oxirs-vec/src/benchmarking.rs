@@ -654,7 +654,7 @@ impl BenchmarkSuite {
         let avg_query_time = Duration::from_nanos(
             (query_times.iter().map(|d| d.as_nanos()).sum::<u128>() / query_times.len() as u128)
                 .try_into()
-                .unwrap(),
+                .expect("average query time should fit in u64"),
         );
 
         let median_query_time = sorted_times[sorted_times.len() / 2];
@@ -1071,7 +1071,7 @@ impl BenchmarkSuite {
                 (query_times.iter().map(|d| d.as_nanos()).sum::<u128>()
                     / query_times.len() as u128)
                     .try_into()
-                    .unwrap(),
+                    .expect("average query time should fit in u64"),
             );
 
             performance_scaling.push((size, avg_query_time));

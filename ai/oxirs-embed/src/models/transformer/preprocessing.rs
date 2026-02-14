@@ -81,7 +81,7 @@ impl TransformerPreprocessor {
     /// Normalize whitespace
     fn normalize_whitespace(&self, text: &str) -> String {
         // Replace multiple whitespace with single space
-        let re = Regex::new(r"\s+").unwrap();
+        let re = Regex::new(r"\s+").expect("regex pattern should be valid");
         re.replace_all(text, " ").trim().to_string()
     }
 
@@ -217,7 +217,7 @@ impl TransformerPreprocessor {
         }
 
         // Handle legal citations
-        let section_re = Regex::new(r"§(\d+)").unwrap();
+        let section_re = Regex::new(r"§(\d+)").expect("regex pattern should be valid");
         result = section_re.replace_all(&result, "section $1").to_string();
 
         result
@@ -254,7 +254,7 @@ impl TransformerPreprocessor {
         result = result.replace("Q4", "fourth quarter");
 
         // Handle percentages
-        let percent_re = Regex::new(r"(\d+\.?\d*)%").unwrap();
+        let percent_re = Regex::new(r"(\d+\.?\d*)%").expect("regex pattern should be valid");
         result = percent_re.replace_all(&result, "$1 percent").to_string();
 
         result

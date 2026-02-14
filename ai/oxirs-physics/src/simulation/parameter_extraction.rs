@@ -118,10 +118,15 @@ impl ParameterExtractor {
         // Parse query results
         if let QueryResults::Bindings(ref bindings) = results.results() {
             for binding in bindings {
-                if let (Some(prop_term), Some(val_term)) = (binding.get("property"), binding.get("value"))
+                if let (Some(Term::NamedNode(prop_node)), Some(val_term)) =
+                    (binding.get("property"), binding.get("value"))
                 {
-                if let Term::NamedNode(prop_node) = prop_term {
-                    let prop_name = prop_node.as_str().split('#').last().or_else(|| prop_node.as_str().split('/').last()).unwrap_or("unknown");
+                    let prop_name = prop_node
+                        .as_str()
+                        .split('#')
+                        .next_back()
+                        .or_else(|| prop_node.as_str().split('/').next_back())
+                        .unwrap_or("unknown");
 
                     let unit = binding
                         .get("unit")
@@ -139,7 +144,6 @@ impl ParameterExtractor {
                     }
                 }
             }
-        }
         }
 
         // Extract relationships
@@ -225,7 +229,12 @@ impl ParameterExtractor {
                     }
 
                     let datatype = NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
-                        .map_err(|e| PhysicsError::ParameterExtraction(format!("Invalid datatype IRI: {}", e)))?;
+                        .map_err(|e| {
+                            PhysicsError::ParameterExtraction(format!(
+                                "Invalid datatype IRI: {}",
+                                e
+                            ))
+                        })?;
 
                     Ok(Some(PhysicalValue {
                         value,
@@ -269,16 +278,16 @@ impl ParameterExtractor {
         if let QueryResults::Bindings(ref bindings) = results.results() {
             for binding in bindings {
                 if let Some(value_term) = binding.get("value") {
-                let unit = binding
-                    .get("unit")
-                    .and_then(|t| {
-                        if let Term::Literal(lit) = t {
-                            Some(lit.value().to_string())
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(|| "dimensionless".to_string());
+                    let unit = binding
+                        .get("unit")
+                        .and_then(|t| {
+                            if let Term::Literal(lit) = t {
+                                Some(lit.value().to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| "dimensionless".to_string());
 
                     return self.parse_value(value_term, &unit);
                 }
@@ -363,31 +372,29 @@ impl ParameterExtractor {
         }
 
         // Add defaults if needed
-        if self.config.use_defaults {
-            if initial_conditions.is_empty() {
-                match simulation_type {
-                    "thermal" => {
-                        initial_conditions.insert(
-                            "temperature".to_string(),
-                            PhysicalQuantity {
-                                value: 293.15,
-                                unit: "K".to_string(),
-                                uncertainty: Some(0.1),
-                            },
-                        );
-                    }
-                    "mechanical" => {
-                        initial_conditions.insert(
-                            "displacement".to_string(),
-                            PhysicalQuantity {
-                                value: 0.0,
-                                unit: "m".to_string(),
-                                uncertainty: Some(1e-6),
-                            },
-                        );
-                    }
-                    _ => {}
+        if self.config.use_defaults && initial_conditions.is_empty() {
+            match simulation_type {
+                "thermal" => {
+                    initial_conditions.insert(
+                        "temperature".to_string(),
+                        PhysicalQuantity {
+                            value: 293.15,
+                            unit: "K".to_string(),
+                            uncertainty: Some(0.1),
+                        },
+                    );
                 }
+                "mechanical" => {
+                    initial_conditions.insert(
+                        "displacement".to_string(),
+                        PhysicalQuantity {
+                            value: 0.0,
+                            unit: "m".to_string(),
+                            uncertainty: Some(1e-6),
+                        },
+                    );
+                }
+                _ => {}
             }
         }
 
@@ -607,7 +614,10 @@ mod tests {
         assert_eq!(params.time_span, (0.0, 100.0));
 
         // Check thermal initial conditions
-        let temp = params.initial_conditions.get("temperature").expect("Missing temperature");
+        let temp = params
+            .initial_conditions
+            .get("temperature")
+            .expect("Missing temperature");
         assert_eq!(temp.value, 293.15); // 20°C
         assert_eq!(temp.unit, "K");
 
@@ -631,16 +641,25 @@ mod tests {
         assert_eq!(params.simulation_type, "mechanical");
 
         // Check mechanical initial conditions
-        let disp = params.initial_conditions.get("displacement").expect("Missing displacement");
+        let disp = params
+            .initial_conditions
+            .get("displacement")
+            .expect("Missing displacement");
         assert_eq!(disp.value, 0.0);
         assert_eq!(disp.unit, "m");
 
         // Check mechanical properties
-        let youngs = params.material_properties.get("youngs_modulus").expect("Missing Young's modulus");
+        let youngs = params
+            .material_properties
+            .get("youngs_modulus")
+            .expect("Missing Young's modulus");
         assert_eq!(youngs.value, 200e9); // Steel
         assert_eq!(youngs.unit, "Pa");
 
-        let poisson = params.material_properties.get("poisson_ratio").expect("Missing Poisson's ratio");
+        let poisson = params
+            .material_properties
+            .get("poisson_ratio")
+            .expect("Missing Poisson's ratio");
         assert_eq!(poisson.value, 0.3);
         assert_eq!(poisson.unit, "dimensionless");
     }
@@ -650,11 +669,15 @@ mod tests {
         let extractor = ParameterExtractor::new();
 
         // g → kg
-        let kg_value = extractor.convert_unit(1000.0, "g", "kg").expect("Failed to convert g to kg");
+        let kg_value = extractor
+            .convert_unit(1000.0, "g", "kg")
+            .expect("Failed to convert g to kg");
         assert!((kg_value - 1.0).abs() < 1e-10);
 
         // cm → m
-        let m_value = extractor.convert_unit(100.0, "cm", "m").expect("Failed to convert cm to m");
+        let m_value = extractor
+            .convert_unit(100.0, "cm", "m")
+            .expect("Failed to convert cm to m");
         assert!((m_value - 1.0).abs() < 1e-10);
     }
 
@@ -680,7 +703,8 @@ mod tests {
         };
 
         let json = serde_json::to_string(&quantity).expect("Failed to serialize");
-        let deserialized: PhysicalQuantity = serde_json::from_str(&json).expect("Failed to deserialize");
+        let deserialized: PhysicalQuantity =
+            serde_json::from_str(&json).expect("Failed to deserialize");
 
         assert_eq!(deserialized.value, 300.0);
         assert_eq!(deserialized.unit, "K");
@@ -711,7 +735,8 @@ mod tests {
         };
 
         let json = serde_json::to_string(&params).expect("Failed to serialize");
-        let deserialized: SimulationParameters = serde_json::from_str(&json).expect("Failed to deserialize");
+        let deserialized: SimulationParameters =
+            serde_json::from_str(&json).expect("Failed to deserialize");
 
         assert_eq!(deserialized.entity_iri, "urn:test");
         assert_eq!(deserialized.simulation_type, "thermal");

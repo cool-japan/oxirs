@@ -680,7 +680,8 @@ mod tests {
         }
 
         let compressed = compressor.finish();
-        let decompressor = GorillaDecompressor::new(&compressed).unwrap();
+        let decompressor =
+            GorillaDecompressor::new(&compressed).expect("construction should succeed");
         let decompressed = decompressor.decompress_all();
 
         assert_eq!(values.len(), decompressed.len());
@@ -720,7 +721,8 @@ mod tests {
         assert!(compressed_size < original_size / 30); // > 30:1 ratio
 
         // Verify round-trip
-        let decompressor = DeltaOfDeltaDecompressor::new(&compressed).unwrap();
+        let decompressor =
+            DeltaOfDeltaDecompressor::new(&compressed).expect("construction should succeed");
         let decompressed = decompressor.decompress_all();
 
         assert_eq!(timestamps, decompressed);
@@ -741,7 +743,8 @@ mod tests {
         let compressed = compressor.finish();
 
         // Verify round-trip
-        let decompressor = DeltaOfDeltaDecompressor::new(&compressed).unwrap();
+        let decompressor =
+            DeltaOfDeltaDecompressor::new(&compressed).expect("construction should succeed");
         let decompressed = decompressor.decompress_all();
 
         assert_eq!(timestamps, decompressed);

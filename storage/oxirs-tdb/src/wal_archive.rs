@@ -131,7 +131,7 @@ impl WalArchiver {
         // Generate archive file name
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         let archive_name = if self.config.compress_archives {

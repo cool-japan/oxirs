@@ -420,7 +420,11 @@ impl StateProcessor {
         let interval = self.config.checkpoint_interval;
 
         let task = tokio::spawn(async move {
-            let mut interval_timer = tokio::time::interval(interval.to_std().unwrap());
+            let mut interval_timer = tokio::time::interval(
+                interval
+                    .to_std()
+                    .expect("checkpoint interval should be valid std Duration"),
+            );
 
             loop {
                 interval_timer.tick().await;

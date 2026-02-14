@@ -348,7 +348,9 @@ mod tests {
     #[test]
     fn test_simple_iri_no_allocation() {
         let mut parser = ZeroCopyIriParser::new();
-        let iri = parser.parse_iri_ref(b"<http://example.org/>").unwrap();
+        let iri = parser
+            .parse_iri_ref(b"<http://example.org/>")
+            .expect("valid IRI");
 
         // Should be borrowed (no allocation)
         assert!(matches!(iri, Cow::Borrowed(_)));
@@ -360,7 +362,7 @@ mod tests {
         let mut parser = ZeroCopyIriParser::new();
         let iri = parser
             .parse_iri_ref(b"<http://example.org/sp%20ace>")
-            .unwrap();
+            .expect("valid IRI");
 
         // Should be owned (allocation for decoding)
         assert!(matches!(iri, Cow::Owned(_)));
@@ -374,10 +376,10 @@ mod tests {
         // Parse same IRI twice
         parser
             .parse_iri_ref(b"<http://example.org/sp%20ace>")
-            .unwrap();
+            .expect("valid IRI");
         parser
             .parse_iri_ref(b"<http://example.org/sp%20ace>")
-            .unwrap();
+            .expect("valid IRI");
 
         // Should have one cached entry
         assert_eq!(parser.cache_size(), 1);
@@ -400,7 +402,9 @@ mod tests {
     #[test]
     fn test_string_literal_no_allocation() {
         let parser = ZeroCopyLiteralParser::new();
-        let literal = parser.parse_string_literal(b"\"hello world\"").unwrap();
+        let literal = parser
+            .parse_string_literal(b"\"hello world\"")
+            .expect("parsing should succeed");
 
         // Should be borrowed (no escape sequences)
         assert!(matches!(literal, Cow::Borrowed(_)));
@@ -410,7 +414,9 @@ mod tests {
     #[test]
     fn test_string_literal_with_escapes() {
         let parser = ZeroCopyLiteralParser::new();
-        let literal = parser.parse_string_literal(b"\"hello\\nworld\"").unwrap();
+        let literal = parser
+            .parse_string_literal(b"\"hello\\nworld\"")
+            .expect("parsing should succeed");
 
         // Should be owned (escape sequence decoded)
         assert!(matches!(literal, Cow::Owned(_)));
@@ -422,11 +428,15 @@ mod tests {
         let parser = ZeroCopyLiteralParser::new();
 
         // \u0041 = 'A'
-        let literal = parser.parse_string_literal(b"\"\\u0041BC\"").unwrap();
+        let literal = parser
+            .parse_string_literal(b"\"\\u0041BC\"")
+            .expect("parsing should succeed");
         assert_eq!(literal, "ABC");
 
         // \U00000041 = 'A'
-        let literal = parser.parse_string_literal(b"\"\\U00000041BC\"").unwrap();
+        let literal = parser
+            .parse_string_literal(b"\"\\U00000041BC\"")
+            .expect("parsing should succeed");
         assert_eq!(literal, "ABC");
     }
 
@@ -435,22 +445,26 @@ mod tests {
         let parser = ZeroCopyLiteralParser::new();
 
         // Double quotes
-        let literal = parser.parse_string_literal(b"\"test\"").unwrap();
+        let literal = parser
+            .parse_string_literal(b"\"test\"")
+            .expect("parsing should succeed");
         assert_eq!(literal, "test");
 
         // Single quotes
-        let literal = parser.parse_string_literal(b"'test'").unwrap();
+        let literal = parser
+            .parse_string_literal(b"'test'")
+            .expect("parsing should succeed");
         assert_eq!(literal, "test");
     }
 
     #[test]
     fn test_hex_digit_decoding() {
-        assert_eq!(ZeroCopyIriParser::hex_digit(b'0').unwrap(), 0);
-        assert_eq!(ZeroCopyIriParser::hex_digit(b'9').unwrap(), 9);
-        assert_eq!(ZeroCopyIriParser::hex_digit(b'a').unwrap(), 10);
-        assert_eq!(ZeroCopyIriParser::hex_digit(b'f').unwrap(), 15);
-        assert_eq!(ZeroCopyIriParser::hex_digit(b'A').unwrap(), 10);
-        assert_eq!(ZeroCopyIriParser::hex_digit(b'F').unwrap(), 15);
+        assert_eq!(ZeroCopyIriParser::hex_digit(b'0').expect("valid IRI"), 0);
+        assert_eq!(ZeroCopyIriParser::hex_digit(b'9').expect("valid IRI"), 9);
+        assert_eq!(ZeroCopyIriParser::hex_digit(b'a').expect("valid IRI"), 10);
+        assert_eq!(ZeroCopyIriParser::hex_digit(b'f').expect("valid IRI"), 15);
+        assert_eq!(ZeroCopyIriParser::hex_digit(b'A').expect("valid IRI"), 10);
+        assert_eq!(ZeroCopyIriParser::hex_digit(b'F').expect("valid IRI"), 15);
 
         assert!(ZeroCopyIriParser::hex_digit(b'g').is_err());
         assert!(ZeroCopyIriParser::hex_digit(b'Z').is_err());
@@ -461,13 +475,15 @@ mod tests {
         let mut parser = ZeroCopyIriParser::new();
 
         // Space encoded as %20
-        let iri = parser.parse_iri_ref(b"<http://example.org/%20>").unwrap();
+        let iri = parser
+            .parse_iri_ref(b"<http://example.org/%20>")
+            .expect("valid IRI");
         assert_eq!(iri, "http://example.org/ ");
 
         // Multiple percent-encoded characters
         let iri = parser
             .parse_iri_ref(b"<http://example.org/%20%21%22>")
-            .unwrap();
+            .expect("valid IRI");
         assert_eq!(iri, "http://example.org/ !\"");
     }
 
@@ -477,7 +493,7 @@ mod tests {
 
         parser
             .parse_iri_ref(b"<http://example.org/sp%20ace>")
-            .unwrap();
+            .expect("valid IRI");
         assert_eq!(parser.cache_size(), 1);
 
         parser.clear_cache();

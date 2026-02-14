@@ -32,16 +32,14 @@ pub use cross_language::CrossLanguageProcessor;
 pub use federation::{FederatedQueryResult, FederationManager};
 pub use monitoring::{PerformanceMonitor, PerformanceReport};
 pub use multimodal_functions::{
-    generate_multimodal_sparql_function, sparql_multimodal_search, sparql_multimodal_search_from_args,
-    MultimodalSearchConfig, SparqlMultimodalResult,
+    generate_multimodal_sparql_function, sparql_multimodal_search,
+    sparql_multimodal_search_from_args, MultimodalSearchConfig, SparqlMultimodalResult,
 };
 pub use query_executor::QueryExecutor;
 pub use sparql_functions::{CustomVectorFunction, SparqlVectorFunctions};
 
 #[cfg(feature = "tantivy-search")]
-pub use text_functions::{
-    RdfLiteral, SearchStats, SparqlSearchResult, SparqlTextFunctions,
-};
+pub use text_functions::{RdfLiteral, SearchStats, SparqlSearchResult, SparqlTextFunctions};
 
 /// Main SPARQL vector service implementation
 pub struct SparqlVectorService {

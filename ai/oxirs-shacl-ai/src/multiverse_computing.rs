@@ -610,7 +610,7 @@ impl MultiverseComputingEngine {
 
     /// Establish quantum entanglement between universes
     async fn establish_entanglement(&self, universes: &[Universe]) -> Result<(), ShaclAIError> {
-        let mut bridge = self.entanglement_bridge.lock().unwrap();
+        let mut bridge = self.entanglement_bridge.lock().expect("lock should not be poisoned");
         
         // Create entangled pairs between all universes
         for (i, universe_a) in universes.iter().enumerate() {

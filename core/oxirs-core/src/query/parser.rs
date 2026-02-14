@@ -90,7 +90,11 @@ impl SparqlParser {
 
     fn parse_construct_query(&self, query: &str) -> Result<Query, OxirsError> {
         // Find CONSTRUCT template and WHERE clause
-        let construct_start = query.to_uppercase().find("CONSTRUCT").unwrap() + 9;
+        let construct_start = query
+            .to_uppercase()
+            .find("CONSTRUCT")
+            .expect("CONSTRUCT keyword should be present in construct query")
+            + 9;
         let where_start = query.to_uppercase().find("WHERE").ok_or_else(|| {
             OxirsError::Parse("CONSTRUCT query must have WHERE clause".to_string())
         })?;

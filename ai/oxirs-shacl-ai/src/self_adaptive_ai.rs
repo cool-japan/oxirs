@@ -438,7 +438,10 @@ impl PerformanceMonitor {
             return PerformanceTrend::Stable;
         }
 
-        let recent = self.metrics_history.back().unwrap();
+        let recent = self
+            .metrics_history
+            .back()
+            .expect("metrics_history should not be empty");
         let previous = &self.metrics_history[self.metrics_history.len() - 2];
 
         let change = recent.overall_score - previous.overall_score;

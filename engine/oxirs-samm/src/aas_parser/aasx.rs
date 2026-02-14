@@ -111,18 +111,23 @@ mod tests {
         // Create ZIP
         let mut zip = oxiarc_archive::ZipWriter::new(std::io::Cursor::new(Vec::new()));
         zip.set_compression(oxiarc_archive::ZipCompressionLevel::Normal);
-        zip.add_file("test.txt", content).unwrap();
-        let cursor = zip.into_inner().unwrap();
+        zip.add_file("test.txt", content)
+            .expect("archive operation should succeed");
+        let cursor = zip.into_inner().expect("inner value should be available");
         let zip_data = cursor.into_inner();
 
         eprintln!("Created ZIP with {} bytes", zip_data.len());
 
         // Read ZIP
-        let mut reader = oxiarc_archive::ZipReader::new(std::io::Cursor::new(&zip_data)).unwrap();
+        let mut reader = oxiarc_archive::ZipReader::new(std::io::Cursor::new(&zip_data))
+            .expect("construction should succeed");
         eprintln!("ZIP has {} entries", reader.entries().len());
 
-        let entry = reader.entry_by_name("test.txt").unwrap().clone();
-        let data = reader.extract(&entry).unwrap();
+        let entry = reader
+            .entry_by_name("test.txt")
+            .expect("value should exist")
+            .clone();
+        let data = reader.extract(&entry).expect("value should exist");
 
         assert_eq!(data, content);
     }
@@ -130,7 +135,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_aasx_with_json() {
         // Create a temporary AASX file (ZIP) with JSON content
-        let mut temp_file = NamedTempFile::new().unwrap();
+        let mut temp_file = NamedTempFile::new().expect("temp file creation should succeed");
 
         // Create a minimal AAS JSON
         let json_content = r#"{
@@ -153,22 +158,24 @@ mod tests {
 
             // Add JSON content file
             zip.add_file("aasx/json/content.json", json_content.as_bytes())
-                .unwrap();
+                .expect("archive operation should succeed");
 
             // Get the ZIP data
-            let cursor = zip.into_inner().unwrap();
+            let cursor = zip.into_inner().expect("inner value should be available");
             cursor.into_inner()
         };
 
         // Write ZIP data to temp file
-        temp_file.write_all(&zip_data).unwrap();
-        temp_file.flush().unwrap();
+        temp_file
+            .write_all(&zip_data)
+            .expect("write should succeed");
+        temp_file.flush().expect("flush should succeed");
 
         // Parse the AASX file
         let result = parse_aasx_file(temp_file.path()).await;
         assert!(result.is_ok(), "Failed to parse AASX: {:?}", result.err());
 
-        let env = result.unwrap();
+        let env = result.expect("result should be Ok");
         assert_eq!(env.submodels.len(), 1);
         assert_eq!(env.submodels[0].id, "urn:submodel:test:1");
     }

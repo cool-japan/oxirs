@@ -791,7 +791,7 @@ mod tests {
     fn test_term_to_json_conversion() {
         use oxirs_core::model::NamedNode;
 
-        let term = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
+        let term = Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI"));
         let json = interop::term_to_json(&term);
 
         assert_eq!(json["type"], "NamedNode");
@@ -815,7 +815,7 @@ mod tests {
             .component_id(ConstraintComponentId("test:js".to_string()))
             .metadata(metadata)
             .build_js("function validate() { return true; }".to_string())
-            .unwrap();
+            .expect("validation should succeed");
 
         assert_eq!(validator.component_id.as_str(), "test:js");
     }
@@ -839,7 +839,7 @@ mod tests {
             .component_id(ConstraintComponentId("test:wasm".to_string()))
             .metadata(metadata)
             .build_wasm(wasm_bytes)
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(validator.component_id.as_str(), "test:wasm");
     }

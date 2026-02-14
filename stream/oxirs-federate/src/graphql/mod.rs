@@ -69,7 +69,7 @@ mod tests {
         federation
             .register_schema("test-service".to_string(), schema)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let unified_result = federation.create_unified_schema().await;
         assert!(unified_result.is_ok());
@@ -92,7 +92,7 @@ mod tests {
         let parsed_result = federation.parse_graphql_query(query);
         assert!(parsed_result.is_ok());
 
-        let parsed_query = parsed_result.unwrap();
+        let parsed_query = parsed_result.expect("parsing should succeed");
         assert!(matches!(
             parsed_query.operation_type,
             GraphQLOperationType::Query
@@ -142,7 +142,7 @@ mod tests {
         let complexity_result = federation.analyze_query_complexity(&query);
         assert!(complexity_result.is_ok());
 
-        let complexity = complexity_result.unwrap();
+        let complexity = complexity_result.expect("result should be Ok");
         assert_eq!(complexity.max_depth, 3);
         assert_eq!(complexity.field_count, 4); // user, id, profile, bio = 4 fields
         assert!(complexity.total_complexity > 0);
@@ -203,7 +203,7 @@ mod tests {
 
         let has_dependency = federation.entities_have_dependency(&entity_a, &entity_b);
         assert!(has_dependency.is_ok());
-        assert!(has_dependency.unwrap());
+        assert!(has_dependency.expect("operation should succeed"));
     }
 
     #[tokio::test]
@@ -250,16 +250,22 @@ mod tests {
         let service_queries = federation.create_service_queries(&parsed_query, &ownership);
         assert!(service_queries.is_ok());
 
-        let queries = service_queries.unwrap();
+        let queries = service_queries.expect("operation should succeed");
         assert_eq!(queries.len(), 2);
 
         let user_query = queries.iter().find(|q| q.service_id == "user-service");
         assert!(user_query.is_some());
-        assert!(user_query.unwrap().query.contains("user"));
+        assert!(user_query
+            .expect("query should succeed")
+            .query
+            .contains("user"));
 
         let product_query = queries.iter().find(|q| q.service_id == "product-service");
         assert!(product_query.is_some());
-        assert!(product_query.unwrap().query.contains("product"));
+        assert!(product_query
+            .expect("query should succeed")
+            .query
+            .contains("product"));
     }
 
     #[tokio::test]
@@ -321,12 +327,12 @@ mod tests {
         federation
             .register_schema("test-service".to_string(), schema)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let capabilities = federation.analyze_schema_capabilities("test-service").await;
         assert!(capabilities.is_ok());
 
-        let caps = capabilities.unwrap();
+        let caps = capabilities.expect("operation should succeed");
         assert!(caps.supports_federation);
         assert!(caps.supports_subscriptions);
         assert_eq!(caps.entity_types, vec!["User".to_string()]);

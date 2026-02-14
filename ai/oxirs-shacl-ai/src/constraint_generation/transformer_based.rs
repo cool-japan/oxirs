@@ -663,7 +663,8 @@ impl ConstraintDecoder {
             PatternType::Relationship => {
                 // Create a dummy class node for the relationship
                 let class_node = NamedNode::new("http://example.org/Class").unwrap_or_else(|_| {
-                    NamedNode::new("http://www.w3.org/2002/07/owl#Thing").unwrap()
+                    NamedNode::new("http://www.w3.org/2002/07/owl#Thing")
+                        .expect("owl:Thing IRI should be valid")
                 });
                 (
                     ConstraintType::Class,

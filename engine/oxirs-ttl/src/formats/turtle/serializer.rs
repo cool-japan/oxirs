@@ -15,8 +15,8 @@
 //! use oxirs_core::model::{Triple, Subject, Predicate, Object, NamedNode, Literal};
 //!
 //! let serializer = TurtleSerializer::new();
-//! let subject = Subject::NamedNode(NamedNode::new("http://example.org/subject").unwrap());
-//! let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/predicate").unwrap());
+//! let subject = Subject::NamedNode(NamedNode::new("http://example.org/subject").expect("valid IRI"));
+//! let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/predicate").expect("valid IRI"));
 //! let object = Object::Literal(Literal::new_simple_literal("object"));
 //! let triple = Triple::new(subject, predicate, object);
 //!

@@ -485,7 +485,7 @@ impl FloydWarshall {
             if let Some(node_id) = graph.get_node(u) {
                 path.push(node_id.to_string());
             }
-            u = next[u][v].unwrap();
+            u = next[u][v].expect("operation should succeed");
         }
 
         if let Some(node_id) = graph.get_node(v) {
@@ -793,13 +793,27 @@ mod tests {
         graph.add_node("E".to_string());
 
         // Use bidirectional edges for federation routing (typical scenario)
-        graph.add_bidirectional_edge("A", "B", 4.0).unwrap();
-        graph.add_bidirectional_edge("A", "C", 2.0).unwrap();
-        graph.add_bidirectional_edge("B", "C", 1.0).unwrap();
-        graph.add_bidirectional_edge("B", "D", 5.0).unwrap();
-        graph.add_bidirectional_edge("C", "D", 8.0).unwrap();
-        graph.add_bidirectional_edge("C", "E", 10.0).unwrap();
-        graph.add_bidirectional_edge("D", "E", 2.0).unwrap();
+        graph
+            .add_bidirectional_edge("A", "B", 4.0)
+            .expect("edge addition should succeed");
+        graph
+            .add_bidirectional_edge("A", "C", 2.0)
+            .expect("edge addition should succeed");
+        graph
+            .add_bidirectional_edge("B", "C", 1.0)
+            .expect("edge addition should succeed");
+        graph
+            .add_bidirectional_edge("B", "D", 5.0)
+            .expect("edge addition should succeed");
+        graph
+            .add_bidirectional_edge("C", "D", 8.0)
+            .expect("edge addition should succeed");
+        graph
+            .add_bidirectional_edge("C", "E", 10.0)
+            .expect("edge addition should succeed");
+        graph
+            .add_bidirectional_edge("D", "E", 2.0)
+            .expect("edge addition should succeed");
 
         graph
     }
@@ -813,7 +827,7 @@ mod tests {
     #[test]
     fn test_dijkstra_shortest_path() {
         let graph = create_test_graph();
-        let result = Dijkstra::shortest_path(&graph, "A", "E").unwrap();
+        let result = Dijkstra::shortest_path(&graph, "A", "E").expect("result should be Ok");
 
         assert_eq!(result.path, vec!["A", "C", "B", "D", "E"]);
         // Cost: A→C(2) + C→B(1) + B→D(5) + D→E(2) = 10.0
@@ -823,7 +837,7 @@ mod tests {
     #[test]
     fn test_dijkstra_all_paths() {
         let graph = create_test_graph();
-        let results = Dijkstra::shortest_paths_from(&graph, "A").unwrap();
+        let results = Dijkstra::shortest_paths_from(&graph, "A").expect("result should be Ok");
 
         assert_eq!(results.len(), 4);
         assert!(results.contains_key("E"));
@@ -836,7 +850,8 @@ mod tests {
         // Simple heuristic (constant 0)
         let heuristic = |_: &str, _: &str| 0.0;
 
-        let result = AStar::shortest_path(&graph, "A", "E", heuristic).unwrap();
+        let result =
+            AStar::shortest_path(&graph, "A", "E", heuristic).expect("result should be Ok");
         assert!(result.cost > 0.0);
         assert!(!result.path.is_empty());
     }
@@ -844,7 +859,7 @@ mod tests {
     #[test]
     fn test_bellman_ford() {
         let graph = create_test_graph();
-        let results = BellmanFord::shortest_paths(&graph, "A").unwrap();
+        let results = BellmanFord::shortest_paths(&graph, "A").expect("result should be Ok");
 
         assert!(results.contains_key("E"));
     }
@@ -852,7 +867,7 @@ mod tests {
     #[test]
     fn test_floyd_warshall() {
         let graph = create_test_graph();
-        let results = FloydWarshall::all_pairs_shortest_paths(&graph).unwrap();
+        let results = FloydWarshall::all_pairs_shortest_paths(&graph).expect("result should be Ok");
 
         assert!(results.contains_key(&("A".to_string(), "E".to_string())));
     }
@@ -864,11 +879,17 @@ mod tests {
         graph.add_node("B".to_string());
         graph.add_node("C".to_string());
 
-        graph.add_bidirectional_edge("A", "B", 1.0).unwrap();
-        graph.add_bidirectional_edge("B", "C", 2.0).unwrap();
-        graph.add_bidirectional_edge("A", "C", 3.0).unwrap();
+        graph
+            .add_bidirectional_edge("A", "B", 1.0)
+            .expect("edge addition should succeed");
+        graph
+            .add_bidirectional_edge("B", "C", 2.0)
+            .expect("edge addition should succeed");
+        graph
+            .add_bidirectional_edge("A", "C", 3.0)
+            .expect("edge addition should succeed");
 
-        let mst = PrimMST::compute(&graph).unwrap();
+        let mst = PrimMST::compute(&graph).expect("operation should succeed");
         assert_eq!(mst.len(), 2);
     }
 
@@ -879,8 +900,12 @@ mod tests {
         graph.add_node("B".to_string());
         graph.add_node("C".to_string());
 
-        graph.add_edge("A", "B", 1.0).unwrap();
-        graph.add_edge("B", "C", 1.0).unwrap();
+        graph
+            .add_edge("A", "B", 1.0)
+            .expect("edge addition should succeed");
+        graph
+            .add_edge("B", "C", 1.0)
+            .expect("edge addition should succeed");
 
         let components = ConnectivityAnalyzer::connected_components(&graph);
         assert_eq!(components.len(), 1);

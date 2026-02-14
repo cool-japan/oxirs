@@ -354,7 +354,7 @@ impl ProductionMonitor {
             status,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs()
                 .to_string(),
             uptime_secs: uptime.as_secs(),
@@ -420,7 +420,7 @@ impl ProductionMonitor {
                 (name.clone(), (total.as_micros() as f64) / 1000.0)
             })
             .collect();
-        rules_by_time.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        rules_by_time.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Slowest rules (by average time)
         let mut slowest_rules: Vec<_> = self
@@ -431,7 +431,7 @@ impl ProductionMonitor {
                 (name.clone(), (avg.as_micros() as f64) / 1000.0)
             })
             .collect();
-        slowest_rules.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        slowest_rules.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let total_errors = self.error_counts.values().sum();
 
@@ -498,7 +498,7 @@ impl ProductionMonitor {
         self.audit_log.push(AuditEntry {
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs()
                 .to_string(),
             event_type,

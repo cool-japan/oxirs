@@ -116,8 +116,8 @@ impl<T: Copy> AlignedVec<T> {
             };
         }
 
-        let layout =
-            Layout::from_size_align(capacity * std::mem::size_of::<T>(), CACHE_LINE_SIZE).unwrap();
+        let layout = Layout::from_size_align(capacity * std::mem::size_of::<T>(), CACHE_LINE_SIZE)
+            .expect("layout should be valid for cache-line alignment");
 
         unsafe {
             let ptr = alloc(layout) as *mut T;
@@ -148,7 +148,7 @@ impl<T: Copy> AlignedVec<T> {
         };
         let new_layout =
             Layout::from_size_align(new_capacity * std::mem::size_of::<T>(), CACHE_LINE_SIZE)
-                .unwrap();
+                .expect("layout should be valid for cache-line alignment");
 
         unsafe {
             let new_ptr = alloc(new_layout) as *mut T;
@@ -160,7 +160,7 @@ impl<T: Copy> AlignedVec<T> {
                     self.capacity * std::mem::size_of::<T>(),
                     CACHE_LINE_SIZE,
                 )
-                .unwrap();
+                .expect("layout should be valid for cache-line alignment");
                 dealloc(self.ptr as *mut u8, old_layout);
             }
 
@@ -184,7 +184,7 @@ impl<T> Drop for AlignedVec<T> {
         if !self.ptr.is_null() && self.capacity > 0 {
             let layout =
                 Layout::from_size_align(self.capacity * std::mem::size_of::<T>(), CACHE_LINE_SIZE)
-                    .unwrap();
+                    .expect("layout should be valid for cache-line alignment");
             unsafe {
                 dealloc(self.ptr as *mut u8, layout);
             }
@@ -423,11 +423,15 @@ impl CacheFriendlyVectorIndex {
                     if local_results.len() < k {
                         local_results.push((idx, similarity));
                         if local_results.len() == k {
-                            local_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                            local_results.sort_by(|a, b| {
+                                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                            });
                         }
                     } else if similarity > local_results[k - 1].1 {
                         local_results[k - 1] = (idx, similarity);
-                        local_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                        local_results.sort_by(|a, b| {
+                            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                        });
                     }
                 }
 
@@ -442,11 +446,14 @@ impl CacheFriendlyVectorIndex {
                 if final_results.len() < k {
                     final_results.push((idx, sim));
                     if final_results.len() == k {
-                        final_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                        final_results.sort_by(|a, b| {
+                            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                        });
                     }
                 } else if sim > final_results[k - 1].1 {
                     final_results[k - 1] = (idx, sim);
-                    final_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                    final_results
+                        .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 }
             }
         }

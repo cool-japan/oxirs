@@ -534,7 +534,7 @@ impl CompressionMLModel {
         // Find algorithm with highest score
         self.algorithm_scores
             .iter()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(algo, _)| algo.clone())
     }
 

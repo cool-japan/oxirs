@@ -424,7 +424,10 @@ impl IriResolver {
         }
 
         // Must start with letter or underscore
-        let first_char = name.chars().next().unwrap();
+        let first_char = name
+            .chars()
+            .next()
+            .expect("iterator should have next element");
         if !first_char.is_alphabetic() && first_char != '_' {
             return false;
         }
@@ -598,7 +601,9 @@ mod tests {
         let resolver = IriResolver::new();
         assert!(resolver.get_namespace("sh").is_some());
         assert_eq!(
-            resolver.get_namespace("sh").unwrap(),
+            resolver
+                .get_namespace("sh")
+                .expect("resolution should succeed"),
             "http://www.w3.org/ns/shacl#"
         );
     }
@@ -614,53 +619,67 @@ mod tests {
     fn test_prefix_expansion() {
         let resolver = IriResolver::new();
 
-        let expanded = resolver.expand_prefixed_name("sh:Shape").unwrap();
+        let expanded = resolver
+            .expand_prefixed_name("sh:Shape")
+            .expect("resolution should succeed");
         assert_eq!(expanded, "http://www.w3.org/ns/shacl#Shape");
 
-        let expanded = resolver.expand_prefixed_name("rdf:type").unwrap();
+        let expanded = resolver
+            .expand_prefixed_name("rdf:type")
+            .expect("resolution should succeed");
         assert_eq!(expanded, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
     }
 
     #[test]
     fn test_custom_prefix() {
         let mut resolver = IriResolver::new();
-        resolver.add_prefix("ex", "http://example.org/").unwrap();
+        resolver
+            .add_prefix("ex", "http://example.org/")
+            .expect("valid IRI");
 
-        let expanded = resolver.expand_prefixed_name("ex:Person").unwrap();
+        let expanded = resolver
+            .expand_prefixed_name("ex:Person")
+            .expect("resolution should succeed");
         assert_eq!(expanded, "http://example.org/Person");
     }
 
     #[test]
     fn test_relative_iri_resolution() {
         let mut resolver = IriResolver::new();
-        resolver.set_base_iri("http://example.org/base/").unwrap();
+        resolver
+            .set_base_iri("http://example.org/base/")
+            .expect("valid IRI");
 
         let resolved = resolver
             .resolve_relative_iri("relative", "http://example.org/base/")
-            .unwrap();
+            .expect("valid IRI");
         assert_eq!(resolved, "http://example.org/base/relative");
 
         let resolved = resolver
             .resolve_relative_iri("../other", "http://example.org/base/")
-            .unwrap();
+            .expect("valid IRI");
         assert_eq!(resolved, "http://example.org/other");
     }
 
     #[test]
     fn test_iri_resolution() {
         let mut resolver = IriResolver::new();
-        resolver.set_base_iri("http://example.org/").unwrap();
+        resolver
+            .set_base_iri("http://example.org/")
+            .expect("valid IRI");
 
         // Absolute IRI
-        let resolved = resolver.resolve_iri("http://example.org/test").unwrap();
+        let resolved = resolver
+            .resolve_iri("http://example.org/test")
+            .expect("valid IRI");
         assert_eq!(resolved, "http://example.org/test");
 
         // Prefixed name
-        let resolved = resolver.resolve_iri("sh:Shape").unwrap();
+        let resolved = resolver.resolve_iri("sh:Shape").expect("valid IRI");
         assert_eq!(resolved, "http://www.w3.org/ns/shacl#Shape");
 
         // Relative IRI
-        let resolved = resolver.resolve_iri("relative").unwrap();
+        let resolved = resolver.resolve_iri("relative").expect("valid IRI");
         assert_eq!(resolved, "http://example.org/relative");
     }
 
@@ -725,7 +744,7 @@ mod tests {
         let resolver = IriResolver::new();
         let iris = vec!["sh:Shape", "rdf:type", "rdfs:Class"];
 
-        let resolved = resolver.resolve_iris(&iris).unwrap();
+        let resolved = resolver.resolve_iris(&iris).expect("valid IRI");
         assert_eq!(resolved.len(), 3);
         assert_eq!(resolved[0], "http://www.w3.org/ns/shacl#Shape");
         assert_eq!(
@@ -743,13 +762,13 @@ mod tests {
         assert_eq!(
             resolver
                 .normalize_iri("http://example.org:80/path")
-                .unwrap(),
+                .expect("valid IRI"),
             "http://example.org/path"
         );
         assert_eq!(
             resolver
                 .normalize_iri("https://example.org:443/path")
-                .unwrap(),
+                .expect("valid IRI"),
             "https://example.org/path"
         );
 
@@ -757,7 +776,7 @@ mod tests {
         assert_eq!(
             resolver
                 .normalize_iri("http://example.org/a/./b/../c")
-                .unwrap(),
+                .expect("valid IRI"),
             "http://example.org/a/c"
         );
     }
@@ -853,7 +872,9 @@ mod tests {
         new_mappings.insert("test".to_string(), "http://test.example.org/".to_string());
         new_mappings.insert("invalid".to_string(), "not-a-valid-url".to_string());
 
-        let warnings = resolver.import_prefix_mappings(&new_mappings).unwrap();
+        let warnings = resolver
+            .import_prefix_mappings(&new_mappings)
+            .expect("resolution should succeed");
         assert_eq!(warnings.len(), 1); // Should warn about invalid URL
 
         // Check that valid mapping was added

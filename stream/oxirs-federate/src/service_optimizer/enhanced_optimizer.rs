@@ -382,7 +382,7 @@ impl EnhancedServiceOptimizer {
             ml_rec
                 .ml_enhanced_scores
                 .iter()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
                 .map(|(id, _)| id.clone())
         } else {
             ml_rec

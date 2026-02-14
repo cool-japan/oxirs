@@ -300,7 +300,11 @@ impl DistributedMLTrainer {
 
         // Return final metrics
         let state = self.training_state.read().await;
-        Ok(state.training_history.last().cloned().unwrap())
+        Ok(state
+            .training_history
+            .last()
+            .cloned()
+            .expect("training should succeed"))
     }
 
     /// Partition data across workers
@@ -592,7 +596,10 @@ mod tests {
         let trainer = DistributedMLTrainer::new(config);
 
         let initial_params = vec![Array1::zeros(10); 3];
-        trainer.initialize(initial_params).await.unwrap();
+        trainer
+            .initialize(initial_params)
+            .await
+            .expect("initialization should succeed");
 
         let workers = trainer.get_worker_status().await;
         assert_eq!(workers.len(), 4);
@@ -637,7 +644,10 @@ mod tests {
             },
         ];
 
-        let aggregated = trainer.allreduce_aggregation(&results).await.unwrap();
+        let aggregated = trainer
+            .allreduce_aggregation(&results)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(aggregated.len(), 1);
         assert!((aggregated[0][0] - 1.5).abs() < 1e-6);
         assert!((aggregated[0][1] - 2.5).abs() < 1e-6);
@@ -672,7 +682,7 @@ mod tests {
         let aggregated = trainer
             .federated_averaging_aggregation(&results)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         // Weight: w1=20/30=0.667, w2=10/30=0.333
         // Expected: [1*0.667 + 3*0.333, 2*0.667 + 4*0.333]
         assert_eq!(aggregated.len(), 1);
@@ -691,12 +701,18 @@ mod tests {
         let trainer = DistributedMLTrainer::new(config);
 
         let initial_params = vec![Array1::from_vec(vec![0.5; 10]); 2];
-        trainer.initialize(initial_params).await.unwrap();
+        trainer
+            .initialize(initial_params)
+            .await
+            .expect("initialization should succeed");
 
         let data = vec![vec![1.0, 2.0, 3.0]; 20];
         let labels = vec![2.0; 20];
 
-        let metrics = trainer.train(data, labels).await.unwrap();
+        let metrics = trainer
+            .train(data, labels)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(metrics.epoch, 1);
         assert!(metrics.average_loss >= 0.0);
         assert_eq!(metrics.worker_metrics.len(), 2);

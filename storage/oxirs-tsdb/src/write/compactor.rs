@@ -336,7 +336,7 @@ mod tests {
         start_timestamp: i64,
         count: usize,
     ) -> TsdbResult<TimeChunk> {
-        let start_time = DateTime::from_timestamp(start_timestamp, 0).unwrap();
+        let start_time = DateTime::from_timestamp(start_timestamp, 0).expect("valid timestamp");
         let mut points = Vec::new();
 
         for i in 0..count {
@@ -363,7 +363,7 @@ mod tests {
         let compactor = Compactor::new();
         assert!(!compactor.is_running());
 
-        let stats = compactor.stats().unwrap();
+        let stats = compactor.stats().expect("operation should succeed");
         assert_eq!(stats.runs, 0);
         assert_eq!(stats.chunks_merged, 0);
     }
@@ -380,22 +380,22 @@ mod tests {
             ChunkEntry::new(
                 1,
                 100,
-                DateTime::from_timestamp(1000, 0).unwrap(),
-                DateTime::from_timestamp(1100, 0).unwrap(),
+                DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+                DateTime::from_timestamp(1100, 0).expect("valid timestamp"),
                 50,
             ),
             ChunkEntry::new(
                 2,
                 100,
-                DateTime::from_timestamp(1200, 0).unwrap(),
-                DateTime::from_timestamp(1300, 0).unwrap(),
+                DateTime::from_timestamp(1200, 0).expect("valid timestamp"),
+                DateTime::from_timestamp(1300, 0).expect("valid timestamp"),
                 60,
             ),
             ChunkEntry::new(
                 3,
                 100,
-                DateTime::from_timestamp(1400, 0).unwrap(),
-                DateTime::from_timestamp(1500, 0).unwrap(),
+                DateTime::from_timestamp(1400, 0).expect("valid timestamp"),
+                DateTime::from_timestamp(1500, 0).expect("valid timestamp"),
                 70,
             ),
         ];
@@ -419,22 +419,22 @@ mod tests {
             ChunkEntry::new(
                 1,
                 100,
-                DateTime::from_timestamp(1000, 0).unwrap(),
-                DateTime::from_timestamp(1100, 0).unwrap(),
+                DateTime::from_timestamp(1000, 0).expect("valid timestamp"),
+                DateTime::from_timestamp(1100, 0).expect("valid timestamp"),
                 50,
             ),
             ChunkEntry::new(
                 2,
                 100,
-                DateTime::from_timestamp(1200, 0).unwrap(),
-                DateTime::from_timestamp(1300, 0).unwrap(),
+                DateTime::from_timestamp(1200, 0).expect("valid timestamp"),
+                DateTime::from_timestamp(1300, 0).expect("valid timestamp"),
                 60,
             ),
             ChunkEntry::new(
                 3,
                 100,
-                DateTime::from_timestamp(1400, 0).unwrap(),
-                DateTime::from_timestamp(1500, 0).unwrap(),
+                DateTime::from_timestamp(1400, 0).expect("valid timestamp"),
+                DateTime::from_timestamp(1500, 0).expect("valid timestamp"),
                 70,
             ),
         ];
@@ -486,7 +486,10 @@ mod tests {
 
         // Simulate a compaction run
         {
-            let mut stats = compactor.stats.write().unwrap();
+            let mut stats = compactor
+                .stats
+                .write()
+                .expect("lock should not be poisoned");
             stats.runs += 1;
             stats.chunks_merged += 5;
             stats.chunks_created += 2;
@@ -510,7 +513,10 @@ mod tests {
 
         // Set some stats
         {
-            let mut stats = compactor.stats.write().unwrap();
+            let mut stats = compactor
+                .stats
+                .write()
+                .expect("lock should not be poisoned");
             stats.runs = 10;
             stats.chunks_merged = 50;
         }
@@ -537,7 +543,10 @@ mod tests {
 
         // Should return immediately without error
         let temp_dir = env::temp_dir().join("tsdb_compactor_disabled_test");
-        let store = Arc::new(ColumnarStore::new(&temp_dir, Duration::hours(2), 100).unwrap());
+        let store = Arc::new(
+            ColumnarStore::new(&temp_dir, Duration::hours(2), 100)
+                .expect("construction should succeed"),
+        );
 
         let result = compactor.start(store).await;
         assert!(result.is_ok());

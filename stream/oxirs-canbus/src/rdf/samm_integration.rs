@@ -23,7 +23,7 @@
 //!  SG_ EngineTemp : 16|8@1+ (1,-40) [-40|215] "degC" Dashboard
 //! "#;
 //!
-//! let db = parse_dbc(dbc_content).unwrap();
+//! let db = parse_dbc(dbc_content).expect("DBC parsing should succeed");
 //! let config = SammConfig::new("1.0.0", "http://automotive.example.com/");
 //! let generator = DbcSammGenerator::new(config);
 //!
@@ -724,7 +724,7 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_generate_from_database() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let config = SammConfig::new("1.0.0", "http://automotive.example.com/");
         let gen = DbcSammGenerator::new(config);
 
@@ -752,11 +752,11 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_generate_for_single_message() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let config = SammConfig::new("1.0.0", "http://test.org/");
         let gen = DbcSammGenerator::new(config);
 
-        let message = db.get_message(2024).unwrap();
+        let message = db.get_message(2024).expect("message should exist");
         let ttl = gen.generate_for_message(message);
 
         // Should have EngineData but not VehicleSpeed
@@ -816,7 +816,7 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_validate_for_samm() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let result = validate_for_samm(&db);
 
         assert!(result.valid);
@@ -833,7 +833,7 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_enumeration_generation() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let config = SammConfig::new("1.0.0", "http://test.org/");
         let gen = DbcSammGenerator::new(config);
 
@@ -846,7 +846,7 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_constraints_generation() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let config = SammConfig::new("1.0.0", "http://test.org/");
         let gen = DbcSammGenerator::new(config);
 

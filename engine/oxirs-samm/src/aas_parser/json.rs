@@ -54,7 +54,7 @@ mod tests {
         let result = parse_json_string(json);
         assert!(result.is_ok());
 
-        let env = result.unwrap();
+        let env = result.expect("result should be Ok");
         assert_eq!(env.asset_administration_shells.len(), 0);
         assert_eq!(env.submodels.len(), 0);
         assert_eq!(env.concept_descriptions.len(), 0);
@@ -76,7 +76,7 @@ mod tests {
         let result = parse_json_string(json);
         assert!(result.is_ok());
 
-        let env = result.unwrap();
+        let env = result.expect("result should be Ok");
         assert_eq!(env.submodels.len(), 1);
         assert_eq!(env.submodels[0].id, "urn:submodel:example:1");
         assert_eq!(

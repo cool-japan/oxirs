@@ -293,7 +293,7 @@ impl RevolutionaryEmbeddingOptimizer {
 
         // Stage 1: AI-powered performance prediction
         let performance_prediction = {
-            let predictor = self.performance_predictor.lock().unwrap();
+            let predictor = self.performance_predictor.lock().expect("lock should not be poisoned");
             predictor
                 .predict_performance(embeddings.shape(), entities.len())
                 .await?
@@ -329,13 +329,13 @@ impl RevolutionaryEmbeddingOptimizer {
 
         // Stage 6: Apply advanced memory optimization
         if optimization_strategy.use_memory_optimization {
-            let memory_manager = self.memory_manager.read().unwrap();
+            let memory_manager = self.memory_manager.read().expect("lock should not be poisoned");
             memory_manager.optimize_memory_layout(embeddings).await?;
         }
 
         // Stage 7: Apply streaming optimization if enabled
         if self.config.enable_streaming_optimization {
-            let streaming_processor = self.streaming_processor.read().unwrap();
+            let streaming_processor = self.streaming_processor.read().expect("lock should not be poisoned");
             streaming_processor
                 .process_embedding_updates(embeddings.view())
                 .await?;
@@ -344,7 +344,7 @@ impl RevolutionaryEmbeddingOptimizer {
         // Stage 8: Update optimization statistics
         let optimization_time = start_time.elapsed();
         {
-            let mut stats = self.optimization_stats.write().unwrap();
+            let mut stats = self.optimization_stats.write().expect("lock should not be poisoned");
             stats.record_optimization(
                 embeddings.len(),
                 optimization_time,
@@ -615,7 +615,7 @@ impl RevolutionaryEmbeddingOptimizer {
 
     /// Get optimization statistics
     pub async fn get_optimization_statistics(&self) -> OptimizationStatistics {
-        self.optimization_stats.read().unwrap().clone()
+        self.optimization_stats.read().expect("lock should not be poisoned").clone()
     }
 
     /// Get performance metrics

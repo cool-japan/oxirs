@@ -573,7 +573,7 @@ impl AdvancedDiagnosticEngine {
             query_times.iter().sum::<f64>() / query_times.len() as f64
         };
         let mut sorted_times = query_times.clone();
-        sorted_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let median = sorted_times[sorted_times.len() / 2];
         let p95_idx = (sorted_times.len() as f64 * 0.95) as usize;
@@ -612,7 +612,7 @@ impl AdvancedDiagnosticEngine {
         query_patterns.sort_by(|a, b| {
             b.optimization_potential
                 .partial_cmp(&a.optimization_potential)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Generate optimization opportunities
@@ -684,7 +684,7 @@ impl AdvancedDiagnosticEngine {
 
         let median = if !durations.is_empty() {
             let mut sorted = durations.clone();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             sorted[sorted.len() / 2]
         } else {
             0.0
@@ -718,7 +718,11 @@ impl AdvancedDiagnosticEngine {
         }
 
         // Sort by severity
-        contention_points.sort_by(|a, b| b.severity.partial_cmp(&a.severity).unwrap());
+        contention_points.sort_by(|a, b| {
+            b.severity
+                .partial_cmp(&a.severity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Simple size distribution (would need actual transaction size data)
         let size_distribution = TransactionSizeDistribution {
@@ -1078,7 +1082,11 @@ impl AdvancedDiagnosticEngine {
         }
 
         // Sort by priority
-        recommendations.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap());
+        recommendations.sort_by(|a, b| {
+            b.priority
+                .partial_cmp(&a.priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(recommendations)
     }
@@ -1178,8 +1186,14 @@ impl AdvancedDiagnosticEngine {
         }
 
         // Calculate growth rate from historical data
-        let first = self.historical_buffer.front().unwrap();
-        let last = self.historical_buffer.back().unwrap();
+        let first = self
+            .historical_buffer
+            .front()
+            .expect("collection validated to be non-empty");
+        let last = self
+            .historical_buffer
+            .back()
+            .expect("collection validated to be non-empty");
 
         let time_diff_days = last
             .timestamp

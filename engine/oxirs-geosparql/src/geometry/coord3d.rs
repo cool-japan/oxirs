@@ -6,8 +6,8 @@
 //!
 //! Additionally provides true 3D coordinate operations for spatial analysis.
 
-use serde::{Deserialize, Serialize};
 use scirs2_core::ndarray_ext::Array2;
+use serde::{Deserialize, Serialize};
 
 /// Coordinate dimension type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -230,8 +230,11 @@ impl Default for Coord3D {
 /// A true 3D point with x, y, z coordinates
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Coord3DPoint {
+    /// X coordinate (longitude or easting)
     pub x: f64,
+    /// Y coordinate (latitude or northing)
     pub y: f64,
+    /// Z coordinate (elevation or altitude in meters)
     pub z: f64,
 }
 
@@ -466,8 +469,7 @@ impl Geometry3D {
             data[i * 3 + 1] = coord.y;
             data[i * 3 + 2] = coord.z;
         }
-        Array2::from_shape_vec((n, 3), data)
-            .map_err(|e| format!("Array conversion failed: {}", e))
+        Array2::from_shape_vec((n, 3), data).map_err(|e| format!("Array conversion failed: {}", e))
     }
 }
 
@@ -661,7 +663,7 @@ mod tests {
             Coord3DPoint::new(0.0, 0.0, 0.0),
             Coord3DPoint::new(2.0, 3.0, 4.0),
         ];
-        let mut geom = Geometry3D::new(coords, Geometry3DType::Solid);
+        let geom = Geometry3D::new(coords, Geometry3DType::Solid);
         let volume = geom.volume();
         assert!((volume - 24.0).abs() < 1e-10); // 2 * 3 * 4 = 24
     }

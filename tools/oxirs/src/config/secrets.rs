@@ -232,7 +232,7 @@ impl SecretManager {
             if key.starts_with("OXIRS_SECRET_") {
                 let name = key
                     .strip_prefix("OXIRS_SECRET_")
-                    .unwrap()
+                    .expect("prefix should match after starts_with check")
                     .to_lowercase()
                     .replace('_', "-");
 
@@ -259,7 +259,7 @@ impl SecretManager {
 
         pbkdf2::derive(
             pbkdf2::PBKDF2_HMAC_SHA256,
-            std::num::NonZeroU32::new(100_000).unwrap(),
+            std::num::NonZeroU32::new(100_000).expect("100_000 is non-zero"),
             salt,
             password.as_bytes(),
             &mut key,

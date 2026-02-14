@@ -276,7 +276,7 @@ impl MLCardinalityEstimator {
     /// Add training example
     pub fn add_training_example(&self, algebra: &Algebra, actual_cardinality: usize) -> Result<()> {
         let features = self.extract_features(algebra)?;
-        let mut buffer = self.training_buffer.lock().unwrap();
+        let mut buffer = self.training_buffer.lock().expect("lock should not be poisoned");
         buffer.push((features, actual_cardinality as f64));
 
         // Retrain periodically

@@ -224,7 +224,7 @@ impl WriteAheadLog {
         let sequence = self.current_sequence.fetch_add(1, Ordering::SeqCst);
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         let entry = WalEntry {
@@ -758,8 +758,16 @@ impl AdvancedStorageBackend {
         }
 
         // Try to parse as parallel format
-        let original_size = u64::from_le_bytes(data[0..8].try_into().unwrap()) as usize;
-        let num_chunks = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
+        let original_size = u64::from_le_bytes(
+            data[0..8]
+                .try_into()
+                .expect("slice should be exactly 8 bytes"),
+        ) as usize;
+        let num_chunks = u32::from_le_bytes(
+            data[8..12]
+                .try_into()
+                .expect("slice should be exactly 4 bytes"),
+        ) as usize;
 
         // Sanity check: if num_chunks is unreasonably large, it's probably regular format
         if num_chunks == 0 || num_chunks > 100000 {
@@ -779,7 +787,11 @@ impl AdvancedStorageBackend {
         let mut chunk_sizes = Vec::with_capacity(num_chunks);
         for i in 0..num_chunks {
             let offset = 12 + (i * 4);
-            let size = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+            let size = u32::from_le_bytes(
+                data[offset..offset + 4]
+                    .try_into()
+                    .expect("slice should be exactly 4 bytes"),
+            ) as usize;
             chunk_sizes.push(size);
         }
 
@@ -831,7 +843,7 @@ impl AdvancedStorageBackend {
     ) -> Result<SnapshotMetadata> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         // Compress snapshot data with SIMD-accelerated parallel compression if enabled

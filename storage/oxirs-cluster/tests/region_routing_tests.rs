@@ -58,13 +58,40 @@ async fn setup_test_manager() -> RegionManager {
 
     // Initialize with multiple regions
     let regions = vec![
-        create_test_region_with_coords("us-east-1", "US East", 40.7128, -74.0060, RoutingStrategy::LatencyAware),
-        create_test_region_with_coords("us-west-1", "US West", 37.7749, -122.4194, RoutingStrategy::LatencyAware),
-        create_test_region_with_coords("eu-central-1", "EU Central", 50.1109, 8.6821, RoutingStrategy::LatencyAware),
-        create_test_region_with_coords("ap-southeast-1", "Asia Pacific", 1.3521, 103.8198, RoutingStrategy::LatencyAware),
+        create_test_region_with_coords(
+            "us-east-1",
+            "US East",
+            40.7128,
+            -74.0060,
+            RoutingStrategy::LatencyAware,
+        ),
+        create_test_region_with_coords(
+            "us-west-1",
+            "US West",
+            37.7749,
+            -122.4194,
+            RoutingStrategy::LatencyAware,
+        ),
+        create_test_region_with_coords(
+            "eu-central-1",
+            "EU Central",
+            50.1109,
+            8.6821,
+            RoutingStrategy::LatencyAware,
+        ),
+        create_test_region_with_coords(
+            "ap-southeast-1",
+            "Asia Pacific",
+            1.3521,
+            103.8198,
+            RoutingStrategy::LatencyAware,
+        ),
     ];
 
-    manager.initialize(regions).await.expect("Failed to initialize manager");
+    manager
+        .initialize(regions)
+        .await
+        .expect("Failed to initialize manager");
 
     manager
 }
@@ -111,18 +138,16 @@ async fn test_relay_routing() -> anyhow::Result<()> {
         );
 
         // Set lower latencies via relay paths
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "eu-central-1".to_string()),
-            100.0,
-        );
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "eu-central-1".to_string()), 100.0);
         topology.latency_matrix.insert(
             ("eu-central-1".to_string(), "ap-southeast-1".to_string()),
             120.0,
         );
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "us-west-1".to_string()),
-            50.0,
-        );
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "us-west-1".to_string()), 50.0);
         topology.latency_matrix.insert(
             ("us-west-1".to_string(), "ap-southeast-1".to_string()),
             100.0,
@@ -161,10 +186,9 @@ async fn test_dijkstra_shortest_path() -> anyhow::Result<()> {
         // us-east → us-west → ap-southeast (total: 150ms)
         // vs direct us-east → ap-southeast (300ms)
 
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "us-west-1".to_string()),
-            50.0,
-        );
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "us-west-1".to_string()), 50.0);
         topology.latency_matrix.insert(
             ("us-west-1".to_string(), "ap-southeast-1".to_string()),
             100.0,
@@ -200,18 +224,15 @@ async fn test_read_local_routing() -> anyhow::Result<()> {
     // Set up latencies
     {
         let mut topology = manager.get_topology().await;
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "us-east-1".to_string()),
-            5.0,
-        );
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "us-west-1".to_string()),
-            50.0,
-        );
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "eu-central-1".to_string()),
-            100.0,
-        );
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "us-east-1".to_string()), 5.0);
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "us-west-1".to_string()), 50.0);
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "eu-central-1".to_string()), 100.0);
         topology.latency_matrix.insert(
             ("us-east-1".to_string(), "ap-southeast-1".to_string()),
             200.0,
@@ -289,22 +310,19 @@ async fn test_latency_targets() -> anyhow::Result<()> {
         let mut topology = manager.get_topology().await;
 
         // Same region: <5ms
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "us-east-1".to_string()),
-            2.0,
-        );
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "us-east-1".to_string()), 2.0);
 
         // Cross-region same continent: <50ms
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "us-west-1".to_string()),
-            45.0,
-        );
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "us-west-1".to_string()), 45.0);
 
         // Inter-continental: <200ms
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "eu-central-1".to_string()),
-            95.0,
-        );
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "eu-central-1".to_string()), 95.0);
         topology.latency_matrix.insert(
             ("us-east-1".to_string(), "ap-southeast-1".to_string()),
             180.0,
@@ -320,10 +338,7 @@ async fn test_latency_targets() -> anyhow::Result<()> {
         .copied()
         .unwrap_or(0.0);
     println!("   Same region latency: {}ms", same_region_latency);
-    assert!(
-        same_region_latency < 5.0,
-        "Same region should be <5ms"
-    );
+    assert!(same_region_latency < 5.0, "Same region should be <5ms");
 
     // Verify cross-region same continent
     let cross_region_latency = topology
@@ -331,11 +346,11 @@ async fn test_latency_targets() -> anyhow::Result<()> {
         .get(&("us-east-1".to_string(), "us-west-1".to_string()))
         .copied()
         .unwrap_or(0.0);
-    println!("   Cross-region (same continent) latency: {}ms", cross_region_latency);
-    assert!(
-        cross_region_latency < 50.0,
-        "Cross-region should be <50ms"
+    println!(
+        "   Cross-region (same continent) latency: {}ms",
+        cross_region_latency
     );
+    assert!(cross_region_latency < 50.0, "Cross-region should be <50ms");
 
     // Verify inter-continental
     let inter_continental_latency = topology
@@ -343,7 +358,10 @@ async fn test_latency_targets() -> anyhow::Result<()> {
         .get(&("us-east-1".to_string(), "ap-southeast-1".to_string()))
         .copied()
         .unwrap_or(0.0);
-    println!("   Inter-continental latency: {}ms", inter_continental_latency);
+    println!(
+        "   Inter-continental latency: {}ms",
+        inter_continental_latency
+    );
     assert!(
         inter_continental_latency < 200.0,
         "Inter-continental should be <200ms"
@@ -362,16 +380,40 @@ async fn test_multi_region_deployment() -> anyhow::Result<()> {
 
     // Register nodes in different regions
     manager
-        .register_node(1, "us-east-1".to_string(), "us-east-1-a".to_string(), None, None)
+        .register_node(
+            1,
+            "us-east-1".to_string(),
+            "us-east-1-a".to_string(),
+            None,
+            None,
+        )
         .await?;
     manager
-        .register_node(2, "us-west-1".to_string(), "us-west-1-a".to_string(), None, None)
+        .register_node(
+            2,
+            "us-west-1".to_string(),
+            "us-west-1-a".to_string(),
+            None,
+            None,
+        )
         .await?;
     manager
-        .register_node(3, "eu-central-1".to_string(), "eu-central-1-a".to_string(), None, None)
+        .register_node(
+            3,
+            "eu-central-1".to_string(),
+            "eu-central-1-a".to_string(),
+            None,
+            None,
+        )
         .await?;
     manager
-        .register_node(4, "ap-southeast-1".to_string(), "ap-southeast-1-a".to_string(), None, None)
+        .register_node(
+            4,
+            "ap-southeast-1".to_string(),
+            "ap-southeast-1-a".to_string(),
+            None,
+            None,
+        )
         .await?;
 
     // Verify all regions have nodes
@@ -401,12 +443,18 @@ async fn test_multi_region_deployment() -> anyhow::Result<()> {
                     Ok(route) => {
                         println!(
                             "   Route {} → {}: {} hops, {}ms",
-                            source, dest, route.hops.len(), route.total_latency
+                            source,
+                            dest,
+                            route.hops.len(),
+                            route.total_latency
                         );
                         route_count += 1;
                     }
                     Err(e) => {
-                        println!("   Warning: Failed to find route {} → {}: {}", source, dest, e);
+                        println!(
+                            "   Warning: Failed to find route {} → {}: {}",
+                            source, dest, e
+                        );
                     }
                 }
             }
@@ -438,10 +486,9 @@ async fn test_relay_effectiveness() -> anyhow::Result<()> {
         );
 
         // Relay path via EU: 100ms + 80ms = 180ms (40% improvement)
-        topology.latency_matrix.insert(
-            ("us-east-1".to_string(), "eu-central-1".to_string()),
-            100.0,
-        );
+        topology
+            .latency_matrix
+            .insert(("us-east-1".to_string(), "eu-central-1".to_string()), 100.0);
         topology.latency_matrix.insert(
             ("eu-central-1".to_string(), "ap-southeast-1".to_string()),
             80.0,
@@ -452,10 +499,9 @@ async fn test_relay_effectiveness() -> anyhow::Result<()> {
             ("ap-southeast-1".to_string(), "us-east-1".to_string()),
             300.0,
         );
-        topology.latency_matrix.insert(
-            ("eu-central-1".to_string(), "us-east-1".to_string()),
-            100.0,
-        );
+        topology
+            .latency_matrix
+            .insert(("eu-central-1".to_string(), "us-east-1".to_string()), 100.0);
         topology.latency_matrix.insert(
             ("ap-southeast-1".to_string(), "eu-central-1".to_string()),
             80.0,
@@ -499,17 +545,32 @@ async fn test_configuration() -> anyhow::Result<()> {
 
     println!("   Custom config created:");
     println!("     enable_relay: {}", custom_config.enable_relay);
-    println!("     relay_latency_threshold_ms: {}", custom_config.relay_latency_threshold_ms);
-    println!("     enable_compression: {}", custom_config.enable_compression);
-    println!("     enable_read_local: {}", custom_config.enable_read_local);
-    println!("     routing_strategy: {:?}", custom_config.routing_strategy);
+    println!(
+        "     relay_latency_threshold_ms: {}",
+        custom_config.relay_latency_threshold_ms
+    );
+    println!(
+        "     enable_compression: {}",
+        custom_config.enable_compression
+    );
+    println!(
+        "     enable_read_local: {}",
+        custom_config.enable_read_local
+    );
+    println!(
+        "     routing_strategy: {:?}",
+        custom_config.routing_strategy
+    );
 
     // Verify all fields are set correctly
     assert!(custom_config.enable_relay);
     assert_eq!(custom_config.relay_latency_threshold_ms, 150.0);
     assert!(custom_config.enable_compression);
     assert!(custom_config.enable_read_local);
-    assert_eq!(custom_config.routing_strategy, RoutingStrategy::LatencyAware);
+    assert_eq!(
+        custom_config.routing_strategy,
+        RoutingStrategy::LatencyAware
+    );
 
     println!("   ✓ Configuration test passed");
     Ok(())

@@ -845,7 +845,7 @@ impl WebhookManager {
         // Add timestamp
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         request = request.header("X-Webhook-Timestamp", timestamp.to_string());
 

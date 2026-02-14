@@ -248,7 +248,7 @@ impl CustomConstraint {
     ) -> Result<ConstraintEvaluationResult> {
         // Simple email regex pattern
         let email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$";
-        let regex = regex::Regex::new(email_pattern).unwrap();
+        let regex = regex::Regex::new(email_pattern).expect("valid regex pattern");
 
         for value in &context.values {
             if let Term::Literal(lit) = value {

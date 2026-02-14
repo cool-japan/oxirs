@@ -515,7 +515,10 @@ mod tests {
             use_spot_instances: false,
         };
 
-        optimizer.add_deployment(deployment).await.unwrap();
+        optimizer
+            .add_deployment(deployment)
+            .await
+            .expect("async operation should succeed");
 
         let instances = optimizer.get_active_instances().await;
         assert_eq!(instances.len(), 2);
@@ -544,13 +547,19 @@ mod tests {
             use_spot_instances: true,
         };
 
-        optimizer.add_deployment(deployment1).await.unwrap();
-        optimizer.add_deployment(deployment2).await.unwrap();
+        optimizer
+            .add_deployment(deployment1)
+            .await
+            .expect("async operation should succeed");
+        optimizer
+            .add_deployment(deployment2)
+            .await
+            .expect("async operation should succeed");
 
         let decision = optimizer
             .route_query(1000, Duration::from_millis(100))
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(decision.estimated_cost > 0.0);
         assert!(decision.estimated_latency > 0.0);
@@ -587,7 +596,10 @@ mod tests {
             use_spot_instances: false,
         };
 
-        optimizer.add_deployment(deployment).await.unwrap();
+        optimizer
+            .add_deployment(deployment)
+            .await
+            .expect("async operation should succeed");
 
         let recommendations = optimizer.get_recommendations().await;
         assert!(!recommendations.is_empty());

@@ -818,7 +818,7 @@ impl EvolutionaryNAS {
             OperationType::SkipConnection,
         ];
         
-        Ok(operations.choose(random).unwrap().clone())
+        Ok(operations.choose(random).expect("operations should not be empty").clone())
     }
 
     /// Generate random parameters for an operation
@@ -854,9 +854,9 @@ impl EvolutionaryNAS {
             // Update best candidate
             let current_best = self.get_best_candidate().await?;
             if best_candidate.is_none() || 
-               current_best.fitness.overall_fitness > best_candidate.as_ref().unwrap().fitness.overall_fitness {
+               current_best.fitness.overall_fitness > best_candidate.as_ref().expect("best_candidate should be set").fitness.overall_fitness {
                 best_candidate = Some(current_best);
-                info!("New best fitness: {:.4}", best_candidate.as_ref().unwrap().fitness.overall_fitness);
+                info!("New best fitness: {:.4}", best_candidate.as_ref().expect("best_candidate should be set").fitness.overall_fitness);
             }
             
             // Check convergence
@@ -1170,7 +1170,7 @@ impl EvolutionaryNAS {
         let population = self.population.read().await;
         
         population.iter()
-            .max_by(|a, b| a.fitness.overall_fitness.partial_cmp(&b.fitness.overall_fitness).unwrap())
+            .max_by(|a, b| a.fitness.overall_fitness.partial_cmp(&b.fitness.overall_fitness).unwrap_or(std::cmp::Ordering::Equal))
             .cloned()
             .ok_or_else(|| anyhow!("Empty population"))
     }
@@ -1206,7 +1206,7 @@ impl EvolutionaryNAS {
         // Elite selection - preserve best candidates
         let elite_count = (current_population.len() as f32 * self.config.elite_percentage) as usize;
         current_population.sort_by(|a, b| 
-            b.fitness.overall_fitness.partial_cmp(&a.fitness.overall_fitness).unwrap()
+            b.fitness.overall_fitness.partial_cmp(&a.fitness.overall_fitness).unwrap_or(std::cmp::Ordering::Equal)
         );
         
         for i in 0..elite_count {
@@ -1485,7 +1485,7 @@ impl EvolutionaryNAS {
             }
         }
         
-        distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        distances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         
         let novelty = if distances.len() >= k {
             distances.iter().take(k).sum::<f32>() / k as f32
@@ -1524,7 +1524,7 @@ impl EvolutionaryNAS {
     pub async fn export_best_architectures(&self, count: usize) -> Result<Vec<ArchitectureCandidate>> {
         let mut population = self.population.read().await.clone();
         population.sort_by(|a, b| 
-            b.fitness.overall_fitness.partial_cmp(&a.fitness.overall_fitness).unwrap()
+            b.fitness.overall_fitness.partial_cmp(&a.fitness.overall_fitness).unwrap_or(std::cmp::Ordering::Equal)
         );
         
         Ok(population.into_iter().take(count).collect())

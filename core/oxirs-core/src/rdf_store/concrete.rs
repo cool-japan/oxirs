@@ -48,7 +48,7 @@ impl ConcreteStore {
 
 impl Default for ConcreteStore {
     fn default() -> Self {
-        ConcreteStore::new().unwrap()
+        ConcreteStore::new().expect("ConcreteStore::new() should not fail")
     }
 }
 

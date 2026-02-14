@@ -82,7 +82,7 @@ impl Default for BudgetConfig {
     fn default() -> Self {
         Self {
             default_monthly_limit: 100_000, // 100k tokens
-            admin_monthly_limit: 1_000_000,  // 1M tokens
+            admin_monthly_limit: 1_000_000, // 1M tokens
             reset_interval_days: 30,
             warning_threshold: 0.8, // Warn at 80% usage
         }
@@ -208,7 +208,10 @@ impl TokenBudget {
             user_id.clone(),
             UserBudget::new(user_id.clone(), monthly_limit),
         );
-        info!("Created budget for user {}: {} tokens/month", user_id, monthly_limit);
+        info!(
+            "Created budget for user {}: {} tokens/month",
+            user_id, monthly_limit
+        );
         Ok(())
     }
 
@@ -217,7 +220,10 @@ impl TokenBudget {
         let mut budgets = self.budgets.write().await;
         if let Some(budget) = budgets.get_mut(user_id) {
             budget.monthly_limit = new_limit;
-            info!("Updated budget limit for user {}: {} tokens/month", user_id, new_limit);
+            info!(
+                "Updated budget limit for user {}: {} tokens/month",
+                user_id, new_limit
+            );
             Ok(())
         } else {
             Err(anyhow!("User budget not found: {}", user_id))
@@ -328,7 +334,9 @@ mod tests {
             .await
             .unwrap();
 
-        let remaining = budget_manager.get_remaining_budget(&"user1".to_string()).await;
+        let remaining = budget_manager
+            .get_remaining_budget(&"user1".to_string())
+            .await;
         assert_eq!(remaining, 10000);
     }
 
@@ -343,7 +351,9 @@ mod tests {
             .unwrap();
 
         // Should succeed
-        let result = budget_manager.check_budget(&"user1".to_string(), 5000).await;
+        let result = budget_manager
+            .check_budget(&"user1".to_string(), 5000)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -454,7 +464,9 @@ mod tests {
         let budget_manager = TokenBudget::new(config);
 
         // Check budget for non-existent user (should auto-create)
-        let result = budget_manager.check_budget(&"new_user".to_string(), 1000).await;
+        let result = budget_manager
+            .check_budget(&"new_user".to_string(), 1000)
+            .await;
         assert!(result.is_ok());
 
         // Verify budget was created

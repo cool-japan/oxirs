@@ -145,7 +145,9 @@ mod tests {
             Term::Literal(Literal::new(r"^test\d+$")),
         );
 
-        let constraint = component.create_constraint(parameters).unwrap();
+        let constraint = component
+            .create_constraint(parameters)
+            .expect("training should succeed");
         assert_eq!(
             constraint.component_id.as_str(),
             "ex:RegexConstraintComponent"
@@ -203,7 +205,9 @@ mod tests {
     #[test]
     fn test_composite_constraint_creation() {
         let mut registry = CustomConstraintRegistry::new();
-        registry.register_standard_extensions().unwrap();
+        registry
+            .register_standard_extensions()
+            .expect("training should succeed");
 
         let regex_id = ConstraintComponentId("ex:RegexConstraintComponent".to_string());
         let range_id = ConstraintComponentId("ex:RangeConstraintComponent".to_string());
@@ -214,7 +218,7 @@ mod tests {
 
         let composite = registry
             .create_composite_constraint(&[regex_id, range_id], parameters)
-            .unwrap();
+            .expect("training should succeed");
 
         assert_eq!(composite.component_ids.len(), 2);
         assert_eq!(composite.constraints.len(), 2);

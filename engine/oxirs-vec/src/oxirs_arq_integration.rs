@@ -731,7 +731,10 @@ impl VectorQueryPlanner {
 
     /// Register a vector index for query optimization
     pub fn register_vector_index(&self, name: String, index: Arc<dyn VectorIndex>) -> Result<()> {
-        let mut indices = self.vector_indices.write().unwrap();
+        let mut indices = self
+            .vector_indices
+            .write()
+            .expect("vector_indices write lock should not be poisoned");
         indices.insert(name, index);
         Ok(())
     }
@@ -777,7 +780,10 @@ impl VectorQueryPlanner {
 
         // Cache the plan
         {
-            let mut cache = self.optimization_cache.write().unwrap();
+            let mut cache = self
+                .optimization_cache
+                .write()
+                .expect("optimization_cache write lock should not be poisoned");
             cache.insert(plan_id, plan.clone());
         }
 
@@ -970,7 +976,10 @@ impl VectorQueryPlanner {
         execution_time: Duration,
         _result_count: usize,
     ) -> Result<()> {
-        let mut stats = self.query_stats.write().unwrap();
+        let mut stats = self
+            .query_stats
+            .write()
+            .expect("query_stats write lock should not be poisoned");
 
         stats.total_queries += 1;
 
@@ -989,7 +998,10 @@ impl VectorQueryPlanner {
 
     /// Get performance metrics
     pub fn get_performance_metrics(&self) -> Result<VectorQueryPerformance> {
-        let performance = self.performance_monitor.read().unwrap();
+        let performance = self
+            .performance_monitor
+            .read()
+            .expect("performance_monitor read lock should not be poisoned");
         Ok(performance.clone())
     }
 }
@@ -1025,13 +1037,19 @@ impl VectorFunctionRegistry {
 
         // Register function
         {
-            let mut functions = self.functions.write().unwrap();
+            let mut functions = self
+                .functions
+                .write()
+                .expect("functions write lock should not be poisoned");
             functions.insert(name.clone(), function);
         }
 
         // Register metadata
         {
-            let mut meta = self.function_metadata.write().unwrap();
+            let mut meta = self
+                .function_metadata
+                .write()
+                .expect("function_metadata write lock should not be poisoned");
             meta.insert(name, metadata);
         }
 
@@ -1046,7 +1064,10 @@ impl VectorFunctionRegistry {
         context: &ExecutionContext,
     ) -> Result<FunctionResult> {
         let function = {
-            let functions = self.functions.read().unwrap();
+            let functions = self
+                .functions
+                .read()
+                .expect("functions read lock should not be poisoned");
             functions
                 .get(name)
                 .ok_or_else(|| AnyhowError::msg(format!("Function not found: {name}")))?
@@ -1070,7 +1091,10 @@ impl VectorFunctionRegistry {
 
     /// Update function performance metrics
     fn update_function_performance(&self, name: &str, execution_time: Duration) -> Result<()> {
-        let mut monitor = self.performance_monitor.write().unwrap();
+        let mut monitor = self
+            .performance_monitor
+            .write()
+            .expect("performance_monitor write lock should not be poisoned");
 
         // Update call count
         *monitor.call_counts.entry(name.to_string()).or_insert(0) += 1;
@@ -1094,7 +1118,10 @@ impl VectorFunctionRegistry {
 
     /// Get function performance statistics
     pub fn get_function_stats(&self, name: &str) -> Result<FunctionStats> {
-        let monitor = self.performance_monitor.read().unwrap();
+        let monitor = self
+            .performance_monitor
+            .read()
+            .expect("performance_monitor read lock should not be poisoned");
 
         let call_count = monitor.call_counts.get(name).copied().unwrap_or(0);
         let execution_times = monitor

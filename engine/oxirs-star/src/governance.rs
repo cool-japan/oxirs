@@ -648,7 +648,10 @@ impl GovernanceManager {
         });
 
         // Check if we have enough approvals
-        let policy = self.policies.get(&annotation.policy).unwrap();
+        let policy = self
+            .policies
+            .get(&annotation.policy)
+            .expect("policy should exist for annotation");
         let approved_count = annotation
             .approvals
             .iter()

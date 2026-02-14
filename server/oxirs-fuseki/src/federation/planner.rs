@@ -646,7 +646,7 @@ impl QueryPlanner {
 
     /// Extract variables from a SPARQL pattern
     fn extract_variables_from_pattern(&self, pattern: &str) -> Vec<String> {
-        let var_regex = regex::Regex::new(r"\?(\w+)").unwrap();
+        let var_regex = regex::Regex::new(r"\?(\w+)").expect("regex pattern should be valid");
         var_regex
             .captures_iter(pattern)
             .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
@@ -707,7 +707,9 @@ impl QueryPlanner {
 
         // Create final step to combine results if needed
         if steps.len() > 1 {
-            let (best_endpoint, cost) = endpoint_costs.first().unwrap();
+            let (best_endpoint, cost) = endpoint_costs
+                .first()
+                .expect("collection validated to be non-empty");
             let final_step = ExecutionStep {
                 id: "final_combination".to_string(),
                 services: vec![ServiceSelection {
@@ -798,7 +800,9 @@ impl QueryPlanner {
 
             // Add combination step if needed
             if steps.len() > 1 {
-                let (best_endpoint, cost) = endpoint_costs.first().unwrap();
+                let (best_endpoint, cost) = endpoint_costs
+                    .first()
+                    .expect("collection validated to be non-empty");
                 steps.push(ExecutionStep {
                     id: "merge_step".to_string(),
                     services: vec![ServiceSelection {

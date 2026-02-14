@@ -28,7 +28,7 @@ chrono = { workspace = true, features = ["serde"] }
 arrow = { workspace = true, optional = true }
 bit-vec = "0.6"
 lz4 = "1.28"
-lru = "0.12"
+lru = "0.16"
 humantime-serde = "1.1"
 
 thiserror.workspace = true

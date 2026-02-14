@@ -151,7 +151,11 @@ impl CrossEncoderReranker {
         }
 
         // Sort by final score
-        reranked.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap());
+        reranked.sort_by(|a, b| {
+            b.final_score
+                .partial_cmp(&a.final_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Take top-k
         reranked.truncate(self.config.top_k);

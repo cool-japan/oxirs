@@ -297,7 +297,9 @@ async fn compute_link_prediction_metrics(
         // Update hits@k counters
         for &k in k_values {
             if rank <= k {
-                *hits_at_k.get_mut(&k).unwrap() += 1.0;
+                if let Some(hits) = hits_at_k.get_mut(&k) {
+                    *hits += 1.0;
+                }
             }
         }
     }

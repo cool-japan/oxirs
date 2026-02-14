@@ -1050,7 +1050,7 @@ mod tests {
         let mut viewer = InteractiveReportViewer::new(ViewerConfig::default());
         let report = ValidationReport::new();
 
-        viewer.load_report(report).unwrap();
+        viewer.load_report(report).expect("loading should succeed");
         assert!(viewer.current_report.is_some());
     }
 

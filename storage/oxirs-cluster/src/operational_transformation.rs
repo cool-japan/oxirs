@@ -437,7 +437,7 @@ impl OperationalTransformation {
             .iter()
             .max_by_key(|op| op.timestamp)
             .map(|op| op.operation.clone())
-            .unwrap()
+            .expect("operations should not be empty for LWW resolution")
     }
 
     /// Priority-based resolution
@@ -446,7 +446,7 @@ impl OperationalTransformation {
             .iter()
             .max_by_key(|op| op.priority)
             .map(|op| op.operation.clone())
-            .unwrap()
+            .expect("operations should not be empty for priority resolution")
     }
 
     /// Semantic resolution (preserve RDF semantics)
@@ -469,14 +469,14 @@ impl OperationalTransformation {
                 .iter()
                 .find(|op| matches!(op.operation, RdfOperation::Insert { .. }))
                 .map(|op| op.operation.clone())
-                .unwrap()
+                .expect("insert operation should exist after has_insert check")
         } else if has_update {
             // Prefer update
             operations
                 .iter()
                 .find(|op| matches!(op.operation, RdfOperation::Update { .. }))
                 .map(|op| op.operation.clone())
-                .unwrap()
+                .expect("update operation should exist after has_update check")
         } else {
             // Fallback to LWW
             self.resolve_last_writer_wins(operations)

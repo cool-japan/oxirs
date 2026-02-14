@@ -101,7 +101,7 @@ impl MigrationOperation {
             stats: MigrationStats::default(),
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             started_at: None,
             completed_at: None,
@@ -121,7 +121,7 @@ impl MigrationOperation {
             self.started_at = Some(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("SystemTime should be after UNIX_EPOCH")
                     .as_secs(),
             );
         }
@@ -133,7 +133,7 @@ impl MigrationOperation {
             self.completed_at = Some(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("SystemTime should be after UNIX_EPOCH")
                     .as_secs(),
             );
         }
@@ -176,7 +176,7 @@ impl Default for MigrationStats {
             retries: 0,
             last_updated: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
         }
     }
@@ -213,7 +213,7 @@ impl MigrationBatch {
             checksum,
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
         }
     }
@@ -643,7 +643,7 @@ impl ShardMigrationManager {
                 .map(|start| {
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("SystemTime should be after UNIX_EPOCH")
                         .as_secs()
                         .saturating_sub(start)
                 })
@@ -729,7 +729,7 @@ impl ShardMigrationManager {
     pub async fn cleanup_completed_migrations(&self, retention_hours: u64) -> Result<usize> {
         let cutoff_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs()
             .saturating_sub(retention_hours * 3600);
 

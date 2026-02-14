@@ -270,7 +270,8 @@ mod tests {
             })
             .collect();
 
-        let chunk = TimeChunk::new(1, start, Duration::hours(2), points).unwrap();
+        let chunk = TimeChunk::new(1, start, Duration::hours(2), points)
+            .expect("construction should succeed");
         engine.add_chunk(chunk);
 
         engine
@@ -280,7 +281,11 @@ mod tests {
     fn test_basic_query() {
         let engine = create_test_engine();
 
-        let result = engine.query().series(1).execute().unwrap();
+        let result = engine
+            .query()
+            .series(1)
+            .execute()
+            .expect("query should succeed");
 
         assert_eq!(result.series_id, 1);
         assert_eq!(result.points.len(), 100);
@@ -297,7 +302,7 @@ mod tests {
             .series(1)
             .time_range(now + Duration::seconds(20), now + Duration::seconds(30))
             .execute()
-            .unwrap();
+            .expect("operation should succeed");
 
         // Should get 10 points (20-29)
         assert_eq!(result.points.len(), 10);
@@ -312,10 +317,10 @@ mod tests {
             .series(1)
             .aggregate(Aggregation::Avg)
             .execute()
-            .unwrap();
+            .expect("operation should succeed");
 
         // Average of 0-99 = 49.5
-        let avg = result.aggregated_value.unwrap();
+        let avg = result.aggregated_value.expect("result should be Ok");
         assert!((avg - 49.5).abs() < 0.1);
     }
 
@@ -323,7 +328,12 @@ mod tests {
     fn test_query_with_limit() {
         let engine = create_test_engine();
 
-        let result = engine.query().series(1).limit(10).execute().unwrap();
+        let result = engine
+            .query()
+            .series(1)
+            .limit(10)
+            .execute()
+            .expect("query should succeed");
 
         assert_eq!(result.points.len(), 10);
     }
@@ -338,7 +348,7 @@ mod tests {
             .descending()
             .limit(5)
             .execute()
-            .unwrap();
+            .expect("operation should succeed");
 
         // Should be in descending order
         for window in result.points.windows(2) {
@@ -355,7 +365,7 @@ mod tests {
             .series(1)
             .window(WindowSpec::count_based(5, WindowFunction::MovingAverage))
             .execute()
-            .unwrap();
+            .expect("operation should succeed");
 
         // Moving average reduces points by window size - 1
         assert!(result.points.len() <= 100);
@@ -374,8 +384,8 @@ mod tests {
             })
             .collect();
 
-        let chunk =
-            TimeChunk::new(1, now - Duration::hours(1), Duration::hours(2), points).unwrap();
+        let chunk = TimeChunk::new(1, now - Duration::hours(1), Duration::hours(2), points)
+            .expect("chunk operation should succeed");
         engine.add_chunk(chunk);
 
         let result = engine
@@ -383,7 +393,7 @@ mod tests {
             .series(1)
             .last(Duration::minutes(30))
             .execute()
-            .unwrap();
+            .expect("operation should succeed");
 
         // Should get approximately 30 points
         assert!(result.points.len() <= 35);
@@ -393,7 +403,11 @@ mod tests {
     fn test_query_nonexistent_series() {
         let engine = create_test_engine();
 
-        let result = engine.query().series(999).execute().unwrap();
+        let result = engine
+            .query()
+            .series(999)
+            .execute()
+            .expect("query should succeed");
 
         // No chunks for series 999
         assert_eq!(result.chunks_scanned, 0);

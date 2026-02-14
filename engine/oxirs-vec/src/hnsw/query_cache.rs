@@ -100,7 +100,8 @@ pub struct QueryCache {
 impl QueryCache {
     /// Create a new query cache
     pub fn new(config: QueryCacheConfig) -> Self {
-        let capacity = NonZeroUsize::new(config.max_entries).unwrap();
+        let capacity =
+            NonZeroUsize::new(config.max_entries).expect("cache max_entries must be non-zero");
         Self {
             cache: Arc::new(RwLock::new(LruCache::new(capacity))),
             config,

@@ -123,7 +123,7 @@ impl PersistenceManager {
             config: index.config().clone(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             checksum: 0, // Will be calculated
         };
@@ -371,7 +371,7 @@ impl PersistenceManager {
             "snapshot.{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs()
         ));
 

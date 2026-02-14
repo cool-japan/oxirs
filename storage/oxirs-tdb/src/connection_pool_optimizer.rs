@@ -443,7 +443,11 @@ impl ConnectionPoolOptimizer {
 
         quality_metrics
             .values()
-            .max_by(|a, b| a.quality_score.partial_cmp(&b.quality_score).unwrap())
+            .max_by(|a, b| {
+                a.quality_score
+                    .partial_cmp(&b.quality_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|q| q.connection_id)
     }
 

@@ -190,8 +190,10 @@ impl OptimizedReader {
         for &pos in positions {
             if pos < all_triples.len() {
                 // Prefetch next position
-                if let Some(&next_pos) =
-                    positions.get(positions.iter().position(|&p| p == pos).unwrap() + 1)
+                if let Some(&next_pos) = positions
+                    .iter()
+                    .position(|&p| p == pos)
+                    .and_then(|idx| positions.get(idx + 1))
                 {
                     if next_pos < all_triples.len() {
                         // CPU hint: prefetch next element

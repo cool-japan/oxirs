@@ -94,15 +94,16 @@ impl QuerySignature {
         let mut normalized = query.to_string();
 
         // Replace string literals: "..." -> "?"
-        let re_string = regex::Regex::new(r#""[^"]*""#).unwrap();
+        let re_string = regex::Regex::new(r#""[^"]*""#).expect("regex pattern should be valid");
         normalized = re_string.replace_all(&normalized, "\"?\"").to_string();
 
         // Replace numeric literals: 123 -> ?
-        let re_number = regex::Regex::new(r"\b\d+(\.\d+)?\b").unwrap();
+        let re_number =
+            regex::Regex::new(r"\b\d+(\.\d+)?\b").expect("regex pattern should be valid");
         normalized = re_number.replace_all(&normalized, "?").to_string();
 
         // Collapse whitespace
-        let re_whitespace = regex::Regex::new(r"\s+").unwrap();
+        let re_whitespace = regex::Regex::new(r"\s+").expect("regex pattern should be valid");
         re_whitespace.replace_all(&normalized, " ").to_string()
     }
 
@@ -172,7 +173,7 @@ impl StatisticsSnapshot {
                 .collect(),
             snapshot_time: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
         }
     }

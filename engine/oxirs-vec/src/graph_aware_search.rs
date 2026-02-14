@@ -228,7 +228,11 @@ impl GraphAwareSearch {
         }
 
         // Sort by final score
-        graph_results.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap());
+        graph_results.sort_by(|a, b| {
+            b.final_score
+                .partial_cmp(&a.final_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(graph_results.into_iter().take(limit).collect())
     }
@@ -374,7 +378,11 @@ impl GraphAwareSearch {
         }
 
         // Sort by final score (descending)
-        results.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap());
+        results.sort_by(|a, b| {
+            b.final_score
+                .partial_cmp(&a.final_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Apply diversity filtering if enabled (ensure results from different graphs)
         if self.config.enable_cross_graph_similarity {

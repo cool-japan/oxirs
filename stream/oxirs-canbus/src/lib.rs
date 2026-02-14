@@ -71,8 +71,8 @@
 //! let registry = PgnRegistry::with_standard_decoders();
 //!
 //! // Process incoming CAN frames
-//! let can_id = CanId::extended(0x0CF00400).unwrap(); // EEC1
-//! let frame = CanFrame::new(can_id, vec![0, 125, 125, 0x80, 0x3E, 0, 0, 125]).unwrap();
+//! let can_id = CanId::extended(0x0CF00400).expect("valid extended CAN ID"); // EEC1
+//! let frame = CanFrame::new(can_id, vec![0, 125, 125, 0x80, 0x3E, 0, 0, 125]).expect("valid CAN frame");
 //!
 //! if let Some(message) = processor.process(&frame) {
 //!     // Decode the message using PGN registry

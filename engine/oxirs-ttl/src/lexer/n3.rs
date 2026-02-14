@@ -572,15 +572,15 @@ mod tests {
     fn test_variable_lexing() {
         let mut lexer = N3Lexer::new("?x ?name ?_var");
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::Variable("x".to_string())
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::Variable("name".to_string())
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::Variable("_var".to_string())
         );
     }
@@ -588,36 +588,54 @@ mod tests {
     #[test]
     fn test_formula_braces() {
         let mut lexer = N3Lexer::new("{ }");
-        assert_eq!(lexer.next_token().unwrap(), N3Token::LeftBrace);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::RightBrace);
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::LeftBrace
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::RightBrace
+        );
     }
 
     #[test]
     fn test_implication_operators() {
         let mut lexer = N3Lexer::new("=> <=");
-        assert_eq!(lexer.next_token().unwrap(), N3Token::Implies);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::ImpliedBy);
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::Implies
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::ImpliedBy
+        );
     }
 
     #[test]
     fn test_quantifiers() {
         let mut lexer = N3Lexer::new("@forAll @forSome");
-        assert_eq!(lexer.next_token().unwrap(), N3Token::ForAll);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::ForSome);
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::ForAll
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::ForSome
+        );
     }
 
     #[test]
     fn test_prefixed_name() {
         let mut lexer = N3Lexer::new("ex:name rdf:type");
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::PrefixedName {
                 prefix: "ex".to_string(),
                 local: "name".to_string()
             }
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::PrefixedName {
                 prefix: "rdf".to_string(),
                 local: "type".to_string()
@@ -629,7 +647,7 @@ mod tests {
     fn test_iri() {
         let mut lexer = N3Lexer::new("<http://example.org/resource>");
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::Iri("http://example.org/resource".to_string())
         );
     }
@@ -638,7 +656,7 @@ mod tests {
     fn test_string_literal() {
         let mut lexer = N3Lexer::new(r#""Hello World""#);
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::StringLiteral("Hello World".to_string())
         );
     }
@@ -647,15 +665,15 @@ mod tests {
     fn test_numeric_literals() {
         let mut lexer = N3Lexer::new("42 3.14 -5");
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::IntegerLiteral("42".to_string())
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::DecimalLiteral("3.14".to_string())
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::IntegerLiteral("-5".to_string())
         );
     }
@@ -664,11 +682,11 @@ mod tests {
     fn test_blank_node() {
         let mut lexer = N3Lexer::new("_:b1 _:node123");
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::BlankNode("b1".to_string())
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::BlankNode("node123".to_string())
         );
     }
@@ -676,24 +694,45 @@ mod tests {
     #[test]
     fn test_punctuation() {
         let mut lexer = N3Lexer::new(". ; , ( ) [ ]");
-        assert_eq!(lexer.next_token().unwrap(), N3Token::Dot);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::Semicolon);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::Comma);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::LeftParen);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::RightParen);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::LeftBracket);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::RightBracket);
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::Dot
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::Semicolon
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::Comma
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::LeftParen
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::RightParen
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::LeftBracket
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::RightBracket
+        );
     }
 
     #[test]
     fn test_comments() {
         let mut lexer = N3Lexer::new("?x # this is a comment\n?y");
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::Variable("x".to_string())
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::Variable("y".to_string())
         );
     }
@@ -701,41 +740,59 @@ mod tests {
     #[test]
     fn test_complete_n3_statement() {
         let mut lexer = N3Lexer::new("{ ?x ex:knows ?y } => { ?y ex:knows ?x } .");
-        assert_eq!(lexer.next_token().unwrap(), N3Token::LeftBrace);
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
+            N3Token::LeftBrace
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
             N3Token::Variable("x".to_string())
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::PrefixedName {
                 prefix: "ex".to_string(),
                 local: "knows".to_string()
             }
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
-            N3Token::Variable("y".to_string())
-        );
-        assert_eq!(lexer.next_token().unwrap(), N3Token::RightBrace);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::Implies);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::LeftBrace);
-        assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::Variable("y".to_string())
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
+            N3Token::RightBrace
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::Implies
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::LeftBrace
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::Variable("y".to_string())
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
             N3Token::PrefixedName {
                 prefix: "ex".to_string(),
                 local: "knows".to_string()
             }
         );
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("token should be available"),
             N3Token::Variable("x".to_string())
         );
-        assert_eq!(lexer.next_token().unwrap(), N3Token::RightBrace);
-        assert_eq!(lexer.next_token().unwrap(), N3Token::Dot);
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::RightBrace
+        );
+        assert_eq!(
+            lexer.next_token().expect("token should be available"),
+            N3Token::Dot
+        );
     }
 }

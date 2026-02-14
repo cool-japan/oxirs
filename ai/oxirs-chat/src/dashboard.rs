@@ -376,7 +376,7 @@ impl DashboardAnalytics {
         }
 
         let mut sorted = values.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let index = (percentile * sorted.len() as f64) as usize;
         sorted.get(index).copied().unwrap_or(0.0)

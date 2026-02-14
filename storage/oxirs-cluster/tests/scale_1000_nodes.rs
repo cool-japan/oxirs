@@ -36,6 +36,7 @@ struct SimulatedCluster {
 
 /// Cluster performance metrics
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 struct ClusterMetrics {
     leader_election_time_ms: u64,
     replication_throughput_ops_sec: f64,
@@ -220,7 +221,10 @@ async fn test_1000_node_replication_throughput() {
     tracing::info!("Starting 1000 node replication throughput test...");
 
     let cluster = SimulatedCluster::new(1000).await;
-    cluster.elect_leader().await.expect("Leader election failed");
+    cluster
+        .elect_leader()
+        .await
+        .expect("Leader election failed");
 
     // Generate 100k operations
     let entries = generate_log_entries(100_000);
@@ -253,22 +257,18 @@ async fn test_adaptive_batching() {
 
     // Test adaptive batching for different cluster sizes
     let test_cases = vec![
-        (50, 100),    // Small cluster: 100 entries per batch
-        (300, 200),   // Medium cluster: 200 entries per batch
-        (750, 350),   // Large cluster: 350 entries per batch
-        (1000, 500),  // Very large cluster: 500 entries per batch
-        (1500, 500),  // Extra large cluster: 500 entries per batch (max)
+        (50, 100),   // Small cluster: 100 entries per batch
+        (300, 200),  // Medium cluster: 200 entries per batch
+        (750, 350),  // Large cluster: 350 entries per batch
+        (1000, 500), // Very large cluster: 500 entries per batch
+        (1500, 500), // Extra large cluster: 500 entries per batch (max)
     ];
 
     for (cluster_size, expected_batch_size) in test_cases {
         optimizer.update_cluster_size(cluster_size).await;
         let batch_size = optimizer.calculate_adaptive_batch_size().await;
 
-        tracing::info!(
-            "Cluster size: {}, batch size: {}",
-            cluster_size,
-            batch_size
-        );
+        tracing::info!("Cluster size: {}, batch size: {}", cluster_size, batch_size);
 
         assert_eq!(
             batch_size, expected_batch_size,
@@ -297,7 +297,11 @@ async fn test_connection_pooling() {
     let mut connections = Vec::new();
     for node_id in 0..10 {
         let conn = pool.acquire(node_id).await;
-        assert!(conn.is_ok(), "Failed to acquire connection for node {}", node_id);
+        assert!(
+            conn.is_ok(),
+            "Failed to acquire connection for node {}",
+            node_id
+        );
         connections.push(conn.unwrap());
     }
 
@@ -345,7 +349,10 @@ async fn test_pipelined_replication() {
     // This is a placeholder - pipelined replication would require actual RPC
     // For now, we just verify the adaptive batch size is correct
     let batch_size = optimizer.calculate_adaptive_batch_size().await;
-    assert_eq!(batch_size, 500, "Expected batch size 500 for 1000 node cluster");
+    assert_eq!(
+        batch_size, 500,
+        "Expected batch size 500 for 1000 node cluster"
+    );
 
     tracing::info!(
         "Pipelined replication configured with batch size: {}",
@@ -360,7 +367,10 @@ async fn test_1000_node_chaos() {
     tracing::info!("Starting 1000 node chaos engineering test...");
 
     let cluster = SimulatedCluster::new(1000).await;
-    cluster.elect_leader().await.expect("Leader election failed");
+    cluster
+        .elect_leader()
+        .await
+        .expect("Leader election failed");
 
     // Randomly kill and restart nodes
     let mut rng_obj = rng();

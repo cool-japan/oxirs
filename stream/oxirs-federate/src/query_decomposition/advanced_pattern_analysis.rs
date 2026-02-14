@@ -884,7 +884,8 @@ impl AdvancedPatternAnalyzer {
         // For each pattern, recommend the best services
         for (pattern_id, pattern_score) in &analysis.pattern_scores {
             let mut sorted_services: Vec<_> = pattern_score.service_scores.iter().collect();
-            sorted_services.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+            sorted_services
+                .sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
 
             let top_services: Vec<_> = sorted_services
                 .into_iter()
@@ -1226,7 +1227,7 @@ impl AdvancedPatternAnalyzer {
         let best_service = pattern_score
             .service_scores
             .iter()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(id, score)| (id.clone(), *score));
 
         match best_service {

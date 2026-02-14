@@ -41,7 +41,9 @@ impl Default for ClusterConfig {
     fn default() -> Self {
         Self {
             node_id: Uuid::new_v4().to_string(),
-            bind_addr: "0.0.0.0:7000".parse().unwrap(),
+            bind_addr: "0.0.0.0:7000"
+                .parse()
+                .expect("default bind address should be valid"),
             seeds: Vec::new(),
             raft: RaftConfig::default(),
             partitioning: PartitionConfig::default(),

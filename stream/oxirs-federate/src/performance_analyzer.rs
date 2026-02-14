@@ -403,12 +403,20 @@ impl PerformanceAnalyzer {
             ));
         }
 
-        let recent_metrics = history.system_metrics.back().unwrap();
+        let recent_metrics = history
+            .system_metrics
+            .back()
+            .expect("operation should succeed");
         let baseline = self
             .bottleneck_detector
             .baseline_metrics
             .as_ref()
-            .unwrap_or(history.system_metrics.front().unwrap());
+            .unwrap_or(
+                history
+                    .system_metrics
+                    .front()
+                    .expect("reference should be available"),
+            );
 
         let mut analysis = BottleneckAnalysis {
             primary_bottleneck: BottleneckType::Unknown,
@@ -430,8 +438,12 @@ impl PerformanceAnalyzer {
             let primary_factor = analysis
                 .contributing_factors
                 .iter()
-                .max_by(|a, b| a.weight.partial_cmp(&b.weight).unwrap())
-                .unwrap();
+                .max_by(|a, b| {
+                    a.weight
+                        .partial_cmp(&b.weight)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .expect("collection should not be empty");
 
             analysis.primary_bottleneck = match primary_factor.factor_type {
                 FactorType::Latency => BottleneckType::NetworkLatency,
@@ -726,7 +738,7 @@ impl PerformanceAnalyzer {
             .contributing_factors
             .iter()
             .map(|f| f.weight)
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(0.0);
 
         // Higher confidence with more factors and higher weights
@@ -1000,10 +1012,16 @@ mod tests {
                 queue_depth: 10,
             };
 
-            analyzer.record_system_metrics(metrics).await.unwrap();
+            analyzer
+                .record_system_metrics(metrics)
+                .await
+                .expect("async operation should succeed");
         }
 
-        let trends = analyzer.analyze_trends().await.unwrap();
+        let trends = analyzer
+            .analyze_trends()
+            .await
+            .expect("async operation should succeed");
         assert!(!trends.is_empty());
     }
 }
@@ -1700,7 +1718,7 @@ mod query_optimizer_tests {
         let plan = optimizer
             .optimize_query_plan("test_query", &complexity, &services)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(plan.confidence > 0.0);
         assert!(plan.predicted_execution_time > Duration::from_millis(0));

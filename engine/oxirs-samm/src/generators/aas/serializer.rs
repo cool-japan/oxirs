@@ -374,7 +374,7 @@ mod tests {
             concept_descriptions: None,
         };
 
-        let json = serialize_json(&env).unwrap();
+        let json = serialize_json(&env).expect("serialization should succeed");
         eprintln!("JSON output: {}", json); // Debug output
                                             // Check that JSON was generated successfully
         assert!(!json.is_empty());

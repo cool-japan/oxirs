@@ -447,7 +447,7 @@ impl QueryPlanExplainer {
             return path;
         }
 
-        let mut current_id = current_id.unwrap();
+        let mut current_id = current_id.expect("operation should succeed");
         let mut visited = HashSet::new();
 
         path.push(current_id.clone());
@@ -890,7 +890,7 @@ mod tests {
         let explanation = explainer.explain_plan(&plan, ExplainFormat::Brief);
         assert!(explanation.is_ok());
 
-        let output = explanation.unwrap();
+        let output = explanation.expect("explanation should be available");
         assert!(output.contains("Total Cost"));
         assert!(output.contains("Steps: 3"));
         assert!(output.contains("Services: 2"));
@@ -904,7 +904,7 @@ mod tests {
         let explanation = explainer.explain_plan(&plan, ExplainFormat::Detailed);
         assert!(explanation.is_ok());
 
-        let output = explanation.unwrap();
+        let output = explanation.expect("explanation should be available");
         assert!(output.contains("EXECUTION STEPS"));
         assert!(output.contains("ServiceQuery"));
         assert!(output.contains("Join"));
@@ -918,7 +918,7 @@ mod tests {
         let explanation = explainer.explain_plan(&plan, ExplainFormat::Json);
         assert!(explanation.is_ok());
 
-        let output = explanation.unwrap();
+        let output = explanation.expect("explanation should be available");
         let parsed: Result<PlanExplanation, _> = serde_json::from_str(&output);
         assert!(parsed.is_ok());
     }
@@ -931,7 +931,7 @@ mod tests {
         let explanation = explainer.explain_plan(&plan, ExplainFormat::Tree);
         assert!(explanation.is_ok());
 
-        let output = explanation.unwrap();
+        let output = explanation.expect("explanation should be available");
         assert!(output.contains("Query Execution Tree"));
         assert!(output.contains("├─"));
     }
@@ -944,7 +944,7 @@ mod tests {
         let explanation = explainer.explain_plan(&plan, ExplainFormat::CostAnalysis);
         assert!(explanation.is_ok());
 
-        let output = explanation.unwrap();
+        let output = explanation.expect("explanation should be available");
         assert!(output.contains("COST ANALYSIS"));
         assert!(output.contains("Cost Breakdown"));
     }
@@ -954,7 +954,9 @@ mod tests {
         let explainer = QueryPlanExplainer::new();
         let plan = create_test_plan();
 
-        let explanation = explainer.analyze_plan(&plan).unwrap();
+        let explanation = explainer
+            .analyze_plan(&plan)
+            .expect("plan analysis should succeed");
         assert!(!explanation.parallel_steps.is_empty());
         assert_eq!(
             explanation.parallel_steps[0],
@@ -967,7 +969,9 @@ mod tests {
         let explainer = QueryPlanExplainer::new();
         let plan = create_test_plan();
 
-        let explanation = explainer.analyze_plan(&plan).unwrap();
+        let explanation = explainer
+            .analyze_plan(&plan)
+            .expect("plan analysis should succeed");
         assert!(!explanation.suggestions.is_empty());
 
         // Should suggest parallelization
@@ -983,7 +987,9 @@ mod tests {
         let explainer = QueryPlanExplainer::new();
         let plan = create_test_plan();
 
-        let explanation = explainer.analyze_plan(&plan).unwrap();
+        let explanation = explainer
+            .analyze_plan(&plan)
+            .expect("plan analysis should succeed");
         assert!(!explanation.critical_path.is_empty());
 
         // Critical path should contain the join step
@@ -995,7 +1001,9 @@ mod tests {
         let explainer = QueryPlanExplainer::new();
         let plan = create_test_plan();
 
-        let explanation = explainer.analyze_plan(&plan).unwrap();
+        let explanation = explainer
+            .analyze_plan(&plan)
+            .expect("plan analysis should succeed");
         // Two services, no cross-service dependencies in this simple case
         assert_eq!(explanation.service_count, 2);
     }
@@ -1005,7 +1013,9 @@ mod tests {
         let explainer = QueryPlanExplainer::new();
         let plan = create_test_plan();
 
-        let explanation = explainer.analyze_plan(&plan).unwrap();
+        let explanation = explainer
+            .analyze_plan(&plan)
+            .expect("plan analysis should succeed");
         assert!(explanation.estimated_duration_ms > 0);
     }
 }

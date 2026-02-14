@@ -346,7 +346,7 @@ impl FailoverManager {
                     // Generate new node IDs (using timestamp-based IDs to avoid conflicts)
                     let base_id = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
-                        .unwrap()
+                        .expect("SystemTime should be after UNIX_EPOCH")
                         .as_secs();
                     let new_nodes: Vec<OxirsNodeId> =
                         (0..nodes_needed).map(|i| base_id + i as u64).collect();

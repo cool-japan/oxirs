@@ -187,7 +187,9 @@ impl DiskAnnConfig {
                 return Err("PQ bits must be specified when compression is enabled".to_string());
             }
 
-            let pq_subvectors = self.pq_subvectors.unwrap();
+            let pq_subvectors = self
+                .pq_subvectors
+                .expect("pq_subvectors validated as Some above");
             if self.dimension % pq_subvectors != 0 {
                 return Err(format!(
                     "Dimension {} must be divisible by PQ subvectors {}",
@@ -195,7 +197,7 @@ impl DiskAnnConfig {
                 ));
             }
 
-            let pq_bits = self.pq_bits.unwrap();
+            let pq_bits = self.pq_bits.expect("pq_bits validated as Some above");
             if pq_bits == 0 || pq_bits > 16 {
                 return Err("PQ bits must be between 1 and 16".to_string());
             }

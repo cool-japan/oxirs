@@ -128,7 +128,8 @@ mod tests {
                 value: i as f64,
             });
         }
-        TimeChunk::new(series_id, start, Duration::hours(2), points).unwrap()
+        TimeChunk::new(series_id, start, Duration::hours(2), points)
+            .expect("construction should succeed")
     }
 
     #[test]
@@ -148,7 +149,7 @@ mod tests {
         let chunk = create_test_chunk(1, now, 100);
 
         let query = RangeQuery::new(1, now + Duration::seconds(10), now + Duration::seconds(20));
-        let results = query.execute(&[chunk]).unwrap();
+        let results = query.execute(&[chunk]).expect("execution should succeed");
 
         assert_eq!(results.len(), 10);
         assert!(results[0].timestamp >= now + Duration::seconds(10));
@@ -160,7 +161,7 @@ mod tests {
         let chunk = create_test_chunk(1, now, 100);
 
         let query = RangeQuery::new(1, now, now + Duration::seconds(100)).with_limit(5);
-        let results = query.execute(&[chunk]).unwrap();
+        let results = query.execute(&[chunk]).expect("execution should succeed");
 
         assert_eq!(results.len(), 5);
     }
@@ -171,7 +172,7 @@ mod tests {
         let chunk = create_test_chunk(1, now, 100);
 
         let query = RangeQuery::new(1, now, now + Duration::seconds(100)).with_order(false);
-        let results = query.execute(&[chunk]).unwrap();
+        let results = query.execute(&[chunk]).expect("execution should succeed");
 
         // Should be descending
         for window in results.windows(2) {

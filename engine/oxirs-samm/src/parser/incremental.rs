@@ -444,33 +444,39 @@ mod tests {
     #[tokio::test]
     async fn test_parse_state_progress() {
         // Create a temp file
-        let mut temp_file = NamedTempFile::new().unwrap();
-        write!(temp_file, "test content").unwrap();
-        temp_file.flush().unwrap();
+        let mut temp_file = NamedTempFile::new().expect("temp file creation should succeed");
+        write!(temp_file, "test content").expect("write should succeed");
+        temp_file.flush().expect("flush should succeed");
 
         let mut state = ParseState::new(temp_file.path());
         state.byte_offset = 6; // Half of "test content" (12 bytes)
 
-        let progress = state.progress_percentage().await.unwrap();
+        let progress = state
+            .progress_percentage()
+            .await
+            .expect("async operation should succeed");
         assert!((progress - 50.0).abs() < 0.1);
     }
 
     #[tokio::test]
     async fn test_parse_state_save_load() {
-        let temp_state_file = NamedTempFile::new().unwrap();
-        let temp_data_file = NamedTempFile::new().unwrap();
+        let temp_state_file = NamedTempFile::new().expect("temp file creation should succeed");
+        let temp_data_file = NamedTempFile::new().expect("temp file creation should succeed");
 
         let mut state = ParseState::new(temp_data_file.path());
         state.byte_offset = 100;
         state.properties_parsed = 5;
 
         // Save
-        state.save_to_file(temp_state_file.path()).await.unwrap();
+        state
+            .save_to_file(temp_state_file.path())
+            .await
+            .expect("async operation should succeed");
 
         // Load
         let loaded_state = ParseState::load_from_file(temp_state_file.path())
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(loaded_state.byte_offset, 100);
         assert_eq!(loaded_state.properties_parsed, 5);
@@ -491,7 +497,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_events_simple() {
         // Create a minimal SAMM file
-        let mut temp_file = NamedTempFile::new().unwrap();
+        let mut temp_file = NamedTempFile::new().expect("temp file creation should succeed");
         let ttl_content = r#"
 @prefix samm: <urn:samm:org.eclipse.esmf.samm:meta-model:2.1.0#> .
 @prefix : <urn:samm:org.example:1.0.0#> .
@@ -506,11 +512,14 @@ mod tests {
 :TestCharacteristic a samm:Characteristic ;
     samm:dataType xsd:string .
 "#;
-        write!(temp_file, "{}", ttl_content).unwrap();
-        temp_file.flush().unwrap();
+        write!(temp_file, "{}", ttl_content).expect("write should succeed");
+        temp_file.flush().expect("flush should succeed");
 
         let mut parser = IncrementalParser::new(temp_file.path());
-        let events = parser.parse_with_events().await.unwrap();
+        let events = parser
+            .parse_with_events()
+            .await
+            .expect("async operation should succeed");
 
         let collected: Vec<ParseEvent> = events.collect().await;
 

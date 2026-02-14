@@ -622,8 +622,12 @@ impl StorageBackend for MVCCStorage {
 
         let deletion_marker_key = format!("shard:{shard_id}:__MARKED_FOR_DELETION__");
         let marker_triple = Triple::new(
-            Subject::NamedNode(NamedNode::new("urn:oxirs:shard:deleted").unwrap()),
-            Predicate::NamedNode(NamedNode::new("urn:oxirs:prop:deletionMarker").unwrap()),
+            Subject::NamedNode(
+                NamedNode::new("urn:oxirs:shard:deleted").expect("valid static URI"),
+            ),
+            Predicate::NamedNode(
+                NamedNode::new("urn:oxirs:prop:deletionMarker").expect("valid static URI"),
+            ),
             Object::Literal(Literal::new_simple_literal("true")),
         );
 

@@ -509,7 +509,7 @@ fn is_valid_scheme(scheme: &str) -> bool {
     let mut chars = scheme.chars();
 
     // First character must be ASCII letter
-    let first = chars.next().unwrap();
+    let first = chars.next().expect("iterator should have next element");
     if !first.is_ascii_alphabetic() {
         return false;
     }
@@ -567,108 +567,119 @@ mod tests {
 
     #[test]
     fn test_case_normalization() {
-        let iri = normalize_iri("HTTP://EXAMPLE.ORG/Path").unwrap();
+        let iri = normalize_iri("HTTP://EXAMPLE.ORG/Path").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/Path");
     }
 
     #[test]
     fn test_percent_encoding_normalization() {
         // Decode unreserved characters
-        let iri = normalize_iri("http://example.org/%7Euser").unwrap();
+        let iri = normalize_iri("http://example.org/%7Euser").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/~user");
 
-        let iri = normalize_iri("http://example.org/%41%42%43").unwrap();
+        let iri = normalize_iri("http://example.org/%41%42%43").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/ABC");
 
         // Keep reserved characters encoded (but uppercase)
-        let iri = normalize_iri("http://example.org/path%20with%20spaces").unwrap();
+        let iri = normalize_iri("http://example.org/path%20with%20spaces").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/path%20with%20spaces");
     }
 
     #[test]
     fn test_default_port_removal() {
-        let iri = normalize_iri("http://example.org:80/path").unwrap();
+        let iri = normalize_iri("http://example.org:80/path").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/path");
 
-        let iri = normalize_iri("https://example.org:443/path").unwrap();
+        let iri = normalize_iri("https://example.org:443/path").expect("valid IRI");
         assert_eq!(iri.as_str(), "https://example.org/path");
 
         // Non-default port should be kept
-        let iri = normalize_iri("http://example.org:8080/path").unwrap();
+        let iri = normalize_iri("http://example.org:8080/path").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org:8080/path");
     }
 
     #[test]
     fn test_path_normalization() {
-        let iri = normalize_iri("http://example.org/a/./b/../c").unwrap();
+        let iri = normalize_iri("http://example.org/a/./b/../c").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/a/c");
 
-        let iri = normalize_iri("http://example.org/./a/b").unwrap();
+        let iri = normalize_iri("http://example.org/./a/b").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/a/b");
 
-        let iri = normalize_iri("http://example.org/a/b/..").unwrap();
+        let iri = normalize_iri("http://example.org/a/b/..").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/a");
     }
 
     #[test]
     fn test_empty_path_normalization() {
-        let iri = normalize_iri("http://example.org").unwrap();
+        let iri = normalize_iri("http://example.org").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/");
     }
 
     #[test]
     fn test_query_and_fragment() {
-        let iri = normalize_iri("http://example.org/path?query=value#fragment").unwrap();
+        let iri = normalize_iri("http://example.org/path?query=value#fragment").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/path?query=value#fragment");
 
         // Percent-encoding in query and fragment
-        let iri = normalize_iri("http://example.org/path?q=%41#%42").unwrap();
+        let iri = normalize_iri("http://example.org/path?q=%41#%42").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://example.org/path?q=A#B");
     }
 
     #[test]
     fn test_ipv6_address() {
-        let iri = normalize_iri("http://[2001:db8::1]/path").unwrap();
+        let iri = normalize_iri("http://[2001:db8::1]/path").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://[2001:db8::1]/path");
 
-        let iri = normalize_iri("http://[2001:DB8::1]:8080/path").unwrap();
+        let iri = normalize_iri("http://[2001:DB8::1]:8080/path").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://[2001:db8::1]:8080/path");
     }
 
     #[test]
     fn test_userinfo() {
-        let iri = normalize_iri("http://user:pass@example.org/path").unwrap();
+        let iri = normalize_iri("http://user:pass@example.org/path").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://user:pass@example.org/path");
 
-        let iri = normalize_iri("http://%41%42%43@example.org/path").unwrap();
+        let iri = normalize_iri("http://%41%42%43@example.org/path").expect("valid IRI");
         assert_eq!(iri.as_str(), "http://ABC@example.org/path");
     }
 
     #[test]
     fn test_iris_equivalent() {
-        assert!(iris_equivalent("HTTP://EXAMPLE.ORG/path", "http://example.org/path").unwrap());
-
-        assert!(iris_equivalent("http://example.org:80/path", "http://example.org/path").unwrap());
-
         assert!(
-            iris_equivalent("http://example.org/a/./b/../c", "http://example.org/a/c").unwrap()
+            iris_equivalent("HTTP://EXAMPLE.ORG/path", "http://example.org/path")
+                .expect("valid IRI")
         );
 
-        assert!(!iris_equivalent("http://example.org/path1", "http://example.org/path2").unwrap());
+        assert!(
+            iris_equivalent("http://example.org:80/path", "http://example.org/path")
+                .expect("valid IRI")
+        );
+
+        assert!(
+            iris_equivalent("http://example.org/a/./b/../c", "http://example.org/a/c")
+                .expect("valid IRI")
+        );
+
+        assert!(
+            !iris_equivalent("http://example.org/path1", "http://example.org/path2")
+                .expect("valid IRI")
+        );
     }
 
     #[test]
     fn test_complex_normalization() {
-        let iri = normalize_iri("HTTP://USER@EXAMPLE.ORG:80/A/./B/../C/%7Euser?Q=%41#%42").unwrap();
+        let iri = normalize_iri("HTTP://USER@EXAMPLE.ORG:80/A/./B/../C/%7Euser?Q=%41#%42")
+            .expect("valid IRI");
         assert_eq!(iri.as_str(), "http://USER@example.org/A/C/~user?Q=A#B");
     }
 
     #[test]
     fn test_non_http_schemes() {
-        let iri = normalize_iri("ftp://example.org:21/path").unwrap();
+        let iri = normalize_iri("ftp://example.org:21/path").expect("valid IRI");
         assert_eq!(iri.as_str(), "ftp://example.org/path");
 
-        let iri = normalize_iri("urn:isbn:0451450523").unwrap();
+        let iri = normalize_iri("urn:isbn:0451450523").expect("valid IRI");
         assert_eq!(iri.as_str(), "urn:isbn:0451450523");
     }
 
@@ -681,8 +692,8 @@ mod tests {
 
     #[test]
     fn test_normalized_iri_methods() {
-        let iri1 = normalize_iri("http://example.org/path").unwrap();
-        let iri2 = normalize_iri("HTTP://EXAMPLE.ORG/path").unwrap();
+        let iri1 = normalize_iri("http://example.org/path").expect("valid IRI");
+        let iri2 = normalize_iri("HTTP://EXAMPLE.ORG/path").expect("valid IRI");
 
         assert_eq!(iri1.as_str(), "http://example.org/path");
         assert!(iri1.is_equivalent(&iri2));
@@ -696,13 +707,13 @@ mod tests {
     fn test_normalize_iri_cow() {
         // Already normalized - should return Borrowed
         let iri = "http://example.org/path";
-        let result = normalize_iri_cow(iri).unwrap();
+        let result = normalize_iri_cow(iri).expect("valid IRI");
         assert!(matches!(result, Cow::Borrowed(_)));
         assert_eq!(result, iri);
 
         // Not normalized - should return Owned
         let iri = "HTTP://EXAMPLE.ORG/path";
-        let result = normalize_iri_cow(iri).unwrap();
+        let result = normalize_iri_cow(iri).expect("valid IRI");
         assert!(matches!(result, Cow::Owned(_)));
         assert_eq!(result, "http://example.org/path");
     }
@@ -710,14 +721,14 @@ mod tests {
     #[test]
     fn test_urn_normalization() {
         // URN scheme normalization
-        let iri = normalize_iri("URN:ISBN:0451450523").unwrap();
+        let iri = normalize_iri("URN:ISBN:0451450523").expect("valid IRI");
         assert_eq!(iri.as_str(), "urn:ISBN:0451450523");
     }
 
     #[test]
     fn test_trailing_slash() {
-        let iri1 = normalize_iri("http://example.org/path/").unwrap();
-        let iri2 = normalize_iri("http://example.org/path").unwrap();
+        let iri1 = normalize_iri("http://example.org/path/").expect("valid IRI");
+        let iri2 = normalize_iri("http://example.org/path").expect("valid IRI");
 
         // These should NOT be equivalent (trailing slash matters)
         assert_ne!(iri1, iri2);

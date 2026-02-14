@@ -310,7 +310,7 @@ mod tests {
         let result = serializer.serialize_to_string(&aspect);
 
         assert!(result.is_ok());
-        let ttl = result.unwrap();
+        let ttl = result.expect("result should be Ok");
 
         assert!(ttl.contains("@prefix samm:"));
         assert!(ttl.contains("<urn:test:aspect#MinimalAspect> a samm:Aspect"));
@@ -354,7 +354,7 @@ mod tests {
         let result = serializer.serialize_to_string(&aspect);
 
         assert!(result.is_ok());
-        let ttl = result.unwrap();
+        let ttl = result.expect("result should be Ok");
 
         assert!(ttl.contains("<urn:test:aspect#TestAspect> a samm:Aspect"));
         assert!(ttl.contains("samm:properties"));

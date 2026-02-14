@@ -850,7 +850,11 @@ mod tests {
     #[test]
     fn test_negation_optimizer_creation() {
         let optimizer = NegationOptimizer::new();
-        assert!(optimizer.validation_cache.read().unwrap().is_empty());
+        assert!(optimizer
+            .validation_cache
+            .read()
+            .expect("read lock should not be poisoned")
+            .is_empty());
     }
 
     #[test]
@@ -869,7 +873,7 @@ mod tests {
         };
 
         let few_values = vec![Term::NamedNode(
-            NamedNode::new("http://example.org/test").unwrap(),
+            NamedNode::new("http://example.org/test").expect("valid IRI"),
         )];
         let strategy = optimizer.select_optimization_strategy(&low_complexity, &few_values);
         assert_eq!(strategy, OptimizationStrategy::DirectEvaluation);
@@ -880,18 +884,18 @@ mod tests {
         let optimizer = NegationOptimizer::new();
 
         // Mock store for testing
-        let store = oxirs_core::ConcreteStore::new().unwrap();
+        let store = oxirs_core::ConcreteStore::new().expect("store creation should succeed");
 
         let simple_shape = ShapeId::new("SimpleShape");
         let analysis = optimizer
             .perform_shape_analysis(&simple_shape, &store)
-            .unwrap();
+            .expect("analysis should succeed");
         assert_eq!(analysis.complexity, ShapeComplexity::Low);
 
         let complex_shape = ShapeId::new("ComplexShape");
         let analysis = optimizer
             .perform_shape_analysis(&complex_shape, &store)
-            .unwrap();
+            .expect("analysis should succeed");
         assert_eq!(analysis.complexity, ShapeComplexity::High);
     }
 
@@ -904,7 +908,10 @@ mod tests {
         for i in 0..100 {
             let key = NegationCacheKey {
                 shape_id: ShapeId::new(format!("shape_{i}")),
-                value: Term::NamedNode(NamedNode::new(format!("http://example.org/{i}")).unwrap()),
+                value: Term::NamedNode(
+                    NamedNode::new(format!("http://example.org/{i}"))
+                        .expect("construction should succeed"),
+                ),
             };
             cache.insert(key, CachedValidationResult::new(i % 2 == 0));
         }
@@ -926,7 +933,9 @@ mod tests {
             5,
         );
 
-        let stats = optimizer.get_performance_stats().unwrap();
+        let stats = optimizer
+            .get_performance_stats()
+            .expect("optimization should succeed");
         assert_eq!(stats.total_evaluations, 1);
         assert_eq!(stats.total_values_processed, 5);
         assert!(stats
@@ -940,10 +949,11 @@ mod tests {
 
         // Test that early termination works for obvious violations
         let shape_id = ShapeId::new("test_shape");
-        let focus_node = Term::NamedNode(NamedNode::new("http://example.org/focus").unwrap());
+        let focus_node =
+            Term::NamedNode(NamedNode::new("http://example.org/focus").expect("valid IRI"));
         let _context =
             ConstraintContext::new(focus_node, shape_id).with_values(vec![Term::NamedNode(
-                NamedNode::new("http://example.org/test").unwrap(),
+                NamedNode::new("http://example.org/test").expect("valid IRI"),
             )]);
 
         // This should demonstrate early termination
@@ -960,10 +970,16 @@ mod tests {
 
         // Test batch optimization for multiple values
         let values: Vec<Term> = (0..10)
-            .map(|i| Term::NamedNode(NamedNode::new(format!("http://example.org/{i}")).unwrap()))
+            .map(|i| {
+                Term::NamedNode(
+                    NamedNode::new(format!("http://example.org/{i}"))
+                        .expect("construction should succeed"),
+                )
+            })
             .collect();
 
-        let focus_node = Term::NamedNode(NamedNode::new("http://example.org/focus").unwrap());
+        let focus_node =
+            Term::NamedNode(NamedNode::new("http://example.org/focus").expect("valid IRI"));
         let shape_id = ShapeId::new("test_shape");
         let context = ConstraintContext::new(focus_node, shape_id).with_values(values);
 

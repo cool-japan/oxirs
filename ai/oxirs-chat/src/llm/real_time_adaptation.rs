@@ -575,7 +575,7 @@ impl RealTimeAdaptation {
                 "checkpoint_{}",
                 SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("SystemTime should be after UNIX_EPOCH")
                     .as_secs()
             ),
             model_state: vec![0u8; 1000], // Mock model state
@@ -602,7 +602,7 @@ impl RealTimeAdaptation {
                 "event_{}",
                 SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("SystemTime should be after UNIX_EPOCH")
                     .as_secs()
             ),
             adaptation_type: result.adaptation_type,

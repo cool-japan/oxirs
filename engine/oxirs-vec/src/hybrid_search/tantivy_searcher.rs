@@ -29,16 +29,18 @@ use tantivy::{
     directory::MmapDirectory,
     query::{FuzzyTermQuery, PhraseQuery, QueryParser},
     schema::{Field, Schema, SchemaBuilder, TextFieldIndexing, TextOptions, Value, STORED, STRING},
-    tokenizer::{LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer},
+    tokenizer::{
+        LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer,
+    },
     IndexReader, IndexSettings, IndexWriter, ReloadPolicy, Term,
 };
 
 use anyhow::{anyhow, Context, Result};
+use parking_lot::RwLock;
 use scirs2_core::metrics::{Counter, Timer};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 /// Configuration for Tantivy search engine
 #[derive(Debug, Clone)]
@@ -141,8 +143,7 @@ impl TantivySearcher {
         let schema = schema_builder.build();
 
         // Create or open index
-        std::fs::create_dir_all(&config.index_path)
-            .context("Failed to create index directory")?;
+        std::fs::create_dir_all(&config.index_path).context("Failed to create index directory")?;
 
         let index_settings = IndexSettings::default();
         let index = if config.index_path.join("meta.json").exists() {
@@ -194,11 +195,13 @@ impl TantivySearcher {
         // Conditional filter application causes type incompatibility issues
         let stopwords = if config.stopwords {
             vec![
-                "a", "an", "and", "are", "as", "at", "be", "but", "by",
-                "for", "if", "in", "into", "is", "it", "no", "not", "of",
-                "on", "or", "such", "that", "the", "their", "then", "there",
-                "these", "they", "this", "to", "was", "will", "with",
-            ].into_iter().map(String::from).collect()
+                "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in", "into",
+                "is", "it", "no", "not", "of", "on", "or", "such", "that", "the", "their", "then",
+                "there", "these", "they", "this", "to", "was", "will", "with",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect()
         } else {
             vec![] // Empty stopword list effectively disables filtering
         };
@@ -214,7 +217,9 @@ impl TantivySearcher {
 
     /// Index multiple RDF documents in batch
     pub fn index_documents(&mut self, docs: &[RdfDocument]) -> Result<()> {
-        let writer = self.writer.as_ref()
+        let writer = self
+            .writer
+            .as_ref()
             .ok_or_else(|| anyhow!("Index writer not available"))?;
 
         let mut writer_guard = writer.write();
@@ -233,29 +238,38 @@ impl TantivySearcher {
                 tantivy_doc.add_text(self.datatype_field, datatype);
             }
 
-            writer_guard.add_document(tantivy_doc)
+            writer_guard
+                .add_document(tantivy_doc)
                 .context("Failed to add document")?;
 
             self.index_counter.add(1);
         }
 
-        writer_guard.commit()
+        writer_guard
+            .commit()
             .context("Failed to commit documents")?;
 
         Ok(())
     }
 
     /// Basic text search with BM25 ranking
-    pub fn text_search(&self, query: &str, limit: usize, threshold: f32) -> Result<Vec<SearchResult>> {
+    pub fn text_search(
+        &self,
+        query: &str,
+        limit: usize,
+        threshold: f32,
+    ) -> Result<Vec<SearchResult>> {
         let _timer = self.search_timer.start();
 
         let searcher = self.reader.searcher();
 
         let query_parser = QueryParser::for_index(&self.index, vec![self.content_field]);
-        let query = query_parser.parse_query(query)
+        let query = query_parser
+            .parse_query(query)
             .context("Failed to parse query")?;
 
-        let top_docs = searcher.search(&query, &TopDocs::with_limit(limit))
+        let top_docs = searcher
+            .search(&query, &TopDocs::with_limit(limit))
             .context("Failed to execute search")?;
 
         let mut results = Vec::new();
@@ -265,7 +279,8 @@ impl TantivySearcher {
                 continue;
             }
 
-            let retrieved_doc = searcher.doc::<tantivy::TantivyDocument>(doc_address)
+            let retrieved_doc = searcher
+                .doc::<tantivy::TantivyDocument>(doc_address)
                 .context("Failed to retrieve document")?;
 
             let uri = retrieved_doc
@@ -309,13 +324,15 @@ impl TantivySearcher {
 
         let query = PhraseQuery::new(terms);
 
-        let top_docs = searcher.search(&query, &TopDocs::with_limit(limit))
+        let top_docs = searcher
+            .search(&query, &TopDocs::with_limit(limit))
             .context("Failed to execute phrase search")?;
 
         let mut results = Vec::new();
 
         for (score, doc_address) in top_docs {
-            let retrieved_doc = searcher.doc::<tantivy::TantivyDocument>(doc_address)
+            let retrieved_doc = searcher
+                .doc::<tantivy::TantivyDocument>(doc_address)
                 .context("Failed to retrieve document")?;
 
             let uri = retrieved_doc
@@ -346,7 +363,12 @@ impl TantivySearcher {
     }
 
     /// Fuzzy search with edit distance tolerance
-    pub fn fuzzy_search(&self, query: &str, distance: u8, limit: usize) -> Result<Vec<SearchResult>> {
+    pub fn fuzzy_search(
+        &self,
+        query: &str,
+        distance: u8,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>> {
         let _timer = self.search_timer.start();
 
         let searcher = self.reader.searcher();
@@ -355,13 +377,15 @@ impl TantivySearcher {
         let term = Term::from_field_text(self.content_field, query);
         let fuzzy_query = FuzzyTermQuery::new(term, distance, true);
 
-        let top_docs = searcher.search(&fuzzy_query, &TopDocs::with_limit(limit))
+        let top_docs = searcher
+            .search(&fuzzy_query, &TopDocs::with_limit(limit))
             .context("Failed to execute fuzzy search")?;
 
         let mut results = Vec::new();
 
         for (score, doc_address) in top_docs {
-            let retrieved_doc = searcher.doc::<tantivy::TantivyDocument>(doc_address)
+            let retrieved_doc = searcher
+                .doc::<tantivy::TantivyDocument>(doc_address)
                 .context("Failed to retrieve document")?;
 
             let uri = retrieved_doc
@@ -392,7 +416,11 @@ impl TantivySearcher {
     }
 
     /// Field-specific search with multiple fields
-    pub fn field_search(&self, field_queries: &HashMap<String, String>, limit: usize) -> Result<Vec<SearchResult>> {
+    pub fn field_search(
+        &self,
+        field_queries: &HashMap<String, String>,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>> {
         let _timer = self.search_timer.start();
 
         let searcher = self.reader.searcher();
@@ -408,16 +436,19 @@ impl TantivySearcher {
         }
 
         let query_parser = QueryParser::for_index(&self.index, vec![self.content_field]);
-        let query = query_parser.parse_query(&combined_query_str)
+        let query = query_parser
+            .parse_query(&combined_query_str)
             .context("Failed to parse field query")?;
 
-        let top_docs = searcher.search(&query, &TopDocs::with_limit(limit))
+        let top_docs = searcher
+            .search(&query, &TopDocs::with_limit(limit))
             .context("Failed to execute field search")?;
 
         let mut results = Vec::new();
 
         for (score, doc_address) in top_docs {
-            let retrieved_doc = searcher.doc::<tantivy::TantivyDocument>(doc_address)
+            let retrieved_doc = searcher
+                .doc::<tantivy::TantivyDocument>(doc_address)
                 .context("Failed to retrieve document")?;
 
             let uri = retrieved_doc
@@ -452,9 +483,7 @@ impl TantivySearcher {
         let searcher = self.reader.searcher();
         let segment_metas = searcher.segment_readers();
 
-        let total_docs = segment_metas.iter()
-            .map(|seg| seg.num_docs() as u64)
-            .sum();
+        let total_docs = segment_metas.iter().map(|seg| seg.num_docs() as u64).sum();
 
         IndexStats {
             total_documents: total_docs,
@@ -465,14 +494,17 @@ impl TantivySearcher {
 
     /// Optimize index (commit pending changes)
     pub fn optimize(&mut self) -> Result<()> {
-        let writer = self.writer.as_ref()
+        let writer = self
+            .writer
+            .as_ref()
             .ok_or_else(|| anyhow!("Index writer not available"))?;
 
         let mut writer_guard = writer.write();
 
         // Tantivy automatically merges segments during commit
         // We just commit to ensure all changes are persisted
-        writer_guard.commit()
+        writer_guard
+            .commit()
             .context("Failed to commit during optimization")?;
 
         Ok(())
@@ -486,7 +518,9 @@ pub struct TantivySearcher;
 #[cfg(not(feature = "tantivy-search"))]
 impl TantivySearcher {
     pub fn new(_config: TantivyConfig) -> Result<Self> {
-        Err(anyhow!("Tantivy search feature is not enabled. Enable with: --features tantivy-search"))
+        Err(anyhow!(
+            "Tantivy search feature is not enabled. Enable with: --features tantivy-search"
+        ))
     }
 }
 
@@ -593,20 +627,21 @@ mod tests {
         let config = create_test_config();
         let mut searcher = TantivySearcher::new(config)?;
 
-        let docs = vec![
-            RdfDocument {
-                uri: "http://example.org/running".to_string(),
-                content: "The runner is running a marathon".to_string(),
-                language: Some("en".to_string()),
-                datatype: None,
-            },
-        ];
+        let docs = vec![RdfDocument {
+            uri: "http://example.org/running".to_string(),
+            content: "The runner is running a marathon".to_string(),
+            language: Some("en".to_string()),
+            datatype: None,
+        }];
 
         searcher.index_documents(&docs)?;
 
         // Search with different form of word (stemming should match)
         let results = searcher.text_search("run", 10, 0.0)?;
-        assert!(!results.is_empty(), "Stemming should match 'run' with 'running'");
+        assert!(
+            !results.is_empty(),
+            "Stemming should match 'run' with 'running'"
+        );
 
         Ok(())
     }
@@ -621,7 +656,10 @@ mod tests {
 
         // Stopwords like "and", "for" should be filtered
         let results = searcher.text_search("algorithms for networks", 10, 0.0)?;
-        assert!(!results.is_empty(), "Should find results ignoring stopwords");
+        assert!(
+            !results.is_empty(),
+            "Should find results ignoring stopwords"
+        );
 
         Ok(())
     }

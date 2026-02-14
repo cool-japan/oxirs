@@ -1215,8 +1215,12 @@ impl MemoryBandwidthMonitor {
                 return 0.0;
             }
 
-            let first = node_samples.front().unwrap();
-            let last = node_samples.back().unwrap();
+            let first = node_samples
+                .front()
+                .expect("node_samples validated to have at least 2 elements");
+            let last = node_samples
+                .back()
+                .expect("node_samples validated to have at least 2 elements");
 
             let total_bytes: u64 = node_samples.iter().map(|(_, b)| b).sum();
             let duration = last.0.duration_since(first.0);

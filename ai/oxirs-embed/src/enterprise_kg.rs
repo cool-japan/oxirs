@@ -346,7 +346,7 @@ impl ProductCatalogEmbedder {
             }
             
             // Sort by similarity and take top k
-            similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             similarities.truncate(k);
             
             Ok(similarities)
@@ -937,7 +937,7 @@ impl OrganizationalKGEmbedder {
                 }
             }
             
-            similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             similarities.into_iter().take(k).collect()
         } else {
             Vec::new()

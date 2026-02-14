@@ -199,7 +199,9 @@ impl MvtTile {
                     extent: self.extent,
                     features: Vec::new(),
                 });
-                self.layers.last_mut().unwrap()
+                self.layers
+                    .last_mut()
+                    .expect("collection validated to be non-empty")
             }
         };
 

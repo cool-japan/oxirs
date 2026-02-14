@@ -380,13 +380,13 @@ impl SparqlSecurityAnalyzer {
 
     /// Remove comments from query
     fn remove_comments(&self, query: &str) -> String {
-        let comment_pattern = Regex::new(r"#[^\r\n]*").unwrap();
+        let comment_pattern = Regex::new(r"#[^\r\n]*").expect("valid regex pattern");
         comment_pattern.replace_all(query, "").to_string()
     }
 
     /// Normalize whitespace
     fn normalize_whitespace(&self, query: &str) -> String {
-        let whitespace_pattern = Regex::new(r"\s+").unwrap();
+        let whitespace_pattern = Regex::new(r"\s+").expect("valid regex pattern");
         whitespace_pattern
             .replace_all(query.trim(), " ")
             .to_string()
@@ -626,17 +626,19 @@ mod tests {
     #[test]
     fn test_security_analyzer_creation() {
         let config = SecurityConfig::default();
-        let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
+        let analyzer = SparqlSecurityAnalyzer::new(config).expect("construction should succeed");
         assert!(!analyzer.dangerous_patterns.is_empty());
     }
 
     #[test]
     fn test_safe_query_analysis() {
         let config = SecurityConfig::default();
-        let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
+        let analyzer = SparqlSecurityAnalyzer::new(config).expect("construction should succeed");
 
         let safe_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-        let result = analyzer.analyze_query(safe_query).unwrap();
+        let result = analyzer
+            .analyze_query(safe_query)
+            .expect("analysis should succeed");
 
         assert!(result.is_safe);
         assert!(result.violations.is_empty());
@@ -645,10 +647,12 @@ mod tests {
     #[test]
     fn test_dangerous_pattern_detection() {
         let config = SecurityConfig::default();
-        let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
+        let analyzer = SparqlSecurityAnalyzer::new(config).expect("construction should succeed");
 
         let dangerous_query = "DROP GRAPH <http://example.org/graph>";
-        let result = analyzer.analyze_query(dangerous_query).unwrap();
+        let result = analyzer
+            .analyze_query(dangerous_query)
+            .expect("analysis should succeed");
 
         assert!(!result.is_safe);
         assert!(!result.violations.is_empty());
@@ -664,7 +668,7 @@ mod tests {
             max_complexity_score: 5.0,
             ..SecurityConfig::default()
         };
-        let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
+        let analyzer = SparqlSecurityAnalyzer::new(config).expect("construction should succeed");
 
         let complex_query = r"
             SELECT ?s ?p ?o ?x ?y ?z WHERE {
@@ -675,7 +679,9 @@ mod tests {
                 { ?a ?b ?c } UNION { ?d ?e ?f }
             }
         ";
-        let result = analyzer.analyze_query(complex_query).unwrap();
+        let result = analyzer
+            .analyze_query(complex_query)
+            .expect("analysis should succeed");
 
         assert!(!result.is_safe);
         assert!(result
@@ -690,12 +696,12 @@ mod tests {
         config.allowed_functions.clear();
         config.allowed_functions.insert("STR".to_string());
 
-        let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
+        let analyzer = SparqlSecurityAnalyzer::new(config).expect("construction should succeed");
 
         let query_with_disallowed_function = "SELECT ?s WHERE { ?s ?p ?o . FILTER(RAND() > 0.5) }";
         let result = analyzer
             .analyze_query(query_with_disallowed_function)
-            .unwrap();
+            .expect("analysis should succeed");
 
         assert!(!result.is_safe);
         assert!(result
@@ -707,7 +713,7 @@ mod tests {
     #[test]
     fn test_query_sanitization() {
         let config = SecurityConfig::default();
-        let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
+        let analyzer = SparqlSecurityAnalyzer::new(config).expect("construction should succeed");
 
         let query_with_comments = r"
             SELECT ?s ?p ?o WHERE {
@@ -716,7 +722,9 @@ mod tests {
             }
         ";
 
-        let sanitized = analyzer.sanitize_query(query_with_comments).unwrap();
+        let sanitized = analyzer
+            .sanitize_query(query_with_comments)
+            .expect("analysis should succeed");
         assert!(!sanitized.contains('#'));
     }
 
@@ -725,16 +733,20 @@ mod tests {
         let config = SecurityConfig::default();
         let mut sandbox = QueryExecutionSandbox::new(config);
 
-        sandbox.start_execution().unwrap();
+        sandbox.start_execution().expect("start should succeed");
 
         // Should be able to record results within limit
         for _ in 0..10 {
-            sandbox.record_result().unwrap();
+            sandbox.record_result().expect("recording should succeed");
         }
 
-        sandbox.check_execution_limits().unwrap();
+        sandbox
+            .check_execution_limits()
+            .expect("check should succeed");
 
-        let stats = sandbox.stop_execution().unwrap();
+        let stats = sandbox
+            .stop_execution()
+            .expect("sandbox operation should succeed");
         assert_eq!(stats.results_produced, 10);
     }
 
@@ -743,15 +755,23 @@ mod tests {
         let mut monitor = RecursionMonitor::new(3);
 
         // Should allow normal recursion
-        monitor.enter_shape("shape1").unwrap();
-        monitor.enter_shape("shape1").unwrap();
-        monitor.enter_shape("shape1").unwrap();
+        monitor
+            .enter_shape("shape1")
+            .expect("shape entry should succeed");
+        monitor
+            .enter_shape("shape1")
+            .expect("shape entry should succeed");
+        monitor
+            .enter_shape("shape1")
+            .expect("shape entry should succeed");
 
         // Should fail on exceeding depth
         assert!(monitor.enter_shape("shape1").is_err());
 
         // Should recover after exiting
         monitor.exit_shape("shape1");
-        monitor.enter_shape("shape1").unwrap();
+        monitor
+            .enter_shape("shape1")
+            .expect("shape entry should succeed");
     }
 }

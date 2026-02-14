@@ -1055,7 +1055,12 @@ impl ResultDispatcher {
         loop {
             attempts += 1;
 
-            match request.try_clone().unwrap().send().await {
+            match request
+                .try_clone()
+                .expect("request should be cloneable for retry")
+                .send()
+                .await
+            {
                 Ok(response) => {
                     if response.status().is_success() {
                         return Ok(());

@@ -223,7 +223,7 @@ impl GraphQLFederation {
 
             // Take all nodes with no dependencies as a batch
             for _ in 0..batch_size {
-                let node = queue.pop_front().unwrap();
+                let node = queue.pop_front().expect("collection should not be empty");
 
                 // Find the entity reference for this node index
                 let entity_ref = graph

@@ -271,7 +271,7 @@ impl GraphUpdater {
             let mut request = self
                 .client
                 .as_ref()
-                .unwrap()
+                .expect("HTTP client should be initialized")
                 .post(&self.config.update_url)
                 .header("Content-Type", "application/sparql-update")
                 .body(query.clone());

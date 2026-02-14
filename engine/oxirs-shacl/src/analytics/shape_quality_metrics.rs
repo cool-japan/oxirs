@@ -1333,7 +1333,7 @@ mod tests {
 
         let trend = analyzer.get_quality_trend(&shape.id);
         assert!(trend.is_some());
-        assert_eq!(trend.unwrap().len(), 2);
+        assert_eq!(trend.expect("operation should succeed").len(), 2);
     }
 
     #[test]

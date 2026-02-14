@@ -138,7 +138,7 @@ impl NeuralLayer for LinearLayer {
             self.bias
                 .clone()
                 .to_shape((self.output_dim, 1))
-                .unwrap()
+                .expect("reshape should succeed for matching dimensions")
                 .to_owned(),
         ]
     }
@@ -255,7 +255,9 @@ impl NeuralLayer for BatchNormLayer {
     fn forward(&self, input: &Array2<f32>) -> Result<Array2<f32>> {
         let (mean, var) = if self.training {
             // Compute batch statistics
-            let batch_mean = input.mean_axis(Axis(0)).unwrap();
+            let batch_mean = input
+                .mean_axis(Axis(0))
+                .expect("axis 0 should exist for 2D array");
             let batch_var = input.var_axis(Axis(0), 0.0);
 
             // Update running statistics (in a real implementation)
@@ -282,12 +284,12 @@ impl NeuralLayer for BatchNormLayer {
             self.gamma
                 .clone()
                 .to_shape((self.num_features, 1))
-                .unwrap()
+                .expect("reshape should succeed for matching dimensions")
                 .to_owned(),
             self.beta
                 .clone()
                 .to_shape((self.num_features, 1))
-                .unwrap()
+                .expect("reshape should succeed for matching dimensions")
                 .to_owned(),
         ]
     }

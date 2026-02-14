@@ -152,7 +152,10 @@ impl PatternAnalyzer {
         // Find frequently co-queried fields
         for pattern in &self.patterns {
             if pattern.frequency >= self.min_frequency && !pattern.field_combinations.is_empty() {
-                let fields = pattern.field_combinations.first().unwrap();
+                let fields = pattern
+                    .field_combinations
+                    .first()
+                    .expect("collection validated to be non-empty");
                 if fields.len() > 1 {
                     // Suggest adding a composite type or index
                     suggestions.push(
@@ -320,7 +323,9 @@ impl SchemaSuggestionEngine {
         all_suggestions.sort_by(|a, b| {
             let score_a = a.impact_score * a.confidence;
             let score_b = b.impact_score * b.confidence;
-            score_b.partial_cmp(&score_a).unwrap()
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Store in history

@@ -849,7 +849,9 @@ mod tests {
 
         manager.set_shape_metadata(shape_id.clone(), metadata.clone());
 
-        let retrieved = manager.get_shape_metadata(&shape_id).unwrap();
+        let retrieved = manager
+            .get_shape_metadata(&shape_id)
+            .expect("operation should succeed");
         assert_eq!(retrieved.label, metadata.label);
         assert_eq!(retrieved.priority, metadata.priority);
         assert_eq!(retrieved.tags, metadata.tags);
@@ -862,12 +864,15 @@ mod tests {
         let terms = vec![
             (
                 Term::NamedNode(
-                    NamedNode::new("http://www.w3.org/2000/01/rdf-schema#label").unwrap(),
+                    NamedNode::new("http://www.w3.org/2000/01/rdf-schema#label")
+                        .expect("valid IRI"),
                 ),
                 Term::Literal(Literal::new_simple_literal("Test Shape")),
             ),
             (
-                Term::NamedNode(NamedNode::new("http://www.w3.org/ns/shacl#deactivated").unwrap()),
+                Term::NamedNode(
+                    NamedNode::new("http://www.w3.org/ns/shacl#deactivated").expect("valid IRI"),
+                ),
                 Term::Literal(Literal::new_simple_literal("true")),
             ),
         ];
@@ -971,7 +976,7 @@ mod tests {
         // Test base precedence (default)
         let resolved = manager
             .resolve_shape_constraints(&ShapeId::new("base"), &base_shape, &all_shapes)
-            .unwrap();
+            .expect("resolution should succeed");
         assert_eq!(resolved.len(), 2);
         // Base shape minCount should win
         if let Some(Constraint::MinCount(count)) =
@@ -989,7 +994,7 @@ mod tests {
         manager.set_conflict_resolution_strategy(ConflictResolutionStrategy::PriorityBased);
         let resolved = manager
             .resolve_shape_constraints(&ShapeId::new("base"), &base_shape, &all_shapes)
-            .unwrap();
+            .expect("resolution should succeed");
         assert_eq!(resolved.len(), 2);
         // Parent shape minCount should win (higher priority)
         if let Some(Constraint::MinCount(count)) =

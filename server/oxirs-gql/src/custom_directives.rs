@@ -271,7 +271,10 @@ impl DirectiveHandler for AuthDirectiveHandler {
         // Check required role if specified
         if let Some(requires) = directive.get_argument("requires") {
             if let Some(required_role) = requires.as_string() {
-                let user_context = context.user_context.as_ref().unwrap();
+                let user_context = context
+                    .user_context
+                    .as_ref()
+                    .expect("user_context should be set when authentication is present");
                 let user_role = user_context.get("role");
 
                 if user_role.map(|r| r.as_str()) != Some(required_role) {

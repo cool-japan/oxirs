@@ -727,7 +727,10 @@ impl TimeTravelEngine {
         // Use most specific index available
         if let Some(ref aggregate_ids) = query.filter.aggregate_ids {
             if aggregate_ids.len() == 1 {
-                let aggregate_id = aggregate_ids.iter().next().unwrap();
+                let aggregate_id = aggregate_ids
+                    .iter()
+                    .next()
+                    .expect("aggregate_ids validated to have exactly 1 element");
                 return Ok(index.find_events_by_aggregate(aggregate_id, start_time, end_time));
             }
         }
@@ -859,8 +862,16 @@ impl TimeTravelEngine {
         let total_events = events.len();
 
         let time_range_covered = if !events.is_empty() {
-            let min_time = events.iter().map(|e| e.metadata().timestamp).min().unwrap();
-            let max_time = events.iter().map(|e| e.metadata().timestamp).max().unwrap();
+            let min_time = events
+                .iter()
+                .map(|e| e.metadata().timestamp)
+                .min()
+                .expect("events validated to be non-empty");
+            let max_time = events
+                .iter()
+                .map(|e| e.metadata().timestamp)
+                .max()
+                .expect("events validated to be non-empty");
             Some((min_time, max_time))
         } else {
             None

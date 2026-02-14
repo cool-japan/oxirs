@@ -145,7 +145,7 @@ impl TokenBucket {
     fn now() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs()
     }
 
@@ -199,7 +199,7 @@ impl SlidingWindowCounter {
     fn current_window(window_duration: u64) -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs()
             / window_duration
     }
@@ -207,7 +207,7 @@ impl SlidingWindowCounter {
     fn now_seconds() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs()
     }
 
@@ -288,7 +288,7 @@ impl FixedWindowCounter {
     fn now() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs()
     }
 

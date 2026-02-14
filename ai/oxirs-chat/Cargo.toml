@@ -22,12 +22,7 @@ oxirs-embed.workspace = true
 
 # SciRS2 dependencies for AI chat and NLP
 scirs2-core = { workspace = true, features = ["random"] }
-scirs2-text = { workspace = true }
-scirs2-neural = { workspace = true }
-scirs2-stats = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-tokio-stream = "0.1"
-hyper = { workspace = true, features = ["full"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 anyhow.workspace = true
@@ -39,20 +34,16 @@ chrono.workspace = true
 
 # HTTP Server and WebSocket
 axum = { version = "0.7", features = ["ws"] }
-axum-extra = { version = "0.9", features = ["typed-header"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
-tokio-tungstenite = "0.28"
 futures-util = "0.3"
 
 # LLM Integration
 reqwest = { workspace = true, features = ["stream"] }
 async-openai = "0.27"
-async-stream = "0.3"
 # anthropic-sdk = "0.1" # Add when available
 
 # Storage and Caching
-redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 uuid.workspace = true
 
 # Configuration
@@ -62,7 +53,6 @@ serde_yaml.workspace = true
 
 # Metrics and Monitoring
 metrics = "0.23"
-metrics-exporter-prometheus = "0.18"
 
 # Template Engine for SPARQL
 handlebars = "5.1"
@@ -76,24 +66,12 @@ hmac = "0.12"
 sha2 = "0.10"
 
 # Session persistence and state management
-sled = "0.34"
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 zstd.workspace = true
 
 # Encryption
 aes-gcm.workspace = true
-argon2.workspace = true
 base64 = "0.22"
-
-# Natural Language Processing
-tokenizers = "0.22"
-
-# OpenTelemetry for monitoring
-opentelemetry = { workspace = true }
-opentelemetry-prometheus = "0.27"
-
-# Rate limiting
-governor = "0.10"
 
 # Random number generation removed - use scirs2-core::random instead
 fastrand.workspace = true

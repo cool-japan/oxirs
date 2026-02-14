@@ -218,8 +218,8 @@ impl N3Parser {
     ) -> TurtleResult<Predicate> {
         if term == "a" {
             // rdf:type shorthand
-            let rdf_type =
-                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+            let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                .expect("valid IRI");
             Ok(Predicate::NamedNode(rdf_type))
         } else if term.starts_with('<') && term.ends_with('>') {
             // Absolute IRI
@@ -274,14 +274,14 @@ impl N3Parser {
             // Integer literal
             let literal = Literal::new_typed_literal(
                 term,
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("valid IRI"),
             );
             Ok(Object::Literal(literal))
         } else if term.parse::<f64>().is_ok() {
             // Decimal literal
             let literal = Literal::new_typed_literal(
                 term,
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").expect("valid IRI"),
             );
             Ok(Object::Literal(literal))
         } else {

@@ -157,7 +157,8 @@ impl Query {
     /// Formats using the SPARQL S-Expression syntax
     pub fn to_sse(&self) -> String {
         let mut buffer = String::new();
-        self.fmt_sse(&mut buffer).unwrap();
+        self.fmt_sse(&mut buffer)
+            .expect("writing to String should not fail");
         buffer
     }
 

@@ -83,9 +83,10 @@ impl MultiModalTransformer {
         graph_emb: &Array1<f32>,
     ) -> Result<Array1<f32>> {
         let mut concatenated = Vec::new();
-        concatenated.extend_from_slice(vision_emb.as_slice().unwrap());
-        concatenated.extend_from_slice(language_emb.as_slice().unwrap());
-        concatenated.extend_from_slice(graph_emb.as_slice().unwrap());
+        concatenated.extend_from_slice(vision_emb.as_slice().expect("array should be contiguous"));
+        concatenated
+            .extend_from_slice(language_emb.as_slice().expect("array should be contiguous"));
+        concatenated.extend_from_slice(graph_emb.as_slice().expect("array should be contiguous"));
 
         let concat_array = Array1::from_vec(concatenated);
 

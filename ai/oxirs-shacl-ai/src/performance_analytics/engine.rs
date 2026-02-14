@@ -63,7 +63,10 @@ impl PerformanceAnalyticsEngine {
             return Ok(());
         }
 
-        let mut monitor = self.real_time_monitor.lock().unwrap();
+        let mut monitor = self
+            .real_time_monitor
+            .lock()
+            .expect("lock should not be poisoned");
 
         // Use tokio runtime to execute async method
         let rt = tokio::runtime::Runtime::new().map_err(|e| {
@@ -75,7 +78,10 @@ impl PerformanceAnalyticsEngine {
 
     /// Stop real-time monitoring
     pub fn stop_monitoring(&self) -> crate::Result<()> {
-        let mut monitor = self.real_time_monitor.lock().unwrap();
+        let mut monitor = self
+            .real_time_monitor
+            .lock()
+            .expect("lock should not be poisoned");
 
         // Use tokio runtime to execute async method
         let rt = tokio::runtime::Runtime::new().map_err(|e| {
@@ -87,7 +93,10 @@ impl PerformanceAnalyticsEngine {
 
     /// Get current performance statistics
     pub fn get_statistics(&self) -> PerformanceAnalyticsStatistics {
-        self.statistics.read().unwrap().clone()
+        self.statistics
+            .read()
+            .expect("read lock should not be poisoned")
+            .clone()
     }
 
     /// Update configuration

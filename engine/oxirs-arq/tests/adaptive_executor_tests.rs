@@ -88,7 +88,7 @@ async fn test_deviation_based_trigger() -> Result<()> {
     // Test Case 3: Re-optimization triggered by 5x deviation
     let config = AdaptiveConfig {
         enable_adaptive: true,
-        deviation_threshold: 2.0, // Low threshold to trigger easily
+        deviation_threshold: 2.0,    // Low threshold to trigger easily
         re_opt_trigger_seconds: 100, // High value, won't trigger on time
         ..Default::default()
     };
@@ -97,8 +97,7 @@ async fn test_deviation_based_trigger() -> Result<()> {
 
     // Create a plan with poor estimates
     let mut plan = create_test_plan(100.0, 100); // Estimate 100 rows
-    plan.operator_estimates
-        .insert("scan_op".to_string(), 100); // Estimate 100 rows from scan
+    plan.operator_estimates.insert("scan_op".to_string(), 100); // Estimate 100 rows from scan
 
     let query = Algebra::Bgp(vec![]);
 
@@ -132,8 +131,8 @@ async fn test_plan_switching() -> Result<()> {
 
     // Check if any plan switches occurred
     let metrics = executor.get_metrics();
-    // Plan switches may or may not occur depending on actual vs estimated costs
-    assert!(metrics.plan_switches.get() >= 0);
+    // Verify metrics are accessible (plan switches may or may not occur)
+    let _plan_switches = metrics.plan_switches.get();
 
     Ok(())
 }
@@ -219,10 +218,7 @@ async fn test_pathological_query() -> Result<()> {
     let elapsed = start.elapsed();
 
     assert!(results.rows > 0);
-    println!(
-        "Pathological query executed in {:?}ms",
-        elapsed.as_millis()
-    );
+    println!("Pathological query executed in {:?}ms", elapsed.as_millis());
 
     // Should have triggered re-optimization due to poor estimates
     let metrics = executor.get_metrics();
@@ -491,9 +487,9 @@ async fn test_adaptive_metrics() -> Result<()> {
 
     // Access metrics
     let metrics = executor.get_metrics();
-    assert!(metrics.reoptimizations.get() >= 0);
-    assert!(metrics.plan_switches.get() >= 0);
-    assert!(metrics.queries_improved.get() >= 0);
+    let _reoptimizations = metrics.reoptimizations.get();
+    let _plan_switches = metrics.plan_switches.get();
+    let _queries_improved = metrics.queries_improved.get();
 
     Ok(())
 }

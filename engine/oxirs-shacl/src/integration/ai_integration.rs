@@ -234,7 +234,7 @@ impl AIValidator {
             .filter(|(id, _)| id != &shape.id)
             .collect();
 
-        similar.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similar.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         similar.truncate(top_k);
 
         Ok(similar

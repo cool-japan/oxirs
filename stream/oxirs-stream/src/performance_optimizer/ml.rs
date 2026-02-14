@@ -257,7 +257,10 @@ impl PerformancePredictor {
         self.metrics_history.len() >= self.min_training_samples
             && (self.last_training.is_none()
                 || SystemTime::now()
-                    .duration_since(self.last_training.unwrap())
+                    .duration_since(
+                        self.last_training
+                            .expect("last_training checked to be Some above"),
+                    )
                     .unwrap_or(Duration::from_secs(0))
                     >= self.training_interval)
     }

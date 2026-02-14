@@ -373,7 +373,11 @@ impl PersonalizedSearchEngine {
         }
 
         // Re-rank by combined score
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Apply diversity
         let diversified = self.apply_diversity(&results, k)?;
@@ -492,7 +496,11 @@ impl PersonalizedSearchEngine {
                     }
                 }
 
-                results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+                results.sort_by(|a, b| {
+                    b.score
+                        .partial_cmp(&a.score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
             }
             ColdStartStrategy::RandomExploration => {
                 // Add random exploration
@@ -505,11 +513,19 @@ impl PersonalizedSearchEngine {
                     result.score += random_val;
                 }
 
-                results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+                results.sort_by(|a, b| {
+                    b.score
+                        .partial_cmp(&a.score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
             }
             ColdStartStrategy::DemographicBased => {
                 // Use demographic-based recommendations (simplified)
-                results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+                results.sort_by(|a, b| {
+                    b.score
+                        .partial_cmp(&a.score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
             }
             ColdStartStrategy::Hybrid => {
                 // Combine multiple strategies
@@ -524,7 +540,11 @@ impl PersonalizedSearchEngine {
                     }
                 }
 
-                results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+                results.sort_by(|a, b| {
+                    b.score
+                        .partial_cmp(&a.score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
             }
         }
 
@@ -655,7 +675,8 @@ impl PersonalizedSearchEngine {
                 }
 
                 // Sort by similarity and keep top 10
-                similar_users.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                similar_users
+                    .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 similar_users.truncate(10);
 
                 // Update user profile (need to drop read lock and acquire write lock)

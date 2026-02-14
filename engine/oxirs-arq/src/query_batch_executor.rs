@@ -805,7 +805,7 @@ mod tests {
         assert_ne!(id1, id2);
 
         // High priority query should be first
-        let queue = executor.queue.lock().unwrap();
+        let queue = executor.queue.lock().expect("lock should not be poisoned");
         assert_eq!(queue[0].priority, QueryPriority::High);
         assert_eq!(queue[1].priority, QueryPriority::Normal);
     }
@@ -881,7 +881,7 @@ mod tests {
         executor.add_query("Q3", QueryPriority::Normal).unwrap();
         executor.add_query("Q4", QueryPriority::High).unwrap();
 
-        let queue = executor.queue.lock().unwrap();
+        let queue = executor.queue.lock().expect("lock should not be poisoned");
 
         // With fair scheduling, order should be: High, High, Normal, Normal
         assert_eq!(queue[0].priority, QueryPriority::High);

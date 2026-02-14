@@ -262,19 +262,19 @@ impl RdfXmlStreamingSink for MemoryRdfXmlSink {
 
     fn process_triple_stream(&mut self, triples: Vec<Triple>) -> Result<(), Self::Error> {
         let count = triples.len();
-        let mut triples_guard = self.triples.write().unwrap();
+        let mut triples_guard = self.triples.write().expect("lock should not be poisoned");
         triples_guard.extend(triples);
         
-        let mut stats_guard = self.statistics.write().unwrap();
+        let mut stats_guard = self.statistics.write().expect("lock should not be poisoned");
         stats_guard.triples_processed += count;
         Ok(())
     }
 
     fn process_namespace_declaration(&mut self, prefix: &str, namespace: &str) -> Result<(), Self::Error> {
-        let mut namespaces_guard = self.namespaces.write().unwrap();
+        let mut namespaces_guard = self.namespaces.write().expect("lock should not be poisoned");
         namespaces_guard.insert(prefix.to_string(), namespace.to_string());
         
-        let mut stats_guard = self.statistics.write().unwrap();
+        let mut stats_guard = self.statistics.write().expect("lock should not be poisoned");
         stats_guard.namespaces_declared += 1;
         Ok(())
     }
@@ -285,6 +285,6 @@ impl RdfXmlStreamingSink for MemoryRdfXmlSink {
     }
 
     fn get_statistics(&self) -> RdfXmlSinkStatistics {
-        self.statistics.read().unwrap().clone()
+        self.statistics.read().expect("lock should not be poisoned").clone()
     }
 }

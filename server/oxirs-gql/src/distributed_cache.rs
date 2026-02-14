@@ -208,8 +208,9 @@ impl RedisDistributedCache {
         }
 
         let local_cache = lru::LruCache::new(
-            std::num::NonZeroUsize::new(config.local_cache_size)
-                .unwrap_or(std::num::NonZeroUsize::new(1000).unwrap()),
+            std::num::NonZeroUsize::new(config.local_cache_size).unwrap_or(
+                std::num::NonZeroUsize::new(1000).expect("1000 is a valid NonZeroUsize"),
+            ),
         );
 
         let compression = if config.compression_enabled {

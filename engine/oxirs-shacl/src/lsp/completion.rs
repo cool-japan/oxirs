@@ -319,7 +319,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_completion_provider() {
-        let store = Arc::new(ConcreteStore::new().unwrap());
+        let store = Arc::new(ConcreteStore::new().expect("store creation should succeed"));
         let provider = CompletionProvider::new(store);
 
         let text = "sh:";
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_completion_context_extraction() {
-        let store = Arc::new(ConcreteStore::new().unwrap());
+        let store = Arc::new(ConcreteStore::new().expect("store creation should succeed"));
         let provider = CompletionProvider::new(store);
 
         let context = provider.get_completion_context("sh:", Position::new(0, 3));

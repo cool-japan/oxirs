@@ -298,7 +298,7 @@ impl ServiceEndpointManager {
         }
 
         // Sort by similarity score (descending)
-        all_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        all_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Apply global limit if specified
         if let Some(limit) = query.global_limit {

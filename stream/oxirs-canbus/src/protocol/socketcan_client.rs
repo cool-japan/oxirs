@@ -471,8 +471,8 @@ mod tests {
 
     #[test]
     fn test_convert_standard_frame() {
-        let id = CanId::standard(0x123).unwrap();
-        let frame = CanFrame::new(id, vec![0xDE, 0xAD, 0xBE, 0xEF]).unwrap();
+        let id = CanId::standard(0x123).expect("valid standard CAN ID");
+        let frame = CanFrame::new(id, vec![0xDE, 0xAD, 0xBE, 0xEF]).expect("valid CAN frame");
 
         // Test conversion to socket frame
         let socket_frame = CanbusClient::convert_to_socket_frame(&frame);
@@ -481,8 +481,8 @@ mod tests {
 
     #[test]
     fn test_convert_extended_frame() {
-        let id = CanId::extended(0x18FEF100).unwrap();
-        let frame = CanFrame::new(id, vec![0x01, 0x02, 0x03, 0x04]).unwrap();
+        let id = CanId::extended(0x18FEF100).expect("valid extended CAN ID");
+        let frame = CanFrame::new(id, vec![0x01, 0x02, 0x03, 0x04]).expect("valid CAN frame");
 
         // Test conversion to socket frame
         let socket_frame = CanbusClient::convert_to_socket_frame(&frame);
@@ -491,7 +491,7 @@ mod tests {
 
     #[test]
     fn test_frame_too_large_for_standard() {
-        let id = CanId::standard(0x123).unwrap();
+        let id = CanId::standard(0x123).expect("valid standard CAN ID");
         let frame = CanFrame {
             id,
             data: vec![0; 10], // 10 bytes, too large for standard CAN

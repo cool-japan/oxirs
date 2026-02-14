@@ -438,7 +438,7 @@ ex:subject ex:predicate "object" .
 
         let result = converter
             .convert_string(turtle, RdfFormat::Turtle, RdfFormat::NTriples)
-            .unwrap();
+            .expect("conversion should succeed");
 
         assert!(result.contains("<http://example.org/subject>"));
         assert!(result.contains("<http://example.org/predicate>"));
@@ -452,7 +452,7 @@ ex:subject ex:predicate "object" .
 
         let result = converter
             .convert_string(ntriples, RdfFormat::NTriples, RdfFormat::Turtle)
-            .unwrap();
+            .expect("conversion should succeed");
 
         assert!(result.contains("<http://example.org/s>"));
     }
@@ -465,9 +465,9 @@ ex:subject ex:predicate "object" .
 
         converter
             .convert_stream(turtle, &mut output, RdfFormat::Turtle, RdfFormat::NTriples)
-            .unwrap();
+            .expect("conversion should succeed");
 
-        let result = String::from_utf8(output).unwrap();
+        let result = String::from_utf8(output).expect("valid UTF-8");
         assert!(result.contains("<http://s>"));
     }
 

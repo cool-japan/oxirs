@@ -21,7 +21,7 @@
 //!  SG_ EngineSpeed : 0|16@1+ (0.125,0) [0|8031.875] "rpm" Dashboard
 //! "#;
 //!
-//! let db = parse_dbc(dbc_content).unwrap();
+//! let db = parse_dbc(dbc_content).expect("DBC parsing should succeed");
 //! let config = RdfMappingConfig {
 //!     device_id: "vehicle001".to_string(),
 //!     base_iri: "http://automotive.example.com/vehicle".to_string(),
@@ -31,9 +31,9 @@
 //! let mut mapper = CanRdfMapper::new(db, config);
 //!
 //! // Map a CAN frame to RDF triples
-//! let id = CanId::standard(2024).unwrap();
-//! let frame = CanFrame::new(id, vec![0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).unwrap();
-//! let triples = mapper.map_frame(&frame).unwrap();
+//! let id = CanId::standard(2024).expect("valid standard CAN ID");
+//! let frame = CanFrame::new(id, vec![0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).expect("valid CAN frame");
+//! let triples = mapper.map_frame(&frame).expect("frame mapping should succeed");
 //!
 //! // Each triple includes provenance
 //! for generated in &triples {

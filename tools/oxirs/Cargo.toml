@@ -19,21 +19,14 @@ scirs2-graph = { workspace = true }  # Graph algorithms (betweenness, closeness,
 oxirs-core.workspace = true
 oxirs-arq.workspace = true
 oxirs-fuseki.workspace = true
-oxirs-gql.workspace = true
 oxirs-tdb.workspace = true
 oxirs-samm.workspace = true
-
-# Phase D: Industrial Connectivity (0.1.0)
-oxirs-tsdb.workspace = true
-oxirs-modbus.workspace = true
-oxirs-canbus.workspace = true
 clap.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
 anyhow.workspace = true
-thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 reqwest.workspace = true  # HTTP client for triplestore migrations

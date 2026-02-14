@@ -780,7 +780,7 @@ impl IntoResponse for StaticAssetResponse {
             StaticAssetResponse::NotModified => Response::builder()
                 .status(StatusCode::NOT_MODIFIED)
                 .body(Body::empty())
-                .unwrap(),
+                .expect("response body build should succeed"),
             StaticAssetResponse::Content {
                 content,
                 content_type,
@@ -810,7 +810,7 @@ impl IntoResponse for StaticAssetResponse {
                 builder
                     .header(header::CONTENT_LENGTH, content.len())
                     .body(Body::from(content))
-                    .unwrap()
+                    .expect("response body build should succeed")
             }
         }
     }

@@ -1059,26 +1059,31 @@ mod tests {
         let shapes = IndexMap::new();
         let config = StreamingValidationConfig::default();
 
-        let mut engine = StreamingValidationEngine::new(shapes, config).unwrap();
+        let mut engine =
+            StreamingValidationEngine::new(shapes, config).expect("construction should succeed");
 
         // Create test stream
         let events = vec![
             StreamEvent::Addition(Triple::new(
-                NamedNode::new("http://example.org/person1").unwrap(),
-                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
-                NamedNode::new("http://example.org/Person").unwrap(),
+                NamedNode::new("http://example.org/person1").expect("valid IRI"),
+                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                    .expect("valid IRI"),
+                NamedNode::new("http://example.org/Person").expect("valid IRI"),
             )),
             StreamEvent::BatchEnd,
             StreamEvent::StreamEnd,
         ];
 
         let test_stream = stream::iter(events);
-        let mut result_stream = engine.validate_stream(test_stream).await.unwrap();
+        let mut result_stream = engine
+            .validate_stream(test_stream)
+            .await
+            .expect("async operation should succeed");
 
         // Collect results
         let mut results = Vec::new();
         while let Some(result) = result_stream.next().await {
-            results.push(result.unwrap());
+            results.push(result.expect("next element should exist"));
         }
 
         assert_eq!(results.len(), 1);

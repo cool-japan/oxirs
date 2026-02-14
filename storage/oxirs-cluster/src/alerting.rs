@@ -625,7 +625,11 @@ impl AlertingManager {
             return Ok(());
         };
 
-        let email_config = self.config.email_channel.as_ref().unwrap();
+        let email_config = self
+            .config
+            .email_channel
+            .as_ref()
+            .expect("email_channel config should be present when email transport exists");
 
         for to_address in &email_config.to_addresses {
             let email = Message::builder()
@@ -658,7 +662,11 @@ impl AlertingManager {
             return Ok(());
         };
 
-        let slack_config = self.config.slack_channel.as_ref().unwrap();
+        let slack_config = self
+            .config
+            .slack_channel
+            .as_ref()
+            .expect("slack_channel config should be present when slack client exists");
 
         let mut payload = PayloadBuilder::new()
             .text(format!(

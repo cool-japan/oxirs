@@ -91,7 +91,7 @@ mod tests {
             result.err()
         );
 
-        let aspect = result.unwrap();
+        let aspect = result.expect("result should be Ok");
         assert_eq!(aspect.name(), "TestAspect");
         assert_eq!(aspect.properties().len(), 1);
         assert_eq!(aspect.properties()[0].name(), "testProperty");
@@ -165,7 +165,7 @@ mod tests {
             result.err()
         );
 
-        let aspect = result.unwrap();
+        let aspect = result.expect("result should be Ok");
         assert_eq!(aspect.properties().len(), 3);
         assert_eq!(aspect.properties()[0].name(), "prop1");
         assert_eq!(aspect.properties()[1].name(), "prop2");
@@ -193,7 +193,7 @@ mod tests {
             result.err()
         );
 
-        let aspect = result.unwrap();
+        let aspect = result.expect("result should be Ok");
         assert_eq!(aspect.operations().len(), 1);
         assert_eq!(aspect.operations()[0].name(), "testOperation");
     }

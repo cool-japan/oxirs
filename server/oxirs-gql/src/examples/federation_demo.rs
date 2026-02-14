@@ -215,7 +215,7 @@ async fn demo_federated_queries(manager: &EnhancedFederationManager) -> Result<(
 
     info!("Executing simple federated query...");
     let result1 = manager.execute_query(
-        &juniper::parse_query(query1).unwrap(),
+        &juniper::parse_query(query1).expect("parse should succeed for valid input"),
         std::collections::HashMap::new(),
         ()
     ).await;
@@ -252,7 +252,7 @@ async fn demo_federated_queries(manager: &EnhancedFederationManager) -> Result<(
 
     info!("Executing complex multi-service query...");
     let result2 = manager.execute_query(
-        &juniper::parse_query(query2).unwrap(),
+        &juniper::parse_query(query2).expect("parse should succeed for valid input"),
         std::collections::HashMap::new(),
         ()
     ).await;
@@ -283,7 +283,7 @@ async fn demo_federated_queries(manager: &EnhancedFederationManager) -> Result<(
 
     info!("Executing batched federation query...");
     let result3 = manager.execute_query(
-        &juniper::parse_query(query3).unwrap(),
+        &juniper::parse_query(query3).expect("parse should succeed for valid input"),
         std::collections::HashMap::new(),
         ()
     ).await;
