@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Raft-backed distributed dataset for high availability and horizontal scaling"
 keywords = ["distributed", "raft", "clustering", "consensus", "rdf"]
 categories = ["database", "network-programming", "concurrency"]
+readme = "README.md"
 rust-version.workspace = true
 
 [dependencies]

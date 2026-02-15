@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Vector index abstractions for semantic similarity and AI-augmented querying"
 keywords = ["vector-search", "embeddings", "similarity", "hnsw", "rdf"]
 categories = ["algorithms", "data-structures", "science"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

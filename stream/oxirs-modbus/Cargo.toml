@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Modbus TCP/RTU protocol support for OxiRS semantic web platform"
 keywords = ["modbus", "industrial-iot", "plc", "rdf", "semantic-web"]
 categories = ["network-programming", "embedded", "database"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

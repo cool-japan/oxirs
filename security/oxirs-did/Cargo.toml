@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "W3C DID and Verifiable Credentials implementation with Signed RDF Graphs for OxiRS"
 keywords = ["did", "vc", "w3c", "rdf", "cryptography"]
 categories = ["cryptography", "authentication", "web-programming"]
+readme = "README.md"
 rust-version.workspace = true
 
 [lints]

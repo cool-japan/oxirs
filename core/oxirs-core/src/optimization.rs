@@ -898,7 +898,7 @@ pub mod simd {
 
             for &forbidden in &forbidden_chars {
                 let forbidden_vec = u8x32::splat(forbidden);
-                let matches = data.cmp_eq(forbidden_vec);
+                let matches = data.simd_eq(forbidden_vec);
                 if matches.any() {
                     return false;
                 }

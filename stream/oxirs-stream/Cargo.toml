@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Real-time streaming support with Kafka/NATS/MQTT/OPC-UA I/O, RDF Patch, and SPARQL Update delta"
 keywords = ["streaming", "kafka", "mqtt", "opcua", "industry40"]
 categories = ["network-programming", "asynchronous", "database"]
+readme = "README.md"
 rust-version.workspace = true
 
 [dependencies]
@@ -59,8 +60,8 @@ hmac = "0.12"
 sha2 = "0.10"
 hex = "0.4"
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
-prost = "0.13"
-prost-types = "0.13"
+prost = "0.14"
+prost-types = "0.14"
 apache-avro = "0.21"
 tokio-stream = "0.1"
 lz4_flex.workspace = true
@@ -85,7 +86,7 @@ once_cell.workspace = true
 serde_yaml.workspace = true
 
 [build-dependencies]
-prost-build = { version = "0.13", optional = true }
+prost-build = { version = "0.14", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true

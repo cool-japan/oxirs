@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Semantic Aspect Meta Model (SAMM) implementation for OxiRS"
 keywords = ["samm", "aspect-model", "semantic-web", "rdf", "digital-twin"]
 categories = ["data-structures", "parser-implementations", "web-programming"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

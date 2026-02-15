@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "GraphRAG: Hybrid Vector + Graph Retrieval-Augmented Generation for OxiRS"
 keywords = ["graphrag", "rag", "knowledge-graph", "vector-search", "llm"]
 categories = ["database", "science", "text-processing"]
+readme = "README.md"
 rust-version.workspace = true
 
 [lints]

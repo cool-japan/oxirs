@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "GeoSPARQL implementation for spatial data and queries"
 keywords = ["geosparql", "spatial", "geometry", "gis", "rdf"]
 categories = ["algorithms", "data-structures", "science"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

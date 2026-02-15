@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Knowledge graph embeddings with TransE, ComplEx, and custom models"
 keywords = ["embeddings", "knowledge-graph", "machine-learning", "ai", "rdf"]
 categories = ["science", "algorithms", "data-structures"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

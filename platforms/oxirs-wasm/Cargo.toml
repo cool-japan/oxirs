@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "WebAssembly bindings for OxiRS - Run RDF/SPARQL in the browser"
 keywords = ["wasm", "webassembly", "rdf", "sparql", "browser"]
 categories = ["wasm", "web-programming", "database"]
+readme = "README.md"
 rust-version.workspace = true
 
 [lib]

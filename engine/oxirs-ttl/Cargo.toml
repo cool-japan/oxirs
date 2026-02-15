@@ -9,6 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 keywords = ["turtle", "rdf", "parser", "n-triples", "trig"]
 categories = ["parser-implementations", "encoding", "data-structures"]
+readme = "README.md"
 rust-version.workspace = true
 
 [dependencies]

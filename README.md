@@ -3,9 +3,9 @@
 > A Rust-native, modular platform for Semantic Web, SPARQL 1.2, GraphQL, and AI-augmented reasoning
 
 [![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.1.1 - Maintenance Release - Released February 9, 2026
+**Status**: v0.2.0 - Performance, Search & Geo - Released February 15, 2026
 
 🎉 **Production Ready**: Complete SPARQL 1.1/1.2 implementation with **3.8x faster optimizer**, industrial IoT support, and AI-powered features. 13,123 tests passing with zero warnings.
 
@@ -26,7 +26,7 @@ OxiRS aims to be a **Rust-first, JVM-free** alternative to Apache Jena + Fuseki 
 
 ```bash
 # Install the CLI tool
-cargo install oxirs --version 0.1.1
+cargo install oxirs --version 0.2.0
 
 # Or build from source
 git clone https://github.com/cool-japan/oxirs.git
@@ -34,11 +34,11 @@ cd oxirs
 cargo build --workspace --release
 ```
 
-### What's New in v0.1.1 (February 9, 2026) 🎉
+### What's New in v0.2.0 (February 15, 2026) 🎉
 
 **Maintenance Release: Code Quality & Stability**
 
-OxiRS v0.1.1 is a maintenance release focused on code quality, refactoring, and removing unverified experimental features:
+OxiRS v0.2.0 is a performance and feature release focused on query optimization, search, and geo capabilities:
 
 **Core Capabilities:**
 - 🚀 **Complete SPARQL 1.1/1.2** - Full W3C compliance with advanced query optimization
@@ -231,7 +231,7 @@ oxirs/                  # Cargo workspace root
     └─ benchmarks/       # SP2Bench, WatDiv, LDBC SGS
 ```
 
-## Feature Matrix (v0.1.1)
+## Feature Matrix (v0.2.0)
 
 | Capability | Oxirs crate(s) | Status | Jena / Fuseki parity |
 |------------|----------------|--------|----------------------|
@@ -286,7 +286,7 @@ oxirs/                  # Cargo workspace root
 - ⏳ Planned: Not yet implemented
 - 🔸 Partial/plug-in support in Jena
 
-**Quality Metrics (v0.1.1):**
+**Quality Metrics (v0.2.0):**
 - **13,123 tests passing** (100% pass rate, 136 skipped)
 - **Zero compilation warnings** (enforced with `-D warnings`)
 - **95%+ test coverage** across all modules
@@ -527,7 +527,7 @@ See [LICENSE](LICENSE) for details.
 - **Issues & RFCs**: https://github.com/cool-japan/oxirs
 - **Maintainer**: @cool-japan (KitaSan)
 
-## Release Notes (v0.1.1)
+## Release Notes (v0.2.0)
 
 📄 Full notes live in [CHANGELOG.md](CHANGELOG.md).
 
@@ -545,7 +545,7 @@ See [LICENSE](LICENSE) for details.
 - Full-text search (`oxirs-textsearch`) planned for v0.2.0
 - AI modules under active refactoring (February 2026): Removed 27,000+ lines of unverified code to improve stability and maintainability (issue #61)
 
-### Quality Metrics (v0.1.1)
+### Quality Metrics (v0.2.0)
 - ✅ **Zero warnings** - Strict `-D warnings` enforced across all 22 crates
 - ✅ **13,123 tests passing** - 100% pass rate (136 skipped)
 - ✅ **95%+ test coverage** - Comprehensive test suites
@@ -573,7 +573,7 @@ Production Impact (100K QPS):
 ```
 
 ### Getting Started
-- Install the CLI with `cargo install oxirs --version 0.1.1`
+- Install the CLI with `cargo install oxirs --version 0.2.0`
 - Adaptive optimization is enabled by default (no configuration needed)
 - CUDA support is opt-in via feature flags
 - See [CHANGELOG.md](CHANGELOG.md) for detailed release notes
@@ -582,4 +582,4 @@ Production Impact (100K QPS):
 
 *"Rust makes memory safety table stakes; OxiRS makes knowledge-graph engineering table stakes."*
 
-**v0.1.1 - Maintenance Release - February 9, 2026**
+**v0.2.0 - Performance, Search & Geo - February 15, 2026**

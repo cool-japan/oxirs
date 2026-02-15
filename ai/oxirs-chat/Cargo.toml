@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "RAG chat API with LLM integration and natural language to SPARQL translation"
 keywords = ["rag", "chat", "llm", "ai", "semantic-search"]
 categories = ["science", "algorithms", "web-programming"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
@@ -47,7 +48,7 @@ async-openai = "0.27"
 uuid.workspace = true
 
 # Configuration
-config = "0.14"
+config = "0.15"
 toml = "0.9"
 serde_yaml.workspace = true
 

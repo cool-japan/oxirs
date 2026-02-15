@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "SHACL Core + SHACL-SPARQL validator for RDF data validation"
 keywords = ["shacl", "validation", "rdf", "constraints", "semantic-web"]
 categories = ["data-structures", "parser-implementations", "science"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

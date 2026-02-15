@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "AI-powered shape induction and data repair suggestions for SHACL validation"
 keywords = ["shacl", "ai", "machine-learning", "validation", "rdf"]
 categories = ["science", "algorithms", "data-structures"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

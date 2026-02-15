@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "SERVICE planner and GraphQL stitching for federated SPARQL queries"
 keywords = ["federation", "distributed-query", "sparql", "graphql", "rdf"]
 categories = ["network-programming", "database", "algorithms"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

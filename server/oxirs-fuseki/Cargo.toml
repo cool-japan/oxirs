@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "SPARQL 1.1/1.2 HTTP protocol server with Fuseki-compatible configuration"
 keywords = ["sparql", "http-server", "fuseki", "rdf-server", "semantic-web"]
 categories = ["web-programming", "database", "network-programming"]
+readme = "README.md"
 rust-version.workspace = true
 
 [lints]
@@ -43,7 +44,7 @@ serde_json = "1.0"
 serde_yaml.workspace = true
 serde_urlencoded = "0.7"
 toml = "0.9"
-config = "0.14"
+config = "0.15"
 figment = { version = "0.10", features = ["toml", "yaml", "env"] }
 
 # Error handling
@@ -79,7 +80,7 @@ http-body-util = "0.1"
 
 # Metrics and monitoring
 prometheus = { version = "0.14", optional = true }
-axum-prometheus = { version = "0.7", optional = true }
+axum-prometheus = { version = "0.10", optional = true }
 metrics = "0.23"
 metrics-exporter-prometheus = "0.18"
 
@@ -184,7 +185,7 @@ dotenv = "0.15"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 tokio-test = "0.4"
-axum-test = "14.10"
+axum-test = "15"
 http = { workspace = true }
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }

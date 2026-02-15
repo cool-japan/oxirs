@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Time-series optimizations for OxiRS semantic web platform"
 keywords = ["time-series", "iot", "compression", "rdf", "sparql"]
 categories = ["database", "compression", "algorithms"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

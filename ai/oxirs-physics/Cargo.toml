@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Physics-informed digital twin simulation bridge for OxiRS"
 keywords = ["physics", "simulation", "digital-twin", "scirs2", "neuro-symbolic"]
 categories = ["science", "simulation"]
+readme = "README.md"
 rust-version.workspace = true
 
 [dependencies]

@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Jena-style SPARQL algebra with extension points and query optimization"
 keywords = ["sparql", "query-engine", "optimization", "rdf", "jena"]
 categories = ["database", "algorithms", "data-structures"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

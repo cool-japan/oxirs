@@ -135,7 +135,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 
 # Storage and persistence
-rocksdb = "0.22"
+rocksdb = "0.24"
 
 # Text search (upgraded to 0.25 for lru security fix)
 tantivy = "0.25"

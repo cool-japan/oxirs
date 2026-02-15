@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Command-line interface for OxiRS - import, export, migration, and benchmarking tools"
 keywords = ["cli", "sparql", "rdf", "command-line", "semantic-web"]
 categories = ["command-line-utilities", "database", "development-tools"]
+readme = "README.md"
 rust-version.workspace = true
 
 [dependencies]
@@ -62,7 +63,7 @@ hostname = "0.4"    # System hostname for test reports
 md5.workspace = true
 hex = "0.4"         # Hex encoding for checksums
 rust_xlsxwriter = { version = "0.79", optional = true }  # Excel XLSX file generation (feature-gated for Pure Rust policy)
-inferno = "0.11"    # Flame graph generation for profiling
+inferno = "0.12"    # Flame graph generation for profiling
 printpdf = "0.8"    # PDF generation for reports
 handlebars = "5.1"  # Template engine for custom output formats
 
