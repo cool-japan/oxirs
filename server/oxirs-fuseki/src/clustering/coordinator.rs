@@ -458,7 +458,10 @@ impl QueryCoordinator {
 
         // TODO: Implement proper result merging
         // For now, return the first result
-        Ok(results.into_iter().next().unwrap())
+        Ok(results
+            .into_iter()
+            .next()
+            .expect("results should not be empty after check"))
     }
 
     /// Clone for async operations

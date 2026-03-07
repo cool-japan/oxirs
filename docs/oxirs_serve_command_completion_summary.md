@@ -378,9 +378,9 @@ oxirs serve /var/oxirs/prod/oxirs.toml --host 0.0.0.0 --port 80
 **Recommended Action**:
 1. Update TODO.md to mark serve command as complete
 2. Move to next P1 priority task from TODO.md
-3. Consider serve command feature-complete for v0.1.0
+3. Consider serve command feature-complete for v0.2.0
 
 ---
 
 *Verification completed: January 7, 2026*
-*OxiRS v0.1.0 - Serve Command Ready*
+*OxiRS v0.2.0 - Serve Command Ready*

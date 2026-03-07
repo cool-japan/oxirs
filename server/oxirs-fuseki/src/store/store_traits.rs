@@ -24,6 +24,6 @@ impl std::fmt::Debug for Store {
 
 impl Default for Store {
     fn default() -> Self {
-        Self::new().unwrap()
+        Self::new().expect("Store creation should succeed")
     }
 }

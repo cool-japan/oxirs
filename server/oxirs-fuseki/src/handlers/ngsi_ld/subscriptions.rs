@@ -169,7 +169,10 @@ pub async fn create_subscription(
     // Store subscription
     store.store_subscription(&subscription).await?;
 
-    let id = subscription.id.as_ref().unwrap();
+    let id = subscription
+        .id
+        .as_ref()
+        .expect("subscription id should be set after validation");
 
     Ok((
         StatusCode::CREATED,

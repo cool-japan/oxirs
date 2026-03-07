@@ -294,7 +294,10 @@ impl TemporalAnnotationStore {
         }
 
         let transaction_time = Utc::now();
-        let chain = self.version_chains.get_mut(&triple_hash).unwrap();
+        let chain = self
+            .version_chains
+            .get_mut(&triple_hash)
+            .expect("version chain should exist after contains_key check");
 
         let previous_version = chain.get_current().map(|v| v.version);
 

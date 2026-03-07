@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn test_single_read() {
         let store = MrswStore::<TripleStore>::new();
-        let reader = store.read().unwrap();
+        let reader = store.read().expect("store lock should not be poisoned");
 
         assert_eq!(reader.len(), 0);
 
@@ -427,9 +427,9 @@ mod tests {
         let store = MrswStore::<TripleStore>::new();
 
         // Acquire multiple read locks
-        let _reader1 = store.read().unwrap();
-        let _reader2 = store.read().unwrap();
-        let _reader3 = store.read().unwrap();
+        let _reader1 = store.read().expect("store lock should not be poisoned");
+        let _reader2 = store.read().expect("store lock should not be poisoned");
+        let _reader3 = store.read().expect("store lock should not be poisoned");
 
         let stats = store.metrics();
         assert_eq!(stats.total_reads, 3);
@@ -441,12 +441,12 @@ mod tests {
         let store = MrswStore::<TripleStore>::new();
 
         {
-            let mut writer = store.write().unwrap();
+            let mut writer = store.write().expect("store lock should not be poisoned");
             let triple = create_test_triple(1);
             writer.insert(triple);
         }
 
-        let reader = store.read().unwrap();
+        let reader = store.read().expect("store lock should not be poisoned");
         assert_eq!(reader.len(), 1);
 
         let stats = store.metrics();
@@ -460,12 +460,12 @@ mod tests {
 
         // Insert initial data
         {
-            let mut writer = store.write().unwrap();
+            let mut writer = store.write().expect("store lock should not be poisoned");
             writer.insert(create_test_triple(1));
         }
 
         // Reader sees the data
-        let reader = store.read().unwrap();
+        let reader = store.read().expect("store lock should not be poisoned");
         assert_eq!(reader.len(), 1);
 
         // Can't get write lock while reader exists
@@ -482,7 +482,9 @@ mod tests {
         let store_clone = Arc::clone(&store);
         let writer_handle = thread::spawn(move || {
             for i in 0..num_writes {
-                let mut writer = store_clone.write().unwrap();
+                let mut writer = store_clone
+                    .write()
+                    .expect("store lock should not be poisoned");
                 writer.insert(create_test_triple(i));
             }
         });
@@ -494,7 +496,9 @@ mod tests {
                 thread::spawn(move || {
                     let mut reads = 0;
                     for _ in 0..50 {
-                        let reader = store_clone.read().unwrap();
+                        let reader = store_clone
+                            .read()
+                            .expect("store lock should not be poisoned");
                         let _ = reader.len();
                         reads += 1;
                     }
@@ -519,12 +523,12 @@ mod tests {
 
         // Perform 10 reads
         for _ in 0..10 {
-            let _ = store.read().unwrap();
+            let _ = store.read().expect("store lock should not be poisoned");
         }
 
         // Perform 1 write
         {
-            let _ = store.write().unwrap();
+            let _ = store.write().expect("store lock should not be poisoned");
         }
 
         let stats = store.metrics();
@@ -545,8 +549,8 @@ mod tests {
         let store = MrswStore::<TripleStore>::new();
 
         // Perform some operations
-        let _ = store.read().unwrap();
-        let _ = store.write().unwrap();
+        let _ = store.read().expect("store lock should not be poisoned");
+        let _ = store.write().expect("store lock should not be poisoned");
 
         // Reset metrics
         store.reset_metrics();

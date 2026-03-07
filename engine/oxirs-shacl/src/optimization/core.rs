@@ -888,11 +888,11 @@ mod tests {
         let cache = ConstraintCache::new(100, Duration::from_secs(60));
 
         let constraint = Constraint::Class(ClassConstraint {
-            class_iri: NamedNode::new("http://example.org/Person").unwrap(),
+            class_iri: NamedNode::new("http://example.org/Person").expect("valid IRI"),
         });
 
         let context = ConstraintContext::new(
-            Term::NamedNode(NamedNode::new("http://example.org/john").unwrap()),
+            Term::NamedNode(NamedNode::new("http://example.org/john").expect("valid IRI")),
             ShapeId::new("PersonShape"),
         );
 
@@ -906,11 +906,12 @@ mod tests {
 
         let constraints = vec![
             Constraint::Class(ClassConstraint {
-                class_iri: NamedNode::new("http://example.org/Person").unwrap(),
+                class_iri: NamedNode::new("http://example.org/Person").expect("valid IRI"),
             }),
             Constraint::MinCount(MinCountConstraint { min_count: 1 }),
             Constraint::Datatype(DatatypeConstraint {
-                datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+                datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#string")
+                    .expect("valid IRI"),
             }),
         ];
 
@@ -1165,7 +1166,10 @@ impl IncrementalValidationEngine {
             let properties_hash = self.hash_node_properties(store, node)?;
 
             let needs_validation = force_revalidate || {
-                let previous_results = self.previous_results.read().unwrap();
+                let previous_results = self
+                    .previous_results
+                    .read()
+                    .expect("read lock should not be poisoned");
                 match previous_results.get(node) {
                     Some(snapshot) => {
                         // Check if constraints or properties changed
@@ -1194,7 +1198,10 @@ impl IncrementalValidationEngine {
                 };
 
                 {
-                    let mut previous_results = self.previous_results.write().unwrap();
+                    let mut previous_results = self
+                        .previous_results
+                        .write()
+                        .expect("write lock should not be poisoned");
                     previous_results.insert(node.clone(), snapshot);
                 }
 
@@ -1326,12 +1333,18 @@ impl IncrementalValidationEngine {
 
     /// Clear validation history
     pub fn clear_history(&mut self) {
-        self.previous_results.write().unwrap().clear();
+        self.previous_results
+            .write()
+            .expect("write lock should not be poisoned")
+            .clear();
     }
 
     /// Get statistics about incremental validation
     pub fn get_incremental_stats(&self) -> IncrementalValidationStats {
-        let snapshots = self.previous_results.read().unwrap();
+        let snapshots = self
+            .previous_results
+            .read()
+            .expect("read lock should not be poisoned");
         IncrementalValidationStats {
             cached_validations: snapshots.len(),
             memory_usage_mb: snapshots.len() * std::mem::size_of::<ValidationSnapshot>()
@@ -1347,7 +1360,10 @@ impl IncrementalValidationEngine {
         nodes: &[Term],
     ) -> Result<ChangesDelta> {
         let mut delta = ChangesDelta::new();
-        let snapshots = self.previous_results.read().unwrap();
+        let snapshots = self
+            .previous_results
+            .read()
+            .expect("read lock should not be poisoned");
 
         for node in nodes {
             // Check if we have a previous snapshot for this node
@@ -1413,7 +1429,7 @@ impl IncrementalValidationEngine {
                 property_change.node.as_str(),
                 timestamp
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .as_millis()
             );
 
@@ -1423,7 +1439,7 @@ impl IncrementalValidationEngine {
                 "current_hash": property_change.current_hash,
                 "detected_at": property_change.detected_at
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .as_secs()
             });
 
@@ -1444,7 +1460,7 @@ impl IncrementalValidationEngine {
                 constraint_change.node.as_str(),
                 timestamp
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .as_millis()
             );
 
@@ -1472,7 +1488,7 @@ impl IncrementalValidationEngine {
                 new_node.as_str(),
                 timestamp
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .as_millis()
             );
 
@@ -1480,7 +1496,7 @@ impl IncrementalValidationEngine {
                 "node": new_node.as_str(),
                 "detected_at": timestamp
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .as_secs()
             });
 
@@ -1501,7 +1517,7 @@ impl IncrementalValidationEngine {
                 deleted_node.as_str(),
                 timestamp
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .as_millis()
             );
 
@@ -1509,7 +1525,7 @@ impl IncrementalValidationEngine {
                 "node": deleted_node.as_str(),
                 "detected_at": timestamp
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .as_secs()
             });
 

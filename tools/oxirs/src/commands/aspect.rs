@@ -954,7 +954,11 @@ fn to_snake_case(s: &str) -> String {
             if i > 0 {
                 result.push('_');
             }
-            result.push(ch.to_lowercase().next().unwrap());
+            result.push(
+                ch.to_lowercase()
+                    .next()
+                    .expect("lowercase conversion should produce at least one char"),
+            );
         } else {
             result.push(ch);
         }
@@ -1529,7 +1533,9 @@ async fn edit_newversion(
             "  Would create: {}/{}/{}",
             namespace,
             new_version,
-            file.file_name().unwrap().to_string_lossy()
+            file.file_name()
+                .expect("file path should have a file name")
+                .to_string_lossy()
         );
     }
 

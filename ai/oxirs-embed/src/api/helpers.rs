@@ -71,7 +71,7 @@ pub async fn get_production_model_version(state: &ApiState) -> Result<Uuid> {
         Ok(uuid)
     } else {
         // Return first available model as fallback
-        let (uuid, _) = models.iter().next().unwrap();
+        let (uuid, _) = models.iter().next().expect("models should not be empty");
         Ok(*uuid)
     }
 }

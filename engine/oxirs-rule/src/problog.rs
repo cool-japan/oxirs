@@ -735,7 +735,7 @@ impl ProbLogEngine {
         use scirs2_core::random::rng;
 
         let mut rng_instance = rng();
-        let uniform = Uniform::new(0.0, 1.0).unwrap();
+        let uniform = Uniform::new(0.0, 1.0).expect("distribution parameters are valid");
         let mut sampled_facts = HashSet::new();
 
         // Sample probabilistic facts

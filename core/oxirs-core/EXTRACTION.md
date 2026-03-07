@@ -184,4 +184,4 @@ This work is based on the excellent OxiGraph project. We are grateful to the Oxi
 
 ## License
 
-The extracted code maintains the same license as OxiGraph (MIT/Apache-2.0 dual license).
+The extracted code maintains the same license as OxiGraph (Apache-2.0).

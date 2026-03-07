@@ -7,6 +7,8 @@
 pub mod adaptive;
 /// Adaptive compression algorithm selection
 pub mod adaptive_selection;
+/// Compression benchmarking — measures throughput and ratio for all algorithms
+pub mod benchmark;
 /// Bitmap compression for boolean and sparse data
 pub mod bitmap;
 /// Bloom filter for membership testing
@@ -31,9 +33,11 @@ pub mod run_length;
 pub mod simd_scan;
 /// Snappy compression algorithm (fast with good ratio)
 pub mod snappy;
+/// Zstandard compression algorithm (excellent ratio)
+pub mod triple_delta;
 /// Unified compression interface with automatic algorithm selection
 pub mod unified;
-/// Zstandard compression algorithm (excellent ratio)
+pub mod zstd_codec;
 pub mod zstd_compression;
 
 use anyhow::Result;
@@ -43,19 +47,26 @@ use std::fmt;
 
 // Re-export main compression implementations
 pub use adaptive::AdaptiveCompressor;
+pub use adaptive::{AdaptiveCodec, CodecType};
 pub use adaptive_selection::{AdaptiveCompressionSelector, SelectionStrategy};
+pub use benchmark::{BenchmarkResult, CompressionAlgo, CompressionBenchmark};
 pub use bitmap::{BitmapRoaringEncoder, BitmapWAHEncoder};
 pub use bloom::{BloomFilter, BloomFilterStats};
 pub use brotli_compression::BrotliCompressor;
 pub use column_store::ColumnStoreCompressor;
 pub use delta::DeltaEncoder;
 pub use dictionary::AdaptiveDictionary;
+pub use dictionary::TripleDictionary;
 pub use frame_of_reference::FrameOfReferenceEncoder;
 pub use lz4::Lz4Compressor;
 pub use prefix::{CompressedString, CompressionStats as PrefixCompressionStats, PrefixCompressor};
 pub use run_length::RunLengthEncoder;
 pub use simd_scan::SimdScanner;
 pub use snappy::SnappyCompressor;
+pub use triple_delta::{
+    DeltaStoreConfig, DeltaStoreStats, EncodedDeltaLog, TripleDelta, TripleDeltaStore,
+};
+pub use zstd_codec::{ZstdCodec, ZstdCodecStats};
 pub use zstd_compression::ZstdCompressor;
 
 /// Advanced compression types

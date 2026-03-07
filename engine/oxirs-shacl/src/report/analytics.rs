@@ -973,8 +973,14 @@ impl ValidationReportAnalytics {
 
         // Simple trend direction calculation
         let trend_direction = if quality_trend.len() > 1 {
-            let first_quality = quality_trend.first().unwrap().1;
-            let last_quality = quality_trend.last().unwrap().1;
+            let first_quality = quality_trend
+                .first()
+                .expect("collection validated to be non-empty")
+                .1;
+            let last_quality = quality_trend
+                .last()
+                .expect("collection should not be empty")
+                .1;
 
             if last_quality > first_quality + 5.0 {
                 TrendDirection::Increasing

@@ -6,9 +6,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Modbus TCP/RTU protocol support for OxiRS semantic web platform"
+description = "Modbus TCP/RTU/ASCII/TLS protocol support for OxiRS semantic web platform"
 keywords = ["modbus", "industrial-iot", "plc", "rdf", "semantic-web"]
 categories = ["network-programming", "embedded", "database"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
@@ -22,6 +23,7 @@ scirs2-core.workspace = true
 
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync", "rt-multi-thread"] }
 tokio-serial = { version = "5.4", optional = true }
+tokio-rustls = { version = "0.26.1", optional = true }
 bytes = "1.11"
 
 serde = { workspace = true, features = ["derive"] }
@@ -38,6 +40,11 @@ async-trait = "0.1"
 deadpool = "0.12"
 reqwest = { workspace = true, optional = true }
 
+# TLS dependencies (feature-gated)
+rustls = { version = "0.23.19", optional = true, default-features = false, features = ["std", "tls12", "ring"] }
+rustls-pemfile = { version = "2.2.0", optional = true }
+webpki-roots = { version = "1.0.6", optional = true }
+
 [dev-dependencies]
 tokio-test = "0.4"
 criterion.workspace = true
@@ -46,6 +53,7 @@ criterion.workspace = true
 default = ["tcp", "rtu"]
 tcp = []
 rtu = ["tokio-serial"]
+tls = ["tokio-rustls", "rustls", "rustls-pemfile", "webpki-roots"]
 samm-integration = []
 testing = []
 http-client = ["reqwest"]

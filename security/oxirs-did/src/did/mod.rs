@@ -8,6 +8,14 @@ pub use document::DidDocument;
 pub use methods::DidKeyMethod;
 #[cfg(feature = "did-web")]
 pub use methods::DidWebMethod;
+pub use methods::{ChainNamespace, DidPkh, DidPkhMethod};
+#[cfg(feature = "did-ethr")]
+pub use methods::{DidEthr, DidEthrMethod, EthNetwork};
+#[cfg(feature = "did-ion")]
+pub use methods::{
+    DidIon, DidIonMethod, IonCreateOperation, IonDocument, IonKeyDescriptor, IonKeyPurpose,
+    IonOperationType, IonService,
+};
 pub use resolver::DidResolver;
 
 use crate::{DidError, DidResult};

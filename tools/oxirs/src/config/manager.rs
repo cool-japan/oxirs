@@ -457,7 +457,7 @@ mod tests {
         // Use a lock to ensure single-threaded access to environment variables
         use std::sync::Mutex;
         static ENV_LOCK: Mutex<()> = Mutex::new(());
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().expect("lock should not be poisoned");
 
         // Set test environment variables - safe because we have exclusive access via mutex
         std::env::set_var("OXIRS_DEFAULT_FORMAT", "ntriples");

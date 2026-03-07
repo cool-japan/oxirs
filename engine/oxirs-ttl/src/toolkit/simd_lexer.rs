@@ -408,7 +408,7 @@ mod tests {
         let pos = lexer.scan_until_delimiter(0);
         assert_eq!(pos, 12); // Stops at space
         assert_eq!(
-            std::str::from_utf8(lexer.slice(0, pos)).unwrap(),
+            std::str::from_utf8(lexer.slice(0, pos)).expect("valid UTF-8"),
             "prefix:local"
         );
     }

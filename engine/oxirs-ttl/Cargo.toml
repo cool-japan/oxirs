@@ -9,15 +9,17 @@ repository.workspace = true
 homepage.workspace = true
 keywords = ["turtle", "rdf", "parser", "n-triples", "trig"]
 categories = ["parser-implementations", "encoding", "data-structures"]
+readme = "README.md"
 rust-version.workspace = true
 
 [dependencies]
 oxirs-core.workspace = true
-memchr = "2.7"
+memchr = "2.8"
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 futures = { workspace = true }
 lazy_static = "1.5"
+serde_json = { workspace = true }
 
 # Optional async support
 tokio = { version = "1.47", features = ["io-util", "fs"], optional = true }
@@ -36,7 +38,7 @@ rdf-12 = ["oxirs-core/rdf-12"]  # RDF 1.2 features (quoted triples, directional 
 tokio-test = "0.4"
 criterion = "0.8"
 proptest = "1.7"
-tempfile = "3.24"
+tempfile = "3.25"
 
 [package.metadata.docs.rs]
 all-features = true

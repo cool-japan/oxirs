@@ -230,7 +230,7 @@ impl IncrementalParser {
                     }));
                 }
                 std::str::from_utf8(&self.buffer[..valid_up_to])
-                    .unwrap()
+                    .expect("valid UTF-8")
                     .to_string()
             }
         };
@@ -498,11 +498,13 @@ mod tests {
 
         parser
             .push_data(b"@prefix ex: <http://example.org/> .\n")
-            .unwrap();
-        parser.push_data(b"ex:s ex:p \"object\" .\n").unwrap();
+            .expect("operation should succeed");
+        parser
+            .push_data(b"ex:s ex:p \"object\" .\n")
+            .expect("push data should succeed");
         parser.push_eof();
 
-        let triples = parser.parse_available().unwrap();
+        let triples = parser.parse_available().expect("parsing should succeed");
         assert_eq!(triples.len(), 1);
         assert!(parser.is_complete());
     }
@@ -512,13 +514,21 @@ mod tests {
         let mut parser = IncrementalParser::new();
 
         // Send data in small chunks
-        parser.push_data(b"@prefix ex: <").unwrap();
-        parser.push_data(b"http://example.org/> .\n").unwrap();
-        parser.push_data(b"ex:s ex:p ").unwrap();
-        parser.push_data(b"\"object\" .\n").unwrap();
+        parser
+            .push_data(b"@prefix ex: <")
+            .expect("push data should succeed");
+        parser
+            .push_data(b"http://example.org/> .\n")
+            .expect("push data should succeed");
+        parser
+            .push_data(b"ex:s ex:p ")
+            .expect("push data should succeed");
+        parser
+            .push_data(b"\"object\" .\n")
+            .expect("push data should succeed");
         parser.push_eof();
 
-        let triples = parser.parse_available().unwrap();
+        let triples = parser.parse_available().expect("parsing should succeed");
         assert_eq!(triples.len(), 1);
     }
 
@@ -528,18 +538,22 @@ mod tests {
 
         parser
             .push_data(b"@prefix ex: <http://example.org/> .\n")
-            .unwrap();
-        parser.push_data(b"ex:s ex:p").unwrap(); // Incomplete statement
+            .expect("operation should succeed");
+        parser
+            .push_data(b"ex:s ex:p")
+            .expect("push data should succeed"); // Incomplete statement
 
-        let triples = parser.parse_available().unwrap();
+        let triples = parser.parse_available().expect("parsing should succeed");
         assert!(triples.is_empty());
         assert_eq!(parser.state(), ParseState::Incomplete);
 
         // Complete the statement
-        parser.push_data(b" \"object\" .\n").unwrap();
+        parser
+            .push_data(b" \"object\" .\n")
+            .expect("push data should succeed");
         parser.push_eof();
 
-        let triples = parser.parse_available().unwrap();
+        let triples = parser.parse_available().expect("parsing should succeed");
         assert_eq!(triples.len(), 1);
     }
 
@@ -549,13 +563,13 @@ mod tests {
 
         parser
             .push_data(b"@prefix ex: <http://example.org/> .\n")
-            .unwrap();
+            .expect("operation should succeed");
         parser
             .push_data(b"ex:a ex:p \"1\" .\nex:b ex:p \"2\" .\nex:c ex:p \"3\" .\n")
-            .unwrap();
+            .expect("operation should succeed");
         parser.push_eof();
 
-        let triples = parser.parse_available().unwrap();
+        let triples = parser.parse_available().expect("parsing should succeed");
         assert_eq!(triples.len(), 3);
     }
 
@@ -565,17 +579,21 @@ mod tests {
 
         parser
             .push_data(b"@prefix ex: <http://example.org/> .\n")
-            .unwrap();
-        parser.push_data(b"ex:a ex:p \"1\" .\n").unwrap();
-        parser.parse_available().unwrap();
+            .expect("operation should succeed");
+        parser
+            .push_data(b"ex:a ex:p \"1\" .\n")
+            .expect("push data should succeed");
+        parser.parse_available().expect("parsing should succeed");
 
         // Create checkpoint
         let checkpoint = parser.checkpoint();
 
         // Parse more
-        parser.push_data(b"ex:b ex:p \"2\" .\n").unwrap();
+        parser
+            .push_data(b"ex:b ex:p \"2\" .\n")
+            .expect("push data should succeed");
         parser.push_eof();
-        parser.parse_available().unwrap();
+        parser.parse_available().expect("parsing should succeed");
         assert_eq!(parser.triples_parsed(), 2);
 
         // Restore to checkpoint
@@ -591,21 +609,25 @@ mod tests {
         // The parser attempts to parse the entire content as one document
         parser
             .push_data(b"@prefix ex: <http://example.org/> .\n")
-            .unwrap();
-        parser.push_data(b"ex:s ex:p \"object\" .\n").unwrap();
+            .expect("operation should succeed");
+        parser
+            .push_data(b"ex:s ex:p \"object\" .\n")
+            .expect("push data should succeed");
         parser.push_eof();
 
-        let triples = parser.parse_available().unwrap();
+        let triples = parser.parse_available().expect("parsing should succeed");
         assert_eq!(triples.len(), 1);
         assert!(parser.errors().is_empty());
 
         // Now test with errors - errors are collected
         let mut parser2 = IncrementalParser::new_lenient();
-        parser2.push_data(b"invalid syntax here\n").unwrap();
+        parser2
+            .push_data(b"invalid syntax here\n")
+            .expect("push data should succeed");
         parser2.push_eof();
 
-        let _ = parser2.parse_available().unwrap(); // Should not panic
-                                                    // Errors may or may not be collected depending on parsing behavior
+        let _ = parser2.parse_available().expect("parsing should succeed"); // Should not panic
+                                                                            // Errors may or may not be collected depending on parsing behavior
     }
 
     #[test]
@@ -614,15 +636,15 @@ mod tests {
 
         parser
             .push_data(b"@prefix ex: <http://example.org/> .\n")
-            .unwrap();
-        parser.parse_available().unwrap();
+            .expect("operation should succeed");
+        parser.parse_available().expect("parsing should succeed");
 
         assert!(parser.prefixes().contains_key("ex"));
 
         parser
             .push_data(b"@prefix foaf: <http://xmlns.com/foaf/0.1/> .\n")
-            .unwrap();
-        parser.parse_available().unwrap();
+            .expect("operation should succeed");
+        parser.parse_available().expect("parsing should succeed");
 
         assert!(parser.prefixes().contains_key("ex"));
         assert!(parser.prefixes().contains_key("foaf"));
@@ -634,13 +656,13 @@ mod tests {
 
         parser
             .push_data(b"@prefix ex: <http://example.org/> .\n")
-            .unwrap();
+            .expect("operation should succeed");
         parser
             .push_data(b"ex:s ex:p \"\"\"hello\nworld\"\"\" .\n")
-            .unwrap();
+            .expect("operation should succeed");
         parser.push_eof();
 
-        let triples = parser.parse_available().unwrap();
+        let triples = parser.parse_available().expect("parsing should succeed");
         assert_eq!(triples.len(), 1);
     }
 
@@ -650,10 +672,12 @@ mod tests {
 
         parser
             .push_data(b"@prefix ex: <http://example.org/> .\n")
-            .unwrap();
-        parser.push_data(b"ex:s ex:p \"object\" .\n").unwrap();
+            .expect("operation should succeed");
+        parser
+            .push_data(b"ex:s ex:p \"object\" .\n")
+            .expect("push data should succeed");
         parser.push_eof();
-        parser.parse_available().unwrap();
+        parser.parse_available().expect("parsing should succeed");
 
         assert_eq!(parser.triples_parsed(), 1);
 
@@ -680,15 +704,17 @@ mod tests {
         // "@prefix ex: <http://example.org/> .\n" is 36 bytes
         parser
             .push_data(b"@prefix ex: <http://example.org/> .\n")
-            .unwrap();
+            .expect("operation should succeed");
         assert_eq!(parser.bytes_processed(), 36);
 
         // "ex:s ex:p \"object\" .\n" is 21 bytes
-        parser.push_data(b"ex:s ex:p \"object\" .\n").unwrap();
+        parser
+            .push_data(b"ex:s ex:p \"object\" .\n")
+            .expect("push data should succeed");
         assert_eq!(parser.bytes_processed(), 57);
 
         parser.push_eof();
-        parser.parse_available().unwrap();
+        parser.parse_available().expect("parsing should succeed");
 
         assert_eq!(parser.triples_parsed(), 1);
     }

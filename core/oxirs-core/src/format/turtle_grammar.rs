@@ -109,7 +109,8 @@ impl TurtleContext {
     /// Generate a new anonymous blank node
     pub fn generate_blank_node(&mut self) -> BlankNode {
         self.blank_node_counter += 1;
-        BlankNode::new(format!("_:gen{}", self.blank_node_counter)).unwrap()
+        BlankNode::new(format!("_:gen{}", self.blank_node_counter))
+            .expect("generated blank node format is always valid")
     }
 
     /// Check if an IRI is absolute (has scheme)

@@ -113,7 +113,7 @@ impl TuckER {
             use std::time::{SystemTime, UNIX_EPOCH};
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs()
         }));
 
@@ -291,7 +291,7 @@ impl TuckER {
             use std::time::{SystemTime, UNIX_EPOCH};
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs()
         }));
 
@@ -509,11 +509,15 @@ impl EmbeddingModel for TuckER {
 
         for object_id in 0..self.base.num_entities() {
             let score = self.score_triple_ids(subject_id, predicate_id, object_id)?;
-            let object_name = self.base.get_entity(object_id).unwrap().clone();
+            let object_name = self
+                .base
+                .get_entity(object_id)
+                .expect("entity should exist for valid id")
+                .clone();
             scores.push((object_name, score));
         }
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
 
         Ok(scores)
@@ -542,11 +546,15 @@ impl EmbeddingModel for TuckER {
 
         for subject_id in 0..self.base.num_entities() {
             let score = self.score_triple_ids(subject_id, predicate_id, object_id)?;
-            let subject_name = self.base.get_entity(subject_id).unwrap().clone();
+            let subject_name = self
+                .base
+                .get_entity(subject_id)
+                .expect("entity should exist for valid id")
+                .clone();
             scores.push((subject_name, score));
         }
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
 
         Ok(scores)
@@ -575,11 +583,15 @@ impl EmbeddingModel for TuckER {
 
         for predicate_id in 0..self.base.num_relations() {
             let score = self.score_triple_ids(subject_id, predicate_id, object_id)?;
-            let predicate_name = self.base.get_relation(predicate_id).unwrap().clone();
+            let predicate_name = self
+                .base
+                .get_relation(predicate_id)
+                .expect("relation should exist for valid id")
+                .clone();
             scores.push((predicate_name, score));
         }
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
 
         Ok(scores)

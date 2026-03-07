@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
 /// Compression algorithm
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub enum CompressionAlgorithm {
     /// Zstandard (fast, good compression)
+    #[default]
     Zstd,
     /// LZ4 (very fast, moderate compression)
     Lz4,
@@ -15,12 +16,6 @@ pub enum CompressionAlgorithm {
     Gzip,
     /// No compression
     None,
-}
-
-impl Default for CompressionAlgorithm {
-    fn default() -> Self {
-        Self::Zstd
-    }
 }
 
 /// Compressor for data
@@ -117,10 +112,7 @@ impl CompressedEmbedding {
         let compressor = Compressor::new(algorithm);
 
         // Convert f32 to bytes
-        let bytes: Vec<u8> = embeddings
-            .iter()
-            .flat_map(|f| f.to_le_bytes())
-            .collect();
+        let bytes: Vec<u8> = embeddings.iter().flat_map(|f| f.to_le_bytes()).collect();
 
         let compressed_data = compressor.compress(&bytes)?;
 
@@ -194,7 +186,8 @@ mod tests {
     #[test]
     fn test_compressed_embedding() {
         let embeddings = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
-        let compressed = CompressedEmbedding::from_embeddings(&embeddings, CompressionAlgorithm::Zstd).unwrap();
+        let compressed =
+            CompressedEmbedding::from_embeddings(&embeddings, CompressionAlgorithm::Zstd).unwrap();
 
         let decompressed = compressed.to_embeddings().unwrap();
         assert_eq!(decompressed.len(), embeddings.len());

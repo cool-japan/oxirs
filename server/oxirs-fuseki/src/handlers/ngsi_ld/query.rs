@@ -273,7 +273,7 @@ impl NgsiQueryTranslator {
 
             if !or_filters.is_empty() {
                 if or_filters.len() == 1 {
-                    filters.push(or_filters.pop().unwrap());
+                    filters.push(or_filters.pop().expect("or_filters should not be empty"));
                 } else {
                     filters.push(format!("({})", or_filters.join(" || ")));
                 }
@@ -283,7 +283,10 @@ impl NgsiQueryTranslator {
         if filters.is_empty() {
             Ok(String::new())
         } else if filters.len() == 1 {
-            Ok(format!("FILTER({})", filters.pop().unwrap()))
+            Ok(format!(
+                "FILTER({})",
+                filters.pop().expect("filters should not be empty")
+            ))
         } else {
             Ok(format!(
                 "FILTER({} && {})",

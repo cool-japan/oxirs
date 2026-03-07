@@ -622,7 +622,9 @@ impl TestHarness {
         if passed {
             Ok(())
         } else {
-            Err(anyhow!(error_message.unwrap()))
+            Err(anyhow!(
+                error_message.expect("error_message should be set when assertion fails")
+            ))
         }
     }
 
@@ -661,7 +663,9 @@ impl TestHarness {
         if passed {
             Ok(())
         } else {
-            Err(anyhow!(error_message.unwrap()))
+            Err(anyhow!(
+                error_message.expect("error_message should be set when assertion fails")
+            ))
         }
     }
 
@@ -788,7 +792,9 @@ impl TestHarness {
         if passed {
             Ok(())
         } else {
-            Err(anyhow!(error_message.unwrap()))
+            Err(anyhow!(
+                error_message.expect("error_message should be set when assertion fails")
+            ))
         }
     }
 

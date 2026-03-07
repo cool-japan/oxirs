@@ -499,7 +499,7 @@ impl HyperparameterOptimizer {
                 }
 
                 // Keep top performers
-                results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 configs = results.iter().take(n_i).map(|(c, _)| c.clone()).collect();
             }
         }
@@ -567,7 +567,7 @@ impl HyperparameterOptimizer {
             }
 
             // Selection and reproduction (simplified)
-            fitness.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            fitness.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             let survivors: Vec<_> = fitness.iter().take(population_size / 2).collect();
 
             // Create new population

@@ -522,7 +522,7 @@ impl TemporalStorage {
         let bucket_seconds = self.config.bucket_duration.num_seconds();
         let timestamp = time.timestamp();
         let bucket_timestamp = (timestamp / bucket_seconds) * bucket_seconds;
-        DateTime::from_timestamp(bucket_timestamp, 0).unwrap()
+        DateTime::from_timestamp(bucket_timestamp, 0).expect("bucket timestamp should be valid")
     }
 
     /// Update entity index

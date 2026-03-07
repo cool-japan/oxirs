@@ -710,8 +710,8 @@ mod tests {
     #[test]
     fn test_j1939_header_from_can_id() {
         // CAN ID: 0x0CF00400 (EEC1 from ECU at address 0)
-        let can_id = CanId::extended(0x0CF00400).unwrap();
-        let header = J1939Header::from_can_id(&can_id).unwrap();
+        let can_id = CanId::extended(0x0CF00400).expect("valid extended CAN ID");
+        let header = J1939Header::from_can_id(&can_id).expect("conversion should succeed");
 
         assert_eq!(header.priority, 3);
         assert_eq!(header.pgn.value(), 61444);
@@ -734,22 +734,22 @@ mod tests {
 
     #[test]
     fn test_j1939_message_from_frame() {
-        let can_id = CanId::extended(0x0CF00400).unwrap();
-        let frame =
-            CanFrame::new(can_id, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]).unwrap();
+        let can_id = CanId::extended(0x0CF00400).expect("valid extended CAN ID");
+        let frame = CanFrame::new(can_id, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])
+            .expect("valid CAN frame");
 
-        let message = J1939Message::from_frame(&frame).unwrap();
+        let message = J1939Message::from_frame(&frame).expect("conversion should succeed");
         assert_eq!(message.header.pgn.value(), 61444);
         assert_eq!(message.data.len(), 8);
     }
 
     #[test]
     fn test_j1939_message_extract_u16() {
-        let can_id = CanId::extended(0x0CF00400).unwrap();
-        let frame =
-            CanFrame::new(can_id, vec![0x34, 0x12, 0x78, 0x56, 0x00, 0x00, 0x00, 0x00]).unwrap();
+        let can_id = CanId::extended(0x0CF00400).expect("valid extended CAN ID");
+        let frame = CanFrame::new(can_id, vec![0x34, 0x12, 0x78, 0x56, 0x00, 0x00, 0x00, 0x00])
+            .expect("valid CAN frame");
 
-        let message = J1939Message::from_frame(&frame).unwrap();
+        let message = J1939Message::from_frame(&frame).expect("conversion should succeed");
         assert_eq!(message.extract_u16(0), Some(0x1234));
         assert_eq!(message.extract_u16(2), Some(0x5678));
     }
@@ -759,7 +759,7 @@ mod tests {
         let mut tp = TransportProtocol::new();
 
         // BAM announcement (PGN 60416)
-        let bam_id = CanId::extended(0x1CECFF00).unwrap(); // Priority 7, PGN 60416, SA 0
+        let bam_id = CanId::extended(0x1CECFF00).expect("valid extended CAN ID"); // Priority 7, PGN 60416, SA 0
         let bam_data = vec![
             tp_control::BAM,
             0x09,
@@ -770,7 +770,7 @@ mod tests {
             0xF0,
             0x00, // PGN 61444 (0xF004) in little-endian
         ];
-        let bam_frame = CanFrame::new(bam_id, bam_data).unwrap();
+        let bam_frame = CanFrame::new(bam_id, bam_data).expect("valid CAN frame");
 
         assert!(tp.process_frame(&bam_frame).is_none());
         assert_eq!(tp.active_transfer_count(), 1);
@@ -781,7 +781,7 @@ mod tests {
         let mut tp = TransportProtocol::new();
 
         // BAM announcement
-        let bam_id = CanId::extended(0x1CECFF00).unwrap();
+        let bam_id = CanId::extended(0x1CECFF00).expect("valid extended CAN ID");
         let bam_data = vec![
             tp_control::BAM,
             0x09,
@@ -792,22 +792,22 @@ mod tests {
             0xF0,
             0x00, // PGN 61444 (0xF004) in little-endian
         ];
-        let bam_frame = CanFrame::new(bam_id, bam_data).unwrap();
+        let bam_frame = CanFrame::new(bam_id, bam_data).expect("valid CAN frame");
         tp.process_frame(&bam_frame);
 
         // Data packet 1 (PGN 60160)
-        let dt_id = CanId::extended(0x1CEBFF00).unwrap();
+        let dt_id = CanId::extended(0x1CEBFF00).expect("valid extended CAN ID");
         let dt1_data = vec![0x01, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11];
-        let dt1_frame = CanFrame::new(dt_id, dt1_data).unwrap();
+        let dt1_frame = CanFrame::new(dt_id, dt1_data).expect("valid CAN frame");
         assert!(tp.process_frame(&dt1_frame).is_none());
 
         // Data packet 2
         let dt2_data = vec![0x02, 0x22, 0x33, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
-        let dt2_frame = CanFrame::new(dt_id, dt2_data).unwrap();
+        let dt2_frame = CanFrame::new(dt_id, dt2_data).expect("valid CAN frame");
         let message = tp.process_frame(&dt2_frame);
 
         assert!(message.is_some());
-        let msg = message.unwrap();
+        let msg = message.expect("message should exist");
         assert_eq!(msg.header.pgn.value(), 61444);
         assert_eq!(msg.data.len(), 9);
         assert!(msg.is_multipacket);
@@ -847,9 +847,9 @@ mod tests {
     fn test_j1939_processor() {
         let mut processor = J1939Processor::new();
 
-        let can_id = CanId::extended(0x0CF00400).unwrap();
-        let frame =
-            CanFrame::new(can_id, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]).unwrap();
+        let can_id = CanId::extended(0x0CF00400).expect("valid extended CAN ID");
+        let frame = CanFrame::new(can_id, vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])
+            .expect("valid CAN frame");
 
         let message = processor.process(&frame);
         assert!(message.is_some());
@@ -857,9 +857,9 @@ mod tests {
 
     #[test]
     fn test_extract_bits() {
-        let can_id = CanId::extended(0x0CF00400).unwrap();
-        let frame = CanFrame::new(can_id, vec![0b10101010, 0b11001100]).unwrap();
-        let message = J1939Message::from_frame(&frame).unwrap();
+        let can_id = CanId::extended(0x0CF00400).expect("valid extended CAN ID");
+        let frame = CanFrame::new(can_id, vec![0b10101010, 0b11001100]).expect("valid CAN frame");
+        let message = J1939Message::from_frame(&frame).expect("conversion should succeed");
 
         // Extract bits 0-3 from byte 0
         let bits = message.extract_bits(0, 0, 4);

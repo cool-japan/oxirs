@@ -902,3 +902,235 @@ impl ClosedConstraint {
         Ok(ConstraintEvaluationResult::Satisfied)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{PropertyPath, ShapeId};
+    use oxirs_core::{
+        model::{GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Term},
+        ConcreteStore,
+    };
+
+    fn make_iri(s: &str) -> Term {
+        Term::NamedNode(NamedNode::new(s).expect("valid IRI"))
+    }
+
+    fn plain_lit(s: &str) -> Term {
+        Term::Literal(Literal::new(s))
+    }
+
+    fn focus_node_term() -> Term {
+        make_iri("http://example.org/focusNode")
+    }
+
+    fn shape_id(s: &str) -> ShapeId {
+        ShapeId::new(s)
+    }
+
+    fn pred_path(p: &str) -> PropertyPath {
+        PropertyPath::Predicate(NamedNode::new(p).expect("valid IRI"))
+    }
+
+    fn base_ctx(values: Vec<Term>) -> ConstraintContext {
+        ConstraintContext::new(focus_node_term(), shape_id("http://example.org/shape"))
+            .with_path(pred_path("http://example.org/prop"))
+            .with_values(values)
+    }
+
+    fn insert_type_triple(store: &ConcreteStore, subject: &str, rdf_type: &str) {
+        let subj = Subject::from(NamedNode::new(subject).expect("IRI"));
+        let pred = Predicate::from(
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("IRI"),
+        );
+        let obj = Object::from(NamedNode::new(rdf_type).expect("IRI"));
+        let quad = Quad::new(subj, pred, obj, GraphName::DefaultGraph);
+        store.insert_quad(quad).expect("insert");
+    }
+
+    // ---- QualifiedValueShapeConstraint: validate() ----
+
+    #[test]
+    fn test_qualified_value_shape_validate_ok_min_only() {
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_min_count(1);
+        assert!(c.validate().is_ok(), "Min count only should validate");
+    }
+
+    #[test]
+    fn test_qualified_value_shape_validate_ok_max_only() {
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_max_count(5);
+        assert!(c.validate().is_ok(), "Max count only should validate");
+    }
+
+    #[test]
+    fn test_qualified_value_shape_validate_ok_min_max() {
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_min_count(1)
+            .with_qualified_max_count(3);
+        assert!(c.validate().is_ok(), "Min and max count should validate");
+    }
+
+    #[test]
+    fn test_qualified_value_shape_validate_min_greater_than_max_error() {
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_min_count(5)
+            .with_qualified_max_count(3);
+        assert!(c.validate().is_err(), "Min > Max should fail validation");
+    }
+
+    #[test]
+    fn test_qualified_value_shape_validate_no_counts_error() {
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"));
+        assert!(
+            c.validate().is_err(),
+            "No min or max count should fail validation"
+        );
+    }
+
+    // ---- QualifiedValueShapeConstraint: evaluate() with no registry (fallback) ----
+
+    #[test]
+    fn test_qualified_min_empty_values_satisfied() {
+        // No values, min_count = 0: satisfied
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_min_count(0);
+        let store = ConcreteStore::new().expect("store");
+        let ctx = base_ctx(vec![]);
+        assert!(c.evaluate(&ctx, &store).expect("eval").is_satisfied());
+    }
+
+    #[test]
+    fn test_qualified_min_positive_empty_values_violated() {
+        // No values, min_count = 1: violated
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_min_count(1);
+        let store = ConcreteStore::new().expect("store");
+        let ctx = base_ctx(vec![]);
+        assert!(c.evaluate(&ctx, &store).expect("eval").is_violated());
+    }
+
+    #[test]
+    fn test_qualified_max_zero_empty_values_satisfied() {
+        // No values, max_count = 0: satisfied
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_max_count(0);
+        let store = ConcreteStore::new().expect("store");
+        let ctx = base_ctx(vec![]);
+        assert!(c.evaluate(&ctx, &store).expect("eval").is_satisfied());
+    }
+
+    #[test]
+    fn test_qualified_max_with_friend_type_satisfied() {
+        // FriendShape fallback: value that has rdf:type Friend => conforms
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_min_count(1)
+            .with_qualified_max_count(2);
+        let store = ConcreteStore::new().expect("store");
+        let friend_iri = "http://example.org/bob";
+        insert_type_triple(&store, friend_iri, "http://example.org/Friend");
+
+        let ctx = base_ctx(vec![make_iri(friend_iri)]);
+        // The fallback checks if value has rdf:type Friend => conforms => count=1 >= min=1
+        assert!(c.evaluate(&ctx, &store).expect("eval").is_satisfied());
+    }
+
+    #[test]
+    fn test_qualified_min_with_non_friend_violated() {
+        // FriendShape fallback: value that does NOT have rdf:type Friend => non-conforming
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_min_count(1);
+        let store = ConcreteStore::new().expect("store");
+        // Do not insert type triple, so the value does not conform
+        let ctx = base_ctx(vec![make_iri("http://example.org/stranger")]);
+        // Count conforming = 0 < min_count = 1 => violated
+        assert!(c.evaluate(&ctx, &store).expect("eval").is_violated());
+    }
+
+    #[test]
+    fn test_qualified_max_exceeded_violated() {
+        // FriendShape fallback: 3 friends, max_count = 2 => violated
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/FriendShape"))
+            .with_qualified_max_count(2);
+        let store = ConcreteStore::new().expect("store");
+        for i in 1..=3 {
+            let friend_iri = format!("http://example.org/friend{i}");
+            insert_type_triple(&store, &friend_iri, "http://example.org/Friend");
+        }
+        let ctx = base_ctx(vec![
+            make_iri("http://example.org/friend1"),
+            make_iri("http://example.org/friend2"),
+            make_iri("http://example.org/friend3"),
+        ]);
+        assert!(c.evaluate(&ctx, &store).expect("eval").is_violated());
+    }
+
+    #[test]
+    fn test_qualified_disjoint_flag_is_stored() {
+        let c = QualifiedValueShapeConstraint::new(shape_id("http://example.org/S"))
+            .with_qualified_min_count(1)
+            .with_qualified_value_shapes_disjoint(true);
+        assert!(
+            c.qualified_value_shapes_disjoint,
+            "Disjoint flag should be true"
+        );
+    }
+
+    // ---- ClosedConstraint tests ----
+
+    #[test]
+    fn test_closed_constraint_validate_ok() {
+        let allowed = vec![make_iri("http://example.org/name")];
+        let c = ClosedConstraint::new(allowed);
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn test_closed_empty_focus_node_violated() {
+        let c = ClosedConstraint::new(vec![]);
+        let store = ConcreteStore::new().expect("store");
+        // Literal as focus node is invalid subject
+        let ctx = ConstraintContext::new(plain_lit("invalid"), shape_id("http://example.org/S"))
+            .with_path(pred_path("http://example.org/prop"))
+            .with_values(vec![]);
+        let result = c.evaluate(&ctx, &store).expect("eval");
+        assert!(
+            result.is_violated(),
+            "Literal focus node should be violated"
+        );
+    }
+
+    #[test]
+    fn test_closed_no_extra_properties_satisfied() {
+        let allowed_pred = "http://example.org/name";
+        let c = ClosedConstraint::new(vec![make_iri(allowed_pred)]);
+        let store = ConcreteStore::new().expect("store");
+        // Insert a triple using the allowed property
+        let subj = Subject::from(NamedNode::new("http://example.org/focusNode").expect("IRI"));
+        let pred = Predicate::from(NamedNode::new(allowed_pred).expect("IRI"));
+        let obj = Object::from(Literal::new("Alice"));
+        store
+            .insert_quad(Quad::new(subj, pred, obj, GraphName::DefaultGraph))
+            .expect("insert");
+        let ctx = base_ctx(vec![]);
+        assert!(c.evaluate(&ctx, &store).expect("eval").is_satisfied());
+    }
+
+    #[test]
+    fn test_closed_extra_property_violated() {
+        let allowed_pred = "http://example.org/name";
+        let extra_pred = "http://example.org/unknownProp";
+        let c = ClosedConstraint::new(vec![make_iri(allowed_pred)]);
+        let store = ConcreteStore::new().expect("store");
+        // Insert a triple using an extra (not-allowed) property
+        let subj = Subject::from(NamedNode::new("http://example.org/focusNode").expect("IRI"));
+        let pred = Predicate::from(NamedNode::new(extra_pred).expect("IRI"));
+        let obj = Object::from(Literal::new("SomeValue"));
+        store
+            .insert_quad(Quad::new(subj, pred, obj, GraphName::DefaultGraph))
+            .expect("insert");
+        let ctx = base_ctx(vec![]);
+        assert!(c.evaluate(&ctx, &store).expect("eval").is_violated());
+    }
+}

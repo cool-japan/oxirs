@@ -504,7 +504,7 @@ impl PerformanceInsightsAnalyzer {
             .iter()
             .map(|d| d.as_secs_f64() * 1000.0)
             .collect();
-        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         if !times.is_empty() {
             self.query_stats.p50_latency_ms = self.percentile(&times, 0.5);

@@ -207,14 +207,16 @@ impl PatternOptimizer {
             let best_a =
                 a.1.iter()
                     .map(|s| s.selectivity)
-                    .min_by(|x, y| x.partial_cmp(y).unwrap())
+                    .min_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or(1.0);
             let best_b =
                 b.1.iter()
                     .map(|s| s.selectivity)
-                    .min_by(|x, y| x.partial_cmp(y).unwrap())
+                    .min_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or(1.0);
-            best_a.partial_cmp(&best_b).unwrap()
+            best_a
+                .partial_cmp(&best_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Build execution order considering variable bindings
@@ -248,7 +250,9 @@ impl PatternOptimizer {
                     (pos, idx, strategy)
                 })
                 .min_by(|(_, _, a), (_, _, b)| {
-                    a.estimated_cost.partial_cmp(&b.estimated_cost).unwrap()
+                    a.estimated_cost
+                        .partial_cmp(&b.estimated_cost)
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 })
                 .ok_or_else(|| OxirsError::Query("Failed to find next pattern".to_string()))?;
 
@@ -460,7 +464,11 @@ impl PatternOptimizer {
     ) -> Result<PatternStrategy, OxirsError> {
         strategies
             .iter()
-            .min_by(|a, b| a.estimated_cost.partial_cmp(&b.estimated_cost).unwrap())
+            .min_by(|a, b| {
+                a.estimated_cost
+                    .partial_cmp(&b.estimated_cost)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .cloned()
             .ok_or_else(|| OxirsError::Query("No valid strategy found".to_string()))
     }

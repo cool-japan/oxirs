@@ -847,11 +847,17 @@ mod tests {
             created_at: Utc::now(),
         };
 
-        registry.register_model(model.clone()).await.unwrap();
+        registry
+            .register_model(model.clone())
+            .await
+            .expect("async operation should succeed");
 
         let retrieved = registry.get_model("test-model").await;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().name, "Test Model");
+        assert_eq!(
+            retrieved.expect("operation should succeed").name,
+            "Test Model"
+        );
     }
 
     #[tokio::test]
@@ -862,12 +868,15 @@ mod tests {
         engine
             .load_model("test-model".to_string(), Box::new(model))
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let mut inputs = HashMap::new();
         inputs.insert("input".to_string(), Array2::from_elem((2, 10), 1.0));
 
-        let outputs = engine.infer("test-model", inputs).await.unwrap();
+        let outputs = engine
+            .infer("test-model", inputs)
+            .await
+            .expect("async operation should succeed");
         assert!(!outputs.is_empty());
     }
 
@@ -891,7 +900,7 @@ mod tests {
                 ModelFormat::ONNX,
             )
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(result.success);
     }
@@ -913,7 +922,7 @@ mod tests {
         let model = integration
             .import_from_huggingface("bert-base-uncased")
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(model.framework, MLFramework::HuggingFace);
         assert_eq!(model.name, "bert-base-uncased");
@@ -927,7 +936,7 @@ mod tests {
         engine
             .load_model("test-model".to_string(), Box::new(model))
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let batch_inputs: Vec<HashMap<String, Array2<f64>>> = (0..3)
             .map(|_| {
@@ -940,7 +949,7 @@ mod tests {
         let results = engine
             .batch_infer("test-model", batch_inputs)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(results.len(), 3);
     }

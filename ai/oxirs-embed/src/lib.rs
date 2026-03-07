@@ -85,7 +85,7 @@
 //!
 //! ## GPU Acceleration Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use oxirs_embed::{GpuAccelerationConfig, GpuAccelerationManager};
 //!
 //! # async fn example() -> anyhow::Result<()> {
@@ -120,14 +120,15 @@
 
 #![allow(dead_code)]
 
+pub mod ab_testing;
 pub mod acceleration;
 pub mod adaptive_learning;
 pub mod advanced_profiler;
+pub mod alignment;
 #[cfg(feature = "api-server")]
 pub mod api;
 pub mod application_tasks;
 pub mod batch_processing;
-pub mod biological_computing;
 pub mod biomedical_embeddings;
 pub mod caching;
 pub mod causal_representation_learning;
@@ -135,7 +136,6 @@ pub mod cloud_integration;
 pub mod clustering;
 pub mod community_detection;
 pub mod compression;
-pub mod consciousness_aware_embeddings;
 pub mod contextual;
 pub mod continual_learning;
 pub mod cross_domain_transfer;
@@ -143,16 +143,20 @@ pub mod cross_module_performance;
 pub mod delta;
 pub mod diffusion_embeddings;
 pub mod distributed_training;
+pub mod embed_compression;
 pub mod enterprise_knowledge;
 pub mod entity_linking;
 pub mod evaluation;
 pub mod federated_learning;
 pub mod fine_tuning;
+#[cfg(feature = "gpu")]
 pub mod gpu_acceleration;
+pub mod graph_models;
 pub mod graphql_api;
 pub mod inference;
 pub mod integration;
 pub mod interpretability;
+pub mod kg_completion;
 pub mod link_prediction;
 pub mod mamba_attention;
 pub mod mixed_precision;
@@ -167,7 +171,6 @@ pub mod novel_architectures;
 pub mod performance_profiler;
 pub mod persistence;
 pub mod quantization;
-pub mod quantum_circuits;
 pub mod real_time_fine_tuning;
 pub mod real_time_optimization;
 pub mod research_networks;
@@ -176,10 +179,60 @@ pub mod sparql_extension;
 pub mod storage_backend;
 pub mod temporal_embeddings;
 pub mod training;
+pub mod training_online;
 pub mod utils;
+pub mod validation;
 pub mod vector_search;
 pub mod vision_language_graph;
 pub mod visualization;
+// v1.1.0: Contrastive learning loss functions
+pub mod contrastive_learning;
+
+// v1.1.0: Procrustes alignment for embedding space alignment across models/languages
+pub mod procrustes_alignment;
+
+// v1.1.0: LRU embedding cache with memory-bounded eviction and per-model invalidation
+pub mod embedding_cache;
+
+// v1.1.0 round 5: PCA-based dimensionality reduction for embedding vectors
+pub mod dimensionality_reducer;
+
+// v1.1.0 round 6: Full PCA reducer with fit/transform/inverse_transform and power-iteration eigenvectors
+pub mod pca_reducer;
+
+// v1.1.0 round 7: Fine-tuner with triplet/contrastive/cosine loss
+pub mod fine_tuner;
+
+// v1.1.0 round 10: In-memory vector store with namespace support
+pub mod vector_store;
+
+// v1.1.0 round 11: Cross-encoder re-ranker for embedding search
+pub mod cross_encoder;
+
+// v1.1.0 round 12: Linear embedding projection layer (dimensionality reduction/expansion)
+pub mod projection_layer;
+pub use projection_layer::{ActivationFn, InitMethod, ProjectionLayer, ProjectionMatrix};
+
+// v1.1.0 round 13: In-memory embedding store with label-based lookup
+pub mod embedding_store;
+
+// v1.1.0 round 12: BPE / WordPiece tokenizer with special tokens and batch encoding
+pub mod tokenizer;
+
+// v1.1.0 round 11: Embedding aggregation strategies (mean/max/CLS/attention pooling)
+pub mod embedding_aggregator;
+
+// v1.1.0 round 13: Result reranking (cross-encoder, BM25, reciprocal rank fusion)
+pub mod reranker;
+
+// v1.1.0 round 14: ANN index hyperparameter search (HNSW/IVF grid expansion + Pareto front)
+pub mod index_optimizer;
+
+// v1.1.0 round 15: Batch text encoding pipeline with chunking and pooling
+pub mod batch_encoder;
+
+// v1.1.0 round 16: Random projection for embedding dimensionality reduction
+pub mod embedding_compressor;
 
 // Import Vector from oxirs-vec for type compatibility across the ecosystem
 pub use oxirs_vec::Vector as VecVector;
@@ -586,10 +639,6 @@ pub use compression::{
     ModelCompressionManager, NASConfig, OptimizationTarget, PruningConfig, PruningMethod,
     QuantizationConfig, QuantizationMethod,
 };
-pub use consciousness_aware_embeddings::{
-    AttentionMechanism, ConsciousnessAwareEmbedding, ConsciousnessInsights, ConsciousnessLevel,
-    MetaCognition, WorkingMemory,
-};
 // pub use contextual::{
 //     ContextualConfig, ContextualEmbeddingModel, EmbeddingContext,
 // };
@@ -620,6 +669,7 @@ pub use enterprise_knowledge::{
     RecommendationReason, SalesMetrics, Skill, SkillCategory, Team, TeamPerformance,
 };
 pub use evaluation::{
+    AnalogicalReasoningBenchmark, AnalogyQuad, EmbeddingClusteringMetrics, EmbeddingEvaluator,
     QueryAnsweringEvaluator, QueryEvaluationConfig, QueryEvaluationResults, QueryMetric,
     QueryResult, QueryTemplate, QueryType, ReasoningChain, ReasoningEvaluationConfig,
     ReasoningEvaluationResults, ReasoningRule, ReasoningStep, ReasoningTaskEvaluator,
@@ -640,6 +690,7 @@ pub use federated_learning::{
     SecurityFeature, SecurityManager, TrainingConfig, VerificationEngine, VerificationMechanism,
     VerificationResult, WeightingScheme,
 };
+#[cfg(feature = "gpu")]
 pub use gpu_acceleration::{
     GpuAccelerationConfig, GpuAccelerationManager, GpuMemoryPool, GpuPerformanceStats,
     MixedPrecisionProcessor, MultiStreamProcessor, TensorCache,
@@ -649,6 +700,7 @@ pub use graphql_api::{
     EmbeddingFormat, EmbeddingQueryInput, EmbeddingResult, EmbeddingSchema, GraphQLContext,
     ModelInfo, ModelType, SimilarityResult, SimilaritySearchInput,
 };
+pub use kg_completion::{BatchedTrainingLoop, KgCompletionTask, NegativeSampler, TrainingBatch};
 pub use models::{
     AggregationType, ComplEx, DistMult, GNNConfig, GNNEmbedding, GNNType, HoLE, HoLEConfig,
     PoolingStrategy, RotatE, TransE, TransformerConfig, TransformerEmbedding, TransformerType,
@@ -661,9 +713,11 @@ pub use contextual::{
     TaskType, UserContext, UserHistory, UserPreferences,
 };
 pub use distributed_training::{
-    AggregationMethod, CommunicationBackend, DistributedEmbeddingTrainer, DistributedStrategy,
-    DistributedTrainingConfig, DistributedTrainingCoordinator, DistributedTrainingStats,
-    FaultToleranceConfig, WorkerInfo, WorkerStatus,
+    AggregationMethod, AllReduceStrategy, CommunicationBackend, DataParallelTrainer,
+    DistributedEmbeddingTrainer, DistributedStrategy, DistributedTrainingConfig,
+    DistributedTrainingCoordinator, DistributedTrainingSample, DistributedTrainingStats,
+    FaultToleranceConfig, GradientAggregator, GradientCompressor, ModelUpdate, SparseGradient,
+    WorkerInfo, WorkerStatus, WorkerUpdate,
 };
 #[cfg(feature = "conve")]
 pub use models::{ConvE, ConvEConfig};
@@ -693,11 +747,6 @@ pub use novel_architectures::{
     NovelArchitectureConfig, NovelArchitectureModel, ODERegularization, ODESolverType,
     ParallelTransport, QuantumGateSet, QuantumMeasurement, QuantumNoise, QuantumParams,
     QuantumState, StabilityConstraints, StructuralBias, TimeEvolution, TransportMethod,
-};
-pub use quantum_circuits::{
-    Complex, MeasurementStrategy, QNNLayerType, QuantumApproximateOptimization, QuantumCircuit,
-    QuantumGate, QuantumNeuralNetwork, QuantumNeuralNetworkLayer, QuantumSimulator,
-    VariationalQuantumEigensolver,
 };
 pub use research_networks::{
     AuthorEmbedding, Citation, CitationNetwork, CitationType, Collaboration, CollaborationNetwork,

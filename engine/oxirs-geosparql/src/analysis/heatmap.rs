@@ -266,7 +266,7 @@ impl Heatmap {
             }
         }
 
-        hotspots.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
+        hotspots.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
         hotspots
     }
 }

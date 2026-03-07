@@ -20,7 +20,9 @@ impl HnswIndex {
             return Ok(Vec::new());
         }
 
-        let entry_point = self.entry_point().unwrap();
+        let entry_point = self
+            .entry_point()
+            .expect("entry point should exist when index is non-empty");
         let mut visited = std::collections::HashSet::new();
         let mut current_best = Vec::new();
 
@@ -163,7 +165,9 @@ impl HnswIndex {
             return Ok(Vec::new());
         }
 
-        let entry_point = self.entry_point().unwrap();
+        let entry_point = self
+            .entry_point()
+            .expect("entry point should exist when index is non-empty");
         let mut visited = std::collections::HashSet::new();
         let mut beam: BinaryHeap<Candidate> = BinaryHeap::new();
 
@@ -384,7 +388,9 @@ impl HnswIndex {
         let mut to_explore = Vec::new();
 
         // Start from entry point
-        let entry_point = self.entry_point().unwrap();
+        let entry_point = self
+            .entry_point()
+            .expect("entry point should exist when index is non-empty");
         to_explore.push(entry_point);
         visited.insert(entry_point);
 

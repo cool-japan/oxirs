@@ -206,7 +206,10 @@ impl TurtleParser {
                     Ok(None) // Empty triple list
                 } else if triples.len() == 1 {
                     Ok(Some(TurtleStatement::Triple(
-                        triples.into_iter().next().unwrap(),
+                        triples
+                            .into_iter()
+                            .next()
+                            .expect("iterator should have next element"),
                     )))
                 } else {
                     Ok(Some(TurtleStatement::Triples(triples)))
@@ -850,5 +853,350 @@ impl Parser<Triple> for TurtleParser {
             },
             Err(e) => Box::new(std::iter::once(Err(TurtleParseError::io(e)))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_parse_simple_triple_with_prefix() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:subject ex:predicate ex:object .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+        if let Subject::NamedNode(s) = triples[0].subject() {
+            assert_eq!(s.as_str(), "http://example.org/subject");
+        } else {
+            panic!("expected named node subject");
+        }
+    }
+
+    #[test]
+    fn test_parse_string_literal() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:name "Alice" .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+        if let Object::Literal(lit) = triples[0].object() {
+            assert_eq!(lit.value(), "Alice");
+        } else {
+            panic!("expected literal object");
+        }
+    }
+
+    #[test]
+    fn test_parse_language_tagged_literal() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:label "Alice"@en .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+        if let Object::Literal(lit) = triples[0].object() {
+            assert_eq!(lit.value(), "Alice");
+            assert_eq!(lit.language(), Some("en"));
+        } else {
+            panic!("expected language-tagged literal");
+        }
+    }
+
+    #[test]
+    fn test_parse_typed_literal() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+ex:item ex:count "42"^^xsd:integer .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+        if let Object::Literal(lit) = triples[0].object() {
+            assert_eq!(lit.value(), "42");
+            assert_eq!(
+                lit.datatype().as_str(),
+                "http://www.w3.org/2001/XMLSchema#integer"
+            );
+        } else {
+            panic!("expected typed literal");
+        }
+    }
+
+    #[test]
+    fn test_parse_blank_node_subject() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+_:b1 ex:type ex:Thing .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+        assert!(
+            matches!(triples[0].subject(), Subject::BlankNode(_)),
+            "subject should be blank node"
+        );
+    }
+
+    #[test]
+    fn test_parse_semicolon_abbreviated_predicates() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:name "Alice" ;
+         ex:age "30" .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 2, "semicolon should produce two triples");
+        // Both triples should share the same subject
+        let subject_0 = triples[0].subject().to_string();
+        let subject_1 = triples[1].subject().to_string();
+        assert_eq!(subject_0, subject_1, "both triples should share subject");
+    }
+
+    #[test]
+    fn test_parse_comma_abbreviated_objects() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:knows ex:bob , ex:charlie .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 2, "comma should produce two triples");
+    }
+
+    #[test]
+    fn test_parse_rdf_type_shortcut() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice a ex:Person .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+        if let Predicate::NamedNode(pred) = triples[0].predicate() {
+            assert_eq!(
+                pred.as_str(),
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+            );
+        } else {
+            panic!("expected named node predicate");
+        }
+    }
+
+    #[test]
+    fn test_parse_blank_node_property_list() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:address [ ex:city "London" ; ex:country "UK" ] .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        // Should produce: alice ex:address _:b, _:b ex:city "London", _:b ex:country "UK"
+        assert!(
+            triples.len() >= 2,
+            "blank node property list should produce multiple triples"
+        );
+    }
+
+    #[test]
+    fn test_parse_multiple_prefix_declarations() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+ex:alice foaf:name "Alice" .
+ex:bob foaf:name "Bob" .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_base_iri_declaration() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@base <http://example.org/> .
+<alice> <knows> <bob> .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_comments_are_ignored() {
+        let parser = TurtleParser::new();
+        let input = r#"
+# This is a comment
+@prefix ex: <http://example.org/> . # inline comment
+ex:s ex:p "o" . # another comment
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_iri_object() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:knows ex:bob .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+        if let Object::NamedNode(nn) = triples[0].object() {
+            assert_eq!(nn.as_str(), "http://example.org/bob");
+        } else {
+            panic!("expected named node object");
+        }
+    }
+
+    #[test]
+    fn test_parse_empty_document() {
+        let parser = TurtleParser::new();
+        let input = "# only comments\n\n";
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert!(triples.is_empty(), "empty document produces no triples");
+    }
+
+    #[test]
+    fn test_parse_multiple_triples() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:a ex:p1 "v1" .
+ex:b ex:p2 "v2" .
+ex:c ex:p3 "v3" .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_undefined_prefix_error() {
+        let parser = TurtleParser::new();
+        let input = r#"undeclared:subject ex:predicate "object" ."#;
+        let result = parser.parse_document(input);
+        assert!(result.is_err(), "undefined prefix should produce an error");
+    }
+
+    #[test]
+    fn test_for_reader_interface() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:s ex:p "o" .
+"#;
+        let triples: Vec<_> = parser
+            .for_reader(Cursor::new(input))
+            .collect::<Result<Vec<_>, _>>()
+            .expect("for_reader should succeed");
+        assert_eq!(triples.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_with_base_iri_builder() {
+        let parser = TurtleParser::new().with_base_iri("http://example.org/base/".to_string());
+        let input = r#"<subject> <predicate> "object" ."#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_with_prefix_builder() {
+        let parser = TurtleParser::new()
+            .with_prefix("myns".to_string(), "http://myns.example.org/".to_string());
+        let input = r#"myns:subject myns:predicate "object" ."#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+        if let Subject::NamedNode(s) = triples[0].subject() {
+            assert_eq!(s.as_str(), "http://myns.example.org/subject");
+        } else {
+            panic!("expected named node subject");
+        }
+    }
+
+    #[test]
+    fn test_parse_trailing_semicolon() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:name "Alice" ;
+         ex:age "30" ;
+         .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("trailing semicolon should be tolerated");
+        assert_eq!(triples.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_blank_node_object() {
+        let parser = TurtleParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:knows _:unknown .
+"#;
+        let triples = parser
+            .parse_document(input)
+            .expect("turtle parsing should succeed");
+        assert_eq!(triples.len(), 1);
+        assert!(
+            matches!(triples[0].object(), Object::BlankNode(_)),
+            "object should be blank node"
+        );
+    }
+
+    #[test]
+    fn test_parse_via_reader() {
+        let parser = TurtleParser::new();
+        let input = b"@prefix ex: <http://example.org/> .\nex:s ex:p \"o\" .\n";
+        let triples = parser
+            .parse(Cursor::new(input))
+            .expect("parsing via reader should succeed");
+        assert_eq!(triples.len(), 1);
     }
 }

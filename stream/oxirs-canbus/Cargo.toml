@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "CANbus/J1939 protocol support for OxiRS semantic web platform"
 keywords = ["canbus", "automotive", "j1939", "rdf", "dbc"]
 categories = ["network-programming", "embedded", "database"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

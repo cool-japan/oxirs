@@ -9,9 +9,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub enum RetryStrategy {
     /// Fixed delay between retries
-    Fixed {
-        delay: Duration,
-    },
+    Fixed { delay: Duration },
 
     /// Linear backoff (delay increases linearly)
     Linear {
@@ -45,9 +43,10 @@ impl RetryStrategy {
         match self {
             Self::Fixed { delay } => *delay,
 
-            Self::Linear { initial_delay, increment } => {
-                *initial_delay + *increment * (attempt as u32)
-            }
+            Self::Linear {
+                initial_delay,
+                increment,
+            } => *initial_delay + *increment * (attempt as u32),
 
             Self::ExponentialBackoff(backoff) => {
                 let base_delay = backoff.initial_delay.as_millis() as f64
@@ -115,10 +114,7 @@ impl RetryPolicy {
 }
 
 /// Execute an operation with retry logic
-pub async fn execute_with_retry<F, T, E>(
-    policy: &RetryPolicy,
-    mut operation: F,
-) -> Result<T, E>
+pub async fn execute_with_retry<F, T, E>(policy: &RetryPolicy, mut operation: F) -> Result<T, E>
 where
     F: FnMut() -> Result<T, E>,
 {
@@ -230,10 +226,10 @@ mod tests {
 
         // With jitter, delay should be between 0.5x and 1.0x the base delay
         let delay1 = strategy.calculate_delay(1).as_millis();
-        assert!(delay1 >= 500 && delay1 <= 1000);
+        assert!((500..=1000).contains(&delay1));
 
         let delay2 = strategy.calculate_delay(2).as_millis();
-        assert!(delay2 >= 1000 && delay2 <= 2000);
+        assert!((1000..=2000).contains(&delay2));
     }
 
     #[tokio::test]

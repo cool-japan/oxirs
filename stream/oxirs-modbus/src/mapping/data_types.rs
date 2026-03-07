@@ -348,6 +348,23 @@ pub fn encode_value(value: &ModbusValue, data_type: ModbusDataType) -> ModbusRes
     }
 }
 
+// ── Serde support for ModbusDataType ─────────────────────────────────────────
+// Uses the Display/FromStr implementations (e.g. "FLOAT32", "BIT5", "STRING10")
+// for a compact, human-readable serialization.
+
+impl serde::Serialize for ModbusDataType {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ModbusDataType {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

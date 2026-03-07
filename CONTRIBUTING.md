@@ -374,7 +374,7 @@ Versions are managed at the workspace level in the root `Cargo.toml`:
 
 ```toml
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 ```
 
 ### Release Checklist
@@ -436,7 +436,7 @@ Recommended extensions for VS Code:
 
 ## License
 
-By contributing to OxiRS, you agree that your contributions will be licensed under both MIT and Apache-2.0 licenses (dual license).
+By contributing to OxiRS, you agree that your contributions will be licensed under the Apache-2.0 license.
 
 ## Recognition
 

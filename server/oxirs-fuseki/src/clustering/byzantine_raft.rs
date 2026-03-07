@@ -215,7 +215,9 @@ impl BftNodeState {
     pub fn verify_message(&mut self, bft_message: &BftMessage) -> FusekiResult<bool> {
         // Check if message is too old (replay attack protection)
         let age = Utc::now() - bft_message.timestamp;
-        if age > chrono::Duration::from_std(MESSAGE_TTL).unwrap() {
+        if age
+            > chrono::Duration::from_std(MESSAGE_TTL).expect("MESSAGE_TTL should be valid duration")
+        {
             self.record_byzantine_behavior(
                 &bft_message.sender_key_id,
                 ByzantineBehavior::ReplayAttack,

@@ -1174,7 +1174,7 @@ mod tests {
         let change = comparison
             .properties_modified
             .get("urn:samm:test:1.0.0#prop1")
-            .unwrap();
+            .expect("operation should succeed");
         assert!(change.optional_changed);
         assert!(!change.old_optional);
         assert!(change.new_optional);
@@ -1254,7 +1254,7 @@ mod tests {
         let html = comparison.generate_visual_diff_html(&aspect1, &aspect2);
 
         assert!(html.is_ok());
-        let html_content = html.unwrap();
+        let html_content = html.expect("operation should succeed");
         assert!(html_content.contains("<!DOCTYPE html>"));
         assert!(html_content.contains("Model Comparison Report"));
         assert!(html_content.contains("mermaid"));
@@ -1277,7 +1277,7 @@ mod tests {
         let html = comparison.generate_visual_diff_html(&aspect1, &aspect2);
 
         assert!(html.is_ok());
-        let html_content = html.unwrap();
+        let html_content = html.expect("operation should succeed");
         assert!(html_content.contains("Breaking Changes Detected"));
         assert!(html_content.contains("breaking-warning"));
     }
@@ -1294,7 +1294,7 @@ mod tests {
         let mermaid = comparison.generate_mermaid_comparison(&aspect1, &aspect2);
 
         assert!(mermaid.is_ok());
-        let mermaid_content = mermaid.unwrap();
+        let mermaid_content = mermaid.expect("operation should succeed");
         assert!(mermaid_content.contains("graph LR"));
         assert!(mermaid_content.contains("Old"));
         assert!(mermaid_content.contains("New"));
@@ -1318,7 +1318,7 @@ mod tests {
         let mermaid = comparison.generate_mermaid_comparison(&aspect1, &aspect2);
 
         assert!(mermaid.is_ok());
-        let mermaid_content = mermaid.unwrap();
+        let mermaid_content = mermaid.expect("operation should succeed");
         assert!(mermaid_content.contains("🔄")); // modified marker
         assert!(mermaid_content.contains("fill:#fff4e6")); // modified color
     }
@@ -1338,7 +1338,7 @@ mod tests {
         let mermaid = comparison.generate_mermaid_comparison(&aspect1, &aspect2);
 
         assert!(mermaid.is_ok());
-        let mermaid_content = mermaid.unwrap();
+        let mermaid_content = mermaid.expect("operation should succeed");
         // Unchanged properties should be present and connected to both versions
         assert!(mermaid_content.contains("unchangedProp"));
         assert!(mermaid_content.contains("fill:#f0f0f0")); // unchanged color
@@ -1353,7 +1353,7 @@ mod tests {
         let html = comparison.generate_visual_diff_html(&aspect1, &aspect2);
 
         assert!(html.is_ok());
-        let html_content = html.unwrap();
+        let html_content = html.expect("operation should succeed");
 
         // Check for essential HTML elements
         assert!(html_content.contains("<html"));
@@ -1380,7 +1380,7 @@ mod tests {
         aspect2.add_property(prop2);
 
         let comparison = ModelComparison::compare(&aspect1, &aspect2);
-        let json = comparison.export_json().unwrap();
+        let json = comparison.export_json().expect("comparison should succeed");
 
         assert!(json.contains("property_changes"));
         assert!(json.contains("metadata_changes"));

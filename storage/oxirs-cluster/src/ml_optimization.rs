@@ -397,7 +397,7 @@ impl MLClusterOptimizer {
             }
 
             let values: Vec<f64> = series.iter().map(|p| p.value).collect();
-            let latest = *values.last().unwrap();
+            let latest = *values.last().expect("collection validated to be non-empty");
 
             // Run each detection method
             let mut votes = 0;
@@ -661,8 +661,14 @@ impl MLClusterOptimizer {
 
         // Calculate steps ahead
         let avg_interval = if series.len() > 1 {
-            let first = series.front().unwrap().timestamp;
-            let last = series.back().unwrap().timestamp;
+            let first = series
+                .front()
+                .expect("series should not be empty when len > 1")
+                .timestamp;
+            let last = series
+                .back()
+                .expect("series should not be empty when len > 1")
+                .timestamp;
             last.duration_since(first).as_secs_f64() / (series.len() - 1) as f64
         } else {
             1.0
@@ -905,7 +911,7 @@ impl MLClusterOptimizer {
     fn analyze_risk_factor(&self, values: &[f64]) -> (f64, TrendDirection) {
         let mean = self.calculate_mean(values);
         let std_dev = self.calculate_std_dev(values, mean);
-        let latest = *values.last().unwrap();
+        let latest = *values.last().expect("collection validated to be non-empty");
 
         // Calculate trend
         let trend = self.calculate_trend(values);

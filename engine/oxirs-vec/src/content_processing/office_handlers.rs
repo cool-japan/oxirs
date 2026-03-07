@@ -17,16 +17,17 @@ use std::collections::HashMap;
 pub trait OfficeDocumentHandler {
     fn extract_from_zip(&self, data: &[u8], main_xml_path: &str) -> Result<String> {
         let cursor = std::io::Cursor::new(data);
-        let mut archive = zip::ZipArchive::new(cursor)
+        let mut archive = oxiarc_archive::ZipReader::new(cursor)
             .map_err(|e| anyhow!("Failed to open ZIP archive: {}", e))?;
 
         // Try to find the main content file
-        let file = archive
-            .by_name(main_xml_path)
-            .map_err(|e| anyhow!("Main content file not found: {}", e))?;
+        let entry = archive
+            .entry_by_name(main_xml_path)
+            .cloned()
+            .ok_or_else(|| anyhow!("Main content file not found: {}", main_xml_path))?;
 
-        let content =
-            std::io::read_to_string(file).map_err(|e| anyhow!("Failed to read content: {}", e))?;
+        let data = archive.extract(&entry)?;
+        let content = String::from_utf8(data)?;
 
         self.extract_text_from_xml(&content)
     }
@@ -68,45 +69,50 @@ pub trait OfficeDocumentHandler {
         let mut metadata = HashMap::new();
 
         let cursor = std::io::Cursor::new(data);
-        if let Ok(mut archive) = zip::ZipArchive::new(cursor) {
+        if let Ok(mut archive) = oxiarc_archive::ZipReader::new(cursor) {
             // Try to read core properties
-            if let Ok(file) = archive.by_name("docProps/core.xml") {
-                if let Ok(content) = std::io::read_to_string(file) {
-                    // Parse core properties XML
-                    let mut reader = quick_xml::Reader::from_str(&content);
-                    let mut buf = Vec::new();
-                    let mut current_element = String::new();
+            if let Some(entry) = archive.entry_by_name("docProps/core.xml").cloned() {
+                if let Ok(data) = archive.extract(&entry) {
+                    if let Ok(content) = String::from_utf8(data) {
+                        // Parse core properties XML
+                        let mut reader = quick_xml::Reader::from_str(&content);
+                        let mut buf = Vec::new();
+                        let mut current_element = String::new();
 
-                    loop {
-                        match reader.read_event_into(&mut buf) {
-                            Ok(quick_xml::events::Event::Start(ref e)) => {
-                                current_element =
-                                    String::from_utf8_lossy(e.name().as_ref()).to_string();
-                            }
-                            Ok(quick_xml::events::Event::Text(e)) => {
-                                let inner = e.into_inner();
-                                let text = String::from_utf8_lossy(inner.as_ref());
-                                match current_element.as_str() {
-                                    "dc:title" => {
-                                        metadata.insert("title".to_string(), text.to_string());
-                                    }
-                                    "dc:creator" => {
-                                        metadata.insert("author".to_string(), text.to_string());
-                                    }
-                                    "dc:subject" => {
-                                        metadata.insert("subject".to_string(), text.to_string());
-                                    }
-                                    "dc:description" => {
-                                        metadata
-                                            .insert("description".to_string(), text.to_string());
-                                    }
-                                    _ => {}
+                        loop {
+                            match reader.read_event_into(&mut buf) {
+                                Ok(quick_xml::events::Event::Start(ref e)) => {
+                                    current_element =
+                                        String::from_utf8_lossy(e.name().as_ref()).to_string();
                                 }
+                                Ok(quick_xml::events::Event::Text(e)) => {
+                                    let inner = e.into_inner();
+                                    let text = String::from_utf8_lossy(inner.as_ref());
+                                    match current_element.as_str() {
+                                        "dc:title" => {
+                                            metadata.insert("title".to_string(), text.to_string());
+                                        }
+                                        "dc:creator" => {
+                                            metadata.insert("author".to_string(), text.to_string());
+                                        }
+                                        "dc:subject" => {
+                                            metadata
+                                                .insert("subject".to_string(), text.to_string());
+                                        }
+                                        "dc:description" => {
+                                            metadata.insert(
+                                                "description".to_string(),
+                                                text.to_string(),
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                Ok(quick_xml::events::Event::Eof) => break,
+                                _ => {}
                             }
-                            Ok(quick_xml::events::Event::Eof) => break,
-                            _ => {}
+                            buf.clear();
                         }
-                        buf.clear();
                     }
                 }
             }
@@ -173,9 +179,9 @@ impl FormatHandler for DocxHandler {
 
         // Check if it contains DOCX-specific files
         let cursor = std::io::Cursor::new(data);
-        if let Ok(mut archive) = zip::ZipArchive::new(cursor) {
-            archive.by_name("word/document.xml").is_ok()
-                && archive.by_name("[Content_Types].xml").is_ok()
+        if let Ok(archive) = oxiarc_archive::ZipReader::new(cursor) {
+            archive.entry_by_name("word/document.xml").is_some()
+                && archive.entry_by_name("[Content_Types].xml").is_some()
         } else {
             false
         }
@@ -237,25 +243,24 @@ impl FormatHandler for PptxHandler {
         // Extract text from all slides
         let mut all_text = Vec::new();
         let cursor = std::io::Cursor::new(data);
-        let mut archive = zip::ZipArchive::new(cursor)
+        let mut archive = oxiarc_archive::ZipReader::new(cursor)
             .map_err(|e| anyhow!("Failed to open PPTX archive: {}", e))?;
 
         // Find all slide files
-        let file_names: Vec<String> = (0..archive.len())
-            .filter_map(|i| {
-                archive
-                    .by_index(i)
-                    .ok()
-                    .map(|file| file.name().to_string())
-                    .filter(|name| name.starts_with("ppt/slides/slide") && name.ends_with(".xml"))
-            })
+        let file_names: Vec<String> = archive
+            .entries()
+            .iter()
+            .map(|entry| entry.name.to_string())
+            .filter(|name: &String| name.starts_with("ppt/slides/slide") && name.ends_with(".xml"))
             .collect();
 
         for slide_name in file_names {
-            if let Ok(file) = archive.by_name(&slide_name) {
-                if let Ok(content) = std::io::read_to_string(file) {
-                    if let Ok(slide_text) = self.extract_text_from_xml(&content) {
-                        all_text.push(slide_text);
+            if let Some(entry) = archive.entry_by_name(&slide_name).cloned() {
+                if let Ok(data) = archive.extract(&entry) {
+                    if let Ok(content) = String::from_utf8(data) {
+                        if let Ok(slide_text) = self.extract_text_from_xml(&content) {
+                            all_text.push(slide_text);
+                        }
                     }
                 }
             }
@@ -300,9 +305,9 @@ impl FormatHandler for PptxHandler {
 
         // Check if it contains PPTX-specific files
         let cursor = std::io::Cursor::new(data);
-        if let Ok(mut archive) = zip::ZipArchive::new(cursor) {
-            archive.by_name("ppt/presentation.xml").is_ok()
-                && archive.by_name("[Content_Types].xml").is_ok()
+        if let Ok(archive) = oxiarc_archive::ZipReader::new(cursor) {
+            archive.entry_by_name("ppt/presentation.xml").is_some()
+                && archive.entry_by_name("[Content_Types].xml").is_some()
         } else {
             false
         }
@@ -328,7 +333,7 @@ impl FormatHandler for XlsxHandler {
         config: &ContentExtractionConfig,
     ) -> Result<ExtractedContent> {
         let cursor = std::io::Cursor::new(data);
-        let mut archive = zip::ZipArchive::new(cursor)
+        let mut archive = oxiarc_archive::ZipReader::new(cursor)
             .map_err(|e| anyhow!("Failed to open XLSX archive: {}", e))?;
 
         // Extract shared strings first
@@ -374,9 +379,9 @@ impl FormatHandler for XlsxHandler {
 
         // Check if it contains XLSX-specific files
         let cursor = std::io::Cursor::new(data);
-        if let Ok(mut archive) = zip::ZipArchive::new(cursor) {
-            archive.by_name("xl/workbook.xml").is_ok()
-                && archive.by_name("[Content_Types].xml").is_ok()
+        if let Ok(archive) = oxiarc_archive::ZipReader::new(cursor) {
+            archive.entry_by_name("xl/workbook.xml").is_some()
+                && archive.entry_by_name("[Content_Types].xml").is_some()
         } else {
             false
         }
@@ -391,12 +396,15 @@ impl FormatHandler for XlsxHandler {
 impl XlsxHandler {
     fn extract_shared_strings(
         &self,
-        archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
+        archive: &mut oxiarc_archive::ZipReader<std::io::Cursor<&[u8]>>,
     ) -> Result<Vec<String>> {
         let mut shared_strings = Vec::new();
 
-        if let Ok(file) = archive.by_name("xl/sharedStrings.xml") {
-            let content = std::io::read_to_string(file)
+        if let Some(entry) = archive.entry_by_name("xl/sharedStrings.xml").cloned() {
+            let data = archive
+                .extract(&entry)
+                .map_err(|e| anyhow!("Failed to extract shared strings: {}", e))?;
+            let content = String::from_utf8(data)
                 .map_err(|e| anyhow!("Failed to read shared strings: {}", e))?;
 
             let mut reader = quick_xml::Reader::from_str(&content);
@@ -438,7 +446,7 @@ impl XlsxHandler {
 
     fn extract_worksheets(
         &self,
-        archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
+        archive: &mut oxiarc_archive::ZipReader<std::io::Cursor<&[u8]>>,
         shared_strings: &[String],
         config: &ContentExtractionConfig,
     ) -> Result<(String, Vec<ExtractedTable>)> {
@@ -446,29 +454,28 @@ impl XlsxHandler {
         let mut tables = Vec::new();
 
         // Find all worksheet files
-        let file_names: Vec<String> = (0..archive.len())
-            .filter_map(|i| {
-                archive
-                    .by_index(i)
-                    .ok()
-                    .map(|file| file.name().to_string())
-                    .filter(|name| {
-                        name.starts_with("xl/worksheets/sheet") && name.ends_with(".xml")
-                    })
+        let file_names: Vec<String> = archive
+            .entries()
+            .iter()
+            .map(|entry| entry.name.to_string())
+            .filter(|name: &String| {
+                name.starts_with("xl/worksheets/sheet") && name.ends_with(".xml")
             })
             .collect();
 
         for (sheet_index, sheet_name) in file_names.iter().enumerate() {
-            if let Ok(file) = archive.by_name(sheet_name) {
-                if let Ok(content) = std::io::read_to_string(file) {
-                    let (sheet_text, sheet_table) =
-                        self.extract_sheet_content(&content, shared_strings)?;
-                    all_text.push(sheet_text);
+            if let Some(entry) = archive.entry_by_name(sheet_name).cloned() {
+                if let Ok(data) = archive.extract(&entry) {
+                    if let Ok(content) = String::from_utf8(data) {
+                        let (sheet_text, sheet_table) =
+                            self.extract_sheet_content(&content, shared_strings)?;
+                        all_text.push(sheet_text);
 
-                    if config.extract_tables && !sheet_table.rows.is_empty() {
-                        let mut table = sheet_table;
-                        table.caption = Some(format!("Sheet {}", sheet_index + 1));
-                        tables.push(table);
+                        if config.extract_tables && !sheet_table.rows.is_empty() {
+                            let mut table = sheet_table;
+                            table.caption = Some(format!("Sheet {}", sheet_index + 1));
+                            tables.push(table);
+                        }
                     }
                 }
             }

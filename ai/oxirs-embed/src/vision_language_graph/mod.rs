@@ -478,6 +478,63 @@ impl VisionLanguageGraphModel {
 mod tests {
     use super::*;
 
+    /// Create a small VisionLanguageGraphConfig suitable for fast tests in debug builds.
+    /// All dimensions are reduced to avoid multi-second matrix allocations.
+    fn small_test_config() -> VisionLanguageGraphConfig {
+        VisionLanguageGraphConfig {
+            vision_config: VisionEncoderConfig {
+                image_size: (32, 32),
+                channels: 3,
+                patch_size: (8, 8),
+                vision_dim: 32,
+                cnn_config: CNNConfig {
+                    num_layers: 2,
+                    filter_sizes: vec![8, 16],
+                    stride_sizes: vec![2, 2],
+                    ..CNNConfig::default()
+                },
+                vit_config: ViTConfig {
+                    num_layers: 2,
+                    num_heads: 2,
+                    mlp_dim: 64,
+                    ..ViTConfig::default()
+                },
+                ..VisionEncoderConfig::default()
+            },
+            language_config: LanguageEncoderConfig {
+                vocab_size: 256,
+                language_dim: 32,
+                max_seq_length: 16,
+                transformer_config: LanguageTransformerConfig {
+                    num_layers: 2,
+                    num_heads: 2,
+                    hidden_dim: 32,
+                    intermediate_dim: 64,
+                    ..LanguageTransformerConfig::default()
+                },
+                ..LanguageEncoderConfig::default()
+            },
+            graph_config: GraphEncoderConfig {
+                node_dim: 16,
+                edge_dim: 8,
+                graph_dim: 32,
+                num_layers: 2,
+                ..GraphEncoderConfig::default()
+            },
+            transformer_config: MultiModalTransformerConfig {
+                unified_dim: 32,
+                num_fusion_layers: 2,
+                cross_attention_config: CrossAttentionConfig {
+                    num_heads: 2,
+                    head_dim: 16,
+                    ..CrossAttentionConfig::default()
+                },
+                ..MultiModalTransformerConfig::default()
+            },
+            ..VisionLanguageGraphConfig::default()
+        }
+    }
+
     #[test]
     fn test_vision_language_graph_config_default() {
         let config = VisionLanguageGraphConfig::default();
@@ -496,10 +553,23 @@ mod tests {
 
     #[test]
     fn test_language_encoder_creation() {
-        let config = LanguageEncoderConfig::default();
+        // Use small dimensions to avoid timeout in debug builds
+        let config = LanguageEncoderConfig {
+            vocab_size: 256,
+            language_dim: 32,
+            max_seq_length: 16,
+            transformer_config: LanguageTransformerConfig {
+                num_layers: 2,
+                num_heads: 2,
+                hidden_dim: 32,
+                intermediate_dim: 64,
+                ..LanguageTransformerConfig::default()
+            },
+            ..LanguageEncoderConfig::default()
+        };
         let encoder = LanguageEncoder::new(config);
-        assert_eq!(encoder.token_embeddings.nrows(), 30522);
-        assert_eq!(encoder.position_embeddings.nrows(), 512);
+        assert_eq!(encoder.token_embeddings.nrows(), 256);
+        assert_eq!(encoder.position_embeddings.nrows(), 16);
     }
 
     #[test]
@@ -541,11 +611,26 @@ mod tests {
 
     #[test]
     fn test_language_encoder_text_encoding() {
-        let config = LanguageEncoderConfig::default();
+        // Use small dimensions to avoid timeout in debug builds
+        let config = LanguageEncoderConfig {
+            vocab_size: 256,
+            language_dim: 32,
+            max_seq_length: 16,
+            transformer_config: LanguageTransformerConfig {
+                num_layers: 2,
+                num_heads: 2,
+                hidden_dim: 32,
+                intermediate_dim: 64,
+                ..LanguageTransformerConfig::default()
+            },
+            ..LanguageEncoderConfig::default()
+        };
         let encoder = LanguageEncoder::new(config);
 
         let text = "Hello world, this is a test";
-        let embedding = encoder.encode_text(text).unwrap();
+        let embedding = encoder
+            .encode_text(text)
+            .expect("encode_text should succeed");
 
         assert_eq!(embedding.len(), encoder.config.language_dim);
     }
@@ -600,25 +685,27 @@ mod tests {
 
     #[test]
     fn test_zero_shot_prediction() {
-        let config = VisionLanguageGraphConfig::default();
+        let config = small_test_config();
         let model = VisionLanguageGraphModel::new(config);
 
         let mut random = Random::default();
-        let query = Array1::from_shape_fn(768, |_| random.random::<f32>());
+        let query = Array1::from_shape_fn(32, |_| random.random::<f32>());
 
         let mut prototypes = HashMap::new();
         let mut random = Random::default();
         prototypes.insert(
             "class1".to_string(),
-            Array1::from_shape_fn(768, |_| random.random::<f32>()),
+            Array1::from_shape_fn(32, |_| random.random::<f32>()),
         );
         let mut random = Random::default();
         prototypes.insert(
             "class2".to_string(),
-            Array1::from_shape_fn(768, |_| random.random::<f32>()),
+            Array1::from_shape_fn(32, |_| random.random::<f32>()),
         );
 
-        let prediction = model.zero_shot_predict(&query, &prototypes).unwrap();
+        let prediction = model
+            .zero_shot_predict(&query, &prototypes)
+            .expect("zero_shot_predict should succeed");
         assert!(prototypes.contains_key(&prediction));
     }
 
@@ -679,10 +766,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_vision_language_graph_training() {
-        let config = VisionLanguageGraphConfig::default();
+        let config = small_test_config();
         let mut model = VisionLanguageGraphModel::new(config);
 
-        let stats = model.train(Some(3)).await.unwrap();
+        let stats = model.train(Some(3)).await.expect("training should succeed");
         assert_eq!(stats.epochs_completed, 3);
         assert!(model.is_trained());
     }

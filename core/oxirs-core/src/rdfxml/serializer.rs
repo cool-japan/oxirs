@@ -35,20 +35,25 @@ fn subject_to_named_or_blank_owned(subject: &Subject) -> Option<NamedOrBlankNode
 /// A [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) serializer.
 ///
 /// ```
-/// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
-/// use oxrdf::vocab::rdf;
-/// use oxrdfxml::RdfXmlSerializer;
+/// use oxirs_core::model::{Literal, NamedNode, SubjectRef, PredicateRef, ObjectRef, TripleRef};
+/// use oxirs_core::vocab::rdf;
+/// use oxirs_core::rdfxml::RdfXmlSerializer;
+///
+/// let subject = NamedNode::new("http://example.com#me")?;
+/// let name_pred = NamedNode::new("http://schema.org/name")?;
+/// let person_type = NamedNode::new("http://schema.org/Person")?;
+/// let name_lit = Literal::new_language_tagged_literal_unchecked("Foo Bar", "en");
 ///
 /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
 /// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
+///     SubjectRef::NamedNode(&subject),
+///     PredicateRef::NamedNode(&rdf::TYPE),
+///     ObjectRef::NamedNode(&person_type),
 /// ))?;
 /// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://schema.org/name")?,
-///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     SubjectRef::NamedNode(&subject),
+///     PredicateRef::NamedNode(&name_pred),
+///     ObjectRef::Literal(&name_lit),
 /// ))?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -89,22 +94,28 @@ impl RdfXmlSerializer {
     }
 
     /// ```
-    /// use oxrdf::{NamedNodeRef, TripleRef};
-    /// use oxrdfxml::RdfXmlSerializer;
+    /// use oxirs_core::model::{NamedNode, SubjectRef, PredicateRef, ObjectRef, TripleRef};
+    /// use oxirs_core::rdfxml::RdfXmlSerializer;
+    ///
+    /// let subject = NamedNode::new("http://example.com#me")?;
+    /// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
+    /// let person_type = NamedNode::new("http://example.com/ns#Person")?;
+    /// let parent_pred = NamedNode::new("http://example.com/ns#parent")?;
+    /// let other_obj = NamedNode::new("http://example.com#other")?;
     ///
     /// let mut serializer = RdfXmlSerializer::new()
     ///     .with_base_iri("http://example.com")?
     ///     .with_prefix("ex", "http://example.com/ns#")?
     ///     .for_writer(Vec::new());
     /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
-    ///     NamedNodeRef::new("http://example.com/ns#Person")?,
+    ///     SubjectRef::NamedNode(&subject),
+    ///     PredicateRef::NamedNode(&rdf_type),
+    ///     ObjectRef::NamedNode(&person_type),
     /// ))?;
     /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://example.com/ns#parent")?,
-    ///     NamedNodeRef::new("http://example.com#other")?,
+    ///     SubjectRef::NamedNode(&subject),
+    ///     PredicateRef::NamedNode(&parent_pred),
+    ///     ObjectRef::NamedNode(&other_obj),
     /// ))?;
     /// assert_eq!(
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xml:base=\"http://example.com\" xmlns:ex=\"http://example.com/ns#\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<ex:Person rdf:about=\"#me\">\n\t\t<ex:parent rdf:resource=\"#other\"/>\n\t</ex:Person>\n</rdf:RDF>",
@@ -123,20 +134,25 @@ impl RdfXmlSerializer {
     /// This writer does unbuffered writes.
     ///
     /// ```
-    /// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
-    /// use oxrdf::vocab::rdf;
-    /// use oxrdfxml::RdfXmlSerializer;
+    /// use oxirs_core::model::{Literal, NamedNode, SubjectRef, PredicateRef, ObjectRef, TripleRef};
+    /// use oxirs_core::vocab::rdf;
+    /// use oxirs_core::rdfxml::RdfXmlSerializer;
+    ///
+    /// let subject = NamedNode::new("http://example.com#me")?;
+    /// let name_pred = NamedNode::new("http://schema.org/name")?;
+    /// let person_type = NamedNode::new("http://schema.org/Person")?;
+    /// let name_lit = Literal::new_language_tagged_literal_unchecked("Foo Bar", "en");
     ///
     /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
     /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     rdf::TYPE,
-    ///     NamedNodeRef::new("http://schema.org/Person")?,
+    ///     SubjectRef::NamedNode(&subject),
+    ///     PredicateRef::NamedNode(&rdf::TYPE),
+    ///     ObjectRef::NamedNode(&person_type),
     /// ))?;
     /// serializer.serialize_triple(TripleRef::new(
-    ///     NamedNodeRef::new("http://example.com#me")?,
-    ///     NamedNodeRef::new("http://schema.org/name")?,
-    ///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+    ///     SubjectRef::NamedNode(&subject),
+    ///     PredicateRef::NamedNode(&name_pred),
+    ///     ObjectRef::Literal(&name_lit),
     /// ))?;
     /// assert_eq!(
     ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",
@@ -220,20 +236,25 @@ impl RdfXmlSerializer {
 /// Can be built using [`RdfXmlSerializer::for_writer`].
 ///
 /// ```
-/// use oxrdf::{LiteralRef, NamedNodeRef, TripleRef};
-/// use oxrdf::vocab::rdf;
-/// use oxrdfxml::RdfXmlSerializer;
+/// use oxirs_core::model::{Literal, NamedNode, SubjectRef, PredicateRef, ObjectRef, TripleRef};
+/// use oxirs_core::vocab::rdf;
+/// use oxirs_core::rdfxml::RdfXmlSerializer;
+///
+/// let subject = NamedNode::new("http://example.com#me")?;
+/// let name_pred = NamedNode::new("http://schema.org/name")?;
+/// let person_type = NamedNode::new("http://schema.org/Person")?;
+/// let name_lit = Literal::new_language_tagged_literal_unchecked("Foo Bar", "en");
 ///
 /// let mut serializer = RdfXmlSerializer::new().with_prefix("schema", "http://schema.org/")?.for_writer(Vec::new());
 /// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     rdf::TYPE,
-///     NamedNodeRef::new("http://schema.org/Person")?,
+///     SubjectRef::NamedNode(&subject),
+///     PredicateRef::NamedNode(&rdf::TYPE),
+///     ObjectRef::NamedNode(&person_type),
 /// ))?;
 /// serializer.serialize_triple(TripleRef::new(
-///     NamedNodeRef::new("http://example.com#me")?,
-///     NamedNodeRef::new("http://schema.org/name")?,
-///     LiteralRef::new_language_tagged_literal_unchecked("Foo Bar", "en"),
+///     SubjectRef::NamedNode(&subject),
+///     PredicateRef::NamedNode(&name_pred),
+///     ObjectRef::Literal(&name_lit),
 /// ))?;
 /// assert_eq!(
 ///     b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rdf:RDF xmlns:schema=\"http://schema.org/\" xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\t<schema:Person rdf:about=\"http://example.com#me\">\n\t\t<schema:name xml:lang=\"en\">Foo Bar</schema:name>\n\t</schema:Person>\n</rdf:RDF>",

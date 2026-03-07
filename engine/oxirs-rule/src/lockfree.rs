@@ -434,7 +434,7 @@ impl LockFreeFactSet {
             let slot_idx = (hash as usize + attempt) % capacity;
 
             // Try to insert using optimistic locking
-            let mut facts = self.facts.write().unwrap();
+            let mut facts = self.facts.write().expect("lock should not be poisoned");
 
             // Check if slot is empty
             if facts[slot_idx].fact.is_none() {
@@ -466,7 +466,7 @@ impl LockFreeFactSet {
 
         // If we reach here, the array might be full - need to resize
         // For simplicity, we'll do a forced insertion
-        let mut facts = self.facts.write().unwrap();
+        let mut facts = self.facts.write().expect("lock should not be poisoned");
 
         // Check for duplicates in the entire array
         for slot in facts.iter() {
@@ -557,7 +557,7 @@ impl LockFreeFactSet {
 
     /// Clear all facts
     fn clear(&self) {
-        let mut facts = self.facts.write().unwrap();
+        let mut facts = self.facts.write().expect("lock should not be poisoned");
         for slot in facts.iter_mut() {
             slot.fact = None;
             slot.version += 1;
@@ -585,7 +585,7 @@ impl LockFreeFactSet {
 
     /// Convert to vector
     fn to_vec(&self) -> Vec<RuleAtom> {
-        let facts = self.facts.read().unwrap();
+        let facts = self.facts.read().expect("lock should not be poisoned");
         facts.iter().filter_map(|slot| slot.fact.clone()).collect()
     }
 
@@ -606,7 +606,7 @@ impl LockFreeFactSet {
     fn contains(&self, fact: &RuleAtom) -> bool {
         let hash = self.hash_fact(fact);
         let capacity = self.capacity.load(Ordering::Acquire);
-        let facts = self.facts.read().unwrap();
+        let facts = self.facts.read().expect("lock should not be poisoned");
 
         // First check the expected slot
         let primary_idx = (hash as usize) % capacity;

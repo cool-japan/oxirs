@@ -177,7 +177,7 @@ impl RangePartition {
     pub fn new(partition_id: String, shard_id: ShardId, range: Range) -> Self {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         Self {
@@ -222,7 +222,7 @@ impl RangePartition {
     fn touch(&mut self) {
         self.modified_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
     }
 }
@@ -254,7 +254,7 @@ impl Default for LoadStats {
             avg_key_size: 0,
             last_updated: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
         }
     }
@@ -463,7 +463,7 @@ impl RangePartitionManager {
             progress: 0,
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             completed_at: None,
         };
@@ -530,7 +530,7 @@ impl RangePartitionManager {
             progress: 0,
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             completed_at: None,
         };
@@ -626,7 +626,7 @@ impl RangePartitionManager {
                 op.completed_at = Some(
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("SystemTime should be after UNIX_EPOCH")
                         .as_secs(),
                 );
             }
@@ -701,7 +701,7 @@ impl RangePartitionManager {
                 op.completed_at = Some(
                     std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("SystemTime should be after UNIX_EPOCH")
                         .as_secs(),
                 );
             }

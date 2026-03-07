@@ -1,6 +1,6 @@
 # OxiRS-Star - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.0 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -33,19 +33,24 @@ OxiRS-Star provides RDF-star and SPARQL-star support for quoted triples with ent
 - Memory-efficient storage with SIMD-accelerated indexing
 - Full SciRS2 integration for scientific computing
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.0 - Enhanced Performance (Q1 2026 - Expanded)
-- [ ] Advanced HNSW graph optimizations
-- [ ] Enhanced parallel query execution
-- [ ] Improved cache management
-- [ ] Additional storage backends
-- [ ] Extended HDT-star compression options
-- [ ] Enhanced streaming query capabilities
-- [ ] Advanced property graph integration
-- [ ] Distributed query processing
+### v0.1.0 - Released (January 7, 2026)
+- ✅ RDF-star/SPARQL-star support with all major formats
+- ✅ Adaptive query optimization, HDT-star, streaming, property graph bridge
+- ✅ 317 tests passing
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.0 - Current Release (March 5, 2026)
+- ✅ Advanced HNSW graph optimizations
+- ✅ Enhanced parallel query execution
+- ✅ Improved cache management
+- ✅ Additional storage backends
+- ✅ Extended HDT-star compression options
+- ✅ Enhanced streaming query capabilities
+- ✅ Advanced property graph integration
+- ✅ Distributed query processing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Full W3C RDF-star compliance
 - [ ] Long-term support guarantees
 - [ ] Enterprise features
@@ -57,4 +62,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS-Star v0.1.0 - RDF-star and SPARQL-star support*
+*OxiRS-Star v0.2.0 - RDF-star and SPARQL-star support*

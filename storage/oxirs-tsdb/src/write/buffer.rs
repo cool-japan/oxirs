@@ -221,7 +221,10 @@ mod tests {
             value: 22.5,
         };
 
-        let should_flush = buffer.insert(1, point).await.unwrap();
+        let should_flush = buffer
+            .insert(1, point)
+            .await
+            .expect("async operation should succeed");
         assert!(!should_flush); // Should not flush with just 1 point
 
         let stats = buffer.stats().await;
@@ -246,7 +249,10 @@ mod tests {
                 timestamp: base_time + chrono::Duration::seconds(i),
                 value: i as f64,
             };
-            let should_flush = buffer.insert(1, point).await.unwrap();
+            let should_flush = buffer
+                .insert(1, point)
+                .await
+                .expect("async operation should succeed");
             assert!(!should_flush);
         }
 
@@ -255,7 +261,10 @@ mod tests {
             timestamp: base_time + chrono::Duration::seconds(9),
             value: 9.0,
         };
-        let should_flush = buffer.insert(1, point).await.unwrap();
+        let should_flush = buffer
+            .insert(1, point)
+            .await
+            .expect("async operation should succeed");
         assert!(should_flush);
     }
 
@@ -271,7 +280,10 @@ mod tests {
                 timestamp: base_time + chrono::Duration::seconds(i),
                 value: i as f64,
             };
-            buffer.insert(1, point).await.unwrap();
+            buffer
+                .insert(1, point)
+                .await
+                .expect("async operation should succeed");
         }
 
         // Insert to series 2
@@ -280,11 +292,17 @@ mod tests {
                 timestamp: base_time + chrono::Duration::seconds(i),
                 value: (i + 100) as f64,
             };
-            buffer.insert(2, point).await.unwrap();
+            buffer
+                .insert(2, point)
+                .await
+                .expect("async operation should succeed");
         }
 
         // Flush only series 1
-        let points = buffer.flush_series(1).await.unwrap();
+        let points = buffer
+            .flush_series(1)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(points.len(), 5);
 
         // Series 2 should still have data
@@ -305,7 +323,10 @@ mod tests {
                     timestamp: base_time + chrono::Duration::seconds(i),
                     value: (series_id * 100 + i as u64) as f64,
                 };
-                buffer.insert(series_id, point).await.unwrap();
+                buffer
+                    .insert(series_id, point)
+                    .await
+                    .expect("async operation should succeed");
             }
         }
 
@@ -314,9 +335,12 @@ mod tests {
         assert_eq!(stats.num_series, 5);
 
         // Flush all
-        let flushed = buffer.flush_all().await.unwrap();
+        let flushed = buffer
+            .flush_all()
+            .await
+            .expect("async operation should succeed");
         assert_eq!(flushed.len(), 5);
-        assert_eq!(flushed.get(&1).unwrap().len(), 10);
+        assert_eq!(flushed.get(&1).expect("key should exist").len(), 10);
 
         // Buffer should be empty
         let stats = buffer.stats().await;
@@ -338,7 +362,10 @@ mod tests {
             batch.push((1, point));
         }
 
-        buffer.insert_batch(&batch).await.unwrap();
+        buffer
+            .insert_batch(&batch)
+            .await
+            .expect("async operation should succeed");
 
         let stats = buffer.stats().await;
         assert_eq!(stats.total_points, 100);
@@ -361,7 +388,10 @@ mod tests {
                 timestamp: base_time + chrono::Duration::seconds(i),
                 value: i as f64,
             };
-            buffer.insert(1, point).await.unwrap();
+            buffer
+                .insert(1, point)
+                .await
+                .expect("async operation should succeed");
         }
 
         // Series 2: 10 points (flush needed)
@@ -370,7 +400,10 @@ mod tests {
                 timestamp: base_time + chrono::Duration::seconds(i),
                 value: i as f64,
             };
-            buffer.insert(2, point).await.unwrap();
+            buffer
+                .insert(2, point)
+                .await
+                .expect("async operation should succeed");
         }
 
         let to_flush = buffer.series_needing_flush().await;

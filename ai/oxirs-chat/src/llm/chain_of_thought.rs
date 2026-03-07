@@ -164,7 +164,12 @@ impl ChainOfThoughtEngine {
                 steps.push(inference_step);
 
                 // Check if we've reached a conclusion
-                if steps.last().unwrap().step_type == StepType::Conclusion {
+                if steps
+                    .last()
+                    .expect("collection validated to be non-empty")
+                    .step_type
+                    == StepType::Conclusion
+                {
                     break;
                 }
             } else {
@@ -277,7 +282,10 @@ impl ChainOfThoughtEngine {
         }
 
         // Apply inference based on previous step outputs
-        let last_output = &previous_steps.last().unwrap().output;
+        let last_output = &previous_steps
+            .last()
+            .expect("collection validated to be non-empty")
+            .output;
         let inference = format!("Based on previous analysis: {}", last_output);
 
         Ok(Some(ThoughtStep {

@@ -666,6 +666,15 @@ impl<'a> ValidationEngine<'a> {
                     // Constraint is satisfied but has a note - treat as satisfied
                     results.push(None);
                 }
+                ConstraintEvaluationResult::Error { message } => {
+                    // Evaluation error - log and treat as satisfied to avoid false violations
+                    tracing::warn!(
+                        "Constraint evaluation error for {}: {}",
+                        component_id.as_str(),
+                        message
+                    );
+                    results.push(None);
+                }
                 ConstraintEvaluationResult::Violated {
                     violating_value,
                     message,

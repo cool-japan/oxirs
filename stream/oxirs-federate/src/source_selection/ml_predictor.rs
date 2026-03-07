@@ -259,14 +259,14 @@ mod tests {
         analyzer
             .update_service_statistics("http://example.org/sparql", &triples)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Test coverage analysis
         let registry = ServiceRegistry::new();
         let results = analyzer
             .analyze_coverage(&[pattern], &registry)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(results.len(), 1);
         assert!(results[0].coverage_score >= 0.0);
@@ -300,7 +300,7 @@ mod tests {
         let result = selector
             .select_sources(&patterns, &constraints, &registry)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(!result.selected_sources.is_empty());
         assert!(matches!(result.selection_method, SelectionMethod::Fallback)); // No services registered
@@ -327,7 +327,7 @@ mod tests {
         filter
             .update_filters("http://example.org/sparql", &triples)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let patterns = vec![create_test_pattern("?s", "http://example.org/name", "?o")];
 
@@ -335,7 +335,7 @@ mod tests {
         let matches = filter
             .filter_by_predicates(&patterns, &registry)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(matches.contains_key("http://example.org/sparql"));
     }
@@ -361,8 +361,9 @@ mod tests {
     #[test]
     fn test_config_serialization() {
         let config = SourceSelectionConfig::default();
-        let serialized = serde_json::to_string(&config).unwrap();
-        let deserialized: SourceSelectionConfig = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&config).expect("JSON serialization should succeed");
+        let deserialized: SourceSelectionConfig =
+            serde_json::from_str(&serialized).expect("valid JSON");
 
         assert_eq!(config.coverage_threshold, deserialized.coverage_threshold);
         assert_eq!(

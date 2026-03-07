@@ -516,7 +516,10 @@ impl BackupManager {
             let path = entry.path();
 
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                let filename = path.file_name().unwrap().to_string_lossy();
+                let filename = path
+                    .file_name()
+                    .expect("path should have a filename")
+                    .to_string_lossy();
                 if filename.ends_with(".meta.json") {
                     match std::fs::read_to_string(&path) {
                         Ok(json) => match serde_json::from_str::<BackupMetadata>(&json) {

@@ -86,14 +86,14 @@ impl TimeChunk {
         let min_value = points
             .iter()
             .map(|p| p.value)
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .expect("collection should not be empty");
 
         let max_value = points
             .iter()
             .map(|p| p.value)
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .expect("collection should not be empty");
 
         let sum: f64 = points.iter().map(|p| p.value).sum();
         let avg_value = sum / points.len() as f64;
@@ -222,7 +222,8 @@ mod tests {
             });
         }
 
-        let chunk = TimeChunk::new(series_id, start_time, chunk_duration, points.clone()).unwrap();
+        let chunk = TimeChunk::new(series_id, start_time, chunk_duration, points.clone())
+            .expect("construction should succeed");
 
         assert_eq!(chunk.series_id, 1);
         assert_eq!(chunk.metadata.count, 100);
@@ -245,8 +246,9 @@ mod tests {
             });
         }
 
-        let chunk = TimeChunk::new(series_id, start_time, chunk_duration, points.clone()).unwrap();
-        let decompressed = chunk.decompress().unwrap();
+        let chunk = TimeChunk::new(series_id, start_time, chunk_duration, points.clone())
+            .expect("construction should succeed");
+        let decompressed = chunk.decompress().expect("start should succeed");
 
         assert_eq!(points.len(), decompressed.len());
 
@@ -274,13 +276,16 @@ mod tests {
             });
         }
 
-        let chunk = TimeChunk::new(series_id, start_time, chunk_duration, points).unwrap();
+        let chunk = TimeChunk::new(series_id, start_time, chunk_duration, points)
+            .expect("construction should succeed");
 
         // Query middle 50 points
         let query_start = start_time + Duration::seconds(250);
         let query_end = start_time + Duration::seconds(750);
 
-        let results = chunk.query_range(query_start, query_end).unwrap();
+        let results = chunk
+            .query_range(query_start, query_end)
+            .expect("query should succeed");
 
         // Should get points in range [250s, 750s) = indices 25-74 = 50 points
         assert!(results.len() >= 45 && results.len() <= 55); // Allow some tolerance
@@ -302,7 +307,8 @@ mod tests {
             });
         }
 
-        let chunk = TimeChunk::new(series_id, start_time, chunk_duration, points).unwrap();
+        let chunk = TimeChunk::new(series_id, start_time, chunk_duration, points)
+            .expect("construction should succeed");
 
         let ratio = chunk.compression_ratio();
         println!("Stable sensor compression ratio: {:.1}:1", ratio);

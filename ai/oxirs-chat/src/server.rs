@@ -832,7 +832,7 @@ async fn metrics_handler() -> Result<String, StatusCode> {
     // Sample metric values (in production, these would be collected from actual metrics)
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .expect("SystemTime should be after UNIX_EPOCH")
         .as_millis();
 
     metrics.push(format!(

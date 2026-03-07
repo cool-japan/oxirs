@@ -442,7 +442,7 @@ impl MamdaniFuzzySystem {
                 let max_membership = membership
                     .iter()
                     .copied()
-                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or(0.0);
 
                 if max_membership < 1e-10 {
@@ -465,7 +465,7 @@ impl MamdaniFuzzySystem {
                 let max_membership = membership
                     .iter()
                     .copied()
-                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or(0.0);
 
                 if max_membership < 1e-10 {
@@ -483,7 +483,7 @@ impl MamdaniFuzzySystem {
                 let max_membership = membership
                     .iter()
                     .copied()
-                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .unwrap_or(0.0);
 
                 if max_membership < 1e-10 {

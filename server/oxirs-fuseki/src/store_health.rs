@@ -334,7 +334,7 @@ impl StoreHealthMonitor {
         };
 
         let mut sorted_latencies = recent_latencies.clone();
-        sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let p95_query_latency_ms = if !sorted_latencies.is_empty() {
             let idx = (sorted_latencies.len() as f64 * 0.95) as usize;

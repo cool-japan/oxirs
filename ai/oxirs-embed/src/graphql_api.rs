@@ -600,7 +600,9 @@ impl SubscriptionRoot {
         ctx: &Context<'_>,
         _entity_filter: Option<Vec<String>>,
     ) -> Pin<Box<dyn Stream<Item = EmbeddingEvent> + Send>> {
-        let context = ctx.data::<GraphQLContext>().unwrap();
+        let context = ctx
+            .data::<GraphQLContext>()
+            .expect("GraphQLContext should be available in context");
         let rx = context.event_broadcaster.read().await.subscribe();
 
         let stream = BroadcastStream::new(rx).filter_map(|result| result.ok());
@@ -614,7 +616,9 @@ impl SubscriptionRoot {
         ctx: &Context<'_>,
         _job_id: Option<ID>,
     ) -> Pin<Box<dyn Stream<Item = BatchCompletedEvent> + Send>> {
-        let context = ctx.data::<GraphQLContext>().unwrap();
+        let context = ctx
+            .data::<GraphQLContext>()
+            .expect("GraphQLContext should be available in context");
         let rx = context.event_broadcaster.read().await.subscribe();
 
         let stream = BroadcastStream::new(rx).filter_map(|result| match result {
@@ -631,7 +635,9 @@ impl SubscriptionRoot {
         ctx: &Context<'_>,
         _severity_filter: Option<Vec<String>>,
     ) -> Pin<Box<dyn Stream<Item = QualityAlertEvent> + Send>> {
-        let context = ctx.data::<GraphQLContext>().unwrap();
+        let context = ctx
+            .data::<GraphQLContext>()
+            .expect("GraphQLContext should be available in context");
         let rx = context.event_broadcaster.read().await.subscribe();
 
         let stream = BroadcastStream::new(rx).filter_map(|result| match result {

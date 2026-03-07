@@ -1293,7 +1293,9 @@ mod tests {
 
         // Normal values with one outlier
         let values = vec![1.0, 2.0, 3.0, 2.5, 2.2, 100.0];
-        let anomalies = detector.detect_value_anomalies(&values).unwrap();
+        let anomalies = detector
+            .detect_value_anomalies(&values)
+            .expect("detection should succeed");
 
         // Should detect the outlier (100.0)
         assert!(!anomalies.is_empty());
@@ -1310,7 +1312,9 @@ mod tests {
         });
 
         let values = vec![10.0, 12.0, 11.0, 13.0, 12.5, 50.0];
-        let anomalies = detector.detect_value_anomalies(&values).unwrap();
+        let anomalies = detector
+            .detect_value_anomalies(&values)
+            .expect("detection should succeed");
 
         // Should detect the outlier (50.0)
         assert!(!anomalies.is_empty());
@@ -1326,7 +1330,9 @@ mod tests {
         });
 
         let values = vec![5.0, 5.1, 4.9, 5.2, 4.8, 20.0];
-        let anomalies = detector.detect_value_anomalies(&values).unwrap();
+        let anomalies = detector
+            .detect_value_anomalies(&values)
+            .expect("detection should succeed");
 
         // Should detect the outlier (20.0)
         assert!(!anomalies.is_empty());
@@ -1346,7 +1352,9 @@ mod tests {
 
         // All same values
         let values = vec![5.0, 5.0, 5.0, 5.0, 5.0];
-        let anomalies = detector.detect_value_anomalies(&values).unwrap();
+        let anomalies = detector
+            .detect_value_anomalies(&values)
+            .expect("detection should succeed");
 
         // Should detect no anomalies
         assert!(anomalies.is_empty());

@@ -156,6 +156,24 @@ impl ConstraintEvaluationResult {
         matches!(self, ConstraintEvaluationResult::Error { .. })
     }
 
+    /// Get the violation message if any
+    pub fn message(&self) -> Option<&str> {
+        match self {
+            ConstraintEvaluationResult::Violated { message, .. } => message.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// Get the violating value if any
+    pub fn violating_value(&self) -> Option<&Term> {
+        match self {
+            ConstraintEvaluationResult::Violated {
+                violating_value, ..
+            } => violating_value.as_ref(),
+            _ => None,
+        }
+    }
+
     pub fn into_violation(self) -> Option<ValidationViolation> {
         match self {
             ConstraintEvaluationResult::Violated {
@@ -168,7 +186,9 @@ impl ConstraintEvaluationResult {
                     "http://example.org/constraint",
                 ),
                 source_shape: ShapeId::new("http://example.org/shape"),
-                focus_node: Term::NamedNode(NamedNode::new("http://example.org/focus").unwrap()),
+                focus_node: Term::NamedNode(
+                    NamedNode::new("http://example.org/focus").expect("valid IRI"),
+                ),
                 result_path: None,
                 result_severity: Severity::Violation,
                 result_message: message,

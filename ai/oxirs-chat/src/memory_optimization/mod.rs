@@ -7,15 +7,15 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 
+pub mod compression;
 pub mod pooling;
 pub mod streaming;
-pub mod compression;
 pub mod tensor_ops;
 
+pub use compression::{CompressionAlgorithm, Compressor};
 pub use pooling::{MemoryPool, PooledBuffer};
-pub use streaming::{StreamProcessor, ChunkProcessor};
-pub use compression::{Compressor, CompressionAlgorithm};
-pub use tensor_ops::{TensorOptimizer, MemoryEfficientTensor};
+pub use streaming::{ChunkProcessor, StreamProcessor};
+pub use tensor_ops::{MemoryEfficientTensor, TensorOptimizer};
 
 /// Configuration for memory optimization
 #[derive(Debug, Clone, Serialize, Deserialize)]

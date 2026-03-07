@@ -58,7 +58,7 @@ impl QuantumRetrievalState {
         results.sort_by(|a, b| {
             b.quantum_probability
                 .partial_cmp(&a.quantum_probability)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
     }
 

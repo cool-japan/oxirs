@@ -265,9 +265,10 @@ impl PdfHandler {
         let mut links = Vec::new();
 
         // Regular expressions for different link types
-        let url_regex = regex::Regex::new(r"https?://[^\s\)]+").unwrap();
-        let email_regex =
-            regex::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap();
+        let url_regex =
+            regex::Regex::new(r"https?://[^\s\)]+").expect("URL regex pattern is valid");
+        let email_regex = regex::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+            .expect("email regex pattern is valid");
 
         // Find HTTP/HTTPS URLs
         for mat in url_regex.find_iter(text) {
@@ -317,7 +318,7 @@ impl PdfHandler {
 
         // Look for title
         if let Some(title_match) = regex::Regex::new(r"/Title\s*\(\s*([^)]+)\s*\)")
-            .unwrap()
+            .expect("title regex pattern is valid")
             .captures(&content)
         {
             if let Some(title) = title_match.get(1) {
@@ -327,7 +328,7 @@ impl PdfHandler {
 
         // Look for author
         if let Some(author_match) = regex::Regex::new(r"/Author\s*\(\s*([^)]+)\s*\)")
-            .unwrap()
+            .expect("author regex pattern is valid")
             .captures(&content)
         {
             if let Some(author) = author_match.get(1) {
@@ -337,7 +338,7 @@ impl PdfHandler {
 
         // Look for subject
         if let Some(subject_match) = regex::Regex::new(r"/Subject\s*\(\s*([^)]+)\s*\)")
-            .unwrap()
+            .expect("subject regex pattern is valid")
             .captures(&content)
         {
             if let Some(subject) = subject_match.get(1) {
@@ -347,7 +348,7 @@ impl PdfHandler {
 
         // Look for creation date
         if let Some(date_match) = regex::Regex::new(r"/CreationDate\s*\(\s*([^)]+)\s*\)")
-            .unwrap()
+            .expect("creation date regex pattern is valid")
             .captures(&content)
         {
             if let Some(date) = date_match.get(1) {

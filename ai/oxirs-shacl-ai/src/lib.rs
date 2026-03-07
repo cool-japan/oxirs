@@ -418,6 +418,7 @@ pub mod data_types;
 
 // Feature modules
 pub mod ab_testing;
+// v1.1.0: Explainable AI for SHACL violations
 pub mod advanced_features;
 pub mod advanced_neural;
 pub mod advanced_pattern_mining;
@@ -431,11 +432,7 @@ pub mod bias_detection;
 pub mod biological_neural_integration;
 pub mod blockchain_validation;
 pub mod collaborative_development;
-pub mod collective_consciousness;
-pub mod consciousness_guided_neuroplasticity;
-pub mod consciousness_validation;
 pub mod constraint_generation;
-pub mod cosmic_scale_processing;
 pub mod crosslingual_transfer;
 pub mod deployment;
 pub mod edge_deployment;
@@ -445,6 +442,7 @@ pub mod evolutionary_neural_architecture;
 pub mod experiment_tracking;
 pub mod explainable;
 pub mod explainable_ai;
+pub mod explainable_violations;
 pub mod feature_store;
 pub mod federated_learning;
 pub mod forecasting_models;
@@ -455,39 +453,34 @@ pub mod interactive_labeling;
 pub mod knowledge_distillation;
 // Temporarily disabled problematic modules for compilation
 pub mod automated_retraining;
-pub mod interdimensional_patterns;
+pub mod ensemble;
+pub mod inference;
 pub mod learning;
+pub mod llm;
 pub mod meta_learning;
 pub mod ml;
 pub mod model_compression;
 pub mod model_drift_monitoring;
 pub mod model_governance;
 pub mod model_registry;
+pub mod models;
 pub mod multi_task_learning;
 pub mod multimodal_validation;
 pub mod neural_cost_estimation;
 pub mod neural_patterns;
 pub mod neural_transformer_pattern_integration;
 pub mod neuromorphic_validation;
-pub mod omniscient_validation;
 pub mod optimization;
 pub mod optimization_engine;
 pub mod owl_to_shacl;
 pub mod patterns;
 pub mod performance_analytics;
 pub mod performance_benchmarking;
-pub mod photonic_computing;
 pub mod prediction;
 pub mod predictive_analytics;
 pub mod production_deployment;
 pub mod production_monitoring;
 pub mod quality;
-pub mod quantum_consciousness_entanglement;
-pub mod quantum_consciousness_synthesis;
-pub mod quantum_enhanced_pattern_optimizer;
-pub mod quantum_neural_patterns;
-pub mod quantum_neuromorphic_fusion;
-pub mod reality_synthesis;
 pub mod realtime_adaptive_query_optimizer;
 pub mod realtime_anomaly_streams;
 pub mod recommendation_systems;
@@ -499,13 +492,75 @@ pub mod shape;
 pub mod shape_management;
 pub mod sophisticated_validation_optimization;
 pub mod streaming_adaptation;
-pub mod swarm_neuromorphic_networks;
 pub mod system_monitoring;
-pub mod temporal_paradox_resolution;
-pub mod time_space_validation;
-pub mod universal_knowledge_integration;
+pub mod training;
 pub mod validation_performance;
 pub mod version_control;
+
+// v0.3.0 Advanced SHACL AI: machine learning-based shape discovery and validation
+pub mod shape_learning;
+
+// v0.3.0 New modules: memory optimization, resilience, security, orchestrator
+// Note: collaborative_shapes has pre-existing type inconsistencies, excluded for now
+pub mod memory_optimization;
+pub mod orchestrator;
+pub mod resilience;
+pub mod security;
+
+// v1.0.0 LTS GPU acceleration and LLM integration
+pub mod gpu;
+pub mod llm_integration;
+
+// v1.1.0 Constraint mining from RDF data
+pub mod constraint_miner;
+
+// v1.1.0 round 7: Incremental SHACL shape evolution as RDF data changes
+pub mod shape_evolver;
+
+// v1.1.0: AI-powered SHACL shape recommendation from RDF data analysis
+pub mod shape_recommender;
+
+// v1.1.0 round 5: ML-based SHACL pattern learner from RDF facts
+pub mod pattern_learner;
+
+// v1.1.0 round 6: SHACL validation report formatter (Turtle/JSON/text/CSV/HTML)
+pub mod report_formatter;
+
+// v1.1.0 round 8: SHACL violation explanation generator
+pub mod explanation_generator;
+
+// v1.1.0 round 9: Property suggester
+pub mod property_suggester;
+
+// v1.1.0 round 10: Data-driven SHACL constraint inference
+pub mod constraint_inference;
+
+// v1.1.0 round 11: ML-style SHACL violation severity classification
+pub mod violation_classifier;
+
+// v1.1.0 round 12: Automated SHACL constraint synthesis from data samples
+pub mod constraint_synthesizer;
+
+// v1.1.0 round 11: Schema alignment between ontologies (class/property mapping)
+pub mod schema_alignment;
+
+// v1.1.0 round 12: RDF data profiling for shape inference
+pub mod data_profiler;
+
+// v1.1.0 round 13: Schema change detection between SHACL shape sets
+pub mod change_detector;
+
+// v1.1.0 round 14: SHACL rule generation from observed data patterns
+pub mod rule_generator;
+
+// v1.1.0 round 15: Constraint ranking by severity and impact
+pub mod constraint_ranker;
+
+// v1.1.0 round 16: SHACL shape pattern scoring and ranking
+pub mod pattern_scorer;
+pub use constraint_synthesizer::{
+    ConstraintSynthesizer, ConstraintType, DataSample, SynthesizedConstraint,
+};
 
 // Re-export key types for convenience with explicit imports to avoid ambiguity
 // A/B Testing Framework (v0.1.0 Final - NEW)
@@ -533,7 +588,7 @@ pub use advanced_features::{
     DomainAdapter,
     // Ensemble Methods
     EnsembleLearner,
-    EnsembleStrategy,
+    EnsembleStrategy as AdvancedEnsembleStrategy,
     GanModel,
     // Generative Models
     GenerativeModel,
@@ -569,10 +624,10 @@ pub use advanced_neural::{
     TrainingState,
 };
 pub use advanced_pattern_mining::{
-    AdvancedPattern, AdvancedPatternMiningConfig, AdvancedPatternMiningEngine, ConstraintType,
-    ItemRole, PatternItem, PatternItemType, PatternMiningStats, PatternType as MiningPatternType,
-    SeasonalityComponent, SuggestedConstraint, TemporalPatternInfo,
-    TrendDirection as MiningTrendDirection,
+    AdvancedPattern, AdvancedPatternMiningConfig, AdvancedPatternMiningEngine,
+    ConstraintType as MiningConstraintType, ItemRole, PatternItem, PatternItemType,
+    PatternMiningStats, PatternType as MiningPatternType, SeasonalityComponent,
+    SuggestedConstraint, TemporalPatternInfo, TrendDirection as MiningTrendDirection,
 };
 pub use advanced_scirs2_integration::{
     AdvancedSciRS2Config, AdvancedSciRS2Engine, BenchmarkResults, CloudProviderType,
@@ -635,6 +690,10 @@ pub use edge_deployment::{
     DeviceProfile, EdgeDeploymentConfig, EdgeDeploymentError, EdgeDeploymentManager, EdgeDevice,
     OptimizationResult as EdgeOptimizationResult, ResourceUsage,
 };
+pub use ensemble::{
+    EdgeFeature, EnsembleStrategy as ShapeEnsembleStrategy, GraphFeatures, GraphStats, NodeFeature,
+    ShapeLearnerEnsemble, ShapePrediction, TrainingExample, TrainingMetrics,
+};
 pub use error_handling::{
     ErrorClassificationResult, ErrorHandlingConfig, ErrorSeverity, ErrorType,
     IntelligentErrorHandler, RepairSuggestion, RepairType, SmartErrorAnalysis,
@@ -645,6 +704,13 @@ pub use hyperparameter_optimization::{
     HpoStrategy, HyperparameterOptimizer, OptimizationConfig,
     OptimizationResult as HpoOptimizationResult, OptimizationTrial, OptimizerStats, ParameterSpace,
     SearchSpace, TrialStatus,
+};
+pub use inference::{
+    quantize_model, Activation, BatchedInferenceConfig, BatchedInferenceEngine,
+    CalibrationCollector, FusedLinearKernel, InferenceEngineStats, InferencePipelineConfig,
+    InferenceRequest, InferenceResult, PipelineStats, PredictedViolation,
+    QuantizationConfig as InferenceQuantizationConfig, QuantizationParams, QuantizationSummary,
+    QuantizedInferenceResult, QuantizedWeightMatrix, RealTimeInferencePipeline,
 };
 pub use insights::*;
 pub use integration_testing::{
@@ -669,6 +735,11 @@ pub use knowledge_distillation::{
 pub use learning::{
     LearningConfig, LearningPerformanceMetrics, LearningStatistics, PatternStatistics,
     ShapeExample, ShapeLearner, ShapeTrainingData as LearningTrainingData, TemporalPatterns,
+};
+pub use llm::{
+    BatchGenerationRequest, BatchItemResult, GeneratedShaclShape, GeneratorStats,
+    LlmConstraintGenerator, LlmConstraintGeneratorConfig, LlmProvider, LlmRequest, LlmResponse,
+    PromptTemplate, StubLlmProvider, TokenUsage,
 };
 pub use meta_learning::{
     AdaptationStrategy, AdaptedModel, LearningTask, MetaLearner, MetaLearningConfig,
@@ -698,6 +769,12 @@ pub use model_registry::{
     ModelComparison, ModelMetadata, ModelParameters, ModelRegistrationBuilder, ModelRegistry,
     ModelStatus, ModelType, PerformanceMetrics as RegistryPerformanceMetrics, RegisteredModel,
     RegistryConfig, TrainingMetrics as RegistryTrainingMetrics, Version,
+};
+pub use models::{
+    AttributedGraph, ConstraintHead, FeatureEncoder, FeedForward, GraphEdge, GraphNode,
+    GraphTransformerConfig, GraphTransformerLayer, GtShaclModel, GtShaclStats, GtShaclTrainer,
+    LayerNorm, LearnedRule, Linear, MultiHeadAttention as ModelMultiHeadAttention,
+    RuleBasedShapeLearner, TrainingReport,
 };
 pub use multi_task_learning::{
     ActivationType, ConvergenceInfo, GradientNormalizer, LayerNormalization, LearnedTaskModel,
@@ -750,15 +827,6 @@ pub use performance_benchmarking::{
     PerformanceBenchmarkFramework, PrecisionLevel, ResourceUsageSummary as ResourceMetrics,
     SuccessCriteria, TargetComponent, ThroughputSummary as ThroughputMetrics, WorkloadConfig,
 };
-pub use photonic_computing::{
-    CoherenceProperties, ConnectionType, GateType,
-    InterferencePattern as PhotonicInterferencePattern, InterferenceProcessor, JunctionType,
-    LightSpeedComputationManager, MaterialType, NetworkTopology, NonlinearProperties,
-    OpticalMemoryBank, OpticalProcessingState, OpticalProcessingUnit, PatternType,
-    PhotonNumberState, PhotonicComputingEngine, PhotonicEntanglementNetwork, PhotonicGate,
-    PhotonicQuantumCircuit, PhotonicQubit, PolarizationState, SpatialMode,
-    ValidationResult as PhotonicValidationResult, WavelengthRange,
-};
 pub use prediction::*;
 pub use predictive_analytics::*;
 pub use production_deployment::*;
@@ -768,23 +836,6 @@ pub use production_monitoring::{
     PredictionMetrics, ProductionMonitor, SLA,
 };
 pub use quality::*;
-pub use quantum_consciousness_entanglement::{
-    BellState, EntanglementId, EntanglementPair, EntanglementStatus, MeasurementBasis,
-    QuantumConsciousnessEntanglement, QuantumEntanglementConfig, QuantumEntanglementState,
-    QuantumEntanglementValidationResult, QuantumInformation,
-};
-pub use quantum_consciousness_synthesis::{
-    ConsciousnessLevel as QuantumConsciousnessLevel, ConsciousnessStateSynthesizer,
-    MultiDimensionalAwarenessSystem, QuantumCognitionEnhancer, QuantumConsciousnessProcessor,
-    QuantumConsciousnessSynthesisEngine, QuantumConsciousnessValidationResult,
-    QuantumIntuitionEngine, SentientReasoningValidator, SyntheticMind, ValidationOutcome,
-};
-pub use quantum_enhanced_pattern_optimizer::{
-    AnnealingSchedule, NeuralPredictor, PerformanceRecord, QuantumAnnealer,
-    QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig, QuantumOptimizerStats,
-    QuantumSuperpositionStates, RealTimeLearningAdapter,
-};
-pub use quantum_neural_patterns::*;
 pub use realtime_adaptive_query_optimizer::{
     AdaptationRecommendation, AdaptiveOptimizerConfig, AdaptiveOptimizerStats, AdaptivePlanCache,
     CacheStatistics, ComplexityAnalysis, ComplexityFactor, ExecutionMetrics, FeedbackProcessor,
@@ -813,32 +864,51 @@ pub use sophisticated_validation_optimization::{
     SophisticatedOptimizationConfig, SophisticatedValidationOptimizer,
 };
 pub use system_monitoring::*;
+pub use training::{
+    dequantise_gradients_i8, finite_difference_grad, quantise_gradients_i8, sparsify_gradients,
+    AdamOptimiser, AllReduceStrategy, AllReduceSync, DistributedTrainer, DistributedTrainingConfig,
+    DistributedTrainingStats, GradientAccumulator, ParameterVector, SgdOptimiser, WorkerConfig,
+};
 pub use validation_performance::*;
 pub use version_control::*;
+
+// v0.3.0 shape learning re-exports
+// Note: PropertyConstraint is accessed via shape_learning::PropertyConstraint
+// to avoid conflict with shape::PropertyConstraint.
+pub use shape_learning::{
+    // shape_validator_ai
+    AiValidationReport,
+    // constraint_learner
+    ConstraintLearner,
+    ConstraintLearningReport,
+    ConstraintLearningStats,
+    ConstraintValidationScore,
+    // pattern_detector
+    DetectedPattern,
+    GraphPattern,
+    LearnedConstraintResult,
+    // shape_miner
+    MinedShape,
+    NodeKind as ShapeMinerNodeKind,
+    PatternDetectionConfig,
+    PatternDetectionReport,
+    PatternDetector,
+    PatternKind,
+    ShapeMiner,
+    ShapeMinerConfig,
+    ShapeMiningReport,
+    ShapeMiningStats,
+    ShapeValidatorAi,
+    ShapeValidatorAiConfig,
+    ValidationFinding,
+    ValidationFindingKind,
+};
 
 // Ultrathink Mode Exports
 pub use blockchain_validation::{
     BlockchainEvent, BlockchainValidationConfig, BlockchainValidationResult, BlockchainValidator,
     CrossChainAggregation, CrossChainValidationResult, PrivacyLevel, PrivateValidationResult,
     SmartContractValidationResult, ValidationMode,
-};
-pub use collective_consciousness::{
-    AgentCapabilities, AgentStats, AgentStatus, CollectiveConfig, CollectiveConsciousnessNetwork,
-    CollectiveInsight, CollectiveMetrics, CollectiveValidationResult, ConsciousnessAgent,
-    ConsciousnessId, ConsensusDecision, ConsensusResult, ConsensusType, InterdimensionalPattern,
-    QuantumEffect, Reality, SynthesizedReality,
-    ValidationContext as InterdimensionalValidationContext, ValidationSpecialization,
-};
-pub use consciousness_validation::{
-    ConsciousnessLevel as ValidatorConsciousnessLevel, ConsciousnessValidationResult,
-    ConsciousnessValidator, ConsciousnessValidatorConfig, ConsciousnessValidatorStats,
-    DreamInsight, DreamState, Emotion, EmotionalContext, IntuitiveInsight, IntuitiveInsightType,
-    ValidationStrategy as ConsciousnessValidationStrategy,
-};
-pub use cosmic_scale_processing::{
-    CosmicNetworkInitResult, CosmicScaleConfig, CosmicScaleProcessor, CosmicStatistics,
-    CosmicValidationResult, CosmicValidationScope, GalaxyId, IntergalacticCoordinates,
-    StellarCoordinates, StellarNodeId,
 };
 pub use crosslingual_transfer::{
     CrosslingualConfig, CrosslingualShapeTransfer, CrosslingualStats, Language, TranslatedShape,
@@ -862,12 +932,6 @@ pub use federated_learning::{
     AggregationStrategy, ConsensusAlgorithm, FederatedLearningCoordinator, FederatedNode,
     FederationStats, PrivacyLevel as FederatedPrivacyLevel,
 };
-pub use interdimensional_patterns::{
-    BridgeType, CausalDirection, DimensionType, DimensionalBridge, DimensionalCorrelation,
-    DiscoveredPattern, InterdimensionalConfig, InterdimensionalPatternEngine,
-    InterdimensionalPatternResult, PatternType as InterdimensionalPatternType, PhysicsVariant,
-    RealityDimension,
-};
 pub use multimodal_validation::{
     ContentType, MultiModalConfig, MultiModalValidationReport, MultiModalValidator,
     ValidationResult,
@@ -880,19 +944,6 @@ pub use streaming_adaptation::{
     AdaptationEvent, AdaptationEventType, RealTimeAdaptationStats, RealTimeMetrics, StreamType,
     StreamingAdaptationEngine, StreamingConfig,
 };
-pub use temporal_paradox_resolution::{
-    CausalRelationship as TemporalCausalRelationship, CausalityAnalysisResult,
-    MultiTimelineValidator, ParadoxDetectionResult, ParadoxResolutionResult, QuantumTemporalEngine,
-    TemporalConsistencyEnforcer, TemporalConstraint as TemporalParadoxConstraint,
-    TemporalParadoxResolutionEngine, TemporalValidationProcessor, TemporalValidationResult,
-    Timeline as TemporalTimeline, TimelineContext as TemporalParadoxTimelineContext,
-};
-pub use time_space_validation::{
-    CoordinateSystem, InterferencePattern as SpacetimeInterferencePattern,
-    MultiTimelineValidationResult, ReferenceFrame, SpacetimeContext, SpacetimeInitResult,
-    SpacetimeStatistics, SpacetimeValidationResult, SpatialCoordinates, TemporalCoordinate,
-    TimeSpaceConfig, TimeSpaceValidator, Timeline as SpacetimeTimeline,
-};
 
 // Version 2.1 Features - Neuromorphic Evolution
 pub use biological_neural_integration::{
@@ -902,12 +953,6 @@ pub use biological_neural_integration::{
     EnergyEfficiencyRequirements, NeuralStimulationParameters, NeurotransmitterConfig,
     OrganoidConfig, OrganoidId, PlasticityConfig, SignalProcessingConfig, StimulationPattern,
 };
-pub use consciousness_guided_neuroplasticity::{
-    ConsciousnessGoal, ConsciousnessGuidedNeuroplasticity, ConsciousnessPlasticityConfig,
-    ConsciousnessPlasticityContext, ConsciousnessPlasticityInitResult,
-    ConsciousnessPlasticityMetrics, ConsciousnessPlasticityResult, EffectivenessThresholds,
-    LearningObjective,
-};
 pub use evolutionary_neural_architecture::{
     ArchitecturePerformanceMetrics, ConvergenceMetrics, DiversityRequirements, EvolutionaryConfig,
     EvolutionaryInitResult, EvolutionaryMetrics, EvolutionaryNeuralArchitecture,
@@ -915,39 +960,11 @@ pub use evolutionary_neural_architecture::{
     NASSearchStrategy, NeuralArchitecture, PerformanceTargets, ResourceConstraints,
     TopologyType as ArchTopologyType,
 };
-pub use quantum_neuromorphic_fusion::{
-    CoherenceRequirements, EntanglementRequirements, QuantumBiologicalValidationContext,
-    QuantumBiologicalValidationResult, QuantumFusionConfig, QuantumFusionInitResult,
-    QuantumFusionMetrics, QuantumNeuromorphicFusion, QuantumResourceInventory,
-};
-pub use swarm_neuromorphic_networks::{
-    EmergentBehaviorInsight, SwarmInitResult, SwarmIntelligenceType, SwarmNetworkConfig,
-    SwarmNeuromorphicNetwork, SwarmNodeCapabilities, SwarmNodeId, SwarmStatistics,
-    SwarmValidationContext, SwarmValidationResult, TopologyType as SwarmTopologyType,
-};
 
 // Version 2.2 Features - Transcendent AI Capabilities
-pub use omniscient_validation::{
-    AbsoluteTruthValidator, InfiniteKnowledgeProcessor, OmniscientConfig, OmniscientMetrics,
-    OmniscientValidation, OmniscientValidationResult, PerfectReasoningEngine,
-    TranscendentConsciousnessValidator, UniversalKnowledgeOmniscience,
-};
 pub use owl_to_shacl::{
     GeneratedShape, OwlClass, OwlConstructType, OwlProperty, OwlPropertyCharacteristic,
     OwlRestriction, OwlRestrictionType, OwlToShaclConfig, OwlToShaclTransfer, TransferStats,
-};
-pub use reality_synthesis::{
-    CrossRealityValidator, DimensionalConstructor, MultiDimensionalCoordinator,
-    PossibilityMaterializer, RealityCoherenceManager, RealityGenerationEngine,
-    RealityQualityPerfector, RealitySynthesis, RealitySynthesisConfig, RealitySynthesisMetrics,
-    RealitySynthesisResult, TemporalRealityOrchestrator, UniversalRealityHarmonizer,
-};
-pub use universal_knowledge_integration::{
-    ArtisticKnowledgeIntegrator, CulturalKnowledgeIntegrator, HistoricalKnowledgeIntegrator,
-    KnowledgeQualityAssurance, KnowledgeSynthesisEngine, LinguisticKnowledgeIntegrator,
-    MathematicalKnowledgeIntegrator, PhilosophicalKnowledgeIntegrator, RealTimeKnowledgeUpdater,
-    ScientificKnowledgeIntegrator, TechnicalKnowledgeIntegrator, UniversalKnowledgeConfig,
-    UniversalKnowledgeIntegration, UniversalKnowledgeMetrics, UniversalOntologyMapper,
 };
 
 // Re-export configuration types

@@ -1,10 +1,10 @@
 # oxirs-geosparql
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
 GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
 
-**Status**: Production Release (v0.1.0) - Released January 7, 2026
+**Status**: Production Release (v0.2.0) - Released March 5, 2026
 
 ✅ **Production Ready**: APIs are stable and ready for production deployments.
 
@@ -30,7 +30,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-geosparql = "0.1.0"
+oxirs-geosparql = "0.2.0"
 ```
 
 ## Usage
@@ -235,7 +235,7 @@ oxirs-geosparql provides **two buffer implementations**:
 **1. Pure Rust Buffer** (`rust-buffer` feature):
 ```toml
 [dependencies]
-oxirs-geosparql = { version = "0.1.0", features = ["rust-buffer"] }
+oxirs-geosparql = { version = "0.2.0", features = ["rust-buffer"] }
 ```
 
 ```rust
@@ -257,7 +257,7 @@ let buffered = buffer(&poly, 2.0).unwrap(); // Pure Rust!
 **2. GEOS Backend** (`geos-backend` feature):
 ```toml
 [dependencies]
-oxirs-geosparql = { version = "0.1.0", features = ["geos-backend"] }
+oxirs-geosparql = { version = "0.2.0", features = ["geos-backend"] }
 ```
 
 **Advantages:**
@@ -297,4 +297,4 @@ oxirs-geosparql/
 
 ## License
 
-Dual-licensed under MIT OR Apache-2.0.
+Licensed under Apache-2.0.

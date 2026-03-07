@@ -200,7 +200,8 @@ impl HoLE {
                 let random_subject =
                     entity_list[local_rng.random_range(0..entity_list.len())].clone();
                 negatives.push(Triple {
-                    subject: NamedNode::new(&random_subject).unwrap(),
+                    subject: NamedNode::new(&random_subject)
+                        .expect("NamedNode creation should succeed for valid entity"),
                     predicate: triple.predicate.clone(),
                     object: triple.object.clone(),
                 });
@@ -211,7 +212,8 @@ impl HoLE {
                 negatives.push(Triple {
                     subject: triple.subject.clone(),
                     predicate: triple.predicate.clone(),
-                    object: NamedNode::new(&random_object).unwrap(),
+                    object: NamedNode::new(&random_object)
+                        .expect("NamedNode creation should succeed for valid entity"),
                 });
             }
         }

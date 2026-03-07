@@ -257,7 +257,11 @@ impl JoinOptimizer {
         }
 
         if patterns.len() == 1 {
-            return Ok(JoinPlan::Pattern(patterns.pop().unwrap()));
+            return Ok(JoinPlan::Pattern(
+                patterns
+                    .pop()
+                    .expect("collection validated to be non-empty"),
+            ));
         }
 
         // Estimate cardinalities
@@ -352,7 +356,7 @@ impl JoinOptimizer {
             .enumerate()
             .min_by_key(|(_, p)| p.estimated_cardinality.unwrap_or(u64::MAX))
             .map(|(i, _)| i)
-            .unwrap();
+            .expect("collection validated to be non-empty");
 
         let mut current_plan = JoinPlan::Pattern(remaining.remove(start_idx));
         let mut current_vars = current_plan.variables();
@@ -376,7 +380,7 @@ impl JoinOptimizer {
                         .partial_cmp(cost2)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
-                .unwrap();
+                .expect("collection validated to be non-empty");
 
             let next_pattern = remaining.remove(best_idx);
             let join_vars = current_vars

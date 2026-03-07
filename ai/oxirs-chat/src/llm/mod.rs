@@ -1,33 +1,44 @@
 //! LLM Integration Module for OxiRS Chat
 //!
 //! Provides unified interface for multiple LLM providers including OpenAI, Anthropic Claude,
-//! and local models with intelligent routing and fallback strategies.
+//! Cohere, Groq, Mistral, and local models with intelligent routing and fallback strategies.
 
 // Module declarations
 pub mod anthropic_provider;
-pub mod chain_of_thought; // NEW: Chain-of-Thought reasoning
+pub mod cache; // Response caching for fallback chains
+pub mod chain_of_thought; // Chain-of-Thought reasoning
 pub mod circuit_breaker;
+pub mod cohere_provider; // Cohere Command-R family
 pub mod config;
 pub mod cross_modal_reasoning;
 pub mod federated_learning;
 pub mod fine_tuning;
+pub mod groq_provider; // Groq ultra-fast LPU inference
+pub mod health_checker; // Provider health monitoring
 pub mod local_provider;
 pub mod manager;
+pub mod mistral_provider; // Mistral AI models
 pub mod neural_architecture_search;
 pub mod openai_provider;
 pub mod performance_optimization;
 pub mod providers;
 pub mod real_time_adaptation;
 pub mod reasoning;
-pub mod tree_of_thoughts; // NEW: Tree-of-Thoughts reasoning
+pub mod token_budget; // Token budget management
+pub mod tree_of_thoughts; // Tree-of-Thoughts reasoning
 pub mod types;
 
 // Re-export commonly used types
 pub use anthropic_provider::AnthropicProvider;
+pub use cache::{CacheConfig, CacheMetrics, CachedResponse, ResponseCache};
 pub use chain_of_thought::{
     ChainOfThought, ChainOfThoughtConfig, ChainOfThoughtEngine, StepType, ThoughtStep,
 };
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerStats};
+pub use cohere_provider::{
+    CohereChatMessage, CohereChatRequest, CohereChatResponse, CohereMetadata, CohereModel,
+    CohereProvider, CohereUsage,
+};
 pub use config::{
     BackoffStrategy, CircuitBreakerConfig, CircuitBreakerState, FallbackConfig, LLMConfig,
     ModelConfig, ProviderConfig, RateLimitConfig, RoutingConfig, RoutingStrategy,
@@ -44,8 +55,16 @@ pub use fine_tuning::{
     FineTuningConfig, FineTuningEngine, FineTuningJob, FineTuningStatistics, JobStatus,
     TrainingExample, TrainingParameters,
 };
+pub use groq_provider::{
+    GroqChatRequest, GroqChatResponse, GroqChoice, GroqMessage, GroqModel, GroqProvider, GroqUsage,
+};
+pub use health_checker::{HealthCheckConfig, HealthChecker, HealthStatus, ProviderHealth};
 pub use local_provider::LocalModelProvider;
 pub use manager::{EnhancedLLMManager, LLMManager};
+pub use mistral_provider::{
+    MistralChatRequest, MistralChatResponse, MistralChoice, MistralMessage, MistralModel,
+    MistralProvider, MistralUsage,
+};
 pub use neural_architecture_search::{
     ArchitectureOptimizer, ArchitectureSearch, ArchitectureSearchConfig, ModelArchitecture,
     SearchResult,
@@ -59,6 +78,7 @@ pub use providers::LLMProvider;
 pub use real_time_adaptation::{
     AdaptationConfig, AdaptationMetrics, AdaptationStrategy, RealTimeAdaptation,
 };
+pub use token_budget::{BudgetConfig, TokenBudget, UsageStats as TokenUsageStats, UserBudget};
 pub use tree_of_thoughts::{
     SearchStrategy, ThoughtNode, TreeOfThoughts, TreeOfThoughtsConfig, TreeOfThoughtsEngine,
 };

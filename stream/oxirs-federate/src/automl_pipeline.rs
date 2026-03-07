@@ -299,7 +299,7 @@ impl AutoMLPipeline {
             a.metrics
                 .combined_score
                 .partial_cmp(&b.metrics.combined_score)
-                .unwrap()
+                .expect("operation should succeed")
         }) {
             // Add Gaussian noise to best config for exploration
             let mut rng_gen = rng();
@@ -331,7 +331,11 @@ impl AutoMLPipeline {
         let tasks = self.meta_tasks.read().await;
         tasks
             .iter()
-            .max_by(|a, b| a.performance.partial_cmp(&b.performance).unwrap())
+            .max_by(|a, b| {
+                a.performance
+                    .partial_cmp(&b.performance)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|best_task| best_task.optimal_config.clone())
     }
 
@@ -376,7 +380,11 @@ impl AutoMLPipeline {
             {
                 let mut pop = self.architecture_population.write().await;
                 pop.extend(offspring);
-                pop.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+                pop.sort_by(|a, b| {
+                    b.fitness
+                        .partial_cmp(&a.fitness)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 pop.truncate(self.config.population_size);
             }
 
@@ -426,10 +434,11 @@ impl AutoMLPipeline {
                 tournament.push(&population[idx]);
             }
 
-            if let Some(winner) = tournament
-                .iter()
-                .max_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap())
-            {
+            if let Some(winner) = tournament.iter().max_by(|a, b| {
+                a.fitness
+                    .partial_cmp(&b.fitness)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            }) {
                 parents.push((*winner).clone());
             }
         }
@@ -574,7 +583,7 @@ mod tests {
         let best_config = pipeline
             .optimize_hyperparameters(objective_fn)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(best_config.learning_rate > 0.0);
         assert!(best_config.hidden_dim > 0);
 

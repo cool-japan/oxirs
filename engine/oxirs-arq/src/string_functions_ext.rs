@@ -456,7 +456,12 @@ fn validate_language_tag(tag: &str) -> Result<String> {
     let normalized = tag.to_lowercase();
 
     // Basic format check: starts with letter
-    if !normalized.chars().next().unwrap().is_ascii_alphabetic() {
+    if !normalized
+        .chars()
+        .next()
+        .expect("normalized string validated to be non-empty")
+        .is_ascii_alphabetic()
+    {
         bail!("Language tag must start with a letter");
     }
 

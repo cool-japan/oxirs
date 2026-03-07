@@ -308,7 +308,11 @@ impl AdvancedVectorIndex {
         }
 
         let mut results: Vec<SearchResult> = heap.into_iter().map(|r| r.0).collect();
-        results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+        results.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(results)
     }
@@ -386,7 +390,11 @@ impl AdvancedVectorIndex {
         }
 
         let mut results: Vec<SearchResult> = final_heap.into_iter().map(|r| r.0).collect();
-        results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+        results.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(results)
     }
@@ -478,7 +486,7 @@ impl VectorIndex for AdvancedVectorIndex {
             }
         }
 
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(results)
     }
 
@@ -588,7 +596,7 @@ impl VectorIndex for QuantizedVectorIndex {
             results.push((uri.clone(), distance));
         }
 
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(k);
 
         Ok(results)
@@ -605,7 +613,7 @@ impl VectorIndex for QuantizedVectorIndex {
             }
         }
 
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(results)
     }
 

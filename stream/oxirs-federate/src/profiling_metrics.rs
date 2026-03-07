@@ -284,14 +284,20 @@ pub struct ActiveQueryGuard;
 impl ActiveQueryGuard {
     /// Create a new active query guard
     pub fn new() -> Self {
-        global_metrics().lock().unwrap().increment_active_queries();
+        global_metrics()
+            .lock()
+            .expect("lock should not be poisoned")
+            .increment_active_queries();
         Self
     }
 }
 
 impl Drop for ActiveQueryGuard {
     fn drop(&mut self) {
-        global_metrics().lock().unwrap().decrement_active_queries();
+        global_metrics()
+            .lock()
+            .expect("lock should not be poisoned")
+            .decrement_active_queries();
     }
 }
 
@@ -305,13 +311,16 @@ impl Default for ActiveQueryGuard {
 pub fn get_timing_stats(operation: &str) -> Option<(usize, Duration, Duration, Duration)> {
     Profiler::global()
         .lock()
-        .unwrap()
+        .expect("operation should succeed")
         .get_timing_stats(operation)
 }
 
 /// Print profiling report from the global profiler
 pub fn print_profiling_report() {
-    Profiler::global().lock().unwrap().print_report();
+    Profiler::global()
+        .lock()
+        .expect("lock should not be poisoned")
+        .print_report();
 }
 
 #[cfg(test)]
@@ -348,13 +357,16 @@ mod tests {
     #[test]
     fn test_profile_guard() {
         // Start the global profiler
-        Profiler::global().lock().unwrap().start();
+        Profiler::global()
+            .lock()
+            .expect("lock should not be poisoned")
+            .start();
 
         let operation_name = format!(
             "guard_test_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_nanos()
         );
 
@@ -373,15 +385,27 @@ mod tests {
 
     #[test]
     fn test_active_query_guard() {
-        let initial_count = global_metrics().lock().unwrap().active_queries.get();
+        let initial_count = global_metrics()
+            .lock()
+            .expect("lock should not be poisoned")
+            .active_queries
+            .get();
 
         {
             let _guard = ActiveQueryGuard::new();
-            let active_count = global_metrics().lock().unwrap().active_queries.get();
+            let active_count = global_metrics()
+                .lock()
+                .expect("lock should not be poisoned")
+                .active_queries
+                .get();
             assert_eq!(active_count, initial_count + 1.0);
         }
 
-        let final_count = global_metrics().lock().unwrap().active_queries.get();
+        let final_count = global_metrics()
+            .lock()
+            .expect("lock should not be poisoned")
+            .active_queries
+            .get();
         assert_eq!(final_count, initial_count);
     }
 
@@ -406,13 +430,16 @@ mod tests {
     #[test]
     fn test_profiling_integration() {
         // Start the global profiler
-        Profiler::global().lock().unwrap().start();
+        Profiler::global()
+            .lock()
+            .expect("lock should not be poisoned")
+            .start();
 
         let operation_name = format!(
             "test_operation_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_nanos()
         );
 

@@ -640,3 +640,414 @@ mod tests {
         assert!(owl::SAME_AS.as_str().starts_with(owl::NAMESPACE));
     }
 }
+
+/// SKOS Simple Knowledge Organization System vocabulary namespace
+/// W3C spec: <https://www.w3.org/TR/skos-reference/>
+pub mod skos {
+    /// The SKOS namespace IRI
+    pub const NAMESPACE: &str = "http://www.w3.org/2004/02/skos/core#";
+
+    // --- SKOS Classes ---
+
+    /// skos:Concept class — the unit of thought in a thesaurus or taxonomy
+    pub const CONCEPT: &str = "http://www.w3.org/2004/02/skos/core#Concept";
+
+    /// skos:ConceptScheme class — a set of concepts
+    pub const CONCEPT_SCHEME: &str = "http://www.w3.org/2004/02/skos/core#ConceptScheme";
+
+    /// skos:Collection class — a meaningful collection of concepts
+    pub const COLLECTION: &str = "http://www.w3.org/2004/02/skos/core#Collection";
+
+    /// skos:OrderedCollection class — an ordered collection of concepts
+    pub const ORDERED_COLLECTION: &str = "http://www.w3.org/2004/02/skos/core#OrderedCollection";
+
+    // --- SKOS Lexical Labels ---
+
+    /// skos:prefLabel — preferred lexical label for a concept
+    pub const PREF_LABEL: &str = "http://www.w3.org/2004/02/skos/core#prefLabel";
+
+    /// skos:altLabel — alternative lexical label for a concept
+    pub const ALT_LABEL: &str = "http://www.w3.org/2004/02/skos/core#altLabel";
+
+    /// skos:hiddenLabel — a label not intended for display
+    pub const HIDDEN_LABEL: &str = "http://www.w3.org/2004/02/skos/core#hiddenLabel";
+
+    // --- SKOS Hierarchical Relations ---
+
+    /// skos:broader — a concept that is more general
+    pub const BROADER: &str = "http://www.w3.org/2004/02/skos/core#broader";
+
+    /// skos:narrower — a concept that is more specific
+    pub const NARROWER: &str = "http://www.w3.org/2004/02/skos/core#narrower";
+
+    /// skos:broaderTransitive — reflexive transitive closure of skos:broader
+    pub const BROADER_TRANSITIVE: &str = "http://www.w3.org/2004/02/skos/core#broaderTransitive";
+
+    /// skos:narrowerTransitive — reflexive transitive closure of skos:narrower
+    pub const NARROWER_TRANSITIVE: &str = "http://www.w3.org/2004/02/skos/core#narrowerTransitive";
+
+    /// skos:related — an associative relationship between concepts
+    pub const RELATED: &str = "http://www.w3.org/2004/02/skos/core#related";
+
+    // --- SKOS Mapping Relations ---
+
+    /// skos:exactMatch — two concepts are interchangeable across vocabularies
+    pub const EXACT_MATCH: &str = "http://www.w3.org/2004/02/skos/core#exactMatch";
+
+    /// skos:closeMatch — concepts are sufficiently similar to be useful
+    pub const CLOSE_MATCH: &str = "http://www.w3.org/2004/02/skos/core#closeMatch";
+
+    /// skos:broadMatch — the object concept is broader than the subject
+    pub const BROAD_MATCH: &str = "http://www.w3.org/2004/02/skos/core#broadMatch";
+
+    /// skos:narrowMatch — the object concept is narrower than the subject
+    pub const NARROW_MATCH: &str = "http://www.w3.org/2004/02/skos/core#narrowMatch";
+
+    /// skos:relatedMatch — an associative mapping relation
+    pub const RELATED_MATCH: &str = "http://www.w3.org/2004/02/skos/core#relatedMatch";
+
+    // --- SKOS Scheme Relations ---
+
+    /// skos:inScheme — the concept scheme that a concept is a member of
+    pub const IN_SCHEME: &str = "http://www.w3.org/2004/02/skos/core#inScheme";
+
+    /// skos:hasTopConcept — top-level concept in the concept scheme
+    pub const HAS_TOP_CONCEPT: &str = "http://www.w3.org/2004/02/skos/core#hasTopConcept";
+
+    /// skos:topConceptOf — the concept scheme that this is a top concept of
+    pub const TOP_CONCEPT_OF: &str = "http://www.w3.org/2004/02/skos/core#topConceptOf";
+
+    // --- SKOS Documentation Properties ---
+
+    /// skos:definition — a formal statement of the meaning of a concept
+    pub const DEFINITION: &str = "http://www.w3.org/2004/02/skos/core#definition";
+
+    /// skos:example — an example of how a concept is used
+    pub const EXAMPLE: &str = "http://www.w3.org/2004/02/skos/core#example";
+
+    /// skos:note — a general note for any purpose
+    pub const NOTE: &str = "http://www.w3.org/2004/02/skos/core#note";
+
+    /// skos:scopeNote — note that helps clarify the meaning of a concept
+    pub const SCOPE_NOTE: &str = "http://www.w3.org/2004/02/skos/core#scopeNote";
+
+    /// skos:changeNote — note about a modification to a concept
+    pub const CHANGE_NOTE: &str = "http://www.w3.org/2004/02/skos/core#changeNote";
+
+    /// skos:historyNote — note about the past state/meaning of a concept
+    pub const HISTORY_NOTE: &str = "http://www.w3.org/2004/02/skos/core#historyNote";
+
+    /// skos:editorialNote — administrative information for editors
+    pub const EDITORIAL_NOTE: &str = "http://www.w3.org/2004/02/skos/core#editorialNote";
+
+    // --- SKOS Notation ---
+
+    /// skos:notation — a notation, unique within the scope of a scheme
+    pub const NOTATION: &str = "http://www.w3.org/2004/02/skos/core#notation";
+
+    // --- SKOS Collections ---
+
+    /// skos:member — a member of a collection
+    pub const MEMBER: &str = "http://www.w3.org/2004/02/skos/core#member";
+
+    /// skos:memberList — the ordered list of members in an ordered collection
+    pub const MEMBER_LIST: &str = "http://www.w3.org/2004/02/skos/core#memberList";
+
+    // --- Helper functions ---
+
+    /// Returns true if `iri` belongs to the SKOS namespace
+    pub fn is_skos_iri(iri: &str) -> bool {
+        iri.starts_with(NAMESPACE)
+    }
+
+    /// Constructs a full SKOS IRI from a local name
+    pub fn skos(local: &str) -> String {
+        format!("{NAMESPACE}{local}")
+    }
+}
+
+#[cfg(test)]
+mod skos_vocab_tests {
+    use super::skos;
+
+    #[test]
+    fn test_skos_namespace() {
+        assert_eq!(skos::NAMESPACE, "http://www.w3.org/2004/02/skos/core#");
+    }
+
+    #[test]
+    fn test_skos_classes() {
+        assert_eq!(skos::CONCEPT, "http://www.w3.org/2004/02/skos/core#Concept");
+        assert_eq!(
+            skos::CONCEPT_SCHEME,
+            "http://www.w3.org/2004/02/skos/core#ConceptScheme"
+        );
+        assert_eq!(
+            skos::COLLECTION,
+            "http://www.w3.org/2004/02/skos/core#Collection"
+        );
+        assert_eq!(
+            skos::ORDERED_COLLECTION,
+            "http://www.w3.org/2004/02/skos/core#OrderedCollection"
+        );
+    }
+
+    #[test]
+    fn test_skos_lexical_labels() {
+        assert_eq!(
+            skos::PREF_LABEL,
+            "http://www.w3.org/2004/02/skos/core#prefLabel"
+        );
+        assert_eq!(
+            skos::ALT_LABEL,
+            "http://www.w3.org/2004/02/skos/core#altLabel"
+        );
+        assert_eq!(
+            skos::HIDDEN_LABEL,
+            "http://www.w3.org/2004/02/skos/core#hiddenLabel"
+        );
+    }
+
+    #[test]
+    fn test_skos_hierarchical_relations() {
+        assert_eq!(skos::BROADER, "http://www.w3.org/2004/02/skos/core#broader");
+        assert_eq!(
+            skos::NARROWER,
+            "http://www.w3.org/2004/02/skos/core#narrower"
+        );
+        assert_eq!(
+            skos::BROADER_TRANSITIVE,
+            "http://www.w3.org/2004/02/skos/core#broaderTransitive"
+        );
+        assert_eq!(
+            skos::NARROWER_TRANSITIVE,
+            "http://www.w3.org/2004/02/skos/core#narrowerTransitive"
+        );
+        assert_eq!(skos::RELATED, "http://www.w3.org/2004/02/skos/core#related");
+    }
+
+    #[test]
+    fn test_skos_mapping_relations() {
+        assert_eq!(
+            skos::EXACT_MATCH,
+            "http://www.w3.org/2004/02/skos/core#exactMatch"
+        );
+        assert_eq!(
+            skos::CLOSE_MATCH,
+            "http://www.w3.org/2004/02/skos/core#closeMatch"
+        );
+        assert_eq!(
+            skos::BROAD_MATCH,
+            "http://www.w3.org/2004/02/skos/core#broadMatch"
+        );
+        assert_eq!(
+            skos::NARROW_MATCH,
+            "http://www.w3.org/2004/02/skos/core#narrowMatch"
+        );
+        assert_eq!(
+            skos::RELATED_MATCH,
+            "http://www.w3.org/2004/02/skos/core#relatedMatch"
+        );
+    }
+
+    #[test]
+    fn test_skos_scheme_relations() {
+        assert_eq!(
+            skos::IN_SCHEME,
+            "http://www.w3.org/2004/02/skos/core#inScheme"
+        );
+        assert_eq!(
+            skos::HAS_TOP_CONCEPT,
+            "http://www.w3.org/2004/02/skos/core#hasTopConcept"
+        );
+        assert_eq!(
+            skos::TOP_CONCEPT_OF,
+            "http://www.w3.org/2004/02/skos/core#topConceptOf"
+        );
+    }
+
+    #[test]
+    fn test_skos_documentation_properties() {
+        assert_eq!(
+            skos::DEFINITION,
+            "http://www.w3.org/2004/02/skos/core#definition"
+        );
+        assert_eq!(skos::EXAMPLE, "http://www.w3.org/2004/02/skos/core#example");
+        assert_eq!(skos::NOTE, "http://www.w3.org/2004/02/skos/core#note");
+        assert_eq!(
+            skos::SCOPE_NOTE,
+            "http://www.w3.org/2004/02/skos/core#scopeNote"
+        );
+        assert_eq!(
+            skos::CHANGE_NOTE,
+            "http://www.w3.org/2004/02/skos/core#changeNote"
+        );
+        assert_eq!(
+            skos::HISTORY_NOTE,
+            "http://www.w3.org/2004/02/skos/core#historyNote"
+        );
+        assert_eq!(
+            skos::EDITORIAL_NOTE,
+            "http://www.w3.org/2004/02/skos/core#editorialNote"
+        );
+    }
+
+    #[test]
+    fn test_skos_notation_and_collections() {
+        assert_eq!(
+            skos::NOTATION,
+            "http://www.w3.org/2004/02/skos/core#notation"
+        );
+        assert_eq!(skos::MEMBER, "http://www.w3.org/2004/02/skos/core#member");
+        assert_eq!(
+            skos::MEMBER_LIST,
+            "http://www.w3.org/2004/02/skos/core#memberList"
+        );
+    }
+
+    #[test]
+    fn test_skos_is_skos_iri() {
+        assert!(skos::is_skos_iri(skos::CONCEPT));
+        assert!(skos::is_skos_iri(skos::BROADER));
+        assert!(skos::is_skos_iri(skos::EXACT_MATCH));
+        assert!(!skos::is_skos_iri("http://www.w3.org/2002/07/owl#Class"));
+        assert!(!skos::is_skos_iri(
+            "http://www.w3.org/2000/01/rdf-schema#label"
+        ));
+        assert!(!skos::is_skos_iri(""));
+        assert!(!skos::is_skos_iri("http://example.org/skos/concept"));
+    }
+
+    #[test]
+    fn test_skos_helper_fn() {
+        assert_eq!(
+            skos::skos("Concept"),
+            "http://www.w3.org/2004/02/skos/core#Concept"
+        );
+        assert_eq!(
+            skos::skos("broader"),
+            "http://www.w3.org/2004/02/skos/core#broader"
+        );
+        assert_eq!(skos::skos(""), "http://www.w3.org/2004/02/skos/core#");
+    }
+
+    #[test]
+    fn test_all_skos_iris_start_with_namespace() {
+        let all_iris = [
+            skos::CONCEPT,
+            skos::CONCEPT_SCHEME,
+            skos::COLLECTION,
+            skos::ORDERED_COLLECTION,
+            skos::PREF_LABEL,
+            skos::ALT_LABEL,
+            skos::HIDDEN_LABEL,
+            skos::BROADER,
+            skos::NARROWER,
+            skos::BROADER_TRANSITIVE,
+            skos::NARROWER_TRANSITIVE,
+            skos::RELATED,
+            skos::EXACT_MATCH,
+            skos::CLOSE_MATCH,
+            skos::BROAD_MATCH,
+            skos::NARROW_MATCH,
+            skos::RELATED_MATCH,
+            skos::IN_SCHEME,
+            skos::HAS_TOP_CONCEPT,
+            skos::TOP_CONCEPT_OF,
+            skos::DEFINITION,
+            skos::EXAMPLE,
+            skos::NOTE,
+            skos::SCOPE_NOTE,
+            skos::CHANGE_NOTE,
+            skos::HISTORY_NOTE,
+            skos::EDITORIAL_NOTE,
+            skos::NOTATION,
+            skos::MEMBER,
+            skos::MEMBER_LIST,
+        ];
+        for iri in &all_iris {
+            assert!(
+                iri.starts_with(skos::NAMESPACE),
+                "IRI {iri} does not start with SKOS namespace"
+            );
+        }
+    }
+
+    #[test]
+    fn test_skos_iris_are_unique() {
+        use std::collections::HashSet;
+        let all_iris = vec![
+            skos::CONCEPT,
+            skos::CONCEPT_SCHEME,
+            skos::COLLECTION,
+            skos::ORDERED_COLLECTION,
+            skos::PREF_LABEL,
+            skos::ALT_LABEL,
+            skos::HIDDEN_LABEL,
+            skos::BROADER,
+            skos::NARROWER,
+            skos::BROADER_TRANSITIVE,
+            skos::NARROWER_TRANSITIVE,
+            skos::RELATED,
+            skos::EXACT_MATCH,
+            skos::CLOSE_MATCH,
+            skos::BROAD_MATCH,
+            skos::NARROW_MATCH,
+            skos::RELATED_MATCH,
+            skos::IN_SCHEME,
+            skos::HAS_TOP_CONCEPT,
+            skos::TOP_CONCEPT_OF,
+            skos::DEFINITION,
+            skos::EXAMPLE,
+            skos::NOTE,
+            skos::SCOPE_NOTE,
+            skos::CHANGE_NOTE,
+            skos::HISTORY_NOTE,
+            skos::EDITORIAL_NOTE,
+            skos::NOTATION,
+            skos::MEMBER,
+            skos::MEMBER_LIST,
+        ];
+        let unique: HashSet<_> = all_iris.iter().collect();
+        assert_eq!(unique.len(), all_iris.len(), "All SKOS IRIs must be unique");
+    }
+
+    #[test]
+    fn test_skos_iris_contain_no_spaces() {
+        let all_iris = [
+            skos::CONCEPT,
+            skos::CONCEPT_SCHEME,
+            skos::COLLECTION,
+            skos::ORDERED_COLLECTION,
+            skos::PREF_LABEL,
+            skos::ALT_LABEL,
+            skos::HIDDEN_LABEL,
+            skos::BROADER,
+            skos::NARROWER,
+            skos::BROADER_TRANSITIVE,
+            skos::NARROWER_TRANSITIVE,
+            skos::RELATED,
+            skos::EXACT_MATCH,
+            skos::CLOSE_MATCH,
+            skos::BROAD_MATCH,
+            skos::NARROW_MATCH,
+            skos::RELATED_MATCH,
+            skos::IN_SCHEME,
+            skos::HAS_TOP_CONCEPT,
+            skos::TOP_CONCEPT_OF,
+            skos::DEFINITION,
+            skos::EXAMPLE,
+            skos::NOTE,
+            skos::SCOPE_NOTE,
+            skos::CHANGE_NOTE,
+            skos::HISTORY_NOTE,
+            skos::EDITORIAL_NOTE,
+            skos::NOTATION,
+            skos::MEMBER,
+            skos::MEMBER_LIST,
+        ];
+        for iri in &all_iris {
+            assert!(!iri.contains(' '), "IRI {iri} must not contain spaces");
+        }
+    }
+}

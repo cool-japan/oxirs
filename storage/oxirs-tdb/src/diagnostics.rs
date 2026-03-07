@@ -618,9 +618,18 @@ impl DiagnosticCheck for IndexConsistencyCheck {
             return Ok(results);
         }
 
-        let spo_triples = context.spo_triples.as_ref().unwrap();
-        let pos_triples = context.pos_triples.as_ref().unwrap();
-        let osp_triples = context.osp_triples.as_ref().unwrap();
+        let spo_triples = context
+            .spo_triples
+            .as_ref()
+            .expect("field validated to be Some above");
+        let pos_triples = context
+            .pos_triples
+            .as_ref()
+            .expect("field validated to be Some above");
+        let osp_triples = context
+            .osp_triples
+            .as_ref()
+            .expect("field validated to be Some above");
 
         // Convert to sets for comparison
         let spo_set: HashSet<Triple> = spo_triples.iter().copied().collect();
@@ -732,8 +741,14 @@ impl DiagnosticCheck for DictionaryConsistencyCheck {
             return Ok(results);
         }
 
-        let spo_triples = context.spo_triples.as_ref().unwrap();
-        let dictionary_ids = context.dictionary_node_ids.as_ref().unwrap();
+        let spo_triples = context
+            .spo_triples
+            .as_ref()
+            .expect("field validated to be Some above");
+        let dictionary_ids = context
+            .dictionary_node_ids
+            .as_ref()
+            .expect("field validated to be Some above");
 
         // Collect all node IDs from triples
         let mut index_node_ids = HashSet::new();

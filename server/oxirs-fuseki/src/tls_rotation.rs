@@ -395,7 +395,7 @@ impl CertificateRotation {
             let not_after = cert.validity().not_after;
             let now = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs() as i64;
 
             let expiry_timestamp = not_after.timestamp();
@@ -970,12 +970,12 @@ impl AcmeChallengeServer {
                                 .status(200)
                                 .header("content-type", "text/plain")
                                 .body(response.clone())
-                                .unwrap()
+                                .expect("response body build should succeed")
                         } else {
                             axum::response::Response::builder()
                                 .status(404)
                                 .body("Not found".to_string())
-                                .unwrap()
+                                .expect("response body build should succeed")
                         }
                     }
                 },

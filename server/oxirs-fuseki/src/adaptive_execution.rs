@@ -552,7 +552,7 @@ impl AdaptiveExecutionEngine {
         let std_dev_time = variance_time.sqrt();
 
         let mut sorted_times = times.clone();
-        sorted_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let median_time = sorted_times[sorted_times.len() / 2];
         let p95_time = sorted_times[(sorted_times.len() as f64 * 0.95) as usize];
         let p99_time = sorted_times[(sorted_times.len() as f64 * 0.99) as usize];

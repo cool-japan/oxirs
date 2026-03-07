@@ -5,7 +5,7 @@ use thiserror::Error;
 pub enum TsdbError {
     /// I/O error during storage operations
     #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(String),
 
     /// Compression or decompression error
     #[error("Compression error: {0}")]
@@ -60,6 +60,33 @@ pub enum TsdbError {
     /// Integration error (RDF store integration)
     #[error("Integration error: {0}")]
     Integration(String),
+
+    /// Apache Arrow conversion error
+    #[error("Arrow error: {0}")]
+    Arrow(String),
+
+    /// JSON serialization / deserialization error
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
+    /// Replication / Raft error
+    #[error("Replication error: {0}")]
+    Replication(String),
+
+    /// CRC checksum mismatch (WAL corruption)
+    #[error("CRC mismatch in WAL record (expected={expected:#010x}, got={got:#010x})")]
+    CrcMismatch {
+        /// Expected CRC value stored in the record.
+        expected: u32,
+        /// Computed CRC value of the record payload.
+        got: u32,
+    },
+}
+
+impl From<std::io::Error> for TsdbError {
+    fn from(e: std::io::Error) -> Self {
+        TsdbError::Io(e.to_string())
+    }
 }
 
 /// Result type for time-series operations

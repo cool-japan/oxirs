@@ -936,7 +936,7 @@ fn generate_timestamp_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .expect("operation should succeed")
         .as_secs()
         .to_string()
 }

@@ -702,13 +702,13 @@ impl MultiQueryOptimizer {
                     ExecutionPlan::TripleScan {
                         pattern: crate::model::pattern::TriplePattern::new(
                             Some(crate::model::pattern::SubjectPattern::Variable(
-                                Variable::new("?s").unwrap(),
+                                Variable::new("?s").expect("variable name is valid"),
                             )),
                             Some(crate::model::pattern::PredicatePattern::Variable(
-                                Variable::new("?p").unwrap(),
+                                Variable::new("?p").expect("variable name is valid"),
                             )),
                             Some(crate::model::pattern::ObjectPattern::Variable(
-                                Variable::new("?o").unwrap(),
+                                Variable::new("?o").expect("variable name is valid"),
                             )),
                         ),
                     },
@@ -774,7 +774,10 @@ mod tests {
         let stats = Arc::new(IndexStats::new());
         let model = CostModel::new(stats);
 
-        let history = model.execution_history.read().unwrap();
+        let history = model
+            .execution_history
+            .read()
+            .expect("lock should not be poisoned");
         assert_eq!(history.patterns.len(), 0);
     }
 

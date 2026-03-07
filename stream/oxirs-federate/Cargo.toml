@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "SERVICE planner and GraphQL stitching for federated SPARQL queries"
 keywords = ["federation", "distributed-query", "sparql", "graphql", "rdf"]
 categories = ["network-programming", "database", "algorithms"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
@@ -54,7 +55,7 @@ opentelemetry = { workspace = true, features = ["trace", "metrics"], optional = 
 opentelemetry-jaeger = { workspace = true, features = ["collector_client", "rt-tokio"], optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, features = ["trace", "rt-tokio"], optional = true }
-prometheus = { version = "0.13", optional = true }
+prometheus = { version = "0.14", optional = true }
 async-stream = "0.3"
 pin-project = "1.1"
 # oxigraph = "0.4.11"  # REMOVED: Using oxirs-core instead
@@ -103,3 +104,7 @@ monitoring = ["opentelemetry", "opentelemetry-jaeger", "opentelemetry-otlp", "op
 service-discovery = ["mdns-sd"]
 oauth = ["oauth2"]
 
+
+[[bench]]
+name = "federation_bench"
+harness = false

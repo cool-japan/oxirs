@@ -292,6 +292,7 @@ pub mod ast;
 pub mod auto_caching_strategies;
 pub mod custom_directives;
 pub mod custom_type_mappings;
+pub mod directive_registry;
 pub mod enhanced_errors;
 pub mod execution;
 pub mod federation;
@@ -388,6 +389,30 @@ pub mod observability;
 // Production-ready features (November 2025)
 pub mod production;
 
+// v0.6.0 Enhanced Subscriptions, Multi-tenancy, and Query Caching
+pub mod cache;
+pub mod multitenancy;
+pub mod subscription;
+// v1.1.0 Enhanced tenant module with schema registry, query filter, rate limiter
+pub mod tenant;
+// v1.1.0 Apollo Federation v2 Subgraph Support
+pub mod federation_v2;
+
+// v1.2.0 GraphQL Schema Version Registry
+pub mod schema_registry;
+
+// v1.1.0 Relay Cursor-based Pagination
+pub mod cursor_pagination;
+
+// v1.2.0 GraphQL subscription lifecycle management
+pub mod subscription_manager;
+
+// v1.2.0 DataLoader / batch resolver for GraphQL N+1 resolution
+pub mod batch_resolver;
+
+// v1.5.0 GraphQL __schema / __type introspection engine
+pub mod type_introspection;
+
 // Organized module groups
 pub mod core;
 pub mod distributed_cache;
@@ -396,6 +421,30 @@ pub mod dynamic_query_planner;
 pub mod features;
 pub mod networking;
 pub mod rdf;
+
+// v1.6.0 Field-level resolver pipeline with middleware
+pub mod field_resolver;
+
+// v1.7.0 GraphQL query complexity analysis and limiting
+pub mod query_complexity;
+
+// v1.8.0 GraphQL error formatting, classification, and aggregation
+pub mod error_formatter;
+
+// v1.9.0 Custom GraphQL directive processing engine
+pub mod directive_processor;
+
+// v1.10.0 GraphQL pagination handler (Relay cursor spec)
+pub mod pagination_handler;
+
+// v1.11.0 GraphQL field-level validation rules engine
+pub mod field_validator;
+
+// v1.1.0 round 16 GraphQL enum type resolution and coercion
+pub mod enum_resolver;
+
+// v1.1.0 round 15 GraphQL argument type coercion and validation
+pub mod argument_coercer;
 
 // Juniper-based implementation with proper RDF integration (enabled)
 pub mod juniper_schema;

@@ -124,7 +124,7 @@ impl MemoryPool {
         }
 
         let block = MemoryBlock {
-            ptr: NonNull::new(ptr).unwrap(),
+            ptr: NonNull::new(ptr).expect("ptr validated to be non-null above"),
             size,
             layout,
             allocated_at: Instant::now(),
@@ -212,7 +212,7 @@ impl MemoryPool {
             last_compaction: Some(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("SystemTime should be after UNIX_EPOCH")
                     .as_secs(),
             ),
         }

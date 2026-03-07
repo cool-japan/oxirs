@@ -155,7 +155,7 @@ impl ResilienceManager {
                     component: service_id.clone(),
                     predicted_failure_time: SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("operation should succeed")
                         .as_secs()
                         + 3600, // 1 hour
                     confidence: 0.7,
@@ -173,7 +173,7 @@ impl ResilienceManager {
                     component: service_id.clone(),
                     predicted_failure_time: SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("operation should succeed")
                         .as_secs()
                         + 7200, // 2 hours
                     confidence: 0.6,
@@ -196,7 +196,7 @@ impl ResilienceManager {
                     component: "federation_system".to_string(),
                     executed_at: SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("operation should succeed")
                         .as_secs(),
                     success: true,
                     description: "Initiated service restart sequence".to_string(),
@@ -210,7 +210,7 @@ impl ResilienceManager {
                     component: "query_engine".to_string(),
                     executed_at: SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("operation should succeed")
                         .as_secs(),
                     success: true,
                     description: "Enabled aggressive caching and optimization".to_string(),
@@ -224,7 +224,7 @@ impl ResilienceManager {
                     component: "cache_layer".to_string(),
                     executed_at: SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
+                        .expect("operation should succeed")
                         .as_secs(),
                     success: true,
                     description: "Initiated cache warming sequence".to_string(),

@@ -494,12 +494,12 @@ impl TemplateLibrary {
         let range_template = ConstraintTemplate::new("range", range_params, |values| {
             let min = values
                 .get("min")
-                .unwrap()
+                .expect("operation should succeed")
                 .parse::<i64>()
                 .map_err(|_| ShaclError::Configuration("Invalid min value".to_string()))?;
             let max = values
                 .get("max")
-                .unwrap()
+                .expect("operation should succeed")
                 .parse::<i64>()
                 .map_err(|_| ShaclError::Configuration("Invalid max value".to_string()))?;
 
@@ -544,7 +544,7 @@ impl TemplateLibrary {
                 .unwrap_or(0);
             let max = values
                 .get("max")
-                .unwrap()
+                .expect("operation should succeed")
                 .parse::<usize>()
                 .map_err(|_| ShaclError::Configuration("Invalid max value".to_string()))?;
 
@@ -574,7 +574,7 @@ mod tests {
             .target_class("ex:TestClass")
             .with_label("Test Shape")
             .build()
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(shape.id.as_str(), "TestShape");
         assert!(!shape.targets.is_empty());
@@ -589,17 +589,19 @@ mod tests {
             .datatype(xsd::string())
             .build()
             .build()
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(shape.id.as_str(), "PersonShape");
     }
 
     #[test]
     fn test_patterns() {
-        let email_shape = patterns::email().build().unwrap();
+        let email_shape = patterns::email().build().expect("operation should succeed");
         assert_eq!(email_shape.id.as_str(), "EmailShape");
 
-        let person_shape = patterns::person().build().unwrap();
+        let person_shape = patterns::person()
+            .build()
+            .expect("operation should succeed");
         assert_eq!(person_shape.id.as_str(), "PersonShape");
     }
 
@@ -613,13 +615,15 @@ mod tests {
     #[test]
     fn test_template_instantiation() {
         let library = TemplateLibrary::new();
-        let template = library.get("range").unwrap();
+        let template = library.get("range").expect("key should exist");
 
         let mut values = HashMap::new();
         values.insert("min".to_string(), "0".to_string());
         values.insert("max".to_string(), "100".to_string());
 
-        let constraints = template.instantiate(&values).unwrap();
+        let constraints = template
+            .instantiate(&values)
+            .expect("training should succeed");
         assert_eq!(constraints.len(), 2);
     }
 

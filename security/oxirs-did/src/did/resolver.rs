@@ -39,7 +39,9 @@ impl DidResolver {
 
         Self {
             methods,
-            cache: Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
+            cache: Arc::new(RwLock::new(LruCache::new(
+                NonZeroUsize::new(1000).expect("cache size must be non-zero"),
+            ))),
             cache_ttl_secs: 300, // 5 minutes
         }
     }
@@ -51,7 +53,9 @@ impl DidResolver {
 
         Self {
             methods,
-            cache: Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(100).unwrap()))),
+            cache: Arc::new(RwLock::new(LruCache::new(
+                NonZeroUsize::new(100).expect("cache size must be non-zero"),
+            ))),
             cache_ttl_secs: 3600, // 1 hour for offline
         }
     }

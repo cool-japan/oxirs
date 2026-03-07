@@ -78,7 +78,10 @@ impl ModelResolver {
                 .map_err(|e| SammError::Network(format!("Failed to create HTTP client: {}", e)))?;
             self.http_client = Some(client);
         }
-        Ok(self.http_client.as_ref().unwrap())
+        Ok(self
+            .http_client
+            .as_ref()
+            .expect("HTTP client should be available"))
     }
 
     /// Resolve a model element URN to a file path
@@ -234,7 +237,9 @@ impl ModelResolver {
         let element = parts[1].to_string();
 
         // Parse namespace and version from urn:samm:<namespace>:<version>
-        let namespace_version = parts[0].strip_prefix("urn:samm:").unwrap();
+        let namespace_version = parts[0]
+            .strip_prefix("urn:samm:")
+            .expect("prefix should be present");
         let nv_parts: Vec<&str> = namespace_version.rsplitn(2, ':').collect();
 
         if nv_parts.len() != 2 {
@@ -317,7 +322,7 @@ mod tests {
         // Valid URN
         let result = resolver.parse_urn("urn:samm:org.example:1.0.0#Movement");
         assert!(result.is_ok());
-        let parts = result.unwrap();
+        let parts = result.expect("result should be Ok");
         assert_eq!(parts.namespace, "org.example");
         assert_eq!(parts.version, "1.0.0");
         assert_eq!(parts.element, "Movement");
@@ -330,7 +335,7 @@ mod tests {
         // URN with nested namespace
         let result = resolver.parse_urn("urn:samm:org.eclipse.esmf:2.3.0#Aspect");
         assert!(result.is_ok());
-        let parts = result.unwrap();
+        let parts = result.expect("result should be Ok");
         assert_eq!(parts.namespace, "org.eclipse.esmf");
         assert_eq!(parts.version, "2.3.0");
         assert_eq!(parts.element, "Aspect");
@@ -360,7 +365,9 @@ mod tests {
         // Create a temporary directory structure
         let temp_dir = env::temp_dir().join("samm_resolver_test");
         let namespace_dir = temp_dir.join("org.example").join("1.0.0");
-        fs::create_dir_all(&namespace_dir).await.unwrap();
+        fs::create_dir_all(&namespace_dir)
+            .await
+            .expect("async operation should succeed");
 
         // Create a test file
         let test_file = namespace_dir.join("Movement.ttl");
@@ -369,7 +376,7 @@ mod tests {
             "@prefix samm: <urn:samm:org.eclipse.esmf.samm:meta-model:2.3.0#> .",
         )
         .await
-        .unwrap();
+        .expect("operation should succeed");
 
         // Add models root
         resolver.add_models_root(temp_dir.clone());
@@ -377,10 +384,12 @@ mod tests {
         // Resolve URN
         let result = resolver.resolve_urn("urn:samm:org.example:1.0.0#Movement");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), test_file);
+        assert_eq!(result.expect("operation should succeed"), test_file);
 
         // Cleanup
-        fs::remove_dir_all(temp_dir).await.unwrap();
+        fs::remove_dir_all(temp_dir)
+            .await
+            .expect("async operation should succeed");
     }
 
     #[tokio::test]
@@ -390,12 +399,16 @@ mod tests {
         // Create a temporary directory structure
         let temp_dir = env::temp_dir().join("samm_resolver_cache_test");
         let namespace_dir = temp_dir.join("org.example").join("1.0.0");
-        fs::create_dir_all(&namespace_dir).await.unwrap();
+        fs::create_dir_all(&namespace_dir)
+            .await
+            .expect("async operation should succeed");
 
         // Create a test file
         let test_file = namespace_dir.join("TestAspect.ttl");
         let test_content = "@prefix samm: <urn:samm:org.eclipse.esmf.samm:meta-model:2.3.0#> .";
-        fs::write(&test_file, test_content).await.unwrap();
+        fs::write(&test_file, test_content)
+            .await
+            .expect("async operation should succeed");
 
         // Add models root
         resolver.add_models_root(temp_dir.clone());
@@ -404,7 +417,7 @@ mod tests {
         let urn = "urn:samm:org.example:1.0.0#TestAspect";
         let result1 = resolver.load_element(urn).await;
         assert!(result1.is_ok());
-        assert_eq!(result1.unwrap(), test_content);
+        assert_eq!(result1.expect("operation should succeed"), test_content);
 
         // Check cache stats
         let stats = resolver.cache_stats();
@@ -413,10 +426,12 @@ mod tests {
         // Load element (second time - from cache)
         let result2 = resolver.load_element(urn).await;
         assert!(result2.is_ok());
-        assert_eq!(result2.unwrap(), test_content);
+        assert_eq!(result2.expect("operation should succeed"), test_content);
 
         // Cleanup
-        fs::remove_dir_all(temp_dir).await.unwrap();
+        fs::remove_dir_all(temp_dir)
+            .await
+            .expect("async operation should succeed");
     }
 
     #[test]

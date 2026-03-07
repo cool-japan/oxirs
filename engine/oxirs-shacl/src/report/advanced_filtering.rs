@@ -797,7 +797,7 @@ mod tests {
         let mut report = ValidationReport::new();
         report.add_violation(ValidationViolation {
             focus_node: oxirs_core::model::Term::NamedNode(
-                NamedNode::new("http://example.org/error").unwrap(),
+                NamedNode::new("http://example.org/error").expect("valid IRI"),
             ),
             result_severity: Severity::Violation,
             source_shape: ShapeId::new("ErrorShape"),
@@ -811,7 +811,7 @@ mod tests {
 
         report.add_violation(ValidationViolation {
             focus_node: oxirs_core::model::Term::NamedNode(
-                NamedNode::new("http://example.org/warning").unwrap(),
+                NamedNode::new("http://example.org/warning").expect("valid IRI"),
             ),
             result_severity: Severity::Warning,
             source_shape: ShapeId::new("WarningShape"),
@@ -823,7 +823,9 @@ mod tests {
             nested_results: Vec::new(),
         });
 
-        let filtered = engine.filter_report(&report).unwrap();
+        let filtered = engine
+            .filter_report(&report)
+            .expect("operation should succeed");
         assert_eq!(filtered.filtered_violations.len(), 1);
         assert_eq!(
             filtered.filtered_violations[0].result_severity,
@@ -877,7 +879,9 @@ mod tests {
             severity_filters: Vec::new(),
         };
 
-        let results = engine.query_reports(&criteria).unwrap();
+        let results = engine
+            .query_reports(&criteria)
+            .expect("query should succeed");
         assert_eq!(results.len(), 1);
     }
 }

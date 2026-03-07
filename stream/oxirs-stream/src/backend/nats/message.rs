@@ -35,7 +35,7 @@ impl From<StreamEvent> for NatsEventMessage {
         let data = serde_json::to_value(&event).unwrap_or_default();
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         Self {
@@ -53,7 +53,7 @@ impl NatsEventMessage {
     pub fn new(event_type: String, data: serde_json::Value) -> Self {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         Self {

@@ -92,7 +92,10 @@ impl InputValidator {
         if input.len() > self.max_input_size {
             violations.push(ValidationViolation {
                 violation_type: ViolationType::ExcessiveLength,
-                description: format!("Input exceeds maximum size of {} bytes", self.max_input_size),
+                description: format!(
+                    "Input exceeds maximum size of {} bytes",
+                    self.max_input_size
+                ),
                 severity: Severity::High,
             });
             risk_score += 0.5;
@@ -246,7 +249,9 @@ mod tests {
     #[test]
     fn test_valid_input() {
         let validator = InputValidator::new(1024 * 1024, 4096);
-        let result = validator.validate("SELECT ?s ?p ?o WHERE { ?s ?p ?o }").unwrap();
+        let result = validator
+            .validate("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
+            .unwrap();
         assert!(result.is_valid);
     }
 

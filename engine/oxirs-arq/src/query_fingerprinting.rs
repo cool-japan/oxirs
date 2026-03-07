@@ -269,7 +269,7 @@ impl QueryFingerprinter {
         // Check cache first
         let query_hash = self.quick_hash(query);
         {
-            let cache = self.cache.read().unwrap();
+            let cache = self.cache.read().expect("read lock should not be poisoned");
             if let Some(fp) = cache.get(&query_hash) {
                 self.stats.cache_hits.fetch_add(1, Ordering::Relaxed);
                 return Ok(fp.clone());
@@ -283,7 +283,10 @@ impl QueryFingerprinter {
 
         // Update cache
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self
+                .cache
+                .write()
+                .expect("write lock should not be poisoned");
             if cache.len() >= self.config.cache_size {
                 // Simple eviction: clear half the cache
                 let keys_to_remove: Vec<_> = cache.keys().take(cache.len() / 2).cloned().collect();
@@ -779,13 +782,20 @@ impl QueryFingerprinter {
             fingerprints_computed: self.stats.computed.load(Ordering::Relaxed),
             cache_hits: self.stats.cache_hits.load(Ordering::Relaxed),
             cache_misses: self.stats.cache_misses.load(Ordering::Relaxed),
-            cache_size: self.cache.read().unwrap().len(),
+            cache_size: self
+                .cache
+                .read()
+                .expect("read lock should not be poisoned")
+                .len(),
         }
     }
 
     /// Clear the fingerprint cache
     pub fn clear_cache(&self) {
-        self.cache.write().unwrap().clear();
+        self.cache
+            .write()
+            .expect("write lock should not be poisoned")
+            .clear();
     }
 }
 

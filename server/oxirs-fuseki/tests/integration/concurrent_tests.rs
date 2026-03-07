@@ -195,7 +195,7 @@ async fn test_query_cancellation() {
             "user1",
             RequestPriority::Normal,
             || {
-                std::thread::sleep(Duration::from_secs(10));
+                std::thread::sleep(Duration::from_millis(500));
                 42
             }
         ).await
@@ -276,7 +276,7 @@ async fn test_timeout_handling() {
         "user1",
         RequestPriority::Normal,
         || {
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(Duration::from_millis(300));
             42
         }
     ).await;

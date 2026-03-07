@@ -183,3 +183,107 @@ pub use protocol::{append_crc, calculate_crc, verify_crc, FunctionCode, ModbusTc
 // RTU support (requires "rtu" feature)
 #[cfg(feature = "rtu")]
 pub use protocol::ModbusRtuClient;
+
+/// Advanced byte-order-aware data codec (decoder + encoder).
+pub mod codec;
+/// Prometheus-compatible operational metrics.
+pub mod metrics;
+/// Runtime device registry with register maps and metadata.
+pub mod registry;
+
+// Re-exports for new modules
+pub use codec::{DecoderDataType, ModbusDecoder, ModbusEncoder, ModbusTypedValue};
+pub use metrics::{ModbusMetrics, PrometheusExporter};
+pub use registry::{DeviceRegistry, DeviceType, ModbusDevice};
+
+// ASCII protocol re-exports
+pub use protocol::{
+    compute_lrc, decode_ascii, encode_ascii, AsciiCodec, AsciiFrame, AsciiTransport,
+};
+
+// TLS client re-exports
+pub use client::{TlsConfig, TlsConfigBuilder, TlsMinVersion, TlsModbusClient, MODBUS_TLS_PORT};
+
+// Function code PDU re-exports
+pub use protocol::{
+    pack_bits, unpack_bits, ReadCoilsRequest, ReadCoilsResponse, ReadDiscreteInputsRequest,
+    ReadDiscreteInputsResponse, WriteMultipleCoilsRequest, WriteMultipleCoilsResponse,
+    WriteMultipleRegistersRequest, WriteMultipleRegistersResponse, MAX_READ_COILS,
+    MAX_READ_DISCRETE_INPUTS, MAX_WRITE_COILS, MAX_WRITE_REGISTERS,
+};
+
+/// SAMM Aspect Model integration for Modbus devices.
+pub mod samm;
+
+/// Extended Prometheus metrics export for Modbus devices.
+pub mod prometheus;
+
+/// Extended Modbus data type library: full IEEE 754, BCD, 64-bit integers,
+/// and endianness-controlled register-to-value conversion.
+pub mod datatype;
+
+/// Modbus device profile: structured register map with scaling, units,
+/// access flags, and JSON/TOML serialisation.
+pub mod device_profile;
+
+/// Modbus TCP/RTU gateway: bridges serial RTU buses to Modbus TCP with
+/// request queuing, concurrent connection handling, and transaction ID
+/// management.
+pub mod gateway;
+
+/// Register block caching with change detection: in-memory cache for
+/// Modbus register blocks with dead-band filtering, TTL-based expiry,
+/// change history, and bandwidth-saving statistics.
+pub mod register_cache;
+
+/// Modbus data logger: configurable polling, ring buffer storage,
+/// CSV/JSON export, and threshold-based alerting.
+pub mod data_logger;
+
+/// Modbus coil read/write controller (FC01, FC05, FC15) with PDU encoding.
+pub mod coil_controller;
+
+/// Modbus register monitor: threshold-based alerting with cooldown support.
+pub mod register_monitor;
+
+/// Modbus exception code processing and exponential-backoff retry logic.
+pub mod exception_handler;
+
+/// Modbus TCP frame listener and dispatcher (in-memory simulation).
+pub mod tcp_listener;
+
+/// Modbus holding register bank (FC03 / FC06 / FC16) with write-protection
+/// and per-register timestamps.
+pub mod holding_register_bank;
+
+/// Modbus coil and discrete-input register map (FC01/FC02/FC05/FC15) with
+/// read-only block enforcement and packed byte serialisation.
+pub mod coil_register_map;
+
+/// Modbus function code dispatch table: routes PDU requests to typed handlers.
+pub mod function_code_handler;
+
+/// Adaptive polling strategy (Fixed, Adaptive, OnChange, OnDemand) for Modbus registers.
+pub mod polling_strategy;
+pub use polling_strategy::{PollResult, PollingMode, PollingState, PollingStrategy};
+
+/// Modbus alarm/event management: rule-based triggering, acknowledge/clear lifecycle.
+pub mod alarm_manager;
+
+/// Register value validation: range, type, scaling, alarms, rate-of-change, dead-band.
+pub mod register_validator;
+
+/// Modbus batch register reading with adjacent-register coalescing and retry.
+pub mod batch_reader;
+
+/// Modbus event log: ring-buffer storage of register-change, connection, error events.
+pub mod event_log;
+
+/// Modbus register data encoding/decoding (IEEE 754, BCD, scaled integers).
+pub mod register_encoder;
+
+/// Modbus protocol frame analysis and statistics (v1.1.0 round 18 Batch E).
+pub mod protocol_analyzer;
+
+/// Modbus register change detection: tracks sequential snapshots and emits diffs.
+pub mod register_watcher;

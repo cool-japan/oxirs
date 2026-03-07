@@ -70,6 +70,7 @@ pub use crate::optimization::integration::ValidationStrategy;
 pub mod advanced_features;
 pub mod analytics;
 pub mod builders;
+pub mod cache;
 pub mod constraints;
 pub mod custom_components;
 pub mod designer;
@@ -79,16 +80,21 @@ pub mod integration;
 pub mod iri_resolver;
 #[cfg(feature = "lsp")]
 pub mod lsp;
+pub mod node_expressions;
 pub mod optimization;
 pub mod paths;
 pub mod report;
+pub mod schema_import;
 pub mod scirs_graph_integration;
 pub mod security;
+pub mod shaclc_parser;
 pub mod shape_import;
 pub mod shape_inheritance;
+pub mod shape_map;
 pub mod shape_versioning;
 pub mod shapes;
 pub mod sparql;
+pub mod sparql_af;
 pub mod targets;
 pub mod templates;
 pub mod testing;
@@ -108,9 +114,17 @@ pub use advanced_features::{
 };
 pub use analytics::ValidationAnalytics;
 pub use builders::*;
+pub use cache::{
+    CacheStats, CachedValidationResult, ParallelConstraintConfig, ParallelConstraintOutcome,
+    ParallelConstraintValidator, ParallelValidationStats, ParallelValidationSummary, TripleKey,
+    ValidationCache, ValidationCacheKey,
+};
 pub use constraints::{
-    Constraint, ConstraintContext, ConstraintEvaluationResult, NodeKindConstraint,
-    PropertyConstraint,
+    AdvancedSparqlConstraint, AlwaysViolatingEvaluator, Constraint, ConstraintContext,
+    ConstraintEvaluationResult, ExpressionConstraintComponent, ExpressionConstraintResult,
+    ExpressionContext, ExpressionEvaluator, FailingEvaluator, MockSparqlEvaluator,
+    NodeKindConstraint, PathResolver, PropertyConstraint, ShaclExpression, ShaclValue,
+    SparqlConstraintResult, SparqlConstraintSeverity, SparqlEvaluator,
 };
 pub use custom_components::{
     ComponentMetadata, CustomConstraint, CustomConstraintRegistry, EmailValidationComponent,
@@ -156,6 +170,22 @@ pub use visual_editor::{
     ColorScheme, ExportFormat, LayoutDirection, ShapeVisualizer, VisualizerConfig,
 };
 pub use w3c_test_suite::*;
+
+// Re-export SHACL-AF SPARQL target types
+pub use sparql_af::{
+    ask_validator::{
+        FailingAskExecutor, MockAskExecutor, SparqlAskExecutor, SparqlAskResult,
+        SparqlAskValidator, SparqlAskValidatorBuilder, SparqlAskViolation,
+    },
+    sparql_target::{
+        ParameterBinding, SparqlAfTarget, SparqlAfTargetResult, SparqlTargetEvaluator,
+        SparqlTargetMock,
+    },
+    target_type::{
+        SparqlTargetParameter, SparqlTargetType, SparqlTargetTypeInstance, SparqlTargetTypeRegistry,
+    },
+    PrefixMap, SubstitutionContext,
+};
 
 // Re-export designer types
 pub use designer::{
@@ -627,6 +657,50 @@ impl ValidationConfig {
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 // Validator module
 pub mod validator;
+// SHACL node expression evaluator (v1.1.0 round 5)
+pub mod node_expression_evaluator;
+
+// SHACL target declaration evaluator (v1.1.0 round 6)
+pub mod target_selector;
+
+// SHACL sh:message template interpolation (v1.1.0 round 7)
+pub mod message_formatter;
+
+// SHACL SPARQL-based constraint validation (sh:SPARQLConstraintComponent) (v1.1.0 round 8)
+pub mod sparql_constraint_validator;
+
+// SHACL property path constraint checking (v1.1.0 round 9)
+pub mod property_path_checker;
+
+// SHACL shape graph loader and indexer (v1.1.0 round 10)
+pub mod shape_graph_loader;
+
+// SHACL entailment regime support: RDFS + OWL Direct subsets (v1.1.0 round 11)
+pub mod entailment_regime;
+
+// Pattern-based SHACL shape matching (v1.1.0 round 12)
+pub mod shape_matcher;
+
+// SHACL constraint inheritance via sh:and/sh:or/sh:not/sh:xone (v1.1.0 round 13)
+pub mod constraint_inheritance;
+
+// SHACL severity level handling (v1.1.0 round 12)
+pub mod severity_handler;
+
+// SHACL focus node selection (v1.1.0 round 11)
+pub mod focus_node_selector;
+
+// SHACL property path execution — full path operator evaluation (v1.1.0 round 13)
+pub mod path_executor;
+
+// SHACL sh:parameter / parameterized constraint components (v1.1.0 round 14)
+pub mod constraint_parameter;
+
+// SHACL sh:datatype constraint checker (v1.1.0 round 15)
+pub mod datatype_checker;
+
+// SHACL sh:node constraint component (v1.1.0 round 16)
+pub mod node_constraint;
 
 // Re-export validator types
 pub use validator::{ValidationStats, Validator, ValidatorBuilder};

@@ -58,10 +58,7 @@ impl FallbackChain {
 }
 
 /// Execute operation with fallback
-pub async fn execute_with_fallback<T, F, Fb>(
-    primary: F,
-    fallback: Fb,
-) -> Result<T>
+pub async fn execute_with_fallback<T, F, Fb>(primary: F, fallback: Fb) -> Result<T>
 where
     F: FnOnce() -> Result<T>,
     Fb: FnOnce() -> Result<T>,
@@ -151,7 +148,9 @@ impl<T: Clone> CachedFallback<T> {
 
     /// Update cache with new value
     pub fn update(&self, value: T) -> Result<()> {
-        let mut cache = self.cache.write()
+        let mut cache = self
+            .cache
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
         *cache = Some(CacheEntry {
             value,
@@ -162,7 +161,9 @@ impl<T: Clone> CachedFallback<T> {
 
     /// Get cached value if not expired
     pub fn get(&self) -> Result<Option<T>> {
-        let cache = self.cache.read()
+        let cache = self
+            .cache
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
 
         if let Some(entry) = cache.as_ref() {
@@ -201,22 +202,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_fallback_success_primary() {
-        let result = execute_with_fallback(
-            || Ok::<_, anyhow::Error>(42),
-            || Ok(0),
-        )
-        .await;
+        let result = execute_with_fallback(|| Ok::<_, anyhow::Error>(42), || Ok(0)).await;
 
         assert_eq!(result.unwrap(), 42);
     }
 
     #[tokio::test]
     async fn test_fallback_uses_fallback() {
-        let result = execute_with_fallback(
-            || Err::<i32, _>(anyhow!("Primary failed")),
-            || Ok(99),
-        )
-        .await;
+        let result =
+            execute_with_fallback(|| Err::<i32, _>(anyhow!("Primary failed")), || Ok(99)).await;
 
         assert_eq!(result.unwrap(), 99);
     }

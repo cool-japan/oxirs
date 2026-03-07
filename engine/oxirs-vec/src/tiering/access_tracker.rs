@@ -74,7 +74,7 @@ impl AccessTracker {
             // Calculate QPS
             let avg_qps = if !hist.is_empty() {
                 let time_span = now
-                    .duration_since(*hist.front().unwrap())
+                    .duration_since(*hist.front().expect("hist validated to be non-empty"))
                     .unwrap_or(Duration::from_secs(1))
                     .as_secs_f64();
                 total_queries as f64 / time_span.max(1.0)
@@ -175,7 +175,7 @@ impl AccessTracker {
         let p50 = sorted[sorted.len() * 50 / 100];
         let p95 = sorted[sorted.len() * 95 / 100];
         let p99 = sorted[sorted.len() * 99 / 100];
-        let max = *sorted.last().unwrap();
+        let max = *sorted.last().expect("sorted validated to be non-empty");
 
         super::types::LatencyPercentiles { p50, p95, p99, max }
     }
@@ -284,7 +284,7 @@ impl AccessTracker {
             })
             .collect();
 
-        indices.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        indices.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         indices.truncate(limit);
         indices
     }

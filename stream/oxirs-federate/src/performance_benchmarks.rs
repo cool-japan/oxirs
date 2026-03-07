@@ -591,7 +591,7 @@ mod tests {
                 Ok(())
             })
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(result.name, "test_op");
         assert_eq!(result.summary.iterations, 50);
@@ -607,7 +607,10 @@ mod tests {
         };
 
         let benchmark = PerformanceBenchmark::new(config);
-        let result = benchmark.benchmark_query_decomposition(10).await.unwrap();
+        let result = benchmark
+            .benchmark_query_decomposition(10)
+            .await
+            .expect("async operation should succeed");
 
         assert!(result.summary.iterations > 0);
         assert!(result.throughput > 0.0);
@@ -622,7 +625,10 @@ mod tests {
         };
 
         let benchmark = PerformanceBenchmark::new(config);
-        let result = benchmark.benchmark_parallel_execution(4).await.unwrap();
+        let result = benchmark
+            .benchmark_parallel_execution(4)
+            .await
+            .expect("async operation should succeed");
 
         assert!(result.summary.iterations > 0);
         assert!(result.summary.mean.as_micros() > 0);
@@ -636,7 +642,10 @@ mod tests {
         };
 
         let benchmark = PerformanceBenchmark::new(config);
-        let result = benchmark.load_test(Duration::from_secs(1)).await.unwrap();
+        let result = benchmark
+            .load_test(Duration::from_secs(1))
+            .await
+            .expect("async operation should succeed");
 
         assert!(result.total_requests > 0);
         assert!(result.throughput > 0.0);
@@ -692,7 +701,7 @@ mod tests {
             load_test_result: None,
         };
 
-        let json = report.to_json().unwrap();
+        let json = report.to_json().expect("operation should succeed");
         assert!(json.contains("timestamp"));
         assert!(json.contains("config"));
     }

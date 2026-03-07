@@ -5,7 +5,6 @@
 
 use crate::{
     neural_patterns::{NeuralPatternConfig, NeuralPatternRecognizer},
-    quantum_enhanced_pattern_optimizer::QuantumEnhancedPatternOptimizer,
     Result, ShaclAiError,
 };
 
@@ -39,9 +38,6 @@ pub struct NeuralTransformerPatternIntegration {
 
     /// Neural pattern recognizer integration
     neural_recognizer: Arc<Mutex<NeuralPatternRecognizer>>,
-
-    /// Quantum optimizer integration
-    quantum_optimizer: Option<Arc<Mutex<QuantumEnhancedPatternOptimizer>>>,
 
     /// Position encoding for sequential patterns
     positional_encoder: Arc<Mutex<PositionalEncoder>>,
@@ -853,7 +849,7 @@ impl PatternMemoryBank {
             })
             .collect();
 
-        similarities.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        similarities.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
         similarities
             .into_iter()
@@ -939,7 +935,6 @@ impl NeuralTransformerPatternIntegration {
             pattern_embedder,
             attention_cost_predictor,
             neural_recognizer,
-            quantum_optimizer: None,
             positional_encoder,
             pattern_memory,
             config,
@@ -1067,7 +1062,7 @@ impl NeuralTransformerPatternIntegration {
             .map(|(i, &cost)| (i, cost))
             .collect();
 
-        indexed_costs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        indexed_costs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Build optimized plan
         for (pattern_idx, cost) in indexed_costs {

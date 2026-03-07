@@ -460,7 +460,13 @@ impl NAS {
             }
 
             // Check for improvement
-            let current_best = self.best_architecture.read().await.as_ref().unwrap().score;
+            let current_best = self
+                .best_architecture
+                .read()
+                .await
+                .as_ref()
+                .expect("best_architecture should be set after update_best")
+                .score;
             if current_best > best_score + 0.001 {
                 best_score = current_best;
                 no_improvement = 0;

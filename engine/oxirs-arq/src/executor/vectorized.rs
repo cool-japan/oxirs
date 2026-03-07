@@ -151,8 +151,8 @@ impl ColumnarData {
         }
 
         let id = self.dictionary.len() as u64;
-        Arc::get_mut(&mut self.dictionary).unwrap().insert(id, term.clone());
-        Arc::get_mut(&mut self.reverse_dict).unwrap().insert(term.clone(), id);
+        Arc::get_mut(&mut self.dictionary).expect("Arc should have single owner during mutation").insert(id, term.clone());
+        Arc::get_mut(&mut self.reverse_dict).expect("Arc should have single owner during mutation").insert(term.clone(), id);
         id
     }
 
@@ -541,7 +541,7 @@ impl VectorizedExecutor {
 
     /// Get current execution statistics
     pub fn get_stats(&self) -> VectorizedStats {
-        self.stats.lock().unwrap().clone()
+        self.stats.lock().expect("lock should not be poisoned").clone()
     }
 
     /// Batch processing with adaptive chunking

@@ -292,11 +292,13 @@ impl ParallelQueryExecutor {
         });
 
         let final_results = Arc::try_unwrap(results).unwrap_or_else(|arc| {
-            let mutex = arc.lock().unwrap();
+            let mutex = arc.lock().expect("lock should not be poisoned");
             Mutex::new(mutex.clone())
         });
 
-        Ok(final_results.into_inner().unwrap())
+        Ok(final_results
+            .into_inner()
+            .expect("lock should not be poisoned"))
     }
 
     /// Check if two bindings are compatible for joining

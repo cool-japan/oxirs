@@ -348,7 +348,7 @@ impl MemoryManagedContext {
 
     /// Check and handle memory pressure
     fn check_memory_pressure(&self) -> Result<()> {
-        let current_usage = *self.current_usage.lock().unwrap();
+        let current_usage = *self.current_usage.lock().expect("lock should not be poisoned");
         let pressure_ratio = current_usage as f64 / self.config.memory_limit as f64;
 
         self.memory_pressure_gauge.set(pressure_ratio);
@@ -455,10 +455,10 @@ impl MemoryManagedContext {
 
     /// Get comprehensive memory statistics
     pub fn get_memory_stats(&self) -> MemoryStats {
-        let current_usage = *self.current_usage.lock().unwrap();
-        let peak_usage = *self.peak_usage.lock().unwrap();
-        let allocation_count = *self.allocation_count.lock().unwrap();
-        let deallocation_count = *self.deallocation_count.lock().unwrap();
+        let current_usage = *self.current_usage.lock().expect("lock should not be poisoned");
+        let peak_usage = *self.peak_usage.lock().expect("lock should not be poisoned");
+        let allocation_count = *self.allocation_count.lock().expect("lock should not be poisoned");
+        let deallocation_count = *self.deallocation_count.lock().expect("lock should not be poisoned");
 
         let buffer_pool_hits = self.buffer_pool_hit_counter.get();
         let buffer_pool_misses = self.buffer_pool_miss_counter.get();

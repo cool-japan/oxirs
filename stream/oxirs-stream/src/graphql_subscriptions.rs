@@ -721,7 +721,9 @@ impl GraphQLSubscriptionManager {
                 // Remove timed-out subscriptions
                 subs.retain(|_, subscription| {
                     let inactive_duration = now - subscription.metadata.last_activity;
-                    inactive_duration < ChronoDuration::from_std(timeout).unwrap()
+                    inactive_duration
+                        < ChronoDuration::from_std(timeout)
+                            .expect("timeout should be valid chrono Duration")
                 });
             }
         });

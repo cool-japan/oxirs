@@ -177,8 +177,13 @@
 
 pub mod aas_parser;
 pub mod analytics;
+/// Structural differ for SAMM Aspect Models.
+pub mod aspect_differ;
 pub mod cache;
+pub mod cloud_backends;
+pub mod cloud_client;
 pub mod cloud_storage;
+pub mod codegen;
 pub mod comparison;
 pub mod documentation;
 pub mod dtdl_parser;
@@ -187,6 +192,7 @@ pub mod generators;
 pub mod graph_analytics;
 pub mod metamodel;
 pub mod migration;
+pub mod operation_mapper;
 pub mod package;
 pub mod parser;
 pub mod performance;
@@ -195,10 +201,57 @@ pub mod query;
 pub mod query_cache;
 pub mod serializer;
 pub mod simd_ops;
+pub mod submodel_templates;
 pub mod templates;
 pub mod transformation;
 pub mod utils;
+pub mod validation;
 pub mod validator;
+pub mod versioning;
+// SAMM vocabulary mapper (v1.1.0 round 5)
+pub mod vocabulary_mapper;
+
+// SAMM/BAMM unit catalog with SI and derived units (v1.1.0 round 6)
+pub mod unit_catalog;
+
+/// Registry of SAMM constraint types with validation support (v1.1.0 round 7).
+pub mod constraint_registry;
+
+/// SAMM aspect hierarchical property chain traversal (v1.1.0 round 8).
+pub mod aspect_chain;
+
+/// SAMM operation registry for aspect operations (v1.1.0 round 9).
+pub mod operation_registry;
+
+/// SAMM physical unit conversion engine (v1.1.0 round 10).
+pub mod unit_converter;
+
+/// SAMM event model for IoT events (v1.1.0 round 11).
+pub mod event_model;
+
+/// Aspect model serialization to JSON/YAML/Text (v1.1.0 round 12).
+pub mod aspect_export;
+
+/// SAMM characteristic validation (v1.1.0 round 13).
+pub mod characteristic_validator;
+
+/// SAMM aspect model validation — required properties, cardinality, constraints, cycles (v1.1.0 round 13).
+pub mod aspect_validator;
+
+/// SAMM aspect model serialization to JSON/YAML/Turtle/Compact formats (v1.1.0 round 14).
+pub mod model_serializer;
+
+/// SAMM entity resolution: hierarchy traversal, property flattening, and comparison (v1.1.0 round 12).
+pub mod entity_resolver;
+
+/// SAMM payload generation from aspect model definitions (v1.1.0 round 11).
+pub mod payload_generator;
+
+/// SAMM property mapping between aspect models and target schemas (v1.1.0 round 15).
+pub mod property_mapper;
+
+/// SAMM characteristic constraint validators (RangeConstraint, LengthConstraint, EncodingConstraint, RegularExpressionConstraint) (v1.1.0 round 16).
+pub mod constraint_validator;
 
 // Re-exports for convenience
 pub use analytics::{
@@ -213,9 +266,16 @@ pub use cache::{
     AspectCache, CacheStatistics, CharacteristicCache, EntityCache, LruModelCache, OperationCache,
     PropertyCache, TtlCache, TtlCacheStatistics,
 };
+pub use cloud_client::{
+    CloudStorageClient, CloudStorageError, MockCloudStorage, RetryableCloudClient,
+};
 pub use cloud_storage::{
     BatchResult, CacheStats, CloudModelStorage, CloudStorageBackend, MemoryBackend, ModelInfo,
     ObjectMetadata,
+};
+pub use codegen::{
+    HttpMethod, JsonSchemaGenerator, JsonSchemaOptions, JsonSchemaValidator, OpenApiGenerator,
+    OpenApiOptions, ValidationError as JsonSchemaValidationError,
 };
 pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, PropertyChange};
 pub use documentation::{DocumentationFormat, DocumentationGenerator, DocumentationStyle};
@@ -246,6 +306,11 @@ pub use templates::{
     PostRenderHook, PreRenderHook, TemplateContext, TemplateEngine, ValidationHook,
 };
 pub use transformation::{ModelTransformation, TransformationRule};
+pub use validation::{
+    SammSchemaValidator, SchemaValidationError, SchemaValidationWarning, ValidationReport,
+    ValidationRule,
+};
+pub use versioning::{AspectMigrationRegistry, AspectVersion, MigrationStep, VersionedAspect};
 
 /// SAMM version supported by this implementation
 pub const SAMM_VERSION: &str = "2.3.0";

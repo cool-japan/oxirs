@@ -566,7 +566,7 @@ impl IntuitiveQueryPlanner {
         }
 
         // Sort by combined intuitive score
-        pattern_rankings.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
+        pattern_rankings.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(IntuitiveExecutionPlan {
             ordered_patterns: pattern_rankings,

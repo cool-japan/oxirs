@@ -776,7 +776,7 @@ mod tests {
         wizard.add_target_class("foaf:Person");
         wizard.add_property("foaf:name").required().string().done();
 
-        let shape = wizard.build().unwrap();
+        let shape = wizard.build().expect("operation should succeed");
         assert!(!shape.targets.is_empty());
     }
 }

@@ -1,17 +1,22 @@
 //! # OxiRS WASM
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.1.0)
+//! **Status**: Development Release (v0.2.0)
 //!
 //! WebAssembly bindings for OxiRS - Run RDF/SPARQL in the browser.
 //!
 //! ## Features
 //!
-//! - **RDF Parsing**: Turtle, N-Triples, JSON-LD
-//! - **In-Memory Store**: HashMap-based triple store
-//! - **SPARQL Queries**: SELECT, ASK, CONSTRUCT
-//! - **Validation**: Basic SHACL validation
+//! - **Streaming RDF Parser**: Turtle, N-Triples, N-Quads (incremental chunk processing)
+//! - **Compact Triple Store**: Dictionary-based, 12 bytes per triple, dual sorted indexes
+//! - **JS/TS API**: Clean `wasm_bindgen` surface via `OxiRSStore` and `WasmSparqlStore`
+//! - **SPARQL Queries**: SELECT, ASK, CONSTRUCT (triple-pattern based)
+//! - **SPARQL UPDATE**: INSERT DATA, DELETE DATA, INSERT/DELETE WHERE, CLEAR, DROP
+//! - **SPARQL Enhancements**: OPTIONAL, UNION, FILTER expressions
+//! - **RDFS Inference**: subClassOf/subPropertyOf transitivity, domain/range typing
+//! - **Named Graphs**: Multi-graph storage with GRAPH pattern queries
+//! - **Memory Efficient**: Optimized for WASM's 4 GB address space limit
 //!
 //! ## Example (JavaScript)
 //!
@@ -31,17 +36,61 @@
 //! console.log(results);
 //! ```
 
-mod error;
-mod parser;
-mod query;
-mod store;
+pub mod api;
+pub mod error;
+pub mod inference;
+pub mod named_graph;
+pub mod parser;
+pub mod query;
+pub mod store;
+pub mod update;
+
+// v1.1.0 SPARQL Results CSV/TSV serializer
+pub mod results_csv;
+
+// v1.1.0 round 5: GeoJSON serialization/deserialization for SPARQL geo results
+pub mod geojson_support;
+
+// v1.1.0 round 6: SPARQL query pretty-printer and formatter
+pub mod sparql_formatter;
+
+// v1.1.0 round 7: Namespace/prefix management for RDF serializers
+pub mod prefix_manager;
+
+// v1.1.0 round 11: Streaming / incremental chunk-based RDF document parser
+pub mod streaming_parser;
+
+// v1.1.0 round 12: WASM/JS interop bridge type conversions
+pub mod wasm_bridge;
+
+// v1.1.0 round 13: Client-side SPARQL query validation (syntax/semantic checks)
+pub mod query_validator;
+
+// v1.1.0 round 11: RDF graph visualization with Fruchterman-Reingold layout
+pub mod graph_visualizer;
+
+// v1.1.0 round 12: In-memory indexed triple store for WASM
+pub mod triple_store;
+
+// v1.1.0 round 13: In-memory SPARQL executor (SELECT/ASK/CONSTRUCT/DESCRIBE + FILTER)
+pub mod sparql_executor;
+
+// v1.1.0 round 14: WASM storage abstraction layer (key-value with namespace isolation + TTL)
+pub mod storage_adapter;
+
+// v1.1.0 round 15: WASM event dispatching system (pub/sub for browser events)
+pub mod event_dispatcher;
+
+// v1.1.0 round 16: RDF namespace prefix management for WASM bindings
+pub mod namespace_manager;
 
 use wasm_bindgen::prelude::*;
 
+pub use api::WasmSparqlStore;
 pub use error::WasmError;
 pub use store::OxiRSStore;
 
-// Initialize panic hook for better error messages
+// Initialize panic hook for better error messages in browser DevTools
 #[wasm_bindgen(start)]
 pub fn init() {
     console_error_panic_hook::set_once();

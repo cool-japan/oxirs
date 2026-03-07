@@ -1,39 +1,10 @@
-//! Module for revolutionary chat optimization
-
-use super::*;
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
-use tracing::{debug, info, warn};
-
-//! Revolutionary Chat Optimization Framework for OxiRS Chat
+//! Configuration types for the revolutionary chat optimization framework
 //!
-//! This module integrates the revolutionary AI capabilities developed in oxirs-arq
-//! with the chat system, providing unified optimization, advanced statistics,
-//! AI-powered conversation analysis, and real-time performance enhancement.
+//! This module defines configuration structures for unified optimization,
+//! advanced statistics, AI-powered conversation analysis, and real-time
+//! performance enhancement.
 
-use anyhow::Result;
-use scirs2_core::error::CoreError;
-use scirs2_core::memory::{BufferPool, GlobalBufferPool};
-use scirs2_core::metrics::{Counter, Timer, Histogram, MetricRegistry};
-use scirs2_core::ml_pipeline::{MLPipeline, ModelPredictor, FeatureTransformer};
-use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1};
-use scirs2_core::parallel_ops::{par_chunks, par_join};
-use scirs2_core::profiling::Profiler;
-use scirs2_core::quantum_optimization::{QuantumOptimizer, QuantumStrategy};
-use scirs2_core::random::{Random, rng};
-use scirs2_core::simd_ops::{simd_dot_product, simd_matrix_multiply};
-use scirs2_core::stats::{statistical_analysis, correlation_analysis};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::Notify;
-use uuid::Uuid;
-
-use crate::messages::{Message, MessageRole};
-use crate::types::{StreamResponseChunk, ProcessingStage};
 
 /// Revolutionary chat optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,5 +180,3 @@ impl Default for ChatPerformanceTargets {
         }
     }
 }
-
-/// Revolutionary chat optimizer with unified coordination

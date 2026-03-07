@@ -250,7 +250,9 @@ impl GpuQueryEngine {
             .axis_iter(Axis(0))
             .into_par_iter()
             .map(|embedding| {
-                let emb_slice = embedding.as_slice().unwrap();
+                let emb_slice = embedding
+                    .as_slice()
+                    .expect("embedding array should be contiguous");
                 Self::cosine_similarity_simd(emb_slice, query_slice)
             })
             .collect();

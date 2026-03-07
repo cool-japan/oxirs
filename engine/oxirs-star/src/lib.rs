@@ -204,17 +204,23 @@ pub mod adaptive_query_optimizer;
 pub mod advanced_query;
 pub mod annotation_aggregation;
 pub mod annotation_lifecycle;
+pub mod annotation_paths;
+pub mod annotation_profile;
 pub mod annotations;
 pub mod backup_restore;
 pub mod bloom_filter;
+pub mod cache;
 pub mod cli;
 pub mod cluster_scaling;
 pub mod compact_annotation_storage;
 pub mod compatibility;
+pub mod compliance;
 pub mod compliance_reporting;
 pub mod cryptographic_provenance;
+pub mod distributed;
 pub mod docs;
 pub mod enhanced_errors;
+pub mod execution;
 pub mod functions;
 pub mod governance;
 pub mod gpu_acceleration;
@@ -240,13 +246,21 @@ pub mod property_graph_bridge;
 pub mod quantum_sparql_optimizer;
 pub mod query;
 pub mod query_optimizer;
+pub mod quoted_graph;
+pub mod rdf_star_formats;
 pub mod reasoning;
 pub mod reification;
+pub mod reification_bridge;
 pub mod security_audit;
 pub mod semantics;
+pub mod serialization;
 pub mod serializer;
 pub mod shacl_star;
+pub mod sparql;
 pub mod sparql_enhanced;
+pub mod sparql_star_bind_values;
+pub mod sparql_star_extended;
+pub mod storage;
 pub mod storage_integration;
 pub mod store;
 pub mod streaming_query;
@@ -256,7 +270,47 @@ pub mod tiered_storage;
 pub mod troubleshooting;
 pub mod trust_scoring;
 pub mod validation_framework;
+pub mod w3c_compliance;
+// RDF-star reification mapper (v1.1.0 round 5)
+pub mod reification_mapper;
 pub mod write_ahead_log;
+
+// RDF 1.1 reification ↔ RDF-star bidirectional converter (v1.1.0 round 7)
+pub mod triple_reifier;
+
+// RDF-star provenance tracker (v1.1.0 round 6)
+pub mod provenance_tracker;
+
+// W3C RDF Patch A/D/TX format (v1.1.0 round 8)
+pub mod rdf_patch;
+
+// In-memory store for RDF-star quoted triples (v1.1.0 round 9)
+pub mod quoted_triple_store;
+
+// RDF-star annotation graph for triple metadata (v1.1.0 round 10)
+pub mod annotation_graph;
+
+// RDF-star serialization to Turtle-star, N-Triples-star, JSON-LD-star (v1.1.0 round 11)
+pub mod rdf_star_serializer;
+
+// RDF-star pattern matching for nested triple queries (v1.1.0 round 13)
+pub mod star_pattern_matcher;
+
+// RDF-star graph normalization (v1.1.0 round 12)
+pub mod star_normalizer;
+
+// RDF-star query to standard RDF rewriting (v1.1.0 round 11)
+pub mod star_query_rewriter;
+
+/// RDF / RDF-star graph diff: added/removed triples, RDF Patch generation/application,
+/// symmetric difference, blank-node-aware isomorphic diff (v1.1.0 round 13)
+pub mod triple_diff;
+
+/// RDF-star graph statistics collector (v1.1.0 round 14).
+pub mod star_statistics;
+
+/// RDF-star graph merging with conflict resolution (v1.1.0 round 15).
+pub mod graph_merger;
 
 // Re-export main types
 pub use enhanced_errors::{

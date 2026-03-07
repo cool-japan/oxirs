@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Semantic Aspect Meta Model (SAMM) implementation for OxiRS"
 keywords = ["samm", "aspect-model", "semantic-web", "rdf", "digital-twin"]
 categories = ["data-structures", "parser-implementations", "web-programming"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
@@ -44,7 +45,7 @@ futures = "0.3"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 quick-xml = { version = "0.38", features = ["serialize"] }
-zip = { version = "1.1", default-features = false, features = ["deflate"] }
+oxiarc-archive.workspace = true
 base64 = "0.22"
 
 # Error handling and logging
@@ -60,6 +61,9 @@ regex = "1.12"
 num_cpus = "1.17"
 bytecount = "0.6"
 reqwest.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+hex.workspace = true
 chrono = { version = "0.4", features = ["serde"] }
 
 # Template engine for custom code generation

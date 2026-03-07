@@ -257,7 +257,11 @@ impl EnhancedW3cTestSuiteRunner {
         Ok(TestManifest {
             id: format!(
                 "manifest-{}",
-                manifest_path.file_stem().unwrap().to_str().unwrap()
+                manifest_path
+                    .file_stem()
+                    .expect("valid UTF-8")
+                    .to_str()
+                    .expect("path should be valid UTF-8")
             ),
             label: format!("Test manifest from {}", manifest_path.display()),
             description: Some(format!("Loaded from {}", manifest_path.display())),
@@ -738,7 +742,7 @@ mod tests {
     #[tokio::test]
     async fn test_performance_metrics_initialization() {
         let config = W3cTestConfig::default();
-        let runner = EnhancedW3cTestSuiteRunner::new(config).unwrap();
+        let runner = EnhancedW3cTestSuiteRunner::new(config).expect("construction should succeed");
         let metrics = runner.performance_metrics();
 
         assert_eq!(metrics.total_execution_time, Duration::ZERO);

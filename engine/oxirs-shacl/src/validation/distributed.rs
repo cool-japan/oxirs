@@ -753,7 +753,7 @@ mod tests {
         let assigned = validator
             .assign_partitions(partitions, &workers)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(assigned[0].assigned_worker, Some("w1".to_string()));
         assert_eq!(assigned[1].assigned_worker, Some("w2".to_string()));

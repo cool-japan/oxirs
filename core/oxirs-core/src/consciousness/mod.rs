@@ -213,10 +213,10 @@ impl ConsciousnessModule {
             integration_level: 0.3, // Start with basic integration
             optimization_cache: Arc::new(RwLock::new(OptimizationCache::new())),
             string_pool: Arc::new(RwLock::new(LruCache::new(
-                std::num::NonZeroUsize::new(1000).unwrap(),
+                std::num::NonZeroUsize::new(1000).expect("constant is non-zero"),
             ))),
             pattern_cache: Arc::new(RwLock::new(LruCache::new(
-                std::num::NonZeroUsize::new(500).unwrap(),
+                std::num::NonZeroUsize::new(500).expect("constant is non-zero"),
             ))),
         }
     }

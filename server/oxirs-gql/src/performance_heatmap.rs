@@ -280,8 +280,18 @@ impl HeatmapGenerator {
             return Err("No data points available".to_string());
         }
 
-        let start_time = self.data_points.iter().map(|p| p.timestamp).min().unwrap();
-        let end_time = self.data_points.iter().map(|p| p.timestamp).max().unwrap();
+        let start_time = self
+            .data_points
+            .iter()
+            .map(|p| p.timestamp)
+            .min()
+            .expect("collection should not be empty");
+        let end_time = self
+            .data_points
+            .iter()
+            .map(|p| p.timestamp)
+            .max()
+            .expect("collection should not be empty");
 
         let mut cells_map: HashMap<(u64, usize), Vec<u64>> = HashMap::new();
 

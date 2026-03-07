@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "RDF-star and SPARQL-star grammar support for quoted triples"
 keywords = ["rdf-star", "sparql-star", "quoted-triples", "rdf", "semantic-web"]
 categories = ["data-structures", "parser-implementations", "database"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

@@ -515,8 +515,8 @@ impl DataRebalancingManager {
         let mut loads: Vec<_> = node_loads.values().cloned().collect();
         loads.sort_by_key(|l| l.data_size_bytes);
 
-        let source_load = loads.last().unwrap();
-        let target_load = loads.first().unwrap();
+        let source_load = loads.last().expect("collection validated to be non-empty");
+        let target_load = loads.first().expect("collection validated to be non-empty");
 
         // Calculate how much data to migrate
         let total_data: usize = loads.iter().map(|l| l.data_size_bytes).sum();
@@ -539,7 +539,7 @@ impl DataRebalancingManager {
             target_load.node_id,
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs()
         );
 

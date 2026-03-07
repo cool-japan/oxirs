@@ -263,7 +263,7 @@ impl CrashRecoveryManager {
             self.node_id,
             SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs()
         );
 
@@ -450,7 +450,9 @@ impl CrashRecoveryManager {
             return Err("No checkpoints available".to_string());
         }
 
-        let latest = checkpoints.last().unwrap();
+        let latest = checkpoints
+            .last()
+            .expect("collection validated to be non-empty");
 
         info!(
             "Loading checkpoint {} (sequence: {})",
@@ -484,7 +486,9 @@ impl CrashRecoveryManager {
             return Ok(());
         }
 
-        let latest = checkpoints.last().unwrap();
+        let latest = checkpoints
+            .last()
+            .expect("collection validated to be non-empty");
         let checkpoint_seq = latest.sequence_number;
 
         info!("Replaying WAL from sequence {}", checkpoint_seq);

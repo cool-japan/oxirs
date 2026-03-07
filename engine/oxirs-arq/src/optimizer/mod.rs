@@ -10,6 +10,21 @@ pub mod index_types;
 pub mod production_tuning;
 pub mod statistics;
 
+pub mod adaptive;
+pub mod join_order;
+pub mod materialized_view;
+pub mod passes;
+pub mod view_registry;
+
+pub use adaptive::*;
+pub use join_order::*;
+pub use materialized_view::*;
+pub use passes::{
+    ConstantFoldingPass, OptimizationPass, OptimizationPipeline, PipelineResult,
+    RedundantJoinEliminationPass, UnusedVariableEliminationPass,
+};
+pub use view_registry::*;
+
 pub use cardinality_integration::*;
 pub use config::*;
 pub use execution_tracking::*;

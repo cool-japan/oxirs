@@ -44,6 +44,9 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
+// Import invalidation coordinator for dependency tracking
+use crate::cache::CacheCoordinator;
+
 /// Query result cache with fingerprint-based keys
 pub struct QueryResultCache {
     /// Cache entries
@@ -54,6 +57,10 @@ pub struct QueryResultCache {
     config: CacheConfig,
     /// Cache statistics
     stats: Arc<RwLock<CacheStatistics>>,
+    /// Invalidation coordinator (optional for backward compatibility)
+    invalidation_coordinator: Option<Arc<CacheCoordinator>>,
+    /// Invalidation flags (tracks which entries have been invalidated)
+    invalidated_entries: Arc<RwLock<std::collections::HashSet<String>>>,
 }
 
 /// Configuration for query result cache
@@ -176,7 +183,29 @@ impl QueryResultCache {
             lru_queue: Arc::new(RwLock::new(VecDeque::new())),
             config,
             stats: Arc::new(RwLock::new(CacheStatistics::default())),
+            invalidation_coordinator: None,
+            invalidated_entries: Arc::new(RwLock::new(std::collections::HashSet::new())),
         }
+    }
+
+    /// Create with invalidation coordinator
+    pub fn with_invalidation_coordinator(
+        config: CacheConfig,
+        coordinator: Arc<CacheCoordinator>,
+    ) -> Self {
+        Self {
+            entries: Arc::new(RwLock::new(HashMap::new())),
+            lru_queue: Arc::new(RwLock::new(VecDeque::new())),
+            config,
+            stats: Arc::new(RwLock::new(CacheStatistics::default())),
+            invalidation_coordinator: Some(coordinator),
+            invalidated_entries: Arc::new(RwLock::new(std::collections::HashSet::new())),
+        }
+    }
+
+    /// Attach invalidation coordinator
+    pub fn attach_coordinator(&mut self, coordinator: Arc<CacheCoordinator>) {
+        self.invalidation_coordinator = Some(coordinator);
     }
 
     /// Put query results into cache
@@ -236,6 +265,21 @@ impl QueryResultCache {
 
     /// Get query results from cache
     pub fn get(&self, fingerprint_hash: &str) -> Option<Vec<u8>> {
+        // Check if entry has been invalidated
+        {
+            let invalidated = self.invalidated_entries.read().expect("lock poisoned");
+            if invalidated.contains(fingerprint_hash) {
+                // Entry was invalidated, return None
+                if self.config.enable_stats {
+                    let mut stats = self.stats.write().expect("lock poisoned");
+                    stats.misses += 1;
+                    stats.invalidations += 1;
+                    stats.calculate_hit_rate();
+                }
+                return None;
+            }
+        }
+
         let mut entries = self.entries.write().expect("lock poisoned");
         let mut lru = self.lru_queue.write().expect("lock poisoned");
 
@@ -294,6 +338,12 @@ impl QueryResultCache {
 
     /// Invalidate a specific cache entry
     pub fn invalidate(&self, fingerprint_hash: &str) -> Result<()> {
+        // Mark as invalidated
+        {
+            let mut invalidated = self.invalidated_entries.write().expect("lock poisoned");
+            invalidated.insert(fingerprint_hash.to_string());
+        }
+
         let mut entries = self.entries.write().expect("lock poisoned");
         let mut lru = self.lru_queue.write().expect("lock poisoned");
 
@@ -310,12 +360,32 @@ impl QueryResultCache {
         Ok(())
     }
 
+    /// Mark entry as invalidated without removing (for batched invalidation)
+    pub fn mark_invalidated(&self, fingerprint_hash: &str) -> Result<()> {
+        let mut invalidated = self.invalidated_entries.write().expect("lock poisoned");
+        invalidated.insert(fingerprint_hash.to_string());
+
+        if self.config.enable_stats {
+            let mut stats = self.stats.write().expect("lock poisoned");
+            stats.invalidations += 1;
+        }
+
+        Ok(())
+    }
+
     /// Invalidate all cache entries
     pub fn invalidate_all(&self) -> Result<()> {
         let mut entries = self.entries.write().expect("lock poisoned");
         let mut lru = self.lru_queue.write().expect("lock poisoned");
+        let mut invalidated = self.invalidated_entries.write().expect("lock poisoned");
 
         let count = entries.len();
+
+        // Mark all as invalidated
+        for key in entries.keys() {
+            invalidated.insert(key.clone());
+        }
+
         entries.clear();
         lru.clear();
 

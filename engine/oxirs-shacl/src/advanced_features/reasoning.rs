@@ -1479,11 +1479,20 @@ mod tests {
 
         // Set initial prior
         validator.set_prior("test".to_string(), 0.3);
-        assert_eq!(*validator.get_priors().get("test").unwrap(), 0.3);
+        assert_eq!(
+            *validator
+                .get_priors()
+                .get("test")
+                .expect("key should exist"),
+            0.3
+        );
 
         // After validation, prior should be updated
         validator.validate_probabilistic("test", true, 0.9);
-        let updated_prior = *validator.get_priors().get("test").unwrap();
+        let updated_prior = *validator
+            .get_priors()
+            .get("test")
+            .expect("key should exist");
 
         // Updated prior should be higher than initial
         assert!(updated_prior > 0.3);

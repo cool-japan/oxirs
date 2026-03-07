@@ -137,7 +137,7 @@ pub async fn metrics_stream(
         let overview = state.analytics.get_overview().await;
         let event = axum::response::sse::Event::default()
             .json_data(overview)
-            .unwrap();
+            .expect("SSE event serialization should succeed");
 
         Some((Ok(event), state))
     });

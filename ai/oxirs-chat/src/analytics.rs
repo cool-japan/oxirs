@@ -1,4 +1,9 @@
 //! Analytics module for conversation analysis
+//!
+//! Contains the base analytics types and the `conversation` submodule with
+//! turn-level analytics and quality scoring.
+
+pub mod conversation;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

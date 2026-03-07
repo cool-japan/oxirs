@@ -242,7 +242,10 @@ impl CdcProcessor {
 
     /// Handle transaction event assembly
     async fn handle_transaction_event(&self, event: CdcEvent) -> StreamResult<Vec<CdcEvent>> {
-        let tx_id = event.transaction_id.clone().unwrap();
+        let tx_id = event
+            .transaction_id
+            .clone()
+            .expect("transaction_id should be present for transaction events");
         let mut transactions = self.active_transactions.write().await;
 
         let now = Utc::now();

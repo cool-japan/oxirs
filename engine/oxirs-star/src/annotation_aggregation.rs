@@ -258,8 +258,14 @@ impl AnnotationAggregator {
         let timestamp_range = if timestamps.is_empty() {
             None
         } else {
-            let earliest = timestamps.iter().min().unwrap();
-            let latest = timestamps.iter().max().unwrap();
+            let earliest = timestamps
+                .iter()
+                .min()
+                .expect("timestamps validated to be non-empty");
+            let latest = timestamps
+                .iter()
+                .max()
+                .expect("timestamps validated to be non-empty");
             Some((*earliest, *latest))
         };
 
@@ -369,8 +375,14 @@ impl AnnotationAggregator {
             return Ok(Vec::new());
         }
 
-        let start_time = *timestamps.iter().min().unwrap();
-        let end_time = *timestamps.iter().max().unwrap();
+        let start_time = *timestamps
+            .iter()
+            .min()
+            .expect("timestamps validated to be non-empty");
+        let end_time = *timestamps
+            .iter()
+            .max()
+            .expect("timestamps validated to be non-empty");
 
         // Create time buckets
         let mut buckets = Vec::new();
@@ -434,14 +446,14 @@ impl AnnotationAggregator {
                     a.confidence
                         .unwrap_or(0.0)
                         .partial_cmp(&b.confidence.unwrap_or(0.0))
-                        .unwrap()
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 })
-                .unwrap()
+                .expect("annotations validated to be non-empty")
                 .clone(),
             ConflictResolution::MostRecent => annotations
                 .iter()
                 .max_by_key(|a| a.timestamp)
-                .unwrap()
+                .expect("annotations validated to be non-empty")
                 .clone(),
             ConflictResolution::MostTrustedSource => {
                 let mut best = &annotations[0];
@@ -518,7 +530,7 @@ impl AnnotationAggregator {
         }
 
         let mut sorted = values.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let mid = sorted.len() / 2;
         if sorted.len() % 2 == 0 {

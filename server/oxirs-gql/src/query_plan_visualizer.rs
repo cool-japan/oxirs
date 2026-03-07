@@ -500,8 +500,8 @@ impl QueryPlanVisualizer {
     /// Generate execution timeline
     pub fn generate_timeline(&self, plan: &QueryPlan) -> String {
         let mut output = String::new();
-        writeln!(&mut output, "Execution Timeline:").unwrap();
-        writeln!(&mut output, "==================").unwrap();
+        writeln!(&mut output, "Execution Timeline:").expect("writing to String should not fail");
+        writeln!(&mut output, "==================").expect("writing to String should not fail");
 
         let levels = plan.execution_levels();
         let max_level = levels.values().max().copied().unwrap_or(0);
@@ -514,7 +514,8 @@ impl QueryPlanVisualizer {
                 .collect();
 
             if !nodes_at_level.is_empty() {
-                writeln!(&mut output, "\nLevel {}:", level).unwrap();
+                writeln!(&mut output, "\nLevel {}:", level)
+                    .expect("writing to String should not fail");
                 for (_id, node) in nodes_at_level {
                     let time_str = node
                         .execution_time_ms
@@ -530,7 +531,7 @@ impl QueryPlanVisualizer {
                         "  - {} [{}]{}{}",
                         node.name, node.node_type, time_str, parallel
                     )
-                    .unwrap();
+                    .expect("writing to String should not fail");
                 }
             }
         }
@@ -541,12 +542,17 @@ impl QueryPlanVisualizer {
     /// Generate cost breakdown
     pub fn generate_cost_breakdown(&self, plan: &QueryPlan) -> String {
         let mut output = String::new();
-        writeln!(&mut output, "Cost Breakdown:").unwrap();
-        writeln!(&mut output, "===============").unwrap();
-        writeln!(&mut output, "Total Cost: {:.2}\n", plan.total_cost).unwrap();
+        writeln!(&mut output, "Cost Breakdown:").expect("writing to String should not fail");
+        writeln!(&mut output, "===============").expect("writing to String should not fail");
+        writeln!(&mut output, "Total Cost: {:.2}\n", plan.total_cost)
+            .expect("writing to String should not fail");
 
         let mut nodes: Vec<_> = plan.nodes.values().collect();
-        nodes.sort_by(|a, b| b.estimated_cost.partial_cmp(&a.estimated_cost).unwrap());
+        nodes.sort_by(|a, b| {
+            b.estimated_cost
+                .partial_cmp(&a.estimated_cost)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         for node in nodes {
             let percentage = (node.estimated_cost / plan.total_cost) * 100.0;
@@ -555,7 +561,7 @@ impl QueryPlanVisualizer {
                 "{:<30} {:>8.2} ({:>5.1}%)",
                 node.name, node.estimated_cost, percentage
             )
-            .unwrap();
+            .expect("writing to String should not fail");
         }
 
         output

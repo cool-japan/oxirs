@@ -245,10 +245,16 @@ impl<'a> CachedModelQuery<'a> {
         if let Some(entry) = cache.get_mut(key) {
             entry.access_count += 1;
             entry.last_accessed = std::time::Instant::now();
-            *self.hits.write().unwrap() += 1;
+            *self
+                .hits
+                .write()
+                .expect("write lock should not be poisoned") += 1;
             Some(entry.value.clone())
         } else {
-            *self.misses.write().unwrap() += 1;
+            *self
+                .misses
+                .write()
+                .expect("write lock should not be poisoned") += 1;
             None
         }
     }

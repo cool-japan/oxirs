@@ -611,8 +611,8 @@ impl FederatedQueryPlanner {
     /// Recursively extract patterns from WHERE clause content, including SERVICE blocks
     fn extract_patterns_recursive(&self, content: &str, patterns: &mut Vec<TriplePattern>) {
         // Handle SERVICE blocks
-        let service_regex =
-            regex::Regex::new(r"SERVICE\s+(?:SILENT\s+)?<([^>]+)>\s*\{([^}]+)\}").unwrap();
+        let service_regex = regex::Regex::new(r"SERVICE\s+(?:SILENT\s+)?<([^>]+)>\s*\{([^}]+)\}")
+            .expect("valid regex pattern");
         let mut remaining_content = content.to_string();
 
         // Extract patterns from SERVICE blocks

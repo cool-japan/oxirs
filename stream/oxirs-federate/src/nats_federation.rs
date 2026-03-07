@@ -1099,7 +1099,7 @@ mod tests {
 
         let selected = manager.select_worker(&workers);
         assert!(selected.is_some());
-        assert!(workers.contains(&selected.unwrap()));
+        assert!(workers.contains(&selected.expect("operation should succeed")));
     }
 
     #[tokio::test]

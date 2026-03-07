@@ -20,18 +20,23 @@ pub mod hilbert_rtree;
 pub mod kdtree;
 pub mod quadtree;
 pub mod r_star_tree;
+pub mod rtree;
 pub mod spatial_hash;
 pub mod spatial_index_trait;
+pub mod spatial_join;
+pub mod spatial_rtree_index;
 
 pub use grid_index::GridIndex;
 pub use hilbert_rtree::HilbertRTree;
 pub use kdtree::KdTree;
 pub use quadtree::Quadtree;
 pub use r_star_tree::RStarTree;
+pub use rtree::{BoundingBox as RTreeBBox, RTree as PureRTree};
 pub use spatial_hash::SpatialHash;
 pub use spatial_index_trait::{
     create_index_with_hint, select_optimal_index, IndexHint, SpatialIndexTrait,
 };
+pub use spatial_rtree_index::{RtreeEntry, SpatialRtreeIndex};
 
 use crate::error::{GeoSparqlError, Result};
 use crate::geometry::Geometry;

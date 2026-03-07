@@ -217,8 +217,9 @@ impl ImmutableStorage {
             blocks: Arc::new(RwLock::new(BlockStore {
                 path: config.path.join("blocks"),
                 cache: lru::LruCache::new(
-                    std::num::NonZeroUsize::new(cache_size)
-                        .unwrap_or(std::num::NonZeroUsize::new(1000).unwrap()),
+                    std::num::NonZeroUsize::new(cache_size).unwrap_or(
+                        std::num::NonZeroUsize::new(1000).expect("constant is non-zero"),
+                    ),
                 ),
                 metadata: HashMap::new(),
             })),

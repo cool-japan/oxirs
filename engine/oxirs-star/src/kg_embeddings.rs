@@ -361,13 +361,13 @@ impl EmbeddingModel for TransE {
                     // Get indices (using same extraction as vocabulary)
                     let h_idx = vocab
                         .entity_idx(&Vocabulary::term_to_string(&triple.subject))
-                        .unwrap();
+                        .expect("entity should be in vocabulary");
                     let r_idx = vocab
                         .relation_idx(&Vocabulary::term_to_string(&triple.predicate))
-                        .unwrap();
+                        .expect("relation should be in vocabulary");
                     let t_idx = vocab
                         .entity_idx(&Vocabulary::term_to_string(&triple.object))
-                        .unwrap();
+                        .expect("entity should be in vocabulary");
 
                     // Positive score
                     let pos_score = self.score(h_idx, r_idx, t_idx);
@@ -509,12 +509,15 @@ impl EmbeddingModel for TransE {
         let mut scores: Vec<(String, f64)> = Vec::new();
         for t_idx in 0..vocab.num_entities() {
             let score = self.score(h_idx, r_idx, t_idx);
-            let entity = vocab.entity(t_idx).unwrap().to_string();
+            let entity = vocab
+                .entity(t_idx)
+                .expect("entity index should be valid")
+                .to_string();
             scores.push((entity, -score)); // Negate for ranking (higher is better)
         }
 
         // Sort by score (descending)
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Return top-k
         Ok(scores.into_iter().take(k).collect())
@@ -813,13 +816,13 @@ impl EmbeddingModel for DistMult {
                     // Get indices
                     let h_idx = vocab
                         .entity_idx(&Vocabulary::term_to_string(&triple.subject))
-                        .unwrap();
+                        .expect("entity should be in vocabulary");
                     let r_idx = vocab
                         .relation_idx(&Vocabulary::term_to_string(&triple.predicate))
-                        .unwrap();
+                        .expect("relation should be in vocabulary");
                     let t_idx = vocab
                         .entity_idx(&Vocabulary::term_to_string(&triple.object))
-                        .unwrap();
+                        .expect("entity should be in vocabulary");
 
                     // Positive score
                     let pos_score = self.score(h_idx, r_idx, t_idx);
@@ -977,12 +980,15 @@ impl EmbeddingModel for DistMult {
         let mut scores: Vec<(String, f64)> = Vec::new();
         for t_idx in 0..vocab.num_entities() {
             let score = self.score(h_idx, r_idx, t_idx);
-            let entity = vocab.entity(t_idx).unwrap().to_string();
+            let entity = vocab
+                .entity(t_idx)
+                .expect("entity index should be valid")
+                .to_string();
             scores.push((entity, score)); // Higher is better for DistMult
         }
 
         // Sort by score (descending)
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Return top-k
         Ok(scores.into_iter().take(k).collect())
@@ -1174,13 +1180,13 @@ impl EmbeddingModel for ComplEx {
                     // Get indices
                     let h_idx = vocab
                         .entity_idx(&Vocabulary::term_to_string(&triple.subject))
-                        .unwrap();
+                        .expect("entity should be in vocabulary");
                     let r_idx = vocab
                         .relation_idx(&Vocabulary::term_to_string(&triple.predicate))
-                        .unwrap();
+                        .expect("relation should be in vocabulary");
                     let t_idx = vocab
                         .entity_idx(&Vocabulary::term_to_string(&triple.object))
-                        .unwrap();
+                        .expect("entity should be in vocabulary");
 
                     // Positive score
                     let pos_score = self.score(h_idx, r_idx, t_idx);
@@ -1365,12 +1371,15 @@ impl EmbeddingModel for ComplEx {
         let mut scores: Vec<(String, f64)> = Vec::new();
         for t_idx in 0..vocab.num_entities() {
             let score = self.score(h_idx, r_idx, t_idx);
-            let entity = vocab.entity(t_idx).unwrap().to_string();
+            let entity = vocab
+                .entity(t_idx)
+                .expect("entity index should be valid")
+                .to_string();
             scores.push((entity, score)); // Higher is better for ComplEx
         }
 
         // Sort by score (descending)
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Return top-k
         Ok(scores.into_iter().take(k).collect())

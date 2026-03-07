@@ -239,7 +239,8 @@ mod tests {
 
     #[test]
     fn test_format_term_for_message() {
-        let iri_term = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
+        let iri_term =
+            Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI"));
         assert_eq!(
             format_term_for_message(&iri_term),
             "http://example.org/test"
@@ -248,7 +249,8 @@ mod tests {
         let literal_term = Term::Literal(Literal::new("hello"));
         assert_eq!(format_term_for_message(&literal_term), "\"hello\"");
 
-        let lang_literal = Term::Literal(Literal::new_lang("hello", "en").unwrap());
+        let lang_literal =
+            Term::Literal(Literal::new_lang("hello", "en").expect("operation should succeed"));
         assert_eq!(format_term_for_message(&lang_literal), "\"hello\"@en");
     }
 
@@ -256,14 +258,15 @@ mod tests {
     fn test_is_numeric_term() {
         let int_literal = Term::Literal(Literal::new_typed(
             "42",
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("valid IRI"),
         ));
         assert!(is_numeric_term(&int_literal));
 
         let string_literal = Term::Literal(Literal::new("hello"));
         assert!(!is_numeric_term(&string_literal));
 
-        let iri_term = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
+        let iri_term =
+            Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI"));
         assert!(!is_numeric_term(&iri_term));
     }
 
@@ -271,26 +274,32 @@ mod tests {
     fn test_parse_numeric_value() {
         let int_literal = Term::Literal(Literal::new_typed(
             "42",
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("valid IRI"),
         ));
-        assert_eq!(parse_numeric_value(&int_literal).unwrap(), 42.0);
+        assert_eq!(
+            parse_numeric_value(&int_literal).expect("parsing should succeed"),
+            42.0
+        );
 
         let float_literal = Term::Literal(Literal::new_typed(
             "3.15",
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#float").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#float").expect("valid IRI"),
         ));
-        assert!((parse_numeric_value(&float_literal).unwrap() - 3.15).abs() < f64::EPSILON);
+        assert!(
+            (parse_numeric_value(&float_literal).expect("parsing should succeed") - 3.15).abs()
+                < f64::EPSILON
+        );
     }
 
     #[test]
     fn test_terms_equivalent() {
         let term1 = Term::Literal(Literal::new_typed(
             "42",
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("valid IRI"),
         ));
         let term2 = Term::Literal(Literal::new_typed(
             "42.0",
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").expect("valid IRI"),
         ));
 
         assert!(terms_equivalent(&term1, &term2));

@@ -258,7 +258,11 @@ impl ServiceOptimizer {
             }
 
             // Sort by total score (higher is better)
-            service_scores.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap());
+            service_scores.sort_by(|a, b| {
+                b.total_score
+                    .partial_cmp(&a.total_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
 
             // Select top services based on Pareto optimality
             let pareto_optimal = self.find_pareto_optimal_services(&service_scores);
@@ -453,7 +457,11 @@ impl ServiceOptimizer {
         }
 
         // Sort by total score for easier selection
-        pareto_optimal.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap());
+        pareto_optimal.sort_by(|a, b| {
+            b.total_score
+                .partial_cmp(&a.total_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         pareto_optimal
     }
 

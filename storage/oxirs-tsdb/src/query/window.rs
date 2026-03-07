@@ -183,7 +183,7 @@ impl WindowCalculator {
             .window
             .iter()
             .map(|p| p.value)
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(point.value);
 
         Some(DataPoint {
@@ -218,7 +218,7 @@ impl WindowCalculator {
             .window
             .iter()
             .map(|p| p.value)
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(point.value);
 
         Some(DataPoint {
@@ -308,7 +308,7 @@ mod tests {
         let points = create_test_points(now, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
 
         let spec = WindowSpec::count_based(3, WindowFunction::MovingAverage);
-        let results = apply_window(&points, spec).unwrap();
+        let results = apply_window(&points, spec).expect("window application should succeed");
 
         // First 2 points won't have results (window not full)
         // Point 3: avg(1,2,3) = 2.0
@@ -324,7 +324,7 @@ mod tests {
         let points = create_test_points(now, &[10.0, 20.0, 30.0, 40.0]);
 
         let spec = WindowSpec::count_based(1, WindowFunction::ExponentialMovingAverage(0.5));
-        let results = apply_window(&points, spec).unwrap();
+        let results = apply_window(&points, spec).expect("window application should succeed");
 
         // EMA: first = 10.0
         // second = 0.5 * 20 + 0.5 * 10 = 15.0
@@ -341,10 +341,12 @@ mod tests {
         let points = create_test_points(now, &[5.0, 3.0, 8.0, 2.0, 7.0]);
 
         let spec_min = WindowSpec::count_based(3, WindowFunction::MovingMin);
-        let results_min = apply_window(&points, spec_min).unwrap();
+        let results_min =
+            apply_window(&points, spec_min).expect("window application should succeed");
 
         let spec_max = WindowSpec::count_based(3, WindowFunction::MovingMax);
-        let results_max = apply_window(&points, spec_max).unwrap();
+        let results_max =
+            apply_window(&points, spec_max).expect("window application should succeed");
 
         // Window of 3:
         // [5, 3, 8] -> min=3, max=8
@@ -361,15 +363,27 @@ mod tests {
         let points = create_test_points(now, &[2.0, 4.0, 4.0, 4.0, 5.0]);
 
         let spec = WindowSpec::count_based(4, WindowFunction::RollingStdDev);
-        let results = apply_window(&points, spec).unwrap();
+        let results = apply_window(&points, spec).expect("window application should succeed");
 
         // With window size 4, we need at least 4 points to start producing results
         // and at least 2 for stddev calculation
         // Results: window [2,4,4,4] has stddev ~1.15, window [4,4,4,5] has stddev ~0.5
         assert!(results.len() >= 2);
         // Just verify we get reasonable non-negative stddev values
-        assert!(results.last().unwrap().value >= 0.0);
-        assert!(results.last().unwrap().value < 5.0);
+        assert!(
+            results
+                .last()
+                .expect("collection should not be empty")
+                .value
+                >= 0.0
+        );
+        assert!(
+            results
+                .last()
+                .expect("collection should not be empty")
+                .value
+                < 5.0
+        );
     }
 
     #[test]
@@ -378,7 +392,7 @@ mod tests {
         let points = create_test_points(now, &[1.0, 2.0, 3.0, 4.0, 5.0]);
 
         let spec = WindowSpec::count_based(1, WindowFunction::CumulativeSum);
-        let results = apply_window(&points, spec).unwrap();
+        let results = apply_window(&points, spec).expect("window application should succeed");
 
         assert_eq!(results.len(), 5);
         assert!((results[0].value - 1.0).abs() < 0.001);
@@ -394,7 +408,7 @@ mod tests {
         let points = create_test_points(now, &[10.0, 15.0, 12.0, 18.0]);
 
         let spec = WindowSpec::count_based(1, WindowFunction::RateOfChange);
-        let results = apply_window(&points, spec).unwrap();
+        let results = apply_window(&points, spec).expect("window application should succeed");
 
         // First point has no previous, so no result
         // 15 - 10 = 5

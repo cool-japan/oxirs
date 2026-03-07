@@ -4,14 +4,18 @@
 //! for use in SPARQL queries.
 
 pub mod bbox_utils;
+// GeoSPARQL Simple Features topology predicates (v1.1.0 round 5)
 pub mod buffer_3d;
 pub mod coordinate_transformation;
 pub mod egenhofer;
+pub mod extended_ogc;
 pub mod geometric_operations;
 pub mod geometric_properties;
+pub mod ogc11;
 pub mod rcc8;
 pub mod simple_features;
 pub mod topological_3d;
+pub mod topology_functions;
 
 #[cfg(feature = "proj-support")]
 pub mod transformation_cache;

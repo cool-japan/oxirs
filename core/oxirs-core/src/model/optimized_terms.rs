@@ -180,14 +180,20 @@ impl OptimizedTermEncoder {
 
     /// Encode a named node efficiently
     pub fn encode_named_node(&self, node: &NamedNode) -> OxiEncodedTerm {
-        let mut interner = self.interner.write().unwrap();
+        let mut interner = self
+            .interner
+            .write()
+            .expect("interner lock should not be poisoned");
         let iri_hash = interner.intern(node.as_str());
         OxiEncodedTerm::NamedNode { iri: iri_hash }
     }
 
     /// Encode a blank node efficiently
     pub fn encode_blank_node(&self, node: &BlankNode) -> OxiEncodedTerm {
-        let mut interner = self.interner.write().unwrap();
+        let mut interner = self
+            .interner
+            .write()
+            .expect("interner lock should not be poisoned");
         let id_hash = interner.intern(node.as_str());
         OxiEncodedTerm::BlankNode { id: id_hash }
     }
@@ -222,7 +228,10 @@ impl OptimizedTermEncoder {
                 }
             }
             "http://www.w3.org/2001/XMLSchema#string" => {
-                let mut interner = self.interner.write().unwrap();
+                let mut interner = self
+                    .interner
+                    .write()
+                    .expect("interner lock should not be poisoned");
                 let value_hash = interner.intern(literal_str);
                 return OxiEncodedTerm::StringLiteral(value_hash);
             }
@@ -232,7 +241,10 @@ impl OptimizedTermEncoder {
         }
 
         // General literal encoding
-        let mut interner = self.interner.write().unwrap();
+        let mut interner = self
+            .interner
+            .write()
+            .expect("interner lock should not be poisoned");
         let value_hash = interner.intern(literal_str);
 
         let datatype_hash = Some(interner.intern(datatype.as_str()));
@@ -247,7 +259,10 @@ impl OptimizedTermEncoder {
 
     /// Decode an encoded term back to its original form
     pub fn decode_term(&self, encoded: &OxiEncodedTerm) -> Result<DecodedTerm, String> {
-        let interner = self.interner.read().unwrap();
+        let interner = self
+            .interner
+            .read()
+            .expect("interner lock should not be poisoned");
 
         match encoded {
             OxiEncodedTerm::DefaultGraph => Ok(DecodedTerm::DefaultGraph),
@@ -332,7 +347,10 @@ impl OptimizedTermEncoder {
 
     /// Get interner statistics
     pub fn stats(&self) -> InternerStats {
-        self.interner.read().unwrap().stats()
+        self.interner
+            .read()
+            .expect("interner lock should not be poisoned")
+            .stats()
     }
 }
 

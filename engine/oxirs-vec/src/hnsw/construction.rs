@@ -35,7 +35,9 @@ impl HnswIndex {
         }
 
         // Full HNSW construction algorithm implementation
-        let entry_point = self.entry_point().unwrap();
+        let entry_point = self
+            .entry_point()
+            .expect("entry point should exist after initial insertion");
 
         // Phase 1: Find nearest neighbors at each level from top to insertion level
         let mut nearest_points = vec![entry_point];

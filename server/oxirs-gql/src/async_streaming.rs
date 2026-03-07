@@ -606,7 +606,10 @@ impl AdaptiveStream {
     pub async fn next(&mut self) -> Option<Result<StreamData>> {
         loop {
             if !self.buffer.is_empty() && !self.paused {
-                return Some(Ok(self.buffer.pop_front().unwrap()));
+                return Some(Ok(self
+                    .buffer
+                    .pop_front()
+                    .expect("buffer should not be empty after non-empty check")));
             }
 
             tokio::select! {

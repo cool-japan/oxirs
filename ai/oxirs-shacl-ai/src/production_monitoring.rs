@@ -628,7 +628,7 @@ impl ProductionMonitor {
 
         // Calculate latencies
         let mut latencies: Vec<f64> = state.inferences.iter().map(|r| r.latency_ms).collect();
-        latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let total = latencies.len();
         if total > 0 {

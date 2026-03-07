@@ -364,6 +364,153 @@ impl PersistedQueryManager {
     }
 }
 
+// ---------------------------------------------------------------------------
+// PersistedQueryStore — simple hash-based lookup conforming to Apollo APQ
+// ---------------------------------------------------------------------------
+
+/// A compact, self-contained store for persisted GraphQL queries.
+///
+/// Uses SHA-256 of the query text as the lookup key (Apollo APQ format).
+/// Unlike `PersistedQueryManager` this store is intentionally small: it
+/// provides the minimum surface needed for the `extensions.persistedQuery`
+/// protocol without TTL, denylist, or file I/O features, making it easier
+/// to embed in gateway components that need fast, synchronous lookups.
+pub struct PersistedQueryStore {
+    /// Internal hash → query text map.
+    queries: Arc<RwLock<HashMap<String, String>>>,
+    /// Running count of cache hits.
+    hits: Arc<RwLock<u64>>,
+    /// Running count of cache misses.
+    misses: Arc<RwLock<u64>>,
+}
+
+impl PersistedQueryStore {
+    /// Create an empty store.
+    pub fn new() -> Self {
+        Self {
+            queries: Arc::new(RwLock::new(HashMap::new())),
+            hits: Arc::new(RwLock::new(0)),
+            misses: Arc::new(RwLock::new(0)),
+        }
+    }
+
+    /// Hash a query string using SHA-256 (hex-encoded, lowercase).
+    pub fn hash(query: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(query.as_bytes());
+        format!("{:x}", h.finalize())
+    }
+
+    /// Store a query and return its hash.
+    ///
+    /// The hash is computed from the query text, matching the Apollo APQ
+    /// convention.  If the store already contains a different query with the
+    /// same hash (collision), an error is returned.
+    pub async fn store(&self, query: &str) -> Result<String> {
+        let key = Self::hash(query);
+        let mut map = self.queries.write().await;
+        if let Some(existing) = map.get(&key) {
+            if existing != query {
+                return Err(anyhow!("SHA-256 collision detected for hash {}", key));
+            }
+        }
+        map.insert(key.clone(), query.to_owned());
+        Ok(key)
+    }
+
+    /// Store a query with a pre-computed hash, verifying the hash matches.
+    ///
+    /// This mirrors the second leg of the APQ protocol where the client
+    /// sends both the full query text and the hash.
+    pub async fn store_with_hash(&self, hash: &str, query: &str) -> Result<()> {
+        let computed = Self::hash(query);
+        if computed != hash {
+            return Err(anyhow!(
+                "Hash mismatch: provided {hash}, computed {computed}"
+            ));
+        }
+        let mut map = self.queries.write().await;
+        map.insert(hash.to_owned(), query.to_owned());
+        Ok(())
+    }
+
+    /// Retrieve a query by its SHA-256 hash.
+    ///
+    /// Returns `Ok(query_text)` on a cache hit or an error if not found.
+    pub async fn get(&self, hash: &str) -> Result<String> {
+        let cloned = {
+            let map = self.queries.read().await;
+            map.get(hash).cloned()
+        };
+        if let Some(q) = cloned {
+            let mut hits = self.hits.write().await;
+            *hits += 1;
+            Ok(q)
+        } else {
+            let mut misses = self.misses.write().await;
+            *misses += 1;
+            Err(anyhow!("PersistedQueryNotFound: {hash}"))
+        }
+    }
+
+    /// Handle a full APQ request extension object.
+    ///
+    /// Implements the standard two-leg protocol:
+    /// - If `query` is `None`: attempt to fetch by hash (first leg).
+    /// - If `query` is `Some`: store the query, verify hash, return the text
+    ///   (second leg).
+    pub async fn handle_apq(&self, ext: &ApqPersistedQuery, query: Option<&str>) -> Result<String> {
+        match query {
+            None => self.get(&ext.sha256_hash).await,
+            Some(q) => {
+                self.store_with_hash(&ext.sha256_hash, q).await?;
+                Ok(q.to_owned())
+            }
+        }
+    }
+
+    /// Remove a query from the store.  Returns `true` if the query existed.
+    pub async fn remove(&self, hash: &str) -> bool {
+        let mut map = self.queries.write().await;
+        map.remove(hash).is_some()
+    }
+
+    /// Return the number of queries currently stored.
+    pub async fn len(&self) -> usize {
+        self.queries.read().await.len()
+    }
+
+    /// Return `true` if the store contains no queries.
+    pub async fn is_empty(&self) -> bool {
+        self.queries.read().await.is_empty()
+    }
+
+    /// Return (hits, misses) statistics.
+    pub async fn stats(&self) -> (u64, u64) {
+        let hits = *self.hits.read().await;
+        let misses = *self.misses.read().await;
+        (hits, misses)
+    }
+
+    /// Reset hit/miss counters.
+    pub async fn reset_stats(&self) {
+        *self.hits.write().await = 0;
+        *self.misses.write().await = 0;
+    }
+
+    /// Clear all stored queries.
+    pub async fn clear(&self) {
+        self.queries.write().await.clear();
+    }
+}
+
+impl Default for PersistedQueryStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -552,5 +699,198 @@ mod tests {
             .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("mismatch"));
+    }
+
+    // ---------------------------------------------------------------------------
+    // PersistedQueryStore tests
+    // ---------------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_store_new_is_empty() {
+        let store = PersistedQueryStore::new();
+        assert!(store.is_empty().await);
+        assert_eq!(store.len().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_store_hash_is_sha256() {
+        let hash = PersistedQueryStore::hash("{ hello }");
+        // SHA-256 output is 64 lowercase hex chars.
+        assert_eq!(hash.len(), 64);
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[tokio::test]
+    async fn test_store_and_retrieve() {
+        let store = PersistedQueryStore::new();
+        let query = "{ user { id name } }";
+        let hash = store.store(query).await.unwrap();
+        let retrieved = store.get(&hash).await.unwrap();
+        assert_eq!(retrieved, query);
+    }
+
+    #[tokio::test]
+    async fn test_store_returns_correct_hash() {
+        let store = PersistedQueryStore::new();
+        let query = "{ products { sku } }";
+        let expected_hash = PersistedQueryStore::hash(query);
+        let returned_hash = store.store(query).await.unwrap();
+        assert_eq!(returned_hash, expected_hash);
+    }
+
+    #[tokio::test]
+    async fn test_get_missing_hash_returns_error() {
+        let store = PersistedQueryStore::new();
+        let result = store.get("nonexistenthash").await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("PersistedQueryNotFound"));
+    }
+
+    #[tokio::test]
+    async fn test_store_with_hash_valid() {
+        let store = PersistedQueryStore::new();
+        let query = "{ reviews { rating } }";
+        let hash = PersistedQueryStore::hash(query);
+        store.store_with_hash(&hash, query).await.unwrap();
+        assert_eq!(store.get(&hash).await.unwrap(), query);
+    }
+
+    #[tokio::test]
+    async fn test_store_with_hash_mismatch_returns_error() {
+        let store = PersistedQueryStore::new();
+        let result = store.store_with_hash("badhash", "{ hello }").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("mismatch"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_apq_first_leg_hit() {
+        let store = PersistedQueryStore::new();
+        let query = "{ status }";
+        let hash = store.store(query).await.unwrap();
+        let ext = ApqPersistedQuery {
+            version: 1,
+            sha256_hash: hash,
+        };
+        let result = store.handle_apq(&ext, None).await.unwrap();
+        assert_eq!(result, query);
+    }
+
+    #[tokio::test]
+    async fn test_handle_apq_first_leg_miss() {
+        let store = PersistedQueryStore::new();
+        let ext = ApqPersistedQuery {
+            version: 1,
+            sha256_hash: "notpresent".to_string(),
+        };
+        let result = store.handle_apq(&ext, None).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_apq_second_leg_stores_query() {
+        let store = PersistedQueryStore::new();
+        let query = "{ nodes { id } }";
+        let hash = PersistedQueryStore::hash(query);
+        let ext = ApqPersistedQuery {
+            version: 1,
+            sha256_hash: hash.clone(),
+        };
+        let result = store.handle_apq(&ext, Some(query)).await.unwrap();
+        assert_eq!(result, query);
+        // Subsequent first-leg call should now hit.
+        let ext2 = ApqPersistedQuery {
+            version: 1,
+            sha256_hash: hash,
+        };
+        let hit = store.handle_apq(&ext2, None).await.unwrap();
+        assert_eq!(hit, query);
+    }
+
+    #[tokio::test]
+    async fn test_remove_query() {
+        let store = PersistedQueryStore::new();
+        let query = "{ remove_me }";
+        let hash = store.store(query).await.unwrap();
+        assert!(store.remove(&hash).await);
+        assert!(!store.remove(&hash).await); // already gone
+        assert!(store.is_empty().await);
+    }
+
+    #[tokio::test]
+    async fn test_stats_hit_miss_counts() {
+        let store = PersistedQueryStore::new();
+        let query = "{ stat_test }";
+        let hash = store.store(query).await.unwrap();
+        let _ = store.get(&hash).await; // hit
+        let _ = store.get(&hash).await; // hit
+        let _ = store.get("missing").await; // miss
+        let (hits, misses) = store.stats().await;
+        assert_eq!(hits, 2);
+        assert_eq!(misses, 1);
+    }
+
+    #[tokio::test]
+    async fn test_stats_reset() {
+        let store = PersistedQueryStore::new();
+        let query = "{ reset_test }";
+        let hash = store.store(query).await.unwrap();
+        let _ = store.get(&hash).await;
+        store.reset_stats().await;
+        let (hits, misses) = store.stats().await;
+        assert_eq!(hits, 0);
+        assert_eq!(misses, 0);
+    }
+
+    #[tokio::test]
+    async fn test_clear_empties_store() {
+        let store = PersistedQueryStore::new();
+        for i in 0..5 {
+            let query = format!("{{ q{i} }}");
+            store.store(&query).await.unwrap();
+        }
+        assert_eq!(store.len().await, 5);
+        store.clear().await;
+        assert!(store.is_empty().await);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_queries_stored() {
+        let store = PersistedQueryStore::new();
+        let queries = ["{ a }", "{ b }", "{ c }"];
+        for q in &queries {
+            store.store(q).await.unwrap();
+        }
+        assert_eq!(store.len().await, 3);
+    }
+
+    #[tokio::test]
+    async fn test_idempotent_store() {
+        // Storing the same query twice should be fine.
+        let store = PersistedQueryStore::new();
+        let query = "{ idempotent }";
+        let h1 = store.store(query).await.unwrap();
+        let h2 = store.store(query).await.unwrap();
+        assert_eq!(h1, h2);
+        assert_eq!(store.len().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_store_round_trip_with_temp_file() {
+        let store = PersistedQueryStore::new();
+        let query = "{ temp_file_test }";
+        let hash = store.store(query).await.unwrap();
+
+        // Write hash to a temp file and read it back (exercises temp_dir usage).
+        let temp_dir = std::env::temp_dir();
+        let path = temp_dir.join(format!("{hash}.hash"));
+        tokio::fs::write(&path, hash.as_bytes()).await.unwrap();
+        let read_back = tokio::fs::read_to_string(&path).await.unwrap();
+        let retrieved = store.get(&read_back).await.unwrap();
+        assert_eq!(retrieved, query);
+        let _ = tokio::fs::remove_file(&path).await;
     }
 }

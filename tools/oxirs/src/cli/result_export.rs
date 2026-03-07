@@ -199,7 +199,14 @@ impl ResultExporter {
     pub fn export_to_file(&self, results: &QueryResults, path: &Path) -> CliResult<()> {
         // XLSX format requires special handling (can't write to a generic writer)
         if self.config.format == ExportFormat::Xlsx {
-            return self.export_xlsx(results, path);
+            #[cfg(feature = "excel-export")]
+            {
+                return self.export_xlsx(results, path);
+            }
+            #[cfg(not(feature = "excel-export"))]
+            {
+                return Err("XLSX export requires the 'excel-export' feature to be enabled".into());
+            }
         }
 
         let mut file = File::create(path)?;
@@ -518,6 +525,7 @@ impl ResultExporter {
     }
 
     /// Export results to Excel (XLSX) format
+    #[cfg(feature = "excel-export")]
     fn export_xlsx(&self, results: &QueryResults, path: &Path) -> CliResult<()> {
         use rust_xlsxwriter::{Format, Workbook};
 
@@ -584,6 +592,7 @@ impl ResultExporter {
     }
 
     /// Format an RDF term for Excel export
+    #[cfg(feature = "excel-export")]
     fn format_term_for_excel(term: &RdfTerm) -> String {
         match term {
             RdfTerm::Uri { value } => value.clone(),
@@ -825,6 +834,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "excel-export")]
     fn test_xlsx_export() {
         use std::env;
 
@@ -859,6 +869,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "excel-export")]
     fn test_xlsx_format_term() {
         let uri_term = RdfTerm::Uri {
             value: "http://example.org/test".to_string(),
@@ -885,6 +896,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "excel-export")]
     fn test_xlsx_custom_sheet_name() {
         use std::env;
 

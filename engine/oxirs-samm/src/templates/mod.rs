@@ -504,10 +504,18 @@ mod filters {
                 if c == '_' || c == '-' || c == ' ' {
                     capitalize_next = true;
                 } else if capitalize_next {
-                    result.push(c.to_uppercase().next().unwrap());
+                    result.push(
+                        c.to_uppercase()
+                            .next()
+                            .expect("uppercase should produce a character"),
+                    );
                     capitalize_next = false;
                 } else if i == 0 {
-                    result.push(c.to_lowercase().next().unwrap());
+                    result.push(
+                        c.to_lowercase()
+                            .next()
+                            .expect("lowercase should produce a character"),
+                    );
                 } else {
                     result.push(c);
                 }
@@ -529,7 +537,11 @@ mod filters {
                 if c == '_' || c == '-' || c == ' ' {
                     capitalize_next = true;
                 } else if capitalize_next {
-                    result.push(c.to_uppercase().next().unwrap());
+                    result.push(
+                        c.to_uppercase()
+                            .next()
+                            .expect("uppercase should produce a character"),
+                    );
                     capitalize_next = false;
                 } else {
                     result.push(c);
@@ -632,7 +644,7 @@ mod tests {
 
     #[test]
     fn test_template_engine_creation() {
-        let engine = TemplateEngine::new().unwrap();
+        let engine = TemplateEngine::new().expect("construction should succeed");
         assert!(engine.has_template("rust.tera"));
         assert!(engine.has_template("python.tera"));
         assert!(engine.has_template("typescript.tera"));
@@ -640,7 +652,7 @@ mod tests {
 
     #[test]
     fn test_list_templates() {
-        let engine = TemplateEngine::new().unwrap();
+        let engine = TemplateEngine::new().expect("construction should succeed");
         let templates = engine.list_templates();
         assert!(templates.contains(&"rust.tera".to_string()));
         assert!(templates.len() >= 5);
@@ -652,8 +664,14 @@ mod tests {
         context.insert("name", "Test");
         context.insert("count", 42);
 
-        assert_eq!(context.get("name").unwrap().as_str(), Some("Test"));
-        assert_eq!(context.get("count").unwrap().as_i64(), Some(42));
+        assert_eq!(
+            context.get("name").expect("key should exist").as_str(),
+            Some("Test")
+        );
+        assert_eq!(
+            context.get("count").expect("key should exist").as_i64(),
+            Some(42)
+        );
     }
 
     #[test]
@@ -661,8 +679,11 @@ mod tests {
         use std::collections::HashMap;
 
         let value = Value::String("MyPropertyName".to_string());
-        let result = filters::snake_case(&value, &HashMap::new()).unwrap();
-        assert_eq!(result.as_str().unwrap(), "my_property_name");
+        let result = filters::snake_case(&value, &HashMap::new()).expect("result should be Ok");
+        assert_eq!(
+            result.as_str().expect("should be a valid string"),
+            "my_property_name"
+        );
     }
 
     #[test]
@@ -670,8 +691,11 @@ mod tests {
         use std::collections::HashMap;
 
         let value = Value::String("my_property_name".to_string());
-        let result = filters::camel_case(&value, &HashMap::new()).unwrap();
-        assert_eq!(result.as_str().unwrap(), "myPropertyName");
+        let result = filters::camel_case(&value, &HashMap::new()).expect("result should be Ok");
+        assert_eq!(
+            result.as_str().expect("should be a valid string"),
+            "myPropertyName"
+        );
     }
 
     #[test]
@@ -679,7 +703,10 @@ mod tests {
         use std::collections::HashMap;
 
         let value = Value::String("my_property_name".to_string());
-        let result = filters::pascal_case(&value, &HashMap::new()).unwrap();
-        assert_eq!(result.as_str().unwrap(), "MyPropertyName");
+        let result = filters::pascal_case(&value, &HashMap::new()).expect("result should be Ok");
+        assert_eq!(
+            result.as_str().expect("should be a valid string"),
+            "MyPropertyName"
+        );
     }
 }

@@ -838,7 +838,8 @@ impl ExpressionEvaluator {
 
     /// Helper to create boolean term
     fn bool_term(&self, value: bool) -> Term {
-        Term::typed_literal(if value { "true" } else { "false" }, xsd::BOOLEAN).unwrap()
+        Term::typed_literal(if value { "true" } else { "false" }, xsd::BOOLEAN)
+            .expect("boolean literal should always be valid")
     }
 
     /// Get mutable binding context

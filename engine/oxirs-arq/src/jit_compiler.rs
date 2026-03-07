@@ -1062,3 +1062,220 @@ mod tests {
         assert_eq!(strategies.len(), 4);
     }
 }
+
+#[cfg(test)]
+mod extended_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn default_compiler() -> QueryJitCompiler {
+        QueryJitCompiler::new(JitCompilerConfig::default()).unwrap()
+    }
+
+    // --- JitCompilerConfig tests ---
+
+    #[test]
+    fn test_default_config_has_reasonable_values() {
+        let config = JitCompilerConfig::default();
+        assert!(config.enabled, "Compiler should be enabled by default");
+        assert!(
+            config.enable_caching,
+            "Caching should be enabled by default"
+        );
+        assert!(config.max_cache_size > 0, "Cache size should be positive");
+        assert!(
+            config.optimization_level <= 3,
+            "Optimization level should be 0-3"
+        );
+        assert!(
+            config.max_plan_complexity > 0,
+            "Max plan complexity should be positive"
+        );
+    }
+
+    #[test]
+    fn test_config_with_disabled_caching() {
+        let config = JitCompilerConfig {
+            enable_caching: false,
+            ..Default::default()
+        };
+        let compiler = QueryJitCompiler::new(config);
+        assert!(
+            compiler.is_ok(),
+            "Compiler should initialize with caching disabled"
+        );
+    }
+
+    #[test]
+    fn test_config_with_disabled_compiler() {
+        let config = JitCompilerConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let compiler = QueryJitCompiler::new(config);
+        assert!(
+            compiler.is_ok(),
+            "Compiler should initialize even when disabled"
+        );
+    }
+
+    // --- ExecutionStats tests ---
+
+    #[test]
+    fn test_execution_stats_initial_state() {
+        let stats = ExecutionStats::default();
+        assert_eq!(stats.execution_count, 0);
+        assert_eq!(stats.total_results, 0);
+        assert!(stats.min_execution_time.is_none());
+        assert!(stats.max_execution_time.is_none());
+    }
+
+    #[test]
+    fn test_execution_stats_min_max_tracking() {
+        let mut stats = ExecutionStats::default();
+        stats.record_execution(Duration::from_millis(50), 10);
+        stats.record_execution(Duration::from_millis(200), 20);
+        stats.record_execution(Duration::from_millis(100), 15);
+
+        assert_eq!(stats.min_execution_time.unwrap(), Duration::from_millis(50));
+        assert_eq!(
+            stats.max_execution_time.unwrap(),
+            Duration::from_millis(200)
+        );
+    }
+
+    #[test]
+    fn test_execution_stats_average_results() {
+        let mut stats = ExecutionStats::default();
+        stats.record_execution(Duration::from_millis(10), 10);
+        stats.record_execution(Duration::from_millis(10), 20);
+        stats.record_execution(Duration::from_millis(10), 30);
+
+        assert!(
+            (stats.avg_results - 20.0).abs() < 0.001,
+            "Average results should be 20.0"
+        );
+    }
+
+    #[test]
+    fn test_execution_stats_total_time_accumulates() {
+        let mut stats = ExecutionStats::default();
+        stats.record_execution(Duration::from_millis(100), 5);
+        stats.record_execution(Duration::from_millis(200), 5);
+
+        assert_eq!(stats.total_execution_time, Duration::from_millis(300));
+    }
+
+    #[test]
+    fn test_should_reoptimize_below_min_executions() {
+        let mut stats = ExecutionStats::default();
+        // Just 5 executions with slow queries - below threshold
+        for _ in 0..5 {
+            stats.record_execution(Duration::from_millis(200), 10);
+        }
+        assert!(
+            !stats.should_reoptimize(10),
+            "Should not reoptimize below min_executions threshold"
+        );
+    }
+
+    #[test]
+    fn test_should_not_reoptimize_fast_queries() {
+        let mut stats = ExecutionStats::default();
+        // Many executions but all very fast
+        for _ in 0..20 {
+            stats.record_execution(Duration::from_millis(1), 10);
+        }
+        assert!(
+            !stats.should_reoptimize(10),
+            "Fast queries should not trigger reoptimization"
+        );
+    }
+
+    // --- QueryMetadata tests ---
+
+    #[test]
+    fn test_query_metadata_default() {
+        let meta = QueryMetadata::default();
+        assert_eq!(meta.triple_pattern_count, 0);
+        assert!(!meta.has_aggregation);
+        assert!(!meta.has_optional);
+        assert!(!meta.has_union);
+    }
+
+    #[test]
+    fn test_query_metadata_with_aggregation() {
+        let meta = QueryMetadata {
+            has_aggregation: true,
+            join_count: 3,
+            triple_pattern_count: 4,
+            ..Default::default()
+        };
+        assert!(meta.has_aggregation);
+        assert_eq!(meta.join_count, 3);
+    }
+
+    // --- CompilerStats tests ---
+
+    #[test]
+    fn test_compiler_stats_initial_values() {
+        let compiler = default_compiler();
+        let stats = compiler.stats();
+        assert_eq!(stats.total_compilations, 0);
+        assert_eq!(stats.cache_hits, 0);
+        assert_eq!(stats.cache_misses, 0);
+        assert_eq!(stats.cache_evictions, 0);
+    }
+
+    // --- Cache management tests ---
+
+    #[test]
+    fn test_clear_cache_makes_it_empty() {
+        let compiler = default_compiler();
+        // Cache starts empty; clear should still work
+        compiler.clear_cache();
+        assert_eq!(compiler.query_cache.len(), 0);
+    }
+
+    // --- JoinStrategy and FilterType tests ---
+
+    #[test]
+    fn test_jit_join_strategy_all_variants() {
+        let _: Vec<JitJoinStrategy> = vec![
+            JitJoinStrategy::Hash,
+            JitJoinStrategy::SortMerge,
+            JitJoinStrategy::IndexNestedLoop,
+            JitJoinStrategy::Bind,
+        ];
+    }
+
+    #[test]
+    fn test_filter_type_all_variants() {
+        let _: Vec<FilterType> = vec![
+            FilterType::Equality,
+            FilterType::NumericComparison,
+            FilterType::StringOperation,
+            FilterType::Regex,
+            FilterType::BooleanLogic,
+            FilterType::Complex,
+        ];
+    }
+
+    // --- PatternType tests ---
+
+    #[test]
+    fn test_pattern_type_all_8_variants_coverage() {
+        let variants = [
+            PatternType::AllVariables,
+            PatternType::SubjectBound,
+            PatternType::PredicateBound,
+            PatternType::ObjectBound,
+            PatternType::SubjectPredicateBound,
+            PatternType::SubjectObjectBound,
+            PatternType::PredicateObjectBound,
+            PatternType::FullyBound,
+        ];
+        // All variants should be uniquely representable
+        assert_eq!(variants.len(), 8);
+    }
+}

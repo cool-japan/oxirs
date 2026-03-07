@@ -330,7 +330,11 @@ impl ModelEnsemble {
         }
 
         // Sort by aggregated confidence
-        final_shapes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        final_shapes.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(final_shapes)
     }
@@ -376,7 +380,11 @@ impl ModelEnsemble {
         }
 
         // Sort by weighted confidence
-        final_shapes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        final_shapes.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(final_shapes)
     }
@@ -530,9 +538,11 @@ impl ModelEnsemble {
                 let best_constraint = constraints
                     .iter()
                     .zip(votes.iter().map(|(_, w)| w))
-                    .max_by(|(_, w1), (_, w2)| w1.partial_cmp(w2).unwrap())
+                    .max_by(|(_, w1), (_, w2)| {
+                        w1.partial_cmp(w2).unwrap_or(std::cmp::Ordering::Equal)
+                    })
                     .map(|(c, _)| c)
-                    .unwrap();
+                    .expect("constraints should not be empty");
 
                 aggregated_shape.constraints.push(LearnedConstraint {
                     constraint_type,

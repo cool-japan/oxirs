@@ -579,7 +579,9 @@ mod tests {
         let mut executor = EnhancedSparqlExecutor::new();
         let function = Arc::new(UpperCaseFunction::new());
 
-        executor.register_function(function, None).unwrap();
+        executor
+            .register_function(function, None)
+            .expect("registration should succeed");
         assert_eq!(executor.list_available_functions().len(), 1);
     }
 
@@ -588,7 +590,9 @@ mod tests {
         let mut executor = EnhancedSparqlExecutor::new();
         let library = create_example_library();
 
-        executor.load_function_library(library).unwrap();
+        executor
+            .load_function_library(library)
+            .expect("loading should succeed");
         assert_eq!(executor.list_available_functions().len(), 2);
     }
 
@@ -607,7 +611,9 @@ mod tests {
             max_memory: 1024,
         };
 
-        let result = function.execute(&args, &context).unwrap();
+        let result = function
+            .execute(&args, &context)
+            .expect("execution should succeed");
 
         match result {
             Term::Literal(literal) => {
@@ -635,11 +641,16 @@ mod tests {
             max_memory: 1024,
         };
 
-        let result = function.execute(&args, &context).unwrap();
+        let result = function
+            .execute(&args, &context)
+            .expect("execution should succeed");
 
         match result {
             Term::Literal(literal) => {
-                let value: f64 = literal.as_str().parse().unwrap();
+                let value: f64 = literal
+                    .as_str()
+                    .parse()
+                    .expect("parse should succeed for valid input");
                 assert_eq!(value, 8.0);
             }
             _ => panic!("Expected literal result, got: {result:?}"),

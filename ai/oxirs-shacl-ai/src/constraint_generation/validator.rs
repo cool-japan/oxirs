@@ -252,11 +252,11 @@ impl ConstraintValidator {
                     let c1 = resolved
                         .iter()
                         .find(|c| c.id == conflict.constraint1_id)
-                        .unwrap();
+                        .expect("constraint1 should exist in resolved list");
                     let c2 = resolved
                         .iter()
                         .find(|c| c.id == conflict.constraint2_id)
-                        .unwrap();
+                        .expect("constraint2 should exist in resolved list");
 
                     if c1.metadata.confidence < c2.metadata.confidence {
                         to_remove.insert(conflict.constraint1_id.clone());

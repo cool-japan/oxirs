@@ -4,6 +4,7 @@ pub mod advanced_statistics;
 pub mod algebra;
 pub mod binding_optimizer;
 pub mod cost_based_optimizer;
+pub mod cost_estimator;
 pub mod distributed;
 pub mod exec;
 pub mod functions;
@@ -17,6 +18,7 @@ pub mod pattern_unification;
 pub mod plan;
 pub mod plan_cache;
 pub mod profiled_plan_builder;
+pub mod property_function_registry;
 pub mod property_paths;
 pub mod query_plan_visualizer;
 pub mod query_profiler;
@@ -27,6 +29,12 @@ pub mod statistics;
 pub mod streaming_results;
 pub mod update;
 pub mod wasm;
+
+// Re-export property function registry types
+pub use property_function_registry::{
+    PropertyFunction, PropertyFunctionArg, PropertyFunctionBinding, PropertyFunctionFactory,
+    PropertyFunctionMetadata, PropertyFunctionRegistry, PropertyFunctionResult,
+};
 
 // Re-export the enhanced SPARQL algebra and query types from sparql_algebra
 pub use crate::{GraphName, Triple};
@@ -66,7 +74,10 @@ pub use pattern_unification::{
     PatternConverter, PatternOptimizer as UnifiedPatternOptimizer, UnifiedTermPattern,
     UnifiedTriplePattern,
 };
-pub use plan_cache::{CacheConfig, CacheStatistics, CachedPlan, QueryPlanCache, SerializablePlan};
+pub use plan_cache::{
+    CacheConfig, CacheStatistics, CachedPlan, LruQueryPlanCache, PlanCacheStats, QueryPlan,
+    QueryPlanCache, SerializablePlan,
+};
 pub use profiled_plan_builder::{
     CacheEffectiveness, ExecutionComparison, ImprovementLevel, PerformanceAnalysis,
     PerformanceGrade, ProfiledPlanBuilder, ProfilingReport,

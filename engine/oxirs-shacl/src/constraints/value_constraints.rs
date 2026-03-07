@@ -389,3 +389,451 @@ impl NodeKindConstraint {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{PropertyPath, ShapeId};
+    use oxirs_core::{
+        model::{BlankNode, Literal, NamedNode, Term},
+        ConcreteStore,
+    };
+
+    fn make_focus_node() -> Term {
+        Term::NamedNode(NamedNode::new("http://example.org/subject").expect("valid IRI"))
+    }
+
+    fn make_shape_id() -> ShapeId {
+        ShapeId::new("http://example.org/TestShape")
+    }
+
+    fn make_path() -> PropertyPath {
+        PropertyPath::Predicate(NamedNode::new("http://example.org/prop").expect("valid IRI"))
+    }
+
+    fn xsd_string() -> NamedNode {
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#string").expect("valid IRI")
+    }
+
+    fn xsd_integer() -> NamedNode {
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("valid IRI")
+    }
+
+    // ---- ClassConstraint tests ----
+
+    #[test]
+    fn test_class_constraint_empty_values_satisfied() {
+        let class_iri = NamedNode::new("http://xmlns.com/foaf/0.1/Person").expect("valid IRI");
+        let constraint = ClassConstraint { class_iri };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Empty values should be satisfied for class constraint"
+        );
+    }
+
+    #[test]
+    fn test_class_constraint_literal_value_violated() {
+        let class_iri = NamedNode::new("http://xmlns.com/foaf/0.1/Person").expect("valid IRI");
+        let constraint = ClassConstraint { class_iri };
+        let store = ConcreteStore::new().expect("store creation");
+
+        let literal_value = Term::Literal(Literal::new("not a person"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![literal_value]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "Literal node should fail class constraint (not a class instance)"
+        );
+    }
+
+    #[test]
+    fn test_class_constraint_validate_ok() {
+        let class_iri = NamedNode::new("http://xmlns.com/foaf/0.1/Agent").expect("valid IRI");
+        let constraint = ClassConstraint { class_iri };
+        assert!(constraint.validate().is_ok());
+    }
+
+    // ---- DatatypeConstraint tests ----
+
+    #[test]
+    fn test_datatype_constraint_empty_values_satisfied() {
+        let constraint = DatatypeConstraint {
+            datatype_iri: xsd_string(),
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(result.is_satisfied(), "Empty values should be satisfied");
+    }
+
+    #[test]
+    fn test_datatype_constraint_correct_datatype_satisfied() {
+        let constraint = DatatypeConstraint {
+            datatype_iri: xsd_string(),
+        };
+        let store = ConcreteStore::new().expect("store creation");
+
+        let string_lit = Term::Literal(Literal::new_typed_literal("Hello", xsd_string()));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![string_lit]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Correct datatype should be satisfied"
+        );
+    }
+
+    #[test]
+    fn test_datatype_constraint_wrong_datatype_violated() {
+        let constraint = DatatypeConstraint {
+            datatype_iri: xsd_string(),
+        };
+        let store = ConcreteStore::new().expect("store creation");
+
+        // Use integer literal when string expected
+        let int_lit = Term::Literal(Literal::new_typed_literal("42", xsd_integer()));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![int_lit]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(result.is_violated(), "Wrong datatype should be violated");
+        assert!(result.message().is_some(), "Expected violation message");
+    }
+
+    #[test]
+    fn test_datatype_constraint_iri_value_violated() {
+        let constraint = DatatypeConstraint {
+            datatype_iri: xsd_string(),
+        };
+        let store = ConcreteStore::new().expect("store creation");
+
+        let iri_value =
+            Term::NamedNode(NamedNode::new("http://example.org/thing").expect("valid IRI"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![iri_value]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "IRI value should fail datatype constraint"
+        );
+    }
+
+    #[test]
+    fn test_datatype_constraint_validate_ok() {
+        let constraint = DatatypeConstraint {
+            datatype_iri: xsd_string(),
+        };
+        assert!(constraint.validate().is_ok());
+    }
+
+    // ---- NodeKindConstraint tests ----
+
+    #[test]
+    fn test_nodekind_iri_satisfied_with_iri() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::Iri,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let iri = Term::NamedNode(NamedNode::new("http://example.org/x").expect("valid IRI"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![iri]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "IRI value should satisfy sh:IRI constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_iri_violated_with_literal() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::Iri,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let lit = Term::Literal(Literal::new("string value"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![lit]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "Literal should violate sh:IRI constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_iri_violated_with_blank_node() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::Iri,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let blank = Term::BlankNode(BlankNode::new("b0").expect("valid blank node"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![blank]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "Blank node should violate sh:IRI constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_literal_satisfied_with_literal() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::Literal,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let lit = Term::Literal(Literal::new("test value"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![lit]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Literal should satisfy sh:Literal constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_literal_violated_with_iri() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::Literal,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let iri = Term::NamedNode(NamedNode::new("http://example.org/x").expect("valid IRI"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![iri]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "IRI should violate sh:Literal constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_blank_node_satisfied() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::BlankNode,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let blank = Term::BlankNode(BlankNode::new("bnode1").expect("valid blank node"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![blank]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Blank node should satisfy sh:BlankNode constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_blank_node_or_iri_satisfied_with_iri() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::BlankNodeOrIri,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let iri = Term::NamedNode(NamedNode::new("http://example.org/x").expect("valid IRI"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![iri]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "IRI should satisfy sh:BlankNodeOrIRI constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_blank_node_or_iri_satisfied_with_blank() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::BlankNodeOrIri,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let blank = Term::BlankNode(BlankNode::new("b1").expect("valid blank node"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![blank]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Blank node should satisfy sh:BlankNodeOrIRI constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_blank_node_or_iri_violated_with_literal() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::BlankNodeOrIri,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let lit = Term::Literal(Literal::new("value"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![lit]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "Literal should violate sh:BlankNodeOrIRI constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_iri_or_literal_satisfied_with_iri() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::IriOrLiteral,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let iri = Term::NamedNode(NamedNode::new("http://example.org/x").expect("valid IRI"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![iri]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "IRI should satisfy sh:IRIOrLiteral constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_iri_or_literal_satisfied_with_literal() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::IriOrLiteral,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let lit = Term::Literal(Literal::new("some value"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![lit]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Literal should satisfy sh:IRIOrLiteral constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_iri_or_literal_violated_with_blank() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::IriOrLiteral,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let blank = Term::BlankNode(BlankNode::new("b2").expect("valid blank node"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![blank]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "Blank node should violate sh:IRIOrLiteral constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_blank_node_or_literal_satisfied_with_blank() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::BlankNodeOrLiteral,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let blank = Term::BlankNode(BlankNode::new("b3").expect("valid blank node"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![blank]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Blank node should satisfy sh:BlankNodeOrLiteral constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_blank_node_or_literal_violated_with_iri() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::BlankNodeOrLiteral,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let iri = Term::NamedNode(NamedNode::new("http://example.org/x").expect("valid IRI"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![iri]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "IRI should violate sh:BlankNodeOrLiteral constraint"
+        );
+    }
+
+    #[test]
+    fn test_nodekind_empty_values_satisfied() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::Iri,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(result.is_satisfied(), "Empty values should be satisfied");
+    }
+
+    #[test]
+    fn test_nodekind_constraint_validate_ok() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::IriOrLiteral,
+        };
+        assert!(constraint.validate().is_ok());
+    }
+
+    // ---- Violation message content ----
+
+    #[test]
+    fn test_nodekind_violation_contains_value_info() {
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::Iri,
+        };
+        let store = ConcreteStore::new().expect("store creation");
+        let lit = Term::Literal(Literal::new("not an iri"));
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_path())
+            .with_values(vec![lit.clone()]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(result.is_violated());
+        assert!(result.violating_value().is_some());
+    }
+}

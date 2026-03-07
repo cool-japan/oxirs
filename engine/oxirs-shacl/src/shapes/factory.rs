@@ -54,7 +54,8 @@ impl ShapeFactory {
         let mut shape = Shape::property_shape(shape_id, path);
 
         // Add datatype constraint for string
-        let xsd_string = NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap();
+        let xsd_string =
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#string").expect("valid IRI");
         shape.add_constraint(
             ConstraintComponentId::new("sh:DatatypeConstraintComponent"),
             Constraint::Datatype(DatatypeConstraint {

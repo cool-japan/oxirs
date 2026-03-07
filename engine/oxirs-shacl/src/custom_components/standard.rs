@@ -451,7 +451,7 @@ impl CustomConstraintComponent for SparqlConstraintComponent {
                 Term::Literal(lit) => Some(lit.value().to_string()),
                 _ => None,
             })
-            .unwrap();
+            .expect("operation should succeed");
 
         let prefixes = parameters.get("prefixes").and_then(|t| match t {
             Term::Literal(lit) => Some(lit.value().to_string()),

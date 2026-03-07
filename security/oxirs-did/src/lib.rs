@@ -32,24 +32,117 @@
 //! ```
 
 pub mod did;
+pub mod did_web;
 pub mod key_management;
+pub mod kms;
 pub mod proof;
 pub mod rdf_integration;
+pub mod revocation;
+#[cfg(feature = "bbs-plus")]
+pub mod signatures;
 pub mod signed_graph;
+pub mod url;
 pub mod vc;
+#[cfg(feature = "zkp")]
+pub mod zkp;
+
+// v1.1.0 DID document versioning
+pub mod document_versioning;
+
+// v1.1.0: Verifiable Credential exchange protocols (VP creation, verification, JWT-like encoding)
+pub mod credential_exchange;
+
+// v1.1.0 round 5: DH/ECDH key agreement for DID-based communication
+pub mod key_agreement;
+
+// v1.1.0 round 6: W3C Verifiable Presentation builder
+pub mod presentation_builder;
+
+// v1.1.0 round 7: Verifiable Credential structural verification (W3C VC Data Model)
+pub mod vc_verifier;
+
+// v1.1.0 round 13: VP construction, credential selection, proof stubs, and selective disclosure
+pub mod vc_presenter;
+
+// v1.1.0 round 14: DID trust chain validation (leaf→root certification chain)
+pub mod trust_chain;
+
+// v1.1.0 round 15: DID authentication method management and challenge-response
+pub mod authentication;
+
+// v1.1.0 round 16: Verifiable Presentation request/response handling and validation
+pub mod presentation_request;
+
+// v1.1.0 round 11: In-memory DID document resolver with registration, deactivation and service management
+pub mod did_resolver;
+
+// v1.1.0 round 12: DID identity registry with resolution, update, deactivation, and method lookup
+pub mod identity_registry;
+
+// v1.1.0 round 13: W3C Verifiable Credential schema validation
+pub mod credential_schema;
+
+// v1.1.0 round 12: DID key lifecycle management (generation, rotation, status, purposes)
+pub mod key_manager;
+
+// v1.1.0 round 11: Linked Data Proof purpose validation (authentication, assertion, key agreement, capability)
+pub mod proof_purpose;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 // Re-exports
-pub use did::{Did, DidDocument, DidResolver};
-pub use key_management::Keystore;
-pub use proof::{Proof, ProofPurpose, ProofType};
+#[cfg(feature = "did-ethr")]
+pub use did::methods::{DidEthr, DidEthrMethod, EthNetwork};
+#[cfg(feature = "did-ion")]
+pub use did::methods::{
+    DidIon, DidIonMethod, IonCreateOperation, IonDocument, IonKeyDescriptor, IonKeyPurpose,
+    IonOperationType, IonService,
+};
+pub use did::{ChainNamespace, Did, DidDocument, DidPkh, DidPkhMethod, DidResolver};
+pub use key_management::{
+    generate_rotation_key, KeyExpiry, KeyRotation, KeyRotationManager, KeyRotationReason,
+    KeyRotationRecord, KeyRotationRegistry, Keystore, LifecycleKeyRotationRecord,
+    VerificationKey as ManagedVerificationKey,
+};
+pub use kms::{
+    create_mock_kms, KeyUsage, KmsAlgorithm, KmsBackend, KmsDidSigner, KmsKeyMetadata, KmsProvider,
+    MockAwsKms, MockAzureKms, MockGcpKms,
+};
+pub use proof::{
+    jws::{
+        attach_jws_proof, extract_jws_proof, sign_document, verify_document, CompactJws,
+        JsonWebSignature2020, JwsAlgorithm, JwsHeader, JwsSigner, JwsVerifier,
+    },
+    Proof, ProofPurpose, ProofType,
+};
+pub use revocation::{
+    BloomFilter, CredentialStatus, RevocationEntry, RevocationList2020, RevocationRegistry,
+    RevocationRegistry2020, RevocationStatus, StatusList2021, StatusList2021Inner,
+    StatusListCredential, StatusPurpose, MIN_LIST_SIZE,
+};
+#[cfg(feature = "bbs-plus")]
+pub use signatures::{
+    BbsKeyPair, BbsPlusSignature, BbsProof, BbsProofRequest, EcdsaJwsSigner, EcdsaJwsVerifier,
+    Ed25519JwsSigner, Ed25519JwsVerifier, Es256Signer, Es256Verifier,
+    JwsAlgorithm as SignaturesJwsAlgorithm, JwsHeader as SignaturesJwsHeader, JwsPayload,
+    JwsSignature, JwsSignatureHeader, JwsSigner as SignaturesJwsSigner, JwsSignerTrait,
+    JwsVerifier as SignaturesJwsVerifier, JwsVerifierTrait, MockJwsSigner, MockJwsVerifier,
+    P256KeyPair, Rs256Signer, Rs256Verifier, RsaKeyPair,
+};
 pub use signed_graph::SignedGraph;
+pub use url::{DereferencedResource, DidDereferencer, DidUrl};
 pub use vc::{
     CredentialIssuer, CredentialSubject, CredentialVerifier, VerifiableCredential,
     VerifiablePresentation,
+};
+#[cfg(feature = "zkp")]
+pub use zkp::{
+    prove_selective, verify_selective, AttributeCommitment, CredentialAttribute,
+    DisclosurePresentation, PedersenParams, PedersenSelectiveDisclosureProof, SchnorrProof,
+    SelectiveDisclosureCredential, SelectiveDisclosureProof, SelectiveDisclosureRequest,
+    ZkpProofRequest,
 };
 
 /// DID error types
@@ -114,6 +207,9 @@ pub struct VerificationMethod {
     /// Public key in JWK format
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_key_jwk: Option<serde_json::Value>,
+    /// Blockchain account ID (CAIP-10 format, for did:pkh)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blockchain_account_id: Option<String>,
 }
 
 impl VerificationMethod {
@@ -128,6 +224,38 @@ impl VerificationMethod {
             controller: controller.to_string(),
             public_key_multibase: Some(multibase),
             public_key_jwk: None,
+            blockchain_account_id: None,
+        }
+    }
+
+    /// Create a blockchain account verification method (for did:pkh)
+    ///
+    /// Uses CAIP-10 blockchain account ID format instead of a public key.
+    pub fn blockchain(
+        id: &str,
+        controller: &str,
+        method_type: &str,
+        blockchain_account_id: &str,
+    ) -> Self {
+        Self {
+            id: id.to_string(),
+            method_type: method_type.to_string(),
+            controller: controller.to_string(),
+            public_key_multibase: None,
+            public_key_jwk: None,
+            blockchain_account_id: Some(blockchain_account_id.to_string()),
+        }
+    }
+
+    /// Create a JWK verification method
+    pub fn jwk(id: &str, controller: &str, method_type: &str, jwk: serde_json::Value) -> Self {
+        Self {
+            id: id.to_string(),
+            method_type: method_type.to_string(),
+            controller: controller.to_string(),
+            public_key_multibase: None,
+            public_key_jwk: Some(jwk),
+            blockchain_account_id: None,
         }
     }
 
@@ -142,6 +270,10 @@ impl VerificationMethod {
             } else {
                 Err(DidError::InvalidKey("Unknown multibase prefix".to_string()))
             }
+        } else if self.blockchain_account_id.is_some() {
+            Err(DidError::InvalidKey(
+                "Blockchain account verification methods do not expose raw public keys".to_string(),
+            ))
         } else {
             Err(DidError::InvalidKey("No public key available".to_string()))
         }

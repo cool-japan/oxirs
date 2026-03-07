@@ -145,7 +145,7 @@ impl CliContext {
                 pb.set_style(
                     ProgressStyle::default_bar()
                         .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
-                        .unwrap()
+                        .expect("progress bar template should be valid")
                         .progress_chars("=>-"),
                 );
                 pb
@@ -155,7 +155,7 @@ impl CliContext {
                 pb.set_style(
                     ProgressStyle::default_spinner()
                         .template("{spinner:.green} {msg}")
-                        .unwrap(),
+                        .expect("progress bar template should be valid"),
                 );
                 pb.enable_steady_tick(Duration::from_millis(100));
                 pb

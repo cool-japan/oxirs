@@ -30,6 +30,7 @@ pub mod tucker;
 #[cfg(feature = "quatd")]
 pub mod quatd;
 
+pub mod advanced_models;
 pub mod base;
 pub mod common;
 pub mod scirs_neural;
@@ -55,6 +56,28 @@ pub use tucker::TuckER;
 #[cfg(feature = "quatd")]
 pub use quatd::QuatD;
 
+pub use advanced_models::{Lcg as AdvancedLcg, PairRE, Rescal, RotatEPlus};
 pub use base::*;
 pub use common::*;
 pub use scirs_neural::{ActivationType, OptimizerType, SciRS2NeuralConfig, SciRS2NeuralEmbedding};
+
+// GraphSAGE and GAT basic implementations
+pub mod gat_basic;
+pub mod graphsage;
+
+// Re-exports for GraphSAGE
+pub use graphsage::{
+    AggregatorType, GraphData, GraphSage, GraphSageConfig, GraphSageEmbeddings,
+    GraphSageTrainingMetrics, SimpleLcg,
+};
+
+// Re-exports for GAT
+pub use gat_basic::{Gat, GatConfig, GatEmbeddings};
+
+// Knowledge Graph Embedding algorithms (TransE, DistMult, RotatE)
+pub mod kg_embeddings;
+pub use kg_embeddings::{
+    deserialize_embeddings, serialize_embeddings, DistMult as KgDistMult, KgEmbeddingConfig,
+    KgEmbeddings, KgError, KgModel, KgResult, KgTriple, LinkPredictionEvaluator,
+    RotatE as KgRotatE, TrainingHistory, TransE as KgTransE,
+};

@@ -293,7 +293,11 @@ fn to_snake_case(s: &str) -> String {
             if i > 0 {
                 result.push('_');
             }
-            result.push(ch.to_lowercase().next().unwrap());
+            result.push(
+                ch.to_lowercase()
+                    .next()
+                    .expect("lowercase should produce a character"),
+            );
         } else {
             result.push(ch);
         }
@@ -380,7 +384,7 @@ mod tests {
         let pattern = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
         let value = generate_from_pattern(pattern);
         assert!(value.is_some());
-        assert!(value.unwrap().contains("@"));
+        assert!(value.expect("operation should succeed").contains("@"));
     }
 
     #[test]
@@ -388,7 +392,9 @@ mod tests {
         let pattern = "^https?://.*";
         let value = generate_from_pattern(pattern);
         assert!(value.is_some());
-        assert!(value.unwrap().contains("https://"));
+        assert!(value
+            .expect("operation should succeed")
+            .contains("https://"));
     }
 
     #[test]
@@ -396,7 +402,7 @@ mod tests {
         let pattern = "\\d{3}-\\d{4}";
         let value = generate_from_pattern(pattern);
         assert!(value.is_some());
-        assert!(value.unwrap().contains("-"));
+        assert!(value.expect("operation should succeed").contains("-"));
     }
 
     #[test]
@@ -405,7 +411,7 @@ mod tests {
         let value = generate_from_pattern(pattern);
         assert!(value.is_some());
         // UUID format: 8-4-4-4-12 hex digits
-        let uuid = value.unwrap();
+        let uuid = value.expect("operation should succeed");
         assert!(uuid.contains("550e8400"));
     }
 
@@ -414,7 +420,7 @@ mod tests {
         let pattern = "\\d{4}-\\d{2}-\\d{2}";
         let value = generate_from_pattern(pattern);
         assert!(value.is_some());
-        assert!(value.unwrap().contains("2025"));
+        assert!(value.expect("operation should succeed").contains("2025"));
     }
 
     #[test]
@@ -422,7 +428,7 @@ mod tests {
         let pattern = "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}";
         let value = generate_from_pattern(pattern);
         assert!(value.is_some());
-        assert!(value.unwrap().contains("192.168"));
+        assert!(value.expect("operation should succeed").contains("192.168"));
     }
 
     #[test]
@@ -430,7 +436,7 @@ mod tests {
         let pattern = "#[0-9a-fA-F]{6}";
         let value = generate_from_pattern(pattern);
         assert!(value.is_some());
-        let color = value.unwrap();
+        let color = value.expect("operation should succeed");
         assert!(color.starts_with("\"#"));
     }
 

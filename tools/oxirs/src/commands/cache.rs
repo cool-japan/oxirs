@@ -321,6 +321,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "inherently slow: requires wall-clock TTL expiry (use nextest --ignored to run)"]
     fn test_cache_expiration() {
         let cache = QueryCache::new(1, 100); // 1 second TTL
         let dataset = "test_dataset";

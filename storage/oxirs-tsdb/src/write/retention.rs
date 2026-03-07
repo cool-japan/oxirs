@@ -315,7 +315,7 @@ mod tests {
         start_timestamp: i64,
         count: usize,
     ) -> TsdbResult<TimeChunk> {
-        let start_time = DateTime::from_timestamp(start_timestamp, 0).unwrap();
+        let start_time = DateTime::from_timestamp(start_timestamp, 0).expect("valid timestamp");
         let mut points = Vec::new();
 
         for i in 0..count {
@@ -337,7 +337,7 @@ mod tests {
         };
 
         let enforcer = RetentionEnforcer::new(vec![policy]);
-        let stats = enforcer.stats().unwrap();
+        let stats = enforcer.stats().expect("operation should succeed");
         assert_eq!(stats.runs, 0);
     }
 
@@ -361,12 +361,12 @@ mod tests {
         let age_5days = ChronoDuration::days(5);
         let policy = enforcer.find_policy_for_age(age_5days);
         assert!(policy.is_some());
-        assert_eq!(policy.unwrap().name, "7days");
+        assert_eq!(policy.expect("operation should succeed").name, "7days");
 
         let age_20days = ChronoDuration::days(20);
         let policy = enforcer.find_policy_for_age(age_20days);
         assert!(policy.is_some());
-        assert_eq!(policy.unwrap().name, "30days");
+        assert_eq!(policy.expect("operation should succeed").name, "30days");
 
         let age_40days = ChronoDuration::days(40);
         let policy = enforcer.find_policy_for_age(age_40days);
@@ -406,7 +406,7 @@ mod tests {
 
         // Simulate enforcement
         {
-            let mut stats = enforcer.stats.write().unwrap();
+            let mut stats = enforcer.stats.write().expect("lock should not be poisoned");
             stats.runs += 1;
             stats.chunks_deleted += 10;
             stats.bytes_freed += 50_000;
@@ -427,7 +427,7 @@ mod tests {
         let enforcer = RetentionEnforcer::new(vec![]);
 
         {
-            let mut stats = enforcer.stats.write().unwrap();
+            let mut stats = enforcer.stats.write().expect("lock should not be poisoned");
             stats.runs = 5;
             stats.chunks_deleted = 20;
         }

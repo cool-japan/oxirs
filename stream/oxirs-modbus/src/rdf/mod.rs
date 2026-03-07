@@ -59,3 +59,8 @@ pub mod triple_generator;
 // Re-exports
 pub use graph_updater::{BatchUpdater, GraphUpdater, SparqlEndpointConfig, UpdateStats};
 pub use triple_generator::{GeneratedTriple, ModbusTripleGenerator, QudtUnit};
+
+/// SOSA/SSN ontology mapper for Modbus readings
+pub mod sosa_mapper;
+
+pub use sosa_mapper::{MapperConfig, ModbusToSosaMapper, RdfObject, RdfTriple};

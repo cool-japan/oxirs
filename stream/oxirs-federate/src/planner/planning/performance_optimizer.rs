@@ -842,10 +842,12 @@ impl Default for QueryPatternExtractor {
 impl QueryPatternExtractor {
     pub fn new() -> Self {
         Self {
-            select_regex: Regex::new(r"SELECT\s+([^\s]+(?:\s+[^\s]+)*?)\s+WHERE").unwrap(),
-            join_regex: Regex::new(r"\{[^}]*\}\s*\{[^}]*\}").unwrap(),
-            filter_regex: Regex::new(r"FILTER\s*\([^)]+\)").unwrap(),
-            function_regex: Regex::new(r"\b(COUNT|SUM|AVG|MIN|MAX|GROUP_CONCAT)\s*\(").unwrap(),
+            select_regex: Regex::new(r"SELECT\s+([^\s]+(?:\s+[^\s]+)*?)\s+WHERE")
+                .expect("valid regex pattern"),
+            join_regex: Regex::new(r"\{[^}]*\}\s*\{[^}]*\}").expect("valid regex pattern"),
+            filter_regex: Regex::new(r"FILTER\s*\([^)]+\)").expect("valid regex pattern"),
+            function_regex: Regex::new(r"\b(COUNT|SUM|AVG|MIN|MAX|GROUP_CONCAT)\s*\(")
+                .expect("construction should succeed"),
         }
     }
 

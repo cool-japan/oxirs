@@ -199,13 +199,20 @@ impl PerformanceAnalyzer {
 
     /// Get current profiling data
     pub fn get_profiling_data(&self) -> Result<ProfilingData> {
-        let data = self.profiling_data.lock().unwrap().clone();
+        let data = self
+            .profiling_data
+            .lock()
+            .expect("lock should not be poisoned")
+            .clone();
         Ok(data)
     }
 
     /// Record constraint execution time
     pub fn record_constraint_execution(&self, constraint_type: &str, execution_time_ms: f64) {
-        let mut data = self.profiling_data.lock().unwrap();
+        let mut data = self
+            .profiling_data
+            .lock()
+            .expect("lock should not be poisoned");
         data.constraint_execution_times
             .entry(constraint_type.to_string())
             .or_default()
@@ -214,7 +221,10 @@ impl PerformanceAnalyzer {
 
     /// Record memory usage sample
     pub fn record_memory_usage(&self, sample: MemoryUsageSample) {
-        let mut data = self.profiling_data.lock().unwrap();
+        let mut data = self
+            .profiling_data
+            .lock()
+            .expect("lock should not be poisoned");
         data.memory_usage_samples.push(sample);
     }
 }

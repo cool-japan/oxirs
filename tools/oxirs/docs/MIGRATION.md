@@ -1,8 +1,8 @@
 # OxiRS CLI Migration Guide
 
-**Version**: 0.1.0  
-**Last Updated**: January 7, 2026  
-**Status**: Stub - To be completed in v0.2.0
+**Version**: 0.2.0  
+**Last Updated**: March 5, 2026  
+**Status**: Updated for v0.2.0
 
 ## Overview
 
@@ -23,7 +23,7 @@ OxiRS supports migration from the following systems:
 5. **Blazegraph** - `oxirs migrate from-blazegraph`
 6. **Ontotext GraphDB** - `oxirs migrate from-graphdb`
 
-### 🚧 Planned (v0.2.0)
+### 🚧 Planned (v0.3.0)
 
 - Apache Jena Fuseki (SPARQL endpoint)
 - Stardog
@@ -140,7 +140,7 @@ oxirs migrate format input.ttl output.nq --encoding utf-8
 For complex migrations, use the OxiRS API directly:
 
 ```rust
-// Example migration script (to be documented in v0.2.0)
+// Example migration script (to be documented in v0.3.0)
 // See oxirs/src/commands/migrate.rs for reference
 ```
 
@@ -162,6 +162,6 @@ Migration performance tips:
 
 ---
 
-**Note**: This migration guide is a work in progress. Detailed step-by-step migration procedures for each source system will be added in v0.2.0. For now, use `oxirs migrate --help` for current options.
+**Note**: This migration guide is a work in progress. Detailed step-by-step migration procedures for each source system will be added in v0.3.0. For now, use `oxirs migrate --help` for current options.
 
-**OxiRS CLI v0.1.0** - Migration guide stub
+**OxiRS CLI v0.2.0** - Migration guide

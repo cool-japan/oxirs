@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned for v0.2.0
+### Planned
 - Visual UI tools for annotation exploration
 - Provenance graph visualizer
 - Advanced distributed consensus algorithms
@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cloud-native deployment templates (Kubernetes operators)
 - Enhanced SPARQL-star federation
 - Additional compliance frameworks (FISMA, FedRAMP)
+
+---
+
+## [0.2.0] - 2026-03-05
+
+### Changed
+- Version bump to 0.2.0 release
+- All v0.1.x features stabilized and production-hardened
 
 ---
 

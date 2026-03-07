@@ -1028,13 +1028,13 @@ mod tests {
         let features = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0]];
         let targets = vec![2.0, 4.0, 6.0, 8.0];
 
-        model.train(&features, &targets).unwrap();
+        model.train(&features, &targets).expect("training should succeed");
 
         assert!((model.slope - 2.0).abs() < 0.1);
         assert!(model.intercept.abs() < 0.1);
         assert!(model.r_squared > 0.9);
 
-        let prediction = model.predict(&[5.0]).unwrap();
+        let prediction = model.predict(&[5.0]).expect("operation should succeed");
         assert!((prediction - 10.0).abs() < 0.1);
     }
 
@@ -1055,7 +1055,7 @@ mod tests {
             constraint_violations: HashMap::new(),
         };
 
-        analytics.update_history(record).unwrap();
+        analytics.update_history(record).expect("recording should succeed");
 
         let history = analytics.history.read().expect("rwlock should not be poisoned");
         assert_eq!(history.len(), 1);

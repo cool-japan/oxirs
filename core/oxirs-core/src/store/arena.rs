@@ -178,7 +178,9 @@ impl ConcurrentArena {
                 *arena_opt = Some(Bump::with_capacity(self.arena_size.max(len * 2)));
             }
 
-            let arena = arena_opt.as_ref().unwrap();
+            let arena = arena_opt
+                .as_ref()
+                .expect("arena was just initialized above");
             let allocated = arena.alloc_str(s);
             *self.total_allocated.lock() += len;
 

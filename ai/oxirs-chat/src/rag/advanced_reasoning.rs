@@ -607,7 +607,7 @@ impl AdvancedReasoningEngine {
             .max_by(|a, b| {
                 a.overall_confidence
                     .partial_cmp(&b.overall_confidence)
-                    .unwrap()
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
 
         best_chain.ok_or_else(|| anyhow!("No reasoning chain meets confidence threshold"))

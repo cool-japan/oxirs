@@ -201,7 +201,7 @@ impl PageCursor {
             page_number,
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             nonce: rng_instance.next_u64(),
         }

@@ -229,7 +229,9 @@ impl Network {
             .min_by(|a, b| {
                 let dist_a = Euclidean::distance(point, Point::from(a.coord));
                 let dist_b = Euclidean::distance(point, Point::from(b.coord));
-                dist_a.partial_cmp(&dist_b).unwrap()
+                dist_a
+                    .partial_cmp(&dist_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|node| node.id)
     }
@@ -262,7 +264,7 @@ impl Ord for State {
         other
             .cost
             .partial_cmp(&self.cost)
-            .unwrap()
+            .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| self.node.cmp(&other.node))
     }
 }

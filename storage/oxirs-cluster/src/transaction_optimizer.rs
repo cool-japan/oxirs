@@ -71,7 +71,12 @@ impl TwoPhaseOptimizer {
 
         if affected_shards.len() == 1 && self.enable_single_shard_opt {
             optimization.skip_2pc = true;
-            optimization.single_shard = Some(*affected_shards.iter().next().unwrap());
+            optimization.single_shard = Some(
+                *affected_shards
+                    .iter()
+                    .next()
+                    .expect("affected_shards should not be empty when len == 1"),
+            );
             optimization.reason = "Single-shard transaction".to_string();
             self.stats.write().await.single_shard_optimized += 1;
             return optimization;

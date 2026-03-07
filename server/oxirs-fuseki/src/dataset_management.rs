@@ -422,7 +422,9 @@ impl DatasetManager {
                 .push(snapshot.clone());
 
             // Limit number of snapshots
-            let dataset_snapshots = snapshots.get_mut(name).unwrap();
+            let dataset_snapshots = snapshots
+                .get_mut(name)
+                .expect("snapshot entry should exist after insert");
             if dataset_snapshots.len() > self.config.max_snapshots {
                 dataset_snapshots.remove(0); // Remove oldest
             }
@@ -445,7 +447,11 @@ impl DatasetManager {
         &self,
         dataset_names: Vec<(String, Option<String>)>,
     ) -> FusekiResult<BulkOperationResult> {
-        let _permit = self.operation_semaphore.acquire().await.unwrap();
+        let _permit = self
+            .operation_semaphore
+            .acquire()
+            .await
+            .expect("semaphore should not be closed");
 
         let total = dataset_names.len();
         let mut succeeded = 0;
@@ -489,7 +495,11 @@ impl DatasetManager {
         &self,
         dataset_names: Vec<String>,
     ) -> FusekiResult<BulkOperationResult> {
-        let _permit = self.operation_semaphore.acquire().await.unwrap();
+        let _permit = self
+            .operation_semaphore
+            .acquire()
+            .await
+            .expect("semaphore should not be closed");
 
         let total = dataset_names.len();
         let mut succeeded = 0;

@@ -402,7 +402,7 @@ mod tests {
     #[test]
     fn test_should_use_gpu() {
         let config = GpuAccelerationConfig::default();
-        let validator = GpuAcceleratedValidator::new(config).unwrap();
+        let validator = GpuAcceleratedValidator::new(config).expect("construction should succeed");
 
         // Small batch should not use GPU
         assert!(!validator.should_use_gpu(50));
@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn test_nodes_to_hash_array() {
         let config = GpuAccelerationConfig::default();
-        let validator = GpuAcceleratedValidator::new(config).unwrap();
+        let validator = GpuAcceleratedValidator::new(config).expect("construction should succeed");
 
         let nodes = vec![
             Term::NamedNode(NamedNode::new_unchecked("http://example.org/node1")),
@@ -447,7 +447,8 @@ mod tests {
     #[test]
     fn test_gpu_validator_stats() {
         let config = GpuAccelerationConfig::default();
-        let mut validator = GpuAcceleratedValidator::new(config).unwrap();
+        let mut validator =
+            GpuAcceleratedValidator::new(config).expect("construction should succeed");
 
         assert_eq!(validator.stats().total_batches, 0);
 
@@ -470,7 +471,7 @@ mod tests {
     #[test]
     fn test_profiling_data() {
         let config = GpuAccelerationConfig::default();
-        let validator = GpuAcceleratedValidator::new(config).unwrap();
+        let validator = GpuAcceleratedValidator::new(config).expect("construction should succeed");
         let profiling_data = validator.profiling_data();
         // Should be empty initially
         assert!(profiling_data.is_empty() || !profiling_data.is_empty());

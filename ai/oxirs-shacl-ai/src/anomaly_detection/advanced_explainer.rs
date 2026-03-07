@@ -213,7 +213,11 @@ impl AdvancedAnomalyExplainer {
     /// Format SHAP explanation
     fn format_shap_explanation(&self, attributions: &HashMap<String, f64>) -> String {
         let mut sorted_attrs: Vec<_> = attributions.iter().collect();
-        sorted_attrs.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+        sorted_attrs.sort_by(|a, b| {
+            b.1.abs()
+                .partial_cmp(&a.1.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut explanation = String::from("Top contributing features:\n");
         for (i, (feature, &value)) in sorted_attrs.iter().take(5).enumerate() {
@@ -260,7 +264,11 @@ impl AdvancedAnomalyExplainer {
 
         // Find most impactful features
         let mut sorted_attrs: Vec<_> = attributions.iter().collect();
-        sorted_attrs.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+        sorted_attrs.sort_by(|a, b| {
+            b.1.abs()
+                .partial_cmp(&a.1.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         for (feature, &attribution) in sorted_attrs.iter().take(3) {
             suggestions.push(RemediationSuggestion {
@@ -310,7 +318,11 @@ impl AdvancedAnomalyExplainer {
     /// Create feature importance plot data
     fn create_importance_plot(&self, attributions: &HashMap<String, f64>) -> Vec<(String, f64)> {
         let mut sorted: Vec<_> = attributions.iter().map(|(k, &v)| (k.clone(), v)).collect();
-        sorted.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+        sorted.sort_by(|a, b| {
+            b.1.abs()
+                .partial_cmp(&a.1.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         sorted.truncate(10);
         sorted
     }
@@ -539,7 +551,11 @@ impl NaturalLanguageGenerator {
         // Add top contributing factors
         if !attributions.is_empty() {
             let mut sorted_attrs: Vec<_> = attributions.iter().collect();
-            sorted_attrs.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+            sorted_attrs.sort_by(|a, b| {
+                b.1.abs()
+                    .partial_cmp(&a.1.abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
 
             explanation.push_str("The primary contributing factors are: ");
             for (i, (feature, &value)) in sorted_attrs.iter().take(3).enumerate() {

@@ -623,7 +623,7 @@ mod tests {
             enabled: true,
         };
 
-        engine.add_rule(rule).unwrap();
+        engine.add_rule(rule).expect("operation should succeed");
         assert_eq!(engine.rules().len(), 1);
     }
 
@@ -657,7 +657,9 @@ mod tests {
             enabled: true,
         };
 
-        let resolved = engine.resolve_by_priority(&[&rule1, &rule2]).unwrap();
+        let resolved = engine
+            .resolve_by_priority(&[&rule1, &rule2])
+            .expect("resolution should succeed");
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].id, "rule2");
     }
@@ -681,7 +683,7 @@ mod tests {
             .with_strategy(ConflictResolutionStrategy::Priority)
             .add_rule(rule)
             .build()
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(engine.rules().len(), 1);
     }

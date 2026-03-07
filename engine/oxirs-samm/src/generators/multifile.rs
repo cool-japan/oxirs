@@ -508,10 +508,11 @@ impl MultiFileGenerator {
         let mut classes = HashMap::new();
 
         // Simple regex-based splitting (in production, use proper Java parser)
-        let class_pattern = regex::Regex::new(r"public\s+class\s+(\w+)").unwrap();
+        let class_pattern =
+            regex::Regex::new(r"public\s+class\s+(\w+)").expect("construction should succeed");
 
         for class_match in class_pattern.captures_iter(content) {
-            let class_name = class_match.get(1).unwrap().as_str();
+            let class_name = class_match.get(1).expect("key should exist").as_str();
             // For now, include the entire content for each class
             // In real implementation, extract individual class definition
             classes.insert(class_name.to_string(), content.to_string());
@@ -524,10 +525,11 @@ impl MultiFileGenerator {
         let mut classes = HashMap::new();
 
         // Simple regex-based splitting
-        let class_pattern = regex::Regex::new(r"case\s+class\s+(\w+)").unwrap();
+        let class_pattern =
+            regex::Regex::new(r"case\s+class\s+(\w+)").expect("construction should succeed");
 
         for class_match in class_pattern.captures_iter(content) {
-            let class_name = class_match.get(1).unwrap().as_str();
+            let class_name = class_match.get(1).expect("key should exist").as_str();
             classes.insert(class_name.to_string(), content.to_string());
         }
 
@@ -596,7 +598,9 @@ mod tests {
 
         let options = MultiFileOptions::default();
         let generator = MultiFileGenerator::new(options);
-        let index = generator.generate_typescript_index(&aspect).unwrap();
+        let index = generator
+            .generate_typescript_index(&aspect)
+            .expect("generation should succeed");
 
         assert!(index.contains("export"));
         assert!(index.contains("test_aspect"));
@@ -608,7 +612,9 @@ mod tests {
 
         let options = MultiFileOptions::default();
         let generator = MultiFileGenerator::new(options);
-        let init = generator.generate_python_init(&aspect).unwrap();
+        let init = generator
+            .generate_python_init(&aspect)
+            .expect("generation should succeed");
 
         assert!(init.contains("__all__"));
         assert!(init.contains("from"));
@@ -626,7 +632,9 @@ mod tests {
             ..Default::default()
         };
         let generator = MultiFileGenerator::new(options);
-        let readme = generator.generate_readme(&aspect).unwrap();
+        let readme = generator
+            .generate_readme(&aspect)
+            .expect("generation should succeed");
 
         assert!(readme.contains("# TestAspect"));
         assert!(readme.contains("Test description"));

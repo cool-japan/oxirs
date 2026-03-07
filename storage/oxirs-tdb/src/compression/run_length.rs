@@ -114,6 +114,89 @@ impl RunLengthEncoder {
         Ok(decoded)
     }
 
+    /// Encode a u64 sequence using run-length encoding.
+    ///
+    /// Consecutive equal values are grouped into runs of `(value: u64 LE, count: u32 LE)` = 12 bytes.
+    pub fn encode_u64(values: &[u64]) -> Vec<u8> {
+        if values.is_empty() {
+            return Vec::new();
+        }
+
+        let mut out = Vec::new();
+        let mut current = values[0];
+        let mut count = 1u32;
+
+        for &v in &values[1..] {
+            if v == current && count < u32::MAX {
+                count += 1;
+            } else {
+                out.extend_from_slice(&current.to_le_bytes());
+                out.extend_from_slice(&count.to_le_bytes());
+                current = v;
+                count = 1;
+            }
+        }
+        // Final run
+        out.extend_from_slice(&current.to_le_bytes());
+        out.extend_from_slice(&count.to_le_bytes());
+
+        out
+    }
+
+    /// Decode a u64 run-length encoded byte sequence produced by `encode_u64`.
+    pub fn decode_u64(data: &[u8]) -> Result<Vec<u64>> {
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Each run is 8 (value) + 4 (count) = 12 bytes
+        if data.len() % 12 != 0 {
+            return Err(anyhow!(
+                "Invalid u64 RLE data: length {} is not a multiple of 12",
+                data.len()
+            ));
+        }
+
+        let run_count = data.len() / 12;
+        if run_count > MAX_BLOCK_COUNT {
+            return Err(anyhow!(
+                "Too many u64 RLE runs: {} (max: {})",
+                run_count,
+                MAX_BLOCK_COUNT
+            ));
+        }
+
+        let mut values = Vec::new();
+        let mut total: u64 = 0;
+
+        for chunk in data.chunks_exact(12) {
+            let value = u64::from_le_bytes(
+                chunk[..8]
+                    .try_into()
+                    .map_err(|_| anyhow!("u64 RLE slice error"))?,
+            );
+            let count = u32::from_le_bytes(
+                chunk[8..12]
+                    .try_into()
+                    .map_err(|_| anyhow!("u64 RLE count slice error"))?,
+            );
+
+            // Decompression bomb guard
+            total += count as u64;
+            if total > 100_000_000 {
+                return Err(anyhow!(
+                    "u64 RLE output exceeds 100M elements (possible decompression bomb)"
+                ));
+            }
+
+            for _ in 0..count {
+                values.push(value);
+            }
+        }
+
+        Ok(values)
+    }
+
     /// Estimate compression ratio for given data
     pub fn estimate_compression_ratio(data: &[u8]) -> f64 {
         if data.is_empty() {
@@ -226,5 +309,84 @@ mod tests {
         let random_data = (0..100).collect::<Vec<u8>>();
         let ratio = RunLengthEncoder::estimate_compression_ratio(&random_data);
         assert!(ratio > 1.0); // Should expand
+    }
+
+    // ── u64 RLE ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_encode_u64_empty() {
+        let encoded = RunLengthEncoder::encode_u64(&[]);
+        assert!(encoded.is_empty());
+    }
+
+    #[test]
+    fn test_decode_u64_empty() {
+        let decoded = RunLengthEncoder::decode_u64(&[]).unwrap();
+        assert!(decoded.is_empty());
+    }
+
+    #[test]
+    fn test_encode_u64_single_value() {
+        let values = vec![42u64];
+        let encoded = RunLengthEncoder::encode_u64(&values);
+        let decoded = RunLengthEncoder::decode_u64(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_encode_u64_all_same() {
+        let values = vec![7u64; 100];
+        let encoded = RunLengthEncoder::encode_u64(&values);
+        // Should compress to a single run: 12 bytes
+        assert_eq!(encoded.len(), 12);
+        let decoded = RunLengthEncoder::decode_u64(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_encode_u64_all_different() {
+        let values: Vec<u64> = (0..50).collect();
+        let encoded = RunLengthEncoder::encode_u64(&values);
+        // Each value has run length 1: 50 × 12 bytes
+        assert_eq!(encoded.len(), 50 * 12);
+        let decoded = RunLengthEncoder::decode_u64(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_encode_u64_mixed_runs() {
+        let values = vec![1u64, 1, 1, 2, 2, 3];
+        let encoded = RunLengthEncoder::encode_u64(&values);
+        let decoded = RunLengthEncoder::decode_u64(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_encode_u64_max_value() {
+        let values = vec![u64::MAX, u64::MAX, u64::MAX];
+        let encoded = RunLengthEncoder::encode_u64(&values);
+        let decoded = RunLengthEncoder::decode_u64(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_encode_u64_large_roundtrip() {
+        let mut values = Vec::new();
+        for i in 0..100u64 {
+            for _ in 0..(i % 10 + 1) {
+                values.push(i * 1000);
+            }
+        }
+        let encoded = RunLengthEncoder::encode_u64(&values);
+        let decoded = RunLengthEncoder::decode_u64(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_decode_u64_invalid_length() {
+        // 11 bytes is not a multiple of 12
+        let bad_data = vec![0u8; 11];
+        let result = RunLengthEncoder::decode_u64(&bad_data);
+        assert!(result.is_err());
     }
 }

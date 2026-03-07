@@ -489,7 +489,9 @@ impl ShapeVisualizer {
             "definitions": {}
         });
 
-        let definitions = schema["definitions"].as_object_mut().unwrap();
+        let definitions = schema["definitions"]
+            .as_object_mut()
+            .expect("operation should succeed");
 
         for shape in shapes {
             let shape_schema = self.shape_to_json_schema(shape);
@@ -1093,7 +1095,7 @@ mod tests {
         );
         shape.label = Some("Person Shape".to_string());
         shape.targets.push(Target::Class(
-            NamedNode::new("http://xmlns.com/foaf/0.1/Person").unwrap(),
+            NamedNode::new("http://xmlns.com/foaf/0.1/Person").expect("valid IRI"),
         ));
         shape.add_constraint(
             ConstraintComponentId::new("sh:minCount"),
@@ -1102,7 +1104,8 @@ mod tests {
         shape.add_constraint(
             ConstraintComponentId::new("sh:datatype"),
             crate::constraints::Constraint::Datatype(DatatypeConstraint {
-                datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+                datatype_iri: NamedNode::new("http://www.w3.org/2001/XMLSchema#string")
+                    .expect("valid IRI"),
             }),
         );
         shape

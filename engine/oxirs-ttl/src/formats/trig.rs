@@ -651,8 +651,8 @@ impl TriGParser {
 
         if term == "a" {
             // Handle rdf:type abbreviation
-            let rdf_type =
-                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+            let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                .expect("valid IRI");
             Ok(Predicate::NamedNode(rdf_type))
         } else if term.starts_with('<') && term.ends_with('>') {
             let iri = term.trim_start_matches('<').trim_end_matches('>');
@@ -1046,5 +1046,247 @@ impl Serializer<Quad> for TriGSerializer {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxirs_core::model::Object;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_parse_default_graph_triples() {
+        let parser = TriGParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:name "Alice" .
+ex:bob ex:name "Bob" .
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig parsing should succeed");
+        assert_eq!(quads.len(), 2);
+        for quad in &quads {
+            assert!(
+                quad.graph_name().is_default_graph(),
+                "triples outside graph block should be in default graph"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_named_graph_block() {
+        let parser = TriGParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:graph1 {
+    ex:alice ex:knows ex:bob .
+}
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig parsing should succeed");
+        assert!(!quads.is_empty(), "named graph should produce quads");
+        let in_named_graph = quads
+            .iter()
+            .filter(|q| !q.graph_name().is_default_graph())
+            .count();
+        assert!(in_named_graph > 0, "some quads should be in named graph");
+    }
+
+    #[test]
+    fn test_parse_multiple_named_graphs() {
+        let parser = TriGParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+
+ex:graph1 {
+    ex:alice ex:name "Alice" .
+}
+
+ex:graph2 {
+    ex:bob ex:name "Bob" .
+}
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig parsing should succeed");
+        assert!(
+            quads.len() >= 2,
+            "multiple graphs should produce multiple quads"
+        );
+    }
+
+    #[test]
+    fn test_parse_graph_keyword_syntax() {
+        let parser = TriGParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+GRAPH ex:graph1 {
+    ex:s ex:p ex:o .
+}
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig GRAPH keyword syntax should succeed");
+        assert!(
+            !quads.is_empty(),
+            "GRAPH keyword syntax should produce quads"
+        );
+    }
+
+    #[test]
+    fn test_parse_mixed_default_and_named_graphs() {
+        let parser = TriGParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:type ex:Person .
+ex:relationships {
+    ex:alice ex:knows ex:bob .
+}
+ex:charlie ex:type ex:Person .
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig parsing should succeed");
+        let default_count = quads
+            .iter()
+            .filter(|q| q.graph_name().is_default_graph())
+            .count();
+        assert!(default_count >= 2, "should have default graph triples");
+    }
+
+    #[test]
+    fn test_parse_prefix_declarations() {
+        let parser = TriGParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+ex:graph1 {
+    ex:alice foaf:name "Alice" .
+}
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig parsing with prefixes should succeed");
+        assert!(!quads.is_empty());
+    }
+
+    #[test]
+    fn test_parse_empty_document() {
+        let parser = TriGParser::new();
+        let input = "# only comments\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig parsing empty document should succeed");
+        assert!(quads.is_empty(), "empty document produces no quads");
+    }
+
+    #[test]
+    fn test_for_reader_iterator() {
+        let parser = TriGParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:s ex:p "o" .
+"#;
+        let quads: Vec<_> = parser
+            .for_reader(Cursor::new(input))
+            .collect::<Result<Vec<_>, _>>()
+            .expect("for_reader should succeed");
+        assert_eq!(quads.len(), 1);
+    }
+
+    #[test]
+    fn test_serialize_quads_default_graph() {
+        let serializer = TriGSerializer::new();
+        let quad = Quad::new(
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            NamedNode::new("http://example.org/o").expect("valid IRI"),
+            GraphName::DefaultGraph,
+        );
+        let mut output = Vec::new();
+        serializer
+            .serialize(&[quad], &mut output)
+            .expect("trig serialization should succeed");
+        let out_str = String::from_utf8(output).expect("valid UTF-8");
+        assert!(out_str.contains("<http://example.org/s>"));
+    }
+
+    #[test]
+    fn test_serialize_quads_named_graph() {
+        let serializer = TriGSerializer::new();
+        let quad = Quad::new(
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            NamedNode::new("http://example.org/o").expect("valid IRI"),
+            GraphName::NamedNode(NamedNode::new("http://example.org/g").expect("valid IRI")),
+        );
+        let mut output = Vec::new();
+        serializer
+            .serialize(&[quad], &mut output)
+            .expect("trig serialization should succeed");
+        let out_str = String::from_utf8(output).expect("valid UTF-8");
+        assert!(out_str.contains("<http://example.org/g>"));
+    }
+
+    #[test]
+    fn test_parse_literal_object_in_graph() {
+        let parser = TriGParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:data {
+    ex:alice ex:age "30" .
+}
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig parsing should succeed");
+        assert!(!quads.is_empty());
+        // Find the quad with the literal
+        let has_literal = quads
+            .iter()
+            .any(|q| matches!(q.object(), Object::Literal(_)));
+        assert!(has_literal, "should have quad with literal object");
+    }
+
+    #[test]
+    fn test_parser_default_is_non_lenient() {
+        let parser = TriGParser::new();
+        assert!(!parser.lenient, "default parser should not be lenient");
+    }
+
+    #[test]
+    fn test_parse_base_iri_declaration() {
+        let parser = TriGParser::new();
+        let input = r#"
+@base <http://example.org/> .
+@prefix ex: <http://example.org/> .
+ex:g {
+    <alice> <knows> <bob> .
+}
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig parsing with base IRI should succeed");
+        assert!(!quads.is_empty());
+    }
+
+    #[test]
+    fn test_parse_multiple_triples_in_single_graph() {
+        let parser = TriGParser::new();
+        let input = r#"
+@prefix ex: <http://example.org/> .
+ex:graph1 {
+    ex:s1 ex:p ex:o1 .
+    ex:s2 ex:p ex:o2 .
+    ex:s3 ex:p ex:o3 .
+}
+"#;
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("trig parsing should succeed");
+        assert!(quads.len() >= 3, "single graph with 3 triples");
     }
 }

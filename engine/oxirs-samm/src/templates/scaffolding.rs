@@ -18,7 +18,7 @@
 //!
 //! // Use a pre-built IoT sensor template
 //! let mut registry = TemplateRegistry::default();
-//! let template = registry.get("iot_sensor").unwrap();
+//! let template = registry.get("iot_sensor").expect("key should exist");
 //!
 //! let aspect = template.instantiate("TemperatureSensor", "org.example", "1.0.0")
 //!     .with_property("temperature", "xsd:decimal", false)
@@ -449,7 +449,7 @@ mod tests {
     #[test]
     fn test_template_instantiation() {
         let registry = TemplateRegistry::default();
-        let template = registry.get("iot_sensor").unwrap();
+        let template = registry.get("iot_sensor").expect("key should exist");
 
         let aspect = template
             .instantiate("TemperatureSensor", "org.example", "1.0.0")

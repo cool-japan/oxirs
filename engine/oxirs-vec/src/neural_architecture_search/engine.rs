@@ -241,7 +241,9 @@ impl NeuralArchitectureSearch {
 
         // Update history
         {
-            let mut history = self.history.write().unwrap();
+            let mut history = self.history
+            .write()
+            .expect("history write lock should not be poisoned");
             for arch in &self.population {
                 history.add_architecture(arch.clone());
             }
@@ -303,9 +305,13 @@ impl NeuralArchitectureSearch {
 
     /// Update search statistics
     fn update_search_statistics(&mut self, generation: usize, best_performance: f64) -> Result<()> {
-        let mut history = self.history.write().unwrap();
+        let mut history = self.history
+            .write()
+            .expect("history write lock should not be poisoned");
         history.update_best(
-            self.get_best_architecture()?.unwrap().id,
+            self.get_best_architecture()?
+                .expect("best architecture should exist after evaluation")
+                .id,
             best_performance,
             generation,
         );

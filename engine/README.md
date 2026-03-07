@@ -1,11 +1,11 @@
 # OxiRS Engine 🚀
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: Production Release (v0.1.0) - Released January 7, 2026
+**Status**: Production Release (v0.2.0) - Released March 5, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -198,13 +198,13 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # Individual modules (stable features)
-oxirs-arq = "0.1.0"
-oxirs-shacl = "0.1.0"
+oxirs-arq = "0.2.0"
+oxirs-shacl = "0.2.0"
 
 # Individual modules (experimental features)
-oxirs-vec = "0.1.0"
-oxirs-rule = "0.1.0"
-oxirs-star = "0.1.0"
+oxirs-vec = "0.2.0"
+oxirs-rule = "0.2.0"
+oxirs-star = "0.2.0"
 ```
 
 Note: There is no single `oxirs-engine` crate. Use individual modules as needed.
@@ -426,12 +426,9 @@ We welcome contributions! Please see our [Contributing Guide](../CONTRIBUTING.md
 
 ## 📄 License
 
-Licensed under either of:
+Licensed under:
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT License ([LICENSE-MIT](../LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
 
 ## 🌟 Status
 

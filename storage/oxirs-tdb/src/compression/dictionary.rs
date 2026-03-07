@@ -288,6 +288,197 @@ impl Clone for AdaptiveDictionary {
     }
 }
 
+/// Dictionary encoding specifically for RDF triple components (subjects, predicates, objects).
+///
+/// `TripleDictionary` maps RDF URI strings and literals to compact 64-bit integer IDs,
+/// dramatically reducing storage size for large RDF graphs where the same URIs appear
+/// across millions of triples.  Subjects, predicates and objects maintain separate
+/// namespaces so that ID `42` for a subject is unambiguous relative to predicate ID `42`.
+///
+/// # Compression Characteristics
+///
+/// For a typical SPARQL dataset:
+/// - A 40-byte URI becomes an 8-byte u64 NodeID (~5x size reduction per occurrence)
+/// - With 1M triples sharing 10K unique predicates the savings are dramatic
+/// - `compression_ratio()` reflects actual savings in the live dictionary
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use oxirs_tdb::compression::dictionary::TripleDictionary;
+///
+/// let mut dict = TripleDictionary::new();
+/// let (s_id, p_id, o_id) = dict.encode_triple(
+///     "http://example.org/Alice",
+///     "http://schema.org/knows",
+///     "http://example.org/Bob",
+/// );
+/// let (s, p, o) = dict.decode_triple(s_id, p_id, o_id).unwrap();
+/// assert_eq!(s, "http://example.org/Alice");
+/// ```
+#[derive(Debug)]
+pub struct TripleDictionary {
+    /// Forward mapping: subject string -> subject ID
+    subject_dict: HashMap<String, u64>,
+    /// Forward mapping: predicate string -> predicate ID
+    predicate_dict: HashMap<String, u64>,
+    /// Forward mapping: object string -> object ID
+    object_dict: HashMap<String, u64>,
+    /// Reverse mapping: ID -> string (shared across all three components;
+    /// IDs are globally unique across the entire dictionary)
+    reverse: HashMap<u64, String>,
+    /// Counter for next ID to assign (monotonically increasing)
+    next_id: u64,
+}
+
+impl TripleDictionary {
+    /// Create a new empty `TripleDictionary`.
+    pub fn new() -> Self {
+        Self {
+            subject_dict: HashMap::new(),
+            predicate_dict: HashMap::new(),
+            object_dict: HashMap::new(),
+            reverse: HashMap::new(),
+            next_id: 0,
+        }
+    }
+
+    /// Encode a triple (subject, predicate, object) as three 64-bit integer IDs.
+    ///
+    /// If a component has been seen before its existing ID is returned;
+    /// otherwise a new monotonically-increasing ID is assigned.
+    ///
+    /// Returns `(subject_id, predicate_id, object_id)`.
+    pub fn encode_triple(&mut self, s: &str, p: &str, o: &str) -> (u64, u64, u64) {
+        let s_id = self.intern_subject(s);
+        let p_id = self.intern_predicate(p);
+        let o_id = self.intern_object(o);
+        (s_id, p_id, o_id)
+    }
+
+    /// Decode a triple from three 64-bit integer IDs back to strings.
+    ///
+    /// Returns `Some((subject, predicate, object))` or `None` if any ID is unknown.
+    pub fn decode_triple(
+        &self,
+        s_id: u64,
+        p_id: u64,
+        o_id: u64,
+    ) -> Option<(String, String, String)> {
+        let s = self.reverse.get(&s_id)?.clone();
+        let p = self.reverse.get(&p_id)?.clone();
+        let o = self.reverse.get(&o_id)?.clone();
+        Some((s, p, o))
+    }
+
+    /// Return the total number of unique strings (subjects + predicates + objects combined)
+    /// currently interned in the dictionary.
+    pub fn size(&self) -> usize {
+        self.reverse.len()
+    }
+
+    /// Estimate the compression ratio achieved by this dictionary.
+    ///
+    /// The ratio is computed as:
+    ///   `(total_string_bytes) / (entries * 8)`
+    ///
+    /// where `entries * 8` is the storage cost of the IDs alone (8 bytes per u64).
+    /// A ratio > 1.0 means the dictionary saves space; typical values are 4-10x for
+    /// RDF URI-heavy workloads.
+    pub fn compression_ratio(&self) -> f64 {
+        if self.reverse.is_empty() {
+            return 1.0;
+        }
+        let total_string_bytes: usize = self.reverse.values().map(|s| s.len()).sum();
+        let id_bytes = self.reverse.len() * 8; // 8 bytes per u64 ID
+        if id_bytes == 0 {
+            return 1.0;
+        }
+        total_string_bytes as f64 / id_bytes as f64
+    }
+
+    /// Look up the ID for a subject string, returning `None` if not interned.
+    pub fn get_subject_id(&self, s: &str) -> Option<u64> {
+        self.subject_dict.get(s).copied()
+    }
+
+    /// Look up the ID for a predicate string, returning `None` if not interned.
+    pub fn get_predicate_id(&self, p: &str) -> Option<u64> {
+        self.predicate_dict.get(p).copied()
+    }
+
+    /// Look up the ID for an object string, returning `None` if not interned.
+    pub fn get_object_id(&self, o: &str) -> Option<u64> {
+        self.object_dict.get(o).copied()
+    }
+
+    /// Decode any ID back to the original string, regardless of component type.
+    ///
+    /// Returns `None` if the ID is not known.
+    pub fn decode_id(&self, id: u64) -> Option<&str> {
+        self.reverse.get(&id).map(|s| s.as_str())
+    }
+
+    /// Return the number of unique subjects.
+    pub fn subject_count(&self) -> usize {
+        self.subject_dict.len()
+    }
+
+    /// Return the number of unique predicates.
+    pub fn predicate_count(&self) -> usize {
+        self.predicate_dict.len()
+    }
+
+    /// Return the number of unique objects.
+    pub fn object_count(&self) -> usize {
+        self.object_dict.len()
+    }
+
+    // -- Internal helpers --
+
+    fn intern_subject(&mut self, s: &str) -> u64 {
+        if let Some(&id) = self.subject_dict.get(s) {
+            return id;
+        }
+        let id = self.alloc_id();
+        self.subject_dict.insert(s.to_string(), id);
+        self.reverse.insert(id, s.to_string());
+        id
+    }
+
+    fn intern_predicate(&mut self, p: &str) -> u64 {
+        if let Some(&id) = self.predicate_dict.get(p) {
+            return id;
+        }
+        let id = self.alloc_id();
+        self.predicate_dict.insert(p.to_string(), id);
+        self.reverse.insert(id, p.to_string());
+        id
+    }
+
+    fn intern_object(&mut self, o: &str) -> u64 {
+        if let Some(&id) = self.object_dict.get(o) {
+            return id;
+        }
+        let id = self.alloc_id();
+        self.object_dict.insert(o.to_string(), id);
+        self.reverse.insert(id, o.to_string());
+        id
+    }
+
+    fn alloc_id(&mut self) -> u64 {
+        let id = self.next_id;
+        self.next_id = self.next_id.saturating_add(1);
+        id
+    }
+}
+
+impl Default for TripleDictionary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,5 +525,171 @@ mod tests {
 
         assert_eq!(dict.get_id(b"test"), new_dict.get_id(b"test"));
         assert_eq!(dict.get_id(b"data"), new_dict.get_id(b"data"));
+    }
+
+    // -- TripleDictionary tests --
+
+    #[test]
+    fn test_triple_dictionary_encode_decode_roundtrip() {
+        let mut dict = TripleDictionary::new();
+
+        let s = "http://example.org/Alice";
+        let p = "http://schema.org/knows";
+        let o = "http://example.org/Bob";
+
+        let (s_id, p_id, o_id) = dict.encode_triple(s, p, o);
+        let decoded = dict
+            .decode_triple(s_id, p_id, o_id)
+            .expect("decode must succeed");
+        assert_eq!(decoded.0, s);
+        assert_eq!(decoded.1, p);
+        assert_eq!(decoded.2, o);
+    }
+
+    #[test]
+    fn test_triple_dictionary_same_uri_same_id() {
+        let mut dict = TripleDictionary::new();
+
+        let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+        let class_a = "http://example.org/ClassA";
+        let class_b = "http://example.org/ClassB";
+
+        let (_, p1, _) = dict.encode_triple("http://example.org/s1", rdf_type, class_a);
+        let (_, p2, _) = dict.encode_triple("http://example.org/s2", rdf_type, class_b);
+        // Same predicate URI must get same ID
+        assert_eq!(p1, p2, "same predicate URI must map to same ID");
+    }
+
+    #[test]
+    fn test_triple_dictionary_size() {
+        let mut dict = TripleDictionary::new();
+        assert_eq!(dict.size(), 0);
+
+        // Three distinct URIs
+        dict.encode_triple(
+            "http://example.org/s",
+            "http://example.org/p",
+            "http://example.org/o",
+        );
+        assert_eq!(dict.size(), 3, "three unique URIs should give size 3");
+
+        // Repeat the same triple - no new entries
+        dict.encode_triple(
+            "http://example.org/s",
+            "http://example.org/p",
+            "http://example.org/o",
+        );
+        assert_eq!(
+            dict.size(),
+            3,
+            "duplicate triple must not grow the dictionary"
+        );
+    }
+
+    #[test]
+    fn test_triple_dictionary_compression_ratio() {
+        let mut dict = TripleDictionary::new();
+        // Long URIs give a good compression ratio
+        for i in 0..100 {
+            dict.encode_triple(
+                &format!("http://very-long-namespace.example.org/subject/{}", i),
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                "http://very-long-namespace.example.org/SomeClass",
+            );
+        }
+        let ratio = dict.compression_ratio();
+        assert!(
+            ratio > 1.0,
+            "long URIs should have compression_ratio > 1.0, got {}",
+            ratio
+        );
+    }
+
+    #[test]
+    fn test_triple_dictionary_decode_unknown_id_returns_none() {
+        let dict = TripleDictionary::new();
+        let result = dict.decode_triple(9999, 9998, 9997);
+        assert!(result.is_none(), "unknown IDs should return None");
+    }
+
+    #[test]
+    fn test_triple_dictionary_component_counts() {
+        let mut dict = TripleDictionary::new();
+
+        dict.encode_triple(
+            "http://example.org/s1",
+            "http://schema.org/name",
+            "\"Alice\"",
+        );
+        dict.encode_triple("http://example.org/s2", "http://schema.org/name", "\"Bob\"");
+        dict.encode_triple("http://example.org/s1", "http://schema.org/age", "\"30\"");
+
+        assert_eq!(dict.subject_count(), 2, "two distinct subjects");
+        assert_eq!(dict.predicate_count(), 2, "two distinct predicates");
+        assert_eq!(dict.object_count(), 3, "three distinct objects");
+    }
+
+    #[test]
+    fn test_triple_dictionary_large_graph() {
+        let mut dict = TripleDictionary::new();
+
+        // Simulate a medium-sized RDF graph
+        let predicates = [
+            "http://schema.org/name",
+            "http://schema.org/knows",
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+        ];
+
+        for i in 0..1000 {
+            let s = format!("http://example.org/person/{}", i);
+            let p = predicates[i % predicates.len()];
+            let o = format!("http://example.org/person/{}", (i + 1) % 1000);
+            dict.encode_triple(&s, p, &o);
+        }
+
+        // 1000 unique subjects = 1000 s IDs; 3 unique predicates; subjects also used as objects
+        assert_eq!(dict.subject_count(), 1000);
+        assert_eq!(dict.predicate_count(), 3);
+        // objects are same URIs as subjects (partially reused via the same global ID)
+        // after the full loop all 1000 person URIs appear as objects too, but they get
+        // separate entries in the object_dict (they're tracked independently per role)
+        assert!(dict.object_count() <= 1000);
+
+        let ratio = dict.compression_ratio();
+        // With ~35-byte URIs each mapped to 8 bytes: ratio ~ 35/8 ~ 4.4x
+        assert!(
+            ratio > 2.0,
+            "large graph should achieve > 2x compression ratio, got {}",
+            ratio
+        );
+    }
+
+    #[test]
+    fn test_triple_dictionary_get_id_helpers() {
+        let mut dict = TripleDictionary::new();
+        let s = "http://example.org/s";
+        let p = "http://schema.org/p";
+        let o = "http://example.org/o";
+
+        let (s_id, p_id, o_id) = dict.encode_triple(s, p, o);
+
+        assert_eq!(dict.get_subject_id(s), Some(s_id));
+        assert_eq!(dict.get_predicate_id(p), Some(p_id));
+        assert_eq!(dict.get_object_id(o), Some(o_id));
+        assert_eq!(dict.get_subject_id("unknown"), None);
+    }
+
+    #[test]
+    fn test_triple_dictionary_decode_id() {
+        let mut dict = TripleDictionary::new();
+        let (s_id, p_id, o_id) = dict.encode_triple(
+            "http://example.org/s",
+            "http://schema.org/p",
+            "http://example.org/o",
+        );
+        assert_eq!(dict.decode_id(s_id), Some("http://example.org/s"));
+        assert_eq!(dict.decode_id(p_id), Some("http://schema.org/p"));
+        assert_eq!(dict.decode_id(o_id), Some("http://example.org/o"));
+        assert_eq!(dict.decode_id(99999), None);
     }
 }

@@ -25,3 +25,19 @@ pub use reasoning_evaluation::{
     ReasoningChain, ReasoningEvaluationConfig, ReasoningEvaluationResults, ReasoningRule,
     ReasoningStep, ReasoningTaskEvaluator, ReasoningType,
 };
+
+// A/B testing framework
+pub mod ab_test;
+
+// Re-exports for A/B testing
+pub use ab_test::{
+    evaluate_hits_at_k, evaluate_link_prediction, evaluate_silhouette, AbTestResult, AbTestRunner,
+    EmbedMetric, ModelEvalResult, StatTest,
+};
+
+// Embedding quality metrics: link prediction, analogy, clustering
+pub mod embedding_metrics;
+
+pub use embedding_metrics::{
+    AnalogicalReasoningBenchmark, AnalogyQuad, EmbeddingClusteringMetrics, EmbeddingEvaluator,
+};

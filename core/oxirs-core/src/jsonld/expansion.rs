@@ -350,7 +350,11 @@ impl JsonLdExpansionConverter {
                     | JsonEvent::Number(_)
                     | JsonEvent::Boolean(_)
                     | JsonEvent::Null => {
-                        buffer.last_mut().unwrap().1.push(to_owned_event(event));
+                        buffer
+                            .last_mut()
+                            .expect("buffer validated to be non-empty")
+                            .1
+                            .push(to_owned_event(event));
                     }
                     JsonEvent::ObjectKey(key) => {
                         if depth == 1 {
@@ -359,19 +363,27 @@ impl JsonLdExpansionConverter {
                         } else {
                             buffer
                                 .last_mut()
-                                .unwrap()
+                                .expect("buffer validated to be non-empty")
                                 .1
                                 .push(to_owned_event(JsonEvent::ObjectKey(key)));
                         }
                     }
                     JsonEvent::EndArray | JsonEvent::EndObject => {
                         if depth > 1 {
-                            buffer.last_mut().unwrap().1.push(to_owned_event(event));
+                            buffer
+                                .last_mut()
+                                .expect("buffer validated to be non-empty")
+                                .1
+                                .push(to_owned_event(event));
                         }
                         depth -= 1;
                     }
                     JsonEvent::StartArray | JsonEvent::StartObject => {
-                        buffer.last_mut().unwrap().1.push(to_owned_event(event));
+                        buffer
+                            .last_mut()
+                            .expect("buffer validated to be non-empty")
+                            .1
+                            .push(to_owned_event(event));
                         depth += 1;
                     }
                     JsonEvent::Eof => unreachable!(),
@@ -1758,7 +1770,8 @@ impl JsonLdExpansionConverter {
     ) {
         let context = self.context_processor.process_context(
             self.context(),
-            json_node_from_events(context.into_iter().map(Ok)).unwrap(),
+            json_node_from_events(context.into_iter().map(Ok))
+                .expect("context events should produce valid JSON node"),
             self.base_url.as_ref(),
             &mut Vec::new(),
             false,

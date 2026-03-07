@@ -1,8 +1,8 @@
 # OxiRS Embed - Knowledge Graph Embeddings
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Production Release (v0.1.0) - Released January 2026
+**Status**: v0.2.0 - Released March 5, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -75,10 +75,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-embed = "0.1.0"
+oxirs-embed = "0.2.0"
 
 # Enable specific providers
-oxirs-embed = { version = "0.1.0", features = ["openai", "sentence-transformers"] }
+oxirs-embed = { version = "0.2.0", features = ["openai", "sentence-transformers"] }
 ```
 
 ## Quick Start
@@ -640,7 +640,7 @@ This is an experimental module. Feedback welcome!
 
 ## License
 
-MIT OR Apache-2.0
+Apache-2.0
 
 ## See Also
 

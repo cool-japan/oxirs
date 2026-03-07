@@ -201,7 +201,7 @@ See main [README.md](../README.md#contributing) for contribution guidelines.
 
 ## License
 
-MIT OR Apache-2.0
+Apache-2.0
 
 ## See Also
 

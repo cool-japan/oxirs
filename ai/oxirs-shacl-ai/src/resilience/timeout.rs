@@ -64,10 +64,7 @@ impl TimeoutGuard {
 }
 
 /// Execute operation with timeout
-pub async fn execute_with_timeout<F, T>(
-    duration: Duration,
-    operation: F,
-) -> Result<T>
+pub async fn execute_with_timeout<F, T>(duration: Duration, operation: F) -> Result<T>
 where
     F: std::future::Future<Output = Result<T>>,
 {
@@ -88,11 +85,7 @@ where
 {
     match timeout(duration, operation).await {
         Ok(result) => result,
-        Err(_) => Err(anyhow!(
-            "{} timed out after {:?}",
-            operation_name,
-            duration
-        )),
+        Err(_) => Err(anyhow!("{} timed out after {:?}", operation_name, duration)),
     }
 }
 
@@ -112,7 +105,9 @@ impl StreamTimeout {
 
     /// Update last activity timestamp
     pub fn update(&self) -> Result<()> {
-        let mut last = self.last_activity.write()
+        let mut last = self
+            .last_activity
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
         *last = std::time::Instant::now();
         Ok(())
@@ -120,14 +115,18 @@ impl StreamTimeout {
 
     /// Check if stream has timed out
     pub fn is_expired(&self) -> Result<bool> {
-        let last = self.last_activity.read()
+        let last = self
+            .last_activity
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
         Ok(last.elapsed() >= self.timeout)
     }
 
     /// Get time since last activity
     pub fn idle_time(&self) -> Result<Duration> {
-        let last = self.last_activity.read()
+        let last = self
+            .last_activity
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
         Ok(last.elapsed())
     }
@@ -139,10 +138,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_timeout_success() {
-        let result = execute_with_timeout(
-            Duration::from_millis(100),
-            async { Ok::<_, anyhow::Error>(42) },
-        )
+        let result = execute_with_timeout(Duration::from_millis(100), async {
+            Ok::<_, anyhow::Error>(42)
+        })
         .await;
 
         assert!(result.is_ok());
@@ -151,13 +149,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_timeout_expires() {
-        let result = execute_with_timeout(
-            Duration::from_millis(10),
-            async {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                Ok::<_, anyhow::Error>(42)
-            },
-        )
+        let result = execute_with_timeout(Duration::from_millis(10), async {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            Ok::<_, anyhow::Error>(42)
+        })
         .await;
 
         assert!(result.is_err());

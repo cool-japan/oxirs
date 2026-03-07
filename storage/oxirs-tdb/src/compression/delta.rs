@@ -131,6 +131,89 @@ impl DeltaEncoder {
         compressed_size as f64 / data.len() as f64
     }
 
+    /// Encode a sorted u64 sequence using variable-length (LEB128-style) delta encoding.
+    ///
+    /// This produces more compact output than `encode_u64_sequence` for small
+    /// deltas (which is typical for sorted triple IDs).
+    ///
+    /// Encoding:
+    /// - First value: stored as 9-byte little-endian u64 (1 header byte = 0xFF + 8 bytes)
+    /// - Subsequent values: zigzag-encode the signed delta, then store as LEB128 varint
+    pub fn encode(values: &[u64]) -> Vec<u8> {
+        if values.is_empty() {
+            return Vec::new();
+        }
+
+        let mut out = Vec::new();
+
+        // First value as raw 8-byte LE
+        out.extend_from_slice(&values[0].to_le_bytes());
+
+        let mut prev = values[0];
+        for &v in &values[1..] {
+            // Signed delta, zigzag encoded into unsigned for LEB128
+            let delta: i64 = if v >= prev {
+                (v - prev) as i64
+            } else {
+                -((prev - v) as i64)
+            };
+            // Zigzag: map signed to unsigned
+            let zigzag: u64 = if delta >= 0 {
+                (delta as u64) << 1
+            } else {
+                ((!delta as u64) << 1) | 1
+            };
+            // LEB128 encode the zigzag value
+            encode_leb128(&mut out, zigzag);
+            prev = v;
+        }
+
+        out
+    }
+
+    /// Decode a variable-length delta encoded u64 sequence produced by `encode`.
+    pub fn decode(data: &[u8]) -> Result<Vec<u64>> {
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if data.len() < 8 {
+            return Err(anyhow!("Delta-encoded data too short for first value"));
+        }
+
+        let first = u64::from_le_bytes(
+            data[..8]
+                .try_into()
+                .map_err(|_| anyhow!("Failed to read first value"))?,
+        );
+
+        let mut values = vec![first];
+        let mut prev = first;
+        let mut pos = 8;
+
+        while pos < data.len() {
+            let (zigzag, consumed) = decode_leb128(&data[pos..])
+                .ok_or_else(|| anyhow!("Invalid LEB128 encoding at byte {}", pos))?;
+            pos += consumed;
+
+            // Reverse zigzag
+            let delta: i64 = if (zigzag & 1) == 0 {
+                (zigzag >> 1) as i64
+            } else {
+                !((zigzag >> 1) as i64)
+            };
+
+            prev = if delta >= 0 {
+                prev.saturating_add(delta as u64)
+            } else {
+                prev.saturating_sub((-delta) as u64)
+            };
+            values.push(prev);
+        }
+
+        Ok(values)
+    }
+
     /// Estimate compression ratio for u64 sequences
     pub fn estimate_u64_compression_ratio(values: &[u64]) -> f64 {
         if values.len() < 2 {
@@ -154,6 +237,44 @@ impl DeltaEncoder {
             1.0 // No compression expected
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEB128 helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Encode a `u64` value as unsigned LEB128 into `buf`.
+fn encode_leb128(buf: &mut Vec<u8>, mut value: u64) {
+    loop {
+        let byte = (value & 0x7F) as u8;
+        value >>= 7;
+        if value == 0 {
+            buf.push(byte);
+            break;
+        } else {
+            buf.push(byte | 0x80);
+        }
+    }
+}
+
+/// Decode an unsigned LEB128 value from `data`.
+///
+/// Returns `(value, bytes_consumed)` or `None` if the data is empty or malformed.
+fn decode_leb128(data: &[u8]) -> Option<(u64, usize)> {
+    let mut value: u64 = 0;
+    let mut shift: u32 = 0;
+    for (i, &byte) in data.iter().enumerate() {
+        let low = (byte & 0x7F) as u64;
+        value |= low.checked_shl(shift)?;
+        shift += 7;
+        if (byte & 0x80) == 0 {
+            return Some((value, i + 1));
+        }
+        if shift > 63 {
+            return None; // overflow protection
+        }
+    }
+    None // unterminated LEB128
 }
 
 impl CompressionAlgorithm for DeltaEncoder {
@@ -265,5 +386,106 @@ mod tests {
         let encoded = DeltaEncoder::encode_u64_sequence(&values).unwrap();
         let decoded = DeltaEncoder::decode_u64_sequence(&encoded).unwrap();
         assert_eq!(values, decoded);
+    }
+
+    // ── Variable-length delta encode/decode ──────────────────────────────────
+
+    #[test]
+    fn test_vle_encode_empty() {
+        let encoded = DeltaEncoder::encode(&[]);
+        assert!(encoded.is_empty());
+    }
+
+    #[test]
+    fn test_vle_decode_empty() {
+        let decoded = DeltaEncoder::decode(&[]).unwrap();
+        assert!(decoded.is_empty());
+    }
+
+    #[test]
+    fn test_vle_single_value() {
+        let values = vec![42u64];
+        let encoded = DeltaEncoder::encode(&values);
+        let decoded = DeltaEncoder::decode(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_vle_sorted_ascending() {
+        let values: Vec<u64> = (1..=20).collect();
+        let encoded = DeltaEncoder::encode(&values);
+        let decoded = DeltaEncoder::decode(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_vle_sorted_descending() {
+        let values: Vec<u64> = (1..=20).rev().collect();
+        let encoded = DeltaEncoder::encode(&values);
+        let decoded = DeltaEncoder::decode(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_vle_with_duplicates() {
+        let values = vec![5u64, 5, 5, 5, 10, 10, 15];
+        let encoded = DeltaEncoder::encode(&values);
+        let decoded = DeltaEncoder::decode(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_vle_large_sequence_roundtrip() {
+        let values: Vec<u64> = (0..1000).map(|i| i * 7).collect();
+        let encoded = DeltaEncoder::encode(&values);
+        let decoded = DeltaEncoder::decode(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_vle_large_gaps() {
+        let values = vec![0u64, 1_000_000, 2_000_000, 3_000_000];
+        let encoded = DeltaEncoder::encode(&values);
+        let decoded = DeltaEncoder::decode(&encoded).unwrap();
+        assert_eq!(decoded, values);
+    }
+
+    #[test]
+    fn test_vle_compact_for_small_deltas() {
+        // For a sequence with small deltas, VLE should be more compact than
+        // the fixed 8-byte encoding for sequences longer than 1 element.
+        let values: Vec<u64> = (100..200).collect(); // deltas of 1
+        let vle_encoded = DeltaEncoder::encode(&values);
+        // Fixed encoding: 100 values × 8 bytes = 800 bytes
+        // VLE: 8 bytes (first) + 99 × 1 byte (delta=1 encodes to 1 LEB128 byte) = 107 bytes
+        assert!(vle_encoded.len() < 100 * 8, "VLE should be more compact");
+    }
+
+    // ── LEB128 helpers ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_leb128_round_trip_small() {
+        let mut buf = Vec::new();
+        encode_leb128(&mut buf, 127);
+        let (v, n) = decode_leb128(&buf).unwrap();
+        assert_eq!(v, 127);
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn test_leb128_round_trip_large() {
+        let mut buf = Vec::new();
+        encode_leb128(&mut buf, u64::MAX);
+        let (v, _) = decode_leb128(&buf).unwrap();
+        assert_eq!(v, u64::MAX);
+    }
+
+    #[test]
+    fn test_leb128_zero() {
+        let mut buf = Vec::new();
+        encode_leb128(&mut buf, 0);
+        assert_eq!(buf.len(), 1);
+        let (v, _) = decode_leb128(&buf).unwrap();
+        assert_eq!(v, 0);
     }
 }

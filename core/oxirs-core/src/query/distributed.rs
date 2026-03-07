@@ -679,7 +679,11 @@ impl QueryRouter {
         let best_endpoint = endpoints
             .values()
             .filter(|e| e.status == EndpointStatus::Healthy)
-            .min_by(|a, b| a.latency_ms.partial_cmp(&b.latency_ms).unwrap())
+            .min_by(|a, b| {
+                a.latency_ms
+                    .partial_cmp(&b.latency_ms)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .ok_or_else(|| OxirsError::Query("No healthy endpoints available".to_string()))?;
 
         Ok(vec![QueryRoute {
@@ -1246,7 +1250,11 @@ mod tests {
         let config = DistributedConfig::default();
         let engine = DistributedQueryEngine::new(config);
 
-        assert!(engine.endpoints.read().unwrap().is_empty());
+        assert!(engine
+            .endpoints
+            .read()
+            .expect("lock should not be poisoned")
+            .is_empty());
     }
 
     #[test]
@@ -1273,7 +1281,10 @@ mod tests {
 
         engine.register_endpoint(endpoint).unwrap();
 
-        let endpoints = engine.endpoints.read().unwrap();
+        let endpoints = engine
+            .endpoints
+            .read()
+            .expect("lock should not be poisoned");
         assert_eq!(endpoints.len(), 1);
         assert!(endpoints.contains_key("http://example.org/sparql"));
     }

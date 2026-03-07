@@ -333,9 +333,11 @@ mod tests {
     #[test]
     fn test_dot_generation_compact() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
-        let dot = graph.to_dot(VisualizationStyle::Compact).unwrap();
+        let dot = graph
+            .to_dot(VisualizationStyle::Compact)
+            .expect("operation should succeed");
 
         // Verify DOT structure
         assert!(dot.contains("digraph SAMM_Model"));
@@ -347,9 +349,11 @@ mod tests {
     #[test]
     fn test_dot_generation_detailed() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
-        let dot = graph.to_dot(VisualizationStyle::Detailed).unwrap();
+        let dot = graph
+            .to_dot(VisualizationStyle::Detailed)
+            .expect("operation should succeed");
 
         // Verify DOT structure
         assert!(dot.contains("digraph SAMM_Model"));
@@ -360,9 +364,11 @@ mod tests {
     #[test]
     fn test_dot_generation_hierarchical() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
-        let dot = graph.to_dot(VisualizationStyle::Hierarchical).unwrap();
+        let dot = graph
+            .to_dot(VisualizationStyle::Hierarchical)
+            .expect("operation should succeed");
 
         // Verify hierarchical layout
         assert!(dot.contains("rankdir=TB"));
@@ -371,7 +377,7 @@ mod tests {
     #[test]
     fn test_custom_colors() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
         let colors = ColorScheme {
             aspect_color: "#FF0000".to_string(),
@@ -382,7 +388,7 @@ mod tests {
 
         let dot = graph
             .to_dot_with_colors(VisualizationStyle::Detailed, colors)
-            .unwrap();
+            .expect("operation should succeed");
 
         // Verify custom colors are used
         assert!(dot.contains("#FF0000") || dot.contains("#00FF00") || dot.contains("#0000FF"));
@@ -391,7 +397,7 @@ mod tests {
     #[test]
     fn test_node_attributes() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
         let colors = ColorScheme::default();
 
         // Test aspect node

@@ -85,7 +85,7 @@ impl KdNode {
         let dist_sq = dx * dx + dy * dy;
 
         // Update best if closer
-        if best.is_none() || dist_sq < best.unwrap().1 {
+        if best.is_none() || best.is_some_and(|b| dist_sq < b.1) {
             *best = Some((self.id, dist_sq));
         }
 
@@ -122,10 +122,10 @@ impl KdNode {
         // Add to heap
         if heap.len() < k {
             heap.push((self.id, dist_sq));
-            heap.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            heap.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         } else if dist_sq < heap[0].1 {
             heap[0] = (self.id, dist_sq);
-            heap.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            heap.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         }
 
         // Determine search order
@@ -229,7 +229,11 @@ impl KdTree {
         let axis = depth % 2;
 
         // Sort by current axis
-        points.sort_by(|a, b| a.0[axis].partial_cmp(&b.0[axis]).unwrap());
+        points.sort_by(|a, b| {
+            a.0[axis]
+                .partial_cmp(&b.0[axis])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Find median
         let median = points.len() / 2;
@@ -376,7 +380,7 @@ impl SpatialIndexTrait for KdTree {
                 .collect();
 
             // Sort by distance (ascending order)
-            results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
             results
         } else {
             Vec::new()

@@ -254,7 +254,10 @@ impl QueryDecomposer {
         let mut total_cost = 0.0;
 
         for (service_id, patterns) in service_patterns {
-            let service = services.iter().find(|s| s.id == service_id).unwrap();
+            let service = services
+                .iter()
+                .find(|s| s.id == service_id)
+                .expect("element should be found");
             let cost = self
                 .cost_estimator
                 .estimate_pattern_cost(service, &patterns);
@@ -353,7 +356,8 @@ impl QueryDecomposer {
                 service_costs.push((*service, cost));
             }
             // Sort by cost (ascending)
-            service_costs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            service_costs
+                .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
             pattern_costs.push((*idx, pattern.clone(), service_costs));
         }
 
@@ -374,7 +378,10 @@ impl QueryDecomposer {
         let mut total_cost = 0.0;
 
         for (service_id, patterns) in service_assignments {
-            let service = services.iter().find(|s| s.id == service_id).unwrap();
+            let service = services
+                .iter()
+                .find(|s| s.id == service_id)
+                .expect("element should be found");
             let cost = self
                 .cost_estimator
                 .estimate_pattern_cost(service, &patterns);
@@ -417,7 +424,11 @@ impl QueryDecomposer {
             // Find service with highest affinity for this pattern
             let best_service = service_affinities
                 .iter()
-                .max_by(|a, b| a.affinity_score.partial_cmp(&b.affinity_score).unwrap())
+                .max_by(|a, b| {
+                    a.affinity_score
+                        .partial_cmp(&b.affinity_score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
                 .map(|a| a.service_id.clone())
                 .unwrap_or_else(|| services[0].id.clone());
 
@@ -434,7 +445,10 @@ impl QueryDecomposer {
         let mut total_cost = 0.0;
 
         for (service_id, patterns) in service_assignments {
-            let service = services.iter().find(|s| s.id == service_id).unwrap();
+            let service = services
+                .iter()
+                .find(|s| s.id == service_id)
+                .expect("element should be found");
             let cost = self
                 .cost_estimator
                 .estimate_pattern_cost(service, &patterns);
@@ -533,7 +547,10 @@ impl QueryDecomposer {
 
         // Add satellite steps in order of selectivity (most selective first)
         for (service_id, patterns) in satellite_distribution {
-            let service = services.iter().find(|s| s.id == service_id).unwrap();
+            let service = services
+                .iter()
+                .find(|s| s.id == service_id)
+                .expect("element should be found");
             let cost = self
                 .cost_estimator
                 .estimate_pattern_cost(service, &patterns);
@@ -658,7 +675,11 @@ impl QueryDecomposer {
         }
 
         // Sort by overlap score (descending)
-        overlaps.sort_by(|a, b| b.overlap_score.partial_cmp(&a.overlap_score).unwrap());
+        overlaps.sort_by(|a, b| {
+            b.overlap_score
+                .partial_cmp(&a.overlap_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(overlaps)
     }
@@ -748,7 +769,9 @@ impl QueryDecomposer {
         sorted_patterns.sort_by(|a, b| {
             let sel_a = self.estimate_single_pattern_selectivity(&a.1);
             let sel_b = self.estimate_single_pattern_selectivity(&b.1);
-            sel_a.partial_cmp(&sel_b).unwrap()
+            sel_a
+                .partial_cmp(&sel_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Distribute patterns to services (excluding center service)

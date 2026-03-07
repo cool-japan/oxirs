@@ -31,7 +31,9 @@ impl SecureCredential {
 
     /// Get credential metadata
     pub fn metadata(&self) -> CredentialMetadata {
-        let last_accessed = self.last_accessed.read()
+        let last_accessed = self
+            .last_accessed
+            .read()
             .map(|t| *t)
             .unwrap_or(self.created_at);
 
@@ -101,7 +103,9 @@ impl CredentialManager {
             last_accessed: Arc::new(RwLock::new(chrono::Utc::now())),
         };
 
-        let mut credentials = self.credentials.write()
+        let mut credentials = self
+            .credentials
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
         credentials.insert(provider.to_string(), credential);
 
@@ -110,7 +114,9 @@ impl CredentialManager {
 
     /// Retrieve a credential securely
     pub fn retrieve(&self, provider: &str) -> Result<Option<SecureCredential>> {
-        let credentials = self.credentials.read()
+        let credentials = self
+            .credentials
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
 
         Ok(credentials.get(provider).cloned())
@@ -123,7 +129,8 @@ impl CredentialManager {
         match credential {
             Some(cred) => {
                 if self.encrypt_enabled {
-                    let encryptor = self.encryptor
+                    let encryptor = self
+                        .encryptor
                         .as_ref()
                         .ok_or_else(|| anyhow!("Encryptor not initialized"))?;
                     Ok(Some(cred.decrypt(encryptor)?))
@@ -138,7 +145,9 @@ impl CredentialManager {
 
     /// Remove a credential
     pub fn remove(&mut self, provider: &str) -> Result<bool> {
-        let mut credentials = self.credentials.write()
+        let mut credentials = self
+            .credentials
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
         Ok(credentials.remove(provider).is_some())
@@ -146,12 +155,12 @@ impl CredentialManager {
 
     /// List all credential metadata
     pub fn list_metadata(&self) -> Result<Vec<CredentialMetadata>> {
-        let credentials = self.credentials.read()
+        let credentials = self
+            .credentials
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
 
-        Ok(credentials.values()
-            .map(|cred| cred.metadata())
-            .collect())
+        Ok(credentials.values().map(|cred| cred.metadata()).collect())
     }
 
     /// Rotate encryption key (re-encrypt all credentials with new key)
@@ -160,7 +169,8 @@ impl CredentialManager {
             return Ok(());
         }
 
-        let old_encryptor = self.encryptor
+        let old_encryptor = self
+            .encryptor
             .as_ref()
             .ok_or_else(|| anyhow!("Encryptor not initialized"))?;
 
@@ -168,7 +178,9 @@ impl CredentialManager {
         let new_encryptor = super::encryption::Encryptor::new()?;
 
         // Re-encrypt all credentials
-        let mut credentials = self.credentials.write()
+        let mut credentials = self
+            .credentials
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
         for credential in credentials.values_mut() {

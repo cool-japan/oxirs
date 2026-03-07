@@ -219,7 +219,7 @@ impl RegressionDetector {
     /// Compute percentiles from recent times
     fn compute_percentiles(&self) -> HashMap<String, f64> {
         let mut sorted = self.recent_times.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let mut percentiles = HashMap::new();
         percentiles.insert("p50".to_string(), self.percentile(&sorted, 0.50));

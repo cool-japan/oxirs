@@ -785,3 +785,236 @@ impl<R: BufRead> Iterator for NQuadsIterator<R> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_parse_triple_in_default_graph() {
+        let parser = NQuadsParser::new();
+        let input = "<http://example.org/s> <http://example.org/p> <http://example.org/o> .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 1);
+        assert!(
+            quads[0].graph_name().is_default_graph(),
+            "quad without graph should be in default graph"
+        );
+    }
+
+    #[test]
+    fn test_parse_quad_with_named_graph() {
+        let parser = NQuadsParser::new();
+        let input = "<http://example.org/s> <http://example.org/p> <http://example.org/o> <http://example.org/g> .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 1);
+        assert!(
+            !quads[0].graph_name().is_default_graph(),
+            "quad with graph IRI should not be in default graph"
+        );
+    }
+
+    #[test]
+    fn test_parse_literal_object() {
+        let parser = NQuadsParser::new();
+        let input = "<http://example.org/s> <http://example.org/p> \"hello\" .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 1);
+        if let Object::Literal(lit) = quads[0].object() {
+            assert_eq!(lit.value(), "hello");
+        } else {
+            panic!("expected string literal object");
+        }
+    }
+
+    #[test]
+    fn test_parse_language_tagged_literal() {
+        let parser = NQuadsParser::new();
+        let input = "<http://example.org/s> <http://example.org/p> \"hello\"@en .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 1);
+        if let Object::Literal(lit) = quads[0].object() {
+            assert_eq!(lit.value(), "hello");
+            assert_eq!(lit.language(), Some("en"));
+        } else {
+            panic!("expected language-tagged literal");
+        }
+    }
+
+    #[test]
+    fn test_parse_typed_literal() {
+        let parser = NQuadsParser::new();
+        let input = "<http://example.org/s> <http://example.org/p> \"42\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 1);
+        if let Object::Literal(lit) = quads[0].object() {
+            assert_eq!(lit.value(), "42");
+            assert_eq!(
+                lit.datatype().as_str(),
+                "http://www.w3.org/2001/XMLSchema#integer"
+            );
+        } else {
+            panic!("expected typed literal");
+        }
+    }
+
+    #[test]
+    fn test_parse_blank_node_subject() {
+        let parser = NQuadsParser::new();
+        let input = "_:b1 <http://example.org/p> <http://example.org/o> .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 1);
+        assert!(
+            matches!(quads[0].subject(), Subject::BlankNode(_)),
+            "subject should be a blank node"
+        );
+    }
+
+    #[test]
+    fn test_parse_blank_node_object() {
+        let parser = NQuadsParser::new();
+        let input = "<http://example.org/s> <http://example.org/p> _:b2 .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 1);
+        assert!(
+            matches!(quads[0].object(), Object::BlankNode(_)),
+            "object should be a blank node"
+        );
+    }
+
+    #[test]
+    fn test_parse_multiple_quads() {
+        let parser = NQuadsParser::new();
+        let input = "\
+<http://example.org/s1> <http://example.org/p> \"v1\" .\n\
+<http://example.org/s2> <http://example.org/p> \"v2\" .\n\
+<http://example.org/s3> <http://example.org/p> \"v3\" .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 3);
+    }
+
+    #[test]
+    fn test_skip_empty_lines_and_comments() {
+        let parser = NQuadsParser::new();
+        let input = "\
+# This is a comment\n\
+\n\
+<http://example.org/s> <http://example.org/p> \"v\" .\n\
+\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_error_missing_dot() {
+        let parser = NQuadsParser::new();
+        let input = "<http://example.org/s> <http://example.org/p> \"v\"\n";
+        let result = parser.parse(Cursor::new(input));
+        assert!(result.is_err(), "missing dot should produce an error");
+    }
+
+    #[test]
+    fn test_serialize_quad_default_graph() {
+        let serializer = NQuadsSerializer::new();
+        let quad = Quad::new(
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            NamedNode::new("http://example.org/o").expect("valid IRI"),
+            GraphName::DefaultGraph,
+        );
+        let mut output = Vec::new();
+        serializer
+            .serialize(&[quad], &mut output)
+            .expect("serialization should succeed");
+        let out_str = String::from_utf8(output).expect("valid UTF-8");
+        assert!(out_str.contains("<http://example.org/s>"));
+        assert!(out_str.contains("<http://example.org/p>"));
+        assert!(out_str.contains("<http://example.org/o>"));
+        assert!(out_str.ends_with(".\n"));
+    }
+
+    #[test]
+    fn test_serialize_quad_named_graph() {
+        let serializer = NQuadsSerializer::new();
+        let quad = Quad::new(
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            NamedNode::new("http://example.org/o").expect("valid IRI"),
+            GraphName::NamedNode(NamedNode::new("http://example.org/g").expect("valid IRI")),
+        );
+        let mut output = Vec::new();
+        serializer
+            .serialize(&[quad], &mut output)
+            .expect("serialization should succeed");
+        let out_str = String::from_utf8(output).expect("valid UTF-8");
+        assert!(out_str.contains("<http://example.org/g>"));
+    }
+
+    #[test]
+    fn test_for_reader_iterator() {
+        let parser = NQuadsParser::new();
+        let input = "\
+<http://example.org/s1> <http://example.org/p> \"v1\" .\n\
+<http://example.org/s2> <http://example.org/p> \"v2\" .\n";
+        let quads: Vec<_> = parser
+            .for_reader(Cursor::new(input))
+            .collect::<Result<Vec<_>, _>>()
+            .expect("for_reader should succeed");
+        assert_eq!(quads.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_mixed_default_and_named_graphs() {
+        let parser = NQuadsParser::new();
+        let input = "\
+<http://example.org/alice> <http://example.org/knows> <http://example.org/bob> .\n\
+<http://example.org/alice> <http://example.org/age> \"30\" <http://example.org/graph1> .\n\
+<http://example.org/bob> <http://example.org/name> \"Bob\" <http://example.org/graph2> .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 3);
+        let default_count = quads
+            .iter()
+            .filter(|q| q.graph_name().is_default_graph())
+            .count();
+        assert_eq!(
+            default_count, 1,
+            "only first quad should be in default graph"
+        );
+    }
+
+    #[test]
+    fn test_subject_iri_roundtrip() {
+        let parser = NQuadsParser::new();
+        let input = "<http://example.org/subject> <http://example.org/p> \"value\" .\n";
+        let quads = parser
+            .parse(Cursor::new(input))
+            .expect("nquads parsing should succeed");
+        assert_eq!(quads.len(), 1);
+        if let Subject::NamedNode(nn) = quads[0].subject() {
+            assert_eq!(nn.as_str(), "http://example.org/subject");
+        } else {
+            panic!("expected named node subject");
+        }
+    }
+}

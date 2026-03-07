@@ -1126,7 +1126,7 @@ mod tests {
 
     #[test]
     fn test_security_context_creation() {
-        let mut manager = SecurityPolicyManager::new().unwrap();
+        let mut manager = SecurityPolicyManager::new().expect("construction should succeed");
 
         let context_id = manager
             .create_security_context(
@@ -1134,7 +1134,7 @@ mod tests {
                 vec![Permission::ReadData, Permission::ExecuteQueries],
                 SecurityConstraints::default(),
             )
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(!context_id.is_empty());
     }
@@ -1149,20 +1149,24 @@ mod tests {
 
     #[test]
     fn test_injection_detector() {
-        let detector = AdvancedInjectionDetector::new().unwrap();
+        let detector = AdvancedInjectionDetector::new().expect("construction should succeed");
 
         let safe_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-        let result = detector.analyze_query(safe_query).unwrap();
+        let result = detector
+            .analyze_query(safe_query)
+            .expect("analysis should succeed");
         assert!(result.is_safe);
 
         let malicious_query = "SELECT ?s WHERE { ?s ?p ?o } UNION SELECT ?x WHERE { ?x ?y ?z }";
-        let result = detector.analyze_query(malicious_query).unwrap();
+        let result = detector
+            .analyze_query(malicious_query)
+            .expect("analysis should succeed");
         assert!(!result.is_safe);
     }
 
     #[test]
     fn test_query_rewriter() {
-        let rewriter = QuerySecurityRewriter::new().unwrap();
+        let rewriter = QuerySecurityRewriter::new().expect("construction should succeed");
         let context = SecurityContext {
             id: "test".to_string(),
             user_id: "test_user".to_string(),
@@ -1177,7 +1181,7 @@ mod tests {
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
         let rewritten = rewriter
             .rewrite_for_security(query, &context, &ExecutionConstraints::default())
-            .unwrap();
+            .expect("training should succeed");
 
         assert!(rewritten.contains("LIMIT"));
     }
@@ -1223,10 +1227,14 @@ mod tests {
 
         // Should block DELETE queries
         let delete_query = "DELETE WHERE { ?s ?p ?o }";
-        assert!(!policy.authorize_query(delete_query, &context).unwrap());
+        assert!(!policy
+            .authorize_query(delete_query, &context)
+            .expect("query should succeed"));
 
         // Should allow SELECT queries
         let select_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-        assert!(policy.authorize_query(select_query, &context).unwrap());
+        assert!(policy
+            .authorize_query(select_query, &context)
+            .expect("query should succeed"));
     }
 }

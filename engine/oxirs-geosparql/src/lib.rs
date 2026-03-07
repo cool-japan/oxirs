@@ -52,20 +52,88 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+pub mod aggregate;
 pub mod analysis;
+/// Spatial clustering algorithms (DBSCAN with Haversine distance).
+pub mod clustering;
+pub mod crs;
+pub mod crs_transform;
 pub mod error;
 pub mod functions;
 pub mod geometry;
 pub mod index;
 pub mod performance;
+pub mod reasoning;
 pub mod sparql_integration;
 pub mod validation;
 pub mod vocabulary;
 
+// Geometry serialization to WKT, GeoJSON, and GML (v1.1.0 round 6)
+pub mod geo_serializer;
+
+/// CRS coordinate transformations: WGS84 ↔ UTM ↔ WebMercator.
+pub mod coordinate_transformer;
+
+// Raster value sampler with NN/bilinear/bicubic interpolation (v1.1.0 round 8)
+pub mod raster_sampler;
+
+// Spatial topology checking (DE-9IM simplified) (v1.1.0 round 9)
+pub mod topology_checker;
+
+// WKT geometry parser and serializer (v1.1.0 round 10)
+pub mod wkt_parser;
+
+/// Spatial grid index for fast bounding-box queries.
+pub mod spatial_index;
+
+// WKT geometry serializer (v1.1.0 round 12)
+pub mod wkt_writer;
+
+// Bounding box (Envelope) operations for spatial queries (v1.1.0 round 13)
+pub mod bounding_box;
+
+// Area calculations for geographic polygons (v1.1.0 round 12)
+pub mod area_calculator;
+
+// Geodesic/Euclidean distance calculations (v1.1.0 round 11)
+pub mod distance_calculator;
+
+/// Geometric intersection detection: point-in-polygon, line–line, polygon overlap,
+/// containment, touches, crosses, segment distance (v1.1.0 round 13)
+pub mod intersection_detector;
+
+/// 2D convex hull computation using the Graham scan algorithm (v1.1.0 round 14).
+pub mod convex_hull;
+
+/// Geometry simplification using Douglas-Peucker and radial distance algorithms (v1.1.0 round 15).
+pub mod simplifier;
+
+/// Coordinate system conversions: WGS84 ↔ Web Mercator, plus Haversine distance (v1.1.0 round 16).
+pub mod coordinate_converter;
+
 // Re-export commonly used types
+pub use aggregate::{
+    aggregate_bounding_box, AggregateBoundingBox, BoundingBoxResult, GEO_AGG_BOUNDING_BOX,
+};
+pub use crs::crs_literal::{
+    encode_crs_wkt_literal, parse_crs_wkt_literal, CrsGeometryTransformer, CrsLiteral, CRS84_URI,
+    GEO_CRS, GEO_WKT_LITERAL,
+};
+pub use crs::osgb36::{coordinate_to_osgb_grid_ref, osgb_grid_ref_to_coordinate, OsgbCoordinate};
+pub use crs::utm::{utm_to_wgs84_batch, wgs84_to_utm_batch, UtmCoordinate, WgsCoordinate};
+pub use crs::{CrsKind, CrsTransformer, GeometryWithCrs};
 pub use error::{GeoSparqlError, Result};
+pub use functions::ogc11::{
+    area_with_unit, area_with_unit_uri, concave_hull, distance_with_unit, distance_with_unit_uri,
+    length_with_unit, length_with_unit_uri, UnitOfMeasure, UOM_PREFIX,
+};
+pub use geometry::geometry3d::{
+    BoundingBox3D, Geometry3DEnum, LineString3D, LinearRing3D, Point3D, Polygon3D,
+};
 pub use geometry::{Crs, Geometry};
 pub use index::SpatialIndex;
+pub use index::{PureRTree, RTreeBBox};
+pub use index::{RtreeEntry, SpatialRtreeIndex};
 pub use performance::BatchProcessor;
 
 /// GeoSPARQL function registry

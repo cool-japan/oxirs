@@ -18,7 +18,10 @@ use std::time::Instant;
 ///
 /// Caches compiled execution plans to avoid repeated query compilation
 /// and optimization overhead.
-pub struct QueryPlanCache {
+///
+/// This is the full-featured LRU implementation backed by the `lru` crate and
+/// SciRS2 metrics.  For a simpler, self-contained cache see [`QueryPlanCache`] below.
+pub struct LruQueryPlanCache {
     /// LRU cache for execution plans
     cache: Arc<RwLock<LruCache<u64, CachedPlan>>>,
     /// Cache statistics
@@ -119,7 +122,7 @@ pub struct CacheStatistics {
     pub total_cached: u64,
 }
 
-impl QueryPlanCache {
+impl LruQueryPlanCache {
     /// Create a new query plan cache
     pub fn new(config: CacheConfig) -> Self {
         let capacity = NonZeroUsize::new(config.max_size)
@@ -423,7 +426,7 @@ mod tests {
     #[test]
     fn test_cache_creation() {
         let config = CacheConfig::default();
-        let cache = QueryPlanCache::new(config);
+        let cache = LruQueryPlanCache::new(config);
 
         let stats = cache.statistics();
         assert_eq!(stats.hits, 0);
@@ -433,7 +436,7 @@ mod tests {
     #[test]
     fn test_cache_put_get() {
         let config = CacheConfig::default();
-        let cache = QueryPlanCache::new(config);
+        let cache = LruQueryPlanCache::new(config);
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
         let plan = ExecutionPlan::TripleScan {
@@ -450,7 +453,7 @@ mod tests {
     #[test]
     fn test_cache_miss() {
         let config = CacheConfig::default();
-        let cache = QueryPlanCache::new(config);
+        let cache = LruQueryPlanCache::new(config);
 
         let result = cache.get("SELECT ?s WHERE { ?s ?p ?o }");
         assert!(result.is_none());
@@ -462,7 +465,7 @@ mod tests {
     #[test]
     fn test_cache_remove() {
         let config = CacheConfig::default();
-        let cache = QueryPlanCache::new(config);
+        let cache = LruQueryPlanCache::new(config);
 
         let query = "SELECT ?s WHERE { ?s ?p ?o }";
         let plan = ExecutionPlan::TripleScan {
@@ -479,7 +482,7 @@ mod tests {
     #[test]
     fn test_cache_clear() {
         let config = CacheConfig::default();
-        let cache = QueryPlanCache::new(config);
+        let cache = LruQueryPlanCache::new(config);
 
         let plan = ExecutionPlan::TripleScan {
             pattern: crate::model::pattern::TriplePattern::new(None, None, None),
@@ -497,7 +500,7 @@ mod tests {
     #[test]
     fn test_hit_rate() {
         let config = CacheConfig::default();
-        let cache = QueryPlanCache::new(config);
+        let cache = LruQueryPlanCache::new(config);
 
         let plan = ExecutionPlan::TripleScan {
             pattern: crate::model::pattern::TriplePattern::new(None, None, None),
@@ -522,7 +525,7 @@ mod tests {
             ..Default::default()
         };
 
-        let cache = QueryPlanCache::new(config);
+        let cache = LruQueryPlanCache::new(config);
 
         let plan = ExecutionPlan::TripleScan {
             pattern: crate::model::pattern::TriplePattern::new(None, None, None),
@@ -540,7 +543,7 @@ mod tests {
     #[test]
     fn test_execution_time_update() {
         let config = CacheConfig::default();
-        let cache = QueryPlanCache::new(config);
+        let cache = LruQueryPlanCache::new(config);
 
         let query = "SELECT ?s WHERE { ?s ?p ?o }";
         let plan = ExecutionPlan::TripleScan {
@@ -559,5 +562,366 @@ mod tests {
         let cached2 = cache.get(query).unwrap();
         // Should be exponential moving average
         assert!(cached2.avg_execution_time_ms > 50.0 && cached2.avg_execution_time_ms < 70.0);
+    }
+}
+
+// ===========================================================================
+// Simpler, self-contained QueryPlanCache
+//
+// A lightweight alternative to LruQueryPlanCache that does not depend on the
+// `lru` crate or SciRS2 metrics and is easier to use in unit tests and in
+// parts of the system that only need basic LRU semantics.
+// ===========================================================================
+
+use std::collections::HashMap;
+
+/// A compiled SPARQL query plan ready for execution.
+#[derive(Debug, Clone)]
+pub struct QueryPlan {
+    /// FNV / DefaultHasher hash of the original query string.
+    pub query_hash: u64,
+    /// The raw SPARQL query string.
+    pub original_query: String,
+    /// Human-readable descriptions of the optimized pattern steps.
+    pub optimized_patterns: Vec<String>,
+    /// Estimated execution cost (lower is better).
+    pub estimated_cost: f64,
+    /// Unix timestamp (ms) when this plan was created.
+    pub created_at_ms: i64,
+}
+
+impl QueryPlan {
+    fn now_ms() -> i64 {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0)
+    }
+
+    /// Construct a new plan.  `created_at_ms` is set to the current time.
+    pub fn new(
+        query_hash: u64,
+        original_query: impl Into<String>,
+        optimized_patterns: Vec<String>,
+        estimated_cost: f64,
+    ) -> Self {
+        Self {
+            query_hash,
+            original_query: original_query.into(),
+            optimized_patterns,
+            estimated_cost,
+            created_at_ms: Self::now_ms(),
+        }
+    }
+}
+
+/// Aggregated statistics for a [`QueryPlanCache`] instance.
+#[derive(Debug, Clone, Default)]
+pub struct PlanCacheStats {
+    /// Number of successful cache lookups.
+    pub hits: u64,
+    /// Number of failed cache lookups.
+    pub misses: u64,
+    /// Number of plans evicted to make room for new entries.
+    pub evictions: u64,
+    /// Current number of entries in the cache.
+    pub size: usize,
+}
+
+/// A simple LRU query-plan cache with O(n) eviction.
+///
+/// This is deliberately kept dependency-free (no `lru` crate, no SciRS2).
+/// The access order vector has the most-recently-used entry at the **front**
+/// (index 0) and the least-recently-used at the **back**.
+///
+/// For the high-throughput LRU cache backed by the `lru` crate, see
+/// [`LruQueryPlanCache`].
+pub struct QueryPlanCache {
+    plans: HashMap<u64, QueryPlan>,
+    /// Most-recently-used at index 0; least-recently-used at the back.
+    access_order: Vec<u64>,
+    max_size: usize,
+    stats: PlanCacheStats,
+}
+
+impl QueryPlanCache {
+    /// Create a new cache that can hold at most `max_size` plans.
+    ///
+    /// If `max_size` is 0 it is treated as 1 to avoid degenerate behaviour.
+    pub fn new(max_size: usize) -> Self {
+        let max_size = max_size.max(1);
+        Self {
+            plans: HashMap::new(),
+            access_order: Vec::new(),
+            max_size,
+            stats: PlanCacheStats::default(),
+        }
+    }
+
+    /// Retrieve the plan for `query_hash`.
+    ///
+    /// On a hit the entry is moved to the front of the access-order list and
+    /// `stats.hits` is incremented.  On a miss `stats.misses` is incremented.
+    pub fn get(&mut self, query_hash: u64) -> Option<&QueryPlan> {
+        if self.plans.contains_key(&query_hash) {
+            // Move to front of access_order.
+            if let Some(pos) = self.access_order.iter().position(|&h| h == query_hash) {
+                self.access_order.remove(pos);
+            }
+            self.access_order.insert(0, query_hash);
+            self.stats.hits += 1;
+            self.plans.get(&query_hash)
+        } else {
+            self.stats.misses += 1;
+            None
+        }
+    }
+
+    /// Insert a plan into the cache.
+    ///
+    /// If the cache is at capacity, [`evict_lru`] is called first.  The new
+    /// entry is placed at the front of the access-order list.
+    ///
+    /// [`evict_lru`]: QueryPlanCache::evict_lru
+    pub fn insert(&mut self, plan: QueryPlan) {
+        let hash = plan.query_hash;
+
+        // If the hash is already present, remove it from access_order so it
+        // can be re-inserted at the front.
+        if self.plans.contains_key(&hash) {
+            if let Some(pos) = self.access_order.iter().position(|&h| h == hash) {
+                self.access_order.remove(pos);
+            }
+        } else if self.plans.len() >= self.max_size {
+            self.evict_lru();
+        }
+
+        self.plans.insert(hash, plan);
+        self.access_order.insert(0, hash);
+        self.stats.size = self.plans.len();
+    }
+
+    /// Remove and return the least-recently-used plan (the one at the back of
+    /// the access-order list).  Increments `stats.evictions`.
+    ///
+    /// Returns `None` if the cache is empty.
+    pub fn evict_lru(&mut self) -> Option<QueryPlan> {
+        let lru_hash = self.access_order.pop()?;
+        let plan = self.plans.remove(&lru_hash);
+        self.stats.evictions += 1;
+        self.stats.size = self.plans.len();
+        plan
+    }
+
+    /// Remove a specific plan by hash.  Returns `true` if it existed.
+    pub fn invalidate(&mut self, query_hash: u64) -> bool {
+        let existed = self.plans.remove(&query_hash).is_some();
+        if existed {
+            if let Some(pos) = self.access_order.iter().position(|&h| h == query_hash) {
+                self.access_order.remove(pos);
+            }
+            self.stats.size = self.plans.len();
+        }
+        existed
+    }
+
+    /// Remove all entries and reset size to zero (other statistics are kept).
+    pub fn clear(&mut self) {
+        self.plans.clear();
+        self.access_order.clear();
+        self.stats.size = 0;
+    }
+
+    /// Return a snapshot of the current statistics.
+    pub fn stats(&self) -> &PlanCacheStats {
+        &self.stats
+    }
+
+    /// Cache hit rate: `hits / (hits + misses)`, or `0.0` if no operations
+    /// have been performed yet.
+    pub fn hit_rate(&self) -> f64 {
+        let total = self.stats.hits + self.stats.misses;
+        if total == 0 {
+            0.0
+        } else {
+            self.stats.hits as f64 / total as f64
+        }
+    }
+
+    /// Current number of cached plans.
+    pub fn len(&self) -> usize {
+        self.plans.len()
+    }
+
+    /// Return `true` if the cache contains no plans.
+    pub fn is_empty(&self) -> bool {
+        self.plans.is_empty()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests for the simple QueryPlanCache
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod simple_cache_tests {
+    use super::*;
+
+    fn make_plan(hash: u64, query: &str, cost: f64) -> QueryPlan {
+        QueryPlan::new(hash, query, vec!["scan".to_string()], cost)
+    }
+
+    #[test]
+    fn test_simple_cache_new_is_empty() {
+        let cache = QueryPlanCache::new(10);
+        assert!(cache.is_empty());
+        assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn test_simple_cache_insert_and_get_hit() {
+        let mut cache = QueryPlanCache::new(10);
+        cache.insert(make_plan(1, "SELECT ?s ?p ?o WHERE {?s ?p ?o}", 100.0));
+        let plan = cache.get(1);
+        assert!(plan.is_some());
+        assert_eq!(plan.unwrap().query_hash, 1);
+    }
+
+    #[test]
+    fn test_simple_cache_miss_increments_stat() {
+        let mut cache = QueryPlanCache::new(10);
+        assert!(cache.get(42).is_none());
+        assert_eq!(cache.stats().misses, 1);
+        assert_eq!(cache.stats().hits, 0);
+    }
+
+    #[test]
+    fn test_simple_cache_hit_increments_stat() {
+        let mut cache = QueryPlanCache::new(10);
+        cache.insert(make_plan(7, "SELECT * WHERE {?s ?p ?o}", 50.0));
+        cache.get(7);
+        assert_eq!(cache.stats().hits, 1);
+        assert_eq!(cache.stats().misses, 0);
+    }
+
+    #[test]
+    fn test_simple_cache_hit_rate_zero_initially() {
+        let cache = QueryPlanCache::new(5);
+        assert_eq!(cache.hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_simple_cache_hit_rate_after_ops() {
+        let mut cache = QueryPlanCache::new(5);
+        cache.insert(make_plan(1, "q1", 10.0));
+        cache.get(1); // hit
+        cache.get(2); // miss
+        let rate = cache.hit_rate();
+        assert!((rate - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_simple_cache_evict_lru_on_full() {
+        let mut cache = QueryPlanCache::new(2);
+        cache.insert(make_plan(1, "q1", 1.0)); // LRU = q1
+        cache.insert(make_plan(2, "q2", 2.0)); // LRU = q1, MRU = q2
+                                               // Insert q3 — q1 should be evicted.
+        cache.insert(make_plan(3, "q3", 3.0));
+        assert_eq!(cache.len(), 2);
+        assert!(cache.get(1).is_none(), "q1 should have been evicted");
+        assert!(cache.get(2).is_some());
+        assert!(cache.get(3).is_some());
+    }
+
+    #[test]
+    fn test_simple_cache_evict_lru_access_order() {
+        let mut cache = QueryPlanCache::new(2);
+        cache.insert(make_plan(1, "q1", 1.0));
+        cache.insert(make_plan(2, "q2", 2.0));
+        // Access q1 to make it MRU; q2 becomes LRU.
+        cache.get(1);
+        // Insert q3 — q2 should be evicted.
+        cache.insert(make_plan(3, "q3", 3.0));
+        assert!(cache.get(2).is_none(), "q2 should have been evicted");
+        assert!(cache.get(1).is_some());
+        assert!(cache.get(3).is_some());
+    }
+
+    #[test]
+    fn test_simple_cache_evict_lru_explicit() {
+        let mut cache = QueryPlanCache::new(5);
+        cache.insert(make_plan(1, "q1", 1.0));
+        cache.insert(make_plan(2, "q2", 2.0));
+        let evicted = cache.evict_lru();
+        assert!(evicted.is_some());
+        assert_eq!(cache.stats().evictions, 1);
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn test_simple_cache_evict_lru_empty_returns_none() {
+        let mut cache = QueryPlanCache::new(5);
+        assert!(cache.evict_lru().is_none());
+    }
+
+    #[test]
+    fn test_simple_cache_invalidate_existing() {
+        let mut cache = QueryPlanCache::new(5);
+        cache.insert(make_plan(99, "q99", 9.0));
+        let removed = cache.invalidate(99);
+        assert!(removed);
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_simple_cache_invalidate_missing_returns_false() {
+        let mut cache = QueryPlanCache::new(5);
+        assert!(!cache.invalidate(404));
+    }
+
+    #[test]
+    fn test_simple_cache_clear() {
+        let mut cache = QueryPlanCache::new(5);
+        cache.insert(make_plan(1, "q1", 1.0));
+        cache.insert(make_plan(2, "q2", 2.0));
+        cache.clear();
+        assert!(cache.is_empty());
+        assert_eq!(cache.stats().size, 0);
+    }
+
+    #[test]
+    fn test_simple_cache_plan_fields() {
+        let plan = QueryPlan::new(
+            42,
+            "SELECT * WHERE {?s ?p ?o}",
+            vec!["index_scan".to_string()],
+            2.5,
+        );
+        assert_eq!(plan.query_hash, 42);
+        assert_eq!(plan.optimized_patterns, vec!["index_scan".to_string()]);
+        assert!((plan.estimated_cost - 2.5).abs() < 1e-9);
+        assert!(plan.created_at_ms >= 0);
+    }
+
+    #[test]
+    fn test_simple_cache_stats_size_tracks_inserts() {
+        let mut cache = QueryPlanCache::new(10);
+        cache.insert(make_plan(1, "q1", 1.0));
+        cache.insert(make_plan(2, "q2", 2.0));
+        assert_eq!(cache.stats().size, 2);
+    }
+
+    #[test]
+    fn test_simple_cache_reinsertion_updates_access_order() {
+        let mut cache = QueryPlanCache::new(3);
+        cache.insert(make_plan(1, "q1", 1.0));
+        cache.insert(make_plan(2, "q2", 2.0));
+        // Re-insert q1; it should become MRU.  Then insert q3: q2 (LRU) is evicted.
+        cache.insert(make_plan(1, "q1", 1.5)); // update q1, now MRU
+                                               // Cache at capacity (2 distinct hashes since max_size=3 and we have 2).
+                                               // Insert q3 now — cache has room, no eviction.
+        cache.insert(make_plan(3, "q3", 3.0));
+        assert_eq!(cache.len(), 3); // 1, 2, 3 all present
     }
 }

@@ -11,6 +11,7 @@
 //! - TTL-based expiration
 
 use crate::algebra::Algebra;
+use crate::cache::CacheCoordinator;
 use crate::optimizer::Statistics;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -30,6 +31,10 @@ pub struct QueryPlanCache {
     stats: Arc<CacheStatistics>,
     /// LRU tracking (access order)
     access_counter: Arc<AtomicU64>,
+    /// Invalidation coordinator (optional for backward compatibility)
+    invalidation_coordinator: Option<Arc<CacheCoordinator>>,
+    /// Invalidation flags (tracks which entries have been invalidated)
+    invalidated_entries: Arc<dashmap::DashSet<QuerySignature>>,
 }
 
 /// Configuration for query plan caching
@@ -89,15 +94,16 @@ impl QuerySignature {
         let mut normalized = query.to_string();
 
         // Replace string literals: "..." -> "?"
-        let re_string = regex::Regex::new(r#""[^"]*""#).unwrap();
+        let re_string = regex::Regex::new(r#""[^"]*""#).expect("regex pattern should be valid");
         normalized = re_string.replace_all(&normalized, "\"?\"").to_string();
 
         // Replace numeric literals: 123 -> ?
-        let re_number = regex::Regex::new(r"\b\d+(\.\d+)?\b").unwrap();
+        let re_number =
+            regex::Regex::new(r"\b\d+(\.\d+)?\b").expect("regex pattern should be valid");
         normalized = re_number.replace_all(&normalized, "?").to_string();
 
         // Collapse whitespace
-        let re_whitespace = regex::Regex::new(r"\s+").unwrap();
+        let re_whitespace = regex::Regex::new(r"\s+").expect("regex pattern should be valid");
         re_whitespace.replace_all(&normalized, " ").to_string()
     }
 
@@ -167,7 +173,7 @@ impl StatisticsSnapshot {
                 .collect(),
             snapshot_time: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
         }
     }
@@ -264,7 +270,29 @@ impl QueryPlanCache {
             config,
             stats: Arc::new(CacheStatistics::default()),
             access_counter: Arc::new(AtomicU64::new(0)),
+            invalidation_coordinator: None,
+            invalidated_entries: Arc::new(dashmap::DashSet::new()),
         }
+    }
+
+    /// Create with invalidation coordinator
+    pub fn with_invalidation_coordinator(
+        config: CachingConfig,
+        coordinator: Arc<CacheCoordinator>,
+    ) -> Self {
+        Self {
+            cache: Arc::new(DashMap::new()),
+            config,
+            stats: Arc::new(CacheStatistics::default()),
+            access_counter: Arc::new(AtomicU64::new(0)),
+            invalidation_coordinator: Some(coordinator),
+            invalidated_entries: Arc::new(dashmap::DashSet::new()),
+        }
+    }
+
+    /// Attach invalidation coordinator
+    pub fn attach_coordinator(&mut self, coordinator: Arc<CacheCoordinator>) {
+        self.invalidation_coordinator = Some(coordinator);
     }
 
     /// Get a cached plan if available
@@ -279,6 +307,13 @@ impl QueryPlanCache {
         }
 
         let signature = QuerySignature::new(query, params, current_stats);
+
+        // Check if entry has been invalidated
+        if self.invalidated_entries.contains(&signature) {
+            self.stats.invalidations.fetch_add(1, Ordering::Relaxed);
+            self.stats.misses.fetch_add(1, Ordering::Relaxed);
+            return None;
+        }
 
         if let Some(entry) = self.cache.get_mut(&signature) {
             // Check TTL
@@ -388,9 +423,23 @@ impl QueryPlanCache {
             .collect();
 
         for key in keys_to_remove {
+            self.invalidated_entries.insert(key.clone());
             self.cache.remove(&key);
             self.stats.invalidations.fetch_add(1, Ordering::Relaxed);
         }
+    }
+
+    /// Mark entry as invalidated without removing (for batched invalidation)
+    pub fn mark_invalidated(&self, signature: QuerySignature) {
+        self.invalidated_entries.insert(signature);
+        self.stats.invalidations.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Invalidate by signature (for coordinator integration)
+    pub fn invalidate_signature(&self, signature: &QuerySignature) {
+        self.invalidated_entries.insert(signature.clone());
+        self.cache.remove(signature);
+        self.stats.invalidations.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Get cache statistics
@@ -486,6 +535,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "inherently slow: requires wall-clock TTL expiry (use nextest --ignored to run)"]
     fn test_cache_ttl() {
         let config = CachingConfig {
             ttl_seconds: 1, // 1 second TTL

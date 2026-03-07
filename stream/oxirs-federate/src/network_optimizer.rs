@@ -591,10 +591,13 @@ mod tests {
         let compressed = optimizer
             .compress_data(test_data, EncodingFormat::Json)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(compressed.compressed_size <= compressed.original_size);
 
-        let decompressed = optimizer.decompress_data(&compressed).await.unwrap();
+        let decompressed = optimizer
+            .decompress_data(&compressed)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(decompressed.as_ref(), test_data);
     }
 
@@ -654,7 +657,7 @@ mod tests {
             let _ = optimizer
                 .compress_data(test_data, EncodingFormat::Json)
                 .await
-                .unwrap();
+                .expect("operation should succeed");
         }
 
         let stats = optimizer.get_statistics().await;

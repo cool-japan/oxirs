@@ -50,7 +50,7 @@ fn generate_uuid() -> String {
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .expect("SystemTime should be after UNIX_EPOCH")
         .as_nanos();
 
     let random_part = {

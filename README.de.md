@@ -2,12 +2,12 @@
 
 > Eine Rust-native, modulare Plattform für Semantic Web, SPARQL 1.2, GraphQL und KI-erweiterte Inferenz
 
-[![Lizenz: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Lizenz: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.1.0 - Initial Production Release - Veröffentlicht am 7. Januar 2026
+**Status**: v0.2.0 - Released - March 5, 2026
 
-🎉 **Produktionsbereit**: Vollständige SPARQL 1.1/1.2-Implementierung mit **3,8-fach schnellerem Optimizer**, industriellem IoT-Support und KI-gestützten Funktionen. 13.123 Tests bestanden, null Warnungen.
+🎉 **Produktionsbereit**: Vollständige SPARQL 1.1/1.2-Implementierung mit **3,8-fach schnellerem Optimizer**, industriellem IoT-Support und KI-gestützten Funktionen. 39.000+ Tests bestanden, null Warnungen.
 
 ## Vision
 
@@ -56,7 +56,7 @@ OxiRS bietet erstklassige Unterstützung für **Gaia-X Trust Framework** und eur
 
 ```bash
 # CLI-Tool installieren
-cargo install oxirs --version 0.1.0
+cargo install oxirs --version 0.2.0
 
 # Aus Quellcode bauen
 git clone https://github.com/cool-japan/oxirs.git
@@ -175,9 +175,9 @@ Manufacturing-X Digital Twin:
   Simulation:           Echtzeit-Physik (SciRS2)
 ```
 
-## Neu in v0.1.0 (7. Januar 2026) 🎉
+## Neu in v0.2.0 (5. März 2026) 🎉
 
-**Initial Production Release: Vollständige Semantic Web-Plattform**
+**v0.2.0 Release: Vollständige Semantic Web-Plattform**
 
 **Kernfunktionen:**
 - 🚀 **Vollständiges SPARQL 1.1/1.2** - W3C-konform mit fortschrittlicher Abfrageoptimierung
@@ -189,7 +189,7 @@ Manufacturing-X Digital Twin:
 - ☁️ **Cloud-Native** - Kubernetes-Operator, Terraform-Module
 
 **Qualitätsmetriken:**
-- ✅ **13.123 Tests bestanden** (100% Erfolgsquote, 136 übersprungen)
+- ✅ **39.000+ Tests bestanden** (100% Erfolgsquote)
 - ✅ **Null Kompilierungswarnungen** über alle 22 Crates
 - ✅ **95%+ Testabdeckung**
 - ✅ **Produktionsvalidiert** in industriellen Deployments
@@ -233,7 +233,7 @@ oxirs/                  # Cargo Workspace Root
     └─ benchmarks/       # SP2Bench, WatDiv, LDBC SGS
 ```
 
-## Feature-Matrix (v0.1.0)
+## Feature-Matrix (v0.2.0)
 
 | Fähigkeit | OxiRS Crate(s) | Status | Jena/Fuseki-Parität |
 |-----------|----------------|--------|---------------------|
@@ -330,17 +330,16 @@ cargo build --workspace --all-features
 | Version | Zieldatum | Meilenstein | Lieferungen | Status |
 |---------|-----------|-------------|-------------|--------|
 | **v0.1.0** | **✅ 7. Jan 2026** | **Initial Production** | Vollständiges SPARQL 1.1/1.2, Industrielles IoT, KI | ✅ Veröffentlicht |
-| **v0.2.0** | **Q1 2026** | **Performance, Suche & Geo** | 10x Performance, Volltextsuche, GeoSPARQL | 🎯 Nächste |
-| **v1.0.0** | **Q2 2026** | **LTS-Release** | Vollständige Jena-Parität, Enterprise-Support | 📋 Geplant |
+| **v0.2.0** | **✅ 5. März 2026** | **Performance, Suche & Geo** | 10x Performance, Volltextsuche, GeoSPARQL | ✅ Veröffentlicht (aktuell) |
+| **v0.3.0** | **Q2 2026** | **LTS-Release** | Vollständige Jena-Parität, Enterprise-Support | 📋 Geplant |
 
 ## Lizenz
 
-OxiRS ist dual-lizenziert unter:
+OxiRS ist lizenziert unter:
 
-- **MIT-Lizenz** ([LICENSE-MIT](LICENSE-MIT) oder http://opensource.org/licenses/MIT)
 - **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE) oder http://www.apache.org/licenses/LICENSE-2.0)
 
-Sie können nach Belieben wählen. Details siehe [LICENSE](LICENSE).
+Details siehe [LICENSE](LICENSE).
 
 ## Kontakt
 
@@ -358,4 +357,4 @@ Sie können nach Belieben wählen. Details siehe [LICENSE](LICENSE).
 
 *"Rust macht Speichersicherheit zur Selbstverständlichkeit; OxiRS macht Knowledge-Graph-Engineering zur Selbstverständlichkeit."*
 
-**v0.1.0 - Initial Production Release - 7. Januar 2026**
+**v0.2.0 - Released - 5. März 2026**

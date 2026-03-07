@@ -153,7 +153,7 @@ impl FederationMonitor {
         // Update last seen timestamp
         service_metrics.last_seen = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("operation should succeed")
             .as_secs();
 
         debug!(
@@ -171,7 +171,7 @@ impl FederationMonitor {
         let event = FederationEvent {
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs(),
             event_type,
             details: details.to_string(),
@@ -302,7 +302,7 @@ impl FederationMonitor {
             cache_hit_rate,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs(),
         }
     }
@@ -436,7 +436,7 @@ impl FederationMonitor {
         PerformanceReport {
             report_timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs(),
             uptime,
             total_queries: metrics.total_queries,

@@ -77,7 +77,7 @@ prometheus_port = 9090
 enabled = true
 endpoint = "http://localhost:4317"
 service_name = "oxirs-fuseki-ids"
-service_version = "0.1.0"
+service_version = "0.2.0"
 
 [logging]
 level = "info"

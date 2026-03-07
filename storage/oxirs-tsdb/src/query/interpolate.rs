@@ -194,8 +194,14 @@ impl Interpolator {
             return Ok(points.to_vec());
         }
 
-        let start = points.first().unwrap().timestamp;
-        let end = points.last().unwrap().timestamp;
+        let start = points
+            .first()
+            .expect("collection validated to be non-empty")
+            .timestamp;
+        let end = points
+            .last()
+            .expect("collection validated to be non-empty")
+            .timestamp;
 
         self.fill_at_interval(points, target_interval, Some(start), Some(end))
     }
@@ -258,7 +264,7 @@ mod tests {
         let points = create_test_points();
         let mid_time = points[0].timestamp + Duration::seconds(5);
 
-        let result = interpolate_linear(mid_time, &points).unwrap();
+        let result = interpolate_linear(mid_time, &points).expect("interpolation should succeed");
 
         // At 5 seconds, should be 15.0 (linear between 10 and 20)
         assert!((result - 15.0).abs() < 0.001);
@@ -269,7 +275,7 @@ mod tests {
         let points = create_test_points();
         let mid_time = points[0].timestamp + Duration::seconds(5);
 
-        let result = forward_fill(mid_time, &points).unwrap();
+        let result = forward_fill(mid_time, &points).expect("result should be Ok");
 
         // Forward fill uses previous value: 10.0
         assert!((result - 10.0).abs() < 0.001);
@@ -281,7 +287,9 @@ mod tests {
         let mid_time = points[0].timestamp + Duration::seconds(5);
 
         let interp = Interpolator::new(InterpolateMethod::BackwardFill);
-        let result = interp.interpolate_at(mid_time, &points).unwrap();
+        let result = interp
+            .interpolate_at(mid_time, &points)
+            .expect("interpolation should succeed");
 
         // Backward fill uses next value: 20.0
         assert!((result - 20.0).abs() < 0.001);
@@ -294,12 +302,16 @@ mod tests {
         // At 3 seconds, nearest is first point (10.0)
         let near_first = points[0].timestamp + Duration::seconds(3);
         let interp = Interpolator::new(InterpolateMethod::Nearest);
-        let result1 = interp.interpolate_at(near_first, &points).unwrap();
+        let result1 = interp
+            .interpolate_at(near_first, &points)
+            .expect("interpolation should succeed");
         assert!((result1 - 10.0).abs() < 0.001);
 
         // At 7 seconds, nearest is second point (20.0)
         let near_second = points[0].timestamp + Duration::seconds(7);
-        let result2 = interp.interpolate_at(near_second, &points).unwrap();
+        let result2 = interp
+            .interpolate_at(near_second, &points)
+            .expect("interpolation should succeed");
         assert!((result2 - 20.0).abs() < 0.001);
     }
 
@@ -309,7 +321,9 @@ mod tests {
         let mid_time = points[0].timestamp + Duration::seconds(5);
 
         let interp = Interpolator::new(InterpolateMethod::Constant(42.0));
-        let result = interp.interpolate_at(mid_time, &points).unwrap();
+        let result = interp
+            .interpolate_at(mid_time, &points)
+            .expect("interpolation should succeed");
 
         assert!((result - 42.0).abs() < 0.001);
     }
@@ -331,7 +345,7 @@ mod tests {
         let interp = Interpolator::new(InterpolateMethod::Linear);
         let filled = interp
             .fill_at_interval(&points, Duration::seconds(2), None, None)
-            .unwrap();
+            .expect("operation should succeed");
 
         // Should have 6 points: 0, 2, 4, 6, 8, 10 seconds
         assert_eq!(filled.len(), 6);
@@ -388,7 +402,9 @@ mod tests {
         ];
 
         let interp = Interpolator::new(InterpolateMethod::Linear);
-        let upsampled = interp.upsample(&points, Duration::seconds(1)).unwrap();
+        let upsampled = interp
+            .upsample(&points, Duration::seconds(1))
+            .expect("sampling should succeed");
 
         // Should have 5 points: 0, 1, 2, 3, 4 seconds
         assert_eq!(upsampled.len(), 5);

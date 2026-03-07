@@ -1,6 +1,6 @@
 # OxiRS SAMM - API Stability Guarantees
 
-**Version**: 0.1.0
+**Version**: 0.2.0
 **Status**: Production Release
 **Date**: 2026-01-06
 
@@ -12,7 +12,7 @@ This document outlines the API stability guarantees for the OxiRS SAMM crate. As
 
 ### Stable APIs (100% Coverage)
 
-These APIs are **guaranteed to remain backward compatible** through the 0.1.x release series:
+These APIs are **guaranteed to remain backward compatible** through the 0.2.x release series:
 
 #### Core Metamodel Types
 
@@ -124,13 +124,13 @@ These APIs may change in future releases:
 - **Template System** (`oxirs_samm::templates`) - API may be enhanced
 - **Advanced Serializers** - Future formats may be added
 
-**Note**: These APIs are fully functional but may receive breaking changes in 0.2.x releases.
+**Note**: These APIs are fully functional but may receive breaking changes in 0.3.x releases.
 
 ## Versioning Policy
 
 We follow [Semantic Versioning](https://semver.org/) with the following interpretation:
 
-### 0.1.x Patch Releases
+### 0.2.x Patch Releases
 
 **Allowed Changes**:
 - Bug fixes that don't change public API
@@ -145,7 +145,7 @@ We follow [Semantic Versioning](https://semver.org/) with the following interpre
 - Changes to struct field types
 - Changes to function signatures
 
-### 0.2.0 Minor Release
+### 0.3.0 Minor Release
 
 **Allowed Changes**:
 - Everything from patch releases
@@ -184,7 +184,7 @@ All stable APIs have:
 
 ## SciRS2 Integration Stability
 
-**Current Status**: Using SciRS2-core v0.1.x
+**Current Status**: Using SciRS2-core v0.2.x
 
 **Guarantees**:
 - Will track SciRS2 minor version updates
@@ -213,7 +213,7 @@ These extension points will remain stable and supported.
 ## Binary Compatibility
 
 **Guarantees**:
-- Within 0.1.x series: Full binary compatibility
+- Within 0.2.x series: Full binary compatibility
 - Across 0.x.y releases: Source compatibility only
 - 1.0.0+: Both source and binary compatibility
 
@@ -222,7 +222,7 @@ These extension points will remain stable and supported.
 **Minimum Supported Rust Version (MSRV)**: 1.70
 
 **Policy**:
-- MSRV will not increase in patch releases (0.1.x)
+- MSRV will not increase in patch releases (0.2.x)
 - MSRV may increase in minor releases (0.x.0) with advance notice
 - Major releases (1.0.0+) may require latest stable Rust
 
@@ -276,4 +276,4 @@ We are committed to:
 ---
 
 **Last Updated**: 2026-01-06
-**Next Review**: Upon 0.2.0 release planning
+**Next Review**: Upon 0.3.0 release planning

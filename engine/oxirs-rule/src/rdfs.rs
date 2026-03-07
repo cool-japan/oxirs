@@ -791,12 +791,7 @@ impl RdfsReasoner {
         }
 
         let enabled_count = self.config.enabled_rules.len();
-        let enabled_names: Vec<&str> = self
-            .config
-            .enabled_rules
-            .iter()
-            .map(|r| r.name())
-            .collect();
+        let enabled_names: Vec<&str> = self.config.enabled_rules.iter().map(|r| r.name()).collect();
         info!(
             "Initialized {} RDFS entailment rules: {:?}",
             enabled_count, enabled_names
@@ -956,9 +951,7 @@ impl RdfsReasoner {
         }
 
         // rdfs8: (?c rdf:type rdfs:Class) → (?c rdfs:subClassOf rdfs:Resource)
-        if self.config.is_enabled(RdfsRule::Rdfs8)
-            && predicate == RDF_TYPE
-            && object == RDFS_CLASS
+        if self.config.is_enabled(RdfsRule::Rdfs8) && predicate == RDF_TYPE && object == RDFS_CLASS
         {
             new_facts.push(RuleAtom::Triple {
                 subject: Term::Constant(subject.to_string()),
@@ -968,9 +961,7 @@ impl RdfsReasoner {
         }
 
         // rdfs10: (?c rdf:type rdfs:Class) → (?c rdfs:subClassOf ?c)
-        if self.config.is_enabled(RdfsRule::Rdfs10)
-            && predicate == RDF_TYPE
-            && object == RDFS_CLASS
+        if self.config.is_enabled(RdfsRule::Rdfs10) && predicate == RDF_TYPE && object == RDFS_CLASS
         {
             new_facts.push(RuleAtom::Triple {
                 subject: Term::Constant(subject.to_string()),
@@ -1282,10 +1273,9 @@ mod tests {
 
         // But context should still work
         assert!(reasoner.context.classes.contains(vocabulary::RDFS_CLASS));
-        assert!(reasoner.context.is_subclass_of(
-            vocabulary::RDFS_DATATYPE,
-            vocabulary::RDFS_CLASS
-        ));
+        assert!(reasoner
+            .context
+            .is_subclass_of(vocabulary::RDFS_DATATYPE, vocabulary::RDFS_CLASS));
     }
 
     #[test]

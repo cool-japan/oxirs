@@ -8,17 +8,17 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-pub mod error;
-pub mod retry;
 pub mod circuit_breaker;
+pub mod error;
 pub mod fallback;
+pub mod retry;
 pub mod timeout;
 
+pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 pub use error::{AIError, AIErrorKind, ErrorContext};
-pub use retry::{RetryPolicy, RetryStrategy, ExponentialBackoff};
-pub use circuit_breaker::{CircuitBreaker, CircuitState, CircuitBreakerConfig};
-pub use fallback::{FallbackStrategy, FallbackChain};
-pub use timeout::{TimeoutGuard, TimeoutConfig};
+pub use fallback::{FallbackChain, FallbackStrategy};
+pub use retry::{ExponentialBackoff, RetryPolicy, RetryStrategy};
+pub use timeout::{TimeoutConfig, TimeoutGuard};
 
 /// Configuration for resilience mechanisms
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,14 +107,12 @@ impl ResilienceManager {
             config.max_retries,
         );
 
-        let circuit_breaker = Arc::new(RwLock::new(CircuitBreaker::new(
-            CircuitBreakerConfig {
-                failure_threshold: config.circuit_breaker_threshold,
-                success_threshold: 2,
-                timeout: Duration::from_secs(config.circuit_breaker_timeout_secs),
-                half_open_max_calls: 1,
-            },
-        )));
+        let circuit_breaker = Arc::new(RwLock::new(CircuitBreaker::new(CircuitBreakerConfig {
+            failure_threshold: config.circuit_breaker_threshold,
+            success_threshold: 2,
+            timeout: Duration::from_secs(config.circuit_breaker_timeout_secs),
+            half_open_max_calls: 1,
+        })));
 
         let timeout_config = TimeoutConfig {
             request_timeout: Duration::from_secs(config.request_timeout_secs),
@@ -142,18 +140,24 @@ impl ResilienceManager {
 
         // Update metrics
         {
-            let mut metrics = self.metrics.write()
+            let mut metrics = self
+                .metrics
+                .write()
                 .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
             metrics.total_requests += 1;
         }
 
         // Check circuit breaker
         if self.config.enable_circuit_breaker {
-            let mut breaker = self.circuit_breaker.write()
+            let mut breaker = self
+                .circuit_breaker
+                .write()
                 .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
             if !breaker.can_execute() {
-                let mut metrics = self.metrics.write()
+                let mut metrics = self
+                    .metrics
+                    .write()
                     .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
                 metrics.failed_requests += 1;
 
@@ -170,10 +174,14 @@ impl ResilienceManager {
 
         // Update circuit breaker and metrics
         {
-            let mut breaker = self.circuit_breaker.write()
+            let mut breaker = self
+                .circuit_breaker
+                .write()
                 .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
-            let mut metrics = self.metrics.write()
+            let mut metrics = self
+                .metrics
+                .write()
                 .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
             match &result {
@@ -190,7 +198,7 @@ impl ResilienceManager {
             let elapsed = start.elapsed().as_millis() as f64;
             metrics.avg_response_time_ms =
                 (metrics.avg_response_time_ms * (metrics.total_requests - 1) as f64 + elapsed)
-                / metrics.total_requests as f64;
+                    / metrics.total_requests as f64;
         }
 
         result
@@ -211,7 +219,9 @@ impl ResilienceManager {
 
                     // Update retry metrics
                     {
-                        let mut metrics = self.metrics.write()
+                        let mut metrics = self
+                            .metrics
+                            .write()
                             .map_err(|err| anyhow!("Failed to acquire write lock: {}", err))?;
                         metrics.retried_requests += 1;
                     }
@@ -235,7 +245,9 @@ impl ResilienceManager {
         match tokio::time::timeout(self.timeout_config.request_timeout, operation).await {
             Ok(result) => result,
             Err(_) => {
-                let mut metrics = self.metrics.write()
+                let mut metrics = self
+                    .metrics
+                    .write()
                     .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
                 metrics.timeout_errors += 1;
                 Err(anyhow!("Operation timed out"))
@@ -245,25 +257,33 @@ impl ResilienceManager {
 
     /// Get current resilience metrics
     pub fn metrics(&self) -> Result<ResilienceMetrics> {
-        let metrics = self.metrics.read()
+        let metrics = self
+            .metrics
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
         Ok(metrics.clone())
     }
 
     /// Get circuit breaker state
     pub fn circuit_state(&self) -> Result<CircuitState> {
-        let breaker = self.circuit_breaker.read()
+        let breaker = self
+            .circuit_breaker
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
         Ok(breaker.state())
     }
 
     /// Reset resilience state
     pub fn reset(&self) -> Result<()> {
-        let mut breaker = self.circuit_breaker.write()
+        let mut breaker = self
+            .circuit_breaker
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
         breaker.reset();
 
-        let mut metrics = self.metrics.write()
+        let mut metrics = self
+            .metrics
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
         *metrics = ResilienceMetrics::default();
 
@@ -294,17 +314,20 @@ mod tests {
             max_retries: 2,
             initial_retry_delay_ms: 10,
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         let mut call_count = 0;
-        let result = manager.execute(|| {
-            call_count += 1;
-            if call_count < 2 {
-                Err(anyhow!("Temporary failure"))
-            } else {
-                Ok(42)
-            }
-        }).await;
+        let result = manager
+            .execute(|| {
+                call_count += 1;
+                if call_count < 2 {
+                    Err(anyhow!("Temporary failure"))
+                } else {
+                    Ok(42)
+                }
+            })
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(call_count, 2);
@@ -316,7 +339,8 @@ mod tests {
             circuit_breaker_threshold: 2,
             enable_retry: false,
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         // Cause failures to open circuit
         for _ in 0..2 {

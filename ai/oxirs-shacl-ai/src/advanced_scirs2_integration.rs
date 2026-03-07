@@ -285,7 +285,7 @@ impl AdvancedSciRS2Engine {
 
 impl Default for AdvancedSciRS2Engine {
     fn default() -> Self {
-        Self::new().unwrap()
+        Self::new().expect("default AdvancedSciRS2Engine creation should succeed")
     }
 }
 

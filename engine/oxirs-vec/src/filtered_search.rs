@@ -414,7 +414,10 @@ impl FilterBuilder {
 
     pub fn build_and(self) -> MetadataFilter {
         if self.filters.len() == 1 {
-            self.filters.into_iter().next().unwrap()
+            self.filters
+                .into_iter()
+                .next()
+                .expect("filters validated to have exactly one element")
         } else {
             MetadataFilter::And(self.filters)
         }
@@ -422,7 +425,10 @@ impl FilterBuilder {
 
     pub fn build_or(self) -> MetadataFilter {
         if self.filters.len() == 1 {
-            self.filters.into_iter().next().unwrap()
+            self.filters
+                .into_iter()
+                .next()
+                .expect("filters validated to have exactly one element")
         } else {
             MetadataFilter::Or(self.filters)
         }

@@ -36,7 +36,7 @@ pub fn format_term_for_sparql(term: &Term) -> String {
 pub fn format_literal_for_sparql(literal: &Literal) -> String {
     let value = literal.value();
     let datatype = literal.datatype();
-    let xsd_string = NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap();
+    let xsd_string = NamedNode::new("http://www.w3.org/2001/XMLSchema#string").expect("valid IRI");
 
     if datatype == xsd_string.as_ref() {
         format!("\"{}\"", escape_sparql_string(value))

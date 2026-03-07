@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/oxirs-canbus.svg)](https://crates.io/crates/oxirs-canbus)
 [![docs.rs](https://docs.rs/oxirs-canbus/badge.svg)](https://docs.rs/oxirs-canbus)
-[![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 CANbus/J1939 protocol support for the OxiRS semantic web platform.
 
@@ -33,7 +33,7 @@ CANbus/J1939 protocol support for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-canbus = "0.1.0"
+oxirs-canbus = "0.2.0"
 ```
 
 **Note**: Linux only (requires socketcan kernel module).
@@ -212,4 +212,4 @@ See `/tmp/oxirs_cli_phase_d_guide.md` for complete CLI documentation.
 
 ## License
 
-Dual-licensed under MIT or Apache-2.0.
+Licensed under Apache-2.0.

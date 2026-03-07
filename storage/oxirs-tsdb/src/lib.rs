@@ -1,44 +1,46 @@
 //! Time-series optimizations for OxiRS
 //!
-//! **Status**: ✅ Production Ready (v0.1.0)
+//! **Status**: Production Ready (v0.2.0)
 //!
 //! This crate provides high-performance time-series storage and query
 //! capabilities for IoT-scale RDF data.
 //!
 //! # Features
 //!
-//! - ✅ **Gorilla compression** - 40:1 storage reduction (Facebook, VLDB 2015)
-//! - ✅ **Delta-of-delta timestamps** - <2 bits per timestamp
-//! - ✅ **SPARQL temporal extensions** - WINDOW, RESAMPLE, INTERPOLATE
-//! - ✅ **500K+ writes/sec** - High-throughput ingestion
-//! - ✅ **Hybrid storage** - Seamless RDF + Time-Series integration
-//! - ✅ **Retention policies** - Automatic downsampling and expiration
-//! - ✅ **Write-Ahead Log** - Crash recovery and durability
-//! - ✅ **Background compaction** - Automatic storage optimization
-//! - ✅ **Columnar storage** - Disk-backed binary format
-//! - ✅ **Series indexing** - Efficient chunk lookups
+//! - Gorilla compression - 40:1 storage reduction (Facebook, VLDB 2015)
+//! - Delta-of-delta timestamps - <2 bits per timestamp
+//! - SPARQL temporal extensions - WINDOW, RESAMPLE, INTERPOLATE
+//! - 500K+ writes/sec - High-throughput ingestion
+//! - Hybrid storage - Seamless RDF + Time-Series integration
+//! - Retention policies - Automatic downsampling and expiration
+//! - Write-Ahead Log - Crash recovery and durability with CRC32 protection
+//! - Background compaction - Automatic storage optimization
+//! - Columnar storage - Disk-backed binary format
+//! - Series indexing - Efficient chunk lookups
+//! - Raft replication - Distributed consensus with quorum commits
+//! - Arrow/Parquet export - Analytics interoperability
 //!
 //! # Architecture
 //!
 //! ```text
-//! ┌─────────────────────────────────────────────┐
-//! │         Hybrid Storage Model                │
-//! ├─────────────────────────────────────────────┤
-//! │                                             │
-//! │  ┌──────────────┐    ┌─────────────────┐  │
-//! │  │  RDF Store   │◄──►│ Time-Series DB  │  │
-//! │  │  (oxirs-tdb) │    │  (this crate)   │  │
-//! │  └──────────────┘    └─────────────────┘  │
-//! │        │                     │              │
-//! │        │ Semantic            │ High-freq    │
-//! │        │ metadata            │ sensor data  │
-//! │        └──────────┬──────────┘              │
-//! │                   │                         │
-//! │        ┌──────────▼─────────┐               │
-//! │        │ Unified SPARQL     │               │
-//! │        │ Query Layer        │               │
-//! │        └────────────────────┘               │
-//! └─────────────────────────────────────────────┘
+//! +---------------------------------------------+
+//! |         Hybrid Storage Model                |
+//! +---------------------------------------------+
+//! |                                             |
+//! |  +--------------+    +-----------------+    |
+//! |  |  RDF Store   |<-->| Time-Series DB  |    |
+//! |  |  (oxirs-tdb) |    |  (this crate)   |    |
+//! |  +--------------+    +-----------------+    |
+//! |        |                     |              |
+//! |        | Semantic            | High-freq    |
+//! |        | metadata            | sensor data  |
+//! |        +----------+----------+              |
+//! |                   |                         |
+//! |        +----------v---------+               |
+//! |        | Unified SPARQL     |               |
+//! |        | Query Layer        |               |
+//! |        +--------------------+               |
+//! +---------------------------------------------+
 //! ```
 //!
 //! # Quick Start
@@ -66,85 +68,6 @@
 //! # Ok(())
 //! # }
 //! ```
-//!
-//! ## SPARQL Temporal Extensions
-//!
-//! ```sparql
-//! PREFIX ts: <http://oxirs.org/ts#>
-//!
-//! # Moving average over 10-minute window
-//! SELECT ?sensor (ts:window(?temp, 600, "AVG") AS ?avg_temp)
-//! WHERE {
-//!   ?sensor :temperature ?temp ;
-//!           :timestamp ?time .
-//! }
-//!
-//! # Resample to hourly averages
-//! SELECT ?hour (AVG(?power) AS ?avg_power)
-//! WHERE {
-//!   ?sensor :power ?power ;
-//!           :timestamp ?time .
-//! }
-//! GROUP BY (ts:resample(?time, "1h") AS ?hour)
-//! ```
-//!
-//! # Compression
-//!
-//! ## Gorilla Encoding (for float values)
-//!
-//! Facebook's Gorilla compression exploits temporal locality in sensor data:
-//! - XOR with previous value
-//! - Variable-length encoding for XOR result
-//! - Typical compression: 30-50:1 for IoT data
-//!
-//! ## Delta-of-Delta (for timestamps)
-//!
-//! Exploits regularity in sensor sampling intervals:
-//! - Store delta of consecutive deltas
-//! - Variable-length encoding
-//! - Typical compression: 32:1 for regular sampling
-//!
-//! # Performance
-//!
-//! ## Targets (on AWS m5.2xlarge: 8 vCPUs, 32GB RAM)
-//!
-//! - **Write throughput**: 1M+ data points/sec
-//! - **Query latency**: <200ms for 1M points (p50)
-//! - **Compression ratio**: 40:1 (average)
-//! - **Memory usage**: <2GB for 100M points
-//!
-//! # Integration
-//!
-//! Automatic integration with existing OxiRS components:
-//! - ✅ `oxirs-core::store::Store` trait implementation (HybridStore)
-//! - ✅ `oxirs-stream` ready for MQTT/Modbus ingestion
-//! - ✅ `oxirs-arq` ready for SPARQL temporal extensions
-//!
-//! # CLI Commands
-//!
-//! The `oxirs` CLI provides comprehensive time-series commands:
-//!
-//! ```bash
-//! # Query with aggregation
-//! oxirs tsdb query mykg --series 1 --aggregate avg
-//!
-//! # Insert data point
-//! oxirs tsdb insert mykg --series 1 --value 22.5
-//!
-//! # Show compression statistics
-//! oxirs tsdb stats mykg --detailed
-//!
-//! # Manage retention policies
-//! oxirs tsdb retention list mykg
-//! ```
-//!
-//! # Production Readiness
-//!
-//! - ✅ **128/128 tests passing** - Comprehensive test coverage
-//! - ✅ **Zero warnings** - Strict code quality enforcement
-//! - ✅ **10 examples** - Complete usage documentation
-//! - ✅ **3 benchmarks** - Performance validation
-//! - ✅ **Production features** - WAL, compaction, retention, caching
 
 /// Configuration types for TSDB storage and query options.
 pub mod config;
@@ -191,3 +114,101 @@ pub use sparql::{
     interpolate_function, register_temporal_functions, resample_function, window_function,
     QueryRouter, RoutingDecision, TemporalFunctionRegistry, TemporalValue,
 };
+
+/// Advanced compression algorithms: Gorilla XOR, RLE, Dictionary, Adaptive.
+pub mod compression;
+
+/// Raft consensus state machine for distributed TSDB replication.
+pub mod replication;
+
+// Compression re-exports
+pub use compression::{
+    dict_decode, dict_encode, gorilla_decode, gorilla_encode, rle_decode, rle_encode,
+    AdaptiveCompressor, CompressedBlock, CompressionAlgorithm, DictionaryBlock, DictionaryEncoder,
+    GorillaDecoder, GorillaEncoder, RleBlock, RleEncoder, RleRun,
+};
+
+// Replication re-exports
+pub use replication::{
+    AppendEntriesArgs, AppendEntriesReply, LogEntry, RaftError, RaftResult, RaftRole, RaftState,
+    RequestVoteArgs, RequestVoteReply, TsdbCommand, WriteEntry,
+};
+
+/// Advanced analytics: anomaly detection and time-series forecasting.
+pub mod analytics;
+
+/// Statistical anomaly detection for time-series data.
+pub mod anomaly_detector;
+
+// Replication group re-exports
+pub use replication::{ReplicationGroup, TsdbRaftNode};
+
+// Write path re-exports (batch writer)
+pub use write::{BatchWriter, BatchWriterConfig, CrcWal, MetricPoint};
+
+// Analytics re-exports (Arrow / Parquet export and columnar/SQL export)
+pub use analytics::{
+    AggregationFunction as ExportAggregation, ArrowExporter, ColumnarExport, ColumnarStats,
+    DuckDbQueryAdapter, ExportedPoint, ParquetCompression, ParquetExporter,
+};
+
+// SQL export re-exports
+pub use analytics::{DataValueType, MetricSchema, MetricSchemaBuilder, SqlDataPoint, SqlExporter};
+
+// Kalman filter re-exports
+pub use analytics::{AdaptiveKalmanFilter, AnomalyEvent, KalmanAnomaly, KalmanFilter};
+
+// GPU aggregation re-exports
+pub use analytics::{GpuAggMetrics, GpuAggOp, GpuDownsampler, GpuTimeSeriesAggregator};
+
+// Arrow IPC re-exports
+pub use analytics::{
+    ArrowColumn, ArrowDataType, ArrowField, ArrowIpcReader, ArrowIpcWriter, ArrowRecordBatch,
+    ArrowSchema, TaggedDataPoint, TimeUnit,
+};
+
+// Parquet export re-exports
+pub use analytics::{
+    ParquetColumn, ParquetIpcCompression, ParquetReader, ParquetValues, ParquetWriter,
+};
+
+/// Gorilla/Delta-of-Delta compression for time-series data (v1.1.0).
+pub mod gorilla_compression;
+
+/// Statistical anomaly detection for time-series data (v1.2.0).
+pub mod anomaly_detection;
+
+/// Retention policies for time-series data expiration and downsampling (v1.1.0).
+pub mod retention_policy;
+
+/// Time-series downsampling algorithms: LTTB, Average, MinMax, First, Last, Sum, Count (v1.2.0).
+pub mod downsampler;
+
+/// Time-series value compression codecs: Delta, RLE, Zigzag, Gorilla, Plain (v1.5.0).
+pub mod compression_codec;
+
+/// Forward/backward time series iterator with windowing (v1.6.0).
+pub mod series_iterator;
+
+/// Time-series alerting rules engine (v1.7.0).
+pub mod alert_rule;
+
+/// Continuous aggregate queries with materialized views (v1.8.0).
+pub mod continuous_query;
+
+/// Tag-based time series indexing with inverted index (v1.9.0).
+pub mod tag_index;
+
+/// In-memory write buffer for time-series ingestion: size/time flush policies, WAL integration, backpressure (v2.0.0).
+pub mod write_buffer;
+
+/// Time-series event correlation engine: Pearson correlation, sliding-window
+/// evaluation, threshold triggers, and event purging (v1.1.0 round 14)
+pub mod event_correlator;
+
+/// Time-series forecasting using exponential smoothing and moving averages (v1.1.0 round 15)
+pub mod forecaster;
+
+/// Time-series rollup/downsampling engine: windowed Mean/Sum/Min/Max/Count/First/Last
+/// aggregation, multi-resolution rollup, and LTTB visual downsampling (v1.1.0 round 16)
+pub mod rollup_engine;

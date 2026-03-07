@@ -253,8 +253,14 @@ fn extract_crs(wkt: &str) -> Result<(Crs, &str)> {
     let trimmed = wkt.trim();
 
     if let Some(caps) = CRS_REGEX.captures(trimmed) {
-        let crs_uri = caps.get(1).unwrap().as_str();
-        let wkt_geom = caps.get(2).unwrap().as_str();
+        let crs_uri = caps
+            .get(1)
+            .expect("capture group 1 should exist after successful match")
+            .as_str();
+        let wkt_geom = caps
+            .get(2)
+            .expect("capture group 2 should exist after successful match")
+            .as_str();
         Ok((Crs::new(crs_uri), wkt_geom))
     } else {
         Ok((Crs::default(), wkt))

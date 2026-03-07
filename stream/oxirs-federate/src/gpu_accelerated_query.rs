@@ -626,14 +626,14 @@ mod tests {
             ..Default::default()
         };
 
-        let processor = GpuQueryProcessor::new(config).unwrap();
+        let processor = GpuQueryProcessor::new(config).expect("construction should succeed");
         assert!(!processor.is_gpu_available());
     }
 
     #[tokio::test]
     async fn test_query_optimization() {
         let config = GpuAccelerationConfig::default();
-        let processor = GpuQueryProcessor::new(config).unwrap();
+        let processor = GpuQueryProcessor::new(config).expect("construction should succeed");
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?s a :Person }";
         let batch = processor.optimize_for_gpu(query);
@@ -648,7 +648,7 @@ mod tests {
             ..Default::default()
         };
 
-        let processor = GpuQueryProcessor::new(config).unwrap();
+        let processor = GpuQueryProcessor::new(config).expect("construction should succeed");
 
         let batch = QueryBatch {
             batch_id: "test-1".to_string(),
@@ -668,7 +668,7 @@ mod tests {
             ..Default::default()
         };
 
-        let processor = GpuQueryProcessor::new(config).unwrap();
+        let processor = GpuQueryProcessor::new(config).expect("construction should succeed");
 
         let batch = QueryBatch {
             batch_id: "test-2".to_string(),
@@ -687,13 +687,13 @@ mod tests {
     #[tokio::test]
     async fn test_parallel_scoring() {
         let config = GpuAccelerationConfig::default();
-        let processor = GpuQueryProcessor::new(config).unwrap();
+        let processor = GpuQueryProcessor::new(config).expect("construction should succeed");
 
         let embeddings = Array2::ones((100, 128));
         let scores = processor.compute_similarity_scores_parallel(&embeddings);
 
         assert!(scores.is_ok());
-        let scores = scores.unwrap();
+        let scores = scores.expect("operation should succeed");
         assert_eq!(scores.len(), 100);
     }
 
@@ -704,7 +704,7 @@ mod tests {
             ..Default::default()
         };
 
-        let processor = GpuJoinProcessor::new(config).unwrap();
+        let processor = GpuJoinProcessor::new(config).expect("construction should succeed");
         assert!(!processor.is_gpu_available());
 
         let left = Array2::zeros((10, 3));
@@ -722,7 +722,7 @@ mod tests {
             ..Default::default()
         };
 
-        let processor = GpuQueryProcessor::new(config).unwrap();
+        let processor = GpuQueryProcessor::new(config).expect("construction should succeed");
         let metrics = processor.get_profiling_metrics();
         assert!(metrics.is_some());
     }

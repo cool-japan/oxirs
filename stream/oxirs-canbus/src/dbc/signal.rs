@@ -773,12 +773,14 @@ BO_ 300 MuxMsg: 8 Engine
 
     #[test]
     fn test_decode_intel_signal() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let decoder = SignalDecoder::new(&db);
 
         // EngineSpeed at 16000 raw = 2000 RPM
         let data = [0x00, 0x3E, 0x85, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let decoded = decoder.decode_signal(2024, "EngineSpeed", &data).unwrap();
+        let decoded = decoder
+            .decode_signal(2024, "EngineSpeed", &data)
+            .expect("decoding should succeed");
 
         // Raw value should be 0x3E00 = 15872
         assert_eq!(decoded.raw_value, 15872);
@@ -788,12 +790,14 @@ BO_ 300 MuxMsg: 8 Engine
 
     #[test]
     fn test_decode_with_offset() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let decoder = SignalDecoder::new(&db);
 
         // EngineTemp at offset=16, raw=125 -> physical = 125 - 40 = 85°C
         let data = [0x00, 0x00, 0x7D, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let decoded = decoder.decode_signal(2024, "EngineTemp", &data).unwrap();
+        let decoded = decoder
+            .decode_signal(2024, "EngineTemp", &data)
+            .expect("decoding should succeed");
 
         assert_eq!(decoded.raw_value, 125);
         assert!((decoded.physical_value - 85.0).abs() < 0.01);
@@ -801,47 +805,49 @@ BO_ 300 MuxMsg: 8 Engine
 
     #[test]
     fn test_decode_signed_signal() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let decoder = SignalDecoder::new(&db);
 
         // Test positive value
         let data_pos = [0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         let decoded = decoder
             .decode_signal(100, "SignedValue", &data_pos)
-            .unwrap();
+            .expect("decoding should succeed");
         assert_eq!(decoded.raw_value, 256);
 
         // Test negative value: 0xFFFF = -1 as signed 16-bit
         let data_neg = [0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         let decoded = decoder
             .decode_signal(100, "SignedValue", &data_neg)
-            .unwrap();
+            .expect("decoding should succeed");
         assert_eq!(decoded.raw_value, -1);
 
         // Test -100: 0xFF9C
         let data_neg100 = [0x9C, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         let decoded = decoder
             .decode_signal(100, "SignedValue", &data_neg100)
-            .unwrap();
+            .expect("decoding should succeed");
         assert_eq!(decoded.raw_value, -100);
     }
 
     #[test]
     fn test_decode_big_endian() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let decoder = SignalDecoder::new(&db);
 
         // Big-endian signal starting at bit 7, spanning bytes 0-1
         // Value 0x1234 should be in data[0]=0x12, data[1]=0x34
         let data = [0x12, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let decoded = decoder.decode_signal(200, "BigEndianSig", &data).unwrap();
+        let decoded = decoder
+            .decode_signal(200, "BigEndianSig", &data)
+            .expect("decoding should succeed");
 
         assert_eq!(decoded.raw_value, 0x1234);
     }
 
     #[test]
     fn test_decode_full_message() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let decoder = SignalDecoder::new(&db);
 
         // Set up frame with known values
@@ -852,7 +858,9 @@ BO_ 300 MuxMsg: 8 Engine
             0x00, 0x00, 0x00, 0x00,
         ];
 
-        let values = decoder.decode_message(2024, &data).unwrap();
+        let values = decoder
+            .decode_message(2024, &data)
+            .expect("decoding should succeed");
 
         assert!(values.contains_key("EngineSpeed"));
         assert!(values.contains_key("EngineTemp"));
@@ -869,12 +877,14 @@ BO_ 300 MuxMsg: 8 Engine
 
     #[test]
     fn test_decode_multiplexed() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let decoder = SignalDecoder::new(&db);
 
         // Mux value = 0, Signal_0 = 0x1234
         let data_mux0 = [0x00, 0x34, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let values = decoder.decode_message(300, &data_mux0).unwrap();
+        let values = decoder
+            .decode_message(300, &data_mux0)
+            .expect("decoding should succeed");
 
         assert!(values.contains_key("MuxSwitch"));
         assert!(values.contains_key("Signal_0"));
@@ -883,7 +893,9 @@ BO_ 300 MuxMsg: 8 Engine
 
         // Mux value = 2, Signal_2 = 0x2710 = 10000 -> 1000.0
         let data_mux2 = [0x02, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let values = decoder.decode_message(300, &data_mux2).unwrap();
+        let values = decoder
+            .decode_message(300, &data_mux2)
+            .expect("decoding should succeed");
 
         assert!(values.contains_key("Signal_2"));
         assert!(!values.contains_key("Signal_0"));
@@ -895,13 +907,15 @@ BO_ 300 MuxMsg: 8 Engine
 
     #[test]
     fn test_encode_intel_signal() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let encoder = SignalEncoder::new(&db);
 
         let mut values = HashMap::new();
         values.insert("EngineSpeed".to_string(), 2048.0); // 2048 RPM -> raw 16384
 
-        let data = encoder.encode_message(2024, &values).unwrap();
+        let data = encoder
+            .encode_message(2024, &values)
+            .expect("encoding should succeed");
 
         // Should have 0x4000 in bytes 0-1
         assert_eq!(data[0], 0x00);
@@ -910,13 +924,15 @@ BO_ 300 MuxMsg: 8 Engine
 
     #[test]
     fn test_encode_with_offset() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let encoder = SignalEncoder::new(&db);
 
         let mut values = HashMap::new();
         values.insert("EngineTemp".to_string(), 85.0); // 85°C -> raw 125
 
-        let data = encoder.encode_message(2024, &values).unwrap();
+        let data = encoder
+            .encode_message(2024, &values)
+            .expect("encoding should succeed");
 
         // Temp at byte 2
         assert_eq!(data[2], 125);
@@ -924,7 +940,7 @@ BO_ 300 MuxMsg: 8 Engine
 
     #[test]
     fn test_roundtrip_encoding() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let encoder = SignalEncoder::new(&db);
         let decoder = SignalDecoder::new(&db);
 
@@ -934,10 +950,14 @@ BO_ 300 MuxMsg: 8 Engine
         input.insert("EngineTemp".to_string(), 90.0);
         input.insert("ThrottlePos".to_string(), 75.0);
 
-        let data = encoder.encode_message(2024, &input).unwrap();
+        let data = encoder
+            .encode_message(2024, &input)
+            .expect("encoding should succeed");
 
         // Decode back
-        let output = decoder.decode_message(2024, &data).unwrap();
+        let output = decoder
+            .decode_message(2024, &data)
+            .expect("decoding should succeed");
 
         // Check values match within tolerance
         assert!((output["EngineSpeed"].physical_value - 3500.0).abs() < 0.125);

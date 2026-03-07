@@ -743,7 +743,7 @@ impl PatternMatcher {
                 let mean = arr.mean().unwrap_or(0.0);
                 let std_dev = arr.std(0.0);
 
-                let last_value = values.last().unwrap();
+                let last_value = values.last().expect("collection validated to be non-empty");
                 let z_score = if std_dev > 0.0 {
                     (last_value - mean).abs() / std_dev
                 } else {
@@ -792,11 +792,15 @@ impl PatternMatcher {
             "always" => Ok(true),
             "never" => Ok(false),
             pred if pred.starts_with("type:") => {
-                let expected_type = pred.strip_prefix("type:").unwrap();
+                let expected_type = pred
+                    .strip_prefix("type:")
+                    .expect("strip_prefix should succeed after starts_with check");
                 Ok(self.get_event_type(event) == expected_type)
             }
             pred if pred.starts_with("subject:") => {
-                let expected_subject = pred.strip_prefix("subject:").unwrap();
+                let expected_subject = pred
+                    .strip_prefix("subject:")
+                    .expect("strip_prefix should succeed after starts_with check");
                 Ok(self.get_event_subject(event) == Some(expected_subject.to_string()))
             }
             _ => Ok(false),

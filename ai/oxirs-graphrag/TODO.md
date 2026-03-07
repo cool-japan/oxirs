@@ -1,6 +1,6 @@
 # OxiRS GraphRAG - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.0 | Last Updated: 2026-01-06*
 
 ## Status: Production Ready
 
@@ -17,9 +17,9 @@
 ## Future Roadmap
 
 ### v0.2.0 - Enhanced Retrieval (Q1 2026 - Expanded)
-- [ ] Leiden community detection (better than Louvain)
-- [ ] Query result caching (LRU with TTL)
-- [ ] Graph embedding integration (GraphSAGE, Node2Vec)
+- [x] Leiden community detection (better than Louvain) -- implemented in graph/community.rs with full refinement phase
+- [x] Query result caching (LRU with TTL) -- implemented in cache/query_cache.rs with thread-safe Arc<Mutex<LruCache>> + TTL
+- [x] Graph embedding integration (GraphSAGE, Node2Vec) -- Node2Vec standalone impl in embeddings/node2vec.rs with alias sampling
 - [ ] Streaming SPARQL for large subgraphs
 - [ ] Advanced fusion strategies (BM25 + Dense, ColBERT-style)
 - [ ] Multi-hop reasoning with oxirs-rule
@@ -48,4 +48,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GraphRAG v0.1.0 - Graph-based RAG for knowledge graphs*
+*OxiRS GraphRAG v0.2.0 - Graph-based RAG for knowledge graphs*

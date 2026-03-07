@@ -1128,7 +1128,7 @@ impl PaginationManager {
     pub async fn cleanup_expired_cursors(&self) -> usize {
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("operation should succeed")
             .as_secs();
 
         let mut cursors = self.active_cursors.write().await;
@@ -1154,7 +1154,7 @@ impl PaginationManager {
 
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("operation should succeed")
             .as_secs();
 
         let expired_count = cursors
@@ -1213,7 +1213,7 @@ impl PaginationManager {
         let cursor_id = uuid::Uuid::new_v4().to_string();
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("operation should succeed")
             .as_secs();
 
         let position_state = general_purpose::STANDARD.encode(format!("{offset}:{page_size}"));
@@ -1238,7 +1238,7 @@ impl PaginationManager {
         if cursors.len() >= self.config.max_cached_cursors {
             let current_time = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_secs();
 
             // Remove expired cursors first
@@ -1263,7 +1263,7 @@ impl PaginationManager {
     async fn validate_cursor(&self, cursor: &PaginationCursor) -> Result<()> {
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("operation should succeed")
             .as_secs();
 
         if cursor.expires_at <= current_time {
@@ -1333,11 +1333,17 @@ mod tests {
         let manager = ResultStreamingManager::new();
         let test_data = b"Hello, World! This is a test string for compression.".repeat(100);
 
-        let compressed = manager.compress_result(&test_data).await.unwrap();
+        let compressed = manager
+            .compress_result(&test_data)
+            .await
+            .expect("async operation should succeed");
         assert!(compressed.compressed_size < compressed.original_size);
         assert!(compressed.compression_ratio < 1.0);
 
-        let decompressed = manager.decompress_result(&compressed).await.unwrap();
+        let decompressed = manager
+            .decompress_result(&compressed)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(decompressed.as_ref(), test_data.as_slice());
     }
 
@@ -1350,15 +1356,20 @@ mod tests {
         let mut stream = manager
             .create_stream(test_result, ResultFormat::Json)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let mut chunks = Vec::new();
         while let Some(chunk_result) = stream.next().await {
-            chunks.push(chunk_result.unwrap());
+            chunks.push(chunk_result.expect("next element should exist"));
         }
 
         assert!(!chunks.is_empty());
-        assert!(chunks.last().unwrap().is_final);
+        assert!(
+            chunks
+                .last()
+                .expect("collection validated to be non-empty")
+                .is_final
+        );
     }
 
     #[tokio::test]
@@ -1399,8 +1410,11 @@ mod tests {
             },
         };
 
-        let csv_data = manager.sparql_to_csv(&sparql_result).await.unwrap();
-        let csv_string = String::from_utf8(csv_data).unwrap();
+        let csv_data = manager
+            .sparql_to_csv(&sparql_result)
+            .await
+            .expect("async operation should succeed");
+        let csv_string = String::from_utf8(csv_data).expect("valid UTF-8");
 
         assert!(csv_string.contains("name,age"));
         assert!(csv_string.contains("john"));
@@ -1423,15 +1437,20 @@ mod tests {
         let mut stream = manager
             .create_adaptive_stream(test_result, ResultFormat::Json, network_conditions)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let mut chunks = Vec::new();
         while let Some(chunk_result) = stream.next().await {
-            chunks.push(chunk_result.unwrap());
+            chunks.push(chunk_result.expect("next element should exist"));
         }
 
         assert!(!chunks.is_empty());
-        assert!(chunks.last().unwrap().is_final);
+        assert!(
+            chunks
+                .last()
+                .expect("collection validated to be non-empty")
+                .is_final
+        );
     }
 
     #[test]
@@ -1447,7 +1466,10 @@ mod tests {
         let manager = ResultStreamingManager::new();
         let test_data = b"Test data for statistics".repeat(50);
 
-        let _compressed = manager.compress_result(&test_data).await.unwrap();
+        let _compressed = manager
+            .compress_result(&test_data)
+            .await
+            .expect("async operation should succeed");
 
         let stats = manager.get_compression_stats().await;
         assert_eq!(stats.total_compressions, 1);

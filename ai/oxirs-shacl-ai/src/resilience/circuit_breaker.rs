@@ -1,9 +1,8 @@
 //! Circuit breaker pattern for fault tolerance
 
-use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Circuit breaker state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,13 +44,22 @@ impl Default for CircuitBreakerConfig {
     }
 }
 
+/// Returns the current time as milliseconds since the Unix epoch, or 0 on error.
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO)
+        .as_millis() as u64
+}
+
 /// Circuit breaker implementation
 pub struct CircuitBreaker {
     config: CircuitBreakerConfig,
     state: CircuitState,
     failure_count: AtomicUsize,
     success_count: AtomicUsize,
-    last_failure_time: AtomicU64,
+    /// Stores milliseconds since Unix epoch when the circuit was opened (0 = never opened)
+    last_failure_time_ms: AtomicU64,
     half_open_calls: AtomicUsize,
 }
 
@@ -62,7 +70,7 @@ impl CircuitBreaker {
             state: CircuitState::Closed,
             failure_count: AtomicUsize::new(0),
             success_count: AtomicUsize::new(0),
-            last_failure_time: AtomicU64::new(0),
+            last_failure_time_ms: AtomicU64::new(0),
             half_open_calls: AtomicUsize::new(0),
         }
     }
@@ -73,17 +81,17 @@ impl CircuitBreaker {
             CircuitState::Closed => true,
 
             CircuitState::Open => {
-                // Check if timeout has elapsed
-                let last_failure = self.last_failure_time.load(Ordering::Relaxed);
-                if last_failure == 0 {
+                // Check if timeout has elapsed since circuit was opened
+                let opened_at_ms = self.last_failure_time_ms.load(Ordering::Relaxed);
+                if opened_at_ms == 0 {
                     return false;
                 }
 
-                let elapsed = Instant::now()
-                    .duration_since(Instant::now() - Duration::from_secs(last_failure))
-                    .as_secs();
+                let now_ms = now_millis();
+                let elapsed_ms = now_ms.saturating_sub(opened_at_ms);
+                let timeout_ms = self.config.timeout.as_millis() as u64;
 
-                if elapsed >= self.config.timeout.as_secs() {
+                if elapsed_ms >= timeout_ms {
                     // Transition to half-open
                     self.state = CircuitState::HalfOpen;
                     self.half_open_calls.store(0, Ordering::Relaxed);
@@ -134,31 +142,25 @@ impl CircuitBreaker {
             CircuitState::Closed => {
                 let failures = self.failure_count.fetch_add(1, Ordering::Relaxed) + 1;
                 if failures >= self.config.failure_threshold {
-                    // Open the circuit
+                    // Open the circuit and record when it was opened
                     self.state = CircuitState::Open;
-                    let now = Instant::now()
-                        .duration_since(Instant::now() - Duration::from_secs(0))
-                        .as_secs();
-                    self.last_failure_time.store(now, Ordering::Relaxed);
+                    self.last_failure_time_ms
+                        .store(now_millis(), Ordering::Relaxed);
                 }
             }
 
             CircuitState::HalfOpen => {
                 // Any failure in half-open state reopens the circuit
                 self.state = CircuitState::Open;
-                let now = Instant::now()
-                    .duration_since(Instant::now() - Duration::from_secs(0))
-                    .as_secs();
-                self.last_failure_time.store(now, Ordering::Relaxed);
+                self.last_failure_time_ms
+                    .store(now_millis(), Ordering::Relaxed);
                 self.success_count.store(0, Ordering::Relaxed);
             }
 
             CircuitState::Open => {
                 // Update last failure time
-                let now = Instant::now()
-                    .duration_since(Instant::now() - Duration::from_secs(0))
-                    .as_secs();
-                self.last_failure_time.store(now, Ordering::Relaxed);
+                self.last_failure_time_ms
+                    .store(now_millis(), Ordering::Relaxed);
             }
         }
     }
@@ -173,7 +175,7 @@ impl CircuitBreaker {
         self.state = CircuitState::Closed;
         self.failure_count.store(0, Ordering::Relaxed);
         self.success_count.store(0, Ordering::Relaxed);
-        self.last_failure_time.store(0, Ordering::Relaxed);
+        self.last_failure_time_ms.store(0, Ordering::Relaxed);
         self.half_open_calls.store(0, Ordering::Relaxed);
     }
 

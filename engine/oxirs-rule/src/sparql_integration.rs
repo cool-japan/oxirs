@@ -318,9 +318,19 @@ impl SparqlRuleIntegration {
     fn pattern_to_goal(&self, pattern: &QueryPattern) -> Option<RuleAtom> {
         if pattern.subject.is_some() && pattern.predicate.is_some() && pattern.object.is_some() {
             Some(RuleAtom::Triple {
-                subject: Term::Constant(pattern.subject.clone().unwrap()),
-                predicate: Term::Constant(pattern.predicate.clone().unwrap()),
-                object: Term::Constant(pattern.object.clone().unwrap()),
+                subject: Term::Constant(
+                    pattern
+                        .subject
+                        .clone()
+                        .expect("subject verified to be Some"),
+                ),
+                predicate: Term::Constant(
+                    pattern
+                        .predicate
+                        .clone()
+                        .expect("predicate verified to be Some"),
+                ),
+                object: Term::Constant(pattern.object.clone().expect("object verified to be Some")),
             })
         } else {
             None

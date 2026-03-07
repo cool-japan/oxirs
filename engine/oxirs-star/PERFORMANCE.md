@@ -1,7 +1,7 @@
 # OxiRS-Star Performance Tuning Guide
 
 [![Documentation](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **Comprehensive performance optimization guide for OxiRS-Star RDF-star implementation with benchmarks, tuning strategies, and production deployment patterns.**
 
@@ -21,7 +21,7 @@
 
 ## Performance Overview
 
-### Production Features Performance (v0.1.0)
+### Production Features Performance (v0.2.0)
 
 Latest performance metrics for Session 5 production features:
 

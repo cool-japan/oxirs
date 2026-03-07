@@ -135,7 +135,7 @@ impl PerformanceService {
             .build();
 
         // Initialize prepared query cache
-        let prepared_cache_size = NonZeroUsize::new(100).unwrap();
+        let prepared_cache_size = NonZeroUsize::new(100).expect("100 is non-zero");
         let prepared_cache = Arc::new(RwLock::new(LruCache::new(prepared_cache_size)));
 
         // Initialize connection pool
@@ -706,7 +706,11 @@ impl PerformanceService {
 
     fn apply_quantum_interference(&self, plans: &[String]) -> String {
         // Quantum interference combines best aspects
-        plans.iter().max_by_key(|p| p.len()).unwrap().clone()
+        plans
+            .iter()
+            .max_by_key(|p| p.len())
+            .expect("plans should not be empty")
+            .clone()
     }
 
     async fn quantum_measurement_collapse(&self, plan: &str) -> String {
@@ -1014,7 +1018,11 @@ impl IntelligentCacheWarmer {
             .collect();
 
         // Sort by priority score (highest first)
-        candidates.sort_by(|a, b| b.priority_score.partial_cmp(&a.priority_score).unwrap());
+        candidates.sort_by(|a, b| {
+            b.priority_score
+                .partial_cmp(&a.priority_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Take top N candidates
         candidates.truncate(self.config.max_warm_queries);

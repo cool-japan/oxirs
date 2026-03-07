@@ -386,10 +386,10 @@ mod tests {
 
         let acquired = lock.acquire("node1".to_string()).await;
         assert!(acquired.is_ok());
-        assert!(acquired.unwrap());
+        assert!(acquired.expect("operation should succeed"));
 
         let acquired2 = lock.acquire("node2".to_string()).await;
         assert!(acquired2.is_ok());
-        assert!(!acquired2.unwrap());
+        assert!(!acquired2.expect("operation should succeed"));
     }
 }

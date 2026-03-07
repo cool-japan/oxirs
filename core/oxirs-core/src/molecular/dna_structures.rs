@@ -108,7 +108,8 @@ impl DnaDataStructure {
                     NucleotideData::Cytosine(SpecialMarker::Enhancer(term.to_string()))
                 }
                 NucleotideData::Cytosine(marker) => NucleotideData::Guanine(Term::NamedNode(
-                    crate::model::NamedNode::new(format!("marker:{}", marker.type_name())).unwrap(),
+                    crate::model::NamedNode::new(format!("marker:{}", marker.type_name()))
+                        .expect("marker IRI is valid"),
                 )),
             };
             self.complementary_strand.push(complement);

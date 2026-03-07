@@ -168,7 +168,7 @@ impl HealthMonitor {
             http_client: Client::builder()
                 .timeout(Duration::from_secs(5))
                 .build()
-                .unwrap(),
+                .expect("HTTP client build should succeed"),
             shutdown: Arc::new(Notify::new()),
         }
     }
@@ -325,7 +325,7 @@ mod tests {
         let config = CircuitBreakerConfig {
             failure_threshold: 3,
             success_threshold: 2,
-            timeout: Duration::from_secs(1),
+            timeout: Duration::from_millis(50),
         };
 
         let mut breaker = CircuitBreaker::new(config);
@@ -344,8 +344,8 @@ mod tests {
         assert_eq!(breaker.state, CircuitState::Open);
         assert!(!breaker.should_allow_request());
 
-        // Wait for timeout
-        std::thread::sleep(Duration::from_secs(1));
+        // Wait for timeout (50ms) then verify half-open transition
+        std::thread::sleep(Duration::from_millis(100));
 
         // Should enter half-open state
         assert!(breaker.should_allow_request());

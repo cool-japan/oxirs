@@ -284,7 +284,10 @@ impl GpuEmbeddingAccelerator {
             .await;
 
         // Update performance statistics
-        let mut stats = self.performance_stats.write().unwrap();
+        let mut stats = self
+            .performance_stats
+            .write()
+            .expect("lock should not be poisoned");
         stats.total_operations += 1;
         stats.total_compute_time += total_time;
         stats.gpu_utilization_percentage = gpu_utilization * 100.0;
@@ -331,7 +334,7 @@ impl GpuEmbeddingAccelerator {
         }
 
         // Sort and return top-k
-        all_similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        all_similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         all_similarities.truncate(top_k);
 
         Ok(all_similarities)
@@ -437,9 +440,15 @@ impl GpuEmbeddingAccelerator {
 
     /// GPU memory and performance monitoring
     pub async fn get_performance_report(&self) -> GpuPerformanceReport {
-        let stats = self.performance_stats.read().unwrap();
+        let stats = self
+            .performance_stats
+            .read()
+            .expect("lock should not be poisoned");
         let (allocated, peak) = {
-            let pool = self.memory_pool.lock().unwrap();
+            let pool = self
+                .memory_pool
+                .lock()
+                .expect("lock should not be poisoned");
             pool.get_memory_stats()
         };
 
@@ -465,14 +474,20 @@ impl GpuEmbeddingAccelerator {
 
     /// Reset performance statistics
     pub fn reset_performance_stats(&self) {
-        let mut stats = self.performance_stats.write().unwrap();
+        let mut stats = self
+            .performance_stats
+            .write()
+            .expect("lock should not be poisoned");
         *stats = GpuPerformanceStats::default();
         self.optimal_batch_size.store(512, Ordering::Relaxed);
     }
 
     /// Get current memory pool status
     pub fn get_memory_pool_status(&self) -> (usize, u64, u64) {
-        let pool = self.memory_pool.lock().unwrap();
+        let pool = self
+            .memory_pool
+            .lock()
+            .expect("lock should not be poisoned");
         let (allocated, peak) = pool.get_memory_stats();
         (pool.available_buffers.len(), allocated, peak)
     }

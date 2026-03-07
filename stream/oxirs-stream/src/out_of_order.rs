@@ -150,7 +150,7 @@ impl Watermark {
     /// Create a new watermark
     pub fn new() -> Self {
         Self {
-            timestamp: DateTime::from_timestamp(0, 0).unwrap(),
+            timestamp: DateTime::from_timestamp(0, 0).expect("epoch timestamp should be valid"),
             last_update: Utc::now(),
             events_processed: 0,
         }

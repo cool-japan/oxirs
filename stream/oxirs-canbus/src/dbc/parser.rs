@@ -974,7 +974,7 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_parse_dbc() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
         assert_eq!(db.nodes.len(), 3);
         assert_eq!(db.messages.len(), 2);
@@ -982,9 +982,9 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_parse_message() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
-        let engine_msg = db.get_message(2024).unwrap();
+        let engine_msg = db.get_message(2024).expect("message should exist");
         assert_eq!(engine_msg.name, "EngineData");
         assert_eq!(engine_msg.dlc, 8);
         assert_eq!(engine_msg.transmitter, "Engine");
@@ -993,10 +993,12 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_parse_signal() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
-        let engine_msg = db.get_message(2024).unwrap();
-        let speed_sig = engine_msg.get_signal("EngineSpeed").unwrap();
+        let engine_msg = db.get_message(2024).expect("message should exist");
+        let speed_sig = engine_msg
+            .get_signal("EngineSpeed")
+            .expect("signal should exist");
 
         assert_eq!(speed_sig.start_bit, 0);
         assert_eq!(speed_sig.bit_length, 16);
@@ -1009,10 +1011,12 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_parse_signal_with_offset() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
-        let engine_msg = db.get_message(2024).unwrap();
-        let temp_sig = engine_msg.get_signal("EngineTemp").unwrap();
+        let engine_msg = db.get_message(2024).expect("message should exist");
+        let temp_sig = engine_msg
+            .get_signal("EngineTemp")
+            .expect("signal should exist");
 
         assert_eq!(temp_sig.start_bit, 16);
         assert_eq!(temp_sig.bit_length, 8);
@@ -1024,46 +1028,54 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_physical_value_conversion() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
-        let engine_msg = db.get_message(2024).unwrap();
+        let engine_msg = db.get_message(2024).expect("message should exist");
 
         // Test engine speed: raw 16000 -> physical 2000 rpm
-        let speed_sig = engine_msg.get_signal("EngineSpeed").unwrap();
+        let speed_sig = engine_msg
+            .get_signal("EngineSpeed")
+            .expect("signal should exist");
         assert!((speed_sig.to_physical(16000) - 2000.0).abs() < 0.001);
 
         // Test engine temp: raw 125 -> physical 85°C
-        let temp_sig = engine_msg.get_signal("EngineTemp").unwrap();
+        let temp_sig = engine_msg
+            .get_signal("EngineTemp")
+            .expect("signal should exist");
         assert!((temp_sig.to_physical(125) - 85.0).abs() < 0.001);
     }
 
     #[test]
     fn test_parse_comments() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
-        let engine_msg = db.get_message(2024).unwrap();
+        let engine_msg = db.get_message(2024).expect("message should exist");
         assert!(engine_msg.comment.is_some());
         assert!(engine_msg
             .comment
             .as_ref()
-            .unwrap()
+            .expect("reference should be available")
             .contains("Engine data message"));
 
-        let speed_sig = engine_msg.get_signal("EngineSpeed").unwrap();
+        let speed_sig = engine_msg
+            .get_signal("EngineSpeed")
+            .expect("signal should exist");
         assert!(speed_sig.comment.is_some());
         assert!(speed_sig
             .comment
             .as_ref()
-            .unwrap()
+            .expect("reference should be available")
             .contains("rotational speed"));
     }
 
     #[test]
     fn test_parse_value_descriptions() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
-        let engine_msg = db.get_message(2024).unwrap();
-        let throttle_sig = engine_msg.get_signal("ThrottlePos").unwrap();
+        let engine_msg = db.get_message(2024).expect("message should exist");
+        let throttle_sig = engine_msg
+            .get_signal("ThrottlePos")
+            .expect("signal should exist");
 
         assert_eq!(throttle_sig.get_value_description(0), Some("Closed"));
         assert_eq!(throttle_sig.get_value_description(100), Some("WOT"));
@@ -1071,37 +1083,37 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 
     #[test]
     fn test_parse_attributes() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
         assert_eq!(db.attribute_definitions.len(), 1);
         let attr_def = &db.attribute_definitions[0];
         assert_eq!(attr_def.name, "GenMsgCycleTime");
 
-        let engine_msg = db.get_message(2024).unwrap();
+        let engine_msg = db.get_message(2024).expect("message should exist");
         assert!(engine_msg.attributes.contains_key("GenMsgCycleTime"));
     }
 
     #[test]
     fn test_parse_nodes() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
         assert!(db.get_node("Engine").is_some());
         assert!(db.get_node("Dashboard").is_some());
         assert!(db.get_node("Transmission").is_some());
 
-        let engine_node = db.get_node("Engine").unwrap();
+        let engine_node = db.get_node("Engine").expect("operation should succeed");
         assert!(engine_node.comment.is_some());
     }
 
     #[test]
     fn test_vehicle_speed_message() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
-        let speed_msg = db.get_message(2028).unwrap();
+        let speed_msg = db.get_message(2028).expect("message should exist");
         assert_eq!(speed_msg.name, "VehicleSpeed");
         assert_eq!(speed_msg.dlc, 4);
 
-        let speed_sig = speed_msg.get_signal("Speed").unwrap();
+        let speed_sig = speed_msg.get_signal("Speed").expect("signal should exist");
         assert_eq!(speed_sig.factor, 0.01);
 
         // Test: raw 10000 -> physical 100 km/h
@@ -1114,10 +1126,10 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 BO_ 100 TestMsg: 8 ECU
  SG_ BigEndianSig : 7|16@0+ (1,0) [0|65535] "" Vector__XXX
 "#;
-        let db = parse_dbc(dbc).unwrap();
+        let db = parse_dbc(dbc).expect("DBC parsing should succeed");
 
-        let msg = db.get_message(100).unwrap();
-        let sig = msg.get_signal("BigEndianSig").unwrap();
+        let msg = db.get_message(100).expect("message should exist");
+        let sig = msg.get_signal("BigEndianSig").expect("signal should exist");
         assert_eq!(sig.byte_order, ByteOrder::BigEndian);
     }
 
@@ -1127,16 +1139,16 @@ BO_ 100 TestMsg: 8 ECU
 BO_ 100 TestMsg: 8 ECU
  SG_ SignedSig : 0|16@1- (1,0) [-32768|32767] "" Vector__XXX
 "#;
-        let db = parse_dbc(dbc).unwrap();
+        let db = parse_dbc(dbc).expect("DBC parsing should succeed");
 
-        let msg = db.get_message(100).unwrap();
-        let sig = msg.get_signal("SignedSig").unwrap();
+        let msg = db.get_message(100).expect("message should exist");
+        let sig = msg.get_signal("SignedSig").expect("signal should exist");
         assert_eq!(sig.value_type, ValueType::Signed);
     }
 
     #[test]
     fn test_all_signals() {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
 
         let all_sigs: Vec<_> = db.all_signals().collect();
         assert_eq!(all_sigs.len(), 4); // 3 in EngineData + 1 in VehicleSpeed
@@ -1145,7 +1157,7 @@ BO_ 100 TestMsg: 8 ECU
     #[test]
     fn test_empty_dbc() {
         let dbc = "VERSION \"\"";
-        let db = parse_dbc(dbc).unwrap();
+        let db = parse_dbc(dbc).expect("DBC parsing should succeed");
         assert!(db.messages.is_empty());
     }
 }

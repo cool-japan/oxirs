@@ -229,8 +229,8 @@ fn calculate_statistics(profiles: &[QueryProfile]) -> ProfilingStats {
         times[times.len() / 2]
     };
 
-    let min_time = *times.first().unwrap();
-    let max_time = *times.last().unwrap();
+    let min_time = *times.first().expect("collection validated to be non-empty");
+    let max_time = *times.last().expect("collection validated to be non-empty");
 
     // Calculate standard deviation
     let variance: f64 = times
@@ -380,7 +380,7 @@ fn display_bottlenecks(profiles: &[QueryProfile]) -> ToolResult<()> {
         })
         .collect();
 
-    phase_percentages.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    phase_percentages.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     println!("Time Distribution:");
     for (name, percent) in &phase_percentages {

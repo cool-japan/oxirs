@@ -110,7 +110,7 @@ OxiRS follows [Semantic Versioning 2.0.0](https://semver.org/) with Rust-specifi
 - Changes to trait requirements
 - Incompatible data format changes
 
-**Timeline**: v1.0.0 planned for Q2 2026 (after v0.1.0 → v0.1.0 → v0.1.0 → Stable)
+**Timeline**: v1.0.0 planned for Q2 2026 (after v0.1.0 → v0.2.0 → Stable)
 
 #### Minor Version (0.1.x → 0.2.x)
 **Non-breaking additions and unstable API changes**:
@@ -392,27 +392,27 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 ### What We Guarantee
 
-#### ✅ Backward Compatibility Within v0.1.x
-- **All patch releases (v0.1.1, v0.1.2, ...)** maintain 100% backward compatibility
+#### ✅ Backward Compatibility Within v0.2.x
+- **All patch releases (v0.2.1, v0.2.2, ...)** maintain 100% backward compatibility
 - **No API removals** in patch releases
 - **No signature changes** in patch releases
 - **Only bug fixes and docs** in patch releases
 
-#### ✅ Migration Path for v0.2.0
+#### ✅ Migration Path for v0.3.0
 - **Deprecations announced 3 months in advance**
 - **Migration guide** provided for all breaking changes
 - **Examples** for all deprecated APIs
 - **Compatibility shims** where possible
 
 #### ✅ Data Format Stability
-- **TDB format** stable across v0.1.x
-- **RDF serialization** compatible across v0.1.x
+- **TDB format** stable across v0.2.x
+- **RDF serialization** compatible across v0.2.x
 - **Configuration format** backward compatible (new fields additive only)
 
 #### ✅ Protocol Stability
 - **SPARQL 1.1 Protocol** fully compliant (no deviations)
 - **HTTP endpoints** stable (no URL changes)
-- **GraphQL schema** additive only in v0.1.x
+- **GraphQL schema** additive only in v0.2.x
 
 ### What We Don't Guarantee
 
@@ -445,7 +445,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: 10% overall
 
-### v0.1.0 (Current - January 2026)
+### v0.2.0 (Current - March 2026)
 **Focus**: Stabilize distributed storage, GraphQL, and AI modules
 
 - 🟢 **Stable**: oxirs-cluster, oxirs-gql promoted to stable (90%+ frozen)
@@ -455,7 +455,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: 5% overall
 
-### v0.1.0 (Q1 2026)
+### v0.3.0 (Q3 2026)
 **Focus**: Production release with full API stability
 
 - 🟢 **Stable**: All core modules frozen (99% frozen)
@@ -495,7 +495,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 # Cargo.toml
 [package]
 name = "oxirs-core"
-version = "0.1.0"
+version = "0.2.0"
 rust-version = "1.75.0"  # MSRV declared
 ```
 
@@ -551,8 +551,8 @@ experimental-neuro = ["dep:oxirs-neuro"]
 ```
 
 **Policy**:
-- **Stable features**: Never removed in v0.1.x
-- **Unstable features**: May change in v0.2.x with migration guide
+- **Stable features**: Never removed in v0.2.x
+- **Unstable features**: May change in v0.3.x with migration guide
 - **Experimental features**: May be removed at any time
 
 ---
@@ -591,7 +591,7 @@ pub struct Triple {
 // BEFORE (v0.1.0)
 pub fn execute(&self, query: &str) -> Result<QueryResults>;
 
-// AFTER (v0.1.1) - NON-BREAKING: New optional parameter via overload
+// AFTER (v0.2.0) - NON-BREAKING: New optional parameter via overload
 pub fn execute_with_options(&self, query: &str, options: QueryOptions) -> Result<QueryResults>;
 ```
 
@@ -603,7 +603,7 @@ pub struct Triple {
     pub object: Term,
 }
 
-// AFTER (v0.1.1) - NON-BREAKING: New optional field with default
+// AFTER (v0.2.0) - NON-BREAKING: New optional field with default
 pub struct Triple {
     pub subject: Term,
     pub predicate: Term,

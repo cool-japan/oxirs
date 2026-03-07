@@ -1,6 +1,7 @@
 //! Cryptographic proof module
 
 pub mod ed25519;
+pub mod jws;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

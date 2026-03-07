@@ -483,7 +483,7 @@ impl NsgIndex {
                         .partial_cmp(&b.distance)
                         .unwrap_or(Ordering::Equal)
                 })
-                .unwrap();
+                .expect("candidates should not be empty during pruning");
 
             let best = candidates.swap_remove(best_idx);
 
@@ -655,7 +655,13 @@ impl NsgIndex {
 
         while let Some(current) = candidates.pop() {
             // Check if we've explored enough
-            if result_set.len() >= ef && current.distance > result_set.peek().unwrap().distance {
+            if result_set.len() >= ef
+                && current.distance
+                    > result_set
+                        .peek()
+                        .expect("result_set should not be empty during search")
+                        .distance
+            {
                 break;
             }
 
@@ -676,7 +682,13 @@ impl NsgIndex {
                     distance: dist,
                 };
 
-                if result_set.len() < ef || dist < result_set.peek().unwrap().distance {
+                if result_set.len() < ef
+                    || dist
+                        < result_set
+                            .peek()
+                            .expect("result_set should not be empty during search")
+                            .distance
+                {
                     candidates.push(candidate.clone());
                     result_set.push(candidate);
 
@@ -696,7 +708,10 @@ impl NsgIndex {
 
     /// Update index statistics
     fn update_stats(&self) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self
+            .stats
+            .write()
+            .expect("stats lock should not be poisoned");
         stats.num_vectors = self.data.len();
         stats.num_edges = self.count_edges();
         stats.avg_out_degree = self.avg_out_degree();
@@ -727,7 +742,10 @@ impl NsgIndex {
 
     /// Get index statistics
     pub fn stats(&self) -> NsgStats {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("stats lock should not be poisoned")
+            .clone()
     }
 
     /// Get number of vectors in the index

@@ -1079,7 +1079,7 @@ mod tests {
         let data = vec![0x00, 0x7D, 0x7D, 0x80, 0x3E, 0x00, 0x00, 0x7D];
         let message = create_test_message(PGN_EEC1, data);
 
-        let decoded = decoder.decode(&message).unwrap();
+        let decoded = decoder.decode(&message).expect("decoding should succeed");
         assert_eq!(decoded.pgn, PGN_EEC1);
         assert_eq!(decoded.name, "EEC1");
 
@@ -1088,7 +1088,7 @@ mod tests {
             .signals
             .iter()
             .find(|s| s.name == "EngineSpeed")
-            .unwrap();
+            .expect("operation should succeed");
         assert!((engine_speed.value - 2000.0).abs() < 0.1);
         assert_eq!(engine_speed.unit, "rpm");
     }
@@ -1102,7 +1102,7 @@ mod tests {
         let data = vec![0x00, 0x00, 0x64, 0x00, 0x64, 0x00, 0x00, 0x00];
         let message = create_test_message(PGN_CCVS, data);
 
-        let decoded = decoder.decode(&message).unwrap();
+        let decoded = decoder.decode(&message).expect("decoding should succeed");
         assert_eq!(decoded.pgn, PGN_CCVS);
 
         // Find vehicle speed signal
@@ -1110,7 +1110,7 @@ mod tests {
             .signals
             .iter()
             .find(|s| s.name == "WheelBasedVehicleSpeed")
-            .unwrap();
+            .expect("operation should succeed");
         assert!((speed.value - 100.0).abs() < 0.1);
         assert_eq!(speed.unit, "km/h");
     }
@@ -1123,14 +1123,14 @@ mod tests {
         let data = vec![125, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
         let message = create_test_message(PGN_ET1, data);
 
-        let decoded = decoder.decode(&message).unwrap();
+        let decoded = decoder.decode(&message).expect("decoding should succeed");
         assert_eq!(decoded.pgn, PGN_ET1);
 
         let coolant = decoded
             .signals
             .iter()
             .find(|s| s.name == "EngineCoolantTemperature")
-            .unwrap();
+            .expect("operation should succeed");
         assert!((coolant.value - 85.0).abs() < 0.1);
     }
 
@@ -1143,14 +1143,14 @@ mod tests {
         let data = vec![0xE8, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
         let message = create_test_message(PGN_LFE, data);
 
-        let decoded = decoder.decode(&message).unwrap();
+        let decoded = decoder.decode(&message).expect("decoding should succeed");
         assert_eq!(decoded.pgn, PGN_LFE);
 
         let fuel_rate = decoded
             .signals
             .iter()
             .find(|s| s.name == "EngineFuelRate")
-            .unwrap();
+            .expect("operation should succeed");
         assert!((fuel_rate.value - 50.0).abs() < 0.1);
         assert_eq!(fuel_rate.unit, "L/h");
     }
@@ -1177,7 +1177,7 @@ mod tests {
         let data = vec![0x00, 0x7D, 0x7D, 0x80, 0x3E, 0x00, 0x00, 0x7D];
         let message = create_test_message(PGN_EEC1, data);
 
-        let decoded = registry.decode(&message).unwrap();
+        let decoded = registry.decode(&message).expect("decoding should succeed");
         assert_eq!(decoded.name, "EEC1");
     }
 
@@ -1197,13 +1197,13 @@ mod tests {
         let data = vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x18, 0x01];
         let message = create_test_message(PGN_VEP1, data);
 
-        let decoded = decoder.decode(&message).unwrap();
+        let decoded = decoder.decode(&message).expect("decoding should succeed");
 
         let voltage = decoded
             .signals
             .iter()
             .find(|s| s.name == "ElectricalPotential")
-            .unwrap();
+            .expect("operation should succeed");
         assert!((voltage.value - 14.0).abs() < 0.1);
         assert_eq!(voltage.unit, "V");
     }
@@ -1216,13 +1216,13 @@ mod tests {
         let data = vec![203, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
         let message = create_test_message(PGN_AMB, data);
 
-        let decoded = decoder.decode(&message).unwrap();
+        let decoded = decoder.decode(&message).expect("decoding should succeed");
 
         let baro = decoded
             .signals
             .iter()
             .find(|s| s.name == "BarometricPressure")
-            .unwrap();
+            .expect("operation should succeed");
         assert!((baro.value - 101.5).abs() < 0.1);
         assert_eq!(baro.unit, "kPa");
     }
@@ -1235,13 +1235,13 @@ mod tests {
         let data = vec![0x00, 125, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
         let message = create_test_message(PGN_EEC2, data);
 
-        let decoded = decoder.decode(&message).unwrap();
+        let decoded = decoder.decode(&message).expect("decoding should succeed");
 
         let pedal = decoded
             .signals
             .iter()
             .find(|s| s.name == "AcceleratorPedalPosition1")
-            .unwrap();
+            .expect("operation should succeed");
         assert!((pedal.value - 50.0).abs() < 0.1);
         assert_eq!(pedal.unit, "%");
     }
@@ -1254,13 +1254,13 @@ mod tests {
         let data = vec![0xFF, 0xFF, 0xFF, 100, 0xFF, 0xFF, 0xFF, 0xFF];
         let message = create_test_message(PGN_EFLP1, data);
 
-        let decoded = decoder.decode(&message).unwrap();
+        let decoded = decoder.decode(&message).expect("decoding should succeed");
 
         let pressure = decoded
             .signals
             .iter()
             .find(|s| s.name == "EngineOilPressure")
-            .unwrap();
+            .expect("operation should succeed");
         assert!((pressure.value - 400.0).abs() < 0.1);
         assert_eq!(pressure.unit, "kPa");
     }

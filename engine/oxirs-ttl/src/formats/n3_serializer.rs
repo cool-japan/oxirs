@@ -529,7 +529,7 @@ fn is_valid_local_name(s: &str) -> bool {
     }
 
     let mut chars = s.chars();
-    let first = chars.next().unwrap();
+    let first = chars.next().expect("iterator should have next element");
 
     // First character must be letter, underscore, or certain Unicode ranges
     if !first.is_alphabetic() && first != '_' {
@@ -556,9 +556,9 @@ mod tests {
                 &var,
                 &mut FormattedWriter::new(&mut output, SerializationConfig::default()),
             )
-            .unwrap();
+            .expect("operation should succeed");
 
-        assert_eq!(String::from_utf8(output).unwrap(), "?x");
+        assert_eq!(String::from_utf8(output).expect("valid UTF-8"), "?x");
     }
 
     #[test]
@@ -567,9 +567,11 @@ mod tests {
         let serializer = N3Serializer::new();
         let mut output = Vec::new();
 
-        serializer.serialize_formula(&formula, &mut output).unwrap();
+        serializer
+            .serialize_formula(&formula, &mut output)
+            .expect("formula serialization should succeed");
 
-        assert_eq!(String::from_utf8(output).unwrap(), "{}");
+        assert_eq!(String::from_utf8(output).expect("valid UTF-8"), "{}");
     }
 
     #[test]
@@ -577,16 +579,18 @@ mod tests {
         let mut formula = N3Formula::new();
         formula.add_statement(N3Statement::new(
             N3Term::Variable(N3Variable::universal("x")),
-            N3Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI")),
             N3Term::Variable(N3Variable::universal("y")),
         ));
 
         let serializer = N3Serializer::new();
         let mut output = Vec::new();
 
-        serializer.serialize_formula(&formula, &mut output).unwrap();
+        serializer
+            .serialize_formula(&formula, &mut output)
+            .expect("formula serialization should succeed");
 
-        let result = String::from_utf8(output).unwrap();
+        let result = String::from_utf8(output).expect("valid UTF-8");
         assert!(result.contains("?x"));
         assert!(result.contains("?y"));
         assert!(result.contains("http://example.org/knows"));
@@ -599,14 +603,14 @@ mod tests {
         let mut antecedent = N3Formula::new();
         antecedent.add_statement(N3Statement::new(
             N3Term::Variable(N3Variable::universal("x")),
-            N3Term::NamedNode(NamedNode::new("http://example.org/parent").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/parent").expect("valid IRI")),
             N3Term::Variable(N3Variable::universal("y")),
         ));
 
         let mut consequent = N3Formula::new();
         consequent.add_statement(N3Statement::new(
             N3Term::Variable(N3Variable::universal("y")),
-            N3Term::NamedNode(NamedNode::new("http://example.org/child").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/child").expect("valid IRI")),
             N3Term::Variable(N3Variable::universal("x")),
         ));
 
@@ -616,9 +620,9 @@ mod tests {
 
         serializer
             .serialize_implication(&implication, &mut output)
-            .unwrap();
+            .expect("serialization should succeed");
 
-        let result = String::from_utf8(output).unwrap();
+        let result = String::from_utf8(output).expect("valid UTF-8");
         assert!(result.contains("=>"));
         assert!(result.contains("?x"));
         assert!(result.contains("?y"));
@@ -642,10 +646,12 @@ mod tests {
         let mut output = Vec::new();
         let mut formatter = FormattedWriter::new(&mut output, serializer.config.clone());
 
-        let nn = NamedNode::new("http://example.org/test").unwrap();
-        serializer.write_named_node(&nn, &mut formatter).unwrap();
+        let nn = NamedNode::new("http://example.org/test").expect("valid IRI");
+        serializer
+            .write_named_node(&nn, &mut formatter)
+            .expect("valid IRI");
 
-        assert_eq!(String::from_utf8(output).unwrap(), "ex:test");
+        assert_eq!(String::from_utf8(output).expect("valid UTF-8"), "ex:test");
     }
 
     #[test]
@@ -677,7 +683,7 @@ mod tests {
 
         let stmt = N3Statement::new(
             N3Term::Variable(N3Variable::universal("x")),
-            N3Term::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+            N3Term::NamedNode(NamedNode::new("http://example.org/type").expect("valid IRI")),
             N3Term::Variable(N3Variable::existential("z")),
         );
         document.add_statement(stmt);

@@ -298,11 +298,11 @@ impl LoadSheddingManager {
 
                 // Update system metrics
                 let mut sys = system.write().await;
-                sys.refresh_cpu();
+                sys.refresh_cpu_all();
                 sys.refresh_memory();
 
-                // Calculate CPU usage (sysinfo 0.30 API)
-                let cpu_usage = sys.global_cpu_info().cpu_usage() / 100.0;
+                // Calculate CPU usage (sysinfo 0.33 API)
+                let cpu_usage = sys.global_cpu_usage() / 100.0;
 
                 // Calculate memory usage
                 let memory_usage = sys.used_memory() as f32 / sys.total_memory() as f32;

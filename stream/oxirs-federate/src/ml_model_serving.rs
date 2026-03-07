@@ -547,7 +547,7 @@ mod tests {
         serving
             .deploy_model("v1.0.0".to_string(), ModelType::TransformerOptimizer, model)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let models = serving.list_models().await;
         assert_eq!(models.len(), 1);
@@ -579,13 +579,13 @@ mod tests {
         serving
             .deploy_model("v1.0.0".to_string(), ModelType::TransformerOptimizer, model)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let query_embedding = vec![0.5; 128];
         let result = serving
             .serve_prediction(ModelType::TransformerOptimizer, &query_embedding, "req-123")
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(!result.is_empty());
     }
@@ -624,7 +624,7 @@ mod tests {
                 model_v1,
             )
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         serving
             .deploy_model(
@@ -633,12 +633,12 @@ mod tests {
                 model_v2,
             )
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         serving
             .start_ab_test("v1.0.0".to_string(), "v2.0.0".to_string(), 0.5)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Make several requests with different request IDs to ensure distribution
         let query_embedding = vec![0.5; 128];
@@ -651,12 +651,18 @@ mod tests {
                     &request_id,
                 )
                 .await
-                .unwrap();
+                .expect("operation should succeed");
         }
 
         // Check that both versions received requests (with 20 requests, very likely both get traffic)
-        let v1_metrics = serving.get_metrics("v1.0.0").await.unwrap();
-        let v2_metrics = serving.get_metrics("v2.0.0").await.unwrap();
+        let v1_metrics = serving
+            .get_metrics("v1.0.0")
+            .await
+            .expect("async operation should succeed");
+        let v2_metrics = serving
+            .get_metrics("v2.0.0")
+            .await
+            .expect("async operation should succeed");
 
         // With 20 requests and 50/50 split, both should get some traffic
         let total_requests = v1_metrics.total_requests + v2_metrics.total_requests;

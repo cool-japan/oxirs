@@ -236,7 +236,11 @@ impl Span {
     /// Finish the span
     pub fn finish(&mut self) {
         self.end_time = Some(SystemTime::now());
-        if let Ok(duration) = self.end_time.unwrap().duration_since(self.start_time) {
+        if let Ok(duration) = self
+            .end_time
+            .expect("end_time should be set before calling finish")
+            .duration_since(self.start_time)
+        {
             self.duration_ms = Some(duration.as_millis() as u64);
         }
     }

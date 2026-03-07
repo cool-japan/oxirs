@@ -106,7 +106,9 @@ mod tests {
         let decomposer = QueryDecomposer::new();
         let query = create_test_query();
 
-        let graph = decomposer.build_query_graph(&query).unwrap();
+        let graph = decomposer
+            .build_query_graph(&query)
+            .expect("query graph should be built");
         assert_eq!(graph.variable_nodes.len(), 3); // ?s, ?p, ?o
         assert_eq!(graph.pattern_nodes.len(), 2); // Two patterns
     }
@@ -116,7 +118,9 @@ mod tests {
         let decomposer = QueryDecomposer::new();
         let query = create_test_query();
 
-        let graph = decomposer.build_query_graph(&query).unwrap();
+        let graph = decomposer
+            .build_query_graph(&query)
+            .expect("query graph should be built");
         let components = decomposer.find_connected_components(&graph);
 
         assert!(!components.is_empty());
@@ -129,12 +133,14 @@ mod tests {
         let service = create_test_service();
         let query = create_test_query();
 
-        let graph = decomposer.build_query_graph(&query).unwrap();
+        let graph = decomposer
+            .build_query_graph(&query)
+            .expect("query graph should be built");
         let components = decomposer.find_connected_components(&graph);
 
         let plan = decomposer
             .create_single_service_plan(&service, &components[0])
-            .unwrap();
+            .expect("plan operation should succeed");
         assert_eq!(plan.strategy, PlanStrategy::SingleService);
         assert!(!plan.requires_join);
         assert_eq!(plan.steps.len(), 1);
@@ -377,7 +383,9 @@ mod tests {
 
         // Create a query with circular dependencies
         let query = create_circular_query();
-        let graph = decomposer.build_query_graph(&query).unwrap();
+        let graph = decomposer
+            .build_query_graph(&query)
+            .expect("query graph should be built");
         let components = decomposer.find_connected_components(&graph);
 
         // Should handle circular dependencies without infinite loops
@@ -395,7 +403,9 @@ mod tests {
 
         // Create a complex query with multiple patterns
         let query = create_complex_query();
-        let graph = decomposer.build_query_graph(&query).unwrap();
+        let graph = decomposer
+            .build_query_graph(&query)
+            .expect("query graph should be built");
         let components = decomposer.find_connected_components(&graph);
 
         // Should handle complex patterns correctly
@@ -446,7 +456,9 @@ mod tests {
 
         // Create a large query with many patterns
         let query = create_large_query();
-        let graph = decomposer.build_query_graph(&query).unwrap();
+        let graph = decomposer
+            .build_query_graph(&query)
+            .expect("query graph should be built");
         let components = decomposer.find_connected_components(&graph);
 
         // Should handle large queries without performance degradation
@@ -469,7 +481,9 @@ mod tests {
 
         // Create a query with filters
         let query = create_filter_query();
-        let graph = decomposer.build_query_graph(&query).unwrap();
+        let graph = decomposer
+            .build_query_graph(&query)
+            .expect("query graph should be built");
         let components = decomposer.find_connected_components(&graph);
 
         // Should handle filtered queries correctly

@@ -1,5 +1,15 @@
 //! Key management module
 
+pub mod key_lifecycle;
+pub mod rotation;
+
+pub use key_lifecycle::{
+    KeyExpiry, KeyRotationManager, KeyRotationRecord as LifecycleKeyRotationRecord, VerificationKey,
+};
+pub use rotation::{
+    generate_rotation_key, KeyRotation, KeyRotationReason, KeyRotationRecord, KeyRotationRegistry,
+};
+
 use crate::proof::ed25519::Ed25519Signer;
 use crate::{Did, DidError, DidResult};
 use std::collections::HashMap;

@@ -599,7 +599,10 @@ impl IntelligentQueryCache {
 
         stats.insert(
             "overall_hit_ratio".to_string(),
-            serde_json::Value::Number(serde_json::Number::from_f64(hit_ratio).unwrap()),
+            serde_json::Value::Number(
+                serde_json::Number::from_f64(hit_ratio)
+                    .expect("hit_ratio should be a valid f64 for JSON"),
+            ),
         );
 
         // Average execution time
@@ -611,7 +614,10 @@ impl IntelligentQueryCache {
 
         stats.insert(
             "average_execution_time_ms".to_string(),
-            serde_json::Value::Number(serde_json::Number::from_f64(avg_exec_time).unwrap()),
+            serde_json::Value::Number(
+                serde_json::Number::from_f64(avg_exec_time)
+                    .expect("avg_exec_time should be a valid f64 for JSON"),
+            ),
         );
 
         Ok(stats)
@@ -811,9 +817,9 @@ impl IntelligentQueryCache {
         }
 
         // Sort by heat score
-        hot_queries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        warm_queries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        cold_queries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        hot_queries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        warm_queries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        cold_queries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         CacheHeatMap {
             hot_queries: hot_queries.into_iter().take(10).collect(),

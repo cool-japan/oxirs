@@ -200,7 +200,7 @@ impl PerformanceMonitor {
 
         // Calculate execution time statistics
         let mut execution_times: Vec<f64> = records.iter().map(|r| r.execution_time_ms).collect();
-        execution_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        execution_times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         self.aggregated_metrics.avg_execution_time_ms =
             execution_times.iter().sum::<f64>() / execution_times.len() as f64;

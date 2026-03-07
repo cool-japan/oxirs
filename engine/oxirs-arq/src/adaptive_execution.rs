@@ -365,7 +365,7 @@ impl AdaptiveQueryExecutor {
         let decision = ReoptimizationDecision {
             timestamp_ms: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_millis(),
             trigger_operator: trigger_id,
             trigger_error,

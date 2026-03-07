@@ -519,7 +519,7 @@ mod tests {
     fn test_lazy_iri_resolved() {
         let iri = LazyIri::from_resolved("http://example.org/");
         assert!(iri.is_resolved());
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/");
+        assert_eq!(iri.resolve().expect("valid IRI"), "http://example.org/");
     }
 
     #[test]
@@ -529,7 +529,10 @@ mod tests {
 
         let iri = LazyIri::from_prefixed("ex", "Person", prefixes);
         assert!(!iri.is_resolved());
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/Person");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "http://example.org/Person"
+        );
     }
 
     #[test]
@@ -545,7 +548,10 @@ mod tests {
         let iri =
             LazyIri::from_relative("relative/path", Some("http://example.org/base".to_string()));
 
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/relative/path");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "http://example.org/relative/path"
+        );
     }
 
     #[test]
@@ -554,43 +560,61 @@ mod tests {
         // Base: /a/b/c + ../ → /a/b + ../ → /a
         let iri =
             LazyIri::from_relative("../sibling", Some("http://example.org/a/b/c".to_string()));
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/sibling");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "http://example.org/a/sibling"
+        );
 
         // Base: /a/ + ./ → /a/current
         let iri = LazyIri::from_relative("./current", Some("http://example.org/a/".to_string()));
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/current");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "http://example.org/a/current"
+        );
 
         // Base: /a/b/c/d + ../../ → /a/b + ../../ → /a
         let iri =
             LazyIri::from_relative("../../up", Some("http://example.org/a/b/c/d".to_string()));
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/up");
+        assert_eq!(iri.resolve().expect("valid IRI"), "http://example.org/a/up");
 
         // Additional RFC 3986 test cases
         // Base: /a/b (file) + c → /a/c (replaces last segment)
         let iri = LazyIri::from_relative("c", Some("http://example.org/a/b".to_string()));
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/c");
+        assert_eq!(iri.resolve().expect("valid IRI"), "http://example.org/a/c");
 
         // Base: /a/b/ (directory) + c → /a/b/c (appends)
         let iri = LazyIri::from_relative("c", Some("http://example.org/a/b/".to_string()));
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/a/b/c");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "http://example.org/a/b/c"
+        );
     }
 
     #[test]
     fn test_rfc3986_absolute_path() {
         // Absolute path reference
         let iri = LazyIri::from_relative("/absolute", Some("http://example.org/a/b/c".to_string()));
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/absolute");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "http://example.org/absolute"
+        );
     }
 
     #[test]
     fn test_rfc3986_query_fragment() {
         // Query reference
         let iri = LazyIri::from_relative("?query", Some("http://example.org/path".to_string()));
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/path?query");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "http://example.org/path?query"
+        );
 
         // Fragment reference
         let iri = LazyIri::from_relative("#fragment", Some("http://example.org/path".to_string()));
-        assert_eq!(iri.resolve().unwrap(), "http://example.org/path#fragment");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "http://example.org/path#fragment"
+        );
     }
 
     #[test]
@@ -600,7 +624,10 @@ mod tests {
             "//other.example.org/path",
             Some("http://example.org/base".to_string()),
         );
-        assert_eq!(iri.resolve().unwrap(), "http://other.example.org/path");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "http://other.example.org/path"
+        );
     }
 
     #[test]
@@ -610,7 +637,10 @@ mod tests {
             "https://absolute.org/path",
             Some("http://example.org/base".to_string()),
         );
-        assert_eq!(iri.resolve().unwrap(), "https://absolute.org/path");
+        assert_eq!(
+            iri.resolve().expect("valid IRI"),
+            "https://absolute.org/path"
+        );
     }
 
     #[test]
@@ -627,14 +657,14 @@ mod tests {
 
         let iri1 = resolver
             .resolve_prefixed("ex", "Person", &prefixes)
-            .unwrap();
+            .expect("resolution should succeed");
         assert_eq!(*iri1, "http://example.org/Person");
         assert_eq!(resolver.stats().cache_misses, 1);
 
         // Second resolution should hit cache
         let iri2 = resolver
             .resolve_prefixed("ex", "Person", &prefixes)
-            .unwrap();
+            .expect("resolution should succeed");
         assert_eq!(*iri2, "http://example.org/Person");
         assert_eq!(resolver.stats().cache_hits, 1);
 
@@ -651,12 +681,12 @@ mod tests {
         // 1 miss
         resolver
             .resolve_prefixed("ex", "Person", &prefixes)
-            .unwrap();
+            .expect("resolution should succeed");
 
         // 1 hit
         resolver
             .resolve_prefixed("ex", "Person", &prefixes)
-            .unwrap();
+            .expect("resolution should succeed");
 
         assert_eq!(resolver.cache_hit_rate(), 0.5); // 50%
     }
@@ -667,13 +697,13 @@ mod tests {
 
         let iri1 = resolver
             .resolve_relative("path", "http://example.org/")
-            .unwrap();
+            .expect("resolution should succeed");
         assert_eq!(*iri1, "http://example.org/path");
 
         // Should hit cache
         let iri2 = resolver
             .resolve_relative("path", "http://example.org/")
-            .unwrap();
+            .expect("resolution should succeed");
         assert!(Arc::ptr_eq(&iri1, &iri2));
     }
 
@@ -685,7 +715,7 @@ mod tests {
 
         resolver
             .resolve_prefixed("ex", "Person", &prefixes)
-            .unwrap();
+            .expect("resolution should succeed");
         assert_eq!(resolver.cache_size(), 1);
 
         resolver.clear_cache();
@@ -713,10 +743,10 @@ mod tests {
 
         resolver
             .resolve_prefixed("ex", "Person", &prefixes)
-            .unwrap();
+            .expect("resolution should succeed");
         resolver
             .resolve_prefixed("ex", "Person", &prefixes)
-            .unwrap();
+            .expect("resolution should succeed");
 
         let report = resolver.stats().report();
         assert!(report.contains("Total requests: 2"));
@@ -729,7 +759,7 @@ mod tests {
         let mut resolver = CachedIriResolver::new();
         let iri = LazyIri::from_resolved("http://example.org/test");
 
-        let resolved = resolver.resolve_lazy(&iri).unwrap();
+        let resolved = resolver.resolve_lazy(&iri).expect("valid IRI");
         assert_eq!(*resolved, "http://example.org/test");
         assert_eq!(resolver.cache_hit_rate(), 1.0); // Already resolved
     }
@@ -741,7 +771,7 @@ mod tests {
         prefixes.insert("ex".to_string(), "http://example.org/".to_string());
 
         let iri = LazyIri::from_prefixed("ex", "Person", prefixes);
-        let resolved = resolver.resolve_lazy(&iri).unwrap();
+        let resolved = resolver.resolve_lazy(&iri).expect("valid IRI");
         assert_eq!(*resolved, "http://example.org/Person");
     }
 }

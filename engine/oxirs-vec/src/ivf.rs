@@ -710,7 +710,9 @@ impl IvfIndex {
         for (cluster_idx, residuals) in cluster_residuals.iter().enumerate() {
             if residuals.len() > 10 {
                 // Minimum threshold for training
-                let mut list = self.inverted_lists[cluster_idx].write().unwrap();
+                let mut list = self.inverted_lists[cluster_idx]
+                    .write()
+                    .expect("inverted_lists lock should not be poisoned");
                 list.train_pq(residuals)?;
             }
         }
@@ -919,7 +921,9 @@ impl VectorIndex for IvfIndex {
         let cluster_idx = self.find_nearest_centroid(&vector)?;
         let centroid = &self.centroids[cluster_idx];
 
-        let mut list = self.inverted_lists[cluster_idx].write().unwrap();
+        let mut list = self.inverted_lists[cluster_idx]
+            .write()
+            .expect("inverted_lists lock should not be poisoned");
 
         // Handle quantization based on strategy
         match &self.config.quantization {
@@ -954,14 +958,16 @@ impl VectorIndex for IvfIndex {
         // Search in selected inverted lists
         let mut all_results = Vec::new();
         for idx in probe_indices {
-            let list = self.inverted_lists[idx].read().unwrap();
+            let list = self.inverted_lists[idx]
+                .read()
+                .expect("inverted_lists lock should not be poisoned");
             let centroid = &self.centroids[idx];
             let mut results = list.search(query, centroid, k)?;
             all_results.append(&mut results);
         }
 
         // Sort and truncate to k results
-        all_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        all_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         all_results.truncate(k);
 
         Ok(all_results)
@@ -978,7 +984,9 @@ impl VectorIndex for IvfIndex {
         // Search in selected inverted lists
         let mut all_results = Vec::new();
         for idx in probe_indices {
-            let list = self.inverted_lists[idx].read().unwrap();
+            let list = self.inverted_lists[idx]
+                .read()
+                .expect("inverted_lists lock should not be poisoned");
             let centroid = &self.centroids[idx];
             let results = list.search(query, centroid, self.n_vectors)?;
 
@@ -991,7 +999,7 @@ impl VectorIndex for IvfIndex {
         }
 
         // Sort by similarity
-        all_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        all_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(all_results)
     }

@@ -1286,7 +1286,7 @@ mod tests {
         let violated_result = QualifiedCombinationResult::violated(
             "Test violation".to_string(),
             Some(Term::NamedNode(
-                NamedNode::new("http://example.org/test").unwrap(),
+                NamedNode::new("http://example.org/test").expect("valid IRI"),
             )),
             3,
         );

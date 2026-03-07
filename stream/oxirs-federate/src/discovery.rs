@@ -839,7 +839,10 @@ mod tests {
             sparql_endpoint: Some("http://example.com/sparql".to_string()),
         };
 
-        assert_eq!(void_desc.description.unwrap(), "Test dataset");
+        assert_eq!(
+            void_desc.description.expect("operation should succeed"),
+            "Test dataset"
+        );
     }
 
     #[test]

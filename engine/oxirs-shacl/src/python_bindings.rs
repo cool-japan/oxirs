@@ -716,7 +716,7 @@ mod tests {
 
     #[test]
     fn test_validator_creation() {
-        let validator = PyShaclValidator::new(None, None).unwrap();
+        let validator = PyShaclValidator::new(None, None).expect("construction should succeed");
         let stats = validator.get_statistics();
         assert_eq!(stats.total_validations(), 0);
     }

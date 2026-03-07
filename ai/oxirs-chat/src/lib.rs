@@ -180,6 +180,7 @@ use tracing::{debug, error, info, warn};
 pub mod analytics;
 pub mod cache;
 pub mod chat;
+// v1.1.0: Conversation memory compression
 pub mod chat_session;
 pub mod collaboration; // NEW: Real-time collaboration with shared sessions
 pub mod collaboration_server; // NEW: Server endpoints for collaboration
@@ -193,6 +194,7 @@ pub mod error;
 pub mod explanation;
 pub mod exploration_guidance; // NEW: Data exploration guidance
 pub mod external_services;
+pub mod memory_compression;
 // pub mod gpu_embedding_cache; // FUTURE: GPU-accelerated embedding cache (requires scirs2-core beta.4+)
 pub mod graph_exploration;
 pub mod health_monitoring;
@@ -224,6 +226,62 @@ pub mod visualization; // NEW: Result visualization helpers
 pub mod voice; // NEW: Voice interface with STT/TTS
 pub mod webhooks; // Webhook support (NEW)
 pub mod workflow;
+
+// v0.2.0 new modules
+pub mod finetuning;
+pub mod history; // Conversation history management with persistent storage and search
+pub mod memory_optimization; // Memory-efficient operations for embeddings and AI processing
+pub mod providers; // Additional LLM provider integrations (Gemini, Claude additional models)
+pub mod resilience; // Production resilience and error handling for AI operations
+pub mod revolutionary_chat; // Revolutionary chat optimization system
+pub mod security; // Security module with credential management and audit logging
+pub mod sso; // Enterprise SSO integration (SAML 2.0 / OIDC federation) // Fine-tuning support for model customization
+
+// v1.1.0 Conversation summarization
+pub mod conversation_summarizer;
+
+// v1.1.0: Prompt template engine with variable substitution and conditional blocks
+pub mod prompt_template;
+
+// v1.1.0 round 5: Rule-based intent classifier for SPARQL/RDF chatbots
+pub mod intent_classifier;
+
+// v1.1.0 round 6: Multi-criteria response ranker for RAG chat (relevance/coherence/completeness/conciseness/factual)
+pub mod response_ranker;
+
+// v1.1.0 round 8: Knowledge retriever with BM25+cosine RAG retrieval
+pub mod knowledge_retriever;
+
+// v1.1.0 round 10: Conversation history manager
+pub mod conversation_history;
+
+// v1.1.0 round 11: Tool registry for LLM function calling
+pub mod tool_registry;
+
+// v1.1.0 round 12: Prompt template builder with variable substitution and validation
+pub mod prompt_builder;
+pub use prompt_builder::{PromptBuilder, PromptError, PromptTemplate};
+
+// v1.1.0 round 13: Conversation state machine for multi-turn interactions
+pub mod conversation_state;
+
+// v1.1.0 round 11: Context window management for LLM interactions
+pub mod context_window;
+
+// v1.1.0 round 12: User intent detection for SPARQL chat (query type / entity / negation / aggregation / temporal)
+pub mod intent_detector;
+
+// v1.1.0 round 13: Persistent chat memory store (entity extraction, fact storage, decay, summarisation)
+pub mod memory_store;
+
+// v1.1.0 round 14: RAG response cache with TTL and LRU eviction
+pub mod response_cache;
+
+// v1.1.0 round 15: Dialogue state machine for multi-turn conversations
+pub mod dialogue_manager;
+
+// v1.1.0 round 16: Chat session persistence and retrieval
+pub mod session_store;
 
 // Re-export commonly used types
 pub use chat_session::{ChatSession, SessionStatistics};

@@ -281,7 +281,7 @@ mod tests {
             .if_shape(ShapeId::new("condition"))
             .then_shape(ShapeId::new("consequent"))
             .build()
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(conditional.if_shape.as_str(), "condition");
         assert!(conditional.has_then());

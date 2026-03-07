@@ -299,7 +299,7 @@ impl MetricsCollector {
             AggregationType::Count => recent_values.len() as f64,
             AggregationType::Percentile(p) => {
                 let mut sorted = recent_values.clone();
-                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 let index = ((p / 100.0) * sorted.len() as f64) as usize;
                 sorted[index.min(sorted.len() - 1)]
             }
@@ -1022,7 +1022,10 @@ mod tests {
         let config = VisualizationConfig::default();
         let viz = AdvancedVisualization::new(config);
 
-        let dashboard_id = viz.create_default_performance_dashboard().await.unwrap();
+        let dashboard_id = viz
+            .create_default_performance_dashboard()
+            .await
+            .expect("async operation should succeed");
         assert!(!dashboard_id.is_empty());
 
         let dashboard = viz.get_dashboard(&dashboard_id).await;
@@ -1033,12 +1036,21 @@ mod tests {
     async fn test_metrics_collection() {
         let collector = MetricsCollector::new();
 
-        collector.record_metric("test_metric", 100.0).await.unwrap();
-        collector.record_metric("test_metric", 200.0).await.unwrap();
+        collector
+            .record_metric("test_metric", 100.0)
+            .await
+            .expect("async operation should succeed");
+        collector
+            .record_metric("test_metric", 200.0)
+            .await
+            .expect("async operation should succeed");
 
         let series = collector.get_time_series("test_metric").await;
         assert!(series.is_some());
-        assert_eq!(series.unwrap().data_points.len(), 2);
+        assert_eq!(
+            series.expect("operation should succeed").data_points.len(),
+            2
+        );
     }
 
     #[tokio::test]
@@ -1046,13 +1058,16 @@ mod tests {
         let collector = MetricsCollector::new();
 
         for i in 1..=10 {
-            collector.record_metric("test", i as f64).await.unwrap();
+            collector
+                .record_metric("test", i as f64)
+                .await
+                .expect("async operation should succeed");
         }
 
         let avg = collector
             .calculate_aggregation("test", AggregationType::Average, Duration::from_secs(3600))
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!((avg - 5.5).abs() < 0.1);
     }
@@ -1076,7 +1091,7 @@ mod tests {
         let chart = generator
             .generate_line_chart(&time_series, &config)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(chart.series.len(), 1);
         assert_eq!(chart.series[0].data.len(), 5);
@@ -1095,7 +1110,7 @@ mod tests {
                 metadata: HashMap::new(),
             })
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         visualizer
             .add_node(TopologyNode {
@@ -1106,7 +1121,7 @@ mod tests {
                 metadata: HashMap::new(),
             })
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         visualizer
             .add_edge(TopologyEdge {
@@ -1117,9 +1132,12 @@ mod tests {
                 label: None,
             })
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
-        let topology = visualizer.generate_topology().await.unwrap();
+        let topology = visualizer
+            .generate_topology()
+            .await
+            .expect("async operation should succeed");
         assert_eq!(topology.nodes.len(), 2);
         assert_eq!(topology.edges.len(), 1);
     }
@@ -1139,9 +1157,12 @@ mod tests {
                 acknowledged: false,
             })
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
-        let timeline = visualizer.generate_alert_timeline().await.unwrap();
+        let timeline = visualizer
+            .generate_alert_timeline()
+            .await
+            .expect("async operation should succeed");
         assert_eq!(timeline.alerts.len(), 1);
     }
 
@@ -1150,18 +1171,21 @@ mod tests {
         let config = VisualizationConfig::default();
         let viz = AdvancedVisualization::new(config);
 
-        let dashboard_id = viz.create_default_performance_dashboard().await.unwrap();
+        let dashboard_id = viz
+            .create_default_performance_dashboard()
+            .await
+            .expect("async operation should succeed");
 
         let json_export = viz
             .export_dashboard(&dashboard_id, ExportFormat::JSON)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(!json_export.is_empty());
 
         let svg_export = viz
             .export_dashboard(&dashboard_id, ExportFormat::SVG)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(!svg_export.is_empty());
     }
 }

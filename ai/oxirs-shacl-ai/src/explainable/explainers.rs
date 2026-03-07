@@ -68,7 +68,8 @@ impl ExplanationGenerator for NeuralDecisionExplainer {
         metadata.insert(
             "activation_threshold".to_string(),
             serde_json::Value::Number(
-                serde_json::Number::from_f64(self.config.activation_threshold).unwrap(),
+                serde_json::Number::from_f64(self.config.activation_threshold)
+                    .expect("activation_threshold should be a valid f64"),
             ),
         );
 

@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "GraphQL façade for OxiRS with automatic schema generation from RDF ontologies"
 keywords = ["graphql", "rdf", "semantic-web", "api", "federation"]
 categories = ["web-programming", "api-bindings", "database"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]

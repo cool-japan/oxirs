@@ -2,12 +2,12 @@
 
 > Plateforme modulaire native Rust pour le Web Sémantique, SPARQL 1.2, GraphQL et raisonnement augmenté par IA
 
-[![Licence: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Licence: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Statut**: v0.1.0 - Version de Production Initiale - Publié le 7 janvier 2026
+**Statut**: v0.2.0 - Publié - 5 mars 2026
 
-🎉 **Prêt pour la Production**: Implémentation complète de SPARQL 1.1/1.2 avec **optimiseur 3,8× plus rapide**, support IoT industriel et fonctionnalités IA. 13 123 tests réussis, zéro avertissement.
+🎉 **Prêt pour la Production**: Implémentation complète de SPARQL 1.1/1.2 avec **optimiseur 3,8× plus rapide**, support IoT industriel et fonctionnalités IA. 39 000+ tests réussis, zéro avertissement.
 
 ## Vision
 
@@ -56,7 +56,7 @@ OxiRS offre un support de premier ordre pour le **Gaia-X Trust Framework** et le
 
 ```bash
 # Installer l'outil CLI
-cargo install oxirs --version 0.1.0
+cargo install oxirs --version 0.2.0
 
 # Compiler depuis les sources
 git clone https://github.com/cool-japan/oxirs.git
@@ -182,9 +182,9 @@ Manufacturing-X Digital Twin:
   Simulation:           Physique temps réel (SciRS2)
 ```
 
-## Nouveautés dans v0.1.0 (7 janvier 2026) 🎉
+## Nouveautés dans v0.2.0 (5 mars 2026) 🎉
 
-**Version de Production Initiale: Plateforme Web Sémantique Complète**
+**v0.2.0 Release: Plateforme Web Sémantique Complète**
 
 **Fonctionnalités Principales:**
 - 🚀 **SPARQL 1.1/1.2 Complet** - Conforme W3C avec optimisation de requêtes avancée
@@ -196,7 +196,7 @@ Manufacturing-X Digital Twin:
 - ☁️ **Cloud-Native** - Opérateur Kubernetes, modules Terraform
 
 **Métriques de Qualité:**
-- ✅ **13 123 tests réussis** (100% de réussite, 136 ignorés)
+- ✅ **39 000+ tests réussis** (100% de réussite)
 - ✅ **Zéro avertissement de compilation** sur les 22 crates
 - ✅ **95%+ de couverture de tests**
 - ✅ **Validé en production** dans des déploiements industriels
@@ -240,7 +240,7 @@ oxirs/                  # Racine Cargo Workspace
     └─ benchmarks/       # SP2Bench, WatDiv, LDBC SGS
 ```
 
-## Matrice de Fonctionnalités (v0.1.0)
+## Matrice de Fonctionnalités (v0.2.0)
 
 | Capacité | Crate(s) OxiRS | Statut | Parité Jena/Fuseki |
 |----------|----------------|--------|--------------------|
@@ -338,17 +338,16 @@ cargo build --workspace --all-features
 | Version | Date Cible | Jalon | Livrables | Statut |
 |---------|-----------|-------|-----------|--------|
 | **v0.1.0** | **✅ 7 jan 2026** | **Production Initiale** | SPARQL 1.1/1.2 complet, IoT industriel, IA | ✅ Publié |
-| **v0.2.0** | **T1 2026** | **Performance, Recherche & Géo** | 10× performance, recherche plein texte, GeoSPARQL | 🎯 Prochain |
-| **v1.0.0** | **T2 2026** | **Version LTS** | Parité Jena complète, support entreprise | 📋 Prévu |
+| **v0.2.0** | **✅ 5 mars 2026** | **Performance, Recherche & Géo** | 10× performance, recherche plein texte, GeoSPARQL | ✅ Publié (actuel) |
+| **v0.3.0** | **T2 2026** | **Version LTS** | Parité Jena complète, support entreprise | 📋 Prévu |
 
 ## Licence
 
-OxiRS est sous double licence:
+OxiRS est distribué sous licence:
 
-- **Licence MIT** ([LICENSE-MIT](LICENSE-MIT) ou http://opensource.org/licenses/MIT)
 - **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE) ou http://www.apache.org/licenses/LICENSE-2.0)
 
-Vous pouvez choisir à votre convenance. Voir [LICENSE](LICENSE) pour les détails.
+Voir [LICENSE](LICENSE) pour les détails.
 
 ## Contact
 
@@ -366,4 +365,4 @@ Vous pouvez choisir à votre convenance. Voir [LICENSE](LICENSE) pour les détai
 
 *"Rust rend la sécurité de la mémoire incontournable; OxiRS rend l'ingénierie des graphes de connaissances incontournable."*
 
-**v0.1.0 - Version de Production Initiale - 7 janvier 2026**
+**v0.2.0 - Publié - 5 mars 2026**

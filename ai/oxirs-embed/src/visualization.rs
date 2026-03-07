@@ -120,7 +120,11 @@ impl EmbeddingVisualizer {
     fn pca(&mut self, embeddings: &HashMap<String, Array1<f32>>) -> Result<VisualizationResult> {
         let entity_list: Vec<String> = embeddings.keys().cloned().collect();
         let n = entity_list.len();
-        let d = embeddings.values().next().unwrap().len();
+        let d = embeddings
+            .values()
+            .next()
+            .expect("embeddings should not be empty")
+            .len();
 
         // Build data matrix (n x d)
         let mut data_matrix = Array2::zeros((n, d));
@@ -185,7 +189,8 @@ impl EmbeddingVisualizer {
         let n = entity_list.len();
 
         // Initialize low-dimensional representation randomly
-        let dist = Normal::new(0.0, 0.01).unwrap();
+        let dist = Normal::new(0.0, 0.01)
+            .expect("Normal distribution should be valid for these parameters");
         let mut y = Array2::from_shape_fn((n, self.config.target_dims), |_| self.rng.sample(dist));
 
         // Compute pairwise affinities in high-dimensional space
@@ -275,7 +280,10 @@ impl EmbeddingVisualizer {
                 }
 
                 // Update position
-                let coords = result.coordinates.get_mut(entity).unwrap();
+                let coords = result
+                    .coordinates
+                    .get_mut(entity)
+                    .expect("entity should exist in coordinates");
                 for d in 0..self.config.target_dims {
                     coords[d] += force[d];
                 }
@@ -294,10 +302,15 @@ impl EmbeddingVisualizer {
         embeddings: &HashMap<String, Array1<f32>>,
     ) -> Result<VisualizationResult> {
         let entity_list: Vec<String> = embeddings.keys().cloned().collect();
-        let d = embeddings.values().next().unwrap().len();
+        let d = embeddings
+            .values()
+            .next()
+            .expect("embeddings should not be empty")
+            .len();
 
         // Generate random projection matrix
-        let dist = Normal::new(0.0, 1.0).unwrap();
+        let dist = Normal::new(0.0, 1.0)
+            .expect("Normal distribution should be valid for these parameters");
         let projection_matrix =
             Array2::from_shape_fn((d, self.config.target_dims), |_| self.rng.sample(dist));
 
@@ -378,7 +391,8 @@ impl EmbeddingVisualizer {
 
         for component in 0..k {
             // Initialize random vector
-            let dist = Normal::new(0.0f32, 1.0f32).unwrap();
+            let dist = Normal::new(0.0f32, 1.0f32)
+                .expect("Normal distribution should be valid for these parameters");
             let mut v = Array1::from_shape_fn(d, |_| self.rng.sample(dist));
 
             // Power iteration
@@ -564,7 +578,7 @@ impl EmbeddingVisualizer {
                 .collect();
 
             // Sort by distance and take top-k
-            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
             let neighbors: Vec<usize> = distances.iter().take(k).map(|(idx, _)| *idx).collect();
             knn_graph.push(neighbors);
         }

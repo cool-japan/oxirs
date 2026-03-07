@@ -256,7 +256,11 @@ impl HybridFusion {
             .collect();
 
         // Sort by score descending
-        filtered.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        filtered.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Apply max results limit
         filtered.truncate(self.config.max_results);

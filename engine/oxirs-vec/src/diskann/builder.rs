@@ -381,7 +381,7 @@ impl DiskAnnBuilder {
 
 impl Default for DiskAnnBuilder {
     fn default() -> Self {
-        Self::new(DiskAnnConfig::default()).unwrap()
+        Self::new(DiskAnnConfig::default()).expect("default DiskAnnConfig should be valid")
     }
 }
 

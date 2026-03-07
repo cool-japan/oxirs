@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn test_invalid_urn_suggestion() {
         let err = SammError::InvalidUrn("URN must start with 'urn:samm:'".to_string());
-        let suggestion = err.suggestion().unwrap();
+        let suggestion = err.suggestion().expect("suggestion should be available");
         assert!(suggestion.contains("urn:samm:"));
         assert!(suggestion.contains("Example:"));
     }
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn test_parse_error_file_not_found_suggestion() {
         let err = SammError::ParseError("Failed to open file".to_string());
-        let suggestion = err.suggestion().unwrap();
+        let suggestion = err.suggestion().expect("suggestion should be available");
         assert!(suggestion.contains("file path exists"));
         assert!(suggestion.contains("read permissions"));
     }
@@ -405,7 +405,7 @@ mod tests {
     #[test]
     fn test_network_timeout_suggestion() {
         let err = SammError::Network("Request timeout after 30s".to_string());
-        let suggestion = err.suggestion().unwrap();
+        let suggestion = err.suggestion().expect("suggestion should be available");
         assert!(suggestion.contains("timeout"));
         assert!(suggestion.contains("set_http_timeout"));
     }
@@ -470,7 +470,7 @@ mod tests {
     #[test]
     fn test_shacl_validation_suggestion() {
         let err = SammError::ShaclValidation("Missing required property".to_string());
-        let suggestion = err.suggestion().unwrap();
+        let suggestion = err.suggestion().expect("suggestion should be available");
         assert!(suggestion.contains("SHACL validation failed"));
         assert!(suggestion.contains("https://eclipse-esmf.github.io"));
     }
@@ -478,7 +478,7 @@ mod tests {
     #[test]
     fn test_missing_element_suggestion() {
         let err = SammError::MissingElement("Movement".to_string());
-        let suggestion = err.suggestion().unwrap();
+        let suggestion = err.suggestion().expect("suggestion should be available");
         assert!(suggestion.contains("Movement"));
         assert!(suggestion.contains("ModelResolver"));
     }
@@ -486,7 +486,7 @@ mod tests {
     #[test]
     fn test_generation_error_suggestion() {
         let err = SammError::Generation("template rendering failed".to_string());
-        let suggestion = err.suggestion().unwrap();
+        let suggestion = err.suggestion().expect("suggestion should be available");
         assert!(suggestion.contains("template"));
         assert!(suggestion.contains("syntax"));
     }
@@ -511,7 +511,7 @@ mod tests {
     #[test]
     fn test_resolution_error_suggestion() {
         let err = SammError::ResolutionError("Element not found in cache".to_string());
-        let suggestion = err.suggestion().unwrap();
+        let suggestion = err.suggestion().expect("suggestion should be available");
         assert!(suggestion.contains("external file"));
         assert!(suggestion.contains("add_file_base"));
     }
@@ -523,7 +523,7 @@ mod tests {
             message: "Property name must be camelCase".to_string(),
             location,
         };
-        let suggestion = err.suggestion().unwrap();
+        let suggestion = err.suggestion().expect("suggestion should be available");
         assert!(suggestion.contains("line 15:10"));
         assert!(suggestion.contains("SAMM constraints"));
     }
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn test_unsupported_feature_suggestion() {
         let err = SammError::Unsupported("Advanced query language".to_string());
-        let suggestion = err.suggestion().unwrap();
+        let suggestion = err.suggestion().expect("suggestion should be available");
         assert!(suggestion.contains("Advanced query language"));
         assert!(suggestion.contains("feature request"));
     }

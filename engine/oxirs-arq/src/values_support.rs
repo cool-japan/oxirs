@@ -101,7 +101,7 @@ impl ValuesClause {
                 if let Some(term) = value {
                     distinct_values_per_var
                         .get_mut(var)
-                        .unwrap()
+                        .expect("variable should exist in initialized map")
                         .insert(term.clone());
                 } else {
                     undef_count += 1;

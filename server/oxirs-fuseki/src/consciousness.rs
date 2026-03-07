@@ -650,7 +650,7 @@ impl ConsciousnessProcessor {
             emotional_influence: self
                 .emotional_state
                 .lock()
-                .unwrap()
+                .expect("lock should not be poisoned")
                 .get_decision_influence(),
             memory_based: true,
             adaptations: vec![
@@ -747,7 +747,7 @@ impl ConsciousnessProcessor {
         let emotional_influence = self
             .emotional_state
             .lock()
-            .unwrap()
+            .expect("lock should not be poisoned")
             .get_decision_influence();
 
         // Determine strategy based on neural outputs and emotion
@@ -805,7 +805,11 @@ impl ConsciousnessProcessor {
             // Remove weakest memory
             if let Some((weakest_id, _)) = patterns
                 .iter()
-                .min_by(|a, b| a.1.strength.partial_cmp(&b.1.strength).unwrap())
+                .min_by(|a, b| {
+                    a.1.strength
+                        .partial_cmp(&b.1.strength)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
                 .map(|(k, v)| (k.clone(), v.clone()))
             {
                 patterns.remove(&weakest_id);
@@ -888,8 +892,16 @@ impl ConsciousnessProcessor {
     pub async fn get_consciousness_state(&self) -> ConsciousnessState {
         let neurons = self.neurons.read().await;
         let patterns = self.memory_patterns.read().await;
-        let emotional_state = self.emotional_state.lock().unwrap().clone();
-        let stats = self.processing_stats.lock().unwrap().clone();
+        let emotional_state = self
+            .emotional_state
+            .lock()
+            .expect("lock should not be poisoned")
+            .clone();
+        let stats = self
+            .processing_stats
+            .lock()
+            .expect("lock should not be poisoned")
+            .clone();
 
         ConsciousnessState {
             neuron_count: neurons.len(),
@@ -913,7 +925,10 @@ impl ConsciousnessProcessor {
             / patterns.len().max(1) as f64;
 
         let emotional_balance = {
-            let state = self.emotional_state.lock().unwrap();
+            let state = self
+                .emotional_state
+                .lock()
+                .expect("lock should not be poisoned");
             1.0 - (state.stress - 0.3).abs() // Ideal stress around 0.3
         };
 

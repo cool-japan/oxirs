@@ -403,7 +403,8 @@ fn build_weights_matrix(
                     .collect();
 
                 // Sort by distance
-                distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+                distances
+                    .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
                 // Set weights for k nearest neighbors
                 for &(j, _) in distances.iter().take(k) {

@@ -616,8 +616,14 @@ impl BenchmarkSuite {
         // Calculate statistics
         let total_time: Duration = durations.iter().sum();
         let avg_time = total_time / durations.len() as u32;
-        let min_time = *durations.iter().min().unwrap();
-        let max_time = *durations.iter().max().unwrap();
+        let min_time = *durations
+            .iter()
+            .min()
+            .expect("durations should not be empty");
+        let max_time = *durations
+            .iter()
+            .max()
+            .expect("durations should not be empty");
 
         // Calculate standard deviation
         let mean = avg_time.as_nanos() as f64;

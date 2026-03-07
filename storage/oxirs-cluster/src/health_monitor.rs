@@ -466,7 +466,7 @@ impl HealthMonitor {
                 let mut statuses = node_statuses.write().await;
                 let now = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .unwrap()
+                    .expect("SystemTime should be after UNIX_EPOCH")
                     .as_millis() as u64;
 
                 for (node_id, status) in statuses.iter_mut() {

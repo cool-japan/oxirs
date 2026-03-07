@@ -322,55 +322,82 @@ impl ExtensionRegistry {
     /// ```
     pub fn register(&self, extension: Extension) {
         let namespace = extension.namespace.clone();
-        let mut extensions = self.extensions.write().unwrap();
+        let mut extensions = self
+            .extensions
+            .write()
+            .expect("write lock should not be poisoned");
         extensions.insert(namespace, extension);
     }
 
     /// Get an extension by namespace
     pub fn get(&self, namespace: &str) -> Option<Extension> {
-        let extensions = self.extensions.read().unwrap();
+        let extensions = self
+            .extensions
+            .read()
+            .expect("read lock should not be poisoned");
         extensions.get(namespace).cloned()
     }
 
     /// Check if an extension is registered
     pub fn has(&self, namespace: &str) -> bool {
-        let extensions = self.extensions.read().unwrap();
+        let extensions = self
+            .extensions
+            .read()
+            .expect("read lock should not be poisoned");
         extensions.contains_key(namespace)
     }
 
     /// Remove an extension
     pub fn remove(&self, namespace: &str) -> bool {
-        let mut extensions = self.extensions.write().unwrap();
+        let mut extensions = self
+            .extensions
+            .write()
+            .expect("write lock should not be poisoned");
         extensions.remove(namespace).is_some()
     }
 
     /// List all registered extension namespaces
     pub fn list(&self) -> Vec<String> {
-        let extensions = self.extensions.read().unwrap();
+        let extensions = self
+            .extensions
+            .read()
+            .expect("read lock should not be poisoned");
         extensions.keys().cloned().collect()
     }
 
     /// Get the number of registered extensions
     pub fn count(&self) -> usize {
-        let extensions = self.extensions.read().unwrap();
+        let extensions = self
+            .extensions
+            .read()
+            .expect("read lock should not be poisoned");
         extensions.len()
     }
 
     /// Clear all extensions
     pub fn clear(&self) {
-        let mut extensions = self.extensions.write().unwrap();
+        let mut extensions = self
+            .extensions
+            .write()
+            .expect("write lock should not be poisoned");
         extensions.clear();
     }
 
     /// Get all extensions
     pub fn all(&self) -> Vec<Extension> {
-        let extensions = self.extensions.read().unwrap();
+        let extensions = self
+            .extensions
+            .read()
+            .expect("read lock should not be poisoned");
         extensions.values().cloned().collect()
     }
 
     /// Find extensions that extend a specific SAMM version
     pub fn find_by_samm_version(&self, version: &str) -> Vec<Extension> {
-        let extensions = self.extensions.read().unwrap();
+        let extensions = self
+            .extensions
+            .read()
+            .expect("read lock should not be poisoned");
         extensions
             .values()
             .filter(|ext| ext.samm_version == version)
@@ -476,7 +503,7 @@ mod tests {
 
         let retrieved = registry.get("urn:ext:test");
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().name, "Test");
+        assert_eq!(retrieved.expect("operation should succeed").name, "Test");
     }
 
     #[test]

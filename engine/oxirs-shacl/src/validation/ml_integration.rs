@@ -1048,7 +1048,9 @@ mod tests {
             timestamp: SystemTime::now(),
         };
 
-        hooks.record_training_data(data_point).unwrap();
+        hooks
+            .record_training_data(data_point)
+            .expect("training should succeed");
 
         let summary = hooks.get_training_data_summary();
         assert_eq!(summary.total_samples, 1);
@@ -1096,7 +1098,7 @@ mod tests {
 
         let predictions = cache_manager
             .predict_cache_needs(&validation_context)
-            .unwrap();
+            .expect("validation should succeed");
         assert!(!predictions.is_empty());
         assert_eq!(predictions[0].shape_uri, "test_shape");
     }
@@ -1109,7 +1111,9 @@ mod tests {
         // Simulate low cache hit rate
         cache_manager.cache_usage_patterns.cache_hit_rate = 0.3;
 
-        let strategy = cache_manager.optimize_cache_strategy().unwrap();
+        let strategy = cache_manager
+            .optimize_cache_strategy()
+            .expect("optimization should succeed");
         assert!(strategy.max_entries > 1000); // Should increase cache size
         assert_eq!(cache_manager.optimization_history.len(), 1);
     }

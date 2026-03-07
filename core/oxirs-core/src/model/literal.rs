@@ -443,8 +443,9 @@ impl Literal {
         value: impl Into<String>,
         language: impl Into<String>,
     ) -> Result<Self, LanguageTagParseError> {
-        let language = language.into();
-        // Validate without modifying case to preserve RFC 5646 conventions
+        let language = language.into().to_ascii_lowercase();
+        // Normalize to lowercase per RDF 1.1 spec (language tags are case-insensitive,
+        // stored as lowercase for consistent comparison and lookup).
         validate_language_tag(&language)?;
         Ok(Self::new_language_tagged_literal_unchecked(value, language))
     }

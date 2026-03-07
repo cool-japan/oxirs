@@ -71,10 +71,7 @@ impl AuditLogger {
 
     /// Create audit logger with file output
     pub fn with_file(path: PathBuf) -> Result<Self> {
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
+        let file = OpenOptions::new().create(true).append(true).open(path)?;
 
         let writer = BufWriter::new(file);
 
@@ -90,14 +87,17 @@ impl AuditLogger {
         // Write to file if configured
         if let Some(log_file) = &self.log_file {
             let json = serde_json::to_string(&event)?;
-            let mut writer = log_file.write()
+            let mut writer = log_file
+                .write()
                 .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
             writeln!(writer, "{}", json)?;
             writer.flush()?;
         }
 
         // Store in memory
-        let mut events = self.events.write()
+        let mut events = self
+            .events
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
         events.push(event);
@@ -112,8 +112,13 @@ impl AuditLogger {
     }
 
     /// Get events since timestamp
-    pub fn get_events_since(&self, since: chrono::DateTime<chrono::Utc>) -> Result<Vec<SecurityEvent>> {
-        let events = self.events.read()
+    pub fn get_events_since(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<SecurityEvent>> {
+        let events = self
+            .events
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
 
         Ok(events
@@ -125,7 +130,9 @@ impl AuditLogger {
 
     /// Get all events in memory
     pub fn get_all_events(&self) -> Result<Vec<SecurityEvent>> {
-        let events = self.events.read()
+        let events = self
+            .events
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
 
         Ok(events.clone())
@@ -133,7 +140,9 @@ impl AuditLogger {
 
     /// Get event count
     pub fn event_count(&self) -> Result<usize> {
-        let events = self.events.read()
+        let events = self
+            .events
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
 
         Ok(events.len())
@@ -141,7 +150,9 @@ impl AuditLogger {
 
     /// Clear all events from memory
     pub fn clear(&self) -> Result<()> {
-        let mut events = self.events.write()
+        let mut events = self
+            .events
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
         events.clear();
@@ -150,7 +161,9 @@ impl AuditLogger {
 
     /// Get statistics
     pub fn get_statistics(&self) -> Result<AuditStatistics> {
-        let events = self.events.read()
+        let events = self
+            .events
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
 
         let mut stats = AuditStatistics::default();
@@ -237,16 +250,20 @@ mod tests {
     fn test_statistics() {
         let logger = AuditLogger::new().unwrap();
 
-        logger.log_event(SecurityEvent::InputValidation {
-            user_id: "user1".to_string(),
-            input_length: 100,
-            timestamp: chrono::Utc::now(),
-        }).unwrap();
+        logger
+            .log_event(SecurityEvent::InputValidation {
+                user_id: "user1".to_string(),
+                input_length: 100,
+                timestamp: chrono::Utc::now(),
+            })
+            .unwrap();
 
-        logger.log_event(SecurityEvent::RateLimitExceeded {
-            user_id: "user2".to_string(),
-            timestamp: chrono::Utc::now(),
-        }).unwrap();
+        logger
+            .log_event(SecurityEvent::RateLimitExceeded {
+                user_id: "user2".to_string(),
+                timestamp: chrono::Utc::now(),
+            })
+            .unwrap();
 
         let stats = logger.get_statistics().unwrap();
         assert_eq!(stats.input_validations, 1);
@@ -259,11 +276,13 @@ mod tests {
 
         // Add more events than max_memory_events
         for i in 0..15_000 {
-            logger.log_event(SecurityEvent::InputValidation {
-                user_id: format!("user{}", i),
-                input_length: 100,
-                timestamp: chrono::Utc::now(),
-            }).unwrap();
+            logger
+                .log_event(SecurityEvent::InputValidation {
+                    user_id: format!("user{}", i),
+                    input_length: 100,
+                    timestamp: chrono::Utc::now(),
+                })
+                .unwrap();
         }
 
         // Should be trimmed to max

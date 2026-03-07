@@ -76,7 +76,9 @@ impl MaintenanceScheduler {
             let interval = view.definition.estimate_freshness_requirement();
             view.last_refresh
                 .unwrap_or(view.creation_time)
-                .checked_add_signed(chrono::Duration::from_std(interval).unwrap())
+                .checked_add_signed(
+                    chrono::Duration::from_std(interval).expect("conversion should succeed"),
+                )
                 .unwrap_or_else(|| Utc::now() + chrono::Duration::hours(1))
         };
 
@@ -149,7 +151,8 @@ impl MaintenanceScheduler {
             operation: schedule.operation.clone(),
             start_time: Utc::now(),
             estimated_completion: Utc::now()
-                + chrono::Duration::from_std(schedule.estimated_duration).unwrap(),
+                + chrono::Duration::from_std(schedule.estimated_duration)
+                    .expect("conversion should succeed"),
         };
 
         self.running_operations

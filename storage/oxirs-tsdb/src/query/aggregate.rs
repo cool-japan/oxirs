@@ -244,7 +244,7 @@ mod tests {
         let mut agg = Aggregator::new();
         agg.add_batch(&points);
 
-        let result = agg.result(Aggregation::Avg).unwrap();
+        let result = agg.result(Aggregation::Avg).expect("result should be Ok");
         assert!((result - 30.0).abs() < 0.001);
     }
 
@@ -256,8 +256,20 @@ mod tests {
         let mut agg = Aggregator::new();
         agg.add_batch(&points);
 
-        assert!((agg.result(Aggregation::Min).unwrap() - 5.0).abs() < 0.001);
-        assert!((agg.result(Aggregation::Max).unwrap() - 30.0).abs() < 0.001);
+        assert!(
+            (agg.result(Aggregation::Min)
+                .expect("operation should succeed")
+                - 5.0)
+                .abs()
+                < 0.001
+        );
+        assert!(
+            (agg.result(Aggregation::Max)
+                .expect("operation should succeed")
+                - 30.0)
+                .abs()
+                < 0.001
+        );
     }
 
     #[test]
@@ -268,8 +280,20 @@ mod tests {
         let mut agg = Aggregator::new();
         agg.add_batch(&points);
 
-        assert!((agg.result(Aggregation::Sum).unwrap() - 60.0).abs() < 0.001);
-        assert!((agg.result(Aggregation::Count).unwrap() - 3.0).abs() < 0.001);
+        assert!(
+            (agg.result(Aggregation::Sum)
+                .expect("operation should succeed")
+                - 60.0)
+                .abs()
+                < 0.001
+        );
+        assert!(
+            (agg.result(Aggregation::Count)
+                .expect("operation should succeed")
+                - 3.0)
+                .abs()
+                < 0.001
+        );
     }
 
     #[test]
@@ -280,8 +304,20 @@ mod tests {
         let mut agg = Aggregator::new();
         agg.add_batch(&points);
 
-        assert!((agg.result(Aggregation::First).unwrap() - 10.0).abs() < 0.001);
-        assert!((agg.result(Aggregation::Last).unwrap() - 30.0).abs() < 0.001);
+        assert!(
+            (agg.result(Aggregation::First)
+                .expect("operation should succeed")
+                - 10.0)
+                .abs()
+                < 0.001
+        );
+        assert!(
+            (agg.result(Aggregation::Last)
+                .expect("operation should succeed")
+                - 30.0)
+                .abs()
+                < 0.001
+        );
     }
 
     #[test]
@@ -294,7 +330,9 @@ mod tests {
         let mut agg = Aggregator::new();
         agg.add_batch(&points);
 
-        let stddev = agg.result(Aggregation::StdDev).unwrap();
+        let stddev = agg
+            .result(Aggregation::StdDev)
+            .expect("result should be Ok");
         assert!((stddev - 2.138).abs() < 0.01);
     }
 
@@ -306,7 +344,9 @@ mod tests {
         let mut agg = Aggregator::new();
         agg.add_batch(&points);
 
-        let median = agg.result(Aggregation::Median).unwrap();
+        let median = agg
+            .result(Aggregation::Median)
+            .expect("result should be Ok");
         assert!((median - 5.0).abs() < 0.001);
     }
 
@@ -319,7 +359,9 @@ mod tests {
         agg.add_batch(&points);
 
         // 90th percentile should be around 9.0
-        let p90 = agg.result(Aggregation::Percentile(90)).unwrap();
+        let p90 = agg
+            .result(Aggregation::Percentile(90))
+            .expect("result should be Ok");
         assert!((p90 - 9.0).abs() < 1.0);
     }
 
@@ -332,7 +374,7 @@ mod tests {
             &points,
             &[Aggregation::Avg, Aggregation::Min, Aggregation::Max],
         )
-        .unwrap();
+        .expect("operation should succeed");
 
         assert!((results[0] - 30.0).abs() < 0.001); // AVG
         assert!((results[1] - 10.0).abs() < 0.001); // MIN

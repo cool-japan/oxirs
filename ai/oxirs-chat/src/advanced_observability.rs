@@ -453,8 +453,8 @@ impl ObservabilitySystem {
             });
         }
 
-        let period_start = events.first().unwrap().timestamp;
-        let period_end = events.last().unwrap().timestamp;
+        let period_start = events.first().expect("collection validated to be non-empty").timestamp;
+        let period_end = events.last().expect("collection validated to be non-empty").timestamp;
 
         // Count events by type
         let mut events_by_type: HashMap<String, usize> = HashMap::new();

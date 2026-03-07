@@ -9,6 +9,7 @@ pub mod batch;
 pub mod config;
 pub mod construction;
 pub mod index;
+pub mod neighbor_heuristic;
 pub mod optimization;
 pub mod parallel_construction;
 pub mod parallel_search;
@@ -28,6 +29,7 @@ pub use adaptive_search::{
 pub use batch::*;
 pub use config::*;
 pub use index::*;
+pub use neighbor_heuristic::NeighborList;
 pub use parallel_construction::{
     ParallelConstructionConfig, ParallelConstructionStats, ParallelHnswBuilder,
     ParallelHnswIndexBuilder,

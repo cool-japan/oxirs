@@ -229,32 +229,51 @@ impl GlobalBufferManager {
 
     /// Acquire a string buffer
     pub fn acquire_string_buffer(&self) -> String {
-        self.inner.lock().unwrap().acquire_string_buffer()
+        self.inner
+            .lock()
+            .expect("lock should not be poisoned")
+            .acquire_string_buffer()
     }
 
     /// Release a string buffer
     pub fn release_string_buffer(&self, buffer: String) {
-        self.inner.lock().unwrap().release_string_buffer(buffer);
+        self.inner
+            .lock()
+            .expect("lock should not be poisoned")
+            .release_string_buffer(buffer);
     }
 
     /// Generate blank node ID
     pub fn generate_blank_node_id(&self, counter: usize) -> String {
-        self.inner.lock().unwrap().generate_blank_node_id(counter)
+        self.inner
+            .lock()
+            .expect("lock should not be poisoned")
+            .generate_blank_node_id(counter)
     }
 
     /// Get statistics
     pub fn stats(&self) -> BufferStats {
-        self.inner.lock().unwrap().stats().clone()
+        self.inner
+            .lock()
+            .expect("lock should not be poisoned")
+            .stats()
+            .clone()
     }
 
     /// Get hit rate
     pub fn hit_rate(&self) -> f64 {
-        self.inner.lock().unwrap().hit_rate()
+        self.inner
+            .lock()
+            .expect("lock should not be poisoned")
+            .hit_rate()
     }
 
     /// Clear the pool
     pub fn clear(&self) {
-        self.inner.lock().unwrap().clear();
+        self.inner
+            .lock()
+            .expect("lock should not be poisoned")
+            .clear();
     }
 }
 

@@ -776,6 +776,437 @@ impl Default for RuleIndexBuilder {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Rule dependency graph
+// ---------------------------------------------------------------------------
+
+/// An edge in the rule dependency graph.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DependencyEdge {
+    /// The rule that produces the predicate.
+    pub from: RuleId,
+    /// The rule that consumes the predicate.
+    pub to: RuleId,
+    /// The predicate IRI connecting the two rules.
+    pub predicate: String,
+}
+
+/// A rule dependency graph: which rules trigger which other rules.
+///
+/// Rule A "triggers" Rule B when A produces a predicate in its head that B
+/// consumes in its body.
+#[derive(Debug, Default)]
+pub struct RuleDependencyGraph {
+    /// All edges (from -> to via predicate).
+    edges: Vec<DependencyEdge>,
+    /// Forward adjacency: rule_id -> list of rules it triggers.
+    forward: HashMap<RuleId, Vec<RuleId>>,
+    /// Backward adjacency: rule_id -> list of rules that trigger it.
+    backward: HashMap<RuleId, Vec<RuleId>>,
+}
+
+impl RuleDependencyGraph {
+    /// Build a dependency graph from an existing index.
+    pub fn from_index(index: &RuleIndex) -> Self {
+        let rules = index.rules.read().expect("lock poisoned");
+        let mut graph = Self::default();
+
+        // Collect head predicates per rule
+        let mut head_preds: HashMap<String, Vec<RuleId>> = HashMap::new();
+        for (id, rule) in rules.iter().enumerate() {
+            if rule.name.is_empty() {
+                continue;
+            }
+            for atom in &rule.head {
+                if let Some(pred) = RuleIndex::extract_predicate(atom) {
+                    head_preds.entry(pred).or_default().push(id);
+                }
+            }
+        }
+
+        // For each rule body predicate, find rules that produce it
+        for (consumer_id, rule) in rules.iter().enumerate() {
+            if rule.name.is_empty() {
+                continue;
+            }
+            for atom in &rule.body {
+                if let Some(pred) = RuleIndex::extract_predicate(atom) {
+                    if let Some(producers) = head_preds.get(&pred) {
+                        for &producer_id in producers {
+                            if producer_id != consumer_id {
+                                graph.add_edge(DependencyEdge {
+                                    from: producer_id,
+                                    to: consumer_id,
+                                    predicate: pred.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        graph
+    }
+
+    /// Add an edge to the graph.
+    fn add_edge(&mut self, edge: DependencyEdge) {
+        self.forward.entry(edge.from).or_default().push(edge.to);
+        self.backward.entry(edge.to).or_default().push(edge.from);
+        self.edges.push(edge);
+    }
+
+    /// Return the rules triggered by the given rule.
+    pub fn triggered_by(&self, rule_id: RuleId) -> Vec<RuleId> {
+        self.forward.get(&rule_id).cloned().unwrap_or_default()
+    }
+
+    /// Return the rules that trigger the given rule.
+    pub fn triggers_of(&self, rule_id: RuleId) -> Vec<RuleId> {
+        self.backward.get(&rule_id).cloned().unwrap_or_default()
+    }
+
+    /// Return all edges.
+    pub fn edges(&self) -> &[DependencyEdge] {
+        &self.edges
+    }
+
+    /// Return the number of edges.
+    pub fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
+
+    /// Return all root rules (rules with no incoming dependency).
+    pub fn roots(&self) -> Vec<RuleId> {
+        let all_targets: HashSet<RuleId> = self.edges.iter().map(|e| e.to).collect();
+        let all_sources: HashSet<RuleId> = self.edges.iter().map(|e| e.from).collect();
+        all_sources.difference(&all_targets).copied().collect()
+    }
+
+    /// Detect cycles in the dependency graph using DFS.
+    pub fn has_cycle(&self) -> bool {
+        let all_nodes: HashSet<RuleId> = self.edges.iter().flat_map(|e| [e.from, e.to]).collect();
+
+        let mut visited = HashSet::new();
+        let mut on_stack = HashSet::new();
+
+        for &node in &all_nodes {
+            if !visited.contains(&node) && self.dfs_cycle(node, &mut visited, &mut on_stack) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn dfs_cycle(
+        &self,
+        node: RuleId,
+        visited: &mut HashSet<RuleId>,
+        on_stack: &mut HashSet<RuleId>,
+    ) -> bool {
+        visited.insert(node);
+        on_stack.insert(node);
+
+        if let Some(neighbours) = self.forward.get(&node) {
+            for &next in neighbours {
+                if !visited.contains(&next) {
+                    if self.dfs_cycle(next, visited, on_stack) {
+                        return true;
+                    }
+                } else if on_stack.contains(&next) {
+                    return true;
+                }
+            }
+        }
+
+        on_stack.remove(&node);
+        false
+    }
+
+    /// Return a topological ordering of rules (or empty if cycle detected).
+    pub fn topological_order(&self) -> Vec<RuleId> {
+        let all_nodes: HashSet<RuleId> = self.edges.iter().flat_map(|e| [e.from, e.to]).collect();
+
+        let mut in_degree: HashMap<RuleId, usize> = HashMap::new();
+        for &node in &all_nodes {
+            in_degree.entry(node).or_insert(0);
+        }
+        for edge in &self.edges {
+            *in_degree.entry(edge.to).or_insert(0) += 1;
+        }
+
+        let mut queue: Vec<RuleId> = in_degree
+            .iter()
+            .filter(|(_, &deg)| deg == 0)
+            .map(|(&id, _)| id)
+            .collect();
+        queue.sort_unstable(); // deterministic
+
+        let mut result = Vec::new();
+        while let Some(node) = queue.pop() {
+            result.push(node);
+            if let Some(neighbours) = self.forward.get(&node) {
+                for &next in neighbours {
+                    if let Some(deg) = in_degree.get_mut(&next) {
+                        *deg = deg.saturating_sub(1);
+                        if *deg == 0 {
+                            queue.push(next);
+                            queue.sort_unstable();
+                        }
+                    }
+                }
+            }
+        }
+
+        if result.len() < all_nodes.len() {
+            // Cycle detected
+            Vec::new()
+        } else {
+            result
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Priority-based rule ordering
+// ---------------------------------------------------------------------------
+
+/// A prioritized rule reference.
+#[derive(Debug, Clone)]
+pub struct PrioritizedRule {
+    /// Rule identifier.
+    pub id: RuleId,
+    /// Rule name.
+    pub name: String,
+    /// Priority (higher = executed first).
+    pub priority: i32,
+}
+
+/// Priority index that allows ordering rules by a user-defined priority.
+#[derive(Debug, Default)]
+pub struct PriorityIndex {
+    priorities: HashMap<RuleId, i32>,
+}
+
+impl PriorityIndex {
+    /// Create a new, empty priority index.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the priority for a rule.
+    pub fn set_priority(&mut self, rule_id: RuleId, priority: i32) {
+        self.priorities.insert(rule_id, priority);
+    }
+
+    /// Get the priority for a rule (defaults to 0).
+    pub fn get_priority(&self, rule_id: RuleId) -> i32 {
+        self.priorities.get(&rule_id).copied().unwrap_or(0)
+    }
+
+    /// Remove the priority for a rule.
+    pub fn remove_priority(&mut self, rule_id: RuleId) {
+        self.priorities.remove(&rule_id);
+    }
+
+    /// Sort a list of rule IDs by priority (descending: highest first).
+    pub fn sort_by_priority(&self, rule_ids: &mut [RuleId]) {
+        rule_ids.sort_by(|a, b| {
+            let pa = self.get_priority(*a);
+            let pb = self.get_priority(*b);
+            pb.cmp(&pa) // descending
+        });
+    }
+
+    /// Return all rules ordered by priority (highest first).
+    pub fn ordered_rules(&self, index: &RuleIndex) -> Vec<PrioritizedRule> {
+        let rules = index.rules.read().expect("lock poisoned");
+        let mut result: Vec<PrioritizedRule> = rules
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| !r.name.is_empty())
+            .map(|(id, r)| PrioritizedRule {
+                id,
+                name: r.name.clone(),
+                priority: self.get_priority(id),
+            })
+            .collect();
+        result.sort_by(|a, b| b.priority.cmp(&a.priority));
+        result
+    }
+
+    /// Return the number of rules with explicit priorities.
+    pub fn len(&self) -> usize {
+        self.priorities.len()
+    }
+
+    /// Return true if no priorities are set.
+    pub fn is_empty(&self) -> bool {
+        self.priorities.is_empty()
+    }
+
+    /// Clear all priorities.
+    pub fn clear(&mut self) {
+        self.priorities.clear();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Wildcard matching helper
+// ---------------------------------------------------------------------------
+
+/// Check if a pattern (with `*` wildcards) matches a given string.
+pub fn wildcard_matches(pattern: &str, text: &str) -> bool {
+    if pattern == "*" {
+        return true;
+    }
+    if !pattern.contains('*') {
+        return pattern == text;
+    }
+
+    let parts: Vec<&str> = pattern.split('*').collect();
+    if parts.is_empty() {
+        return true;
+    }
+
+    let mut pos = 0usize;
+    for (i, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(found) = text[pos..].find(part) {
+            if i == 0 && found != 0 {
+                // First segment must anchor at the start
+                return false;
+            }
+            pos += found + part.len();
+        } else {
+            return false;
+        }
+    }
+
+    // If the pattern does not end with '*', the last part must anchor at the end
+    if let Some(last) = parts.last() {
+        if !last.is_empty() && !text.ends_with(last) {
+            return false;
+        }
+    }
+
+    true
+}
+
+impl RuleIndex {
+    /// Find rules whose body predicates match a wildcard pattern.
+    pub fn find_rules_by_wildcard(&self, pattern: &str) -> Vec<RuleId> {
+        let rules = self.rules.read().expect("lock poisoned");
+        let mut result = Vec::new();
+
+        for (id, rule) in rules.iter().enumerate() {
+            if rule.name.is_empty() {
+                continue;
+            }
+            for atom in &rule.body {
+                if let Some(pred) = Self::extract_predicate(atom) {
+                    if wildcard_matches(pattern, &pred) {
+                        result.push(id);
+                        break;
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Build the dependency graph for all indexed rules.
+    pub fn dependency_graph(&self) -> RuleDependencyGraph {
+        RuleDependencyGraph::from_index(self)
+    }
+
+    /// Re-index a single rule (remove old entries, re-add).
+    pub fn reindex_rule(&self, rule_id: RuleId) -> bool {
+        let rules = self.rules.read().expect("lock poisoned");
+        let rule = match rules.get(rule_id) {
+            Some(r) if !r.name.is_empty() => r.clone(),
+            _ => return false,
+        };
+        drop(rules);
+
+        // Remove old entries
+        if self.config.predicate_indexing {
+            self.unindex_by_predicate(&rule, rule_id);
+        }
+        if self.config.first_arg_indexing {
+            self.unindex_by_first_arg(&rule, rule_id);
+        }
+        if self.config.combined_indexing {
+            self.unindex_by_combined(&rule, rule_id);
+        }
+
+        // Re-add entries
+        if self.config.predicate_indexing {
+            self.index_by_predicate(&rule, rule_id);
+        }
+        if self.config.first_arg_indexing {
+            self.index_by_first_arg(&rule, rule_id);
+        }
+        if self.config.combined_indexing {
+            self.index_by_combined(&rule, rule_id);
+        }
+
+        true
+    }
+
+    /// Replace a rule in-place and re-index it.
+    pub fn replace_rule(&self, rule_id: RuleId, new_rule: Rule) -> Option<Rule> {
+        let rules = self.rules.read().expect("lock poisoned");
+        if rule_id >= rules.len() || rules[rule_id].name.is_empty() {
+            return None;
+        }
+
+        let old_rule = rules[rule_id].clone();
+        drop(rules);
+
+        // Un-index the old rule
+        if self.config.predicate_indexing {
+            self.unindex_by_predicate(&old_rule, rule_id);
+        }
+        if self.config.first_arg_indexing {
+            self.unindex_by_first_arg(&old_rule, rule_id);
+        }
+        if self.config.combined_indexing {
+            self.unindex_by_combined(&old_rule, rule_id);
+        }
+
+        // Index the new rule
+        if self.config.predicate_indexing {
+            self.index_by_predicate(&new_rule, rule_id);
+        }
+        if self.config.first_arg_indexing {
+            self.index_by_first_arg(&new_rule, rule_id);
+        }
+        if self.config.combined_indexing {
+            self.index_by_combined(&new_rule, rule_id);
+        }
+
+        // Store the new rule
+        let mut rules = self.rules.write().expect("lock poisoned");
+        rules[rule_id] = new_rule;
+
+        Some(old_rule)
+    }
+
+    /// Return predicate-level index density (entries / unique predicates).
+    pub fn predicate_density(&self) -> f64 {
+        let pred_index = self.predicate_index.read().expect("lock poisoned");
+        if pred_index.is_empty() {
+            return 0.0;
+        }
+        let total_entries: usize = pred_index.values().map(|v| v.len()).sum();
+        total_entries as f64 / pred_index.len() as f64
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -835,7 +1266,7 @@ mod tests {
 
         let removed = index.remove_rule(id1);
         assert!(removed.is_some());
-        assert_eq!(removed.unwrap().name, "rule1");
+        assert_eq!(removed.expect("already checked is_some").name, "rule1");
 
         assert_eq!(index.rule_count(), 1);
 
@@ -896,7 +1327,7 @@ mod tests {
 
         let retrieved = index.get_rule(id);
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().name, "rule1");
+        assert_eq!(retrieved.expect("already checked is_some").name, "rule1");
 
         let not_found = index.get_rule(999);
         assert!(not_found.is_none());
@@ -1031,5 +1462,364 @@ mod tests {
 
         let found = index.find_rules_for_triple(None, "hasAge", None);
         assert_eq!(found.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // Dependency graph tests
+    // -----------------------------------------------------------------------
+
+    fn create_chain_rule(name: &str, body_pred: &str, head_pred: &str) -> Rule {
+        Rule {
+            name: name.to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(body_pred.to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(head_pred.to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        }
+    }
+
+    #[test]
+    fn test_dependency_graph_basic() {
+        let index = RuleIndex::with_defaults();
+        // r1: parent -> ancestor
+        index.add_rule(create_chain_rule("r1", "parent", "ancestor"));
+        // r2: ancestor -> reachable
+        index.add_rule(create_chain_rule("r2", "ancestor", "reachable"));
+
+        let graph = index.dependency_graph();
+        assert_eq!(graph.edge_count(), 1);
+        // r1 triggers r2
+        let triggered = graph.triggered_by(0);
+        assert_eq!(triggered.len(), 1);
+        assert_eq!(triggered[0], 1);
+    }
+
+    #[test]
+    fn test_dependency_graph_triggers_of() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_chain_rule("r1", "parent", "ancestor"));
+        index.add_rule(create_chain_rule("r2", "ancestor", "reachable"));
+
+        let graph = index.dependency_graph();
+        let triggers = graph.triggers_of(1);
+        assert_eq!(triggers.len(), 1);
+        assert_eq!(triggers[0], 0);
+    }
+
+    #[test]
+    fn test_dependency_graph_roots() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_chain_rule("r1", "parent", "ancestor"));
+        index.add_rule(create_chain_rule("r2", "ancestor", "reachable"));
+        index.add_rule(create_chain_rule("r3", "reachable", "connected"));
+
+        let graph = index.dependency_graph();
+        let roots = graph.roots();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0], 0);
+    }
+
+    #[test]
+    fn test_dependency_graph_no_cycle() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_chain_rule("r1", "parent", "ancestor"));
+        index.add_rule(create_chain_rule("r2", "ancestor", "reachable"));
+
+        let graph = index.dependency_graph();
+        assert!(!graph.has_cycle());
+    }
+
+    #[test]
+    fn test_dependency_graph_cycle() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_chain_rule("r1", "a", "b"));
+        index.add_rule(create_chain_rule("r2", "b", "a"));
+
+        let graph = index.dependency_graph();
+        assert!(graph.has_cycle());
+    }
+
+    #[test]
+    fn test_dependency_graph_topological_order() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_chain_rule("r1", "parent", "ancestor"));
+        index.add_rule(create_chain_rule("r2", "ancestor", "reachable"));
+        index.add_rule(create_chain_rule("r3", "reachable", "connected"));
+
+        let graph = index.dependency_graph();
+        let topo = graph.topological_order();
+        assert_eq!(topo.len(), 3);
+        // r1 (0) should come before r2 (1), r2 before r3 (2)
+        let pos_r1 = topo.iter().position(|&x| x == 0).expect("r1 in topo");
+        let pos_r2 = topo.iter().position(|&x| x == 1).expect("r2 in topo");
+        let pos_r3 = topo.iter().position(|&x| x == 2).expect("r3 in topo");
+        assert!(pos_r1 < pos_r2);
+        assert!(pos_r2 < pos_r3);
+    }
+
+    #[test]
+    fn test_dependency_graph_topological_cycle_empty() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_chain_rule("r1", "a", "b"));
+        index.add_rule(create_chain_rule("r2", "b", "a"));
+
+        let graph = index.dependency_graph();
+        let topo = graph.topological_order();
+        assert!(topo.is_empty()); // cycle detected
+    }
+
+    #[test]
+    fn test_dependency_graph_empty_index() {
+        let index = RuleIndex::with_defaults();
+        let graph = index.dependency_graph();
+        assert_eq!(graph.edge_count(), 0);
+        assert!(graph.roots().is_empty());
+        assert!(!graph.has_cycle());
+    }
+
+    #[test]
+    fn test_dependency_graph_self_no_cycle() {
+        // A rule that doesn't reference itself
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_test_rule("r1", "parent"));
+        let graph = index.dependency_graph();
+        assert_eq!(graph.edge_count(), 0);
+    }
+
+    #[test]
+    fn test_dependency_graph_edges() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_chain_rule("r1", "parent", "ancestor"));
+        index.add_rule(create_chain_rule("r2", "ancestor", "reachable"));
+
+        let graph = index.dependency_graph();
+        let edges = graph.edges();
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].from, 0);
+        assert_eq!(edges[0].to, 1);
+        assert_eq!(edges[0].predicate, "ancestor");
+    }
+
+    // -----------------------------------------------------------------------
+    // Priority index tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_priority_set_and_get() {
+        let mut pi = PriorityIndex::new();
+        pi.set_priority(0, 10);
+        pi.set_priority(1, 5);
+        assert_eq!(pi.get_priority(0), 10);
+        assert_eq!(pi.get_priority(1), 5);
+        assert_eq!(pi.get_priority(99), 0); // default
+    }
+
+    #[test]
+    fn test_priority_sort() {
+        let mut pi = PriorityIndex::new();
+        pi.set_priority(0, 1);
+        pi.set_priority(1, 10);
+        pi.set_priority(2, 5);
+
+        let mut ids = vec![0, 1, 2];
+        pi.sort_by_priority(&mut ids);
+        assert_eq!(ids, vec![1, 2, 0]); // 10, 5, 1
+    }
+
+    #[test]
+    fn test_priority_ordered_rules() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_test_rule("low", "p1"));
+        index.add_rule(create_test_rule("high", "p2"));
+        index.add_rule(create_test_rule("mid", "p3"));
+
+        let mut pi = PriorityIndex::new();
+        pi.set_priority(0, 1);
+        pi.set_priority(1, 100);
+        pi.set_priority(2, 50);
+
+        let ordered = pi.ordered_rules(&index);
+        assert_eq!(ordered.len(), 3);
+        assert_eq!(ordered[0].name, "high");
+        assert_eq!(ordered[1].name, "mid");
+        assert_eq!(ordered[2].name, "low");
+    }
+
+    #[test]
+    fn test_priority_remove() {
+        let mut pi = PriorityIndex::new();
+        pi.set_priority(0, 10);
+        assert_eq!(pi.len(), 1);
+
+        pi.remove_priority(0);
+        assert_eq!(pi.len(), 0);
+        assert_eq!(pi.get_priority(0), 0);
+    }
+
+    #[test]
+    fn test_priority_is_empty() {
+        let pi = PriorityIndex::new();
+        assert!(pi.is_empty());
+    }
+
+    #[test]
+    fn test_priority_clear() {
+        let mut pi = PriorityIndex::new();
+        pi.set_priority(0, 10);
+        pi.set_priority(1, 20);
+        pi.clear();
+        assert!(pi.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Wildcard matching tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_wildcard_star() {
+        assert!(wildcard_matches("*", "anything"));
+        assert!(wildcard_matches("*", ""));
+    }
+
+    #[test]
+    fn test_wildcard_exact() {
+        assert!(wildcard_matches("parent", "parent"));
+        assert!(!wildcard_matches("parent", "child"));
+    }
+
+    #[test]
+    fn test_wildcard_prefix() {
+        assert!(wildcard_matches("par*", "parent"));
+        assert!(!wildcard_matches("par*", "child"));
+    }
+
+    #[test]
+    fn test_wildcard_suffix() {
+        assert!(wildcard_matches("*ent", "parent"));
+        assert!(!wildcard_matches("*ent", "child"));
+    }
+
+    #[test]
+    fn test_wildcard_middle() {
+        assert!(wildcard_matches("p*t", "parent"));
+        assert!(wildcard_matches("p*t", "pet"));
+        assert!(!wildcard_matches("p*t", "patch")); // doesn't end with t
+    }
+
+    #[test]
+    fn test_wildcard_find_rules() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_test_rule("r1", "parent"));
+        index.add_rule(create_test_rule("r2", "child"));
+        index.add_rule(create_test_rule("r3", "partner"));
+
+        let found = index.find_rules_by_wildcard("par*");
+        assert_eq!(found.len(), 2); // parent and partner
+    }
+
+    #[test]
+    fn test_wildcard_star_all() {
+        let index = RuleIndex::with_defaults();
+        index.add_rule(create_test_rule("r1", "parent"));
+        index.add_rule(create_test_rule("r2", "child"));
+
+        let found = index.find_rules_by_wildcard("*");
+        assert_eq!(found.len(), 2);
+    }
+
+    // -----------------------------------------------------------------------
+    // Incremental re-indexing tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_reindex_rule() {
+        let index = RuleIndex::with_defaults();
+        let id = index.add_rule(create_test_rule("r1", "parent"));
+        assert!(index.reindex_rule(id));
+        let found = index.find_rules_for_triple(None, "parent", None);
+        assert_eq!(found.len(), 1);
+    }
+
+    #[test]
+    fn test_reindex_invalid_id() {
+        let index = RuleIndex::with_defaults();
+        assert!(!index.reindex_rule(999));
+    }
+
+    #[test]
+    fn test_replace_rule() {
+        let index = RuleIndex::with_defaults();
+        let id = index.add_rule(create_test_rule("r1", "parent"));
+
+        let old = index.replace_rule(id, create_test_rule("r1_new", "child"));
+        assert!(old.is_some());
+        assert_eq!(old.expect("old rule").name, "r1");
+
+        // The stored rule should be updated
+        let retrieved = index.get_rule(id);
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.expect("rule exists").name, "r1_new");
+
+        // New predicate should be indexed via the predicate index
+        let found_child = index.find_rules_for_triple(None, "child", None);
+        assert!(found_child.contains(&id));
+
+        // Verify old predicate is removed from predicate index
+        let found_by_pred = index.find_rules_by_predicate("parent");
+        assert!(found_by_pred.is_empty());
+    }
+
+    #[test]
+    fn test_replace_rule_invalid_id() {
+        let index = RuleIndex::with_defaults();
+        let result = index.replace_rule(999, create_test_rule("r1", "parent"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_predicate_density() {
+        let index = RuleIndex::with_defaults();
+        assert_eq!(index.predicate_density(), 0.0);
+
+        index.add_rule(create_test_rule("r1", "parent"));
+        index.add_rule(create_test_rule("r2", "parent"));
+        index.add_rule(create_test_rule("r3", "child"));
+
+        let density = index.predicate_density();
+        // 3 rule entries across 2 predicates => density = 1.5
+        assert!(density > 1.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Multiple adds via add_rules
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_add_rules_batch() {
+        let index = RuleIndex::with_defaults();
+        let ids = index.add_rules(vec![
+            create_test_rule("r1", "parent"),
+            create_test_rule("r2", "child"),
+            create_test_rule("r3", "sibling"),
+        ]);
+        assert_eq!(ids.len(), 3);
+        assert_eq!(index.rule_count(), 3);
+    }
+
+    // -----------------------------------------------------------------------
+    // Remove non-existent rule
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_remove_nonexistent_rule() {
+        let index = RuleIndex::with_defaults();
+        let result = index.remove_rule(999);
+        assert!(result.is_none());
     }
 }

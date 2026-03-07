@@ -1,7 +1,11 @@
 //! Circuit breaker pattern for fault tolerance
+//!
+//! Implements the circuit breaker pattern with three states:
+//! - Closed: requests flow normally
+//! - Open: requests are rejected immediately
+//! - Half-Open: limited requests allowed to test recovery
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 /// Circuit breaker state
@@ -9,27 +13,22 @@ use std::time::{Duration, Instant};
 pub enum CircuitState {
     /// Circuit is closed, requests flow normally
     Closed,
-
-    /// Circuit is open, requests are rejected
+    /// Circuit is open, requests are rejected immediately
     Open,
-
-    /// Circuit is half-open, limited requests allowed to test recovery
+    /// Circuit is half-open, limited requests allowed to probe recovery
     HalfOpen,
 }
 
-/// Circuit breaker configuration
+/// Configuration for the circuit breaker
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CircuitBreakerConfig {
-    /// Number of consecutive failures before opening circuit
+    /// Number of consecutive failures before opening the circuit
     pub failure_threshold: usize,
-
-    /// Number of consecutive successes to close circuit from half-open
+    /// Number of consecutive successes needed to close from half-open
     pub success_threshold: usize,
-
-    /// Time to wait before transitioning from open to half-open
+    /// How long to wait before transitioning from Open to HalfOpen
     pub timeout: Duration,
-
-    /// Maximum number of calls allowed in half-open state
+    /// Maximum concurrent calls allowed in half-open state
     pub half_open_max_calls: usize,
 }
 
@@ -48,55 +47,54 @@ impl Default for CircuitBreakerConfig {
 pub struct CircuitBreaker {
     config: CircuitBreakerConfig,
     state: CircuitState,
-    failure_count: AtomicUsize,
-    success_count: AtomicUsize,
-    last_failure_time: AtomicU64,
-    half_open_calls: AtomicUsize,
+    failure_count: usize,
+    success_count: usize,
+    half_open_calls: usize,
+    /// When the circuit was last opened (for timeout tracking)
+    opened_at: Option<Instant>,
 }
 
 impl CircuitBreaker {
+    /// Create a new circuit breaker with the given configuration
     pub fn new(config: CircuitBreakerConfig) -> Self {
         Self {
             config,
             state: CircuitState::Closed,
-            failure_count: AtomicUsize::new(0),
-            success_count: AtomicUsize::new(0),
-            last_failure_time: AtomicU64::new(0),
-            half_open_calls: AtomicUsize::new(0),
+            failure_count: 0,
+            success_count: 0,
+            half_open_calls: 0,
+            opened_at: None,
         }
     }
 
-    /// Check if a call can be executed
+    /// Check whether a request can currently be executed.
+    ///
+    /// For `Open` circuits, this also checks whether the timeout has elapsed
+    /// and transitions to `HalfOpen` if so.
     pub fn can_execute(&mut self) -> bool {
         match self.state {
             CircuitState::Closed => true,
 
             CircuitState::Open => {
-                // Check if timeout has elapsed
-                let last_failure = self.last_failure_time.load(Ordering::Relaxed);
-                if last_failure == 0 {
-                    return false;
+                if let Some(opened_at) = self.opened_at {
+                    if opened_at.elapsed() >= self.config.timeout {
+                        // Transition to half-open
+                        self.state = CircuitState::HalfOpen;
+                        self.half_open_calls = 0;
+                        self.success_count = 0;
+                        return true;
+                    }
                 }
+                false
+            }
 
-                let elapsed = Instant::now()
-                    .duration_since(Instant::now() - Duration::from_secs(last_failure))
-                    .as_secs();
-
-                if elapsed >= self.config.timeout.as_secs() {
-                    // Transition to half-open
-                    self.state = CircuitState::HalfOpen;
-                    self.half_open_calls.store(0, Ordering::Relaxed);
-                    self.success_count.store(0, Ordering::Relaxed);
+            CircuitState::HalfOpen => {
+                if self.half_open_calls < self.config.half_open_max_calls {
+                    self.half_open_calls += 1;
                     true
                 } else {
                     false
                 }
-            }
-
-            CircuitState::HalfOpen => {
-                // Allow limited number of calls
-                let calls = self.half_open_calls.fetch_add(1, Ordering::Relaxed);
-                calls < self.config.half_open_max_calls
             }
         }
     }
@@ -105,24 +103,26 @@ impl CircuitBreaker {
     pub fn record_success(&mut self) {
         match self.state {
             CircuitState::Closed => {
-                // Reset failure count on success
-                self.failure_count.store(0, Ordering::Relaxed);
+                // Reset failure count on any success while closed
+                self.failure_count = 0;
             }
 
             CircuitState::HalfOpen => {
-                let successes = self.success_count.fetch_add(1, Ordering::Relaxed) + 1;
-                if successes >= self.config.success_threshold {
-                    // Close the circuit
+                self.success_count += 1;
+                if self.success_count >= self.config.success_threshold {
+                    // Enough successes — close the circuit
                     self.state = CircuitState::Closed;
-                    self.failure_count.store(0, Ordering::Relaxed);
-                    self.success_count.store(0, Ordering::Relaxed);
+                    self.failure_count = 0;
+                    self.success_count = 0;
+                    self.opened_at = None;
                 }
             }
 
             CircuitState::Open => {
-                // Should not happen, but reset anyway
+                // Shouldn't normally happen, but reset defensively
                 self.state = CircuitState::Closed;
-                self.failure_count.store(0, Ordering::Relaxed);
+                self.failure_count = 0;
+                self.opened_at = None;
             }
         }
     }
@@ -131,33 +131,24 @@ impl CircuitBreaker {
     pub fn record_failure(&mut self) {
         match self.state {
             CircuitState::Closed => {
-                let failures = self.failure_count.fetch_add(1, Ordering::Relaxed) + 1;
-                if failures >= self.config.failure_threshold {
-                    // Open the circuit
+                self.failure_count += 1;
+                if self.failure_count >= self.config.failure_threshold {
                     self.state = CircuitState::Open;
-                    let now = Instant::now()
-                        .duration_since(Instant::now() - Duration::from_secs(0))
-                        .as_secs();
-                    self.last_failure_time.store(now, Ordering::Relaxed);
+                    self.opened_at = Some(Instant::now());
                 }
             }
 
             CircuitState::HalfOpen => {
-                // Any failure in half-open state reopens the circuit
+                // Any failure in half-open reopens the circuit
                 self.state = CircuitState::Open;
-                let now = Instant::now()
-                    .duration_since(Instant::now() - Duration::from_secs(0))
-                    .as_secs();
-                self.last_failure_time.store(now, Ordering::Relaxed);
-                self.success_count.store(0, Ordering::Relaxed);
+                self.opened_at = Some(Instant::now());
+                self.success_count = 0;
+                self.half_open_calls = 0;
             }
 
             CircuitState::Open => {
-                // Update last failure time
-                let now = Instant::now()
-                    .duration_since(Instant::now() - Duration::from_secs(0))
-                    .as_secs();
-                self.last_failure_time.store(now, Ordering::Relaxed);
+                // Update opened_at to restart the timeout
+                self.opened_at = Some(Instant::now());
             }
         }
     }
@@ -170,34 +161,34 @@ impl CircuitBreaker {
     /// Reset circuit breaker to closed state
     pub fn reset(&mut self) {
         self.state = CircuitState::Closed;
-        self.failure_count.store(0, Ordering::Relaxed);
-        self.success_count.store(0, Ordering::Relaxed);
-        self.last_failure_time.store(0, Ordering::Relaxed);
-        self.half_open_calls.store(0, Ordering::Relaxed);
+        self.failure_count = 0;
+        self.success_count = 0;
+        self.half_open_calls = 0;
+        self.opened_at = None;
     }
 
     /// Get current failure count
     pub fn failure_count(&self) -> usize {
-        self.failure_count.load(Ordering::Relaxed)
+        self.failure_count
     }
 
-    /// Get current success count (in half-open state)
+    /// Get current success count (meaningful in half-open state)
     pub fn success_count(&self) -> usize {
-        self.success_count.load(Ordering::Relaxed)
+        self.success_count
     }
 
     /// Get metrics for monitoring
     pub fn metrics(&self) -> CircuitBreakerMetrics {
         CircuitBreakerMetrics {
             state: self.state,
-            failure_count: self.failure_count.load(Ordering::Relaxed),
-            success_count: self.success_count.load(Ordering::Relaxed),
-            half_open_calls: self.half_open_calls.load(Ordering::Relaxed),
+            failure_count: self.failure_count,
+            success_count: self.success_count,
+            half_open_calls: self.half_open_calls,
         }
     }
 }
 
-/// Circuit breaker metrics
+/// Snapshot of circuit breaker metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CircuitBreakerMetrics {
     pub state: CircuitState,
@@ -220,7 +211,6 @@ mod tests {
 
         assert_eq!(breaker.state(), CircuitState::Closed);
 
-        // Record failures
         breaker.record_failure();
         assert_eq!(breaker.state(), CircuitState::Closed);
 
@@ -239,12 +229,10 @@ mod tests {
         };
         let mut breaker = CircuitBreaker::new(config);
 
-        // Record some failures
         breaker.record_failure();
         breaker.record_failure();
         assert_eq!(breaker.failure_count(), 2);
 
-        // Success resets counter
         breaker.record_success();
         assert_eq!(breaker.failure_count(), 0);
     }
@@ -259,15 +247,12 @@ mod tests {
         };
         let mut breaker = CircuitBreaker::new(config);
 
-        // Open the circuit
         breaker.record_failure();
         breaker.record_failure();
         assert_eq!(breaker.state(), CircuitState::Open);
 
-        // Wait for timeout
         std::thread::sleep(Duration::from_millis(150));
 
-        // Check if transition to half-open
         assert!(breaker.can_execute());
         assert_eq!(breaker.state(), CircuitState::HalfOpen);
     }
@@ -282,16 +267,14 @@ mod tests {
         };
         let mut breaker = CircuitBreaker::new(config);
 
-        // Open the circuit
         breaker.record_failure();
         breaker.record_failure();
         assert_eq!(breaker.state(), CircuitState::Open);
 
-        // Wait and transition to half-open
         std::thread::sleep(Duration::from_millis(150));
         assert!(breaker.can_execute());
+        assert_eq!(breaker.state(), CircuitState::HalfOpen);
 
-        // Record successes
         breaker.record_success();
         assert_eq!(breaker.state(), CircuitState::HalfOpen);
 
@@ -309,16 +292,13 @@ mod tests {
         };
         let mut breaker = CircuitBreaker::new(config);
 
-        // Open the circuit
         breaker.record_failure();
         breaker.record_failure();
 
-        // Wait and transition to half-open
         std::thread::sleep(Duration::from_millis(150));
         assert!(breaker.can_execute());
         assert_eq!(breaker.state(), CircuitState::HalfOpen);
 
-        // Failure in half-open reopens circuit
         breaker.record_failure();
         assert_eq!(breaker.state(), CircuitState::Open);
     }
@@ -331,12 +311,10 @@ mod tests {
         };
         let mut breaker = CircuitBreaker::new(config);
 
-        // Open the circuit
         breaker.record_failure();
         breaker.record_failure();
         assert_eq!(breaker.state(), CircuitState::Open);
 
-        // Reset
         breaker.reset();
         assert_eq!(breaker.state(), CircuitState::Closed);
         assert_eq!(breaker.failure_count(), 0);
@@ -352,5 +330,19 @@ mod tests {
         let metrics = breaker.metrics();
         assert_eq!(metrics.failure_count, 2);
         assert_eq!(metrics.state, CircuitState::Closed);
+    }
+
+    #[test]
+    fn test_circuit_breaker_rejects_when_open() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            timeout: Duration::from_secs(60),
+            ..Default::default()
+        };
+        let mut breaker = CircuitBreaker::new(config);
+
+        breaker.record_failure();
+        assert_eq!(breaker.state(), CircuitState::Open);
+        assert!(!breaker.can_execute());
     }
 }

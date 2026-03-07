@@ -14,7 +14,7 @@
 //!  SG_ EngineSpeed : 0|16@1+ (0.125,0) [0|8031.875] "rpm" Dashboard
 //! "#;
 //!
-//! let db = parse_dbc(dbc_content).unwrap();
+//! let db = parse_dbc(dbc_content).expect("DBC parsing should succeed");
 //! let config = RdfMappingConfig {
 //!     device_id: "vehicle001".to_string(),
 //!     base_iri: "http://automotive.example.com/vehicle".to_string(),
@@ -24,8 +24,8 @@
 //! let mut mapper = CanRdfMapper::new(db, config);
 //!
 //! // Map a CAN frame
-//! let id = CanId::standard(0x7E8).unwrap();
-//! let frame = CanFrame::new(id, vec![0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).unwrap();
+//! let id = CanId::standard(0x7E8).expect("valid standard CAN ID");
+//! let frame = CanFrame::new(id, vec![0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).expect("valid CAN frame");
 //! let triples = mapper.map_frame(&frame);
 //! ```
 
@@ -93,7 +93,8 @@ impl GeneratedTriple {
             if let Ok(pred) = NamedNode::new(&prov_time) {
                 let lit = Literal::new_typed(
                     self.timestamp.to_rfc3339(),
-                    NamedNode::new(format!("{}dateTime", ns::XSD)).unwrap(),
+                    NamedNode::new(format!("{}dateTime", ns::XSD))
+                        .expect("construction should succeed"),
                 );
                 triples.push(Triple::new(subject.clone(), pred, lit));
             }
@@ -117,7 +118,8 @@ impl GeneratedTriple {
             if let Ok(pred) = NamedNode::new(&can_id_pred) {
                 let lit = Literal::new_typed(
                     format!("{:#X}", self.can_id),
-                    NamedNode::new(format!("{}hexBinary", ns::XSD)).unwrap(),
+                    NamedNode::new(format!("{}hexBinary", ns::XSD))
+                        .expect("construction should succeed"),
                 );
                 triples.push(Triple::new(subject.clone(), pred, lit));
             }
@@ -273,11 +275,13 @@ impl CanRdfMapper {
         // Create typed literal based on value type
         let literal = if let Some(ref desc) = value.description {
             // Enum value - use string
-            let datatype = NamedNode::new(format!("{}string", ns::XSD)).unwrap();
+            let datatype =
+                NamedNode::new(format!("{}string", ns::XSD)).expect("construction should succeed");
             Literal::new_typed(desc.clone(), datatype)
         } else {
             // Numeric value - use float or integer based on signal
-            let datatype = NamedNode::new(format!("{}float", ns::XSD)).unwrap();
+            let datatype =
+                NamedNode::new(format!("{}float", ns::XSD)).expect("construction should succeed");
             Literal::new_typed(format!("{}", value.physical_value), datatype)
         };
 
@@ -492,7 +496,7 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
 "#;
 
     fn create_test_mapper() -> CanRdfMapper {
-        let db = parse_dbc(TEST_DBC).unwrap();
+        let db = parse_dbc(TEST_DBC).expect("DBC parsing should succeed");
         let config = RdfMappingConfig {
             device_id: "vehicle001".to_string(),
             base_iri: "http://automotive.example.com/vehicle".to_string(),
@@ -506,11 +510,13 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
         let mut mapper = create_test_mapper();
 
         // Create frame with EngineSpeed = 16384 (2048 rpm)
-        let id = CanId::standard(2024).unwrap();
-        let frame =
-            CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00]).unwrap();
+        let id = CanId::standard(2024).expect("valid standard CAN ID");
+        let frame = CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00])
+            .expect("valid CAN frame");
 
-        let triples = mapper.map_frame(&frame).unwrap();
+        let triples = mapper
+            .map_frame(&frame)
+            .expect("frame mapping should succeed");
 
         // Should have triples for EngineSpeed, EngineTemp, ThrottlePos
         assert_eq!(triples.len(), 3);
@@ -535,11 +541,13 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
     fn test_provenance_triples() {
         let mut mapper = create_test_mapper();
 
-        let id = CanId::standard(2024).unwrap();
-        let frame =
-            CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00]).unwrap();
+        let id = CanId::standard(2024).expect("valid standard CAN ID");
+        let frame = CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00])
+            .expect("valid CAN frame");
 
-        let triples = mapper.map_frame(&frame).unwrap();
+        let triples = mapper
+            .map_frame(&frame)
+            .expect("frame mapping should succeed");
         let prov_triples = triples[0].provenance_triples();
 
         // Should have timestamp and CAN ID triples
@@ -557,18 +565,22 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
     fn test_deadband_filtering() {
         let mut mapper = create_test_mapper().with_deadband(100.0);
 
-        let id = CanId::standard(2024).unwrap();
+        let id = CanId::standard(2024).expect("valid standard CAN ID");
 
         // First reading
-        let frame1 =
-            CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00]).unwrap();
-        let triples1 = mapper.map_frame(&frame1).unwrap();
+        let frame1 = CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00])
+            .expect("valid CAN frame");
+        let triples1 = mapper
+            .map_frame(&frame1)
+            .expect("frame mapping should succeed");
         assert!(!triples1.is_empty());
 
         // Second reading - within deadband (small change)
-        let frame2 =
-            CanFrame::new(id, vec![0x10, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00]).unwrap();
-        let triples2 = mapper.map_frame(&frame2).unwrap();
+        let frame2 = CanFrame::new(id, vec![0x10, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00])
+            .expect("valid CAN frame");
+        let triples2 = mapper
+            .map_frame(&frame2)
+            .expect("frame mapping should succeed");
 
         // Some signals may be filtered
         assert!(triples2.len() <= triples1.len());
@@ -587,11 +599,13 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
     fn test_subject_predicate_iris() {
         let mut mapper = create_test_mapper();
 
-        let id = CanId::standard(2024).unwrap();
-        let frame =
-            CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00]).unwrap();
+        let id = CanId::standard(2024).expect("valid standard CAN ID");
+        let frame = CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00])
+            .expect("valid CAN frame");
 
-        let triples = mapper.map_frame(&frame).unwrap();
+        let triples = mapper
+            .map_frame(&frame)
+            .expect("frame mapping should succeed");
 
         // Check subject IRI format
         let subject = match triples[0].triple.subject() {
@@ -619,16 +633,20 @@ VAL_ 2024 ThrottlePos 0 "Closed" 100 "WOT";
     fn test_reset_change_detection() {
         let mut mapper = create_test_mapper().with_deadband(100.0);
 
-        let id = CanId::standard(2024).unwrap();
-        let frame =
-            CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00]).unwrap();
+        let id = CanId::standard(2024).expect("valid standard CAN ID");
+        let frame = CanFrame::new(id, vec![0x00, 0x40, 0x96, 0x80, 0x00, 0x00, 0x00, 0x00])
+            .expect("valid CAN frame");
 
         // First reading
-        let _ = mapper.map_frame(&frame).unwrap();
+        let _ = mapper
+            .map_frame(&frame)
+            .expect("frame mapping should succeed");
 
         // Reset and read same value - should generate triples again
         mapper.reset_change_detection();
-        let triples = mapper.map_frame(&frame).unwrap();
+        let triples = mapper
+            .map_frame(&frame)
+            .expect("frame mapping should succeed");
         assert!(!triples.is_empty());
     }
 }

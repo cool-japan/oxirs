@@ -433,8 +433,12 @@ impl StoragePerformanceMonitor {
         let p50 = sorted_latencies[sorted_latencies.len() / 2];
         let p95 = sorted_latencies[sorted_latencies.len() * 95 / 100];
         let p99 = sorted_latencies[sorted_latencies.len() * 99 / 100];
-        let min = *sorted_latencies.first().unwrap();
-        let max = *sorted_latencies.last().unwrap();
+        let min = *sorted_latencies
+            .first()
+            .expect("collection validated to be non-empty");
+        let max = *sorted_latencies
+            .last()
+            .expect("collection validated to be non-empty");
 
         Some(StorageOperationStats {
             operation: operation.to_string(),

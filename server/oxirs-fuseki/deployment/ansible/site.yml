@@ -14,7 +14,7 @@
 
   vars:
     # Default configuration (can be overridden in group_vars or host_vars)
-    oxirs_version: "0.1.0-beta.2"
+    oxirs_version: "0.2.0"
     oxirs_install_dir: "/opt/oxirs-fuseki"
     oxirs_data_dir: "/var/lib/oxirs-fuseki"
     oxirs_log_dir: "/var/log/oxirs-fuseki"

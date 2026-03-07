@@ -479,9 +479,9 @@ mod tests {
 
     fn create_test_triple(s: &str, p: &str, o: &str) -> Triple {
         Triple::new(
-            NamedNode::new(s).unwrap(),
-            NamedNode::new(p).unwrap(),
-            NamedNode::new(o).unwrap(),
+            NamedNode::new(s).expect("valid IRI"),
+            NamedNode::new(p).expect("valid IRI"),
+            NamedNode::new(o).expect("valid IRI"),
         )
     }
 
@@ -613,8 +613,20 @@ mod tests {
 
         let groups = GraphTransformer::group_by_subject(&triples);
         assert_eq!(groups.len(), 2);
-        assert_eq!(groups.get("<http://example.org/s1>").unwrap().len(), 2);
-        assert_eq!(groups.get("<http://example.org/s2>").unwrap().len(), 1);
+        assert_eq!(
+            groups
+                .get("<http://example.org/s1>")
+                .expect("key should exist")
+                .len(),
+            2
+        );
+        assert_eq!(
+            groups
+                .get("<http://example.org/s2>")
+                .expect("key should exist")
+                .len(),
+            1
+        );
     }
 
     #[test]

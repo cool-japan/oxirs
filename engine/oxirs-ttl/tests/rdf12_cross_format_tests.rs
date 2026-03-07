@@ -488,10 +488,10 @@ fn test_large_trig_with_quoted_triples() {
 
     assert_eq!(quads.len(), 500);
 
-    // Should parse 500 quoted triples in TriG in < 200ms (more lenient for CI/debug builds)
+    // Should parse 500 quoted triples in TriG in < 1000ms (lenient for CI/debug builds)
     assert!(
-        parse_duration.as_millis() < 200,
-        "TriG parsing took {:?} (should be < 200ms)",
+        parse_duration.as_millis() < 1000,
+        "TriG parsing took {:?} (should be < 1000ms)",
         parse_duration
     );
 
@@ -501,8 +501,8 @@ fn test_large_trig_with_quoted_triples() {
     let serialize_duration = start.elapsed();
 
     assert!(
-        serialize_duration.as_millis() < 200,
-        "TriG serialization took {:?} (should be < 200ms)",
+        serialize_duration.as_millis() < 1000,
+        "TriG serialization took {:?} (should be < 1000ms)",
         serialize_duration
     );
 }

@@ -713,7 +713,9 @@ impl TransactionalProcessor {
         processed_events: &Arc<DashMap<String, DateTime<Utc>>>,
         config: &TransactionalConfig,
     ) {
-        let cutoff = Utc::now() - chrono::Duration::from_std(config.idempotency_window).unwrap();
+        let cutoff = Utc::now()
+            - chrono::Duration::from_std(config.idempotency_window)
+                .expect("idempotency_window should be valid chrono Duration");
 
         processed_events.retain(|_, timestamp| *timestamp > cutoff);
 

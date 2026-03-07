@@ -1,8 +1,8 @@
 # OxiRS Stream - Real-time RDF Streaming
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Production Release (v0.1.0) - Released January 7, 2026
+**Status**: v0.2.0 - Released March 5, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -35,10 +35,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-stream = "0.1.0"
+oxirs-stream = "0.2.0"
 
 # Enable specific brokers
-oxirs-stream = { version = "0.1.0", features = ["kafka", "nats"] }
+oxirs-stream = { version = "0.2.0", features = ["kafka", "nats"] }
 ```
 
 ## Quick Start
@@ -414,7 +414,7 @@ This is an experimental module. Feedback welcome!
 
 ## License
 
-MIT OR Apache-2.0
+Apache-2.0
 
 ## See Also
 

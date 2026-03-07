@@ -331,15 +331,17 @@ mod tests {
     fn test_node_kind_validator() {
         let validator = NodeKindConstraintValidator;
         let context = ConstraintContext::new(
-            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
+            Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI")),
             ShapeId::new("test_shape"),
         )
         .with_values(vec![Term::NamedNode(
-            NamedNode::new("http://example.org/value").unwrap(),
+            NamedNode::new("http://example.org/value").expect("valid IRI"),
         )]);
 
-        let store = ConcreteStore::new().unwrap();
-        let result = validator.validate(&store, &context, None).unwrap();
+        let store = ConcreteStore::new().expect("store creation should succeed");
+        let result = validator
+            .validate(&store, &context, None)
+            .expect("validation should succeed");
         assert!(result.is_satisfied());
     }
 
@@ -349,26 +351,26 @@ mod tests {
 
         // Test with values - should pass
         let context_with_values = ConstraintContext::new(
-            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
+            Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI")),
             ShapeId::new("test_shape"),
         )
         .with_values(vec![Term::Literal(Literal::new("value"))]);
 
-        let store = ConcreteStore::new().unwrap();
+        let store = ConcreteStore::new().expect("store creation should succeed");
         let result = validator
             .validate(&store, &context_with_values, None)
-            .unwrap();
+            .expect("validation should succeed");
         assert!(result.is_satisfied());
 
         // Test without values - should fail
         let context_no_values = ConstraintContext::new(
-            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
+            Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI")),
             ShapeId::new("test_shape"),
         );
 
         let result = validator
             .validate(&store, &context_no_values, None)
-            .unwrap();
+            .expect("validation should succeed");
         assert!(result.is_violated());
     }
 }

@@ -340,7 +340,7 @@ mod tests {
     fn test_resample_function() -> TsdbResult<()> {
         let resample_fn = resample_function();
 
-        let timestamp = DateTime::from_timestamp(1609459200, 0).unwrap(); // 2021-01-01 00:00:00
+        let timestamp = DateTime::from_timestamp(1609459200, 0).expect("valid timestamp"); // 2021-01-01 00:00:00
         let result = resample_fn(&[
             TemporalValue::Timestamp(timestamp),
             TemporalValue::String("1h".to_string()),
@@ -360,7 +360,7 @@ mod tests {
     fn test_resample_rounding() -> TsdbResult<()> {
         let resample_fn = resample_function();
 
-        let timestamp = DateTime::from_timestamp(1609459830, 0).unwrap(); // 2021-01-01 00:10:30
+        let timestamp = DateTime::from_timestamp(1609459830, 0).expect("valid timestamp"); // 2021-01-01 00:10:30
         let result = resample_fn(&[
             TemporalValue::Timestamp(timestamp),
             TemporalValue::String("1h".to_string()),
@@ -380,7 +380,7 @@ mod tests {
     fn test_interpolate_function() -> TsdbResult<()> {
         let interpolate_fn = interpolate_function();
 
-        let timestamp = DateTime::from_timestamp(1609459200, 0).unwrap();
+        let timestamp = DateTime::from_timestamp(1609459200, 0).expect("valid timestamp");
         let result = interpolate_fn(&[
             TemporalValue::Timestamp(timestamp),
             TemporalValue::Float(42.5),
@@ -397,7 +397,7 @@ mod tests {
     fn test_interpolate_null() -> TsdbResult<()> {
         let interpolate_fn = interpolate_function();
 
-        let timestamp = DateTime::from_timestamp(1609459200, 0).unwrap();
+        let timestamp = DateTime::from_timestamp(1609459200, 0).expect("valid timestamp");
         let result = interpolate_fn(&[
             TemporalValue::Timestamp(timestamp),
             TemporalValue::Null,
@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_round_to_interval() {
-        let timestamp = DateTime::from_timestamp(1609459830, 0).unwrap(); // 2021-01-01 00:10:30
+        let timestamp = DateTime::from_timestamp(1609459830, 0).expect("valid timestamp"); // 2021-01-01 00:10:30
         let interval = Duration::hours(1);
         let rounded = round_to_interval(timestamp, interval);
 
@@ -461,7 +461,7 @@ mod tests {
         let str_val = TemporalValue::String("hello".to_string());
         assert_eq!(str_val.as_string()?, "hello");
 
-        let timestamp = DateTime::from_timestamp(1609459200, 0).unwrap();
+        let timestamp = DateTime::from_timestamp(1609459200, 0).expect("valid timestamp");
         let ts_val = TemporalValue::Timestamp(timestamp);
         assert_eq!(ts_val.as_timestamp()?, timestamp);
 

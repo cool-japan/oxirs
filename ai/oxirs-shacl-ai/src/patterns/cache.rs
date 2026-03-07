@@ -839,7 +839,7 @@ impl AdaptiveEvictionManager {
             let current_performance = self
                 .strategy_performance
                 .get_mut(&self.current_strategy)
-                .unwrap();
+                .expect("current strategy should exist in performance map");
             current_performance.hit_rate_after_eviction = recent_hit_rate;
             current_performance.memory_efficiency = memory_efficiency;
             current_performance.sample_count += 1;
@@ -851,7 +851,10 @@ impl AdaptiveEvictionManager {
 
         // Switch if there's significant improvement
         if best_strategy != self.current_strategy {
-            let best_performance = self.strategy_performance.get(&best_strategy).unwrap();
+            let best_performance = self
+                .strategy_performance
+                .get(&best_strategy)
+                .expect("best strategy should exist in performance map");
             let best_score =
                 best_performance.hit_rate_after_eviction * best_performance.memory_efficiency;
 

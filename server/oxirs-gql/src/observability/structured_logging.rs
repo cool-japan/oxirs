@@ -315,7 +315,7 @@ impl StructuredLogger {
         }
 
         // Store entry
-        let mut entries = self.entries.lock().unwrap();
+        let mut entries = self.entries.lock().expect("lock should not be poisoned");
         entries.push(entry);
 
         // Trim if too many entries
@@ -397,7 +397,7 @@ impl StructuredLogger {
 
     /// Get recent log entries
     pub fn get_recent_entries(&self, count: usize) -> Vec<LogEntry> {
-        let entries = self.entries.lock().unwrap();
+        let entries = self.entries.lock().expect("lock should not be poisoned");
         let start = if entries.len() > count {
             entries.len() - count
         } else {
@@ -410,7 +410,7 @@ impl StructuredLogger {
     pub fn get_entries_by_level(&self, level: LogLevel) -> Vec<LogEntry> {
         self.entries
             .lock()
-            .unwrap()
+            .expect("lock should not be poisoned")
             .iter()
             .filter(|e| e.level == level)
             .cloned()
@@ -421,7 +421,7 @@ impl StructuredLogger {
     pub fn get_entries_by_request(&self, request_id: &str) -> Vec<LogEntry> {
         self.entries
             .lock()
-            .unwrap()
+            .expect("lock should not be poisoned")
             .iter()
             .filter(|e| {
                 e.request_context
@@ -435,26 +435,32 @@ impl StructuredLogger {
 
     /// Export logs as JSON array
     pub fn export_json(&self) -> String {
-        let entries = self.entries.lock().unwrap();
+        let entries = self.entries.lock().expect("lock should not be poisoned");
         let json_entries: Vec<String> = entries.iter().map(|e| e.to_json()).collect();
         format!("[{}]", json_entries.join(","))
     }
 
     /// Clear all log entries
     pub fn clear(&self) {
-        self.entries.lock().unwrap().clear();
+        self.entries
+            .lock()
+            .expect("lock should not be poisoned")
+            .clear();
     }
 
     /// Get total log count
     pub fn count(&self) -> usize {
-        self.entries.lock().unwrap().len()
+        self.entries
+            .lock()
+            .expect("lock should not be poisoned")
+            .len()
     }
 
     /// Get count by level
     pub fn count_by_level(&self, level: LogLevel) -> usize {
         self.entries
             .lock()
-            .unwrap()
+            .expect("lock should not be poisoned")
             .iter()
             .filter(|e| e.level == level)
             .count()

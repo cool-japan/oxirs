@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Knowledge graph embeddings with TransE, ComplEx, and custom models"
 keywords = ["embeddings", "knowledge-graph", "machine-learning", "ai", "rdf"]
 categories = ["science", "algorithms", "data-structures"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
@@ -41,13 +42,17 @@ regex = "1.12"
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 flate2 = "1.1"
 
+# Model validation dependencies
+sha2 = "0.10"
+blake3 = "1.8"
+
 # Internal OxiRS dependencies
 oxirs-vec.workspace = true
 
 # SciRS2 AI/ML dependencies for enhanced embeddings with full feature support
 # Note: array! macro is now in scirs2_core::ndarray_ext, no need for scirs2-autograd
 # Note: rand and rand_distr replaced by scirs2_core::random
-scirs2-core = { workspace = true, features = ["all"] }
+scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
 scirs2-neural = { workspace = true }
 scirs2-stats = { workspace = true }
 scirs2-metrics = { workspace = true }
@@ -84,7 +89,7 @@ api-server = ["dep:axum", "dep:tower", "dep:tower-http"]
 graphql = []  # GraphQL API support
 
 # High-performance acceleration features
-gpu = ["scirs2-linalg/gpu", "scirs2-neural/gpu"]
+gpu = ["scirs2-core/gpu", "scirs2-linalg/gpu", "scirs2-neural/gpu"]
 cuda = ["scirs2-linalg/cuda"]
 opencl = ["scirs2-linalg/opencl"]
 rocm = ["scirs2-linalg/rocm"]
@@ -106,3 +111,11 @@ name = "temporal_embeddings_demo"
 [[example]]
 name = "storage_backend_demo"
 required-features = ["basic-models"]
+
+[[example]]
+name = "gpu_acceleration_demo"
+required-features = ["gpu"]
+
+[[example]]
+name = "integrated_ai_platform_demo"
+required-features = ["gpu"]

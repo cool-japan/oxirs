@@ -595,7 +595,7 @@ impl StreamEvent {
             size_bytes,
             last_modified: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             metadata: EventMetadata::default(),
         }

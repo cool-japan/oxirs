@@ -254,7 +254,7 @@ impl ResultIntegrator {
                                         ConflictResolution::Merge => {
                                             // Attempt to merge values
                                             if let Some(merged_value) = Self::merge_graphql_values(
-                                                merged_data.get(key).unwrap(),
+                                                merged_data.get(key).expect("key should exist"),
                                                 value,
                                             ) {
                                                 merged_data.insert(key.clone(), merged_value);
@@ -721,7 +721,7 @@ mod tests {
         let result = integrator.integrate_sparql_results(vec![step_result]).await;
         assert!(result.is_ok());
 
-        let federated_result = result.unwrap();
+        let federated_result = result.expect("result should be Ok");
         assert!(federated_result.is_success());
         assert_eq!(federated_result.metadata.services_used, 1);
     }
@@ -757,7 +757,7 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        let federated_result = result.unwrap();
+        let federated_result = result.expect("result should be Ok");
         assert!(federated_result.is_success());
     }
 

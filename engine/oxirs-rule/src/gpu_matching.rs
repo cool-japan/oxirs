@@ -459,7 +459,7 @@ pub struct RuleMatch {
 
 impl Default for GpuRuleMatcher {
     fn default() -> Self {
-        Self::new().unwrap()
+        Self::new().expect("GpuRuleMatcher::new should not fail")
     }
 }
 
@@ -530,7 +530,7 @@ impl GpuForwardChainer {
 
 impl Default for GpuForwardChainer {
     fn default() -> Self {
-        Self::new().unwrap()
+        Self::new().expect("GpuForwardChainer::new should not fail")
     }
 }
 

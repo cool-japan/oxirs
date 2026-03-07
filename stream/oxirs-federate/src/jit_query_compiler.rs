@@ -712,7 +712,7 @@ mod tests {
             enable_jit: false,
             ..Default::default()
         };
-        let compiler = JitQueryCompiler::new(config).unwrap();
+        let compiler = JitQueryCompiler::new(config).expect("construction should succeed");
         assert!(!compiler.is_jit_available());
     }
 
@@ -722,16 +722,22 @@ mod tests {
             compile_threshold: 3,
             ..Default::default()
         };
-        let compiler = JitQueryCompiler::new(config).unwrap();
+        let compiler = JitQueryCompiler::new(config).expect("construction should succeed");
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
 
         // First execution - interpreted
-        let mode1 = compiler.execute_query(query).await.unwrap();
+        let mode1 = compiler
+            .execute_query(query)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(mode1, ExecutionMode::Interpreted);
 
         // Second execution - still interpreted
-        let mode2 = compiler.execute_query(query).await.unwrap();
+        let mode2 = compiler
+            .execute_query(query)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(mode2, ExecutionMode::Interpreted);
 
         // Third execution - should compile (or try to)
@@ -741,7 +747,7 @@ mod tests {
     #[tokio::test]
     async fn test_query_caching() {
         let config = JitCompilationConfig::default();
-        let compiler = JitQueryCompiler::new(config).unwrap();
+        let compiler = JitQueryCompiler::new(config).expect("construction should succeed");
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
 
@@ -764,7 +770,7 @@ mod tests {
             max_cache_size: 2,
             ..Default::default()
         };
-        let compiler = JitQueryCompiler::new(config).unwrap();
+        let compiler = JitQueryCompiler::new(config).expect("construction should succeed");
 
         let query1 = "SELECT ?s WHERE { ?s ?p ?o }";
         let query2 = "SELECT ?p WHERE { ?s ?p ?o }";
@@ -781,7 +787,7 @@ mod tests {
     #[tokio::test]
     async fn test_optimization_rules() {
         let config = JitCompilationConfig::default();
-        let compiler = JitQueryCompiler::new(config).unwrap();
+        let compiler = JitQueryCompiler::new(config).expect("construction should succeed");
 
         let custom_rule = OptimizationRule::new(
             "custom_rule".to_string(),
@@ -802,10 +808,13 @@ mod tests {
             warmup_iterations: 2,
             ..Default::default()
         };
-        let compiler = JitQueryCompiler::new(config).unwrap();
+        let compiler = JitQueryCompiler::new(config).expect("construction should succeed");
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-        let compiled = compiler.compile_query(query).await.unwrap();
+        let compiled = compiler
+            .compile_query(query)
+            .await
+            .expect("async operation should succeed");
 
         // Simulate multiple executions
         {
@@ -826,7 +835,7 @@ mod tests {
             enable_profiling: true,
             ..Default::default()
         };
-        let compiler = JitQueryCompiler::new(config).unwrap();
+        let compiler = JitQueryCompiler::new(config).expect("construction should succeed");
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
         let _ = compiler.compile_query(query).await;
@@ -838,11 +847,15 @@ mod tests {
     #[tokio::test]
     async fn test_query_optimizer() {
         let config = JitCompilationConfig::default();
-        let compiler = Arc::new(JitQueryCompiler::new(config).unwrap());
+        let compiler =
+            Arc::new(JitQueryCompiler::new(config).expect("construction should succeed"));
         let optimizer = JitQueryOptimizer::new(compiler);
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-        let optimized = optimizer.optimize_plan(query).await.unwrap();
+        let optimized = optimizer
+            .optimize_plan(query)
+            .await
+            .expect("async operation should succeed");
         assert!(optimized.contains("OPTIMIZED"));
 
         let cost = optimizer.estimate_cost(query).await;

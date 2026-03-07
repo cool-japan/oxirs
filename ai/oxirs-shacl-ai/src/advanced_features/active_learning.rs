@@ -262,7 +262,8 @@ impl ActiveLearner {
         }
 
         // Sort by uncertainty (descending)
-        uncertainty_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        uncertainty_scores
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Select top batch_size samples
         let selected: Vec<String> = uncertainty_scores
@@ -281,7 +282,8 @@ impl ActiveLearner {
 
             // Sort by disagreement (descending)
             let mut sorted_disagreements: Vec<_> = disagreements.into_iter().collect();
-            sorted_disagreements.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            sorted_disagreements
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
             let selected: Vec<String> = sorted_disagreements
                 .into_iter()
@@ -319,7 +321,7 @@ impl ActiveLearner {
             change_scores.push((shape_id, change_score));
         }
 
-        change_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        change_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let selected: Vec<String> = change_scores
             .into_iter()
@@ -357,7 +359,7 @@ impl ActiveLearner {
             weighted_scores.push((shape_id, weighted_score));
         }
 
-        weighted_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        weighted_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let selected: Vec<String> = weighted_scores
             .into_iter()

@@ -1,10 +1,10 @@
 # OxiRS Core
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Zero-dependency, Rust-native RDF data model and SPARQL engine for the OxiRS semantic web platform**
 
-**Status**: Production Release (v0.1.0) - Released January 7, 2026
+**Status**: v0.2.0 - Released March 5, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -55,17 +55,17 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.1.0"
+oxirs-core = "0.2.0"
 
 # Optional: Enable async streaming support
-oxirs-core = { version = "0.1.0", features = ["async"] }
+oxirs-core = { version = "0.2.0", features = ["async"] }
 ```
 
 For maximum performance in production:
 
 ```toml
 [dependencies]
-oxirs-core = { version = "0.1.0", features = ["async"] }
+oxirs-core = { version = "0.2.0", features = ["async"] }
 
 [profile.release]
 lto = "fat"                    # Maximum link-time optimization
@@ -530,12 +530,9 @@ docker run --rm \
 
 ## License
 
-Licensed under either of:
+Licensed under:
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](../../LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT License ([LICENSE-MIT](../../LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
 
 ## Status
 
@@ -560,7 +557,7 @@ at your option.
 - **Security Certifications**: SOC 2 Type II, ISO 27001 ready
 - **Performance Validation**: Independently verified benchmarks
 - **Enterprise Adoption**: Deployed in Fortune 500 environments
-- **Open Source**: Apache 2.0 + MIT dual licensing for maximum flexibility
+- **Open Source**: Apache-2.0 for maximum flexibility
 
 ### 🎯 Next Phase Priorities (Q1-Q2 2026)
 

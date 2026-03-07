@@ -759,7 +759,10 @@ fn evaluate_builtin(
         return Ok(false);
     }
 
-    let values: Vec<Term> = arg_values.into_iter().map(|v| v.unwrap()).collect();
+    let values: Vec<Term> = arg_values
+        .into_iter()
+        .map(|v| v.expect("argument values verified to be Some"))
+        .collect();
 
     // Evaluate builtin
     match predicate {

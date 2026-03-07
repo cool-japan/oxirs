@@ -160,7 +160,9 @@ pub struct NetworkConfig {
 impl Default for NetworkConfig {
     fn default() -> Self {
         Self {
-            local_address: "127.0.0.1:8080".parse().unwrap(),
+            local_address: "127.0.0.1:8080"
+                .parse()
+                .expect("localhost address is valid"),
             connection_timeout: Duration::from_secs(5),
             request_timeout: Duration::from_secs(10),
             max_connections: 100,

@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Raft-backed distributed dataset for high availability and horizontal scaling"
 keywords = ["distributed", "raft", "clustering", "consensus", "rdf"]
 categories = ["database", "network-programming", "concurrency"]
+readme = "README.md"
 rust-version.workspace = true
 
 [dependencies]
@@ -18,7 +19,8 @@ oxirs-core.workspace = true
 scirs2-cluster = { workspace = true }
 scirs2-optimize = { workspace = true }
 scirs2-stats = { workspace = true }
-scirs2-core = { workspace = true, features = ["all"] }
+scirs2-graph = { workspace = true }
+scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
 # oxirs-tdb = { path = "../oxirs-tdb" }  # Temporarily commented out due to compilation issues
 openraft = { workspace = true, optional = true }
 tokio.workspace = true
@@ -61,7 +63,9 @@ base64 = "0.22"
 flate2 = "1.1"
 zstd = "0.13"
 lz4_flex.workspace = true
+xz2 = "0.1"  # LZMA compression for high-ratio compression
 crc32fast = "1.5"
+snap.workspace = true
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 rmp-serde = "1.3"
 serde_cbor = "0.11"
@@ -89,7 +93,7 @@ tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
 
 [dev-dependencies]
 criterion.workspace = true
-tempfile = "3.24"
+tempfile = "3.25"
 proptest = "1.7"
 
 [features]

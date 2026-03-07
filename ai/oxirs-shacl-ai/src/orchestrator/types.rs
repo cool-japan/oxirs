@@ -5,9 +5,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 /// Advanced model selection strategies for dynamic orchestration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum ModelSelectionStrategy {
     /// Performance-based selection using historical metrics
+    #[default]
     PerformanceBased,
     /// Adaptive selection based on data characteristics
     DataAdaptive,
@@ -19,12 +20,6 @@ pub enum ModelSelectionStrategy {
     MetaLearning,
     /// Hybrid approach combining multiple strategies
     Hybrid(Vec<ModelSelectionStrategy>),
-}
-
-impl Default for ModelSelectionStrategy {
-    fn default() -> Self {
-        ModelSelectionStrategy::PerformanceBased
-    }
 }
 
 /// Data characteristics for adaptive model selection
@@ -198,4 +193,121 @@ impl Default for ConfidenceDistribution {
             percentiles: HashMap::new(),
         }
     }
+}
+/// A shape inferred by the AI orchestrator with confidence
+#[derive(Debug, Clone)]
+pub struct ConfidentShape {
+    /// Shape identifier IRI
+    pub shape_iri: String,
+    /// Confidence score in [0.0, 1.0]
+    pub confidence: f64,
+    /// Target class IRI
+    pub target_class: String,
+    /// SHACL constraint triples (predicate → constraint body)
+    pub constraints: std::collections::HashMap<String, String>,
+    /// Evidence triples that led to this shape
+    pub evidence_count: usize,
+}
+
+/// Quality analysis for learned shapes
+#[derive(Debug, Clone)]
+pub struct QualityAnalysis {
+    /// Average confidence across all shapes
+    pub avg_confidence: f64,
+    /// Fraction of shapes above the confidence threshold
+    pub high_confidence_fraction: f64,
+    /// Estimated false positive rate
+    pub estimated_fpr: f64,
+    /// Estimated false negative rate
+    pub estimated_fnr: f64,
+    /// Overall quality score in [0.0, 1.0]
+    pub quality_score: f64,
+    /// Human-readable quality verdict
+    pub verdict: String,
+}
+
+/// Optimization recommendation from the orchestrator
+#[derive(Debug, Clone)]
+pub struct OptimizationRecommendation {
+    /// Short title for the recommendation
+    pub title: String,
+    /// Detailed description
+    pub description: String,
+    /// Expected improvement in quality score
+    pub expected_improvement: f64,
+    /// Estimated effort to implement
+    pub effort: ImplementationEffort,
+    /// Priority (higher = more important)
+    pub priority: u8,
+}
+
+/// Predictive insights from the orchestrator
+#[derive(Debug, Clone)]
+pub struct PredictiveInsights {
+    /// Predicted number of validation violations on new data
+    pub predicted_violations: usize,
+    /// Confidence in the violation prediction
+    pub violation_confidence: f64,
+    /// Predicted shapes that are most likely to trigger violations
+    pub high_risk_shapes: Vec<String>,
+    /// Recommended actions to reduce violations
+    pub recommendations: Vec<String>,
+}
+
+/// Metadata about a comprehensive learning run
+#[derive(Debug, Clone)]
+pub struct LearningMetadata {
+    /// Duration of the learning process in milliseconds
+    pub duration_ms: u64,
+    /// Number of triples analysed
+    pub triples_analysed: usize,
+    /// Number of models used
+    pub models_used: usize,
+    /// Version of the orchestrator
+    pub orchestrator_version: String,
+}
+
+/// Comprehensive result from the AI orchestrator
+#[derive(Debug, Clone)]
+pub struct ComprehensiveLearningResult {
+    /// Learned shapes sorted by confidence
+    pub shapes: Vec<ConfidentShape>,
+    /// Quality analysis of the learned shapes
+    pub quality: QualityAnalysis,
+    /// Optimization recommendations for further improvement
+    pub recommendations: Vec<OptimizationRecommendation>,
+    /// Predictive insights for future data
+    pub predictions: PredictiveInsights,
+    /// Metadata about this learning run
+    pub metadata: LearningMetadata,
+}
+
+/// Aggregated statistics for the AI orchestrator
+#[derive(Debug, Clone, Default)]
+pub struct ShapeOrchestratorStats {
+    /// Total number of learning runs executed
+    pub total_runs: usize,
+    /// Total shapes discovered across all runs
+    pub total_shapes_discovered: usize,
+    /// Average shapes per run
+    pub avg_shapes_per_run: f64,
+    /// Average quality score across all runs
+    pub avg_quality_score: f64,
+    /// Number of successful runs
+    pub successful_runs: usize,
+}
+
+/// Metrics for a single orchestration run
+#[derive(Debug, Clone)]
+pub struct OrchestrationMetrics {
+    /// Shape count discovered in this run
+    pub shape_count: usize,
+    /// Average confidence of discovered shapes
+    pub avg_confidence: f64,
+    /// Overall quality score
+    pub quality_score: f64,
+    /// Duration in milliseconds
+    pub duration_ms: u64,
+    /// Models used in this run
+    pub models_used: Vec<String>,
 }

@@ -1,10 +1,23 @@
 //! DID Method implementations
 
+#[cfg(feature = "did-ethr")]
+pub mod did_ethr;
+#[cfg(feature = "did-ion")]
+pub mod did_ion;
 pub mod did_key;
+pub mod did_pkh;
 #[cfg(feature = "did-web")]
 pub mod did_web;
 
+#[cfg(feature = "did-ethr")]
+pub use did_ethr::{DidEthr, DidEthrMethod, EthNetwork};
+#[cfg(feature = "did-ion")]
+pub use did_ion::{
+    DidIon, DidIonMethod, IonCreateOperation, IonDocument, IonKeyDescriptor, IonKeyPurpose,
+    IonOperationType, IonService,
+};
 pub use did_key::DidKeyMethod;
+pub use did_pkh::{ChainNamespace, DidPkh, DidPkhMethod};
 #[cfg(feature = "did-web")]
 pub use did_web::DidWebMethod;
 

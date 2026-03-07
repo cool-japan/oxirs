@@ -1,0 +1,51 @@
+//! OWL 2 DL vocabulary — all well-known IRIs used by this module
+
+pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+pub const RDF_FIRST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first";
+pub const RDF_REST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest";
+pub const RDF_NIL: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil";
+pub const RDFS_SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+pub const RDFS_SUBPROPERTY_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf";
+pub const RDFS_DOMAIN: &str = "http://www.w3.org/2000/01/rdf-schema#domain";
+pub const RDFS_RANGE: &str = "http://www.w3.org/2000/01/rdf-schema#range";
+pub const OWL_THING: &str = "http://www.w3.org/2002/07/owl#Thing";
+pub const OWL_NOTHING: &str = "http://www.w3.org/2002/07/owl#Nothing";
+pub const OWL_SAME_AS: &str = "http://www.w3.org/2002/07/owl#sameAs";
+pub const OWL_DIFFERENT_FROM: &str = "http://www.w3.org/2002/07/owl#differentFrom";
+pub const OWL_EQUIVALENT_CLASS: &str = "http://www.w3.org/2002/07/owl#equivalentClass";
+pub const OWL_EQUIVALENT_PROPERTY: &str = "http://www.w3.org/2002/07/owl#equivalentProperty";
+pub const OWL_DISJOINT_WITH: &str = "http://www.w3.org/2002/07/owl#disjointWith";
+pub const OWL_INVERSE_OF: &str = "http://www.w3.org/2002/07/owl#inverseOf";
+pub const OWL_SYMMETRIC_PROPERTY: &str = "http://www.w3.org/2002/07/owl#SymmetricProperty";
+pub const OWL_ASYMMETRIC_PROPERTY: &str = "http://www.w3.org/2002/07/owl#AsymmetricProperty";
+pub const OWL_TRANSITIVE_PROPERTY: &str = "http://www.w3.org/2002/07/owl#TransitiveProperty";
+pub const OWL_REFLEXIVE_PROPERTY: &str = "http://www.w3.org/2002/07/owl#ReflexiveProperty";
+pub const OWL_IRREFLEXIVE_PROPERTY: &str = "http://www.w3.org/2002/07/owl#IrreflexiveProperty";
+pub const OWL_FUNCTIONAL_PROPERTY: &str = "http://www.w3.org/2002/07/owl#FunctionalProperty";
+pub const OWL_INVERSE_FUNCTIONAL_PROPERTY: &str =
+    "http://www.w3.org/2002/07/owl#InverseFunctionalProperty";
+pub const OWL_RESTRICTION: &str = "http://www.w3.org/2002/07/owl#Restriction";
+pub const OWL_ON_PROPERTY: &str = "http://www.w3.org/2002/07/owl#onProperty";
+pub const OWL_ALL_VALUES_FROM: &str = "http://www.w3.org/2002/07/owl#allValuesFrom";
+pub const OWL_SOME_VALUES_FROM: &str = "http://www.w3.org/2002/07/owl#someValuesFrom";
+pub const OWL_HAS_VALUE: &str = "http://www.w3.org/2002/07/owl#hasValue";
+pub const OWL_ONE_OF: &str = "http://www.w3.org/2002/07/owl#oneOf";
+pub const OWL_COMPLEMENT_OF: &str = "http://www.w3.org/2002/07/owl#complementOf";
+pub const OWL_INTERSECTION_OF: &str = "http://www.w3.org/2002/07/owl#intersectionOf";
+pub const OWL_UNION_OF: &str = "http://www.w3.org/2002/07/owl#unionOf";
+pub const OWL_DISJOINT_UNION_OF: &str = "http://www.w3.org/2002/07/owl#disjointUnionOf";
+pub const OWL_HAS_KEY: &str = "http://www.w3.org/2002/07/owl#hasKey";
+pub const OWL_PROPERTY_CHAIN_AXIOM: &str = "http://www.w3.org/2002/07/owl#propertyChainAxiom";
+pub const OWL_MIN_CARDINALITY: &str = "http://www.w3.org/2002/07/owl#minCardinality";
+pub const OWL_MAX_CARDINALITY: &str = "http://www.w3.org/2002/07/owl#maxCardinality";
+pub const OWL_CARDINALITY: &str = "http://www.w3.org/2002/07/owl#cardinality";
+pub const OWL_HAS_SELF: &str = "http://www.w3.org/2002/07/owl#hasSelf";
+pub const OWL_NEGATIVE_PROPERTY_ASSERTION: &str =
+    "http://www.w3.org/2002/07/owl#NegativePropertyAssertion";
+pub const OWL_SOURCE_INDIVIDUAL: &str = "http://www.w3.org/2002/07/owl#sourceIndividual";
+pub const OWL_ASSERTION_PROPERTY: &str = "http://www.w3.org/2002/07/owl#assertionProperty";
+pub const OWL_TARGET_INDIVIDUAL: &str = "http://www.w3.org/2002/07/owl#targetIndividual";
+pub const OWL_TARGET_VALUE: &str = "http://www.w3.org/2002/07/owl#targetValue";
+pub const OWL_PROPERTY_DISJOINT_WITH: &str = "http://www.w3.org/2002/07/owl#propertyDisjointWith";
+pub const OWL_OBJECT_PROPERTY: &str = "http://www.w3.org/2002/07/owl#ObjectProperty";
+pub const OWL_DATA_PROPERTY: &str = "http://www.w3.org/2002/07/owl#DatatypeProperty";

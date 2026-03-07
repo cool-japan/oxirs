@@ -567,6 +567,367 @@ struct WorkerResult {
     gradients: HashMap<String, Array1<f32>>,
 }
 
+// ─────────────────────────────────────────────────────────────
+// A. Gradient Aggregation & Compression
+// ─────────────────────────────────────────────────────────────
+
+/// Strategy for all-reduce gradient aggregation across distributed workers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AllReduceStrategy {
+    /// Ring-based all-reduce: workers arranged in a ring pass partial sums around.
+    RingAllReduce,
+    /// Tree-based all-reduce: hierarchical reduction over a binary tree topology.
+    TreeAllReduce,
+    /// Parameter server: a central server accumulates and broadcasts gradients.
+    ParameterServer,
+}
+
+/// Aggregates gradients from distributed workers.
+#[derive(Debug, Clone, Default)]
+pub struct GradientAggregator;
+
+impl GradientAggregator {
+    /// Create a new `GradientAggregator`.
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Aggregate `local_grad` from this worker together with gradients that have
+    /// already been reduced on other workers, using the given `strategy`.
+    ///
+    /// For the single-worker case the function simply returns a normalised copy of
+    /// `local_grad`.  In a real multi-node scenario the caller would pass the
+    /// collected per-worker slices through `ring_all_reduce` or the tree variant.
+    pub fn aggregate_gradients(
+        &self,
+        local_grad: &[f64],
+        strategy: &AllReduceStrategy,
+    ) -> Vec<f64> {
+        match strategy {
+            AllReduceStrategy::RingAllReduce => {
+                // Treat the single local gradient as the only worker contribution.
+                self.ring_all_reduce(vec![local_grad.to_vec()])
+            }
+            AllReduceStrategy::TreeAllReduce => self.tree_all_reduce(vec![local_grad.to_vec()]),
+            AllReduceStrategy::ParameterServer => {
+                // Parameter-server: accept local grad and average (single worker path).
+                local_grad.to_vec()
+            }
+        }
+    }
+
+    /// Simulate ring all-reduce over a set of per-worker gradient vectors.
+    ///
+    /// Ring all-reduce arranges `n` workers in a ring.  It runs in two phases:
+    ///
+    /// 1. **Scatter-reduce** (`n−1` steps): at step `s`, each worker `w` passes
+    ///    the accumulated data for chunk `(w − s) mod n` to its right neighbour
+    ///    `(w + 1) mod n`, which adds it to its own copy.  After `n−1` steps,
+    ///    worker `w` holds the fully-reduced sum for chunk `(w + 1) mod n`.
+    ///
+    /// 2. **All-gather**: collect the fully-reduced chunk from each owning worker
+    ///    and divide by `n` to obtain the mean.
+    ///
+    /// The mathematical result equals the element-wise mean of all input vectors.
+    /// This simulation runs synchronously on the calling thread with no I/O.
+    pub fn ring_all_reduce(&self, gradients: Vec<Vec<f64>>) -> Vec<f64> {
+        let n = gradients.len();
+        if n == 0 {
+            return Vec::new();
+        }
+        if n == 1 {
+            return gradients.into_iter().next().unwrap_or_default();
+        }
+
+        let len = gradients[0].len();
+        if len == 0 {
+            return Vec::new();
+        }
+
+        // Divide the gradient vector into `n` chunks.  Chunks are sized as
+        // evenly as possible; the first `remainder` chunks get one extra element.
+        let base = len / n;
+        let remainder = len % n;
+        let chunk_sizes: Vec<usize> = (0..n)
+            .map(|i| base + if i < remainder { 1 } else { 0 })
+            .collect();
+        let mut chunk_start = vec![0usize; n];
+        for i in 1..n {
+            chunk_start[i] = chunk_start[i - 1] + chunk_sizes[i - 1];
+        }
+
+        // `partial[w][c]` = partial sums of chunk `c` accumulated on worker `w`.
+        // Initially each worker contributes its own slice of the gradient.
+        let mut partial: Vec<Vec<Vec<f64>>> = gradients
+            .iter()
+            .map(|g| {
+                chunk_sizes
+                    .iter()
+                    .zip(chunk_start.iter())
+                    .map(|(&sz, &s)| g[s..s + sz].to_vec())
+                    .collect()
+            })
+            .collect();
+
+        // ── scatter-reduce phase ──────────────────────────────────────────────
+        // At each step, worker w receives from its left neighbour (w−1) the
+        // partial accumulation for chunk `(w − 1 − step) mod n`.
+        #[allow(clippy::needless_range_loop)]
+        for step in 0..(n - 1) {
+            let prev = partial.clone();
+            for w in 0..n {
+                let left = (w + n - 1) % n;
+                let c = (w + n - 1 - step) % n;
+                let sz = chunk_sizes[c];
+                for i in 0..sz {
+                    partial[w][c][i] += prev[left][c][i];
+                }
+            }
+        }
+
+        // After `n−1` scatter-reduce steps, worker `w` holds the fully-reduced
+        // sum in slot `(w + 1) mod n`.
+
+        // ── collect result (all-gather) ───────────────────────────────────────
+        let mut result = vec![0.0_f64; len];
+        #[allow(clippy::needless_range_loop)]
+        for w in 0..n {
+            let c = (w + 1) % n;
+            let s = chunk_start[c];
+            let sz = chunk_sizes[c];
+            for i in 0..sz {
+                result[s + i] = partial[w][c][i] / n as f64;
+            }
+        }
+
+        result
+    }
+
+    /// Simulate tree (binary) all-reduce: recursive halving/doubling.
+    fn tree_all_reduce(&self, gradients: Vec<Vec<f64>>) -> Vec<f64> {
+        let n = gradients.len();
+        if n == 0 {
+            return Vec::new();
+        }
+        if n == 1 {
+            return gradients.into_iter().next().unwrap_or_default();
+        }
+
+        let len = gradients[0].len();
+        let mut sums = vec![0.0_f64; len];
+        for grad in &gradients {
+            for (i, v) in grad.iter().enumerate() {
+                if i < len {
+                    sums[i] += v;
+                }
+            }
+        }
+        sums.iter_mut().for_each(|v| *v /= n as f64);
+        sums
+    }
+}
+
+/// Sparse gradient representation after top-k sparsification.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SparseGradient {
+    /// Indices of the non-zero (kept) elements in the original gradient vector.
+    pub indices: Vec<usize>,
+    /// Values at the kept indices.
+    pub values: Vec<f64>,
+    /// Length of the original (dense) gradient vector.
+    pub original_len: usize,
+}
+
+/// Compresses gradient vectors via top-k sparsification to reduce communication overhead.
+#[derive(Debug, Clone, Default)]
+pub struct GradientCompressor;
+
+impl GradientCompressor {
+    /// Create a new `GradientCompressor`.
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Compress `grad` by retaining only the top-k largest-magnitude entries.
+    ///
+    /// * `sparsity` — fraction of entries to **zero out** (e.g. `0.9` keeps the top 10%).
+    ///   Clamped to `[0.0, 1.0)`.
+    pub fn compress(&self, grad: &[f64], sparsity: f64) -> SparseGradient {
+        let sparsity = sparsity.clamp(0.0, 0.9999);
+        let n = grad.len();
+        if n == 0 {
+            return SparseGradient {
+                indices: Vec::new(),
+                values: Vec::new(),
+                original_len: 0,
+            };
+        }
+
+        let keep = ((1.0 - sparsity) * n as f64).ceil() as usize;
+        let keep = keep.max(1).min(n);
+
+        // Collect (index, |value|) pairs and sort descending by magnitude.
+        let mut indexed: Vec<(usize, f64)> = grad
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| (i, v.abs()))
+            .collect();
+        indexed.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let mut indices: Vec<usize> = indexed[..keep].iter().map(|(i, _)| *i).collect();
+        indices.sort_unstable();
+
+        let values: Vec<f64> = indices.iter().map(|&i| grad[i]).collect();
+
+        SparseGradient {
+            indices,
+            values,
+            original_len: n,
+        }
+    }
+
+    /// Decompress a `SparseGradient` back into a dense gradient vector (zero-filled elsewhere).
+    pub fn decompress(&self, sparse: &SparseGradient) -> Vec<f64> {
+        let mut dense = vec![0.0_f64; sparse.original_len];
+        for (&idx, &val) in sparse.indices.iter().zip(sparse.values.iter()) {
+            if idx < sparse.original_len {
+                dense[idx] = val;
+            }
+        }
+        dense
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// B. Data-Parallel Training Coordinator
+// ─────────────────────────────────────────────────────────────
+
+/// A training sample for data-parallel distribution.
+///
+/// Deliberately kept generic so it can represent any supervised/self-supervised sample.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DistributedTrainingSample {
+    /// Numeric feature vector for this sample.
+    pub features: Vec<f64>,
+    /// Scalar label or target value.
+    pub label: f64,
+    /// Optional sample weight (defaults to `1.0` if `None`).
+    pub weight: Option<f64>,
+}
+
+impl DistributedTrainingSample {
+    /// Create a new sample with equal weight.
+    pub fn new(features: Vec<f64>, label: f64) -> Self {
+        Self {
+            features,
+            label,
+            weight: None,
+        }
+    }
+}
+
+/// Per-worker gradient update produced after a local forward-backward pass.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerUpdate {
+    /// Identifier of the worker that computed this update.
+    pub worker_id: u32,
+    /// Flattened gradient vector from this worker.
+    pub gradients: Vec<f64>,
+    /// Training loss on the local mini-batch.
+    pub loss: f64,
+    /// Number of samples processed in this update.
+    pub samples_processed: u32,
+}
+
+/// Merged model update produced after aggregating all worker updates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelUpdate {
+    /// Averaged gradient vector across all workers (weighted by sample count).
+    pub averaged_gradients: Vec<f64>,
+    /// Weighted-mean loss across all workers.
+    pub mean_loss: f64,
+    /// Total number of samples processed.
+    pub total_samples: u32,
+}
+
+/// Coordinates data-parallel training by splitting batches and merging worker gradients.
+#[derive(Debug, Clone, Default)]
+pub struct DataParallelTrainer;
+
+impl DataParallelTrainer {
+    /// Create a new `DataParallelTrainer`.
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Evenly split `data` across `n_workers` workers.
+    ///
+    /// Returns a `Vec` of sub-batches, one per worker.  If `data.len()` is not
+    /// evenly divisible some workers receive one extra sample (round-robin
+    /// assignment).
+    pub fn split_batch(
+        &self,
+        data: &[DistributedTrainingSample],
+        n_workers: u32,
+    ) -> Vec<Vec<DistributedTrainingSample>> {
+        let n = n_workers as usize;
+        if n == 0 || data.is_empty() {
+            return Vec::new();
+        }
+
+        let mut buckets: Vec<Vec<DistributedTrainingSample>> = (0..n).map(|_| Vec::new()).collect();
+        for (i, sample) in data.iter().enumerate() {
+            buckets[i % n].push(sample.clone());
+        }
+        buckets
+    }
+
+    /// Merge gradient updates from all workers into a single `ModelUpdate`.
+    ///
+    /// Gradients are averaged weighted by `samples_processed` so that workers
+    /// with larger mini-batches contribute proportionally more.
+    pub fn merge_worker_updates(&self, updates: Vec<WorkerUpdate>) -> ModelUpdate {
+        if updates.is_empty() {
+            return ModelUpdate {
+                averaged_gradients: Vec::new(),
+                mean_loss: 0.0,
+                total_samples: 0,
+            };
+        }
+
+        let total_samples: u32 = updates.iter().map(|u| u.samples_processed).sum();
+        if total_samples == 0 {
+            return ModelUpdate {
+                averaged_gradients: Vec::new(),
+                mean_loss: 0.0,
+                total_samples: 0,
+            };
+        }
+
+        // Determine gradient length from the first update with non-empty gradients.
+        let grad_len = updates.iter().map(|u| u.gradients.len()).max().unwrap_or(0);
+
+        let mut averaged_gradients = vec![0.0_f64; grad_len];
+        let mut weighted_loss = 0.0_f64;
+
+        for update in &updates {
+            let weight = update.samples_processed as f64 / total_samples as f64;
+            for (i, &g) in update.gradients.iter().enumerate() {
+                if i < grad_len {
+                    averaged_gradients[i] += g * weight;
+                }
+            }
+            weighted_loss += update.loss * weight;
+        }
+
+        ModelUpdate {
+            averaged_gradients,
+            mean_loss: weighted_loss,
+            total_samples,
+        }
+    }
+}
+
 /// Distributed embedding model trainer
 pub struct DistributedEmbeddingTrainer<M: EmbeddingModel> {
     model: M,
@@ -611,6 +972,289 @@ impl<M: EmbeddingModel> DistributedEmbeddingTrainer<M> {
 mod tests {
     use super::*;
     use crate::{ModelConfig, TransE};
+
+    // ── AllReduceStrategy & GradientAggregator ────────────────────────────────
+
+    #[test]
+    fn test_all_reduce_strategy_variants() {
+        let strategies = [
+            AllReduceStrategy::RingAllReduce,
+            AllReduceStrategy::TreeAllReduce,
+            AllReduceStrategy::ParameterServer,
+        ];
+        for s in &strategies {
+            let agg = GradientAggregator::new();
+            let grad = vec![1.0, 2.0, 3.0];
+            let result = agg.aggregate_gradients(&grad, s);
+            assert_eq!(result.len(), 3);
+        }
+    }
+
+    #[test]
+    fn test_ring_all_reduce_single_worker() {
+        let agg = GradientAggregator::new();
+        let grads = vec![vec![1.0, 2.0, 3.0]];
+        let result = agg.ring_all_reduce(grads);
+        assert_eq!(result, vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_ring_all_reduce_two_workers() {
+        let agg = GradientAggregator::new();
+        let grads = vec![vec![2.0, 4.0, 6.0], vec![2.0, 4.0, 6.0]];
+        let result = agg.ring_all_reduce(grads);
+        assert_eq!(result.len(), 3);
+        // Mean of equal vectors should be the vector itself.
+        for (r, expected) in result.iter().zip([2.0, 4.0, 6.0].iter()) {
+            assert!((r - expected).abs() < 1e-9, "expected {expected}, got {r}");
+        }
+    }
+
+    #[test]
+    fn test_ring_all_reduce_four_workers_mean() {
+        let agg = GradientAggregator::new();
+        let grads = vec![
+            vec![4.0, 8.0],
+            vec![2.0, 4.0],
+            vec![0.0, 0.0],
+            vec![6.0, 12.0],
+        ];
+        let result = agg.ring_all_reduce(grads);
+        assert_eq!(result.len(), 2);
+        // Mean: (4+2+0+6)/4 = 3, (8+4+0+12)/4 = 6
+        assert!((result[0] - 3.0).abs() < 1e-6);
+        assert!((result[1] - 6.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_ring_all_reduce_empty_input() {
+        let agg = GradientAggregator::new();
+        let result = agg.ring_all_reduce(vec![]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_ring_all_reduce_empty_gradient_vectors() {
+        let agg = GradientAggregator::new();
+        let result = agg.ring_all_reduce(vec![vec![], vec![]]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_aggregate_gradients_ring() {
+        let agg = GradientAggregator::new();
+        let grad = vec![1.0, 2.0, 3.0, 4.0];
+        let result = agg.aggregate_gradients(&grad, &AllReduceStrategy::RingAllReduce);
+        assert_eq!(result.len(), 4);
+    }
+
+    #[test]
+    fn test_aggregate_gradients_tree() {
+        let agg = GradientAggregator::new();
+        let grad = vec![5.0, 10.0];
+        let result = agg.aggregate_gradients(&grad, &AllReduceStrategy::TreeAllReduce);
+        assert_eq!(result, vec![5.0, 10.0]);
+    }
+
+    #[test]
+    fn test_aggregate_gradients_parameter_server() {
+        let agg = GradientAggregator::new();
+        let grad = vec![3.0, 1.0, 4.0];
+        let result = agg.aggregate_gradients(&grad, &AllReduceStrategy::ParameterServer);
+        assert_eq!(result, grad);
+    }
+
+    // ── GradientCompressor ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_compress_empty_gradient() {
+        let comp = GradientCompressor::new();
+        let sparse = comp.compress(&[], 0.9);
+        assert!(sparse.indices.is_empty());
+        assert_eq!(sparse.original_len, 0);
+    }
+
+    #[test]
+    fn test_compress_keep_all() {
+        let comp = GradientCompressor::new();
+        let grad = vec![1.0, -2.0, 3.0, -4.0];
+        let sparse = comp.compress(&grad, 0.0);
+        // sparsity=0 → keep all
+        assert_eq!(sparse.indices.len(), 4);
+        assert_eq!(sparse.original_len, 4);
+    }
+
+    #[test]
+    fn test_compress_top_k_selects_largest() {
+        let comp = GradientCompressor::new();
+        let grad = vec![0.1, 5.0, 0.2, 9.0, 0.3];
+        // sparsity=0.6 → keep 40% = 2 entries → indices 1 (5.0) and 3 (9.0)
+        let sparse = comp.compress(&grad, 0.6);
+        assert_eq!(sparse.indices.len(), 2);
+        assert!(sparse.indices.contains(&3)); // 9.0
+        assert!(sparse.indices.contains(&1)); // 5.0
+    }
+
+    #[test]
+    fn test_decompress_roundtrip() {
+        let comp = GradientCompressor::new();
+        let grad = vec![0.0, 1.0, 0.0, -3.0, 0.0];
+        let sparse = comp.compress(&grad, 0.6);
+        let dense = comp.decompress(&sparse);
+        assert_eq!(dense.len(), 5);
+        // The two largest-magnitude values must be preserved.
+        assert!((dense[3] - (-3.0)).abs() < 1e-12);
+        assert!((dense[1] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_decompress_empty_sparse() {
+        let comp = GradientCompressor::new();
+        let sparse = SparseGradient {
+            indices: Vec::new(),
+            values: Vec::new(),
+            original_len: 5,
+        };
+        let dense = comp.decompress(&sparse);
+        assert_eq!(dense, vec![0.0; 5]);
+    }
+
+    #[test]
+    fn test_sparse_gradient_serialization() {
+        let sg = SparseGradient {
+            indices: vec![0, 2],
+            values: vec![1.5, -2.5],
+            original_len: 4,
+        };
+        let json = serde_json::to_string(&sg).expect("serialize");
+        let sg2: SparseGradient = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(sg, sg2);
+    }
+
+    // ── DataParallelTrainer ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_split_batch_even() {
+        let trainer = DataParallelTrainer::new();
+        let samples: Vec<DistributedTrainingSample> = (0..8)
+            .map(|i| DistributedTrainingSample::new(vec![i as f64], i as f64))
+            .collect();
+        let batches = trainer.split_batch(&samples, 4);
+        assert_eq!(batches.len(), 4);
+        for b in &batches {
+            assert_eq!(b.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_split_batch_uneven() {
+        let trainer = DataParallelTrainer::new();
+        let samples: Vec<DistributedTrainingSample> = (0..10)
+            .map(|i| DistributedTrainingSample::new(vec![i as f64], i as f64))
+            .collect();
+        let batches = trainer.split_batch(&samples, 3);
+        assert_eq!(batches.len(), 3);
+        let total: usize = batches.iter().map(|b| b.len()).sum();
+        assert_eq!(total, 10);
+    }
+
+    #[test]
+    fn test_split_batch_zero_workers() {
+        let trainer = DataParallelTrainer::new();
+        let samples = vec![DistributedTrainingSample::new(vec![1.0], 0.0)];
+        let batches = trainer.split_batch(&samples, 0);
+        assert!(batches.is_empty());
+    }
+
+    #[test]
+    fn test_split_batch_empty_data() {
+        let trainer = DataParallelTrainer::new();
+        let batches = trainer.split_batch(&[], 4);
+        assert!(batches.is_empty());
+    }
+
+    #[test]
+    fn test_merge_worker_updates_basic() {
+        let trainer = DataParallelTrainer::new();
+        let updates = vec![
+            WorkerUpdate {
+                worker_id: 0,
+                gradients: vec![2.0, 4.0],
+                loss: 1.0,
+                samples_processed: 10,
+            },
+            WorkerUpdate {
+                worker_id: 1,
+                gradients: vec![2.0, 4.0],
+                loss: 1.0,
+                samples_processed: 10,
+            },
+        ];
+        let merged = trainer.merge_worker_updates(updates);
+        assert_eq!(merged.total_samples, 20);
+        assert!((merged.mean_loss - 1.0).abs() < 1e-9);
+        assert!((merged.averaged_gradients[0] - 2.0).abs() < 1e-9);
+        assert!((merged.averaged_gradients[1] - 4.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_merge_worker_updates_weighted() {
+        let trainer = DataParallelTrainer::new();
+        // Worker 0 has 1 sample, worker 1 has 3 samples.
+        let updates = vec![
+            WorkerUpdate {
+                worker_id: 0,
+                gradients: vec![4.0],
+                loss: 2.0,
+                samples_processed: 1,
+            },
+            WorkerUpdate {
+                worker_id: 1,
+                gradients: vec![0.0],
+                loss: 0.0,
+                samples_processed: 3,
+            },
+        ];
+        let merged = trainer.merge_worker_updates(updates);
+        assert_eq!(merged.total_samples, 4);
+        // Weighted mean gradient: 4*0.25 + 0*0.75 = 1.0
+        assert!((merged.averaged_gradients[0] - 1.0).abs() < 1e-9);
+        // Weighted mean loss: 2*0.25 + 0*0.75 = 0.5
+        assert!((merged.mean_loss - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_merge_worker_updates_empty() {
+        let trainer = DataParallelTrainer::new();
+        let merged = trainer.merge_worker_updates(vec![]);
+        assert_eq!(merged.total_samples, 0);
+        assert!(merged.averaged_gradients.is_empty());
+    }
+
+    #[test]
+    fn test_worker_update_serialization() {
+        let update = WorkerUpdate {
+            worker_id: 7,
+            gradients: vec![0.1, -0.2],
+            loss: 0.42,
+            samples_processed: 32,
+        };
+        let json = serde_json::to_string(&update).expect("serialize");
+        let update2: WorkerUpdate = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(update.worker_id, update2.worker_id);
+        assert_eq!(update.samples_processed, update2.samples_processed);
+    }
+
+    #[test]
+    fn test_model_update_fields() {
+        let mu = ModelUpdate {
+            averaged_gradients: vec![1.0, 2.0],
+            mean_loss: 0.5,
+            total_samples: 100,
+        };
+        assert_eq!(mu.total_samples, 100);
+        assert!((mu.mean_loss - 0.5).abs() < 1e-12);
+    }
 
     #[tokio::test]
     async fn test_distributed_coordinator_creation() {

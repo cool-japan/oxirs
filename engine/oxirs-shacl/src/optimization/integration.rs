@@ -156,7 +156,10 @@ impl OptimizedValidationEngine {
 
         // Use optimization engine for batch evaluation
         let results = {
-            let mut opt_engine = self.optimization_engine.lock().unwrap();
+            let mut opt_engine = self
+                .optimization_engine
+                .lock()
+                .expect("lock should not be poisoned");
             opt_engine.optimize_and_evaluate(store, all_constraints_with_contexts.clone())?
         };
 
@@ -226,7 +229,10 @@ impl OptimizedValidationEngine {
 
         // Use incremental validation engine
         let incremental_result = {
-            let mut inc_engine = self.incremental_engine.lock().unwrap();
+            let mut inc_engine = self
+                .incremental_engine
+                .lock()
+                .expect("lock should not be poisoned");
             inc_engine.validate_incremental(
                 store,
                 all_constraints,
@@ -279,7 +285,10 @@ impl OptimizedValidationEngine {
 
         // Use streaming validation engine
         let streaming_result = {
-            let streaming_engine = self.streaming_engine.lock().unwrap();
+            let streaming_engine = self
+                .streaming_engine
+                .lock()
+                .expect("lock should not be poisoned");
             streaming_engine.validate_streaming(store, all_constraints, node_stream)?
         };
 

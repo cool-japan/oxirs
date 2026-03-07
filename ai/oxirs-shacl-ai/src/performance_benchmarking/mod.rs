@@ -139,7 +139,7 @@ impl PerformanceBenchmarkFramework {
         let average_throughput = throughputs.iter().sum::<f64>() / throughputs.len() as f64;
 
         let mut sorted_throughputs = throughputs.clone();
-        sorted_throughputs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_throughputs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let median_throughput = sorted_throughputs[sorted_throughputs.len() / 2];
 
         let variance = throughputs

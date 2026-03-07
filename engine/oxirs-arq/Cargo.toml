@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Jena-style SPARQL algebra with extension points and query optimization"
 keywords = ["sparql", "query-engine", "optimization", "rdf", "jena"]
 categories = ["database", "algorithms", "data-structures"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
@@ -23,7 +24,7 @@ scirs2-optimize = { workspace = true }
 scirs2-stats = { workspace = true }
 scirs2-neural = { workspace = true }
 scirs2-cluster = { workspace = true }
-scirs2-core = { workspace = true, features = ["all"] }
+scirs2-core = { workspace = true, features = ["random", "array", "parallel", "simd", "profiling"] }
 
 serde.workspace = true
 serde_json.workspace = true
@@ -56,16 +57,22 @@ tempfile.workspace = true
 flate2 = "1.1"
 lz4_flex.workspace = true
 zstd = "0.13"
+redis = { version = "0.27.6", features = ["tokio-comp", "connection-manager"], optional = true }
+lru = { version = "0.16.3", optional = true }
+futures = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
 tracing-subscriber.workspace = true
+redis = { version = "0.27.6", features = ["tokio-comp", "connection-manager"] }
+futures = "0.3"
 
 [features]
 default = ["parallel"]
 star = ["oxirs-star"]
 extensions = []
 parallel = ["rayon", "tokio", "num_cpus"]
+distributed-cache = ["redis", "lru", "tokio", "futures"]
 
 [dependencies.oxirs-star]
 workspace = true
@@ -95,3 +102,11 @@ harness = false
 name = "production_profiles_bench"
 harness = false
 
+[[bench]]
+name = "ml_prediction_bench"
+harness = false
+
+
+[[bench]]
+name = "sparql_bench"
+harness = false

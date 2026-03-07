@@ -222,7 +222,11 @@ impl FederatedCoordinator {
 
     /// Start a new federation round
     pub async fn start_federation_round(&self) -> Result<usize> {
-        let _permit = self.round_semaphore.acquire().await.unwrap();
+        let _permit = self
+            .round_semaphore
+            .acquire()
+            .await
+            .expect("semaphore should not be closed");
 
         let round_number = {
             let rounds = self.rounds.read().await;
@@ -297,7 +301,7 @@ impl FederatedCoordinator {
                 round.completed_at = Some(SystemTime::now());
                 round.round_metrics.round_duration = round
                     .completed_at
-                    .unwrap()
+                    .expect("completed_at was just set to Some")
                     .duration_since(round.started_at)
                     .unwrap_or(Duration::from_secs(0));
             }
@@ -316,7 +320,11 @@ impl FederatedCoordinator {
             .filter(|node| self.is_node_eligible(node))
             .collect();
 
-        eligible_nodes.sort_by(|a, b| b.reputation_score.partial_cmp(&a.reputation_score).unwrap());
+        eligible_nodes.sort_by(|a, b| {
+            b.reputation_score
+                .partial_cmp(&a.reputation_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let selected = eligible_nodes
             .into_iter()

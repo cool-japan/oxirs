@@ -1,8 +1,8 @@
 //! Schema stitching engine for merging multiple GraphQL schemas
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -166,7 +166,9 @@ impl SchemaStitcher {
                         "Introspection attempt {} failed for endpoint {}: {}",
                         attempt + 1,
                         endpoint.id,
-                        last_error.as_ref().unwrap()
+                        last_error
+                            .as_ref()
+                            .expect("last_error should be set after failed attempt")
                     );
                 }
             }
@@ -420,5 +422,581 @@ impl SchemaStitcher {
 
         // Default to string if can't parse
         Ok(Value::StringValue(trimmed.to_string()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Merge-directive-aware schema stitching
+// ---------------------------------------------------------------------------
+
+/// Conflict resolution strategy for duplicate type names.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ConflictResolution {
+    /// Keep the type from the first schema that defines it and discard others.
+    KeepFirst,
+    /// Keep the type from the last schema that defines it.
+    KeepLast,
+    /// Attempt to merge fields from all schemas that define the type.
+    #[default]
+    MergeFields,
+    /// Raise an error on any conflict.
+    Error,
+}
+
+/// A fragment of a GraphQL schema supplied to the stitcher.
+///
+/// Each `SchemaFragment` represents one source schema.  Directives and
+/// conflict resolution hints can be attached per-type using the `@merge`
+/// directive syntax.
+#[derive(Debug, Clone)]
+pub struct SchemaFragment {
+    /// Human-readable name for this fragment (e.g. the service name).
+    pub name: String,
+    /// Type definitions in this fragment.
+    pub types: HashMap<String, StitchTypeDefinition>,
+    /// Per-type conflict resolution hint.
+    pub merge_directives: HashMap<String, MergeDirective>,
+}
+
+impl SchemaFragment {
+    /// Create an empty fragment with the given name.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            types: HashMap::new(),
+            merge_directives: HashMap::new(),
+        }
+    }
+
+    /// Add a type definition to the fragment.
+    pub fn with_type(mut self, def: StitchTypeDefinition) -> Self {
+        self.types.insert(def.name.clone(), def);
+        self
+    }
+
+    /// Attach a `@merge` directive to a type in this fragment.
+    pub fn with_merge_directive(
+        mut self,
+        type_name: impl Into<String>,
+        dir: MergeDirective,
+    ) -> Self {
+        self.merge_directives.insert(type_name.into(), dir);
+        self
+    }
+}
+
+/// A field definition used within schema stitching.
+#[derive(Debug, Clone)]
+pub struct StitchFieldDef {
+    /// Field name.
+    pub name: String,
+    /// Declared type string (e.g. `"String!"`, `"[Int]"`).
+    pub field_type: String,
+    /// Optional description.
+    pub description: Option<String>,
+    /// Source fragment name.
+    pub source: String,
+}
+
+impl StitchFieldDef {
+    /// Create a new field definition.
+    pub fn new(
+        name: impl Into<String>,
+        field_type: impl Into<String>,
+        source: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            field_type: field_type.into(),
+            description: None,
+            source: source.into(),
+        }
+    }
+
+    /// Set description.
+    pub fn with_description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
+    }
+}
+
+/// A type definition used within schema stitching.
+#[derive(Debug, Clone)]
+pub struct StitchTypeDefinition {
+    /// Type name.
+    pub name: String,
+    /// Whether this is a root type (`Query`, `Mutation`, `Subscription`).
+    pub is_root: bool,
+    /// Field definitions for this type.
+    pub fields: Vec<StitchFieldDef>,
+    /// Optional description.
+    pub description: Option<String>,
+}
+
+impl StitchTypeDefinition {
+    /// Create a new object type definition.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            is_root: false,
+            fields: Vec::new(),
+            description: None,
+        }
+    }
+
+    /// Mark this type as a root type.
+    pub fn as_root(mut self) -> Self {
+        self.is_root = true;
+        self
+    }
+
+    /// Add a field to this type.
+    pub fn with_field(mut self, field: StitchFieldDef) -> Self {
+        self.fields.push(field);
+        self
+    }
+
+    /// Set description.
+    pub fn with_description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
+    }
+}
+
+/// `@merge` directive attached to a type, instructing the stitcher how to
+/// combine it with identically-named types from other fragments.
+#[derive(Debug, Clone)]
+pub struct MergeDirective {
+    /// Key field used for entity stitching (mirrors `@key(fields: "...")`).
+    pub key_field: Option<String>,
+    /// Conflict resolution override for this specific type.
+    pub resolution: ConflictResolution,
+    /// Whether fields from duplicate types should be deduplicated by name.
+    pub deduplicate_fields: bool,
+}
+
+impl Default for MergeDirective {
+    fn default() -> Self {
+        Self {
+            key_field: None,
+            resolution: ConflictResolution::MergeFields,
+            deduplicate_fields: true,
+        }
+    }
+}
+
+/// The merged result of stitching multiple `SchemaFragment` objects.
+#[derive(Debug, Clone)]
+pub struct StitchedSchema {
+    /// Merged type definitions, keyed by type name.
+    pub types: HashMap<String, StitchTypeDefinition>,
+    /// Conflicts detected during stitching.
+    pub conflicts: Vec<StitchConflict>,
+    /// Source fragments that contributed to this schema.
+    pub sources: Vec<String>,
+}
+
+impl StitchedSchema {
+    /// Returns `true` if any conflicts were detected.
+    pub fn has_conflicts(&self) -> bool {
+        !self.conflicts.is_empty()
+    }
+
+    /// Returns total number of types in the merged schema.
+    pub fn type_count(&self) -> usize {
+        self.types.len()
+    }
+
+    /// Returns total number of fields across all types.
+    pub fn total_field_count(&self) -> usize {
+        self.types.values().map(|t| t.fields.len()).sum()
+    }
+
+    /// Get a type by name.
+    pub fn get_type(&self, name: &str) -> Option<&StitchTypeDefinition> {
+        self.types.get(name)
+    }
+}
+
+/// A conflict detected when two fragments define the same type differently.
+#[derive(Debug, Clone)]
+pub struct StitchConflict {
+    /// The conflicting type name.
+    pub type_name: String,
+    /// The fragment that introduced the conflict.
+    pub conflicting_source: String,
+    /// Human-readable description of the conflict.
+    pub description: String,
+}
+
+/// Schema stitcher that merges multiple `SchemaFragment` objects using
+/// `@merge` directive hints for conflict resolution.
+///
+/// # Conflict resolution
+///
+/// When two fragments define the same type name:
+/// - `ConflictResolution::KeepFirst`   — the first fragment wins.
+/// - `ConflictResolution::KeepLast`    — the last fragment wins.
+/// - `ConflictResolution::MergeFields` — fields from all fragments are merged;
+///   if `deduplicate_fields` is set in the `@merge` directive, duplicate field
+///   names are collapsed (keeping the first definition).
+/// - `ConflictResolution::Error`       — stitching fails with an error.
+pub struct MergeDirectiveSchemaStitcher {
+    /// Default conflict resolution when no `@merge` directive is present.
+    pub default_resolution: ConflictResolution,
+}
+
+impl MergeDirectiveSchemaStitcher {
+    /// Create a new stitcher with default (`MergeFields`) resolution.
+    pub fn new() -> Self {
+        Self {
+            default_resolution: ConflictResolution::default(),
+        }
+    }
+
+    /// Create a stitcher with a custom default resolution strategy.
+    pub fn with_resolution(resolution: ConflictResolution) -> Self {
+        Self {
+            default_resolution: resolution,
+        }
+    }
+
+    /// Stitch a list of `SchemaFragment` objects into a single `StitchedSchema`.
+    pub fn stitch(&self, fragments: &[SchemaFragment]) -> Result<StitchedSchema> {
+        let mut merged_types: HashMap<String, StitchTypeDefinition> = HashMap::new();
+        let mut conflicts: Vec<StitchConflict> = Vec::new();
+        let sources: Vec<String> = fragments.iter().map(|f| f.name.clone()).collect();
+
+        for fragment in fragments {
+            for (type_name, type_def) in &fragment.types {
+                if let Some(existing) = merged_types.get_mut(type_name) {
+                    // Conflict — determine resolution.
+                    // Use per-type directive if it exists, otherwise fall back to global default.
+                    let directive_opt = fragment.merge_directives.get(type_name).cloned();
+                    let (resolution, directive) = if let Some(dir) = directive_opt {
+                        let res = dir.resolution.clone();
+                        (res, dir)
+                    } else {
+                        (self.default_resolution.clone(), MergeDirective::default())
+                    };
+
+                    match resolution {
+                        ConflictResolution::KeepFirst => {
+                            // Do nothing — keep the existing definition.
+                            conflicts.push(StitchConflict {
+                                type_name: type_name.clone(),
+                                conflicting_source: fragment.name.clone(),
+                                description: format!(
+                                    "Type '{type_name}' from '{}' ignored (KeepFirst)",
+                                    fragment.name
+                                ),
+                            });
+                        }
+                        ConflictResolution::KeepLast => {
+                            *existing = type_def.clone();
+                            conflicts.push(StitchConflict {
+                                type_name: type_name.clone(),
+                                conflicting_source: fragment.name.clone(),
+                                description: format!(
+                                    "Type '{type_name}' replaced by '{}' (KeepLast)",
+                                    fragment.name
+                                ),
+                            });
+                        }
+                        ConflictResolution::MergeFields => {
+                            let dedup = directive.deduplicate_fields;
+                            let mut seen: HashSet<String> =
+                                existing.fields.iter().map(|f| f.name.clone()).collect();
+                            for field in &type_def.fields {
+                                if dedup && seen.contains(&field.name) {
+                                    // Skip duplicate field.
+                                    continue;
+                                }
+                                seen.insert(field.name.clone());
+                                existing.fields.push(field.clone());
+                            }
+                            // Record the merge event as a conflict entry.
+                            conflicts.push(StitchConflict {
+                                type_name: type_name.clone(),
+                                conflicting_source: fragment.name.clone(),
+                                description: format!(
+                                    "Type '{type_name}' from '{}' merged (MergeFields)",
+                                    fragment.name
+                                ),
+                            });
+                        }
+                        ConflictResolution::Error => {
+                            return Err(anyhow!(
+                                "Conflict: type '{type_name}' defined in both '{}' and '{}'",
+                                existing
+                                    .fields
+                                    .first()
+                                    .map(|f| f.source.as_str())
+                                    .unwrap_or("unknown"),
+                                fragment.name
+                            ));
+                        }
+                    }
+                } else {
+                    merged_types.insert(type_name.clone(), type_def.clone());
+                }
+            }
+        }
+
+        Ok(StitchedSchema {
+            types: merged_types,
+            conflicts,
+            sources,
+        })
+    }
+}
+
+impl Default for MergeDirectiveSchemaStitcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests for MergeDirectiveSchemaStitcher
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+
+    fn user_fragment() -> SchemaFragment {
+        SchemaFragment::new("users")
+            .with_type(
+                StitchTypeDefinition::new("User")
+                    .with_field(StitchFieldDef::new("id", "ID!", "users"))
+                    .with_field(StitchFieldDef::new("name", "String!", "users")),
+            )
+            .with_type(
+                StitchTypeDefinition::new("Query")
+                    .as_root()
+                    .with_field(StitchFieldDef::new("user", "User", "users")),
+            )
+    }
+
+    fn product_fragment() -> SchemaFragment {
+        SchemaFragment::new("products")
+            .with_type(
+                StitchTypeDefinition::new("Product")
+                    .with_field(StitchFieldDef::new("sku", "String!", "products"))
+                    .with_field(StitchFieldDef::new("price", "Float!", "products")),
+            )
+            .with_type(
+                StitchTypeDefinition::new("Query")
+                    .as_root()
+                    .with_field(StitchFieldDef::new("products", "[Product!]!", "products")),
+            )
+    }
+
+    #[test]
+    fn test_stitch_single_fragment() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher.stitch(&[user_fragment()]).unwrap();
+        assert_eq!(result.type_count(), 2); // User + Query
+        assert!(!result.has_conflicts());
+        assert_eq!(result.sources, vec!["users"]);
+    }
+
+    #[test]
+    fn test_stitch_merges_types_from_two_fragments() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher
+            .stitch(&[user_fragment(), product_fragment()])
+            .unwrap();
+        // User, Product, Query (merged)
+        assert_eq!(result.type_count(), 3);
+        let query = result.get_type("Query").unwrap();
+        // user + products fields
+        assert_eq!(query.fields.len(), 2);
+    }
+
+    #[test]
+    fn test_stitch_no_conflict_for_unique_types() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher
+            .stitch(&[user_fragment(), product_fragment()])
+            .unwrap();
+        // Only Query has a conflict (merge).
+        // conflicts list records the merge event.
+        // User and Product are unique — no conflicts.
+        let user_conflict = result.conflicts.iter().any(|c| c.type_name == "User");
+        assert!(!user_conflict);
+    }
+
+    #[test]
+    fn test_stitch_merge_fields_deduplicates_same_field() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        // Both fragments define the same type with an overlapping field.
+        let frag_a = SchemaFragment::new("a").with_type(
+            StitchTypeDefinition::new("Shared")
+                .with_field(StitchFieldDef::new("id", "ID!", "a"))
+                .with_field(StitchFieldDef::new("name", "String", "a")),
+        );
+        let frag_b = SchemaFragment::new("b").with_type(
+            StitchTypeDefinition::new("Shared")
+                .with_field(StitchFieldDef::new("id", "ID!", "b")) // duplicate
+                .with_field(StitchFieldDef::new("extra", "Int", "b")),
+        );
+        let result = stitcher.stitch(&[frag_a, frag_b]).unwrap();
+        let shared = result.get_type("Shared").unwrap();
+        // id, name, extra — id deduplicated
+        assert_eq!(shared.fields.len(), 3);
+    }
+
+    #[test]
+    fn test_stitch_keep_first_resolution() {
+        let stitcher = MergeDirectiveSchemaStitcher::with_resolution(ConflictResolution::KeepFirst);
+        let frag_a = SchemaFragment::new("a").with_type(
+            StitchTypeDefinition::new("Config")
+                .with_field(StitchFieldDef::new("version", "Int", "a")),
+        );
+        let frag_b = SchemaFragment::new("b").with_type(
+            StitchTypeDefinition::new("Config")
+                .with_field(StitchFieldDef::new("debug", "Boolean", "b")),
+        );
+        let result = stitcher.stitch(&[frag_a, frag_b]).unwrap();
+        let cfg = result.get_type("Config").unwrap();
+        // Only frag_a's field kept.
+        assert_eq!(cfg.fields.len(), 1);
+        assert_eq!(cfg.fields[0].name, "version");
+    }
+
+    #[test]
+    fn test_stitch_keep_last_resolution() {
+        let stitcher = MergeDirectiveSchemaStitcher::with_resolution(ConflictResolution::KeepLast);
+        let frag_a = SchemaFragment::new("a").with_type(
+            StitchTypeDefinition::new("Config")
+                .with_field(StitchFieldDef::new("version", "Int", "a")),
+        );
+        let frag_b = SchemaFragment::new("b").with_type(
+            StitchTypeDefinition::new("Config")
+                .with_field(StitchFieldDef::new("debug", "Boolean", "b")),
+        );
+        let result = stitcher.stitch(&[frag_a, frag_b]).unwrap();
+        let cfg = result.get_type("Config").unwrap();
+        // Only frag_b's field kept.
+        assert_eq!(cfg.fields.len(), 1);
+        assert_eq!(cfg.fields[0].name, "debug");
+    }
+
+    #[test]
+    fn test_stitch_error_resolution_fails() {
+        let stitcher = MergeDirectiveSchemaStitcher::with_resolution(ConflictResolution::Error);
+        let frag_a = SchemaFragment::new("a").with_type(
+            StitchTypeDefinition::new("Conflict").with_field(StitchFieldDef::new("x", "Int", "a")),
+        );
+        let frag_b = SchemaFragment::new("b").with_type(
+            StitchTypeDefinition::new("Conflict").with_field(StitchFieldDef::new("y", "Int", "b")),
+        );
+        let result = stitcher.stitch(&[frag_a, frag_b]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Conflict"));
+    }
+
+    #[test]
+    fn test_stitch_merge_directive_overrides_resolution() {
+        // Global = KeepFirst, but per-type @merge uses MergeFields.
+        let stitcher = MergeDirectiveSchemaStitcher::with_resolution(ConflictResolution::KeepFirst);
+        let frag_a = SchemaFragment::new("a").with_type(
+            StitchTypeDefinition::new("Widget").with_field(StitchFieldDef::new("id", "ID!", "a")),
+        );
+        let frag_b = SchemaFragment::new("b")
+            .with_type(
+                StitchTypeDefinition::new("Widget")
+                    .with_field(StitchFieldDef::new("label", "String", "b")),
+            )
+            .with_merge_directive(
+                "Widget",
+                MergeDirective {
+                    key_field: Some("id".to_string()),
+                    resolution: ConflictResolution::MergeFields,
+                    deduplicate_fields: true,
+                },
+            );
+        let result = stitcher.stitch(&[frag_a, frag_b]).unwrap();
+        let widget = result.get_type("Widget").unwrap();
+        // Both fields merged thanks to per-type directive.
+        assert_eq!(widget.fields.len(), 2);
+    }
+
+    #[test]
+    fn test_stitch_sources_recorded() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher
+            .stitch(&[user_fragment(), product_fragment()])
+            .unwrap();
+        assert!(result.sources.contains(&"users".to_string()));
+        assert!(result.sources.contains(&"products".to_string()));
+    }
+
+    #[test]
+    fn test_stitch_empty_input() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher.stitch(&[]).unwrap();
+        assert_eq!(result.type_count(), 0);
+        assert!(!result.has_conflicts());
+    }
+
+    #[test]
+    fn test_stitch_total_field_count() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher
+            .stitch(&[user_fragment(), product_fragment()])
+            .unwrap();
+        // User(2) + Product(2) + Query(2) = 6
+        assert_eq!(result.total_field_count(), 6);
+    }
+
+    #[test]
+    fn test_stitch_get_type_unknown_returns_none() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher.stitch(&[user_fragment()]).unwrap();
+        assert!(result.get_type("NonExistent").is_none());
+    }
+
+    #[test]
+    fn test_stitch_conflict_list_has_merge_events() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher
+            .stitch(&[user_fragment(), product_fragment()])
+            .unwrap();
+        // Query type was merged — should appear in conflicts.
+        let query_conflict = result.conflicts.iter().any(|c| c.type_name == "Query");
+        assert!(query_conflict);
+    }
+
+    #[test]
+    fn test_stitch_root_type_marked() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher.stitch(&[user_fragment()]).unwrap();
+        let query = result.get_type("Query").unwrap();
+        assert!(query.is_root);
+    }
+
+    #[test]
+    fn test_stitch_three_fragments() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let frag_c = SchemaFragment::new("reviews").with_type(
+            StitchTypeDefinition::new("Review")
+                .with_field(StitchFieldDef::new("rating", "Int!", "reviews")),
+        );
+        let result = stitcher
+            .stitch(&[user_fragment(), product_fragment(), frag_c])
+            .unwrap();
+        assert!(result.get_type("Review").is_some());
+        assert_eq!(result.sources.len(), 3);
+    }
+
+    #[test]
+    fn test_stitch_field_source_preserved() {
+        let stitcher = MergeDirectiveSchemaStitcher::new();
+        let result = stitcher.stitch(&[user_fragment()]).unwrap();
+        let user = result.get_type("User").unwrap();
+        assert!(user.fields.iter().all(|f| f.source == "users"));
     }
 }

@@ -11,6 +11,7 @@ pub mod real_time;
 pub mod conflict_resolution;
 pub mod library;
 pub mod review;
+pub mod statistics;
 
 pub use config::*;
 pub use types::*;
@@ -19,6 +20,7 @@ pub use real_time::*;
 pub use conflict_resolution::*;
 pub use library::*;
 pub use review::*;
+pub use statistics::*;
 
 use crate::{Result, ShaclAiError};
 

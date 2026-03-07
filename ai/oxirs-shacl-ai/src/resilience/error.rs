@@ -38,10 +38,7 @@ pub enum AIError {
 
     /// Authentication/Authorization errors
     #[error("Authentication error: {message}")]
-    AuthError {
-        provider: String,
-        message: String,
-    },
+    AuthError { provider: String, message: String },
 
     /// Invalid input/configuration
     #[error("Validation error: {message}")]
@@ -131,14 +128,12 @@ impl AIError {
     /// Get the error kind for retry logic
     pub fn kind(&self) -> AIErrorKind {
         match self {
-            Self::LLMError { status_code, .. } => {
-                match status_code {
-                    Some(429) => AIErrorKind::RateLimit,
-                    Some(code) if *code >= 500 => AIErrorKind::Server,
-                    Some(code) if *code >= 400 => AIErrorKind::Client,
-                    _ => AIErrorKind::Transient,
-                }
-            }
+            Self::LLMError { status_code, .. } => match status_code {
+                Some(429) => AIErrorKind::RateLimit,
+                Some(code) if *code >= 500 => AIErrorKind::Server,
+                Some(code) if *code >= 400 => AIErrorKind::Client,
+                _ => AIErrorKind::Transient,
+            },
             Self::RateLimitError { .. } => AIErrorKind::RateLimit,
             Self::TimeoutError { .. } => AIErrorKind::Transient,
             Self::AuthError { .. } => AIErrorKind::Auth,
@@ -152,13 +147,11 @@ impl AIError {
             }
             Self::CircuitBreakerError { .. } => AIErrorKind::CircuitBreaker,
             Self::ResourceExhausted { .. } => AIErrorKind::Server,
-            Self::ModelError { error_type, .. } => {
-                match error_type.as_str() {
-                    "not_found" | "unsupported" => AIErrorKind::Permanent,
-                    "loading_failed" => AIErrorKind::Transient,
-                    _ => AIErrorKind::Server,
-                }
-            }
+            Self::ModelError { error_type, .. } => match error_type.as_str() {
+                "not_found" | "unsupported" => AIErrorKind::Permanent,
+                "loading_failed" => AIErrorKind::Transient,
+                _ => AIErrorKind::Server,
+            },
             Self::ParseError { .. } => AIErrorKind::Client,
             Self::InternalError { .. } => AIErrorKind::Server,
         }
@@ -175,14 +168,14 @@ impl AIError {
     /// Get retry delay in seconds
     pub fn retry_delay_secs(&self) -> Option<u64> {
         match self {
-            Self::RateLimitError { reset_at, .. } => {
-                reset_at.map(|reset| {
-                    let now = chrono::Utc::now();
-                    (reset - now).num_seconds().max(0) as u64
-                })
-            }
+            Self::RateLimitError { reset_at, .. } => reset_at.map(|reset| {
+                let now = chrono::Utc::now();
+                (reset - now).num_seconds().max(0) as u64
+            }),
             Self::LLMError { retry_after, .. } => *retry_after,
-            Self::CircuitBreakerError { retry_after_secs, .. } => Some(*retry_after_secs),
+            Self::CircuitBreakerError {
+                retry_after_secs, ..
+            } => Some(*retry_after_secs),
             Self::TimeoutError { .. } => Some(5), // 5 second delay for timeouts
             Self::NetworkError { retryable, .. } if *retryable => Some(3),
             _ => None,
@@ -265,10 +258,7 @@ impl fmt::Display for ContextualError {
         write!(
             f,
             "{} (component: {}, operation: {}, timestamp: {})",
-            self.error,
-            self.context.component,
-            self.context.operation,
-            self.context.timestamp
+            self.error, self.context.component, self.context.operation, self.context.timestamp
         )
     }
 }
@@ -334,6 +324,9 @@ mod tests {
         assert_eq!(context.operation, "generate_response");
         assert_eq!(context.request_id, Some("req-123".to_string()));
         assert_eq!(context.user_id, Some("user-456".to_string()));
-        assert_eq!(context.additional_info.get("model"), Some(&"gpt-4".to_string()));
+        assert_eq!(
+            context.additional_info.get("model"),
+            Some(&"gpt-4".to_string())
+        );
     }
 }

@@ -1,10 +1,10 @@
 # OxiRS Cluster - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.0 | Last Updated: 2026-02-11*
 
 ## Status: Production Ready
 
-**oxirs-cluster** provides distributed RDF storage with Raft consensus, advanced fault tolerance, ML optimization, and cloud-native deployment capabilities.
+**oxirs-cluster** provides distributed RDF storage with Raft consensus, advanced fault tolerance, ML optimization, multi-tenant isolation, and cloud-native deployment capabilities.
 
 ### Quality Metrics
 - **Test Status**: 644 tests passing (100% success rate)
@@ -79,17 +79,32 @@
 - Spot instance management
 - AWS, GCP, Azure deployment guides
 
+## Recent Accomplishments (v0.2.0)
+
+### Security Enhancements
+- ✅ **Encryption Validation** - Enhanced encryption at rest with integrity verification using Merkle trees
+- ✅ **Security Audit Framework** - Comprehensive validation of encryption and access controls
+- ✅ **Key Management** - Secure key rotation and management infrastructure
+
+### Multi-Tenancy
+- ✅ **Tenant Isolation** - Complete namespace-based isolation for SaaS deployments
+- ✅ **Resource Quotas** - Per-tenant resource limits and monitoring
+- ✅ **Access Control** - Tenant-aware authentication and authorization
+
+### Performance & Monitoring
+- ✅ **Load Balancing Optimization** - ML-powered resource allocation and distribution
+- ✅ **Enhanced Metrics** - Comprehensive cluster health and performance tracking
+- ✅ **Distributed Tracing** - OpenTelemetry integration for cluster operations
+
 ## Future Roadmap
 
-### v0.2.0 - Extended Scale (Q1 2026 - Expanded)
+### v0.3.0 - Extended Scale (Q2 2026)
 - [ ] 1000+ node cluster support
 - [ ] Enhanced cross-datacenter replication
 - [ ] Advanced compression algorithms
 - [ ] Real-time streaming integration
-- [ ] Multi-tenant isolation
 - [ ] Advanced backup policies
 - [ ] SLA-based resource management
-- [ ] Enhanced security (encryption at rest)
 
 ### v1.0.0 - LTS Release (Q2 2026)
 - [ ] Long-term support guarantees
@@ -110,4 +125,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Cluster v0.1.0 - Distributed RDF storage with Raft consensus*
+*OxiRS Cluster v0.2.0 - Distributed RDF storage with multi-tenant isolation*

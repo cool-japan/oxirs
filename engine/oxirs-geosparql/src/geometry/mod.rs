@@ -5,6 +5,7 @@
 
 pub mod compressed_storage;
 pub mod coord3d;
+pub mod geometry3d;
 pub mod memory_pool;
 pub mod streaming;
 pub mod wkt_parser;

@@ -313,7 +313,11 @@ impl FederatedSubscriptionManager {
         }
 
         // Use latest timestamp
-        let latest_timestamp = events.iter().map(|e| e.timestamp).max().unwrap();
+        let latest_timestamp = events
+            .iter()
+            .map(|e| e.timestamp)
+            .max()
+            .expect("collection should not be empty");
 
         Ok(SubscriptionEvent {
             id: Uuid::new_v4().to_string(),

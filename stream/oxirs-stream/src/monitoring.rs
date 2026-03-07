@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
@@ -464,10 +464,10 @@ impl MetricsCollector {
                 // Refresh system information
                 {
                     let mut sys = system.write().await;
-                    sys.refresh_cpu(); // sysinfo 0.30: refresh_cpu_all() → refresh_cpu()
+                    sys.refresh_cpu_all(); // sysinfo 0.33: refresh_cpu() → refresh_cpu_all()
                     sys.refresh_memory();
                     // Network refresh is handled separately if available
-                    sys.refresh_processes(); // sysinfo 0.30: simplified API
+                    sys.refresh_processes(ProcessesToUpdate::All, true); // sysinfo 0.33: now requires 2 args
                 }
 
                 let mut current_metrics = metrics.write().await;
@@ -475,7 +475,7 @@ impl MetricsCollector {
 
                 // Real system metrics collection
                 current_metrics.system_memory_usage_bytes = sys.used_memory();
-                current_metrics.system_cpu_usage_percent = sys.global_cpu_info().cpu_usage() as f64; // sysinfo 0.30: global_cpu_usage() → global_cpu_info().cpu_usage()
+                current_metrics.system_cpu_usage_percent = sys.global_cpu_usage() as f64; // sysinfo 0.33: global_cpu_info().cpu_usage() → global_cpu_usage()
 
                 // Network metrics (cumulative)
                 let (network_in, network_out) = Self::get_network_metrics(&sys);

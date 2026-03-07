@@ -365,7 +365,7 @@ impl Default for DiskAnnIndex {
             DiskAnnConfig::default(),
             std::env::temp_dir().join("diskann_default"),
         )
-        .unwrap()
+        .expect("default DiskAnnConfig should be valid")
     }
 }
 

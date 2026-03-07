@@ -61,6 +61,7 @@ use crate::{
 };
 
 pub mod adaptive_load_balancer;
+pub mod adaptive_result_merger;
 pub mod advanced_anomaly_detection;
 pub mod advanced_benchmarking;
 pub mod advanced_consensus;
@@ -75,6 +76,7 @@ pub mod auth;
 pub mod auto_discovery;
 pub mod automl_pipeline;
 pub mod cache;
+pub mod cache_v2;
 pub mod capability_assessment;
 pub mod cdc;
 pub mod cloud_cost_optimizer;
@@ -86,9 +88,14 @@ pub mod distributed_tracing;
 pub mod distributed_transactions;
 pub mod executor;
 pub mod external_ml_integration;
+pub mod fault;
+pub mod fault_tolerance;
+pub mod federated_cache;
+pub mod federation_topology;
 pub mod gpu_accelerated_query;
 pub mod graph_algorithms;
 pub mod graphql;
+pub mod health;
 pub mod integration;
 pub mod jit_query_compiler;
 pub mod join_optimizer;
@@ -98,6 +105,7 @@ pub mod memory_efficient_datasets;
 pub mod metadata;
 pub mod ml_model_serving;
 pub mod ml_optimizer;
+pub mod ml_query_router;
 pub mod monitoring;
 pub mod multi_level_federation;
 pub mod nats_federation;
@@ -111,9 +119,13 @@ pub mod production_hardening;
 pub mod profiling_metrics;
 pub mod query_decomposition;
 pub mod query_plan_explainer;
+pub mod query_rewrite;
+pub mod region;
 pub mod request_batcher;
 pub mod result_streaming;
+pub mod routing;
 pub mod schema_alignment;
+pub mod selection;
 pub mod semantic_enhancer;
 pub mod semantic_reasoner;
 pub mod service;
@@ -127,6 +139,40 @@ pub mod streaming;
 pub mod streaming_optimizer;
 pub mod test_infrastructure;
 pub mod vector_similarity_federation;
+pub mod work_stealing;
+
+// v1.1.0: Per-endpoint circuit breaker
+pub mod endpoint_circuit_breaker;
+
+// v1.1.0: Endpoint health monitoring with latency tracking and degradation detection
+pub mod health_monitor;
+
+// v1.1.0: Federated SPARQL query decomposer
+pub mod query_decomposer;
+
+// v1.1.0 round 5: Cost model for federated query optimization
+pub mod cost_model;
+
+// v1.1.0 round 6: Federated query result aggregator with union/intersection/difference/ordered/weighted strategies
+pub mod result_aggregator;
+
+// v1.1.0 round 7: Distributed query result cache coordinator with LRU/LFU/FIFO/TTL eviction
+pub mod cache_coordinator;
+
+// v1.1.0 round 11: Federated query result merging strategies
+pub mod result_merger;
+
+// v1.1.0 round 13: SPARQL endpoint discovery and capability registry
+pub mod endpoint_discovery;
+
+// v1.1.0 round 14: Federated source selection for SPARQL query routing
+pub mod source_selector;
+
+// v1.1.0 round 15: Federated query splitting (BGP decomposition, exclusive groups, bound joins)
+pub mod query_splitter;
+
+// v1.1.0 round 16: Federated result streaming with backpressure and streaming join
+pub mod result_streamer;
 
 // Minimal imports to ensure compilation - only core types
 // Re-enabled specific non-duplicate exports after fixing ServiceRegistry conflicts
@@ -1271,6 +1317,15 @@ fn convert_object_to_rdf_term(object: &oxirs_core::Object) -> RdfTerm {
     }
 }
 
+// v1.1.0 round 17 (Batch E): Federation query execution monitoring and alerting
+pub mod query_monitor;
+
+// v1.1.0 round 18 (Batch E): Federation endpoint load balancing
+pub mod load_balancer;
+
+// v1.1.0 round 19: SPARQL endpoint capability detection and negotiation
+pub mod capability_negotiator;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1278,7 +1333,10 @@ mod tests {
     #[tokio::test]
     async fn test_federation_engine_creation() {
         let engine = FederationEngine::new();
-        let stats = engine.get_stats().await.unwrap();
+        let stats = engine
+            .get_stats()
+            .await
+            .expect("async operation should succeed");
 
         assert_eq!(stats.registry.total_sparql_endpoints, 0);
     }
@@ -1287,7 +1345,10 @@ mod tests {
     async fn test_federation_engine_with_config() {
         let config = FederationConfig::default();
         let engine = FederationEngine::with_config(config);
-        let health = engine.health_check().await.unwrap();
+        let health = engine
+            .health_check()
+            .await
+            .expect("async operation should succeed");
 
         assert_eq!(health.overall_status, ServiceStatus::Healthy);
         assert_eq!(health.total_services, 0);

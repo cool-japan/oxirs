@@ -1361,13 +1361,13 @@ impl ConfigurationManager {
 
     /// Get current configuration
     pub fn get_config(&self) -> OxirsConfig {
-        self.config.read().unwrap().clone()
+        self.config.read().expect("lock should not be poisoned").clone()
     }
 
     /// Update configuration
     pub fn update_config(&mut self, new_config: OxirsConfig) -> Result<(), ConfigError> {
         self.validate_config(&new_config)?;
-        *self.config.write().unwrap() = new_config;
+        *self.config.write().expect("lock should not be poisoned") = new_config;
         Ok(())
     }
 
@@ -1903,55 +1903,7 @@ impl Default for GlobalCacheConfig {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_default_config() {
-        let config = OxirsConfig::default();
-        assert_eq!(config.performance.profile, PerformanceProfile::Balanced);
-        assert!(config.monitoring.enabled);
-    }
+// --- Tests (extracted to config_tests.rs for file size compliance) ---
 
-    #[test]
-    fn test_performance_profiles() {
-        for profile in [
-            PerformanceProfile::Development,
-            PerformanceProfile::Balanced,
-            PerformanceProfile::HighPerformance,
-            PerformanceProfile::MaxThroughput,
-            PerformanceProfile::MemoryEfficient,
-            PerformanceProfile::LowLatency,
-            PerformanceProfile::BatchProcessing,
-            PerformanceProfile::RealTime,
-            PerformanceProfile::EdgeComputing,
-        ] {
-            let config = profile.get_config();
-            assert!(!config.is_empty());
-            println!("Profile: {} - {profile, profile.description(}"));
-        }
-    }
-
-    #[test]
-    fn test_configuration_manager() {
-        let mut manager = ConfigurationManager::new();
-        
-        // Test setting performance profile
-        manager.set_performance_profile(PerformanceProfile::HighPerformance).unwrap();
-        assert_eq!(manager.get_performance_profile(), PerformanceProfile::HighPerformance);
-        
-        // Test validation
-        let mut invalid_config = OxirsConfig::default();
-        invalid_config.concurrency.thread_pool.worker_threads = 0;
-        assert!(manager.update_config(invalid_config).is_err());
-    }
-
-    #[test]
-    fn test_config_serialization() {
-        let config = OxirsConfig::default();
-        let json = serde_json::to_string_pretty(&config).unwrap();
-        let deserialized: OxirsConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(config.performance.profile, deserialized.performance.profile);
-    }
-}
+include!("config_tests.rs");

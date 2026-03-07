@@ -257,12 +257,18 @@ impl TransactionManager {
 
         // Execute all operations (immutable borrow)
         let result = {
-            let transaction = self.active_transactions.get(txn_id).unwrap();
+            let transaction = self
+                .active_transactions
+                .get(txn_id)
+                .expect("transaction should exist for given id");
             self.execute_operations(transaction)
         };
 
         // Update transaction state (mutable borrow)
-        let transaction = self.active_transactions.get_mut(txn_id).unwrap();
+        let transaction = self
+            .active_transactions
+            .get_mut(txn_id)
+            .expect("transaction should exist for given id");
 
         match result {
             Ok(_) => {
@@ -438,7 +444,9 @@ pub async fn run(config: TransactionConfig) -> ToolResult {
     println!();
 
     // Add operations
-    let transaction = manager.get_transaction_mut(&txn_id).unwrap();
+    let transaction = manager
+        .get_transaction_mut(&txn_id)
+        .expect("transaction should exist after begin");
 
     for operation_str in &config.operations {
         let operation = parse_operation(operation_str)?;
@@ -576,7 +584,7 @@ mod uuid {
         pub fn new_v4() -> String {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_nanos();
 
             format!("{:032x}", now)

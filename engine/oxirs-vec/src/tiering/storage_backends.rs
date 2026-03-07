@@ -43,13 +43,13 @@ impl HotTierStorage {
 
     /// Get current memory usage in bytes
     pub fn memory_usage(&self) -> u64 {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().expect("lock should not be poisoned");
         cache.values().map(|v| v.len() as u64).sum()
     }
 
     /// Get number of cached indices
     pub fn cache_size(&self) -> usize {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().expect("lock should not be poisoned");
         cache.len()
     }
 }
@@ -62,7 +62,7 @@ impl Default for HotTierStorage {
 
 impl StorageBackend for HotTierStorage {
     fn load_index(&self, index_id: &str) -> Result<Vec<u8>> {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().expect("lock should not be poisoned");
         cache
             .get(index_id)
             .cloned()
@@ -70,13 +70,13 @@ impl StorageBackend for HotTierStorage {
     }
 
     fn save_index(&mut self, index_id: &str, data: &[u8]) -> Result<()> {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().expect("lock should not be poisoned");
         cache.insert(index_id.to_string(), data.to_vec());
         Ok(())
     }
 
     fn delete_index(&mut self, index_id: &str) -> Result<()> {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().expect("lock should not be poisoned");
         cache
             .remove(index_id)
             .ok_or_else(|| anyhow::anyhow!("Index {} not found in hot tier", index_id))?;
@@ -84,12 +84,12 @@ impl StorageBackend for HotTierStorage {
     }
 
     fn exists(&self, index_id: &str) -> bool {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().expect("lock should not be poisoned");
         cache.contains_key(index_id)
     }
 
     fn get_size(&self, index_id: &str) -> Result<u64> {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().expect("lock should not be poisoned");
         cache
             .get(index_id)
             .map(|v| v.len() as u64)
@@ -97,7 +97,7 @@ impl StorageBackend for HotTierStorage {
     }
 
     fn list_indices(&self) -> Result<Vec<String>> {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().expect("lock should not be poisoned");
         Ok(cache.keys().cloned().collect())
     }
 

@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "WebAssembly bindings for OxiRS - Run RDF/SPARQL in the browser"
 keywords = ["wasm", "webassembly", "rdf", "sparql", "browser"]
 categories = ["wasm", "web-programming", "database"]
+readme = "README.md"
 rust-version.workspace = true
 
 [lib]
@@ -26,7 +27,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 # Utilities
-uuid.workspace = true
+uuid = { workspace = true, features = ["js"] }
 
 # WASM bindings
 wasm-bindgen.workspace = true
@@ -55,4 +56,4 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-O3", "--enable-mutable-globals"]
+wasm-opt = false

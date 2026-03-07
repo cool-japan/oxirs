@@ -4,7 +4,9 @@
 //! quad indexes for named graph (RDF dataset) support, spatial indexes
 //! for GeoSPARQL geospatial queries, and SIMD-accelerated filtering.
 
+pub mod adaptive;
 pub mod bloom_filter;
+pub mod btree_index;
 pub mod gpu_accelerated_scan;
 pub mod quad;
 pub mod simd_triple_filter;
@@ -12,7 +14,12 @@ pub mod spatial;
 pub mod triple;
 pub mod triple_index;
 
+pub use adaptive::{
+    AdaptiveIndexSelector, IndexSelectionThresholds, IndexStats, IndexType, QueryPattern,
+    TieredStorage,
+};
 pub use bloom_filter::{BloomFilter, BloomFilterConfig, BloomFilterStats, CountingBloomFilter};
+pub use btree_index::{BTreeTripleIndex, EncodedTriple, TripleIndexSet, TripleOrdering};
 pub use gpu_accelerated_scan::{
     GpuAccelerationConfig, GpuBackendType, GpuIndexScanner, GpuScanStats, JoinComponent,
     TriplePattern,

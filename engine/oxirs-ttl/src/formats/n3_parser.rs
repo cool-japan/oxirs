@@ -233,8 +233,8 @@ impl AdvancedN3Parser {
                 Ok(N3Term::NamedNode(node))
             }
             N3Token::RdfType => {
-                let rdf_type =
-                    NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+                let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                    .expect("valid IRI");
                 self.advance()?;
                 Ok(N3Term::NamedNode(rdf_type))
             }
@@ -249,14 +249,14 @@ impl AdvancedN3Parser {
             }
             N3Token::IntegerLiteral(value) => {
                 let xsd_integer =
-                    NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap();
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("valid IRI");
                 let lit = Literal::new_typed_literal(value, xsd_integer);
                 self.advance()?;
                 Ok(N3Term::Literal(lit))
             }
             N3Token::DecimalLiteral(value) => {
                 let xsd_decimal =
-                    NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap();
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").expect("valid IRI");
                 let lit = Literal::new_typed_literal(value, xsd_decimal);
                 self.advance()?;
                 Ok(N3Term::Literal(lit))
@@ -342,7 +342,8 @@ impl AdvancedN3Parser {
         // For now, return rdf:nil for empty collections
         if matches!(self.current_token, N3Token::RightParen) {
             self.advance()?;
-            let nil = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil").unwrap();
+            let nil = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+                .expect("valid IRI");
             return Ok(N3Term::NamedNode(nil));
         }
 
@@ -586,8 +587,10 @@ mod tests {
     #[test]
     fn test_parse_simple_statement() {
         let input = "@prefix ex: <http://example.org/> .\nex:alice ex:knows ex:bob .";
-        let mut parser = AdvancedN3Parser::new(input).unwrap();
-        let doc = parser.parse_document().unwrap();
+        let mut parser = AdvancedN3Parser::new(input).expect("construction should succeed");
+        let doc = parser
+            .parse_document()
+            .expect("document parsing should succeed");
 
         assert_eq!(doc.statements.len(), 1);
         assert_eq!(doc.implications.len(), 0);
@@ -596,8 +599,10 @@ mod tests {
     #[test]
     fn test_parse_variable() {
         let input = "@prefix ex: <http://example.org/> .\n?x ex:knows ?y .";
-        let mut parser = AdvancedN3Parser::new(input).unwrap();
-        let doc = parser.parse_document().unwrap();
+        let mut parser = AdvancedN3Parser::new(input).expect("construction should succeed");
+        let doc = parser
+            .parse_document()
+            .expect("document parsing should succeed");
 
         assert_eq!(doc.statements.len(), 1);
         let stmt = &doc.statements[0];
@@ -608,8 +613,8 @@ mod tests {
     #[test]
     fn test_parse_formula() {
         let input = "{ <http://example.org/a> <http://example.org/p> <http://example.org/b> } .";
-        let mut parser = AdvancedN3Parser::new(input).unwrap();
-        let formula = parser.parse_formula().unwrap();
+        let mut parser = AdvancedN3Parser::new(input).expect("construction should succeed");
+        let formula = parser.parse_formula().expect("parsing should succeed");
 
         assert_eq!(formula.len(), 1);
     }
@@ -618,8 +623,10 @@ mod tests {
     fn test_parse_implication() {
         let input =
             "@prefix ex: <http://example.org/> .\n{ ?x ex:knows ?y } => { ?y ex:knows ?x } .";
-        let mut parser = AdvancedN3Parser::new(input).unwrap();
-        let doc = parser.parse_document().unwrap();
+        let mut parser = AdvancedN3Parser::new(input).expect("construction should succeed");
+        let doc = parser
+            .parse_document()
+            .expect("document parsing should succeed");
 
         assert_eq!(doc.implications.len(), 1);
         let impl_rule = &doc.implications[0];
@@ -630,8 +637,10 @@ mod tests {
     #[test]
     fn test_parse_forall() {
         let input = "@forAll ?x, ?y .\n?x <http://ex.org/knows> ?y .";
-        let mut parser = AdvancedN3Parser::new(input).unwrap();
-        let doc = parser.parse_document().unwrap();
+        let mut parser = AdvancedN3Parser::new(input).expect("construction should succeed");
+        let doc = parser
+            .parse_document()
+            .expect("document parsing should succeed");
 
         assert_eq!(parser.universals.len(), 2);
         assert_eq!(doc.statements.len(), 1);

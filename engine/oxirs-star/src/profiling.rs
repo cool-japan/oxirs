@@ -420,9 +420,19 @@ impl StarProfiler {
             return Duration::ZERO;
         }
 
-        let earliest = self.samples.iter().map(|s| s.timestamp).min().unwrap();
+        let earliest = self
+            .samples
+            .iter()
+            .map(|s| s.timestamp)
+            .min()
+            .expect("samples validated to be non-empty");
 
-        let latest = self.samples.iter().map(|s| s.timestamp).max().unwrap();
+        let latest = self
+            .samples
+            .iter()
+            .map(|s| s.timestamp)
+            .max()
+            .expect("samples validated to be non-empty");
 
         latest.duration_since(earliest).unwrap_or(Duration::ZERO)
     }
@@ -471,8 +481,14 @@ impl StarProfiler {
 
         PerformanceTrend {
             operation: operation.to_string(),
-            window_start: samples.first().unwrap().timestamp,
-            window_end: samples.last().unwrap().timestamp,
+            window_start: samples
+                .first()
+                .expect("collection validated to be non-empty")
+                .timestamp,
+            window_end: samples
+                .last()
+                .expect("collection validated to be non-empty")
+                .timestamp,
             average_duration: Duration::from_secs_f64(sum_y / n),
             trend_direction: direction,
             confidence,
@@ -491,7 +507,10 @@ impl StarProfiler {
             };
         }
 
-        let peak_memory = *memory_samples.iter().max().unwrap();
+        let peak_memory = *memory_samples
+            .iter()
+            .max()
+            .expect("memory_samples validated to be non-empty");
         let average_memory = memory_samples.iter().sum::<u64>() / memory_samples.len() as u64;
 
         // Calculate efficiency ratio (simplified)
@@ -569,7 +588,11 @@ impl StarProfiler {
         }
 
         // Sort by severity (highest first)
-        bottlenecks.sort_by(|a, b| b.severity.partial_cmp(&a.severity).unwrap());
+        bottlenecks.sort_by(|a, b| {
+            b.severity
+                .partial_cmp(&a.severity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         bottlenecks
     }

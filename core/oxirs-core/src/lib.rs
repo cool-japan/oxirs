@@ -313,6 +313,18 @@ pub mod simd;
 pub mod simd_triple_matching; // SIMD-optimized triple pattern matching using SciRS2
 pub mod zero_copy_rdf; // Zero-copy RDF operations using SciRS2-core memory management
 
+// Query optimization enhancements
+pub mod cache; // Core-level query result cache with LRU and delta invalidation
+pub mod data_factory;
+pub mod named_graph; // Named Graph Management API (Jena Dataset-compatible)
+pub mod optimizer; // Runtime feedback-based adaptive query optimization
+pub mod provenance; // W3C PROV-O ontology support for RDF data provenance tracking
+pub mod rdf;
+pub mod stability; // API stability markers and LTS compatibility matrix
+pub mod statistics; // Equi-depth histogram statistics for cardinality estimation
+pub mod view; // Incremental view maintenance with delta propagation // W3C DataFactory API for programmatic RDF term construction
+pub mod views; // Incremental view maintenance (new: DeltaChange-based API with IncrementalViewMaintainer) // RDF dataset utilities (diff, patch)
+
 // Re-export core types for convenience
 pub use model::*;
 pub use rdf_store::{ConcreteStore, RdfStore, Store};

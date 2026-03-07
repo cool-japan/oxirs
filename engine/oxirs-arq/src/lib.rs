@@ -44,18 +44,22 @@ pub mod adaptive_execution;
 pub mod aggregates_ext;
 pub mod algebra;
 pub mod algebra_generation;
+pub mod analytics;
 pub mod bgp_optimizer;
 pub mod bgp_optimizer_types;
 pub mod buffer_management;
 pub mod builtin;
 pub mod builtin_fixed;
+pub mod cache;
 pub mod cache_integration;
 pub mod cardinality_estimator;
 pub mod cost_model;
 pub mod debug_utilities;
 pub mod distributed;
 pub mod executor;
+pub mod executor_pipeline;
 pub mod expression;
+pub mod expression_compiler;
 pub mod extensions;
 pub mod federation;
 pub mod gpu_accelerated_ops;
@@ -64,18 +68,21 @@ pub mod integrated_query_planner;
 pub mod interactive_query_builder;
 pub mod jit_compiler;
 pub mod join_algorithms;
+pub mod lateral_join;
 pub mod materialization;
 pub mod materialized_views;
 pub mod optimizer;
 pub mod parallel;
 pub mod path;
 pub mod path_extensions;
+pub mod plan_visualizer;
 pub mod procedures;
 pub mod production;
 pub mod property_functions;
 pub mod query;
 pub mod query_analysis;
 pub mod query_builder;
+pub mod query_cache_lru;
 pub mod query_plan_cache;
 pub mod query_profiler;
 pub mod query_rewriter;
@@ -86,12 +93,15 @@ pub mod scirs_optimize_integration;
 pub mod service_description;
 pub mod simd_query_ops;
 pub mod statistics_collector;
+pub mod stats;
 pub mod streaming;
 pub mod string_functions_ext;
 pub mod system_load_monitor;
 pub mod term;
 pub mod triple_functions;
 pub mod update;
+pub mod update_graph_management;
+pub mod update_protocol;
 pub mod values_support;
 pub mod vector_query_optimizer;
 pub mod websocket_streaming;
@@ -112,12 +122,42 @@ pub mod query_result_cache;
 pub mod query_templates;
 
 // RDF-star / SPARQL-star integration
+#[cfg(test)]
+pub mod conformance;
+pub mod execution;
+pub mod rdf_star;
 #[cfg(feature = "star")]
 pub mod star_integration;
 pub mod statistics;
 
+// Adaptive query optimization and parallel evaluation (v0.2.0 Phase 2)
+pub use execution::{ParallelBgpEvaluator, PatternDependencyGraph, TripleStore};
+pub use optimizer::adaptive::{
+    AdaptiveJoinOrderOptimizer, AdaptiveStatsStore, JoinAlgorithm, JoinPlanNode, PatternTerm,
+    PlanTimer, RuntimeStats, TriplePatternInfo,
+};
+pub use optimizer::materialized_view::{
+    BindingRow, MaterializedView, MaterializedViewManager, RdfTerm, ViewManagerConfig,
+    ViewManagerStats,
+};
+// Adaptive join ordering (v0.2.0 Phase 2 - join_order)
+pub use optimizer::join_order::{
+    AdaptiveQueryPlan, CardinalityEstimate, JoinGraphStats, JoinOrderOptimizer, PatternCost,
+};
+// View registry (v0.2.0 Phase 2 - view_registry)
+pub use optimizer::view_registry::{algebra_hash, BindingSet, ViewDefinition, ViewRegistry};
+// Parallel pipeline executor (v0.2.0 Phase 2)
+pub use executor_pipeline::{BindingMap, ParallelPipelineStage, UnionParallelExecutor};
+// LRU query cache (v0.2.0 Phase 2)
+pub use query_cache_lru::{
+    CacheEntry, CacheFingerprint, CacheManagerStats, CompiledQueryCache, LruQueryCache,
+    QueryCacheManager,
+};
+
 // Advanced modules
 pub mod advanced_optimizer;
+pub mod explain;
+pub mod timeout;
 // Temporarily disabled - require scirs2-core API migration
 // TODO: Complete API migration in future release when scirs2-core API stabilizes
 // pub mod advanced_statistics;
@@ -229,6 +269,13 @@ pub use distributed_consensus::{
 };
 */
 
+pub use lateral_join::{
+    LateralCostEstimate, LateralJoin, LateralJoinConfig, LateralJoinError, LateralJoinExecutor,
+    LateralJoinStats, LateralOptimizer, LateralOptimizerConfig, LateralParser, LateralStrategy,
+    LateralSubquery, LateralValidationResult, LateralValidator, LateralValue, OrderSpec,
+    SolutionMapping,
+};
+
 pub use adaptive_index_advisor::{
     AccessPattern, AdvisorConfig, AdvisorStatistics, AnalysisSummary, IndexAdvisor,
     IndexAnalysisReport, IndexConfiguration, IndexRecommendation, IndexType, IndexUsageStats,
@@ -325,6 +372,11 @@ pub use query_result_cache::{
     CacheConfig as ResultCacheConfig, CacheStatistics as ResultCacheStatistics, QueryResultCache,
     QueryResultCacheBuilder,
 };
+// Cache invalidation system (v0.2.0 Phase 1.1)
+pub use cache::{
+    CacheCoordinator, CacheLevel, DependencyGraph, InvalidationConfig, InvalidationEngine,
+    InvalidationStatistics, InvalidationStrategy, RdfUpdateListener,
+};
 pub use simd_query_ops::{
     ComparisonOp, JoinStats, SimdAggregations, SimdConfig, SimdFilterEvaluator, SimdHashJoin,
     SimdStringOps, SimdTripleMatcher, TripleCandidate,
@@ -342,4 +394,86 @@ pub use star_integration::{
 };
 
 // Common Result type for the crate
+pub use explain::{
+    ExplainFormat, IndexType as ExplainIndexType, PlanNode as ExplainPlanNode, QueryExplainer,
+    QueryExplainerBuilder, QueryPlan as QueryExplainPlan,
+};
+pub use rdf_star::{
+    bind_pattern, instantiate_quoted_triple, sparql_star_builtins, AnnotatedTriple, Annotation,
+    QuotedTriple, RdfStarStore, StarBinding, StarObject, StarOperator, StarPattern, StarPredicate,
+    StarSubject,
+};
+
 pub type Result<T> = anyhow::Result<T>;
+
+// Graph analytics exports (v0.3.0)
+pub use analytics::{
+    is_dag, is_reachable, BetweennessCentrality, ConnectedComponents, DegreeCentrality, EdgeWeight,
+    GraphStats, GraphStatsSummary, LouvainCommunities, NodeId, PageRank, RdfGraphAdapter,
+    ShortestPaths,
+};
+
+// SPARQL 1.1 UPDATE Graph Management Operations (v0.3.0)
+pub use update_graph_management::{
+    GraphManagementDataset, GraphManagementExecutor, GraphManagementOp, GraphManagementResult,
+    GraphManagementTarget, Triple as GraphManagementTriple,
+};
+
+// Runtime statistics collector (v0.2.0 enhancement)
+pub use stats::{PatternStats, QueryExecutionStats, RuntimeStatsCollector};
+
+// SPARQL 1.1 Update Protocol — standalone parser and in-memory executor (v0.2.0 enhancement)
+pub use update_protocol::{
+    ArqError as UpdateArqError, ClearType, DropType, ParseError as UpdateParseError,
+    PatternTerm as UpdatePatternTerm, SparqlUpdate, SparqlUpdateParser, Triple as UpdateTriple,
+    TriplePattern as UpdateTriplePattern, UpdateExecutor as SparqlUpdateExecutor,
+    UpdateResult as SparqlUpdateResult,
+};
+
+// Optimizer passes (v0.2.0 enhancement)
+pub use optimizer::{
+    ConstantFoldingPass, OptimizationPass, OptimizationPipeline, PipelineResult,
+    RedundantJoinEliminationPass, UnusedVariableEliminationPass,
+};
+
+// Subgraph isomorphism / pattern matching (v1.1.0 round 5)
+pub mod subgraph_matcher;
+
+// SPARQL 1.1 aggregate function executor (v1.1.0 round 6)
+pub mod aggregate_executor;
+
+// SPARQL-style window functions: ROW_NUMBER, RANK, DENSE_RANK, NTILE, LAG, LEAD (v1.1.0 round 7)
+pub mod window_function;
+
+// SPARQL 1.1 VALUES clause (inline data) (v1.1.0 round 9)
+pub mod values_clause;
+
+// SPARQL 1.1 SERVICE clause for federated queries (v1.1.0 round 10)
+pub mod service_clause;
+
+// SPARQL subquery (SELECT within SELECT) support (v1.1.0 round 11)
+pub mod subquery;
+
+// Cost-based join reordering for SPARQL query optimization (v1.1.0 round 12)
+pub mod join_optimizer;
+
+// SPARQL 1.1 expression/filter evaluator (v1.1.0 round 13)
+pub mod expression_evaluator;
+
+// SPARQL 1.1 GROUP BY clause evaluator (v1.1.0 round 11)
+pub mod group_by_evaluator;
+
+// SPARQL 1.1 OPTIONAL clause evaluator (left outer join) (v1.1.0 round 12)
+pub mod optional_evaluator;
+
+// SPARQL CONSTRUCT query builder — template instantiation, blank nodes, deduplication (v1.1.0 round 13)
+pub mod construct_builder;
+
+// SPARQL MINUS pattern evaluation (set-difference algebra) (v1.1.0 round 14)
+pub mod minus_evaluator;
+
+// SPARQL EXISTS and NOT EXISTS graph pattern evaluation (v1.1.0 round 15)
+pub mod exists_evaluator;
+
+// SPARQL 1.1 property path expression parser and evaluator (v1.1.0 round 16)
+pub mod path_expression;

@@ -317,8 +317,8 @@ mod tests {
     use oxirs_core::model::{Literal, NamedNode};
 
     fn create_quad(subject: &str, predicate: &str, object: &str) -> Quad {
-        let s = NamedNode::new(subject).unwrap();
-        let p = NamedNode::new(predicate).unwrap();
+        let s = NamedNode::new(subject).expect("valid IRI");
+        let p = NamedNode::new(predicate).expect("valid IRI");
         let o = Literal::new(object);
         Quad::new(s, p, o, oxirs_core::model::GraphName::DefaultGraph)
     }

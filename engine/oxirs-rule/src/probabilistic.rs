@@ -344,7 +344,7 @@ impl BayesianNetwork {
         domain: &[String],
         rng: &mut impl RngCore,
     ) -> String {
-        let uniform = Uniform::new(0.0, 1.0).unwrap();
+        let uniform = Uniform::new(0.0, 1.0).expect("distribution parameters are valid");
         let u: f64 = uniform.sample(rng);
 
         let mut cumulative = 0.0;
@@ -372,8 +372,13 @@ impl BayesianNetwork {
 
         // Build adjacency list and in-degrees
         for (from, to) in &self.edges {
-            adj_list.get_mut(from).unwrap().push(to.clone());
-            *in_degree.get_mut(to).unwrap() += 1;
+            adj_list
+                .get_mut(from)
+                .expect("variable should exist in adjacency list")
+                .push(to.clone());
+            *in_degree
+                .get_mut(to)
+                .expect("variable should exist in in_degree map") += 1;
         }
 
         // Kahn's algorithm
@@ -390,7 +395,9 @@ impl BayesianNetwork {
 
             if let Some(neighbors) = adj_list.get(&node) {
                 for neighbor in neighbors {
-                    let deg = in_degree.get_mut(neighbor).unwrap();
+                    let deg = in_degree
+                        .get_mut(neighbor)
+                        .expect("neighbor should exist in in_degree map");
                     *deg -= 1;
                     if *deg == 0 {
                         queue.push(neighbor.clone());
@@ -406,6 +413,48 @@ impl BayesianNetwork {
         }
 
         Ok(result)
+    }
+
+    /// Return the number of variables in the network
+    pub fn variable_count(&self) -> usize {
+        self.variables.len()
+    }
+
+    /// Check whether a variable with the given name exists
+    pub fn has_variable(&self, name: &str) -> bool {
+        self.variables.contains_key(name)
+    }
+
+    /// Check whether a directed edge exists between two variables
+    pub fn has_edge(&self, from: &str, to: &str) -> bool {
+        self.edges.iter().any(|(f, t)| f == from && t == to)
+    }
+
+    /// Retrieve the prior probability for a specific value of a variable.
+    ///
+    /// Returns 0.0 if no CPT is set or the value is not in the domain.
+    pub fn get_prior(&self, variable: &str, value: &str) -> f64 {
+        let cpt = match self.cpts.get(variable) {
+            Some(c) => c,
+            None => return 0.0,
+        };
+        // Prior CPT has no parents
+        if !cpt.parents.is_empty() {
+            return 0.0;
+        }
+        let var = match self.variables.get(variable) {
+            Some(v) => v,
+            None => return 0.0,
+        };
+        let idx = match var.domain.iter().position(|v| v == value) {
+            Some(i) => i,
+            None => return 0.0,
+        };
+        if idx < cpt.probabilities.len() {
+            cpt.probabilities[idx]
+        } else {
+            0.0
+        }
     }
 }
 
@@ -616,6 +665,34 @@ impl MarkovLogicNetwork {
         // Full implementation would sample each atom conditional on others
         Ok(new_state)
     }
+
+    /// Register a predicate name with its arity
+    pub fn add_predicate(&mut self, name: String, arity: usize) {
+        self.predicates.insert(name, arity);
+    }
+
+    /// Check whether a predicate with the given name is registered
+    pub fn has_predicate(&self, name: &str) -> bool {
+        self.predicates.contains_key(name)
+    }
+
+    /// Add a weighted first-order logic formula to the network.
+    ///
+    /// The formula is stored as a textual representation alongside its weight.
+    /// A corresponding `Rule` is created with the formula string as the rule name.
+    pub fn add_formula(&mut self, formula: String, weight: f64) {
+        let rule = Rule {
+            name: formula,
+            body: Vec::new(),
+            head: Vec::new(),
+        };
+        self.weighted_rules.push(WeightedRule { rule, weight });
+    }
+
+    /// Return the number of weighted formulas (rules) in the network
+    pub fn formula_count(&self) -> usize {
+        self.weighted_rules.len()
+    }
 }
 
 impl Default for MarkovLogicNetwork {
@@ -654,8 +731,14 @@ impl ProbabilisticRuleEngine {
     /// Add a weighted rule
     pub fn add_weighted_rule(&mut self, rule: Rule, weight: f64) {
         self.weighted_rules.push(WeightedRule { rule, weight });
-        self.mln
-            .add_weighted_rule(self.weighted_rules.last().unwrap().rule.clone(), weight);
+        self.mln.add_weighted_rule(
+            self.weighted_rules
+                .last()
+                .expect("weighted_rules should not be empty after push")
+                .rule
+                .clone(),
+            weight,
+        );
     }
 
     /// Perform probabilistic forward chaining
@@ -878,5 +961,282 @@ mod tests {
 
         assert!(a_idx < b_idx);
         assert!(b_idx < c_idx);
+    }
+
+    // ---- Extended tests ----
+
+    #[test]
+    fn test_bn_new_is_empty() {
+        let bn = BayesianNetwork::new();
+        assert!(bn.variables.is_empty());
+        assert!(bn.edges.is_empty());
+        assert!(bn.cpts.is_empty());
+    }
+
+    #[test]
+    fn test_bn_add_four_variables() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("W".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("X".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("Y".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("Z".to_string(), vec!["T".to_string(), "F".to_string()]);
+        assert_eq!(bn.variables.len(), 4);
+    }
+
+    #[test]
+    fn test_bn_cycle_detection_three_node() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("A".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("B".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("C".to_string(), vec!["T".to_string(), "F".to_string()]);
+        assert!(bn.add_edge("A".to_string(), "B".to_string()).is_ok());
+        assert!(bn.add_edge("B".to_string(), "C".to_string()).is_ok());
+        // Creating a cycle: C -> A
+        assert!(
+            bn.add_edge("C".to_string(), "A".to_string()).is_err(),
+            "Should detect cycle A->B->C->A"
+        );
+    }
+
+    #[test]
+    fn test_bn_self_loop_is_cycle() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("A".to_string(), vec!["T".to_string(), "F".to_string()]);
+        assert!(
+            bn.add_edge("A".to_string(), "A".to_string()).is_err(),
+            "Self-loop is a cycle"
+        );
+    }
+
+    #[test]
+    fn test_bn_diamond_dag_is_valid() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("A".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("B".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("C".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("D".to_string(), vec!["T".to_string(), "F".to_string()]);
+        // A -> B, A -> C, B -> D, C -> D
+        assert!(bn.add_edge("A".to_string(), "B".to_string()).is_ok());
+        assert!(bn.add_edge("A".to_string(), "C".to_string()).is_ok());
+        assert!(bn.add_edge("B".to_string(), "D".to_string()).is_ok());
+        assert!(bn.add_edge("C".to_string(), "D".to_string()).is_ok());
+        assert_eq!(bn.edges.len(), 4);
+    }
+
+    #[test]
+    fn test_bn_add_edge_nonexistent_from() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("B".to_string(), vec!["T".to_string(), "F".to_string()]);
+        assert!(bn.add_edge("Ghost".to_string(), "B".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_bn_add_edge_nonexistent_to() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("A".to_string(), vec!["T".to_string(), "F".to_string()]);
+        assert!(bn.add_edge("A".to_string(), "Ghost".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_bn_prior_invalid_sum() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("X".to_string(), vec!["a".to_string(), "b".to_string()]);
+        assert!(
+            bn.set_prior("X".to_string(), vec![0.3, 0.8]).is_err(),
+            "Prob sum > 1 should fail"
+        );
+    }
+
+    #[test]
+    fn test_bn_prior_valid() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("X".to_string(), vec!["a".to_string(), "b".to_string()]);
+        assert!(bn.set_prior("X".to_string(), vec![0.3, 0.7]).is_ok());
+    }
+
+    #[test]
+    fn test_bn_prior_unknown_variable() {
+        let mut bn = BayesianNetwork::new();
+        assert!(
+            bn.set_prior("Ghost".to_string(), vec![0.5, 0.5]).is_err(),
+            "Unknown variable should fail"
+        );
+    }
+
+    #[test]
+    fn test_bn_topological_sort_single_node() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("Alone".to_string(), vec!["T".to_string(), "F".to_string()]);
+        let topo = bn.topological_sort().unwrap();
+        assert_eq!(topo.len(), 1);
+        assert_eq!(topo[0], "Alone");
+    }
+
+    #[test]
+    fn test_bn_topological_sort_no_edges() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("P".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("Q".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.add_variable("R".to_string(), vec!["T".to_string(), "F".to_string()]);
+        let topo = bn.topological_sort().unwrap();
+        assert_eq!(topo.len(), 3);
+    }
+
+    #[test]
+    fn test_bn_query_returns_probability() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("Rain".to_string(), vec!["T".to_string(), "F".to_string()]);
+        bn.set_prior("Rain".to_string(), vec![0.3, 0.7]).unwrap();
+        let result = bn.query("Rain".to_string(), "T".to_string(), &[]);
+        assert!(result.is_ok(), "query should succeed");
+        let prob = result.unwrap();
+        assert!(
+            (0.0..=1.0).contains(&prob),
+            "probability should be in [0,1]"
+        );
+    }
+
+    #[test]
+    fn test_mln_new_is_empty() {
+        let mln = MarkovLogicNetwork::new();
+        assert_eq!(mln.weighted_rules.len(), 0);
+    }
+
+    #[test]
+    fn test_mln_add_multiple_rules() {
+        let mut mln = MarkovLogicNetwork::new();
+        for i in 0..5usize {
+            let rule = Rule {
+                name: format!("rule_{}", i),
+                body: vec![RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant(format!("p{}", i)),
+                    object: Term::Variable("Y".to_string()),
+                }],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant(format!("q{}", i)),
+                    object: Term::Variable("Y".to_string()),
+                }],
+            };
+            mln.add_weighted_rule(rule, 1.0 + i as f64);
+        }
+        assert_eq!(mln.weighted_rules.len(), 5);
+    }
+
+    #[test]
+    fn test_prob_engine_new_is_empty() {
+        let engine = ProbabilisticRuleEngine::new();
+        assert_eq!(engine.weighted_rules.len(), 0);
+    }
+
+    #[test]
+    fn test_prob_engine_with_no_rules_empty_facts() {
+        let engine = ProbabilisticRuleEngine::new();
+        let result = engine.probabilistic_forward_chain(&[]).unwrap();
+        assert!(
+            result.is_empty(),
+            "No rules and empty facts => empty result"
+        );
+    }
+
+    #[test]
+    fn test_prob_engine_confidence_in_range() {
+        let mut engine = ProbabilisticRuleEngine::new();
+        let rule = Rule {
+            name: "range_test".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("likes".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("enjoysCompanyOf".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        };
+        engine.add_weighted_rule(rule, 0.9);
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("alice".to_string()),
+            predicate: Term::Constant("likes".to_string()),
+            object: Term::Constant("bob".to_string()),
+        }];
+        let result = engine.probabilistic_forward_chain(&facts).unwrap();
+        for (_, confidence) in &result {
+            assert!(
+                *confidence >= 0.0 && *confidence <= 1.0,
+                "confidence out of range: {}",
+                confidence
+            );
+        }
+    }
+
+    #[test]
+    fn test_prob_engine_multiple_facts_has_results() {
+        let mut engine = ProbabilisticRuleEngine::new();
+        let rule = Rule {
+            name: "multi".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("input".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("output".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        };
+        engine.add_weighted_rule(rule, 1.5);
+        let facts = vec![
+            RuleAtom::Triple {
+                subject: Term::Constant("a".to_string()),
+                predicate: Term::Constant("input".to_string()),
+                object: Term::Constant("b".to_string()),
+            },
+            RuleAtom::Triple {
+                subject: Term::Constant("c".to_string()),
+                predicate: Term::Constant("input".to_string()),
+                object: Term::Constant("d".to_string()),
+            },
+        ];
+        let result = engine.probabilistic_forward_chain(&facts).unwrap();
+        // Should get at least one result (rule application)
+        assert!(
+            !result.is_empty(),
+            "Should get at least one result from rule application"
+        );
+    }
+
+    #[test]
+    fn test_prob_engine_add_weighted_rule_increments_count() {
+        let mut engine = ProbabilisticRuleEngine::new();
+        assert_eq!(engine.weighted_rules.len(), 0);
+        let rule = Rule {
+            name: "r1".to_string(),
+            body: vec![],
+            head: vec![],
+        };
+        engine.add_weighted_rule(rule, 0.5);
+        assert_eq!(engine.weighted_rules.len(), 1);
+    }
+
+    #[test]
+    fn test_bn_variable_domain_stored() {
+        let mut bn = BayesianNetwork::new();
+        let domain = vec!["low".to_string(), "medium".to_string(), "high".to_string()];
+        bn.add_variable("Risk".to_string(), domain.clone());
+        assert!(bn.variables.contains_key("Risk"));
+        let var = &bn.variables["Risk"];
+        assert_eq!(var.domain, domain);
+    }
+
+    #[test]
+    fn test_bn_prior_zero_prob_valid() {
+        let mut bn = BayesianNetwork::new();
+        bn.add_variable("X".to_string(), vec!["T".to_string(), "F".to_string()]);
+        // P(T)=0, P(F)=1 — valid distribution
+        assert!(bn.set_prior("X".to_string(), vec![0.0, 1.0]).is_ok());
     }
 }

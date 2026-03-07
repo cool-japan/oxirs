@@ -1095,7 +1095,9 @@ mod tests {
     fn test_authentication() {
         let mut marketplace = create_test_marketplace();
 
-        marketplace.authenticate("testuser", "password").unwrap();
+        marketplace
+            .authenticate("testuser", "password")
+            .expect("authentication should succeed");
         assert!(marketplace.is_authenticated());
 
         marketplace.logout();
@@ -1105,9 +1107,14 @@ mod tests {
     #[test]
     fn test_refresh_index() {
         let marketplace = create_test_marketplace();
-        marketplace.refresh_index().unwrap();
+        marketplace
+            .refresh_index()
+            .expect("index refresh should succeed");
 
-        let index = marketplace.index.read().unwrap();
+        let index = marketplace
+            .index
+            .read()
+            .expect("read lock should not be poisoned");
         assert!(index.last_updated.is_some());
         assert_eq!(index.version, "1.0.0");
     }
@@ -1136,35 +1143,50 @@ mod tests {
     #[test]
     fn test_get_categories() {
         let marketplace = create_test_marketplace();
-        marketplace.refresh_index().unwrap();
+        marketplace
+            .refresh_index()
+            .expect("index refresh should succeed");
 
-        let categories = marketplace.get_categories().unwrap();
+        let categories = marketplace
+            .get_categories()
+            .expect("marketplace operation should succeed");
         assert!(!categories.is_empty());
     }
 
     #[test]
     fn test_clear_cache() {
         let marketplace = create_test_marketplace();
-        marketplace.refresh_index().unwrap();
-        marketplace.clear_cache().unwrap();
+        marketplace
+            .refresh_index()
+            .expect("index refresh should succeed");
+        marketplace.clear_cache().expect("clear should succeed");
 
-        let cache = marketplace.cache.read().unwrap();
+        let cache = marketplace
+            .cache
+            .read()
+            .expect("read lock should not be poisoned");
         assert!(cache.index.is_none());
     }
 
     #[test]
     fn test_get_statistics() {
         let marketplace = create_test_marketplace();
-        marketplace.refresh_index().unwrap();
+        marketplace
+            .refresh_index()
+            .expect("index refresh should succeed");
 
-        let stats = marketplace.get_statistics().unwrap();
+        let stats = marketplace
+            .get_statistics()
+            .expect("marketplace operation should succeed");
         assert!(stats.total_categories > 0);
     }
 
     #[test]
     fn test_list_installed() {
         let marketplace = create_test_marketplace();
-        let installed = marketplace.list_installed().unwrap();
+        let installed = marketplace
+            .list_installed()
+            .expect("marketplace operation should succeed");
         assert!(installed.is_empty()); // No components installed by default
     }
 

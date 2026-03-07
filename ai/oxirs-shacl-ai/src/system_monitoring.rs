@@ -1594,7 +1594,10 @@ impl AnomalyDetector {
             return Ok(None); // Not enough data yet
         }
 
-        let baseline = self.baseline_profiles.get(metric_name).unwrap();
+        let baseline = self
+            .baseline_profiles
+            .get(metric_name)
+            .expect("baseline profile should exist after contains_key check");
 
         // Z-score anomaly detection
         let z_score = (value - baseline.mean) / baseline.std_dev;

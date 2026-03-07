@@ -185,7 +185,7 @@ impl DecisionTreeLearner {
         let (constraint_type, count) = constraint_counts
             .iter()
             .max_by_key(|&(_, &count)| count)
-            .unwrap();
+            .expect("constraint_counts should not be empty");
 
         let confidence = *count as f64 / labels.len() as f64;
         let support = labels.len() as f64 / n_samples as f64;

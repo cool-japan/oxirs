@@ -491,10 +491,16 @@ impl ShapeVersionRegistry {
         };
 
         // Store version
-        let mut versions = self.versions.write().unwrap();
+        let mut versions = self
+            .versions
+            .write()
+            .expect("write lock should not be poisoned");
         versions.insert(version_id.clone(), versioned_shape);
 
-        let mut metadata_store = self.metadata.write().unwrap();
+        let mut metadata_store = self
+            .metadata
+            .write()
+            .expect("write lock should not be poisoned");
         metadata_store.insert(version_id.clone(), metadata);
 
         // Update active version if this is the latest
@@ -510,13 +516,19 @@ impl ShapeVersionRegistry {
 
     /// Get a specific shape version
     pub fn get_version(&self, version_id: &ShapeVersionId) -> Option<VersionedShape> {
-        let versions = self.versions.read().unwrap();
+        let versions = self
+            .versions
+            .read()
+            .expect("read lock should not be poisoned");
         versions.get(version_id).cloned()
     }
 
     /// Get the active version of a shape
     pub fn get_active_version(&self, shape_id: &ShapeId) -> Option<VersionedShape> {
-        let active_versions = self.active_versions.read().unwrap();
+        let active_versions = self
+            .active_versions
+            .read()
+            .expect("read lock should not be poisoned");
         if let Some(version) = active_versions.get(shape_id) {
             let version_id = ShapeVersionId {
                 shape_id: shape_id.clone(),
@@ -531,7 +543,10 @@ impl ShapeVersionRegistry {
 
     /// Get all versions of a shape
     pub fn get_all_versions(&self, shape_id: &ShapeId) -> Vec<VersionedShape> {
-        let versions = self.versions.read().unwrap();
+        let versions = self
+            .versions
+            .read()
+            .expect("read lock should not be poisoned");
         versions
             .iter()
             .filter(|(id, _)| id.shape_id == *shape_id)
@@ -545,7 +560,10 @@ impl ShapeVersionRegistry {
         version1: &ShapeVersionId,
         version2: &ShapeVersionId,
     ) -> Result<VersionComparison> {
-        let versions = self.versions.read().unwrap();
+        let versions = self
+            .versions
+            .read()
+            .expect("read lock should not be poisoned");
 
         let shape1 = versions
             .get(version1)
@@ -563,7 +581,10 @@ impl ShapeVersionRegistry {
         from_version: &Version,
         to_version: &Version,
     ) -> Option<MigrationPath> {
-        let migration_paths = self.migration_paths.read().unwrap();
+        let migration_paths = self
+            .migration_paths
+            .read()
+            .expect("read lock should not be poisoned");
         migration_paths
             .get(&(from_version.clone(), to_version.clone()))
             .cloned()
@@ -664,7 +685,10 @@ impl ShapeVersionRegistry {
 
     /// Update active version for a shape
     fn update_active_version(&self, version_id: &ShapeVersionId) -> Result<()> {
-        let mut active_versions = self.active_versions.write().unwrap();
+        let mut active_versions = self
+            .active_versions
+            .write()
+            .expect("write lock should not be poisoned");
 
         // Check if this is the latest version
         let current_active = active_versions.get(&version_id.shape_id);
@@ -748,7 +772,7 @@ impl VersionComparison {
         let compatibility = CompatibilityInfo {
             backward_compatible,
             forward_compatible,
-            compatible_versions: VersionReq::parse("*").unwrap(),
+            compatible_versions: VersionReq::parse("*").expect("valid version requirement"),
             incompatible_versions: Vec::new(),
             migration_required: !constraints_added.is_empty() || !constraints_removed.is_empty(),
             validation_differences: Vec::new(),
@@ -972,7 +996,7 @@ mod tests {
             compatibility: CompatibilityInfo {
                 backward_compatible: true,
                 forward_compatible: true,
-                compatible_versions: VersionReq::parse("*").unwrap(),
+                compatible_versions: VersionReq::parse("*").expect("valid version requirement"),
                 incompatible_versions: Vec::new(),
                 migration_required: false,
                 validation_differences: Vec::new(),
@@ -982,7 +1006,9 @@ mod tests {
             child_versions: Vec::new(),
         };
 
-        let version_id = registry.register_version(shape, version, metadata).unwrap();
+        let version_id = registry
+            .register_version(shape, version, metadata)
+            .expect("registration should succeed");
 
         // Verify version was registered
         let retrieved = registry.get_version(&version_id);

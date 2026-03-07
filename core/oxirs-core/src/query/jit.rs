@@ -253,8 +253,8 @@ impl JitCompiler {
 
     /// Create new JIT compiler with custom configuration
     pub fn with_config(config: JitConfig) -> Self {
-        let cache_size =
-            NonZeroUsize::new(config.result_cache_size).unwrap_or(NonZeroUsize::new(1000).unwrap());
+        let cache_size = NonZeroUsize::new(config.result_cache_size)
+            .unwrap_or(NonZeroUsize::new(1000).expect("constant is non-zero"));
 
         Self {
             compiled_cache: Arc::new(RwLock::new(CompiledQueryCache::new())),
@@ -1219,7 +1219,10 @@ mod tests {
     fn test_jit_compiler_creation() {
         let compiler = JitCompiler::new();
 
-        let stats = compiler.execution_stats.read().unwrap();
+        let stats = compiler
+            .execution_stats
+            .read()
+            .expect("lock should not be poisoned");
         assert_eq!(stats.query_counts.len(), 0);
     }
 

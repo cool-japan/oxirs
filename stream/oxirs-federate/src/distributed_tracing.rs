@@ -547,7 +547,11 @@ impl DistributedTracingManager {
         }
 
         // Calculate total duration
-        let start_time = spans.iter().map(|s| s.start_time).min().unwrap();
+        let start_time = spans
+            .iter()
+            .map(|s| s.start_time)
+            .min()
+            .expect("start should succeed");
         let end_time = spans
             .iter()
             .filter_map(|s| s.end_time)
@@ -773,7 +777,7 @@ impl DistributedTracingManager {
         bottlenecks.sort_by(|a, b| {
             b.percentage_of_trace
                 .partial_cmp(&a.percentage_of_trace)
-                .unwrap()
+                .expect("operation should succeed")
         });
         bottlenecks
     }
@@ -891,7 +895,10 @@ mod tests {
             priority: QueryPriority::Normal,
         };
 
-        let trace = tracer.start_trace(query_context).await.unwrap();
+        let trace = tracer
+            .start_trace(query_context)
+            .await
+            .expect("trace should start");
         assert!(!trace.trace_id.is_empty());
         assert_eq!(trace.query_context.query_type, "SPARQL");
     }
@@ -907,11 +914,14 @@ mod tests {
             priority: QueryPriority::Normal,
         };
 
-        let trace = tracer.start_trace(query_context).await.unwrap();
+        let trace = tracer
+            .start_trace(query_context)
+            .await
+            .expect("trace should start");
         let span = tracer
             .create_span(&trace, "test_operation", "test_service", None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(!span.span_id.is_empty());
         assert_eq!(span.operation_name, "test_operation");
@@ -932,11 +942,14 @@ mod tests {
             priority: QueryPriority::Normal,
         };
 
-        let trace = tracer.start_trace(query_context).await.unwrap();
+        let trace = tracer
+            .start_trace(query_context)
+            .await
+            .expect("trace should start");
         let span1 = tracer
             .create_span(&trace, "query_parsing", "parser_service", None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         let span2 = tracer
             .create_span(
                 &trace,
@@ -945,18 +958,21 @@ mod tests {
                 Some(span1.span_id.clone()),
             )
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         tracer
             .finish_span(&span1.span_id, SpanStatus::Ok)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         tracer
             .finish_span(&span2.span_id, SpanStatus::Ok)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
-        let analysis = tracer.complete_trace(&trace.trace_id).await.unwrap();
+        let analysis = tracer
+            .complete_trace(&trace.trace_id)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(analysis.trace_id, trace.trace_id);
         assert!(!analysis.service_breakdown.is_empty());
     }
@@ -976,11 +992,14 @@ mod tests {
             priority: QueryPriority::Normal,
         };
 
-        let trace = tracer.start_trace(query_context).await.unwrap();
+        let trace = tracer
+            .start_trace(query_context)
+            .await
+            .expect("trace should start");
         let _span = tracer
             .create_span(&trace, "test_operation", "test_service", None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let metrics = tracer.get_metrics().await;
         assert_eq!(metrics.total_traces, 1);

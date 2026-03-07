@@ -9,31 +9,36 @@ use regex::Regex;
 /// SPARQL keyword patterns
 static KEYWORD_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\b(SELECT|WHERE|FILTER|OPTIONAL|UNION|GRAPH|FROM|ORDER BY|GROUP BY|HAVING|LIMIT|OFFSET|DISTINCT|REDUCED|PREFIX|BASE|ASK|CONSTRUCT|DESCRIBE|INSERT|DELETE|LOAD|CLEAR|DROP|CREATE|ADD|MOVE|COPY|WITH|DATA|SILENT|DEFAULT|NAMED|ALL|USING|BIND|VALUES|SERVICE|MINUS|EXISTS|NOT)\b")
-        .unwrap()
+        .expect("regex pattern should be valid")
 });
 
 /// SPARQL function patterns
 static FUNCTION_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\b(STR|LANG|LANGMATCHES|DATATYPE|BOUND|sameTerm|isIRI|isURI|isBLANK|isLITERAL|isNUMERIC|REGEX|SUBSTR|STRLEN|UCASE|LCASE|STRSTARTS|STRENDS|CONTAINS|ENCODE_FOR_URI|CONCAT|NOW|YEAR|MONTH|DAY|HOURS|MINUTES|SECONDS|TIMEZONE|TZ|MD5|SHA1|SHA256|SHA512|COALESCE|IF|STRLANG|STRDT|UUID|STRUUID|REPLACE|ABS|ROUND|CEIL|FLOOR|RAND|COUNT|SUM|MIN|MAX|AVG|SAMPLE|GROUP_CONCAT)\b")
-        .unwrap()
+        .expect("regex pattern should be valid")
 });
 
 /// Variable pattern (?var or $var)
-static VARIABLE_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\?$][\w]+").unwrap());
+static VARIABLE_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[\?$][\w]+").expect("regex pattern should be valid"));
 
 /// IRI pattern <http://...>
-static IRI_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").unwrap());
+static IRI_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"<[^>]+>").expect("regex pattern should be valid"));
 
 /// String literal pattern
-static STRING_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#""(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'"#).unwrap());
+static STRING_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#""(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'"#).expect("regex pattern should be valid")
+});
 
 /// Number pattern
-static NUMBER_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b").unwrap());
+static NUMBER_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b").expect("regex pattern should be valid")
+});
 
 /// Comment pattern
-static COMMENT_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"#[^\n]*").unwrap());
+static COMMENT_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"#[^\n]*").expect("regex pattern should be valid"));
 
 /// Configuration for syntax highlighting
 #[derive(Debug, Clone)]

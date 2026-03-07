@@ -3,7 +3,7 @@
 //! This module provides real-time performance monitoring, drift detection,
 //! and comprehensive metrics collection for production embedding systems.
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
@@ -1127,6 +1127,494 @@ impl AlertHandler for SlackAlertHandler {
     }
 }
 
+// ====================================================================================
+// ENHANCED MONITORING WITH SCIRS2-CORE METRICS
+// ====================================================================================
+
+use scirs2_core::metrics::{Counter, Gauge, Histogram, MetricsRegistry, Timer};
+
+/// Enhanced metrics collector using scirs2_core::metrics
+pub struct MetricsCollector {
+    // Counters
+    requests_total: Arc<Counter>,
+    embeddings_generated_total: Arc<Counter>,
+    errors_total: Arc<Counter>,
+    cache_hits: Arc<Counter>,
+    cache_misses: Arc<Counter>,
+
+    // Gauges
+    concurrent_requests: Arc<Gauge>,
+    memory_usage_bytes: Arc<Gauge>,
+    gpu_memory_bytes: Arc<Gauge>,
+    cpu_utilization: Arc<Gauge>,
+    gpu_utilization: Arc<Gauge>,
+
+    // Histograms
+    request_latency: Arc<Histogram>,
+    embedding_generation_time: Arc<Histogram>,
+    batch_size: Arc<Histogram>,
+
+    // Timers
+    inference_timer: Arc<Timer>,
+    preprocessing_timer: Arc<Timer>,
+    postprocessing_timer: Arc<Timer>,
+
+    // Registry
+    registry: Arc<MetricsRegistry>,
+}
+
+impl MetricsCollector {
+    /// Create a new metrics collector with scirs2-core metrics
+    pub fn new() -> Self {
+        let registry = Arc::new(MetricsRegistry::new());
+
+        // Create counters
+        let requests_total = Arc::new(Counter::new("embed_requests_total".to_string()));
+        let embeddings_generated_total =
+            Arc::new(Counter::new("embeddings_generated_total".to_string()));
+        let errors_total = Arc::new(Counter::new("embed_errors_total".to_string()));
+        let cache_hits = Arc::new(Counter::new("embed_cache_hits_total".to_string()));
+        let cache_misses = Arc::new(Counter::new("embed_cache_misses_total".to_string()));
+
+        // Create gauges
+        let concurrent_requests = Arc::new(Gauge::new("embed_concurrent_requests".to_string()));
+        let memory_usage_bytes = Arc::new(Gauge::new("embed_memory_usage_bytes".to_string()));
+        let gpu_memory_bytes = Arc::new(Gauge::new("embed_gpu_memory_bytes".to_string()));
+        let cpu_utilization = Arc::new(Gauge::new("embed_cpu_utilization".to_string()));
+        let gpu_utilization = Arc::new(Gauge::new("embed_gpu_utilization".to_string()));
+
+        // Create histograms
+        let request_latency = Arc::new(Histogram::with_buckets(
+            "embed_request_latency_ms".to_string(),
+            vec![
+                1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0,
+            ],
+        ));
+        let embedding_generation_time = Arc::new(Histogram::with_buckets(
+            "embed_generation_time_ms".to_string(),
+            vec![0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 25.0, 50.0, 100.0],
+        ));
+        let batch_size = Arc::new(Histogram::with_buckets(
+            "embed_batch_size".to_string(),
+            vec![1.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0],
+        ));
+
+        // Create timers
+        let inference_timer = Arc::new(Timer::new("embed_inference_duration".to_string()));
+        let preprocessing_timer = Arc::new(Timer::new("embed_preprocessing_duration".to_string()));
+        let postprocessing_timer =
+            Arc::new(Timer::new("embed_postprocessing_duration".to_string()));
+
+        Self {
+            requests_total,
+            embeddings_generated_total,
+            errors_total,
+            cache_hits,
+            cache_misses,
+            concurrent_requests,
+            memory_usage_bytes,
+            gpu_memory_bytes,
+            cpu_utilization,
+            gpu_utilization,
+            request_latency,
+            embedding_generation_time,
+            batch_size,
+            inference_timer,
+            preprocessing_timer,
+            postprocessing_timer,
+            registry,
+        }
+    }
+
+    /// Record a request start
+    pub fn record_request_start(&self) {
+        self.requests_total.inc();
+        self.concurrent_requests.inc();
+    }
+
+    /// Record a request completion
+    pub fn record_request_complete(&self, latency_ms: f64) {
+        self.concurrent_requests.dec();
+        self.request_latency.observe(latency_ms);
+    }
+
+    /// Record embedding generation
+    pub fn record_embeddings(&self, count: u64, generation_time_ms: f64) {
+        self.embeddings_generated_total.add(count);
+        self.embedding_generation_time.observe(generation_time_ms);
+    }
+
+    /// Record an error
+    pub fn record_error(&self) {
+        self.errors_total.inc();
+    }
+
+    /// Record cache hit
+    pub fn record_cache_hit(&self) {
+        self.cache_hits.inc();
+    }
+
+    /// Record cache miss
+    pub fn record_cache_miss(&self) {
+        self.cache_misses.inc();
+    }
+
+    /// Update resource metrics
+    pub fn update_resource_metrics(&self, cpu: f64, memory_mb: f64, gpu: f64, gpu_memory_mb: f64) {
+        self.cpu_utilization.set(cpu);
+        self.memory_usage_bytes.set(memory_mb * 1024.0 * 1024.0);
+        self.gpu_utilization.set(gpu);
+        self.gpu_memory_bytes.set(gpu_memory_mb * 1024.0 * 1024.0);
+    }
+
+    /// Get cache hit rate
+    pub fn get_cache_hit_rate(&self) -> f64 {
+        let hits = self.cache_hits.get();
+        let misses = self.cache_misses.get();
+        let total = hits + misses;
+        if total == 0 {
+            return 0.0;
+        }
+        hits as f64 / total as f64
+    }
+
+    /// Export metrics in Prometheus format
+    pub fn export_prometheus(&self) -> Result<String> {
+        self.registry
+            .export_prometheus()
+            .map_err(|e| anyhow!("Failed to export prometheus metrics: {:?}", e))
+    }
+}
+
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ====================================================================================
+// HEALTH CHECK FUNCTIONALITY
+// ====================================================================================
+
+/// Health status for the embedding service
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum HealthStatus {
+    /// Service is healthy and operational
+    Healthy,
+    /// Service is degraded but operational
+    Degraded,
+    /// Service is unhealthy
+    Unhealthy,
+}
+
+/// Health check result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckResult {
+    /// Overall health status
+    pub status: HealthStatus,
+    /// Timestamp of health check
+    pub timestamp: DateTime<Utc>,
+    /// Individual component health
+    pub components: HashMap<String, ComponentHealth>,
+    /// Additional details
+    pub details: HashMap<String, String>,
+}
+
+/// Component health information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentHealth {
+    /// Component status
+    pub status: HealthStatus,
+    /// Component message
+    pub message: String,
+    /// Last check time
+    pub last_check: DateTime<Utc>,
+    /// Additional metrics
+    pub metrics: HashMap<String, f64>,
+}
+
+/// Health checker for embedding service
+pub struct HealthChecker {
+    /// Model load status
+    models_loaded: Arc<RwLock<bool>>,
+    /// Last successful request time
+    last_request_time: Arc<RwLock<DateTime<Utc>>>,
+    /// Error rate threshold
+    error_rate_threshold: f64,
+    /// Latency threshold (ms)
+    latency_threshold_ms: f64,
+    /// Memory threshold (MB)
+    memory_threshold_mb: f64,
+    /// Metrics collector
+    metrics: Arc<MetricsCollector>,
+}
+
+impl HealthChecker {
+    /// Create a new health checker
+    pub fn new(metrics: Arc<MetricsCollector>) -> Self {
+        Self {
+            models_loaded: Arc::new(RwLock::new(false)),
+            last_request_time: Arc::new(RwLock::new(Utc::now())),
+            error_rate_threshold: 0.1,    // 10%
+            latency_threshold_ms: 1000.0, // 1 second
+            memory_threshold_mb: 8192.0,  // 8GB
+            metrics,
+        }
+    }
+
+    /// Set models loaded status
+    pub fn set_models_loaded(&self, loaded: bool) -> Result<()> {
+        let mut status = self
+            .models_loaded
+            .write()
+            .map_err(|e| anyhow!("Failed to write lock: {}", e))?;
+        *status = loaded;
+        Ok(())
+    }
+
+    /// Update last request time
+    pub fn update_last_request_time(&self) -> Result<()> {
+        let mut time = self
+            .last_request_time
+            .write()
+            .map_err(|e| anyhow!("Failed to write lock: {}", e))?;
+        *time = Utc::now();
+        Ok(())
+    }
+
+    /// Perform liveness check (basic service availability)
+    pub fn check_liveness(&self) -> HealthCheckResult {
+        let mut components = HashMap::new();
+
+        // Check if service is running (always healthy if we can respond)
+        components.insert(
+            "service".to_string(),
+            ComponentHealth {
+                status: HealthStatus::Healthy,
+                message: "Service is running".to_string(),
+                last_check: Utc::now(),
+                metrics: HashMap::new(),
+            },
+        );
+
+        HealthCheckResult {
+            status: HealthStatus::Healthy,
+            timestamp: Utc::now(),
+            components,
+            details: HashMap::new(),
+        }
+    }
+
+    /// Perform readiness check (service ready to handle requests)
+    pub fn check_readiness(&self) -> HealthCheckResult {
+        let mut components = HashMap::new();
+        let mut overall_status = HealthStatus::Healthy;
+
+        // Check if models are loaded
+        let models_loaded = self.models_loaded.read().map(|g| *g).unwrap_or(false);
+        if !models_loaded {
+            overall_status = HealthStatus::Unhealthy;
+            components.insert(
+                "models".to_string(),
+                ComponentHealth {
+                    status: HealthStatus::Unhealthy,
+                    message: "Models not loaded".to_string(),
+                    last_check: Utc::now(),
+                    metrics: HashMap::new(),
+                },
+            );
+        } else {
+            components.insert(
+                "models".to_string(),
+                ComponentHealth {
+                    status: HealthStatus::Healthy,
+                    message: "Models loaded and ready".to_string(),
+                    last_check: Utc::now(),
+                    metrics: HashMap::new(),
+                },
+            );
+        }
+
+        // Check cache availability
+        let cache_hit_rate = self.metrics.get_cache_hit_rate();
+        components.insert(
+            "cache".to_string(),
+            ComponentHealth {
+                status: HealthStatus::Healthy,
+                message: format!("Cache hit rate: {:.2}%", cache_hit_rate * 100.0),
+                last_check: Utc::now(),
+                metrics: [("hit_rate".to_string(), cache_hit_rate)]
+                    .into_iter()
+                    .collect(),
+            },
+        );
+
+        HealthCheckResult {
+            status: overall_status,
+            timestamp: Utc::now(),
+            components,
+            details: HashMap::new(),
+        }
+    }
+
+    /// Perform comprehensive health check
+    pub fn check_health(&self, performance_metrics: &PerformanceMetrics) -> HealthCheckResult {
+        let mut components = HashMap::new();
+        let mut overall_status = HealthStatus::Healthy;
+
+        // Check models
+        let models_loaded = self.models_loaded.read().map(|g| *g).unwrap_or(false);
+        if !models_loaded {
+            overall_status = HealthStatus::Unhealthy;
+            components.insert(
+                "models".to_string(),
+                ComponentHealth {
+                    status: HealthStatus::Unhealthy,
+                    message: "Models not loaded".to_string(),
+                    last_check: Utc::now(),
+                    metrics: HashMap::new(),
+                },
+            );
+        } else {
+            components.insert(
+                "models".to_string(),
+                ComponentHealth {
+                    status: HealthStatus::Healthy,
+                    message: "Models operational".to_string(),
+                    last_check: Utc::now(),
+                    metrics: HashMap::new(),
+                },
+            );
+        }
+
+        // Check latency
+        let latency_status =
+            if performance_metrics.latency.p95_latency_ms > self.latency_threshold_ms {
+                if overall_status == HealthStatus::Healthy {
+                    overall_status = HealthStatus::Degraded;
+                }
+                HealthStatus::Degraded
+            } else {
+                HealthStatus::Healthy
+            };
+
+        components.insert(
+            "latency".to_string(),
+            ComponentHealth {
+                status: latency_status,
+                message: format!(
+                    "P95 latency: {:.2}ms",
+                    performance_metrics.latency.p95_latency_ms
+                ),
+                last_check: Utc::now(),
+                metrics: [
+                    (
+                        "p50".to_string(),
+                        performance_metrics.latency.p50_latency_ms,
+                    ),
+                    (
+                        "p95".to_string(),
+                        performance_metrics.latency.p95_latency_ms,
+                    ),
+                    (
+                        "p99".to_string(),
+                        performance_metrics.latency.p99_latency_ms,
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            },
+        );
+
+        // Check error rate
+        let error_rate = if performance_metrics.throughput.total_requests > 0 {
+            performance_metrics.errors.total_errors as f64
+                / performance_metrics.throughput.total_requests as f64
+        } else {
+            0.0
+        };
+
+        let error_status = if error_rate > self.error_rate_threshold {
+            if overall_status == HealthStatus::Healthy {
+                overall_status = HealthStatus::Degraded;
+            }
+            HealthStatus::Degraded
+        } else {
+            HealthStatus::Healthy
+        };
+
+        components.insert(
+            "errors".to_string(),
+            ComponentHealth {
+                status: error_status,
+                message: format!("Error rate: {:.2}%", error_rate * 100.0),
+                last_check: Utc::now(),
+                metrics: [("error_rate".to_string(), error_rate)]
+                    .into_iter()
+                    .collect(),
+            },
+        );
+
+        // Check memory
+        let memory_status =
+            if performance_metrics.resources.memory_usage_mb > self.memory_threshold_mb {
+                if overall_status == HealthStatus::Healthy {
+                    overall_status = HealthStatus::Degraded;
+                }
+                HealthStatus::Degraded
+            } else {
+                HealthStatus::Healthy
+            };
+
+        components.insert(
+            "memory".to_string(),
+            ComponentHealth {
+                status: memory_status,
+                message: format!(
+                    "Memory usage: {:.2}MB / {:.2}MB",
+                    performance_metrics.resources.memory_usage_mb, self.memory_threshold_mb
+                ),
+                last_check: Utc::now(),
+                metrics: [
+                    (
+                        "usage_mb".to_string(),
+                        performance_metrics.resources.memory_usage_mb,
+                    ),
+                    ("threshold_mb".to_string(), self.memory_threshold_mb),
+                ]
+                .into_iter()
+                .collect(),
+            },
+        );
+
+        // Check cache
+        let cache_hit_rate = self.metrics.get_cache_hit_rate();
+        components.insert(
+            "cache".to_string(),
+            ComponentHealth {
+                status: HealthStatus::Healthy,
+                message: format!("Cache hit rate: {:.2}%", cache_hit_rate * 100.0),
+                last_check: Utc::now(),
+                metrics: [("hit_rate".to_string(), cache_hit_rate)]
+                    .into_iter()
+                    .collect(),
+            },
+        );
+
+        HealthCheckResult {
+            status: overall_status,
+            timestamp: Utc::now(),
+            components,
+            details: HashMap::new(),
+        }
+    }
+
+    /// Get metrics endpoint (Prometheus format)
+    pub fn get_metrics_endpoint(&self) -> Result<String> {
+        self.metrics.export_prometheus()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1196,5 +1684,130 @@ mod tests {
         };
 
         assert!(handler.handle_alert(alert).is_ok());
+    }
+
+    #[test]
+    fn test_metrics_collector_creation() {
+        let collector = MetricsCollector::new();
+        // Just verify it was created successfully
+        assert_eq!(collector.requests_total.get(), 0);
+    }
+
+    #[test]
+    fn test_metrics_collector_counters() {
+        let collector = MetricsCollector::new();
+
+        collector.record_request_start();
+        collector.record_request_complete(50.0);
+
+        assert_eq!(collector.requests_total.get(), 1);
+    }
+
+    #[test]
+    fn test_metrics_collector_cache_hit_rate() {
+        let collector = MetricsCollector::new();
+
+        collector.record_cache_hit();
+        collector.record_cache_hit();
+        collector.record_cache_miss();
+
+        let hit_rate = collector.get_cache_hit_rate();
+        assert!((hit_rate - 0.666).abs() < 0.01); // ~66.6%
+    }
+
+    #[test]
+    fn test_metrics_collector_resource_update() {
+        let collector = MetricsCollector::new();
+
+        collector.update_resource_metrics(0.75, 2048.0, 0.5, 4096.0);
+
+        assert_eq!(collector.cpu_utilization.get(), 0.75);
+        assert_eq!(collector.memory_usage_bytes.get(), 2048.0 * 1024.0 * 1024.0);
+        assert_eq!(collector.gpu_utilization.get(), 0.5);
+        assert_eq!(collector.gpu_memory_bytes.get(), 4096.0 * 1024.0 * 1024.0);
+    }
+
+    #[test]
+    fn test_health_checker_liveness() {
+        let metrics = Arc::new(MetricsCollector::new());
+        let checker = HealthChecker::new(metrics);
+
+        let result = checker.check_liveness();
+        assert_eq!(result.status, HealthStatus::Healthy);
+        assert!(result.components.contains_key("service"));
+    }
+
+    #[test]
+    fn test_health_checker_readiness_no_models() {
+        let metrics = Arc::new(MetricsCollector::new());
+        let checker = HealthChecker::new(metrics);
+
+        let result = checker.check_readiness();
+        assert_eq!(result.status, HealthStatus::Unhealthy);
+        assert!(result.components.contains_key("models"));
+    }
+
+    #[test]
+    fn test_health_checker_readiness_with_models() {
+        let metrics = Arc::new(MetricsCollector::new());
+        let checker = HealthChecker::new(metrics);
+
+        checker
+            .set_models_loaded(true)
+            .expect("Failed to set models loaded");
+
+        let result = checker.check_readiness();
+        assert_eq!(result.status, HealthStatus::Healthy);
+    }
+
+    #[test]
+    fn test_health_checker_comprehensive() {
+        let metrics = Arc::new(MetricsCollector::new());
+        let checker = HealthChecker::new(metrics);
+
+        checker
+            .set_models_loaded(true)
+            .expect("Failed to set models loaded");
+
+        let perf_metrics = PerformanceMetrics::default();
+
+        let result = checker.check_health(&perf_metrics);
+        assert_eq!(result.status, HealthStatus::Healthy);
+        assert!(result.components.contains_key("models"));
+        assert!(result.components.contains_key("latency"));
+        assert!(result.components.contains_key("errors"));
+        assert!(result.components.contains_key("memory"));
+    }
+
+    #[test]
+    fn test_health_checker_degraded_latency() {
+        let metrics = Arc::new(MetricsCollector::new());
+        let checker = HealthChecker::new(metrics);
+
+        checker
+            .set_models_loaded(true)
+            .expect("Failed to set models loaded");
+
+        let mut perf_metrics = PerformanceMetrics::default();
+        perf_metrics.latency.p95_latency_ms = 2000.0; // Above threshold
+
+        let result = checker.check_health(&perf_metrics);
+        assert_eq!(result.status, HealthStatus::Degraded);
+    }
+
+    #[test]
+    fn test_prometheus_export() {
+        let collector = MetricsCollector::new();
+
+        collector.record_request_start();
+        collector.record_embeddings(5, 25.0);
+
+        let prometheus_output = collector.export_prometheus();
+        assert!(prometheus_output.is_ok());
+
+        let _output = prometheus_output.unwrap_or_default();
+        // Check that metrics were recorded (may not always be in prometheus output depending on implementation)
+        assert_eq!(collector.requests_total.get(), 1);
+        assert_eq!(collector.embeddings_generated_total.get(), 5);
     }
 }

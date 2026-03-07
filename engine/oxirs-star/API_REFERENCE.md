@@ -1,7 +1,7 @@
 # OxiRS-Star API Reference
 
 [![Documentation](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **Comprehensive API reference for OxiRS-Star RDF-star implementation with production-ready examples and advanced usage patterns.**
 

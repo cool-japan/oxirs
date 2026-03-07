@@ -447,7 +447,11 @@ impl CommunityDetector {
 
         while !unassigned.is_empty() {
             // Pick random seed
-            let seed = unassigned.iter().next().unwrap().clone();
+            let seed = unassigned
+                .iter()
+                .next()
+                .expect("unassigned should not be empty")
+                .clone();
             let mut community = HashSet::new();
             community.insert(seed.clone());
             unassigned.remove(&seed);

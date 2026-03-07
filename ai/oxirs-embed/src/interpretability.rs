@@ -391,7 +391,11 @@ impl InterpretabilityAnalyzer {
     /// Compute global feature statistics
     fn compute_feature_stats(&self, embeddings: &HashMap<String, Array1<f32>>) -> FeatureStats {
         let n = embeddings.len() as f32;
-        let dim = embeddings.values().next().unwrap().len();
+        let dim = embeddings
+            .values()
+            .next()
+            .expect("embeddings should not be empty")
+            .len();
 
         let mut mean = vec![0.0; dim];
         let mut m2 = vec![0.0; dim]; // For variance calculation
@@ -448,7 +452,9 @@ impl InterpretabilityAnalyzer {
 
             // Try to assign to existing cluster
             for cluster in &mut clusters {
-                let cluster_center = cluster.first().unwrap();
+                let cluster_center = cluster
+                    .first()
+                    .expect("collection validated to be non-empty");
                 let center_emb = &embeddings[cluster_center];
                 let dist = self.euclidean_distance(entity_emb, center_emb);
 

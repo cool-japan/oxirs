@@ -531,7 +531,7 @@ impl DynamicArchitectureOptimizer {
             .enumerate()
             .map(|(i, &s)| (i, s))
             .collect();
-        indexed_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        indexed_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Crossover and mutation
         let parent1 = &population[indexed_scores[0].0];
@@ -1305,7 +1305,11 @@ impl RealTimeOptimizer {
     }
 
     fn record_performance_metrics(&mut self, metrics: PerformanceMetrics) {
-        let mut history = self.performance_monitor.metrics_history.lock().unwrap();
+        let mut history = self
+            .performance_monitor
+            .metrics_history
+            .lock()
+            .expect("lock should not be poisoned");
         history.push_back(metrics.clone());
 
         // Maintain window size
@@ -1314,11 +1318,19 @@ impl RealTimeOptimizer {
         }
 
         // Update baseline
-        *self.performance_monitor.current_baseline.lock().unwrap() = metrics;
+        *self
+            .performance_monitor
+            .current_baseline
+            .lock()
+            .expect("lock should not be poisoned") = metrics;
     }
 
     async fn optimize_learning_rate(&mut self, current_metrics: &PerformanceMetrics) -> Result<()> {
-        let history = self.performance_monitor.metrics_history.lock().unwrap();
+        let history = self
+            .performance_monitor
+            .metrics_history
+            .lock()
+            .expect("lock should not be poisoned");
         let recent_metrics: Vec<_> = history.iter().cloned().collect();
         drop(history);
 
@@ -1342,7 +1354,7 @@ impl RealTimeOptimizer {
         // Note: This method needs refactoring to avoid holding mutex across await
         // For now, we'll allow this warning as it may require architectural changes
         let cloned_model = {
-            let model_guard = model.lock().unwrap();
+            let model_guard = model.lock().expect("lock should not be poisoned");
             (*model_guard).clone()
         };
         let new_architecture = self

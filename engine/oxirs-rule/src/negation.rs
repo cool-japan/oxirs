@@ -562,7 +562,9 @@ impl StratifiedReasoner {
         if self.stratification.is_none() {
             self.stratification = Some(self.analyzer.analyze(&self.rules));
         }
-        self.stratification.as_ref().unwrap()
+        self.stratification
+            .as_ref()
+            .expect("stratification was just computed")
     }
 
     /// Check if rules are properly stratified
@@ -913,7 +915,7 @@ impl NafParser {
         // or predicate(subject, object)
         if atom_str.contains('(') {
             // Function-style: pred(s, o)
-            let paren_pos = atom_str.find('(').unwrap();
+            let paren_pos = atom_str.find('(').expect("opening paren verified to exist");
             let predicate = atom_str[..paren_pos].trim();
             let args_str = atom_str[paren_pos + 1..].trim_end_matches(')');
             let args: Vec<&str> = args_str.split(',').map(|s| s.trim()).collect();

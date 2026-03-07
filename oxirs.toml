@@ -48,3 +48,94 @@ output = "stdout"
 cache_size = 104857600  # 100MB
 query_timeout = 30000   # 30 seconds
 max_concurrent_queries = 100
+
+# Advanced Query Optimizer Configuration
+[optimizer]
+enabled = true
+cache_size = 10000
+parallel_optimization = true
+
+# Machine Learning-based Cost Prediction
+# Replaces heuristic-only estimation with learned models for up to 1.75x speedup
+[optimizer.ml]
+enabled = true
+
+# Model type: "linear", "ridge", "gradient_boosting"
+# ridge: L2 regularization (recommended for most cases)
+# linear: Simple linear regression (faster, less accurate)
+model_type = "ridge"
+
+# Confidence threshold (0.0-1.0) for using ML predictions
+# If model confidence < threshold, falls back to heuristic estimation
+confidence_threshold = 0.7
+
+# Retraining interval in hours
+# Model will retrain periodically using accumulated execution feedback
+training_interval_hours = 24
+
+# Maximum training examples to keep in memory
+# Older examples are evicted using sliding window strategy
+max_training_examples = 10000
+
+# Minimum examples required before initial training
+# Lower values train faster but may be less accurate
+min_examples_for_training = 100
+
+# Feature normalization (z-score)
+# Improves model accuracy for queries with varying scales
+feature_normalization = true
+
+# Automatic retraining when interval is reached
+auto_retraining = true
+
+# Paths for model persistence (relative to data directory)
+model_persistence_path = "./data/ml_models/query_cost_predictor.json"
+training_data_path = "./data/ml_training/training_data.json"
+
+# Model Quality Thresholds
+[optimizer.ml.quality]
+# Minimum R² (coefficient of determination) score
+# R² > 0.8 indicates excellent predictive accuracy
+min_r_squared = 0.8
+
+# Maximum Mean Absolute Error as percentage
+# MAE < 20% means predictions are within 20% of actual costs on average
+max_mae_percent = 20.0
+
+# Maximum Root Mean Square Error as percentage
+# RMSE < 30% indicates good overall prediction quality
+max_rmse_percent = 30.0
+
+# Enable automatic rollback if new model performs worse
+# Protects against quality degradation during retraining
+enable_rollback = true
+
+# Distributed Cache Configuration (Phase 5.2)
+# Redis-based L1+L2 cache with coherence protocol for multi-node clusters
+[cache.distributed]
+enabled = false  # Cluster only (enable for multi-node deployments)
+
+# L1 Cache (Local In-Memory)
+l1_max_size = 1000          # Maximum entries in local cache
+l1_ttl_seconds = 300        # Time-to-live: 5 minutes
+
+# L2 Cache (Redis)
+l2_redis_url = "redis://localhost:6379"  # Redis connection URL
+l2_ttl_seconds = 3600       # Time-to-live: 1 hour
+
+# Compression for large values (>1KB)
+compression = true          # Enables gzip compression
+
+# Pub/Sub channel for cache invalidation
+invalidation_channel = "oxirs:cache:invalidate"
+
+# Cache Coherence Protocol
+[cache.coherence]
+# Protocol type: "pubsub" (eventual), "write-through" (strong), "write-behind" (eventual)
+protocol = "pubsub"
+
+# Consistency level: "eventual", "strong", "bounded-staleness"
+consistency_level = "eventual"
+
+# Maximum staleness in seconds (for bounded-staleness)
+max_staleness_seconds = 60

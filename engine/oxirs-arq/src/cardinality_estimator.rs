@@ -1217,9 +1217,9 @@ impl MLCardinalityPredictor {
                 self.config.learning_rate,
             )?;
             *model_lock = Some(new_model);
-            model_lock.as_mut().unwrap()
+            model_lock.as_mut().expect("model should be initialized")
         } else {
-            model_lock.as_mut().unwrap()
+            model_lock.as_mut().expect("model should be initialized")
         };
 
         // Train on batches

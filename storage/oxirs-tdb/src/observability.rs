@@ -255,7 +255,7 @@ impl MetricsRegistry {
                 let avg = if count > 0 { sum / count as f64 } else { 0.0 };
 
                 let mut sorted_values = values.clone();
-                sorted_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                sorted_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
                 let p50 = if count > 0 {
                     sorted_values[count / 2]

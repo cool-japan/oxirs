@@ -361,7 +361,7 @@ impl ModelMigrator {
             SammVersion::V2_0_0,
             MigrationRule {
                 name: "BAMM to SAMM namespace".to_string(),
-                pattern: Regex::new(r"urn:bamm:").unwrap(),
+                pattern: Regex::new(r"urn:bamm:").expect("valid regex pattern"),
                 replacement: "urn:samm:".to_string(),
                 description: "Replaced BAMM namespace with SAMM namespace".to_string(),
             },
@@ -372,7 +372,7 @@ impl ModelMigrator {
             SammVersion::V2_0_0,
             MigrationRule {
                 name: "BAMM prefix to SAMM".to_string(),
-                pattern: Regex::new(r"@prefix\s+bamm:").unwrap(),
+                pattern: Regex::new(r"@prefix\s+bamm:").expect("valid regex pattern"),
                 replacement: "@prefix samm:".to_string(),
                 description: "Replaced bamm: prefix with samm: prefix".to_string(),
             },
@@ -383,7 +383,7 @@ impl ModelMigrator {
             SammVersion::V2_0_0,
             MigrationRule {
                 name: "BAMM-C to SAMM-C".to_string(),
-                pattern: Regex::new(r"@prefix\s+bamm-c:").unwrap(),
+                pattern: Regex::new(r"@prefix\s+bamm-c:").expect("valid regex pattern"),
                 replacement: "@prefix samm-c:".to_string(),
                 description: "Replaced bamm-c: prefix with samm-c: prefix".to_string(),
             },
@@ -394,7 +394,7 @@ impl ModelMigrator {
             SammVersion::V2_0_0,
             MigrationRule {
                 name: "BAMM-E to SAMM-E".to_string(),
-                pattern: Regex::new(r"@prefix\s+bamm-e:").unwrap(),
+                pattern: Regex::new(r"@prefix\s+bamm-e:").expect("valid regex pattern"),
                 replacement: "@prefix samm-e:".to_string(),
                 description: "Replaced bamm-e: prefix with samm-e: prefix".to_string(),
             },
@@ -406,7 +406,7 @@ impl ModelMigrator {
             SammVersion::V2_1_0,
             MigrationRule {
                 name: "Update meta-model version to 2.1.0".to_string(),
-                pattern: Regex::new(r"meta-model:2\.0\.0").unwrap(),
+                pattern: Regex::new(r"meta-model:2\.0\.0").expect("valid regex pattern"),
                 replacement: "meta-model:2.1.0".to_string(),
                 description: "Updated meta-model version from 2.0.0 to 2.1.0".to_string(),
             },
@@ -417,7 +417,7 @@ impl ModelMigrator {
             SammVersion::V2_1_0,
             MigrationRule {
                 name: "Update characteristic version to 2.1.0".to_string(),
-                pattern: Regex::new(r"characteristic:2\.0\.0").unwrap(),
+                pattern: Regex::new(r"characteristic:2\.0\.0").expect("valid regex pattern"),
                 replacement: "characteristic:2.1.0".to_string(),
                 description: "Updated characteristic version from 2.0.0 to 2.1.0".to_string(),
             },
@@ -429,7 +429,7 @@ impl ModelMigrator {
             SammVersion::V2_3_0,
             MigrationRule {
                 name: "Update meta-model version to 2.3.0".to_string(),
-                pattern: Regex::new(r"meta-model:2\.1\.0").unwrap(),
+                pattern: Regex::new(r"meta-model:2\.1\.0").expect("valid regex pattern"),
                 replacement: "meta-model:2.3.0".to_string(),
                 description: "Updated meta-model version from 2.1.0 to 2.3.0".to_string(),
             },
@@ -440,7 +440,7 @@ impl ModelMigrator {
             SammVersion::V2_3_0,
             MigrationRule {
                 name: "Update characteristic version to 2.3.0".to_string(),
-                pattern: Regex::new(r"characteristic:2\.1\.0").unwrap(),
+                pattern: Regex::new(r"characteristic:2\.1\.0").expect("valid regex pattern"),
                 replacement: "characteristic:2.3.0".to_string(),
                 description: "Updated characteristic version from 2.1.0 to 2.3.0".to_string(),
             },
@@ -451,7 +451,7 @@ impl ModelMigrator {
             SammVersion::V2_3_0,
             MigrationRule {
                 name: "Update entity version to 2.3.0".to_string(),
-                pattern: Regex::new(r"entity:2\.1\.0").unwrap(),
+                pattern: Regex::new(r"entity:2\.1\.0").expect("valid regex pattern"),
                 replacement: "entity:2.3.0".to_string(),
                 description: "Updated entity version from 2.1.0 to 2.3.0".to_string(),
             },
@@ -462,7 +462,7 @@ impl ModelMigrator {
             SammVersion::V2_3_0,
             MigrationRule {
                 name: "Update unit version to 2.3.0".to_string(),
-                pattern: Regex::new(r"unit:2\.1\.0").unwrap(),
+                pattern: Regex::new(r"unit:2\.1\.0").expect("valid regex pattern"),
                 replacement: "unit:2.3.0".to_string(),
                 description: "Updated unit version from 2.1.0 to 2.3.0".to_string(),
             },
@@ -546,7 +546,7 @@ mod tests {
         };
 
         let migrator = ModelMigrator::new(options);
-        let result = migrator.migrate(content).unwrap();
+        let result = migrator.migrate(content).expect("migration should succeed");
 
         assert_eq!(result.from_version, SammVersion::Bamm);
         assert_eq!(result.to_version, SammVersion::V2_0_0);
@@ -565,7 +565,7 @@ mod tests {
         };
 
         let migrator = ModelMigrator::new(options);
-        let result = migrator.migrate(content).unwrap();
+        let result = migrator.migrate(content).expect("migration should succeed");
 
         assert_eq!(result.from_version, SammVersion::V2_0_0);
         assert_eq!(result.to_version, SammVersion::V2_3_0);
@@ -582,7 +582,7 @@ mod tests {
         };
 
         let migrator = ModelMigrator::new(options);
-        let result = migrator.migrate(content).unwrap();
+        let result = migrator.migrate(content).expect("migration should succeed");
 
         assert_eq!(result.from_version, SammVersion::V2_3_0);
         assert_eq!(result.to_version, SammVersion::V2_3_0);
@@ -601,7 +601,7 @@ mod tests {
         };
 
         let migrator = ModelMigrator::new(options);
-        let result = migrator.migrate(content).unwrap();
+        let result = migrator.migrate(content).expect("migration should succeed");
 
         // Content should be unchanged in dry run mode
         assert_eq!(result.content, content);

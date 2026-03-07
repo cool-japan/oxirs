@@ -557,7 +557,7 @@ mod tests {
 
         let person = lib.get("person");
         assert!(person.is_some(), "Person template should exist");
-        assert_eq!(person.unwrap().name, "Person");
+        assert_eq!(person.expect("operation should succeed").name, "Person");
     }
 
     #[test]
@@ -590,7 +590,7 @@ mod tests {
     #[test]
     fn test_template_has_shape() {
         let lib = TemplateLibrary::new();
-        let template = lib.get("email").unwrap();
+        let template = lib.get("email").expect("key should exist");
 
         assert!(
             !template.shape.constraints.is_empty(),

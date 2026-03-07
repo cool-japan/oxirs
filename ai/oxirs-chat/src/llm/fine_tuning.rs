@@ -332,7 +332,9 @@ impl FineTuningEngine {
     ) -> Result<()> {
         let epochs = {
             let jobs_lock = jobs.read().await;
-            let job = jobs_lock.get(job_id).unwrap();
+            let job = jobs_lock
+                .get(job_id)
+                .expect("job should exist for given job_id");
             job.config.training_parameters.num_epochs
         };
 

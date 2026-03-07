@@ -355,9 +355,9 @@ mod tests {
 
     fn create_test_triple(s: &str, p: &str, o: &str) -> Triple {
         Triple::new(
-            NamedNode::new(s).unwrap(),
-            NamedNode::new(p).unwrap(),
-            NamedNode::new(o).unwrap(),
+            NamedNode::new(s).expect("valid IRI"),
+            NamedNode::new(p).expect("valid IRI"),
+            NamedNode::new(o).expect("valid IRI"),
         )
     }
 

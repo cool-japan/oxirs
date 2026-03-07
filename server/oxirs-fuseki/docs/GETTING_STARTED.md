@@ -641,4 +641,4 @@ curl http://localhost:3030/$/ping
 
 ## License
 
-OxiRS Fuseki is licensed under the Apache License 2.0 or MIT license.
+OxiRS Fuseki is licensed under the Apache License, Version 2.0.

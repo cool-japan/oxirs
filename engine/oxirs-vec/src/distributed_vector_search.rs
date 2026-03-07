@@ -221,7 +221,10 @@ impl DistributedVectorSearch {
     /// Register a new node in the cluster
     pub async fn register_node(&self, config: DistributedNodeConfig) -> Result<()> {
         {
-            let mut nodes = self.nodes.write().unwrap();
+            let mut nodes = self
+                .nodes
+                .write()
+                .expect("nodes lock should not be poisoned");
             info!("Registering node {} at {}", config.node_id, config.endpoint);
             nodes.insert(config.node_id.clone(), config.clone());
         } // Drop nodes lock before await
@@ -244,7 +247,10 @@ impl DistributedVectorSearch {
     /// Remove a node from the cluster
     pub async fn deregister_node(&self, node_id: &str) -> Result<()> {
         let config = {
-            let mut nodes = self.nodes.write().unwrap();
+            let mut nodes = self
+                .nodes
+                .write()
+                .expect("nodes lock should not be poisoned");
             nodes.remove(node_id)
         }; // Drop nodes lock before await
 
@@ -339,7 +345,11 @@ impl DistributedVectorSearch {
 
     /// Select target nodes for query execution
     async fn select_target_nodes(&self, query: &DistributedQuery) -> Result<Vec<String>> {
-        let nodes = self.nodes.read().unwrap().clone();
+        let nodes = self
+            .nodes
+            .read()
+            .expect("nodes lock should not be poisoned")
+            .clone();
         let load_balancer = self.load_balancer.lock().await;
 
         match &self.partitioning_strategy {
@@ -459,7 +469,7 @@ impl DistributedVectorSearch {
         // For now, simulate the query execution
 
         {
-            let nodes_guard = nodes.read().unwrap();
+            let nodes_guard = nodes.read().expect("nodes lock should not be poisoned");
             let _node_config = nodes_guard
                 .get(&node_id)
                 .ok_or_else(|| anyhow::anyhow!("Node {} not found", node_id))?;
@@ -510,7 +520,11 @@ impl DistributedVectorSearch {
         }
 
         // Sort by similarity score (descending)
-        all_results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+        all_results.sort_by(|a, b| {
+            b.similarity
+                .partial_cmp(&a.similarity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Take top k results
         all_results.truncate(k);
@@ -558,7 +572,10 @@ impl DistributedVectorSearch {
 
     /// Get cluster statistics
     pub fn get_cluster_stats(&self) -> DistributedClusterStats {
-        let nodes = self.nodes.read().unwrap();
+        let nodes = self
+            .nodes
+            .read()
+            .expect("nodes lock should not be poisoned");
 
         let total_nodes = nodes.len();
         let healthy_nodes = nodes

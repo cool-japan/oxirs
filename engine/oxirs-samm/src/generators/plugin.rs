@@ -446,7 +446,10 @@ impl GeneratorRegistry {
         let name = generator.name().to_string();
         assert!(!name.is_empty(), "Generator name cannot be empty");
 
-        let mut generators = self.generators.write().unwrap();
+        let mut generators = self
+            .generators
+            .write()
+            .expect("write lock should not be poisoned");
         generators.insert(name, generator);
     }
 
@@ -460,7 +463,10 @@ impl GeneratorRegistry {
     ///
     /// A reference to the generator if found, None otherwise
     pub fn get(&self, name: &str) -> Option<GeneratorRef> {
-        let generators = self.generators.read().unwrap();
+        let generators = self
+            .generators
+            .read()
+            .expect("read lock should not be poisoned");
         if generators.contains_key(name) {
             Some(GeneratorRef {
                 registry: Arc::clone(&self.generators),
@@ -481,25 +487,37 @@ impl GeneratorRegistry {
     ///
     /// true if the generator was removed, false if it wasn't found
     pub fn remove(&self, name: &str) -> bool {
-        let mut generators = self.generators.write().unwrap();
+        let mut generators = self
+            .generators
+            .write()
+            .expect("write lock should not be poisoned");
         generators.remove(name).is_some()
     }
 
     /// Lists all registered generator names
     pub fn list(&self) -> Vec<String> {
-        let generators = self.generators.read().unwrap();
+        let generators = self
+            .generators
+            .read()
+            .expect("read lock should not be poisoned");
         generators.keys().cloned().collect()
     }
 
     /// Returns the number of registered generators
     pub fn count(&self) -> usize {
-        let generators = self.generators.read().unwrap();
+        let generators = self
+            .generators
+            .read()
+            .expect("read lock should not be poisoned");
         generators.len()
     }
 
     /// Clears all generators from the registry
     pub fn clear(&self) {
-        let mut generators = self.generators.write().unwrap();
+        let mut generators = self
+            .generators
+            .write()
+            .expect("write lock should not be poisoned");
         generators.clear();
     }
 
@@ -551,7 +569,10 @@ impl GeneratorRef {
     ///
     /// Generated code or an error
     pub fn generate(&self, aspect: &Aspect) -> Result<String, SammError> {
-        let generators = self.registry.read().unwrap();
+        let generators = self
+            .registry
+            .read()
+            .expect("read lock should not be poisoned");
         if let Some(generator) = generators.get(&self.name) {
             generator.generate(aspect)
         } else {
@@ -564,7 +585,10 @@ impl GeneratorRef {
 
     /// Returns the file extension for this generator
     pub fn file_extension(&self) -> String {
-        let generators = self.registry.read().unwrap();
+        let generators = self
+            .registry
+            .read()
+            .expect("read lock should not be poisoned");
         if let Some(generator) = generators.get(&self.name) {
             generator.file_extension().to_string()
         } else {
@@ -574,7 +598,10 @@ impl GeneratorRef {
 
     /// Returns the description of this generator
     pub fn description(&self) -> String {
-        let generators = self.registry.read().unwrap();
+        let generators = self
+            .registry
+            .read()
+            .expect("read lock should not be poisoned");
         if let Some(generator) = generators.get(&self.name) {
             generator.description().to_string()
         } else {
@@ -584,7 +611,10 @@ impl GeneratorRef {
 
     /// Returns the metadata of this generator
     pub fn metadata(&self) -> GeneratorMetadata {
-        let generators = self.registry.read().unwrap();
+        let generators = self
+            .registry
+            .read()
+            .expect("read lock should not be poisoned");
         if let Some(generator) = generators.get(&self.name) {
             generator.metadata()
         } else {
@@ -640,7 +670,10 @@ mod tests {
 
         let gen_ref = registry.get("test-gen");
         assert!(gen_ref.is_some());
-        assert_eq!(gen_ref.unwrap().file_extension(), "test");
+        assert_eq!(
+            gen_ref.expect("operation should succeed").file_extension(),
+            "test"
+        );
     }
 
     #[test]
@@ -654,7 +687,9 @@ mod tests {
         let aspect = Aspect::new("urn:samm:org.example:1.0.0#TestAspect".to_string());
 
         if let Some(gen_ref) = registry.get("test-gen") {
-            let code = gen_ref.generate(&aspect).unwrap();
+            let code = gen_ref
+                .generate(&aspect)
+                .expect("generation should succeed");
             assert_eq!(code, "Hello, World!");
         } else {
             panic!("Generator not found");
@@ -835,7 +870,7 @@ mod tests {
         if let Some(ts_gen) = registry.get("typescript") {
             let result = ts_gen.generate(&aspect);
             assert!(result.is_ok());
-            let code = result.unwrap();
+            let code = result.expect("result should be Ok");
             assert!(!code.is_empty());
             assert!(code.contains("TestAspect") || code.contains("interface"));
         }
@@ -843,7 +878,7 @@ mod tests {
         if let Some(py_gen) = registry.get("python") {
             let result = py_gen.generate(&aspect);
             assert!(result.is_ok());
-            let code = result.unwrap();
+            let code = result.expect("result should be Ok");
             assert!(!code.is_empty());
         }
     }

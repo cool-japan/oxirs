@@ -240,7 +240,7 @@ impl AggregationEngine {
         for i in 0..shape[0] {
             for j in 0..shape[1] {
                 let mut values: Vec<f32> = matrices.iter().map(|m| m[[i, j]]).collect();
-                values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
                 let median = if values.len() % 2 == 0 {
                     (values[values.len() / 2 - 1] + values[values.len() / 2]) / 2.0

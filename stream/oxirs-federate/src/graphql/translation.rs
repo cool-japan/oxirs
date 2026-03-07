@@ -1239,7 +1239,7 @@ mod tests {
         let result = translator.translate_query(graphql_query).await;
         assert!(result.is_ok());
 
-        let translation = result.unwrap();
+        let translation = result.expect("result should be Ok");
         assert!(translation.sparql_query.contains("SELECT"));
         assert!(translation.sparql_query.contains("WHERE"));
         assert!(!translation.triple_patterns.is_empty());
@@ -1261,7 +1261,7 @@ mod tests {
         let result = translator.translate_query(graphql_mutation).await;
         assert!(result.is_ok());
 
-        let translation = result.unwrap();
+        let translation = result.expect("result should be Ok");
         assert!(translation.sparql_query.contains("INSERT"));
     }
 

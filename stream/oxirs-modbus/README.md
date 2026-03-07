@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/oxirs-modbus.svg)](https://crates.io/crates/oxirs-modbus)
 [![docs.rs](https://docs.rs/oxirs-modbus/badge.svg)](https://docs.rs/oxirs-modbus)
-[![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 Modbus TCP and RTU protocol support for the OxiRS semantic web platform.
 
@@ -33,7 +33,7 @@ Modbus TCP and RTU protocol support for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-modbus = "0.1.0"
+oxirs-modbus = "0.2.0"
 ```
 
 ### Basic Modbus TCP Example
@@ -200,4 +200,4 @@ See `/tmp/oxirs_cli_phase_d_guide.md` for complete CLI documentation.
 
 ## License
 
-Dual-licensed under MIT or Apache-2.0.
+Licensed under Apache-2.0.

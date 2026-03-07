@@ -621,7 +621,7 @@ mod tests {
         assert!(vocab.is_shacl_term(&vocab.node_shape));
         assert!(vocab.is_shacl_term(&vocab.class));
 
-        let non_shacl = NamedNode::new("http://example.org/test").unwrap();
+        let non_shacl = NamedNode::new("http://example.org/test").expect("valid IRI");
         assert!(!vocab.is_shacl_term(&non_shacl));
     }
 
@@ -632,7 +632,7 @@ mod tests {
         assert_eq!(vocab.get_local_name(&vocab.node_shape), Some("NodeShape"));
         assert_eq!(vocab.get_local_name(&vocab.class), Some("class"));
 
-        let non_shacl = NamedNode::new("http://example.org/test").unwrap();
+        let non_shacl = NamedNode::new("http://example.org/test").expect("valid IRI");
         assert_eq!(vocab.get_local_name(&non_shacl), None);
     }
 
@@ -673,11 +673,11 @@ mod tests {
 
         // Test CURIE expansion
         assert_eq!(
-            resolver.expand_iri("sh:NodeShape").unwrap(),
+            resolver.expand_iri("sh:NodeShape").expect("valid IRI"),
             "http://www.w3.org/ns/shacl#NodeShape"
         );
         assert_eq!(
-            resolver.expand_iri("rdf:type").unwrap(),
+            resolver.expand_iri("rdf:type").expect("valid IRI"),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
         );
 
@@ -691,11 +691,11 @@ mod tests {
 
         // Test relative IRI resolution
         assert_eq!(
-            resolver.expand_iri("test").unwrap(),
+            resolver.expand_iri("test").expect("valid IRI"),
             "http://example.org/base/test"
         );
         assert_eq!(
-            resolver.expand_iri("subdir/test").unwrap(),
+            resolver.expand_iri("subdir/test").expect("valid IRI"),
             "http://example.org/base/subdir/test"
         );
     }
@@ -706,7 +706,7 @@ mod tests {
         resolver.add_prefix("ex".to_string(), "http://example.org/vocab#".to_string());
 
         assert_eq!(
-            resolver.expand_iri("ex:test").unwrap(),
+            resolver.expand_iri("ex:test").expect("valid IRI"),
             "http://example.org/vocab#test"
         );
     }
@@ -716,13 +716,15 @@ mod tests {
         let resolver = IriResolver::new();
 
         // Test creating NamedNode from CURIE
-        let node = resolver.create_named_node("sh:NodeShape").unwrap();
+        let node = resolver
+            .create_named_node("sh:NodeShape")
+            .expect("valid IRI");
         assert_eq!(node.as_str(), "http://www.w3.org/ns/shacl#NodeShape");
 
         // Test creating NamedNode from absolute IRI
         let node = resolver
             .create_named_node("http://example.org/test")
-            .unwrap();
+            .expect("valid IRI");
         assert_eq!(node.as_str(), "http://example.org/test");
 
         // Test invalid IRI

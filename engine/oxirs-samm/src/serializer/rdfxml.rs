@@ -412,7 +412,9 @@ mod tests {
     fn test_rdfxml_serialization_basic() {
         let aspect = create_test_aspect();
         let serializer = RdfXmlSerializer::new();
-        let rdfxml = serializer.serialize_to_string(&aspect).unwrap();
+        let rdfxml = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // Verify XML structure
         assert!(rdfxml.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
@@ -434,7 +436,9 @@ mod tests {
     fn test_rdfxml_contains_metadata() {
         let aspect = create_test_aspect();
         let serializer = RdfXmlSerializer::new();
-        let rdfxml = serializer.serialize_to_string(&aspect).unwrap();
+        let rdfxml = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         assert!(rdfxml.contains("<samm:preferredName"));
         assert!(rdfxml.contains("Test Aspect"));
@@ -448,7 +452,9 @@ mod tests {
     fn test_rdfxml_contains_properties() {
         let aspect = create_test_aspect();
         let serializer = RdfXmlSerializer::new();
-        let rdfxml = serializer.serialize_to_string(&aspect).unwrap();
+        let rdfxml = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         assert!(rdfxml.contains("<samm:properties"));
         assert!(rdfxml.contains("urn:samm:org.example:1.0.0#property1"));
@@ -461,8 +467,12 @@ mod tests {
         let pretty = RdfXmlSerializer::new().with_pretty(true);
         let compact = RdfXmlSerializer::new().with_pretty(false);
 
-        let pretty_output = pretty.serialize_to_string(&aspect).unwrap();
-        let compact_output = compact.serialize_to_string(&aspect).unwrap();
+        let pretty_output = pretty
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
+        let compact_output = compact
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // Pretty output should have newlines and indentation
         assert!(pretty_output.contains('\n'));
@@ -492,7 +502,9 @@ mod tests {
         };
 
         let serializer = RdfXmlSerializer::new();
-        let rdfxml = serializer.serialize_to_string(&aspect).unwrap();
+        let rdfxml = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // All languages should be present with xml:lang attributes
         assert!(rdfxml.contains("xml:lang=\"en\""));
@@ -516,7 +528,9 @@ mod tests {
         };
 
         let serializer = RdfXmlSerializer::new();
-        let rdfxml = serializer.serialize_to_string(&aspect).unwrap();
+        let rdfxml = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // Should have basic structure
         assert!(rdfxml.contains("<rdf:RDF"));
@@ -543,7 +557,9 @@ mod tests {
         };
 
         let serializer = RdfXmlSerializer::new();
-        let rdfxml = serializer.serialize_to_string(&aspect).unwrap();
+        let rdfxml = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // XML special characters should be escaped
         assert!(rdfxml.contains("&amp;"));
@@ -558,7 +574,9 @@ mod tests {
 
         let serializer = RdfXmlSerializer::new().with_indent("    "); // 4 spaces
 
-        let rdfxml = serializer.serialize_to_string(&aspect).unwrap();
+        let rdfxml = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // Should use 4-space indentation
         let lines: Vec<&str> = rdfxml.lines().collect();
@@ -575,7 +593,9 @@ mod tests {
     fn test_rdfxml_type_declaration() {
         let aspect = create_test_aspect();
         let serializer = RdfXmlSerializer::new();
-        let rdfxml = serializer.serialize_to_string(&aspect).unwrap();
+        let rdfxml = serializer
+            .serialize_to_string(&aspect)
+            .expect("serialization should succeed");
 
         // Should have proper rdf:type declaration
         assert!(rdfxml.contains("<rdf:type"));

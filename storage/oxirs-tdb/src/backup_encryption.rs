@@ -134,7 +134,11 @@ impl EncryptedData {
                 "Invalid encrypted data: too short".to_string(),
             ));
         }
-        let salt_len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        let salt_len = u32::from_le_bytes(
+            bytes[offset..offset + 4]
+                .try_into()
+                .expect("slice is exactly 4 bytes"),
+        ) as usize;
         offset += 4;
 
         if bytes.len() < offset + salt_len {
@@ -151,7 +155,11 @@ impl EncryptedData {
                 "Invalid encrypted data: nonce missing".to_string(),
             ));
         }
-        let nonce_len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        let nonce_len = u32::from_le_bytes(
+            bytes[offset..offset + 4]
+                .try_into()
+                .expect("slice is exactly 4 bytes"),
+        ) as usize;
         offset += 4;
 
         if bytes.len() < offset + nonce_len {
@@ -177,8 +185,11 @@ impl EncryptedData {
                 "Invalid encrypted data: ciphertext length missing".to_string(),
             ));
         }
-        let ciphertext_len =
-            u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        let ciphertext_len = u32::from_le_bytes(
+            bytes[offset..offset + 4]
+                .try_into()
+                .expect("slice is exactly 4 bytes"),
+        ) as usize;
         offset += 4;
 
         if bytes.len() < offset + ciphertext_len {

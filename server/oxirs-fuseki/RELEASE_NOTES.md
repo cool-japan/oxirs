@@ -1,7 +1,7 @@
-# OxiRS Fuseki v0.1.0 Release Notes
+# OxiRS Fuseki v0.2.0 Release Notes
 
-**Release Date**: January 7, 2026
-**Status**: Production Release - Initial v0.1.0
+**Release Date**: March 5, 2026
+**Status**: Production Release - v0.2.0
 
 ---
 
@@ -570,7 +570,7 @@ cargo fmt --check
 
 ## 📄 License
 
-OxiRS Fuseki is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
+OxiRS Fuseki is licensed under the Apache License, Version 2.0. See [LICENSE](../../LICENSE) for details.
 
 ---
 

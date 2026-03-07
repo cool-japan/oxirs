@@ -728,7 +728,7 @@ impl RaftNode {
 
         // Check if we can vote
         let vote_granted = if request.request_term < *term
-            || (voted.is_some() && voted.as_ref().unwrap() != &request.candidate_id)
+            || (voted.as_ref().is_some_and(|v| v != &request.candidate_id))
         {
             false
         } else {
@@ -831,7 +831,7 @@ impl RaftNode {
             entry,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
         };
 
@@ -913,8 +913,8 @@ impl RaftNode {
         for _ in 0..entries_to_compact {
             if let Some(entry) = log.entries.pop_front() {
                 // Serialize entry for compaction
-                let serialized =
-                    oxicode::serde::encode_to_vec(&entry, oxicode::config::standard()).unwrap();
+                let serialized = oxicode::serde::encode_to_vec(&entry, oxicode::config::standard())
+                    .expect("serialization should succeed for valid entry");
                 compacted_data.extend_from_slice(&serialized);
                 removed_entries.push(entry);
             }
@@ -923,7 +923,7 @@ impl RaftNode {
         // Apply compression
         let compressed = if config.delta_compression {
             // Delta compression would go here
-            zstd::encode_all(&compacted_data[..], 3).unwrap()
+            zstd::encode_all(&compacted_data[..], 3).expect("zstd compression should succeed")
         } else {
             compacted_data
         };

@@ -289,7 +289,7 @@ impl KGEmbeddingModel for GCN {
                 }
             }
 
-            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             scores.into_iter().take(k).collect()
         } else {
             Vec::new()
@@ -312,7 +312,7 @@ impl KGEmbeddingModel for GCN {
                 }
             }
 
-            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             scores.into_iter().take(k).collect()
         } else {
             Vec::new()
@@ -755,7 +755,7 @@ impl KGEmbeddingModel for GraphSAGE {
                 }
             }
 
-            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             scores.into_iter().take(k).collect()
         } else {
             Vec::new()
@@ -778,7 +778,7 @@ impl KGEmbeddingModel for GraphSAGE {
                 }
             }
 
-            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             scores.into_iter().take(k).collect()
         } else {
             Vec::new()

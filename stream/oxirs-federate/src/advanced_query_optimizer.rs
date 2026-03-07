@@ -365,7 +365,11 @@ impl AdvancedQueryOptimizer {
     fn select_best_plan_simple(&self, plans: &[CostedPlan]) -> Result<OptimizedPlan> {
         let best = plans
             .iter()
-            .min_by(|a, b| a.total_cost.partial_cmp(&b.total_cost).unwrap())
+            .min_by(|a, b| {
+                a.total_cost
+                    .partial_cmp(&b.total_cost)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .ok_or_else(|| anyhow!("No plans available"))?;
 
         Ok(OptimizedPlan {

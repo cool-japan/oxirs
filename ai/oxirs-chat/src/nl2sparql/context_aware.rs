@@ -227,7 +227,7 @@ impl ContextAwareGenerator {
             .collect();
 
         // Extract URI-like patterns
-        let uri_pattern = regex::Regex::new(r"<([^>]+)>").unwrap();
+        let uri_pattern = regex::Regex::new(r"<([^>]+)>").expect("regex pattern should be valid");
         for capture in uri_pattern.captures_iter(query) {
             if let Some(uri) = capture.get(1) {
                 entities.push(uri.as_str().to_string());
@@ -235,7 +235,8 @@ impl ContextAwareGenerator {
         }
 
         // Extract prefixed names (e.g., schema:Person, foaf:Person)
-        let prefixed_pattern = regex::Regex::new(r"\b([a-z]+):([A-Za-z0-9_-]+)\b").unwrap();
+        let prefixed_pattern = regex::Regex::new(r"\b([a-z]+):([A-Za-z0-9_-]+)\b")
+            .expect("regex pattern should be valid");
         for capture in prefixed_pattern.captures_iter(query) {
             if let Some(full_match) = capture.get(0) {
                 entities.push(full_match.as_str().to_string());

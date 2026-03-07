@@ -62,9 +62,7 @@ impl MemoryGuard {
 
     /// Check if allocation is allowed
     pub fn can_allocate(&self, bytes: usize) -> bool {
-        let current = self.current_usage.read()
-            .map(|usage| *usage)
-            .unwrap_or(0);
+        let current = self.current_usage.read().map(|usage| *usage).unwrap_or(0);
 
         current + bytes <= self.max_bytes
     }
@@ -79,10 +77,14 @@ impl MemoryGuard {
             ));
         }
 
-        let mut current = self.current_usage.write()
+        let mut current = self
+            .current_usage
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
-        let mut allocations = self.allocations.write()
+        let mut allocations = self
+            .allocations
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
         let allocation = AllocationInfo {
@@ -104,10 +106,14 @@ impl MemoryGuard {
 
     /// Record deallocation
     pub fn deallocate(&self, handle: AllocationHandle) -> Result<()> {
-        let mut current = self.current_usage.write()
+        let mut current = self
+            .current_usage
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
-        let mut allocations = self.allocations.write()
+        let mut allocations = self
+            .allocations
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
         // Find and remove allocation
@@ -121,9 +127,7 @@ impl MemoryGuard {
 
     /// Get current memory usage
     pub fn current_usage(&self) -> usize {
-        self.current_usage.read()
-            .map(|usage| *usage)
-            .unwrap_or(0)
+        self.current_usage.read().map(|usage| *usage).unwrap_or(0)
     }
 
     /// Get available memory
@@ -134,15 +138,13 @@ impl MemoryGuard {
     /// Get memory statistics
     pub fn statistics(&self) -> Result<MemoryStatistics> {
         let current = self.current_usage();
-        let allocations = self.allocations.read()
+        let allocations = self
+            .allocations
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
 
         let total_allocations = allocations.len();
-        let largest_allocation = allocations
-            .iter()
-            .map(|a| a.bytes)
-            .max()
-            .unwrap_or(0);
+        let largest_allocation = allocations.iter().map(|a| a.bytes).max().unwrap_or(0);
 
         let oldest_allocation = allocations
             .iter()

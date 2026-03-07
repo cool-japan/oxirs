@@ -372,7 +372,7 @@ mypy .
 
 ## License
 
-This project is dual-licensed under MIT and Apache 2.0 licenses. See [LICENSE](LICENSE) for details.
+This project is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
 
 ## Support
 

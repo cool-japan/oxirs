@@ -454,3 +454,491 @@ impl SessionData {
 
 // Re-export with compatibility
 pub use SessionState as state;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── ChatConfig ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_chat_config_default_has_reasonable_values() {
+        let cfg = ChatConfig::default();
+        assert!(cfg.max_context_tokens > 0);
+        assert!(cfg.sliding_window_size > 0);
+        assert!(cfg.max_tokens > 0);
+        assert!(cfg.timeout_seconds > 0);
+    }
+
+    #[test]
+    fn test_chat_config_temperature_in_range() {
+        let cfg = ChatConfig::default();
+        assert!(cfg.temperature >= 0.0 && cfg.temperature <= 2.0);
+    }
+
+    #[test]
+    fn test_chat_config_flags_set() {
+        let cfg = ChatConfig::default();
+        assert!(cfg.enable_topic_tracking);
+        assert!(cfg.enable_context_compression);
+    }
+
+    // ── SessionState ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_session_state_active_eq() {
+        assert_eq!(SessionState::Active, SessionState::Active);
+        assert_ne!(SessionState::Active, SessionState::Expired);
+    }
+
+    #[test]
+    fn test_session_state_all_variants_accessible() {
+        let states = [
+            SessionState::Active,
+            SessionState::Idle,
+            SessionState::Suspended,
+            SessionState::Archived,
+            SessionState::Expired,
+        ];
+        assert_eq!(states.len(), 5);
+    }
+
+    // ── ContextWindow ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_context_window_new_empty() {
+        let cw = ContextWindow::new(10);
+        assert_eq!(cw.window_size, 10);
+        assert!(cw.active_messages.is_empty());
+        assert_eq!(cw.token_count, 0);
+    }
+
+    #[test]
+    fn test_context_window_add_message() {
+        let mut cw = ContextWindow::new(5);
+        cw.add_message("msg1".to_string(), 1.0, 10);
+        assert_eq!(cw.active_messages.len(), 1);
+        assert_eq!(cw.token_count, 10);
+    }
+
+    #[test]
+    fn test_context_window_evicts_oldest_when_full() {
+        let mut cw = ContextWindow::new(3);
+        cw.add_message("a".to_string(), 0.5, 5);
+        cw.add_message("b".to_string(), 0.5, 5);
+        cw.add_message("c".to_string(), 0.5, 5);
+        cw.add_message("d".to_string(), 0.5, 5); // evicts 'a'
+        let msgs = cw.get_context_messages();
+        assert!(!msgs.contains(&"a".to_string()));
+        assert!(msgs.contains(&"b".to_string()) || msgs.contains(&"c".to_string()));
+    }
+
+    #[test]
+    fn test_context_window_pin_message() {
+        let mut cw = ContextWindow::new(2);
+        cw.add_message("pinned".to_string(), 1.0, 5);
+        cw.pin_message("pinned".to_string());
+        assert!(cw.pinned_messages.contains("pinned"));
+    }
+
+    #[test]
+    fn test_context_window_unpin_message() {
+        let mut cw = ContextWindow::new(5);
+        cw.pin_message("msg".to_string());
+        cw.unpin_message("msg");
+        assert!(!cw.pinned_messages.contains("msg"));
+    }
+
+    #[test]
+    fn test_context_window_get_context_messages() {
+        let mut cw = ContextWindow::new(5);
+        cw.add_message("m1".to_string(), 0.5, 3);
+        cw.add_message("m2".to_string(), 0.8, 4);
+        let msgs = cw.get_context_messages();
+        assert_eq!(msgs.len(), 2);
+    }
+
+    #[test]
+    fn test_context_window_needs_compression() {
+        let mut cw = ContextWindow::new(100);
+        cw.token_count = 5000;
+        cw.context_summary = None;
+        assert!(cw.needs_compression(4000));
+        assert!(!cw.needs_compression(6000));
+    }
+
+    #[test]
+    fn test_context_window_needs_compression_false_when_summarized() {
+        let mut cw = ContextWindow::new(100);
+        cw.token_count = 9000;
+        cw.context_summary = Some("summary".to_string());
+        // Already compressed — should not trigger again.
+        assert!(!cw.needs_compression(100));
+    }
+
+    #[test]
+    fn test_context_window_compress_sets_summary() {
+        let mut cw = ContextWindow::new(10);
+        cw.add_message("m1".to_string(), 0.5, 10);
+        cw.compress_context("compressed summary".to_string());
+        assert_eq!(cw.context_summary.as_deref(), Some("compressed summary"));
+        assert!(cw.last_compression.is_some());
+    }
+
+    // ── TopicTracker ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_topic_tracker_new_empty() {
+        let t = TopicTracker::new();
+        assert!(t.current_topics.is_empty());
+        assert!(t.topic_history.is_empty());
+    }
+
+    #[test]
+    fn test_topic_tracker_default() {
+        let t = TopicTracker::default();
+        assert!(t.current_topics.is_empty());
+        assert_eq!(t.max_topics, 5);
+    }
+
+    #[test]
+    fn test_topic_tracker_summary_no_topics() {
+        let t = TopicTracker::new();
+        let s = t.get_current_topic_summary();
+        assert!(s.contains("No") || !s.is_empty());
+    }
+
+    // ── Topic ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_topic_add_keyword() {
+        let mut topic = Topic {
+            name: "SPARQL".to_string(),
+            confidence: 0.9,
+            first_mentioned: chrono::Utc::now(),
+            last_mentioned: chrono::Utc::now(),
+            message_count: 1,
+            keywords: vec!["sparql".to_string()],
+        };
+        topic.add_keyword("query".to_string());
+        assert!(topic.keywords.contains(&"query".to_string()));
+        assert_eq!(topic.keywords.len(), 2);
+    }
+
+    #[test]
+    fn test_topic_add_keyword_no_duplicate() {
+        let mut topic = Topic {
+            name: "RDF".to_string(),
+            confidence: 0.8,
+            first_mentioned: chrono::Utc::now(),
+            last_mentioned: chrono::Utc::now(),
+            message_count: 1,
+            keywords: vec!["rdf".to_string()],
+        };
+        topic.add_keyword("rdf".to_string()); // duplicate
+        assert_eq!(topic.keywords.len(), 1);
+    }
+
+    #[test]
+    fn test_topic_update_mention_increments_count() {
+        let mut topic = Topic {
+            name: "Graphs".to_string(),
+            confidence: 0.7,
+            first_mentioned: chrono::Utc::now(),
+            last_mentioned: chrono::Utc::now(),
+            message_count: 1,
+            keywords: vec![],
+        };
+        topic.update_mention();
+        assert_eq!(topic.message_count, 2);
+    }
+
+    #[test]
+    fn test_topic_relevance_score_positive() {
+        let topic = Topic {
+            name: "Test".to_string(),
+            confidence: 0.9,
+            first_mentioned: chrono::Utc::now(),
+            last_mentioned: chrono::Utc::now(),
+            message_count: 5,
+            keywords: vec![],
+        };
+        let score = topic.get_relevance_score();
+        assert!(score > 0.0);
+    }
+
+    // ── SessionMetrics ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_session_metrics_default_zero() {
+        let m = SessionMetrics::default();
+        assert_eq!(m.total_messages, 0);
+        assert_eq!(m.successful_queries, 0);
+    }
+
+    #[test]
+    fn test_session_metrics_add_user_message() {
+        let mut m = SessionMetrics::default();
+        m.add_user_message();
+        assert_eq!(m.user_messages, 1);
+        assert_eq!(m.total_messages, 1);
+    }
+
+    #[test]
+    fn test_session_metrics_add_successful_query() {
+        let mut m = SessionMetrics::default();
+        m.add_successful_query(100);
+        assert_eq!(m.successful_queries, 1);
+        assert_eq!(m.total_tokens_used, 100);
+    }
+
+    #[test]
+    fn test_session_metrics_add_failed_query() {
+        let mut m = SessionMetrics::default();
+        m.add_failed_query();
+        assert_eq!(m.failed_queries, 1);
+        assert_eq!(m.error_count, 1);
+    }
+
+    #[test]
+    fn test_session_metrics_query_success_rate() {
+        let mut m = SessionMetrics::default();
+        m.add_successful_query(10);
+        m.add_successful_query(10);
+        m.add_failed_query();
+        let rate = m.get_query_success_rate();
+        assert!((rate - 2.0 / 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_session_metrics_query_success_rate_zero_total() {
+        let m = SessionMetrics::default();
+        assert_eq!(m.get_query_success_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_session_metrics_cache_hit_rate() {
+        let m = SessionMetrics {
+            cache_hits: 3,
+            cache_misses: 1,
+            ..SessionMetrics::default()
+        };
+        let rate = m.get_cache_hit_rate();
+        assert!((rate - 0.75).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_session_metrics_cache_hit_rate_zero_total() {
+        let m = SessionMetrics::default();
+        assert_eq!(m.get_cache_hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_session_metrics_satisfaction_score() {
+        let mut m = SessionMetrics::default();
+        m.add_satisfaction_score(4.0);
+        m.add_satisfaction_score(2.0);
+        let avg = m.get_average_satisfaction();
+        assert!((avg - 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_session_metrics_satisfaction_clamped_to_five() {
+        let mut m = SessionMetrics::default();
+        m.add_satisfaction_score(10.0); // clamped to 5.0
+        let avg = m.get_average_satisfaction();
+        assert!((avg - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_session_metrics_average_satisfaction_empty() {
+        let m = SessionMetrics::default();
+        assert_eq!(m.get_average_satisfaction(), 0.0);
+    }
+
+    #[test]
+    fn test_session_metrics_context_compression_tracked() {
+        let mut m = SessionMetrics::default();
+        m.add_context_compression();
+        assert_eq!(m.context_compressions, 1);
+    }
+
+    #[test]
+    fn test_session_metrics_topic_transition_tracked() {
+        let mut m = SessionMetrics::default();
+        m.add_topic_transition();
+        assert_eq!(m.topic_transitions, 1);
+    }
+
+    // ── SessionData ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_session_data_user_id_roundtrip() {
+        let mut sd = SessionData {
+            id: "test-session".to_string(),
+            config: ChatConfig::default(),
+            messages: Vec::new(),
+            created_at: chrono::Utc::now(),
+            last_activity: chrono::Utc::now(),
+            user_preferences: HashMap::new(),
+            session_state: SessionState::Active,
+            context_summary: None,
+            pinned_messages: HashSet::new(),
+            current_topics: Vec::new(),
+            topic_history: Vec::new(),
+            performance_metrics: SessionMetrics::default(),
+        };
+        sd.set_user_id("alice".to_string());
+        assert_eq!(sd.user_id(), Some("alice"));
+    }
+
+    #[test]
+    fn test_session_data_user_id_none_initially() {
+        let sd = SessionData {
+            id: "s1".to_string(),
+            config: ChatConfig::default(),
+            messages: Vec::new(),
+            created_at: chrono::Utc::now(),
+            last_activity: chrono::Utc::now(),
+            user_preferences: HashMap::new(),
+            session_state: SessionState::Active,
+            context_summary: None,
+            pinned_messages: HashSet::new(),
+            current_topics: Vec::new(),
+            topic_history: Vec::new(),
+            performance_metrics: SessionMetrics::default(),
+        };
+        assert!(sd.user_id().is_none());
+    }
+
+    // ── TransitionType ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_transition_type_partial_eq_str() {
+        assert_eq!(TransitionType::NewTopic, "new");
+        assert_eq!(TransitionType::TopicShift, "shift");
+        assert_eq!(TransitionType::TopicReturn, "return");
+        assert_eq!(TransitionType::TopicMerge, "merge");
+        assert_eq!(TransitionType::TopicSplit, "split");
+    }
+
+    #[test]
+    fn test_transition_type_ne_wrong_str() {
+        assert_ne!(TransitionType::NewTopic, "shift");
+    }
+
+    // ── SessionMetrics additional ─────────────────────────────────────────────
+
+    #[test]
+    fn test_session_metrics_update_response_time_first_call() {
+        let mut m = SessionMetrics::default();
+        m.update_response_time(500);
+        assert!((m.average_response_time - 0.5).abs() < 1e-6);
+        assert_eq!(m.assistant_messages, 1);
+    }
+
+    #[test]
+    fn test_session_metrics_update_response_time_average() {
+        let mut m = SessionMetrics::default();
+        m.update_response_time(1000); // 1s
+        m.update_response_time(3000); // 3s
+                                      // Average: (1 + 3) / 2 = 2s
+        assert!((m.average_response_time - 2.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_session_metrics_tokens_accumulate() {
+        let mut m = SessionMetrics::default();
+        m.add_successful_query(100);
+        m.add_successful_query(250);
+        assert_eq!(m.total_tokens_used, 350);
+    }
+
+    #[test]
+    fn test_session_metrics_satisfaction_clamped_to_zero() {
+        let mut m = SessionMetrics::default();
+        m.add_satisfaction_score(-5.0); // clamped to 0.0
+        let avg = m.get_average_satisfaction();
+        assert!((avg - 0.0).abs() < 1e-6);
+    }
+
+    // ── ContextWindow additional ──────────────────────────────────────────────
+
+    #[test]
+    fn test_context_window_importance_scores_stored() {
+        let mut cw = ContextWindow::new(10);
+        cw.add_message("m1".to_string(), 0.9, 5);
+        assert!(cw.importance_scores.contains_key("m1"));
+    }
+
+    #[test]
+    fn test_context_window_multiple_pins() {
+        let mut cw = ContextWindow::new(10);
+        cw.pin_message("m1".to_string());
+        cw.pin_message("m2".to_string());
+        assert_eq!(cw.pinned_messages.len(), 2);
+    }
+
+    // ── ChatConfig custom ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_chat_config_custom_values() {
+        let cfg = ChatConfig {
+            max_context_tokens: 4096,
+            sliding_window_size: 10,
+            enable_context_compression: false,
+            temperature: 0.5,
+            max_tokens: 512,
+            timeout_seconds: 15,
+            enable_topic_tracking: false,
+            enable_sentiment_analysis: false,
+            enable_intent_detection: false,
+        };
+        assert_eq!(cfg.max_context_tokens, 4096);
+        assert_eq!(cfg.sliding_window_size, 10);
+        assert!(!cfg.enable_context_compression);
+    }
+
+    // ── TopicTracker analyze_message ──────────────────────────────────────────
+
+    #[test]
+    fn test_topic_tracker_analyze_sparql_message() {
+        use crate::messages::{MessageContent, MessageRole};
+        let mut tracker = TopicTracker::new();
+        let msg = crate::messages::Message {
+            id: "m1".to_string(),
+            role: MessageRole::User,
+            content: MessageContent::Text("How do I write a sparql query?".to_string()),
+            timestamp: chrono::Utc::now(),
+            metadata: None,
+            thread_id: None,
+            parent_message_id: None,
+            token_count: None,
+            reactions: Vec::new(),
+            attachments: Vec::new(),
+            rich_elements: Vec::new(),
+        };
+        let transition = tracker.analyze_message(&msg);
+        // Should detect "SPARQL Queries" topic.
+        assert!(transition.is_some());
+    }
+
+    #[test]
+    fn test_topic_tracker_summary_with_topics() {
+        let mut tracker = TopicTracker::new();
+        tracker.current_topics.push(Topic {
+            name: "SPARQL".to_string(),
+            confidence: 0.9,
+            first_mentioned: chrono::Utc::now(),
+            last_mentioned: chrono::Utc::now(),
+            message_count: 1,
+            keywords: vec![],
+        });
+        let summary = tracker.get_current_topic_summary();
+        assert!(summary.contains("SPARQL"));
+    }
+}

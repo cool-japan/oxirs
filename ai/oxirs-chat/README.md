@@ -1,10 +1,10 @@
 # OxiRS Chat
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **AI-powered conversational interface for RDF data with RAG and natural language to SPARQL**
 
-**Status**: Production Release (v0.1.0) - Released January 7, 2026
+**Status**: v0.2.0 - Released March 5, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -32,10 +32,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-chat = "0.1.0"
+oxirs-chat = "0.2.0"
 
 # Enable specific LLM providers
-oxirs-chat = { version = "0.1.0", features = ["openai", "anthropic", "ollama"] }
+oxirs-chat = { version = "0.2.0", features = ["openai", "anthropic", "ollama"] }
 ```
 
 ## Quick Start
@@ -473,12 +473,9 @@ export RUST_LOG="oxirs_chat=info"
 
 ## License
 
-Licensed under either of:
+Licensed under:
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](../../LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT License ([LICENSE-MIT](../../LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
 
 ## Status
 

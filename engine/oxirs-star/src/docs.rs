@@ -447,7 +447,7 @@ in other triples. This enables direct annotation of statements with metadata suc
 The key concept is the "quoted triple" - a triple that is referenced but not asserted.
                     "#.to_string(),
                     code_examples: vec![
-                        self.examples.get("basic_quoted_triple").unwrap().clone()
+                        self.examples.get("basic_quoted_triple").expect("example should be loaded").clone()
                     ],
                     exercises: vec![
                         Exercise {
@@ -498,7 +498,7 @@ RDF-star supports several serialization formats:
 The syntax uses << >> to denote quoted triples.
                     "#.to_string(),
                     code_examples: vec![
-                        self.examples.get("parsing_turtle_star").unwrap().clone()
+                        self.examples.get("parsing_turtle_star").expect("example should be loaded").clone()
                     ],
                     exercises: vec![],
                 },

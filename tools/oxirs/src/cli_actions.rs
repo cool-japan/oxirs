@@ -957,3 +957,99 @@ pub enum CanbusAction {
         r#loop: bool,
     },
 }
+
+/// Query profiler actions
+#[derive(Subcommand)]
+pub enum ProfilerAction {
+    /// Profile a SPARQL query with latency statistics
+    Run {
+        /// Dataset name or path
+        #[arg(short, long)]
+        dataset: String,
+        /// SPARQL query string or file path
+        #[arg(short, long)]
+        query: String,
+        /// Treat query as a file path
+        #[arg(long)]
+        file: bool,
+        /// Number of profiling iterations
+        #[arg(short, long, default_value = "10")]
+        iterations: usize,
+        /// Show optimization suggestions
+        #[arg(long)]
+        suggestions: bool,
+    },
+    /// Show optimization suggestions for a query
+    Suggest {
+        /// SPARQL query string or file path
+        #[arg(short, long)]
+        query: String,
+        /// Treat query as a file path
+        #[arg(long)]
+        file: bool,
+    },
+}
+
+/// Result cache management actions
+#[derive(Subcommand)]
+pub enum ResultCacheAction {
+    /// Show cache statistics
+    Stats,
+    /// Clear all cache entries
+    Clear,
+    /// Invalidate cache entries for a dataset
+    Invalidate {
+        /// Dataset name
+        #[arg(short, long)]
+        dataset: String,
+    },
+    /// Evict expired cache entries
+    Evict,
+    /// List cache entries
+    List {
+        /// Filter by dataset name
+        #[arg(short, long)]
+        dataset: Option<String>,
+    },
+    /// Configure cache settings
+    Config {
+        /// Maximum cache entries
+        #[arg(long)]
+        max_size: Option<usize>,
+        /// Default TTL in seconds
+        #[arg(long)]
+        ttl: Option<u64>,
+    },
+}
+
+/// Stream processing actions
+#[derive(Subcommand)]
+pub enum StreamAction {
+    /// Stream SPARQL query results
+    Query {
+        /// Dataset name or path
+        #[arg(short, long)]
+        dataset: String,
+        /// SPARQL query string or file path
+        #[arg(short, long)]
+        query: String,
+        /// Treat query as a file path
+        #[arg(long)]
+        file: bool,
+        /// Chunk size (rows per chunk)
+        #[arg(long, default_value = "1000")]
+        chunk_size: usize,
+        /// Output format (json, csv, tsv, table)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Maximum rows to stream
+        #[arg(long)]
+        max_rows: Option<usize>,
+        /// Disable progress indicator
+        #[arg(long)]
+        no_progress: bool,
+        /// Output file path (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}

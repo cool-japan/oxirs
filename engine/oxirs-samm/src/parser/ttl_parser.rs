@@ -882,7 +882,7 @@ mod tests {
         let result = parser.parse_string(ttl, "http://example.org").await;
 
         assert!(result.is_ok(), "Parse failed: {:?}", result.err());
-        let aspect = result.unwrap();
+        let aspect = result.expect("result should be Ok");
         assert_eq!(aspect.name(), "TestAspect");
         assert_eq!(
             aspect.metadata.get_preferred_name("en"),

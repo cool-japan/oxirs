@@ -364,7 +364,10 @@ impl MultiLevelFederation {
         }
 
         if results.len() == 1 {
-            return Ok(results.into_iter().next().unwrap());
+            return Ok(results
+                .into_iter()
+                .next()
+                .expect("iterator should have next element"));
         }
 
         // Merge logic - simplified for now
@@ -762,7 +765,9 @@ mod tests {
             auth_token: None,
         };
 
-        topology.add_node(node1).unwrap();
+        topology
+            .add_node(node1)
+            .expect("node addition should succeed");
         assert_eq!(topology.nodes.len(), 1);
 
         let node2 = FederationNode {
@@ -777,10 +782,12 @@ mod tests {
             auth_token: None,
         };
 
-        topology.add_node(node2).unwrap();
+        topology
+            .add_node(node2)
+            .expect("node addition should succeed");
         assert_eq!(topology.nodes.len(), 2);
 
-        let stats = topology.get_stats().unwrap();
+        let stats = topology.get_stats().expect("operation should succeed");
         assert_eq!(stats.total_nodes, 2);
         assert_eq!(stats.max_depth, 1);
     }
@@ -808,11 +815,16 @@ mod tests {
                 auth_token: None,
             };
 
-            topology.add_node(node).unwrap();
+            topology
+                .add_node(node)
+                .expect("node addition should succeed");
         }
 
         let optimizer = TopologyOptimizer::new();
-        let result = optimizer.optimize(&topology).await.unwrap();
+        let result = optimizer
+            .optimize(&topology)
+            .await
+            .expect("async operation should succeed");
 
         assert_eq!(result.current_stats.total_nodes, 3);
         assert!(result.estimated_improvement >= 0.0);

@@ -335,7 +335,7 @@ mod tests {
             submodel_elements: vec![],
         };
 
-        let aspect = convert_submodel_to_aspect(&submodel).unwrap();
+        let aspect = convert_submodel_to_aspect(&submodel).expect("conversion should succeed");
 
         assert_eq!(aspect.name(), "TestSubmodel");
         assert_eq!(
@@ -368,7 +368,7 @@ mod tests {
             })],
         };
 
-        let aspect = convert_submodel_to_aspect(&submodel).unwrap();
+        let aspect = convert_submodel_to_aspect(&submodel).expect("conversion should succeed");
 
         assert_eq!(aspect.properties().len(), 1);
         assert_eq!(aspect.properties()[0].name(), "temperature");

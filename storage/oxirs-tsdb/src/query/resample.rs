@@ -46,31 +46,31 @@ impl ResampleBucket {
                 let secs = ts.second() as i64;
                 let aligned_secs = (secs / *n as i64) * *n as i64;
                 ts.with_second(aligned_secs as u32)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .with_nanosecond(0)
-                    .unwrap()
+                    .expect("operation should succeed")
             }
             ResampleBucket::Minute(n) => {
                 let mins = ts.minute() as i64;
                 let aligned_mins = (mins / *n as i64) * *n as i64;
                 ts.with_minute(aligned_mins as u32)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .with_second(0)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .with_nanosecond(0)
-                    .unwrap()
+                    .expect("operation should succeed")
             }
             ResampleBucket::Hour(n) => {
                 let hours = ts.hour() as i64;
                 let aligned_hours = (hours / *n as i64) * *n as i64;
                 ts.with_hour(aligned_hours as u32)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .with_minute(0)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .with_second(0)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .with_nanosecond(0)
-                    .unwrap()
+                    .expect("operation should succeed")
             }
             ResampleBucket::Day(_) | ResampleBucket::Week(_) | ResampleBucket::Custom(_) => {
                 // For day/week/custom, use epoch-based alignment
@@ -253,14 +253,15 @@ mod tests {
     fn test_resample_minute_avg() {
         let start = Utc::now()
             .with_second(0)
-            .unwrap()
+            .expect("operation should succeed")
             .with_nanosecond(0)
-            .unwrap();
+            .expect("operation should succeed");
 
         // Create 120 points, 1 per second (2 minutes worth)
         let points = create_test_points(start, 120, 1);
 
-        let results = resample(&points, ResampleBucket::Minute(1), Aggregation::Avg).unwrap();
+        let results = resample(&points, ResampleBucket::Minute(1), Aggregation::Avg)
+            .expect("sampling should succeed");
 
         // Should get 2 buckets
         assert_eq!(results.len(), 2);
@@ -276,9 +277,9 @@ mod tests {
     fn test_resample_minute_sum() {
         let start = Utc::now()
             .with_second(0)
-            .unwrap()
+            .expect("operation should succeed")
             .with_nanosecond(0)
-            .unwrap();
+            .expect("operation should succeed");
 
         let points = vec![
             DataPoint {
@@ -295,7 +296,8 @@ mod tests {
             },
         ];
 
-        let results = resample(&points, ResampleBucket::Minute(1), Aggregation::Sum).unwrap();
+        let results = resample(&points, ResampleBucket::Minute(1), Aggregation::Sum)
+            .expect("sampling should succeed");
 
         assert_eq!(results.len(), 2);
         assert!((results[0].value - 30.0).abs() < 0.001); // 10 + 20
@@ -306,9 +308,9 @@ mod tests {
     fn test_resample_with_fill() {
         let start = Utc::now()
             .with_second(0)
-            .unwrap()
+            .expect("operation should succeed")
             .with_nanosecond(0)
-            .unwrap();
+            .expect("operation should succeed");
 
         // Create points with a gap
         let points = vec![
@@ -325,7 +327,7 @@ mod tests {
         let results = Resampler::new(ResampleBucket::Minute(1), Aggregation::Avg)
             .with_fill(FillMethod::Linear)
             .resample(&points)
-            .unwrap();
+            .expect("sampling should succeed");
 
         // Should have 4 points: 0, 1, 2, 3 minutes
         assert!(results.len() >= 3);
@@ -339,7 +341,7 @@ mod tests {
     #[test]
     fn test_bucket_alignment() {
         let ts = DateTime::parse_from_rfc3339("2024-01-15T10:23:45.123Z")
-            .unwrap()
+            .expect("valid timestamp")
             .to_utc();
 
         // Align to 5-minute boundary
@@ -361,13 +363,14 @@ mod tests {
     fn test_resample_count() {
         let start = Utc::now()
             .with_second(0)
-            .unwrap()
+            .expect("operation should succeed")
             .with_nanosecond(0)
-            .unwrap();
+            .expect("operation should succeed");
 
         let points = create_test_points(start, 150, 1);
 
-        let results = resample(&points, ResampleBucket::Minute(1), Aggregation::Count).unwrap();
+        let results = resample(&points, ResampleBucket::Minute(1), Aggregation::Count)
+            .expect("sampling should succeed");
 
         assert_eq!(results.len(), 3);
         assert!((results[0].value - 60.0).abs() < 0.001); // First minute: 60 points
@@ -379,9 +382,9 @@ mod tests {
     fn test_resample_min_max() {
         let start = Utc::now()
             .with_second(0)
-            .unwrap()
+            .expect("operation should succeed")
             .with_nanosecond(0)
-            .unwrap();
+            .expect("operation should succeed");
 
         let points = vec![
             DataPoint {
@@ -398,8 +401,10 @@ mod tests {
             },
         ];
 
-        let results_min = resample(&points, ResampleBucket::Minute(1), Aggregation::Min).unwrap();
-        let results_max = resample(&points, ResampleBucket::Minute(1), Aggregation::Max).unwrap();
+        let results_min = resample(&points, ResampleBucket::Minute(1), Aggregation::Min)
+            .expect("sampling should succeed");
+        let results_max = resample(&points, ResampleBucket::Minute(1), Aggregation::Max)
+            .expect("sampling should succeed");
 
         assert!((results_min[0].value - 10.0).abs() < 0.001);
         assert!((results_max[0].value - 50.0).abs() < 0.001);

@@ -194,10 +194,7 @@ mod tests {
 
         let result = processor.process_embeddings(texts, |chunk| {
             // Simulate embedding generation
-            Ok(chunk
-                .iter()
-                .map(|_| vec![1.0, 2.0, 3.0])
-                .collect())
+            Ok(chunk.iter().map(|_| vec![1.0, 2.0, 3.0]).collect())
         });
 
         assert!(result.is_ok());

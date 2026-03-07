@@ -53,12 +53,60 @@
 //!
 //! println!("Found {} matching resources", results.len());
 //! ```
+//!
+//! ## Cargo Features
+//!
+//! This crate follows the **COOLJAPAN Pure Rust Policy**: default features are 100% Pure Rust
+//! with no C/Fortran/CUDA dependencies. Optional features requiring system libraries are
+//! properly feature-gated.
+//!
+//! ### Core Features (Pure Rust)
+//!
+//! - `hnsw` - HNSW index support (default: disabled, Pure Rust)
+//! - `simd` - SIMD optimizations for vector operations (Pure Rust)
+//! - `parallel` - Parallel processing support (Pure Rust)
+//!
+//! ### Optional Features (with system dependencies)
+//!
+//! - `gpu` - GPU acceleration abstractions (Pure Rust, uses scirs2-core GPU backend)
+//! - `blas` - BLAS acceleration (requires system BLAS library)
+//! - `cuda` - CUDA GPU acceleration (requires NVIDIA CUDA Toolkit)
+//!   - When CUDA toolkit is installed: enables GPU-accelerated operations
+//!   - When CUDA toolkit is missing: gracefully falls back to CPU implementations
+//!   - Install CUDA from: <https://developer.nvidia.com/cuda-downloads>
+//! - `candle-gpu` - Candle GPU backend (Pure Rust)
+//! - `gpu-full` - All GPU features combined (`cuda` + `candle-gpu` + `gpu`)
+//!
+//! ### Content Processing
+//!
+//! - `images` - Image processing support
+//! - `content-processing` - Full content processing (PDF, archives, XML, images)
+//!
+//! ### Language Integration
+//!
+//! - `python` - Python bindings via PyO3
+//! - `huggingface` - HuggingFace Hub integration
+//!
+//! ### Default Build
+//!
+//! ```toml
+//! [dependencies]
+//! oxirs-vec = "0.1"  # 100% Pure Rust, no system dependencies
+//! ```
+//!
+//! ### GPU-Accelerated Build (requires CUDA toolkit)
+//!
+//! ```toml
+//! [dependencies]
+//! oxirs-vec = { version = "0.1", features = ["gpu-full"] }
+//! ```
 
 use anyhow::Result;
 use std::collections::HashMap;
 
 pub mod adaptive_compression;
 pub mod adaptive_intelligent_caching;
+pub mod adaptive_recall_tuner;
 pub mod advanced_analytics;
 pub mod advanced_benchmarking;
 pub mod advanced_caching;
@@ -75,8 +123,10 @@ pub mod content_processing;
 pub mod crash_recovery;
 pub mod cross_language_alignment;
 pub mod cross_modal_embeddings;
+pub mod delta_sync_store;
 pub mod diskann;
 pub mod distance_metrics;
+pub mod distributed;
 pub mod distributed_vector_search;
 pub mod dynamic_index_selector;
 pub mod embedding_pipeline;
@@ -87,15 +137,19 @@ pub mod faiss_gpu_integration;
 pub mod faiss_integration;
 pub mod faiss_migration_tools;
 pub mod faiss_native_integration;
+pub mod fault;
 pub mod federated_search;
 pub mod filtered_search;
 pub mod gnn_embeddings;
 pub mod gpu;
 pub mod gpu_benchmarks;
+pub mod gpu_hnsw_index;
+pub mod gpu_search_enhanced;
 pub mod graph_aware_search;
 pub mod graph_indices;
 pub mod hierarchical_similarity;
 pub mod hnsw;
+pub mod hnsw_persistence;
 pub mod huggingface;
 pub mod hybrid_fusion;
 pub mod hybrid_search;
@@ -116,7 +170,9 @@ pub mod performance_insights;
 pub mod persistence;
 pub mod personalized_search;
 pub mod pq;
+pub mod pq_index;
 pub mod pytorch;
+pub mod quantized_cache;
 pub mod quantum_search;
 pub mod query_planning;
 pub mod query_rewriter;
@@ -142,6 +198,53 @@ pub mod tree_indices;
 pub mod validation;
 pub mod wal;
 pub mod word2vec;
+// Flat IVF approximate nearest-neighbour index (v1.1.0 round 5)
+pub mod flat_ivf_index;
+
+// LSH approximate nearest-neighbour index (v1.1.0 round 6)
+pub mod lsh_index;
+
+// IVF-PQ compound approximate nearest-neighbour index (v1.1.0 round 7)
+pub mod ivfpq_index;
+
+// HNSW ANN graph construction (v1.1.0 round 8)
+pub mod hnsw_builder;
+
+// Multi-vector product search combining multiple embedding sub-vectors (v1.1.0 round 9)
+pub mod product_search;
+
+// Vector quantization for embedding compression (v1.1.0 round 10)
+pub mod quantizer;
+
+// Delta encoding for incremental vector updates (v1.1.0 round 11)
+pub mod delta_encoder;
+
+// Vector embedding similarity metrics and nearest-neighbour utilities (v1.1.0 round 12)
+pub mod embedding_similarity;
+
+// HNSW approximate nearest-neighbor search (v1.1.0 round 13)
+pub mod hnsw_search;
+
+// Vector embedding cache with LRU eviction (v1.1.0 round 12)
+pub mod vector_cache;
+
+// ANN recall/latency benchmarking (v1.1.0 round 11)
+pub mod ann_benchmark;
+
+/// K-means clustering index: Lloyd's algorithm, cluster assignment, centroid tracking,
+/// cluster statistics, merge, split, ANN search by cluster probing (v1.1.0 round 13)
+pub mod cluster_index;
+
+/// ANN vector index merging: flat-index merge with last-write-wins dedup,
+/// filter, split, and merge statistics (v1.1.0 round 14)
+pub mod index_merger;
+
+/// Approximate cardinality counting using HyperLogLog (v1.1.0 round 15)
+pub mod approximate_counter;
+
+/// Product quantization encoder/decoder: PqConfig, PqEncoder with encode/decode/
+/// asymmetric_distance and random codebook initialisation (v1.1.0 round 16)
+pub mod pq_encoder;
 
 // Python bindings module
 #[cfg(feature = "python")]
@@ -217,6 +320,35 @@ pub use diskann::{
     PruningStrategy, SearchMode as DiskAnnSearchMode, SearchStats as DiskAnnSearchStats,
     StorageBackend, VamanaGraph, VamanaNode, VectorId as DiskAnnVectorId,
 };
+pub use distributed::{
+    // Raft consensus
+    AppendEntriesRequest,
+    AppendEntriesResponse,
+    ClusterSimulator,
+    // Cross-DC replication
+    ConflictRecord,
+    ConflictResolutionStrategy,
+    CrossDcConfig,
+    CrossDcCoordinator,
+    CrossDcStats,
+    IndexCommand,
+    NodeId as RaftNodeId,
+    NodeRole,
+    PrimaryDcManager,
+    RaftConfig,
+    RaftIndexNode,
+    RaftStats,
+    ReplicaDcManager,
+    ReplicaStatus,
+    ReplicationEntry,
+    ReplicationHealth,
+    ReplicationOperation,
+    ReplicationSeq,
+    RequestVoteRequest,
+    RequestVoteResponse,
+    Term,
+    VectorEntry as RaftVectorEntry,
+};
 pub use distributed_vector_search::{
     ConsistencyLevel, DistributedClusterStats, DistributedNodeConfig, DistributedQuery,
     DistributedSearchResponse, DistributedVectorSearch, LoadBalancingAlgorithm, NodeHealthStatus,
@@ -251,13 +383,40 @@ pub use federated_search::{
 };
 pub use gnn_embeddings::{AggregatorType, GraphSAGE, GCN};
 pub use gpu::{
-    create_default_accelerator, create_memory_optimized_accelerator,
-    create_performance_accelerator, is_gpu_available, GpuAccelerator, GpuBuffer, GpuConfig,
-    GpuDevice, GpuExecutionConfig,
+    create_default_accelerator,
+    create_memory_optimized_accelerator,
+    create_performance_accelerator,
+    is_gpu_available,
+    GpuAccelerator,
+    // GPU HNSW index builder (v0.2.0)
+    GpuBatchDistanceComputer,
+    GpuBuffer,
+    GpuConfig,
+    GpuDevice,
+    // Multi-GPU load balancing (v0.2.0)
+    GpuDeviceMetrics,
+    GpuDistanceMetric,
+    GpuExecutionConfig,
+    GpuHnswIndexBuilder,
+    GpuIndexBuildStats,
+    GpuIndexBuilderConfig,
+    GpuTaskOutput,
+    GpuTaskResult,
+    HnswGraph,
+    HnswNode,
+    IncrementalGpuIndexBuilder,
+    LoadBalancingStrategy,
+    MultiGpuConfig,
+    MultiGpuConfigFactory,
+    MultiGpuManager,
+    MultiGpuStats,
+    MultiGpuTask,
+    TaskPriority,
 };
 pub use gpu_benchmarks::{
     BenchmarkResult as GpuBenchmarkResult, GpuBenchmarkConfig, GpuBenchmarkSuite,
 };
+pub use gpu_search_enhanced::{BatchSearchEngine, SearchMetrics, SimdVectorSearch};
 pub use graph_indices::{
     DelaunayGraph, GraphIndex, GraphIndexConfig, GraphType, NSWGraph, ONNGGraph, PANNGGraph,
     RNGGraph,
@@ -276,6 +435,11 @@ pub use hybrid_search::{
     Bm25Scorer, DocumentScore, HybridQuery, HybridResult, HybridSearchConfig, HybridSearchManager,
     KeywordAlgorithm, KeywordMatch, KeywordSearcher, QueryExpander, RankFusion, RankFusionStrategy,
     SearchMode, SearchWeights, TfidfScorer,
+};
+
+#[cfg(feature = "tantivy-search")]
+pub use hybrid_search::{
+    IndexStats, RdfDocument, TantivyConfig, TantivySearchResult, TantivySearcher,
 };
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use ivf::{IvfConfig, IvfIndex, IvfStats, QuantizationStrategy};
@@ -363,6 +527,9 @@ pub use sparql_integration::{
     SparqlVectorService, VectorOperation, VectorQuery, VectorQueryResult, VectorServiceArg,
     VectorServiceConfig, VectorServiceResult,
 };
+
+#[cfg(feature = "tantivy-search")]
+pub use sparql_integration::{RdfLiteral, SearchStats, SparqlSearchResult, SparqlTextFunctions};
 pub use sparql_service_endpoint::{
     AuthenticationInfo, AuthenticationType, CustomFunctionRegistry, FederatedOperation,
     FederatedSearchResult, FederatedServiceEndpoint, FederatedVectorQuery, FunctionMetadata,
@@ -940,7 +1107,7 @@ impl VectorIndex for MemoryVectorIndex {
             })
             .collect();
 
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         similarities.truncate(k);
 
         Ok(similarities)

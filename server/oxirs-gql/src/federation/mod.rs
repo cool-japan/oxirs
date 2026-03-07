@@ -18,8 +18,11 @@ pub mod automatic_composition;
 pub mod config;
 pub mod dataset_federation;
 pub mod distributed_tracing;
+pub mod enhanced_federation_planner;
 pub mod enhanced_manager;
+pub mod entity_cache;
 pub mod federated_subscriptions;
+pub mod federation_planner;
 pub mod manager;
 pub mod query_planner;
 pub mod real_time_sync;
@@ -31,12 +34,31 @@ pub use auth_propagation::*;
 pub use config::*;
 pub use dataset_federation::*;
 pub use distributed_tracing::*;
+pub use enhanced_federation_planner::{
+    BatchedSubPlan, EnhancedFederationPlan, EnhancedFederationPlanner, EnhancedPlannerConfig,
+    FederationSource, FieldRequest, SourceStats,
+};
 pub use enhanced_manager::*;
+pub use entity_cache::{
+    EntityBatch, EntityBatchLoader, EntityCache, EntityCacheKey, EntityCacheStats, ResolvedEntity,
+};
 pub use federated_subscriptions::*;
+pub use federation_planner::{
+    EntityResolver, FederationKey, FederationPlan, FederationPlannerConfig, FederationQueryPlanner,
+    FederationStep, SubGraph,
+};
 pub use manager::*;
 pub use query_planner::*;
-pub use real_time_sync::*;
-pub use schema_stitcher::*;
+pub use real_time_sync::{
+    ChangeDetection, ConflictResolution as SyncConflictResolution, ConflictType,
+    RealTimeSchemaSynchronizer, SchemaChangeEvent, SchemaChangeType, SchemaConflict, SchemaVersion,
+    SyncConfig, SyncHealth, SyncPriority, SyncStatus, VersionManagement,
+};
+pub use schema_stitcher::{
+    ConflictResolution as StitchConflictResolution, MergeDirective, MergeDirectiveSchemaStitcher,
+    SchemaFragment, SchemaStitcher, StitchConflict, StitchFieldDef, StitchTypeDefinition,
+    StitchedSchema,
+};
 pub use service_discovery::*;
 
 // Re-export from schema_validation to avoid conflicts with automatic_composition

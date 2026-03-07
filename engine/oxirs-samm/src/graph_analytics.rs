@@ -810,7 +810,7 @@ mod tests {
     #[test]
     fn test_graph_construction() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
         // 1 aspect + 3 properties + 3 characteristics = 7 nodes
         assert_eq!(graph.num_nodes(), 7);
@@ -822,7 +822,7 @@ mod tests {
     #[test]
     fn test_centrality_computation() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
         let centrality = graph.compute_centrality();
 
@@ -830,7 +830,7 @@ mod tests {
         assert_eq!(centrality.scores.len(), 7);
 
         // Get top node
-        let (top_node, score) = centrality.max_node().unwrap();
+        let (top_node, score) = centrality.max_node().expect("operation should succeed");
         // Just check that there is a top node with a positive score
         assert!(!top_node.is_empty());
         assert!(score > 0.0);
@@ -839,9 +839,11 @@ mod tests {
     #[test]
     fn test_community_detection() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
-        let communities = graph.detect_communities().unwrap();
+        let communities = graph
+            .detect_communities()
+            .expect("detection should succeed");
 
         // Should have at least 1 community
         assert!(!communities.is_empty());
@@ -854,9 +856,9 @@ mod tests {
     #[test]
     fn test_cycle_detection() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
-        let has_cycles = graph.has_cycles().unwrap();
+        let has_cycles = graph.has_cycles().expect("operation should succeed");
 
         // Simple tree structure should have no cycles
         assert!(!has_cycles);
@@ -865,9 +867,9 @@ mod tests {
     #[test]
     fn test_graph_metrics() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
-        let metrics = graph.compute_metrics().unwrap();
+        let metrics = graph.compute_metrics().expect("operation should succeed");
 
         assert_eq!(metrics.num_nodes, 7);
         assert_eq!(metrics.num_edges, 6);
@@ -878,13 +880,13 @@ mod tests {
     #[test]
     fn test_shortest_path() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
         // Path from aspect to property should exist
         let path = graph
             .shortest_path("TestAspect", "Property1")
-            .unwrap()
-            .unwrap();
+            .expect("operation should succeed")
+            .expect("operation should succeed");
 
         assert_eq!(path.len(), 2); // Direct edge
         assert_eq!(path[0], "TestAspect");
@@ -894,9 +896,11 @@ mod tests {
     #[test]
     fn test_strongly_connected_components() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
-        let sccs = graph.strongly_connected_components().unwrap();
+        let sccs = graph
+            .strongly_connected_components()
+            .expect("operation should succeed");
 
         // Tree structure should have each node as its own SCC
         assert_eq!(sccs.len(), 7);
@@ -905,10 +909,12 @@ mod tests {
     #[test]
     fn test_impact_analysis() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
         // Analyze impact of TestAspect node
-        let impact = graph.analyze_impact("TestAspect").unwrap();
+        let impact = graph
+            .analyze_impact("TestAspect")
+            .expect("analysis should succeed");
 
         assert_eq!(impact.source_node, "TestAspect");
         // Should have 3 direct dependents (the properties)
@@ -924,10 +930,12 @@ mod tests {
     #[test]
     fn test_impact_analysis_leaf_node() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
         // Analyze impact of a characteristic (leaf node)
-        let impact = graph.analyze_impact("Char1").unwrap();
+        let impact = graph
+            .analyze_impact("Char1")
+            .expect("analysis should succeed");
 
         assert_eq!(impact.source_node, "Char1");
         // Leaf node should have no dependents
@@ -942,9 +950,11 @@ mod tests {
     #[test]
     fn test_suggest_cycle_breaks_no_cycles() {
         let aspect = create_test_aspect();
-        let graph = ModelGraph::from_aspect(&aspect).unwrap();
+        let graph = ModelGraph::from_aspect(&aspect).expect("conversion should succeed");
 
-        let suggestions = graph.suggest_cycle_breaks().unwrap();
+        let suggestions = graph
+            .suggest_cycle_breaks()
+            .expect("operation should succeed");
 
         // No cycles in a tree structure
         assert!(suggestions.is_empty());
@@ -955,10 +965,10 @@ mod tests {
         let aspect1 = create_test_aspect();
         let aspect2 = create_test_aspect();
 
-        let graph1 = ModelGraph::from_aspect(&aspect1).unwrap();
-        let graph2 = ModelGraph::from_aspect(&aspect2).unwrap();
+        let graph1 = ModelGraph::from_aspect(&aspect1).expect("conversion should succeed");
+        let graph2 = ModelGraph::from_aspect(&aspect2).expect("conversion should succeed");
 
-        let comparison = graph1.compare(&graph2).unwrap();
+        let comparison = graph1.compare(&graph2).expect("comparison should succeed");
 
         // Identical graphs
         assert!(comparison.added_nodes.is_empty());
@@ -989,10 +999,10 @@ mod tests {
 
         aspect2.add_property(property);
 
-        let graph1 = ModelGraph::from_aspect(&aspect1).unwrap();
-        let graph2 = ModelGraph::from_aspect(&aspect2).unwrap();
+        let graph1 = ModelGraph::from_aspect(&aspect1).expect("conversion should succeed");
+        let graph2 = ModelGraph::from_aspect(&aspect2).expect("conversion should succeed");
 
-        let comparison = graph1.compare(&graph2).unwrap();
+        let comparison = graph1.compare(&graph2).expect("comparison should succeed");
 
         // Should have 2 added nodes (1 property + 1 characteristic)
         assert_eq!(comparison.added_nodes.len(), 2);

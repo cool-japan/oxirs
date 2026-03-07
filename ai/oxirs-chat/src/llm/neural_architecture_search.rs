@@ -433,15 +433,10 @@ impl ArchitectureSearch {
                         search.evaluated_architectures.push(result.clone());
 
                         // Update best result if improved
-                        if search.current_best.is_none()
-                            || result.evaluation_metrics.primary_metric
-                                > search
-                                    .current_best
-                                    .as_ref()
-                                    .unwrap()
-                                    .evaluation_metrics
-                                    .primary_metric
-                        {
+                        if search.current_best.as_ref().map_or(true, |best| {
+                            result.evaluation_metrics.primary_metric
+                                > best.evaluation_metrics.primary_metric
+                        }) {
                             search.current_best = Some(result);
                         }
                     }

@@ -8,19 +8,19 @@
 //! - Memory-safe operations
 //! - DDoS protection
 
-pub mod credentials;
-pub mod input_validation;
-pub mod rate_limiting;
 pub mod audit_log;
-pub mod memory_protection;
+pub mod credentials;
 pub mod encryption;
+pub mod input_validation;
+pub mod memory_protection;
+pub mod rate_limiting;
 
-pub use credentials::{CredentialManager, SecureCredential};
-pub use input_validation::{InputValidator, ValidationResult};
-pub use rate_limiting::{RateLimiter, RateLimitConfig};
 pub use audit_log::{AuditLogger, SecurityEvent};
-pub use memory_protection::{SecureMemory, MemoryGuard};
-pub use encryption::{Encryptor, EncryptionConfig};
+pub use credentials::{CredentialManager, SecureCredential};
+pub use encryption::{EncryptionConfig, Encryptor};
+pub use input_validation::{InputValidator, ValidationResult};
+pub use memory_protection::{MemoryGuard, SecureMemory};
+pub use rate_limiting::{RateLimitConfig, RateLimiter};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -101,10 +101,8 @@ pub struct SecurityManager {
 impl SecurityManager {
     pub fn new(config: SecurityConfig) -> Result<Self> {
         let credential_manager = CredentialManager::new(config.encrypt_credentials)?;
-        let input_validator = InputValidator::new(
-            config.max_input_size,
-            config.max_tokens_per_request,
-        );
+        let input_validator =
+            InputValidator::new(config.max_input_size, config.max_tokens_per_request);
         let rate_limiter = RateLimiter::new(RateLimitConfig {
             requests_per_minute: config.requests_per_minute,
             tokens_per_minute: config.tokens_per_minute,
@@ -131,11 +129,12 @@ impl SecurityManager {
         }
 
         // Log validation attempt
-        self.audit_logger.log_event(SecurityEvent::InputValidation {
-            user_id: user_id.to_string(),
-            input_length: input.len(),
-            timestamp: chrono::Utc::now(),
-        })?;
+        self.audit_logger
+            .log_event(SecurityEvent::InputValidation {
+                user_id: user_id.to_string(),
+                input_length: input.len(),
+                timestamp: chrono::Utc::now(),
+            })?;
 
         self.input_validator.validate(input)
     }
@@ -149,10 +148,11 @@ impl SecurityManager {
         let allowed = self.rate_limiter.check_limit(user_id, tokens)?;
 
         if !allowed {
-            self.audit_logger.log_event(SecurityEvent::RateLimitExceeded {
-                user_id: user_id.to_string(),
-                timestamp: chrono::Utc::now(),
-            })?;
+            self.audit_logger
+                .log_event(SecurityEvent::RateLimitExceeded {
+                    user_id: user_id.to_string(),
+                    timestamp: chrono::Utc::now(),
+                })?;
         }
 
         Ok(allowed)
@@ -160,10 +160,11 @@ impl SecurityManager {
 
     /// Store credential securely
     pub fn store_credential(&mut self, provider: &str, api_key: &str) -> Result<()> {
-        self.audit_logger.log_event(SecurityEvent::CredentialStored {
-            provider: provider.to_string(),
-            timestamp: chrono::Utc::now(),
-        })?;
+        self.audit_logger
+            .log_event(SecurityEvent::CredentialStored {
+                provider: provider.to_string(),
+                timestamp: chrono::Utc::now(),
+            })?;
 
         self.credential_manager.store(provider, api_key)
     }
@@ -215,7 +216,10 @@ impl SecurityManager {
     }
 
     /// Get audit log for security analysis
-    pub fn get_audit_events(&self, start_time: chrono::DateTime<chrono::Utc>) -> Result<Vec<SecurityEvent>> {
+    pub fn get_audit_events(
+        &self,
+        start_time: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<SecurityEvent>> {
         self.audit_logger.get_events_since(start_time)
     }
 }
@@ -264,8 +268,10 @@ mod tests {
 
     #[test]
     fn test_ip_whitelist() {
-        let mut config = SecurityConfig::default();
-        config.ip_whitelist = vec!["127.0.0.1".to_string()];
+        let config = SecurityConfig {
+            ip_whitelist: vec!["127.0.0.1".to_string()],
+            ..SecurityConfig::default()
+        };
         let manager = SecurityManager::new(config).unwrap();
 
         // Whitelisted IP should be allowed
@@ -277,8 +283,10 @@ mod tests {
 
     #[test]
     fn test_ip_blacklist() {
-        let mut config = SecurityConfig::default();
-        config.ip_blacklist = vec!["10.0.0.1".to_string()];
+        let config = SecurityConfig {
+            ip_blacklist: vec!["10.0.0.1".to_string()],
+            ..SecurityConfig::default()
+        };
         let manager = SecurityManager::new(config).unwrap();
 
         // Blacklisted IP should be blocked

@@ -327,7 +327,7 @@ impl SimdJoinProcessor {
 
         // Convert to contiguous array if needed
         let keys_vec: Vec<f64> = if keys.as_slice().is_some() {
-            keys.as_slice().unwrap().to_vec()
+            keys.as_slice().expect("operation should succeed").to_vec()
         } else {
             keys.iter().copied().collect()
         };

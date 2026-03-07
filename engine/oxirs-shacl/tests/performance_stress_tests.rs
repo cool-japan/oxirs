@@ -314,10 +314,15 @@ fn test_performance_regression_benchmark() {
     }
     let duration = start_time.elapsed();
 
-    // Performance target: should validate 100 nodes in under 1 second
+    // Performance target: should validate 100 nodes in under 1 second (release)
+    // Debug builds are significantly slower due to lack of optimizations
+    #[cfg(debug_assertions)]
+    let threshold = Duration::from_secs(30);
+    #[cfg(not(debug_assertions))]
+    let threshold = Duration::from_secs(1);
     assert!(
-        duration < Duration::from_secs(1),
-        "Performance regression detected: {duration:?} (target: <1s)"
+        duration < threshold,
+        "Performance regression detected: {duration:?} (target: <{threshold:?})"
     );
 
     println!("Performance benchmark: Validated 100 nodes in {duration:?}");
@@ -463,12 +468,17 @@ fn test_rapid_validation_cycles() {
     let duration = start_time.elapsed();
 
     // Should handle rapid cycles for real-time validation
-    // Timeout increased to 15s to account for system load variability and CI environments
+    // Debug builds are significantly slower due to lack of optimizations
+    #[cfg(debug_assertions)]
+    let threshold = Duration::from_secs(150);
+    #[cfg(not(debug_assertions))]
+    let threshold = Duration::from_secs(15);
     assert!(
-        duration < Duration::from_secs(15),
-        "Rapid validation cycles took too long: {:?} (avg: {:?} per validation)",
+        duration < threshold,
+        "Rapid validation cycles took too long: {:?} (avg: {:?} per validation, target: <{:?})",
         duration,
-        duration / 5000
+        duration / 5000,
+        threshold
     );
 
     let avg_per_validation = duration.as_nanos() / 5000;

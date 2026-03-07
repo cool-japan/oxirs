@@ -1,13 +1,13 @@
 # OxiRS-Star ⭐
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 [![Tests](https://img.shields.io/badge/tests-292%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
 
-**Status**: Production Release (v0.1.0) - Feature Complete - January 7, 2026
+**Status**: Production Release (v0.2.0) - Feature Complete - March 5, 2026
 
-✅ **Production Ready**: All v0.1.0 features complete with 292 passing tests. Enterprise-ready RDF-star capabilities with comprehensive tooling for compliance, migration, distributed processing, and analysis.
+✅ **Production Ready**: All v0.2.0 features complete with 292 passing tests. Enterprise-ready RDF-star capabilities with comprehensive tooling for compliance, migration, distributed processing, and analysis.
 
 **RDF-star and SPARQL-star implementation providing support for quoted triples, reification, and advanced semantic metadata processing.**
 
@@ -88,7 +88,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-star = "0.1.0"
+oxirs-star = "0.2.0"
 ```
 
 ### Basic Usage
@@ -232,7 +232,7 @@ cargo nextest run --features "reification,sparql-star" --no-fail-fast
 
 ## Roadmap
 
-### v0.1.0 (Current - Feature Complete ✅)
+### v0.2.0 (Current - Feature Complete ✅)
 All core features implemented and tested (292/292 tests passing):
 - ✅ Complete RDF-star specification compliance
 - ✅ All serialization formats (Turtle-star, N-Triples-star, TriG-star, N-Quads-star, JSON-LD-star)
@@ -260,7 +260,7 @@ See [TODO.md](TODO.md) for development roadmap. Current focus areas:
 4. **Cloud integrations** - Kubernetes operators and cloud deployment templates
 5. **Machine learning** - Pattern detection and automated optimization
 
-For v0.1.0 final release, we're preparing:
+For v0.2.0 final release, we're preparing:
 - Performance benchmarking validation
 - Documentation updates
 - Release notes preparation

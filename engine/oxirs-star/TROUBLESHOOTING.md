@@ -1,7 +1,7 @@
 # OxiRS-Star Troubleshooting Guide
 
 [![Documentation](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **Comprehensive troubleshooting guide for OxiRS-Star RDF-star implementation with solutions for common issues and performance optimization tips.**
 
@@ -162,11 +162,11 @@ export PKG_CONFIG_PATH="/usr/local/opt/openssl/lib/pkgconfig"
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-star = { version = "0.1", features = ["full"] }
+oxirs-star = { version = "0.2", features = ["full"] }
 
 # Or specific features
 oxirs-star = { 
-    version = "0.1", 
+    version = "0.2", 
     features = ["turtle-star", "sparql-star", "reification"] 
 }
 ```

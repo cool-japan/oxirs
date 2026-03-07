@@ -132,7 +132,14 @@ impl PatternBasedGenerator {
             // Try to infer character class pattern
             let mut pattern = String::from("^");
             for i in 0..first_len {
-                let chars: Vec<char> = sample.iter().map(|s| s.chars().nth(i).unwrap()).collect();
+                let chars: Vec<char> = sample
+                    .iter()
+                    .map(|s| {
+                        s.chars()
+                            .nth(i)
+                            .expect("char at position i should exist for same-length strings")
+                    })
+                    .collect();
 
                 if chars.iter().all(|c| c.is_ascii_digit()) {
                     pattern.push_str(r"\d");

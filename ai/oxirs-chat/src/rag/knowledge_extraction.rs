@@ -604,8 +604,14 @@ impl KnowledgeExtractionEngine {
             for pattern in patterns {
                 if let Some(captures) = pattern.captures(text) {
                     if captures.len() >= 3 {
-                        let subject = captures.get(1).unwrap().as_str();
-                        let object = captures.get(2).unwrap().as_str();
+                        let subject = captures
+                            .get(1)
+                            .expect("capture group 1 should exist")
+                            .as_str();
+                        let object = captures
+                            .get(2)
+                            .expect("capture group 2 should exist")
+                            .as_str();
 
                         // Find matching entities
                         let subject_entity = self.find_matching_entity(subject, entities);
@@ -619,11 +625,21 @@ impl KnowledgeExtractionEngine {
                                 object_entity: obj.entity_id.clone(),
                                 relationship_type: relationship_type.clone(),
                                 confidence: 0.8,
-                                evidence_text: captures.get(0).unwrap().as_str().to_string(),
+                                evidence_text: captures
+                                    .get(0)
+                                    .expect("capture group 0 should exist")
+                                    .as_str()
+                                    .to_string(),
                                 temporal_context: None,
                                 source_position: TextPosition {
-                                    start_offset: captures.get(0).unwrap().start(),
-                                    end_offset: captures.get(0).unwrap().end(),
+                                    start_offset: captures
+                                        .get(0)
+                                        .expect("capture group 0 should exist")
+                                        .start(),
+                                    end_offset: captures
+                                        .get(0)
+                                        .expect("capture group 0 should exist")
+                                        .end(),
                                     line_number: 1,   // Simplified
                                     column_number: 1, // Simplified
                                 },

@@ -20,7 +20,7 @@ pub struct ExecutionContext {
     /// Parallel execution configuration
     pub parallel_config: ParallelConfig,
     /// Streaming configuration
-    pub streaming: StreamingConfig,
+    pub streaming: StreamingResultConfig,
     /// Statistics collection
     pub collect_stats: bool,
     /// Query complexity threshold for parallel execution
@@ -63,9 +63,9 @@ pub struct ThreadPoolConfig {
     pub thread_affinity: bool,
 }
 
-/// Streaming configuration
+/// Streaming result configuration
 #[derive(Debug, Clone)]
-pub struct StreamingConfig {
+pub struct StreamingResultConfig {
     /// Buffer size for streaming results
     pub buffer_size: usize,
     /// Batch size for result processing
@@ -92,7 +92,7 @@ impl Default for ExecutionContext {
             memory_limit: Some(1024 * 1024 * 1024),  // 1GB default limit
             parallel: true,
             parallel_config: ParallelConfig::default(),
-            streaming: StreamingConfig::default(),
+            streaming: StreamingResultConfig::default(),
             collect_stats: false,
             parallel_threshold: 1000,
             enable_caching: true,
@@ -136,7 +136,7 @@ impl Default for ThreadPoolConfig {
     }
 }
 
-impl Default for StreamingConfig {
+impl Default for StreamingResultConfig {
     fn default() -> Self {
         Self {
             buffer_size: 10000,

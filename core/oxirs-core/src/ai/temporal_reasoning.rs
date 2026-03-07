@@ -822,7 +822,11 @@ impl TemporalReasoner {
         }
 
         // Sort by confidence (descending)
-        facts.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        facts.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(facts)
     }
@@ -925,7 +929,7 @@ impl TemporalConstraintSolver for DefaultConstraintSolver {
 pub fn current_timestamp() -> Timestamp {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .expect("SystemTime should be after UNIX_EPOCH")
         .as_secs()
 }
 

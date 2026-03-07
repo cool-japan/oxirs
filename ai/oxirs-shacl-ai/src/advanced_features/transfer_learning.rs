@@ -500,10 +500,18 @@ impl DomainAdapter {
         // Compute MMD (Maximum Mean Discrepancy) between domains
         let source_mean = source_features
             .mean_axis(scirs2_core::ndarray_ext::Axis(0))
-            .unwrap();
+            .ok_or_else(|| {
+                ShaclAiError::ProcessingError(
+                    "Cannot compute mean of empty source features array".to_string(),
+                )
+            })?;
         let target_mean = target_features
             .mean_axis(scirs2_core::ndarray_ext::Axis(0))
-            .unwrap();
+            .ok_or_else(|| {
+                ShaclAiError::ProcessingError(
+                    "Cannot compute mean of empty target features array".to_string(),
+                )
+            })?;
 
         let diff = &source_mean - &target_mean;
         let discrepancy = diff.iter().map(|x| x * x).sum::<f64>().sqrt();

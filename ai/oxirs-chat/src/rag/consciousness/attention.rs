@@ -105,7 +105,11 @@ impl AttentionMechanism {
         }
 
         // Limit and sort by weight
-        targets.sort_by(|a, b| b.base_weight.partial_cmp(&a.base_weight).unwrap());
+        targets.sort_by(|a, b| {
+            b.base_weight
+                .partial_cmp(&a.base_weight)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         targets.truncate(self.max_attention_points);
 
         Ok(targets)

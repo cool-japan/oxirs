@@ -183,8 +183,13 @@ fn validate_source(config: &MigrationConfig) -> ToolResult {
                 return Err("Host and port required for Virtuoso migration".into());
             }
 
-            let host = config.source_host.as_ref().unwrap();
-            let port = config.source_port.unwrap();
+            let host = config
+                .source_host
+                .as_ref()
+                .expect("host should be present after None check");
+            let port = config
+                .source_port
+                .expect("port should be present after None check");
 
             println!("  ✓ Source: {}:{}", host, port);
         }
@@ -194,7 +199,10 @@ fn validate_source(config: &MigrationConfig) -> ToolResult {
                 return Err("Repository name required for RDF4J migration".into());
             }
 
-            let repo = config.source_repository.as_ref().unwrap();
+            let repo = config
+                .source_repository
+                .as_ref()
+                .expect("repository should be present after None check");
             println!("  ✓ Repository: {}", repo);
         }
     }
@@ -208,7 +216,10 @@ async fn migrate_from_jena_tdb1(config: &MigrationConfig) -> ToolResult<Migratio
 
     println!("\n=== Migrating from Jena TDB1 ===\n");
 
-    let source_path = config.source_path.as_ref().unwrap();
+    let source_path = config
+        .source_path
+        .as_ref()
+        .expect("source_path should be set for TDB1 migration");
 
     // Step 1: Read TDB indexes
     println!("Step 1: Reading TDB1 indexes...");
@@ -241,7 +252,10 @@ async fn migrate_from_jena_tdb2(config: &MigrationConfig) -> ToolResult<Migratio
 
     println!("\n=== Migrating from Jena TDB2 ===\n");
 
-    let source_path = config.source_path.as_ref().unwrap();
+    let source_path = config
+        .source_path
+        .as_ref()
+        .expect("source_path should be set for TDB2 migration");
 
     // TDB2 has different file structure
     println!("Step 1: Reading TDB2 data...");
@@ -265,8 +279,13 @@ async fn migrate_from_virtuoso(config: &MigrationConfig) -> ToolResult<Migration
 
     println!("\n=== Migrating from Virtuoso ===\n");
 
-    let host = config.source_host.as_ref().unwrap();
-    let port = config.source_port.unwrap();
+    let host = config
+        .source_host
+        .as_ref()
+        .expect("host should be set for Virtuoso migration");
+    let port = config
+        .source_port
+        .expect("port should be set for Virtuoso migration");
 
     // Step 1: Connect to Virtuoso
     println!("Step 1: Connecting to Virtuoso at {}:{}...", host, port);
@@ -304,7 +323,10 @@ async fn migrate_from_rdf4j(config: &MigrationConfig) -> ToolResult<MigrationSta
 
     println!("\n=== Migrating from RDF4J ===\n");
 
-    let repository = config.source_repository.as_ref().unwrap();
+    let repository = config
+        .source_repository
+        .as_ref()
+        .expect("repository should be set for RDF4J migration");
 
     // Step 1: Open RDF4J repository
     println!("Step 1: Opening RDF4J repository '{}'...", repository);

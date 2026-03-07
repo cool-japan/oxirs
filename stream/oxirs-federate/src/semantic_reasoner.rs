@@ -628,7 +628,10 @@ impl UnionFind {
             self.parent.insert(root_y, root_x);
         } else {
             self.parent.insert(root_y, root_x.clone());
-            *self.rank.get_mut(&root_x).unwrap() += 1;
+            *self
+                .rank
+                .get_mut(&root_x)
+                .expect("insertion should succeed") += 1;
         }
     }
 
@@ -663,7 +666,9 @@ mod tests {
 
         reasoner.add_subclass("Dog", "Animal");
         reasoner.add_subclass("Animal", "LivingThing");
-        reasoner.compute_class_closure().unwrap();
+        reasoner
+            .compute_class_closure()
+            .expect("reasoning should succeed");
 
         assert!(reasoner.is_subclass_of("Dog", "Animal"));
         assert!(reasoner.is_subclass_of("Dog", "LivingThing"));

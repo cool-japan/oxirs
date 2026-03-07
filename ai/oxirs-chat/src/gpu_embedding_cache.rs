@@ -327,7 +327,7 @@ impl GpuEmbeddingCache {
 
         // Get top-k results
         let mut results: Vec<(String, f32)> = similarities.into_iter().collect();
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(top_k);
 
         // Update access statistics

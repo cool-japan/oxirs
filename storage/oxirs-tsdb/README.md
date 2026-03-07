@@ -2,13 +2,13 @@
 
 [![Crates.io](https://img.shields.io/crates/v/oxirs-tsdb.svg)](https://crates.io/crates/oxirs-tsdb)
 [![docs.rs](https://docs.rs/oxirs-tsdb/badge.svg)](https://docs.rs/oxirs-tsdb)
-[![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 Time-series optimizations for the OxiRS semantic web platform.
 
 ## Status
 
-✅ **Production Ready** (v0.1.0) - Phase D: Industrial Connectivity Complete
+✅ **Production Ready** (v0.2.0) - Phase D: Industrial Connectivity Complete
 
 ## Overview
 
@@ -36,7 +36,7 @@ Time-series optimizations for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-tsdb = "0.1.0"
+oxirs-tsdb = "0.2.0"
 ```
 
 ### Basic Usage
@@ -233,4 +233,4 @@ See `/tmp/oxirs_cli_phase_d_guide.md` for complete CLI documentation.
 
 ## License
 
-Dual-licensed under MIT or Apache-2.0.
+Licensed under Apache-2.0.

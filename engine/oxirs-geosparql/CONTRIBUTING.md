@@ -160,7 +160,7 @@ let geom = Geometry::from_wkt(wkt); // Fails here
 **Environment:**
 - OS: Ubuntu 22.04
 - Rust: 1.75.0
-- oxirs-geosparql: 0.1.0
+- oxirs-geosparql: 0.2.0
 - Features: `all-features`
 ```
 
@@ -624,7 +624,7 @@ Contributors are recognized in:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the same license as the project (Apache 2.0 or MIT).
+By contributing, you agree that your contributions will be licensed under the same license as the project (Apache-2.0).
 
 ---
 

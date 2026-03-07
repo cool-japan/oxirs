@@ -191,13 +191,18 @@ pub mod dataset;
 pub mod graph;
 pub mod iri;
 pub mod literal;
+pub mod namespace_registry; // CURIE prefix ↔ IRI namespace registry (v1.2.0)
 pub mod node;
 pub mod optimized_terms; // Oxigraph-inspired performance optimizations
 pub mod pattern;
+pub mod property_path_evaluator;
 pub mod quad;
+pub mod sparql_binding_set;
+pub mod sparql_optimizer; // SPARQL query plan optimizer with rewrite passes (v1.1.0)
 pub mod star;
 pub mod term;
 pub mod triple;
+pub mod triple_term; // SPARQL binding set algebra: MINUS, EXISTS, JOIN, PROJECT (v1.2.0)
 
 // Re-export core types
 pub use dataset::*;

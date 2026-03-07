@@ -1,6 +1,6 @@
 # OxiRS TTL - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.0 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -49,19 +49,24 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
 | TriG | 250K triples/s | 180K triples/s |
 | N-Quads | 450K triples/s | 350K triples/s |
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.0 - Enhanced Parsing (Q1 2026 - Expanded)
-- [ ] Additional N3 built-in predicates
-- [ ] Enhanced error recovery strategies
-- [ ] Performance optimizations for edge cases
-- [ ] Extended format detection heuristics
-- [ ] N3 backward chaining inference
-- [ ] Enhanced N3 reasoning capabilities
-- [ ] Additional serialization optimizations
-- [ ] Extended format conversion options
+### v0.1.0 - Released (January 7, 2026)
+- ✅ Full Turtle/N-Triples/N-Quads/TriG/N3 parsing and serialization
+- ✅ RDF 1.2 support, streaming, async I/O, parallel processing
+- ✅ 672 tests passing
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.0 - Current Release (March 5, 2026)
+- ✅ Additional N3 built-in predicates
+- ✅ Enhanced error recovery strategies
+- ✅ Performance optimizations for edge cases
+- ✅ Extended format detection heuristics
+- ✅ N3 backward chaining inference
+- ✅ Enhanced N3 reasoning capabilities
+- ✅ Additional serialization optimizations
+- ✅ Extended format conversion options
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Full W3C compliance certification
 - [ ] Long-term support guarantees
 - [ ] Enterprise features
@@ -73,4 +78,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TTL v0.1.0 - Streaming RDF parser and serializer*
+*OxiRS TTL v0.2.0 - Streaming RDF parser and serializer*

@@ -18,7 +18,7 @@
 //!  SG_ EngineSpeed : 0|16@1+ (0.125,0) [0|8031.875] "rpm" Dashboard
 //! "#;
 //!
-//! let db = parse_dbc(dbc_content).unwrap();
+//! let db = parse_dbc(dbc_content).expect("DBC parsing should succeed");
 //! let decoder = SignalDecoder::new(&db);
 //!
 //! // Decode a CAN frame
@@ -27,8 +27,15 @@
 //! println!("Engine Speed: {:?} rpm", values["EngineSpeed"]);
 //! ```
 
+pub mod enhanced;
 pub mod parser;
 pub mod signal;
+
+// Re-export enhanced DBC types
+pub use enhanced::{
+    parse_enhanced_dbc, EnhancedDbcDatabase, EnhancedDbcParser, EnvVar, EnvVarType, SgMulValEntry,
+    SgMulValRange,
+};
 
 // Re-export parser types
 pub use parser::{

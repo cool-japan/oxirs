@@ -131,7 +131,7 @@ impl WalArchiver {
         // Generate archive file name
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         let archive_name = if self.config.compress_archives {
@@ -634,7 +634,7 @@ mod tests {
         let mut config = WalArchiveConfig::default();
         config.archive_dir = archive_dir.clone();
         config.enable_archiving = true;
-        config.retention_period = Duration::from_secs(1); // Very short retention for testing
+        config.retention_period = Duration::from_millis(100); // Very short retention for testing
 
         let archiver = WalArchiver::new(config).unwrap();
 
@@ -644,8 +644,8 @@ mod tests {
 
         assert_eq!(archiver.list_archives().len(), 1);
 
-        // Wait for retention period to pass
-        std::thread::sleep(Duration::from_secs(2));
+        // Wait for retention period to pass (100ms retention + 100ms buffer)
+        std::thread::sleep(Duration::from_millis(200));
 
         // Cleanup old archives
         let deleted = archiver.cleanup_old_archives().unwrap();

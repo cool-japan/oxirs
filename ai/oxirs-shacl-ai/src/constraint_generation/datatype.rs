@@ -132,7 +132,8 @@ impl DatatypeAnalyzer {
         }
 
         // Check for date patterns (simplified)
-        let date_pattern = regex::Regex::new(r"^\d{4}-\d{2}-\d{2}").unwrap();
+        let date_pattern =
+            regex::Regex::new(r"^\d{4}-\d{2}-\d{2}").expect("date regex pattern should be valid");
         let date_count = values.iter().filter(|v| date_pattern.is_match(v)).count();
         if date_count as f64 / values.len() as f64 > 0.9 {
             return Some("http://www.w3.org/2001/XMLSchema#date".to_string());

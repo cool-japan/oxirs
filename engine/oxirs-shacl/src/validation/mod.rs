@@ -27,7 +27,11 @@ pub mod streaming;
 pub mod utils;
 
 #[cfg(test)]
+pub mod sparql_af_tests;
+#[cfg(test)]
 pub mod tests;
+#[cfg(test)]
+pub mod tests_advanced;
 
 // Re-export main types
 #[cfg(feature = "async")]
@@ -82,6 +86,8 @@ pub enum ConstraintEvaluationResult {
         violating_value: Option<Term>,
         message: Option<String>,
     },
+    /// Constraint evaluation failed due to an error
+    Error { message: String },
 }
 
 impl ConstraintEvaluationResult {
@@ -103,6 +109,11 @@ impl ConstraintEvaluationResult {
         }
     }
 
+    /// Create an error result
+    pub fn error(message: String) -> Self {
+        ConstraintEvaluationResult::Error { message }
+    }
+
     /// Check if the result is satisfied (including satisfied with note)
     pub fn is_satisfied(&self) -> bool {
         matches!(
@@ -117,23 +128,26 @@ impl ConstraintEvaluationResult {
         matches!(self, ConstraintEvaluationResult::Violated { .. })
     }
 
+    /// Check if the result is an error
+    pub fn is_error(&self) -> bool {
+        matches!(self, ConstraintEvaluationResult::Error { .. })
+    }
+
     /// Get the violating value if any
     pub fn violating_value(&self) -> Option<&Term> {
         match self {
-            ConstraintEvaluationResult::Satisfied => None,
-            ConstraintEvaluationResult::SatisfiedWithNote { .. } => None,
             ConstraintEvaluationResult::Violated {
                 violating_value, ..
             } => violating_value.as_ref(),
+            _ => None,
         }
     }
 
     /// Get the violation message if any
     pub fn message(&self) -> Option<&str> {
         match self {
-            ConstraintEvaluationResult::Satisfied => None,
-            ConstraintEvaluationResult::SatisfiedWithNote { .. } => None,
             ConstraintEvaluationResult::Violated { message, .. } => message.as_deref(),
+            _ => None,
         }
     }
 

@@ -286,9 +286,12 @@ pub async fn handle_saml_acs(
                 .unwrap_or_else(|| "/".to_string());
 
             let mut response = Redirect::temporary(&redirect_url).into_response();
-            response
-                .headers_mut()
-                .insert(SET_COOKIE, cookie_value.parse().unwrap());
+            response.headers_mut().insert(
+                SET_COOKIE,
+                cookie_value
+                    .parse()
+                    .expect("cookie value should be valid header"),
+            );
 
             Ok(response)
         }

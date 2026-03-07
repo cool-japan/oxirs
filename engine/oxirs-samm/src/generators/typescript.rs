@@ -281,7 +281,11 @@ fn to_camel_case(s: &str) -> String {
     }
 
     let mut chars = pascal.chars();
-    let first = chars.next().unwrap().to_lowercase().to_string();
+    let first = chars
+        .next()
+        .expect("iterator should have next element")
+        .to_lowercase()
+        .to_string();
     format!("{}{}", first, chars.as_str())
 }
 

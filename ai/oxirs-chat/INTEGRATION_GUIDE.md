@@ -488,4 +488,4 @@ cargo bench --bench comprehensive_benchmarks
 
 ## License
 
-Licensed under Apache 2.0 or MIT license.
+Licensed under the Apache-2.0 License.

@@ -523,8 +523,12 @@ impl VectorAnalyticsEngine {
             metrics.p50_latency = sorted_latencies[len / 2];
             metrics.p95_latency = sorted_latencies[(len as f64 * 0.95) as usize];
             metrics.p99_latency = sorted_latencies[(len as f64 * 0.99) as usize];
-            metrics.max_latency = *sorted_latencies.last().unwrap();
-            metrics.min_latency = *sorted_latencies.first().unwrap();
+            metrics.max_latency = *sorted_latencies
+                .last()
+                .expect("sorted_latencies validated to be non-empty");
+            metrics.min_latency = *sorted_latencies
+                .first()
+                .expect("collection validated to be non-empty");
 
             let total_duration: Duration = latencies.iter().sum();
             metrics.average_latency = total_duration / len as u32;

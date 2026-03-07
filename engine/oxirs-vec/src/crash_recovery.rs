@@ -215,7 +215,10 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
 
     /// Apply a WAL entry to the index
     fn apply_entry(&self, entry: &WalEntry) -> Result<()> {
-        let mut index = self.index.write().unwrap();
+        let mut index = self
+            .index
+            .write()
+            .expect("index lock should not be poisoned");
 
         match entry {
             WalEntry::Insert {
@@ -265,7 +268,7 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
         // Write to WAL first
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         let entry = WalEntry::Insert {
@@ -278,7 +281,10 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
         self.wal.append(entry)?;
 
         // Apply to index
-        let mut index = self.index.write().unwrap();
+        let mut index = self
+            .index
+            .write()
+            .expect("index lock should not be poisoned");
         index.add_vector(id, vector, metadata)?;
 
         // Check if we need to checkpoint
@@ -296,7 +302,7 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
     ) -> Result<()> {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         let entry = WalEntry::Update {
@@ -308,7 +314,10 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
 
         self.wal.append(entry)?;
 
-        let mut index = self.index.write().unwrap();
+        let mut index = self
+            .index
+            .write()
+            .expect("index lock should not be poisoned");
         index.update_vector(id.clone(), vector)?;
         if let Some(meta) = metadata {
             index.update_metadata(id, meta)?;
@@ -323,7 +332,7 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
     pub fn delete(&self, id: String) -> Result<()> {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         let entry = WalEntry::Delete {
@@ -333,7 +342,10 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
 
         self.wal.append(entry)?;
 
-        let mut index = self.index.write().unwrap();
+        let mut index = self
+            .index
+            .write()
+            .expect("index lock should not be poisoned");
         index.remove_vector(id)?;
 
         self.maybe_checkpoint()?;
@@ -347,7 +359,10 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
             return Ok(());
         }
 
-        let mut count = self.operation_count.write().unwrap();
+        let mut count = self
+            .operation_count
+            .write()
+            .expect("operation_count lock should not be poisoned");
         *count += 1;
 
         if *count >= self.config.checkpoint_interval {
@@ -363,7 +378,10 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
     pub fn checkpoint(&self) -> Result<()> {
         info!("Manual checkpoint");
         self.wal.checkpoint(self.wal.current_sequence())?;
-        let mut count = self.operation_count.write().unwrap();
+        let mut count = self
+            .operation_count
+            .write()
+            .expect("operation_count lock should not be poisoned");
         *count = 0;
         Ok(())
     }
@@ -380,7 +398,10 @@ impl<I: VectorIndex> CrashRecoveryManager<I> {
 
     /// Get recovery statistics
     pub fn get_stats(&self) -> (u64, u64) {
-        let count = *self.operation_count.read().unwrap();
+        let count = *self
+            .operation_count
+            .read()
+            .expect("operation_count read lock should not be poisoned");
         let seq = self.wal.current_sequence();
         (count, seq)
     }

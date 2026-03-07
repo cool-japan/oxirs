@@ -404,7 +404,10 @@ impl AsyncValidationEngine {
                 let semaphore = Arc::clone(&self.concurrency_limiter);
 
                 async move {
-                    let _permit = semaphore.acquire().await.unwrap();
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .expect("semaphore acquire should succeed");
                     let shape_start = tokio::time::Instant::now();
 
                     let mut engine_guard = engine.write().await;
@@ -530,7 +533,10 @@ impl AsyncValidationEngine {
                         let tx = tx.clone();
 
                         async move {
-                            let _permit = semaphore.acquire().await.unwrap();
+                            let _permit = semaphore
+                                .acquire()
+                                .await
+                                .expect("semaphore acquire should succeed");
                             let shape_start = tokio::time::Instant::now();
 
                             let mut engine_guard = engine.write().await;
@@ -804,7 +810,7 @@ mod tests {
             .await;
 
         assert!(engine.is_ok());
-        let engine = engine.unwrap();
+        let engine = engine.expect("operation should succeed");
         assert_eq!(engine.async_config.max_concurrent_tasks, 4);
         assert_eq!(
             engine.async_config.validation_timeout,

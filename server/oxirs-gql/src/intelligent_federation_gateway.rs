@@ -862,7 +862,10 @@ impl IntelligentFederationGateway {
 
             for neighbor in neighbors {
                 adj_list.entry(neighbor.clone()).or_default();
-                adj_list.get_mut(node).unwrap().push(neighbor.clone());
+                adj_list
+                    .get_mut(node)
+                    .expect("node should exist in adj_list after entry insert")
+                    .push(neighbor.clone());
                 *in_degree.entry(neighbor.clone()).or_insert(0) += 1;
             }
         }
@@ -962,7 +965,10 @@ impl IntelligentFederationGateway {
         }
 
         if results.len() == 1 {
-            return Ok(results.into_values().next().unwrap());
+            return Ok(results
+                .into_values()
+                .next()
+                .expect("results should not be empty when len == 1"));
         }
 
         // Initialize merged result structure

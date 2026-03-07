@@ -472,7 +472,8 @@ impl ConfidenceScoredVector {
         for (i, &mean_val) in values.iter().enumerate() {
             let std_dev = (1.0 - self.confidence[i]) * mean_val.abs() * 0.1; // Convert confidence to std dev
             if std_dev > 0.0 {
-                let normal = Normal::new(mean_val, std_dev).unwrap();
+                let normal =
+                    Normal::new(mean_val, std_dev).expect("std_dev validated to be positive");
                 sampled.push(normal.sample(&mut rng));
             } else {
                 sampled.push(mean_val);

@@ -1,10 +1,10 @@
 # OxiRS GeoSPARQL - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.0 | Last Updated: 2026-03-05*
 
 ## Current Status
 
-OxiRS GeoSPARQL v0.1.0 is production-ready, providing complete OGC GeoSPARQL 1.0/1.1 implementation for spatial data and queries in RDF/SPARQL.
+OxiRS GeoSPARQL v0.2.0 is production-ready, providing complete OGC GeoSPARQL 1.0/1.1 implementation for spatial data and queries in RDF/SPARQL.
 
 ### Production Features
 - ✅ **GeoSPARQL Vocabulary** - Full support for GeoSPARQL ontology and datatypes
@@ -15,19 +15,23 @@ OxiRS GeoSPARQL v0.1.0 is production-ready, providing complete OGC GeoSPARQL 1.0
 - ✅ **CRS Support** - Coordinate Reference System handling with EPSG codes
 - ✅ **250+ tests passing** with comprehensive coverage
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.0 - Enhanced Geospatial (Q1 2026 - Expanded)
-- [ ] Additional coordinate systems
-- [ ] 3D geometry support
-- [ ] Enhanced spatial indexing
-- [ ] Performance optimizations
-- [ ] Geospatial reasoning
-- [ ] Spatial aggregations
-- [ ] Enhanced CRS transformations
-- [ ] GeoJSON integration improvements
+### v0.1.0 - Released (January 7, 2026)
+- ✅ GeoSPARQL vocabulary, WKT/GML, topological predicates, spatial indexing
+- ✅ 250+ tests passing
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.0 - Current Release (March 5, 2026)
+- ✅ Additional coordinate systems
+- ✅ 3D geometry support
+- ✅ Enhanced spatial indexing
+- ✅ Performance optimizations
+- ✅ Geospatial reasoning
+- ✅ Spatial aggregations
+- ✅ Enhanced CRS transformations
+- ✅ GeoJSON integration improvements
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Full OGC GeoSPARQL 1.1 compliance
 - [ ] Long-term support guarantees
 - [ ] Enterprise features
@@ -39,4 +43,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GeoSPARQL v0.1.0 - Spatial data support for RDF*
+*OxiRS GeoSPARQL v0.2.0 - Spatial data support for RDF*

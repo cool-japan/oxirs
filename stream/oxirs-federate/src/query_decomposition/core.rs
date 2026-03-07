@@ -87,9 +87,10 @@ impl QueryDecomposer {
 
             // Select plan based on optimization strategy
             let selected = match self.config.optimization_strategy {
-                OptimizationStrategy::MinimizeCost => {
-                    plans.iter().min_by_key(|p| p.total_cost as u64).unwrap()
-                }
+                OptimizationStrategy::MinimizeCost => plans
+                    .iter()
+                    .min_by_key(|p| p.total_cost as u64)
+                    .expect("collection should not be empty"),
                 OptimizationStrategy::MinimizeTime => plans
                     .iter()
                     .min_by_key(|p| {
@@ -99,11 +100,11 @@ impl QueryDecomposer {
                             p.steps.len()
                         }
                     })
-                    .unwrap(),
+                    .expect("operation should succeed"),
                 OptimizationStrategy::MinimizeTransfer => plans
                     .iter()
                     .min_by_key(|p| p.steps.iter().map(|s| s.estimated_results).sum::<u64>())
-                    .unwrap(),
+                    .expect("collection should not be empty"),
                 OptimizationStrategy::Balanced => {
                     // Balance between cost, time, and data transfer
                     plans
@@ -115,7 +116,7 @@ impl QueryDecomposer {
                                 p.steps.iter().map(|s| s.estimated_results).sum::<u64>() / 1000;
                             cost_factor + time_factor + transfer_factor
                         })
-                        .unwrap()
+                        .expect("operation should succeed")
                 }
             };
 

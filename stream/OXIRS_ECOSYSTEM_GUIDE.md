@@ -8,7 +8,7 @@
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-brightgreen.svg)](https://www.rust-lang.org)
 [![Performance](https://img.shields.io/badge/throughput-100K%2B%20events%2Fsec-blue.svg)](#performance)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-comprehensive-brightgreen.svg)](#documentation)
 
 **Real-time RDF streaming with federated SPARQL queries, GraphQL federation, and enterprise-grade features**
@@ -1948,7 +1948,7 @@ metadata:
   name: oxirs-stream
   labels:
     app: oxirs-stream
-    version: v1.2.0
+    version: v0.2.0
 spec:
   replicas: 3
   selector:
@@ -1958,11 +1958,11 @@ spec:
     metadata:
       labels:
         app: oxirs-stream
-        version: v1.2.0
+        version: v0.2.0
     spec:
       containers:
       - name: oxirs-stream
-        image: oxirs/stream:v1.2.0
+        image: oxirs/stream:v0.2.0
         ports:
         - containerPort: 8080
           name: http
@@ -2013,7 +2013,7 @@ metadata:
   name: oxirs-federate
   labels:
     app: oxirs-federate
-    version: v1.2.0
+    version: v0.2.0
 spec:
   replicas: 2
   selector:
@@ -2023,11 +2023,11 @@ spec:
     metadata:
       labels:
         app: oxirs-federate
-        version: v1.2.0
+        version: v0.2.0
     spec:
       containers:
       - name: oxirs-federate
-        image: oxirs/federate:v1.2.0
+        image: oxirs/federate:v0.2.0
         ports:
         - containerPort: 8081
           name: http

@@ -1390,11 +1390,17 @@ impl ResultMerger {
         }
 
         if results.len() == 1 {
-            return Ok(results.into_iter().next().unwrap());
+            return Ok(results
+                .into_iter()
+                .next()
+                .expect("results should not be empty after check"));
         }
 
         // Default to union merge
-        let strategy = self.strategies.get("union").unwrap();
+        let strategy = self
+            .strategies
+            .get("union")
+            .expect("union strategy should be registered");
         strategy.merge(results).await
     }
 }
@@ -1588,7 +1594,7 @@ mod rand {
         T::from(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_nanos() as u32,
         )
     }

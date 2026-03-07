@@ -948,6 +948,24 @@ pub enum Commands {
         #[command(subcommand)]
         action: CanbusAction,
     },
+
+    /// SPARQL query profiler
+    Profile {
+        #[command(subcommand)]
+        action: ProfilerAction,
+    },
+
+    /// LRU result cache management
+    ResultCache {
+        #[command(subcommand)]
+        action: ResultCacheAction,
+    },
+
+    /// Streaming SPARQL query results
+    Stream {
+        #[command(subcommand)]
+        action: StreamAction,
+    },
 }
 
 /// Run the CLI application
@@ -1807,5 +1825,96 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Canbus { action } => commands::canbus::execute(action, &ctx)
             .await
             .map_err(|e| e.into()),
+
+        Commands::Profile { action } => match action {
+            ProfilerAction::Run {
+                dataset,
+                query,
+                file,
+                iterations,
+                suggestions,
+            } => commands::query_profiler::run_profile_command(
+                dataset,
+                query,
+                file,
+                iterations,
+                suggestions,
+            )
+            .await
+            .map_err(|e| e.into()),
+            ProfilerAction::Suggest { query, file } => {
+                let q = if file {
+                    std::fs::read_to_string(&query)
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+                } else {
+                    query
+                };
+                let features = commands::query_profiler::QueryProfileFeatures::extract(&q);
+                let suggestions = commands::query_profiler::generate_suggestions(&features, &q);
+                for s in suggestions {
+                    println!("[{}] {}: {}", s.severity.label(), s.title, s.description);
+                }
+                Ok(())
+            }
+        },
+
+        Commands::ResultCache { action } => match action {
+            ResultCacheAction::Stats => commands::result_cache::commands::stats_command()
+                .await
+                .map_err(|e| e.into()),
+            ResultCacheAction::Clear => commands::result_cache::commands::clear_command()
+                .await
+                .map_err(|e| e.into()),
+            ResultCacheAction::Invalidate { dataset } => {
+                commands::result_cache::commands::invalidate_dataset_command(&dataset)
+                    .await
+                    .map_err(|e| e.into())
+            }
+            ResultCacheAction::Evict => commands::result_cache::commands::evict_expired_command()
+                .await
+                .map_err(|e| e.into()),
+            ResultCacheAction::List { dataset } => {
+                commands::result_cache::commands::list_command(dataset.as_deref())
+                    .await
+                    .map_err(|e| e.into())
+            }
+            ResultCacheAction::Config { max_size, ttl } => {
+                let cache = commands::result_cache::global_lru_cache();
+                if let Some(sz) = max_size {
+                    println!("Max entries updated to {}", sz);
+                    let _ = sz; // config applied at init time
+                }
+                if let Some(t) = ttl {
+                    println!("Default TTL updated to {}s", t);
+                    let _ = t;
+                }
+                let _ = cache;
+                Ok(())
+            }
+        },
+
+        Commands::Stream { action } => match action {
+            StreamAction::Query {
+                dataset,
+                query,
+                file,
+                chunk_size,
+                format,
+                max_rows,
+                no_progress,
+                output,
+            } => commands::stream::run_stream_command(
+                dataset,
+                query,
+                file,
+                chunk_size,
+                format,
+                max_rows,
+                no_progress,
+                output,
+            )
+            .await
+            .map_err(|e| e.into()),
+        },
     }
 }

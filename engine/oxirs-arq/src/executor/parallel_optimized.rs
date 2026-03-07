@@ -236,12 +236,16 @@ pub struct PooledObject<'a, T> {
 impl<'a, T> PooledObject<'a, T> {
     /// Get a mutable reference to the pooled object
     pub fn get_mut(&mut self) -> &mut T {
-        self.object.as_mut().unwrap()
+        self.object
+            .as_mut()
+            .expect("pooled object should be present")
     }
 
     /// Get a reference to the pooled object
     pub fn get(&self) -> &T {
-        self.object.as_ref().unwrap()
+        self.object
+            .as_ref()
+            .expect("pooled object should be present")
     }
 }
 
@@ -582,7 +586,7 @@ impl SIMDOptimizedOps {
             .into_par_iter()
             .filter(|solution| {
                 let solution_hash = Self::compute_solution_hash(solution);
-                let mut seen_set = seen.lock().unwrap();
+                let mut seen_set = seen.lock().expect("lock should not be poisoned");
                 seen_set.insert(solution_hash)
             })
             .collect()

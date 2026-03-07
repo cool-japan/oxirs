@@ -2,12 +2,12 @@
 
 > Rust製、モジュラー型セマンティックウェブプラットフォーム - SPARQL 1.2、GraphQL、AI拡張推論対応
 
-[![ライセンス: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![バージョン](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![ライセンス: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![バージョン](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**ステータス**: v0.1.0 - 初回プロダクション・リリース - 2026年1月7日リリース
+**ステータス**: v0.2.0 - リリース済み - 2026年3月5日
 
-🎉 **プロダクション対応完了**: 完全なSPARQL 1.1/1.2実装、**3.8倍高速化されたオプティマイザ**、産業IoT対応、AI機能搭載。13,123テスト合格、警告ゼロ。
+🎉 **プロダクション対応完了**: 完全なSPARQL 1.1/1.2実装、**3.8倍高速化されたオプティマイザ**、産業IoT対応、AI機能搭載。39,000以上のテスト合格、警告ゼロ。
 
 ## ビジョン
 
@@ -57,7 +57,7 @@ OxiRSは、**日本のSociety 5.0（ソサエティ5.0）イニシアティブ**
 
 ```bash
 # CLIツールのインストール
-cargo install oxirs --version 0.1.0
+cargo install oxirs --version 0.2.0
 
 # ソースからビルド
 git clone https://github.com/cool-japan/oxirs.git
@@ -146,9 +146,9 @@ az deployment group create --resource-group oxirs-rg \
   稼働率:             99.9% SLA
 ```
 
-## v0.1.0の新機能（2026年1月7日）🎉
+## v0.2.0の新機能（2026年3月5日）🎉
 
-**初回プロダクション・リリース: 完全なセマンティックウェブプラットフォーム**
+**v0.2.0リリース: 完全なセマンティックウェブプラットフォーム**
 
 **コア機能:**
 - 🚀 **完全なSPARQL 1.1/1.2** - W3C準拠、高度なクエリ最適化
@@ -160,7 +160,7 @@ az deployment group create --resource-group oxirs-rg \
 - ☁️ **クラウドネイティブ** - Kubernetesオペレータ、Terraformモジュール、Docker対応
 
 **品質メトリクス:**
-- ✅ **13,123テスト合格** (100%合格率、136スキップ)
+- ✅ **39,000以上のテスト合格** (100%合格率)
 - ✅ **コンパイル警告ゼロ** 22クレート全体
 - ✅ **95%以上のテストカバレッジ**
 - ✅ **プロダクション検証済み** 産業デプロイ実績
@@ -204,7 +204,7 @@ oxirs/                  # Cargoワークスペースルート
     └─ benchmarks/       # SP2Bench、WatDiv、LDBC SGS
 ```
 
-## 機能マトリクス（v0.1.0）
+## 機能マトリクス（v0.2.0）
 
 | 機能 | OxiRSクレート | ステータス | Jena/Fuseki互換性 |
 |------|---------------|-----------|-------------------|
@@ -297,17 +297,16 @@ cargo build --workspace --all-features
 | バージョン | 予定日 | マイルストーン | 成果物 | ステータス |
 |-----------|--------|---------------|--------|-----------|
 | **v0.1.0** | **✅ 2026年1月7日** | **初回プロダクション** | 完全なSPARQL 1.1/1.2、産業IoT、AI機能 | ✅ リリース済 |
-| **v0.2.0** | **2026年Q1** | **パフォーマンス、検索、地理空間** | 10倍高速化、全文検索（Tantivy）、GeoSPARQL強化 | 🎯 次期 |
-| **v1.0.0** | **2026年Q2** | **LTSリリース** | 完全Jena互換検証済、エンタープライズサポート | 📋 計画中 |
+| **v0.2.0** | **✅ 2026年3月5日** | **パフォーマンス、検索、地理空間** | 10倍高速化、全文検索（Tantivy）、GeoSPARQL強化 | ✅ リリース済（現行） |
+| **v0.3.0** | **2026年Q2** | **LTSリリース** | 完全Jena互換検証済、エンタープライズサポート | 📋 計画中 |
 
 ## ライセンス
 
-OxiRSは以下のデュアルライセンスです：
+OxiRSは以下のライセンスで提供されます：
 
-- **MITライセンス** ([LICENSE-MIT](LICENSE-MIT) または http://opensource.org/licenses/MIT)
 - **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE) または http://www.apache.org/licenses/LICENSE-2.0)
 
-どちらかをお選びください。詳細は[LICENSE](LICENSE)を参照してください。
+詳細は[LICENSE](LICENSE)を参照してください。
 
 ## お問い合わせ
 
@@ -325,4 +324,4 @@ OxiRSは以下のデュアルライセンスです：
 
 *"Rustはメモリ安全性を当たり前にした。OxiRSはナレッジグラフエンジニアリングを当たり前にする。"*
 
-**v0.1.0 - 初回プロダクション・リリース - 2026年1月7日**
+**v0.2.0 - リリース済み - 2026年3月5日**

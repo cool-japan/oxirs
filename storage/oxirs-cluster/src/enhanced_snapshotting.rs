@@ -108,7 +108,7 @@ impl TransferStatus {
     pub fn new(total_bytes: u64, total_chunks: u32) -> Self {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         Self {
@@ -126,7 +126,7 @@ impl TransferStatus {
     pub fn update(&mut self, chunk_index: u32, chunk_size: u64) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
 
         self.current_chunk = chunk_index;
@@ -271,7 +271,7 @@ impl EnhancedSnapshotManager {
             configuration: vec![self.node_id],
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("SystemTime should be after UNIX_EPOCH")
                 .as_secs(),
             size: serialized_data.len() as u64,
             checksum: {

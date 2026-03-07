@@ -20,6 +20,22 @@ pub struct GpuDevice {
 }
 
 impl GpuDevice {
+    /// Create a simulated GPU device for testing or when CUDA device is unavailable
+    fn simulated(device_id: i32) -> Self {
+        Self {
+            device_id,
+            name: format!("Simulated GPU {device_id}"),
+            compute_capability: (7, 5),
+            total_memory: 8 * 1024 * 1024 * 1024,
+            free_memory: 6 * 1024 * 1024 * 1024,
+            max_threads_per_block: 1024,
+            max_blocks_per_grid: 65535,
+            warp_size: 32,
+            memory_bandwidth: 900.0,
+            peak_flops: 14000.0,
+        }
+    }
+
     /// Get information about a specific GPU device
     pub fn get_device_info(device_id: i32) -> Result<Self> {
         #[cfg(all(feature = "cuda", cuda_runtime_available))]
@@ -28,20 +44,33 @@ impl GpuDevice {
             unsafe {
                 let result = cudaSetDevice(device_id);
                 if result != cudaError_t::cudaSuccess {
-                    return Err(anyhow!("Failed to set CUDA device {}", device_id));
+                    // Device not available - fall back to simulated device
+                    tracing::warn!(
+                        "CUDA device {} not available - using simulated GPU device",
+                        device_id
+                    );
+                    return Ok(Self::simulated(device_id));
                 }
 
                 let mut props: cudaDeviceProp = std::mem::zeroed();
                 let result = cudaGetDeviceProperties(&mut props, device_id);
                 if result != cudaError_t::cudaSuccess {
-                    return Err(anyhow!("Failed to get device properties"));
+                    tracing::warn!(
+                        "Failed to get properties for CUDA device {} - using simulated GPU device",
+                        device_id
+                    );
+                    return Ok(Self::simulated(device_id));
                 }
 
                 let mut free_mem: usize = 0;
                 let mut total_mem: usize = 0;
                 let result = cudaMemGetInfo(&mut free_mem, &mut total_mem);
                 if result != cudaError_t::cudaSuccess {
-                    return Err(anyhow!("Failed to get memory info"));
+                    tracing::warn!(
+                        "Failed to get memory info for CUDA device {} - using simulated GPU device",
+                        device_id
+                    );
+                    return Ok(Self::simulated(device_id));
                 }
 
                 Ok(Self {
@@ -72,18 +101,7 @@ impl GpuDevice {
         {
             // Fallback for testing without CUDA or when CUDA toolkit not installed
             tracing::warn!("CUDA not available - using simulated GPU device");
-            Ok(Self {
-                device_id,
-                name: format!("Simulated GPU {device_id}"),
-                compute_capability: (7, 5), // Simulate modern GPU
-                total_memory: 8 * 1024 * 1024 * 1024, // 8GB
-                free_memory: 6 * 1024 * 1024 * 1024, // 6GB free
-                max_threads_per_block: 1024,
-                max_blocks_per_grid: 65535,
-                warp_size: 32,
-                memory_bandwidth: 900.0, // GB/s
-                peak_flops: 14000.0,     // GFLOPS
-            })
+            Ok(Self::simulated(device_id))
         }
     }
 

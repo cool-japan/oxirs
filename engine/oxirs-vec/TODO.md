@@ -1,6 +1,6 @@
 # OxiRS Vec - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.0 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -55,23 +55,26 @@ Production-ready guides available in `/docs`:
 
 - **Tree indices** (Ball Tree, KD-Tree, VP-Tree): Marked as experimental with conservative depth limits. Use HNSW, IVF, or LSH for production workloads.
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.0 - Enhanced GPU Support (Q1 2026 - Expanded)
-- [ ] GPU-based index building
-- [ ] Multi-GPU load balancing
-- [ ] Enhanced CUDA kernel optimization
-- [ ] Consensus protocol (Raft) integration
-- [ ] Fault tolerance testing
-- [ ] Cross-datacenter replication
-- [ ] Geo-distributed deployment
+### v0.1.0 - Released (January 7, 2026)
+- ✅ HNSW, IVF, PQ, SQ, LSH, NSG, DiskANN, learned indexes
+- ✅ 20+ distance metrics, GPU acceleration, hybrid search, multi-modal
+- ✅ 683 tests passing
 
-### v0.4.0 - Advanced Features (Q3 2026)
+### v0.2.0 - Current Release (March 5, 2026)
+- ✅ GPU-based index building
+- ✅ Multi-GPU load balancing
+- ✅ Enhanced CUDA kernel optimization
+- ✅ Consensus protocol (Raft) integration
+- ✅ Fault tolerance testing
+- ✅ Cross-datacenter replication
+- ✅ Geo-distributed deployment
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Enhanced snapshot and restore
 - [ ] SLA-based resource allocation
 - [ ] Advanced query optimization
-
-### v1.0.0 - LTS Release (Q2 2026)
 - [ ] Full production deployment validation
 - [ ] Long-term support guarantees
 - [ ] Enterprise features
@@ -83,4 +86,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Vec v0.1.0 - Vector search infrastructure*
+*OxiRS Vec v0.2.0 - Vector search infrastructure*

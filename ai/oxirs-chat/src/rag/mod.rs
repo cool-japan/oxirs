@@ -40,6 +40,7 @@ pub mod embedding_providers;
 pub mod entity_extraction;
 pub mod graph_traversal;
 pub mod knowledge_extraction;
+pub mod pipeline; // NEW: Hybrid BM25+vector RAG pipeline
 pub mod quantum;
 pub mod quantum_rag;
 pub mod query_processing;

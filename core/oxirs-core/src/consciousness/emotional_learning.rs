@@ -556,7 +556,9 @@ impl EmotionalLearningNetwork {
                 .emotion_effectiveness
                 .get(&current_emotion)
                 .unwrap_or(&0.0);
-            a_effectiveness.partial_cmp(b_effectiveness).unwrap()
+            a_effectiveness
+                .partial_cmp(b_effectiveness)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         if let Some(strategy) = best_strategy {

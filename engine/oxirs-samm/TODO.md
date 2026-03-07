@@ -1,6 +1,6 @@
 # OxiRS SAMM - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.0 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -34,24 +34,26 @@ OxiRS SAMM provides comprehensive support for the Semantic Aspect Meta Model (SA
 - Store and retrieve models from cloud storage
 - Visualize model relationships
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.0 - Enhanced Analytics (Q1 2026 - Expanded)
-- [ ] Additional correlation analysis methods (Spearman, Kendall)
-- [ ] Partial correlation analysis
-- [ ] Distribution fitting for model metrics
-- [ ] Time-series analysis for model evolution
-- [ ] Real AWS S3 backend implementation
-- [ ] Google Cloud Storage backend
-- [ ] Azure Blob Storage backend
-- [ ] Presigned URL generation for sharing
+### v0.1.0 - Released (January 7, 2026)
+- ✅ SAMM/AAS parsing, 16 code generators, model analytics, SIMD, plugin system
+- ✅ 398 tests passing
 
-### v0.4.0 - GPU Acceleration (Q3 2026)
+### v0.2.0 - Current Release (March 5, 2026)
+- ✅ Additional correlation analysis methods (Spearman, Kendall)
+- ✅ Partial correlation analysis
+- ✅ Distribution fitting for model metrics
+- ✅ Time-series analysis for model evolution
+- ✅ Real AWS S3 backend implementation
+- ✅ Google Cloud Storage backend
+- ✅ Azure Blob Storage backend
+- ✅ Presigned URL generation for sharing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] GPU-accelerated batch validation
 - [ ] Parallel code generation
 - [ ] Batch correlation matrix computation
-
-### v1.0.0 - LTS Release (Q2 2026)
 - [ ] Java ESMF SDK feature parity
 - [ ] Long-term support guarantees
 - [ ] Enterprise features
@@ -63,4 +65,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS SAMM v0.1.0 - Semantic Aspect Meta Model support*
+*OxiRS SAMM v0.2.0 - Semantic Aspect Meta Model support*

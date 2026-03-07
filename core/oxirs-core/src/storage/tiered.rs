@@ -155,7 +155,7 @@ mod tiered_impl {
             let hot_capacity = config.tiers.hot_tier.max_size_mb * 1024 * 1024 / 1000; // Approximate
             let hot_tier = Arc::new(Mutex::new(LruCache::new(
                 std::num::NonZeroUsize::new(hot_capacity)
-                    .unwrap_or(std::num::NonZeroUsize::new(10000).unwrap()),
+                    .unwrap_or(std::num::NonZeroUsize::new(10000).expect("constant is non-zero")),
             )));
 
             // Initialize warm tier

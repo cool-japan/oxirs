@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Vector index abstractions for semantic similarity and AI-augmented querying"
 keywords = ["vector-search", "embeddings", "similarity", "hnsw", "rdf"]
 categories = ["algorithms", "data-structures", "science"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
@@ -28,48 +29,51 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 hnsw_rs = { workspace = true, optional = true }
-zstd = { version = "0.13", default-features = false }
+zstd = { workspace = true, default-features = false }
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 # rand_distr functionality now provided by scirs2-core (use scirs2_core::random::distributions)
 half = "2.4"
-memmap2 = "0.9"
-parking_lot = "0.12"
+memmap2.workspace = true
+parking_lot.workspace = true
 blake3 = "1.8"
 lru = "0.16"
 crossbeam-utils = "0.8"
-libc = "0.2"
-nalgebra = "0.33"
+libc.workspace = true
+nalgebra.workspace = true
 petgraph = "0.8"
 reqwest = { workspace = true }
-tokio = { version = "1.47", features = ["rt", "time"] }
+tokio = { workspace = true, features = ["rt", "time"] }
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
-regex = "1.12"
+regex.workspace = true
 pdf-extract = { version = "0.10", optional = true }
-zip = { version = "1.1", optional = true }
-quick-xml = { version = "0.38", optional = true }
+oxiarc-archive = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }
 base64 = "0.22"
 image = { version = "0.25", optional = true }
-chrono = { version = "0.4", features = ["serde"] }
-# CUDA dependencies - require CUDA toolkit to be installed
-# Note: cuda-runtime-sys may fail to link if CUDA toolkit not installed
-# cudarc handles dynamic loading more gracefully
+chrono.workspace = true
+# CUDA dependencies (optional - for GPU acceleration)
+# These are only pulled in when "cuda" feature is enabled
+# Code falls back to CPU implementations when CUDA toolkit is not available
 cuda-runtime-sys = { version = "0.3.0-alpha.1", optional = true }
 cudarc = { version = "0.18", features = ["cuda-12000"], optional = true }
 candle-core = { version = "0.9", optional = true }
 # Python bindings
 pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
 numpy = { version = "0.27", optional = true }
-uuid = { version = "1.19", features = ["v4"] }
-num_cpus = "1.17"
+uuid.workspace = true
+num_cpus.workspace = true
 humantime = "2.3"
 indicatif = "0.18"
 # HuggingFace integration
 tokenizers = { version = "0.22", optional = true }
 hf-hub = { version = "0.4", optional = true }
+# Tantivy full-text search (upgraded to 0.25 for lru security fix)
+tantivy = { version = "0.25", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
-tempfile = "3.24"
+tempfile = "3.25"
+uuid.workspace = true
 
 [features]
 default = []
@@ -78,14 +82,21 @@ simd = ["oxirs-core/simd"]
 parallel = ["oxirs-core/parallel"]
 gpu = ["oxirs-core/gpu"]
 blas = ["oxirs-core/blas"]
-# CUDA feature requires CUDA toolkit installed
-# WARNING: Will fail to link if CUDA toolkit not available
-# Do NOT use with --all-features unless CUDA is installed
+# CUDA feature for GPU acceleration (OPTIONAL - follows Pure Rust Policy)
+# When enabled without CUDA toolkit: falls back to CPU implementations
+# When enabled with CUDA toolkit: enables GPU-accelerated operations
+# Default features are 100% Pure Rust (no CUDA required)
 cuda = ["dep:cuda-runtime-sys", "dep:cudarc"]
 candle-gpu = ["candle-core"]
 gpu-full = ["cuda", "candle-gpu", "gpu"]
 images = ["image"]
-content-processing = ["pdf-extract", "zip", "quick-xml", "images"]
+content-processing = ["pdf-extract", "oxiarc-archive", "quick-xml", "images"]
 python = ["pyo3", "numpy"]
 huggingface = ["tokenizers", "hf-hub"]
+# Tantivy full-text search (Pure Rust, optional)
+tantivy-search = ["tantivy"]
 
+
+[[bench]]
+name = "vector_bench"
+harness = false

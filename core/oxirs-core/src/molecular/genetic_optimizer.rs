@@ -320,8 +320,11 @@ impl GeneticGraphOptimizer {
         }
 
         // Sort by fitness (highest first)
-        self.population
-            .sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+        self.population.sort_by(|a, b| {
+            b.fitness
+                .partial_cmp(&a.fitness)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         self.best_fitness = self.population[0].fitness;
 
         Ok(())
@@ -503,8 +506,11 @@ impl GeneticGraphOptimizer {
         self.population = new_population;
 
         // Sort by fitness
-        self.population
-            .sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+        self.population.sort_by(|a, b| {
+            b.fitness
+                .partial_cmp(&a.fitness)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Update best fitness
         if self.population[0].fitness > self.best_fitness {
@@ -517,7 +523,11 @@ impl GeneticGraphOptimizer {
             best_fitness: self.population[0].fitness,
             average_fitness: self.population.iter().map(|s| s.fitness).sum::<f64>()
                 / self.population.len() as f64,
-            worst_fitness: self.population.last().unwrap().fitness,
+            worst_fitness: self
+                .population
+                .last()
+                .expect("collection validated to be non-empty")
+                .fitness,
             diversity: self.calculate_diversity(),
             mutations,
             crossovers,

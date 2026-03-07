@@ -59,3 +59,5 @@ pub mod store_adapter;
 
 pub use rdf_bridge::{Confidence, DetectionResult, RdfBridge};
 pub use store_adapter::HybridStore;
+
+pub mod prometheus_remote_write;

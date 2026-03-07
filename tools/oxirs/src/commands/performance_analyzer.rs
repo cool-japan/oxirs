@@ -163,7 +163,7 @@ impl StatisticalPerformanceAnalyzer {
 
         // Calculate percentiles
         let mut sorted_durations = durations.clone();
-        sorted_durations.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_durations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let median = percentile(&sorted_durations, 50.0);
         let p95 = percentile(&sorted_durations, 95.0);
@@ -308,7 +308,7 @@ impl StatisticalPerformanceAnalyzer {
 
         let durations: Vec<f64> = self.samples.iter().map(|s| s.duration_ms).collect();
         let mut sorted = durations.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         // Calculate quartiles
         let q1 = percentile(&sorted, 25.0);

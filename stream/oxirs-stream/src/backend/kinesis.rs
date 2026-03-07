@@ -787,7 +787,11 @@ impl KinesisProducer {
         }
 
         let time_since_last = Utc::now()
-            .signed_duration_since(self.stats.last_publish.unwrap())
+            .signed_duration_since(
+                self.stats
+                    .last_publish
+                    .expect("last_publish checked to be Some above"),
+            )
             .num_seconds() as f64;
 
         if time_since_last > 300.0 {

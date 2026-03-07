@@ -91,7 +91,7 @@ prometheus_port = 9090
 enabled = true
 endpoint = "http://localhost:4317"
 service_name = "oxirs-society5"
-service_version = "0.1.0"
+service_version = "0.2.0"
 # 日本リージョンのトレース送信先
 # Trace endpoint for Japan region
 # endpoint = "https://trace.ap-northeast-1.amazonaws.com"

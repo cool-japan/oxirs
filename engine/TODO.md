@@ -1,6 +1,6 @@
 # OxiRS Engine Directory - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.0 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -30,19 +30,23 @@ The OxiRS Engine directory contains query processing, validation, and reasoning 
 - Streaming RDF parsing with zero-copy optimization
 - SAMM aspect model processing with 16 code generators
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.0 - Enhanced Optimization (Q1 2026 - Expanded)
-- [ ] Advanced query optimization techniques
-- [ ] Enhanced reasoning strategies
-- [ ] Performance improvements for large datasets
-- [ ] Additional validation features
-- [ ] Distributed query execution
-- [ ] Horizontal scaling support
-- [ ] Advanced federation optimization
-- [ ] Cross-module integration improvements
+### v0.1.0 - Released (January 7, 2026)
+- ✅ Production-ready engine modules
+- ✅ SPARQL 1.1/1.2, SHACL, RDF-star, vector search, TTL, SAMM, GeoSPARQL
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.0 - Current Release (March 5, 2026)
+- ✅ Advanced query optimization techniques
+- ✅ Enhanced reasoning strategies
+- ✅ Performance improvements for large datasets
+- ✅ Additional validation features
+- ✅ Distributed query execution
+- ✅ Horizontal scaling support
+- ✅ Advanced federation optimization
+- ✅ Cross-module integration improvements
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Full Apache Jena feature parity
 - [ ] Enterprise-grade performance
 - [ ] Long-term support guarantees
@@ -54,4 +58,4 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Engine v0.1.0 - Query, validation, and reasoning infrastructure*
+*OxiRS Engine v0.2.0 - Query, validation, and reasoning infrastructure*

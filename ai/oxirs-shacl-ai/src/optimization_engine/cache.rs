@@ -86,7 +86,11 @@ impl CacheManager {
     }
 
     pub async fn get_statistics(&self) -> Result<CacheStatistics> {
-        let stats = self.cache_stats.lock().unwrap().clone();
+        let stats = self
+            .cache_stats
+            .lock()
+            .expect("lock should not be poisoned")
+            .clone();
         Ok(stats)
     }
 }

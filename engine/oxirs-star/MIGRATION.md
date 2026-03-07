@@ -1,7 +1,7 @@
 # OxiRS-Star Migration Guide
 
 [![Documentation](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **Comprehensive migration guide for moving from other RDF stores to OxiRS-Star, including automated migration tools, compatibility layers, and best practices.**
 

@@ -572,11 +572,13 @@ mod performance {
         println!("Parsed 1000-triple document in {:?}", elapsed);
 
         // Baseline: Should parse 1000 triples in reasonable time
-        // Note: Very conservative threshold for CI and system load
+        // Debug builds are significantly slower due to lack of optimizations
+        let threshold_ms: u128 = if cfg!(debug_assertions) { 10000 } else { 1000 };
         assert!(
-            elapsed.as_millis() < 1000,
-            "Performance regression detected: {:?}",
-            elapsed
+            elapsed.as_millis() < threshold_ms,
+            "Performance regression detected: {:?} (threshold: {}ms)",
+            elapsed,
+            threshold_ms
         );
     }
 

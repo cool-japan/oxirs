@@ -225,7 +225,7 @@ impl DeltaComputer {
 
     fn normalize_sparql(&self, update: &str) -> String {
         // Basic normalization - remove extra whitespace, normalize line endings
-        let re = Regex::new(r"\s+").unwrap();
+        let re = Regex::new(r"\s+").expect("regex pattern is valid");
         re.replace_all(update.trim(), " ").to_string()
     }
 
@@ -527,7 +527,7 @@ impl DeltaComputer {
 
     fn extract_graph_uri(&self, statement: &str) -> Result<Option<String>> {
         // Simple graph URI extraction - look for GRAPH <uri> pattern
-        let re = Regex::new(r"(?i)GRAPH\s+<([^>]+)>").unwrap();
+        let re = Regex::new(r"(?i)GRAPH\s+<([^>]+)>").expect("regex pattern is valid");
         if let Some(captures) = re.captures(statement) {
             if let Some(uri) = captures.get(1) {
                 // Normalize the URI

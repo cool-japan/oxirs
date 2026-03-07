@@ -91,7 +91,7 @@ pub fn load_version_benchmarks(version: &str) -> std::io::Result<Vec<BenchmarkRe
         })
         .collect();
 
-    matching_files.sort_by_key(|e| e.metadata().unwrap().modified().unwrap());
+    matching_files.sort_by_key(|e| e.metadata().ok().and_then(|m| m.modified().ok()));
 
     if let Some(latest) = matching_files.last() {
         let content = fs::read_to_string(latest.path())?;
@@ -134,7 +134,7 @@ pub fn compare_benchmarks(
         b.change_percent
             .abs()
             .partial_cmp(&a.change_percent.abs())
-            .unwrap()
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
     comparisons
 }

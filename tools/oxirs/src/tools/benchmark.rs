@@ -406,8 +406,12 @@ fn calculate_query_statistics(
         sorted_times[sorted_times.len() / 2]
     };
 
-    let min = *sorted_times.first().unwrap();
-    let max = *sorted_times.last().unwrap();
+    let min = *sorted_times
+        .first()
+        .expect("collection validated to be non-empty");
+    let max = *sorted_times
+        .last()
+        .expect("collection validated to be non-empty");
 
     // Calculate standard deviation
     let variance: f64 = sorted_times

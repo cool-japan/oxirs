@@ -266,7 +266,7 @@ mod tests {
         let results = generator.generate_multiple(&report, &formats);
 
         assert!(results.is_ok());
-        let results = results.unwrap();
+        let results = results.expect("result should be Ok");
         assert_eq!(results.len(), 3);
     }
 

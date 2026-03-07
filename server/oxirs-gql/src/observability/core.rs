@@ -399,7 +399,7 @@ impl AlertManager {
                     "response_time_{}",
                     SystemTime::now()
                         .duration_since(UNIX_EPOCH)
-                        .unwrap()
+                        .expect("SystemTime should be after UNIX_EPOCH")
                         .as_millis()
                 ),
                 alert_type: AlertType::HighResponseTime,
@@ -422,7 +422,7 @@ impl AlertManager {
                     "error_{}",
                     SystemTime::now()
                         .duration_since(UNIX_EPOCH)
-                        .unwrap()
+                        .expect("SystemTime should be after UNIX_EPOCH")
                         .as_millis()
                 ),
                 alert_type: AlertType::HighErrorRate,

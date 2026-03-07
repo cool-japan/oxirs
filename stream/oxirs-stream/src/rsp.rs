@@ -639,7 +639,13 @@ impl RspProcessor {
             WindowType::Tumbling => {
                 // Create new window if needed
                 if manager.windows.is_empty()
-                    || self.window_is_full(manager.windows.back().unwrap(), &manager.config)
+                    || self.window_is_full(
+                        manager
+                            .windows
+                            .back()
+                            .expect("windows validated to be non-empty via is_empty check"),
+                        &manager.config,
+                    )
                 {
                     self.create_new_window(manager, now).await?;
                 }

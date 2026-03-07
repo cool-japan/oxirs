@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "AI-powered shape induction and data repair suggestions for SHACL validation"
 keywords = ["shacl", "ai", "machine-learning", "validation", "rdf"]
 categories = ["science", "algorithms", "data-structures"]
+readme = "README.md"
 rust-version.workspace = true
 
 [package.metadata.docs.rs]
@@ -40,9 +41,9 @@ num_cpus = "1.17"
 # ndarray and rand now provided by scirs2-core (SciRS2 compliance)
 regex = "1.12"
 indexmap = "2.11"
-uuid = { version = "1.19", features = ["v4", "serde"] }
+uuid = { version = "1.20", features = ["v4", "serde"] }
 threadpool = "1.8"
-sysinfo = "0.30"
+sysinfo.workspace = true  # Updated to 0.33 to fix objc2-core-foundation conflict
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
 num-complex = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
@@ -54,6 +55,9 @@ base64 = "0.22"
 url = { version = "2.5", features = ["serde"] }
 tokio-stream = "0.1"
 libm = "0.2"  # For erf function
+flate2 = { workspace = true }
+zstd = { workspace = true }
+lz4_flex = { workspace = true }
 
 [dev-dependencies]
 criterion.workspace = true

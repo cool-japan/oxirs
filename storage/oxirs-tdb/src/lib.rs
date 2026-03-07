@@ -90,6 +90,7 @@ pub mod storage;
 
 // B+Tree implementation
 pub mod btree;
+pub mod btree_index;
 
 // Index structures
 pub mod index;
@@ -199,17 +200,31 @@ pub mod database_ops;
 // Observability and monitoring
 pub mod observability;
 
+// Full-text search over RDF literals (Tantivy-backed)
+pub mod text_search;
+
+// Bloom filter for probabilistic triple existence checks
+pub mod bloom_filter;
+
 // Re-export commonly used types
 pub use backup_encryption::{BackupEncryption, EncryptedData, EncryptionConfig};
 pub use bulk_operations::{
     BulkStats, BulkTripleProcessor, ParallelPipelineBuilder, StreamingTripleIterator,
+};
+pub use compression::{
+    DeltaStoreConfig, DeltaStoreStats, EncodedDeltaLog, TripleDelta, TripleDeltaStore,
 };
 pub use connection_pool::{ConnectionPool, ConnectionPoolConfig, ConnectionPoolStatsSnapshot};
 pub use database_ops::{
     CompactionStats, DatabaseMetadata, DatabaseOps, DatabaseStatus, RepairReport,
 };
 pub use error::{Result, TdbError};
+pub use index::{BTreeTripleIndex, EncodedTriple, TripleIndexSet, TripleOrdering};
 pub use loader::{BulkLoadStats, BulkLoader, BulkLoaderConfig, BulkLoaderFactory};
+pub use loader::{
+    NodeDictionary, ParallelBulkLoadConfig, ParallelBulkLoadStats, ParallelBulkLoader, RawTriple,
+    RdfNode, TripleSource, VecTripleSource,
+};
 pub use materialized_views::{
     MaterializedView, MaterializedViewConfig, MaterializedViewManager,
     MaterializedViewManagerStats, RefreshStrategy, ViewInfo,
@@ -236,6 +251,15 @@ pub use wal_shipping::{
     ShippingConfig, ShippingDestination, ShippingRecord, ShippingStats, ShippingStatus, WalShipper,
 };
 
+// Temporal RDF: version control and time-travel queries (v0.3.0)
+pub mod temporal;
+
+pub use temporal::{
+    ChangeEntry, ChangeLog, ChangeLogStats, ChangeOperation, TemporalDiff, TemporalSnapshot,
+    TemporalVersionStore, TimeTravelQuery, TimeTravelQueryBuilder, TripleKey, TriplePattern,
+    VersionedTriple,
+};
+
 /// TDB storage engine version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -244,3 +268,88 @@ pub const DEFAULT_PAGE_SIZE: usize = 4096;
 
 /// Default buffer pool size (1000 pages = 4MB)
 pub const DEFAULT_BUFFER_POOL_SIZE: usize = 1000;
+
+// MVCC Transaction Manager: snapshot isolation and SSI (v0.3.0)
+pub mod mvcc;
+
+pub use mvcc::deadlock::{DeadlockDetector, DeadlockScanResult};
+pub use mvcc::{
+    IsolationLevel, MvccError, MvccManager, MvccStats, TransactionContext, TransactionState, TxId,
+    VersionedEntry, VersionedKey, TX_ID_COMMITTED,
+};
+
+// Multi-tenant isolation (v1.0.0 LTS)
+pub mod tenant;
+
+pub use tenant::{
+    TenantAuditEvent, TenantAuditLog, TenantConfig, TenantError, TenantHandle, TenantId,
+    TenantIsolationLayer, TenantRegistry, TenantResult, TenantStats, TenantStore,
+};
+
+// TDB2-compatible data format (v1.1.0)
+pub mod tdb2;
+
+pub use tdb2::{NodeTable, RdfTerm, Tdb2Database, Tdb2Format, TripleIndex};
+
+// Backup engine: triple-level backup/restore with format + compression (v0.2.0)
+pub mod backup_engine;
+
+pub use backup_engine::{
+    BackupCompression, BackupDelta, BackupEngine, BackupFormat, BackupManifest, IncrementalBackup,
+};
+
+// Advanced SLA monitoring and enforcement (v0.2.0)
+pub mod sla;
+
+pub use sla::{SlaComplianceReport, SlaMonitor, SlaViolation, StorageSla, ViolationType};
+
+// Dataset import/export formats: CSV-RDF, JSON-LD, N-Quads (v0.2.0)
+pub mod formats;
+
+pub use formats::{CsvRdfMapper, JsonLdImporter, NQuadsExporter, NQuadsImporter, RdfColumnType};
+
+// WAL compaction and point-in-time recovery (v1.1.0)
+pub mod wal_compaction;
+
+// LSM-tree compaction strategy with bloom filters (v1.1.0)
+pub mod lsm_compaction;
+
+// v1.2.0 Compressed prefix table for IRI storage
+pub mod prefix_table;
+
+// v1.2.0 Triple store cardinality estimator for query optimization
+pub mod index_statistics;
+
+// v1.5.0 Write-ahead journal for crash recovery
+pub mod journal;
+
+/// Write buffer for batching triple insertions (v1.6.0).
+pub mod triple_buffer;
+
+/// Background compaction task scheduler (v1.7.0).
+pub mod compaction_scheduler;
+
+/// Atomic batch write operations with WAL integration (v1.8.0).
+pub mod write_batch;
+
+/// Database checkpoint management for crash recovery and WAL truncation (v1.9.0).
+pub mod checkpoint_manager;
+
+/// Database vacuuming and compaction: dead-space detection, fragmentation analysis, online vacuum (v2.0.0).
+pub mod vacuum;
+
+/// B-tree index rebuild from raw triple data: SPO/POS/OSP/GSPO/GPOS/GOSP orders,
+/// sorted IndexEntry generation, rebuild statistics, and sortedness verification (v1.1.0 round 14)
+pub mod index_rebuilder;
+
+/// Triple pattern cache: memoize repeated pattern lookups using LRU eviction (v1.1.0 round 15)
+pub mod triple_cache;
+
+/// Bloom filter index for fast triple existence checks: FNV double-hashing,
+/// capacity-tuned bit array, TripleBloomIndex wrapper (v1.1.0 round 16)
+pub mod bloom_index;
+
+pub use wal_compaction::{
+    BaseSnapshot, CompactionConfig, CompactionStats as WalCompactionStats, PitrConfig, PitrEngine,
+    RecoveryPlan, WalCompactor, WalRecord, WalRecordType, WalSegment,
+};

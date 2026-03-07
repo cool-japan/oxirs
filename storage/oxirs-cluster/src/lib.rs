@@ -77,6 +77,7 @@ pub mod backup_restore;
 pub mod circuit_breaker;
 pub mod cloud_integration;
 pub mod cluster_metrics;
+pub mod compression_strategy;
 pub mod conflict_resolution;
 pub mod consensus;
 pub mod crash_recovery;
@@ -86,6 +87,7 @@ pub mod discovery;
 pub mod distributed_query;
 pub mod distributed_tracing;
 pub mod edge_computing;
+pub mod encryption;
 pub mod enhanced_node_discovery;
 pub mod enhanced_snapshotting;
 pub mod error;
@@ -97,6 +99,7 @@ pub mod health_monitoring;
 pub mod memory_optimization;
 pub mod merkle_tree;
 pub mod ml_optimization;
+pub mod multi_tenant;
 pub mod mvcc;
 pub mod mvcc_storage;
 pub mod network;
@@ -119,10 +122,14 @@ pub mod replication;
 pub mod replication_lag_monitor;
 pub mod rl_consensus_optimizer;
 pub mod rolling_upgrade;
+pub mod rolling_upgrade_orchestrator;
+pub mod split_brain_detector;
 pub mod visualization_dashboard;
 pub mod zero_downtime_migration;
 // Temporarily disabled due to missing scirs2_core features
 // pub mod revolutionary_cluster_optimization;
+pub mod cross_dc;
+pub mod network_compression;
 pub mod security;
 pub mod serialization;
 pub mod shard;
@@ -133,6 +140,7 @@ pub mod split_brain_prevention;
 pub mod storage;
 pub mod strong_consistency;
 pub mod tls;
+pub mod topology;
 pub mod transaction;
 pub mod transaction_optimizer;
 
@@ -142,6 +150,56 @@ pub mod bft;
 pub mod bft_consensus;
 #[cfg(feature = "bft")]
 pub mod bft_network;
+
+pub mod gossip_scaling;
+pub mod sla_manager;
+pub mod stream_integration;
+
+// New modules added in v0.2.0
+pub mod adaptive_consistent_hash;
+pub mod cross_dc_consistency;
+pub mod distributed_tx_coordinator;
+
+// v1.1.0 Consistent hashing with virtual nodes and bounded loads
+pub mod vnodes_hash_ring;
+
+// v1.2.0 Gossip protocol for cluster membership management
+pub mod membership_gossip;
+
+// v1.2.0 Bully algorithm leader election simulation
+pub mod leader_election;
+
+// v1.2.0 Raft snapshot management with retention and checksum validation
+pub mod snapshot_manager;
+
+// v1.5.0 Consistent-hash shard router
+pub mod consistent_shard_router;
+
+// v1.6.0 Partition rebalancing for cluster data redistribution
+pub mod partition_rebalancer;
+
+// v1.7.0 Cluster node health monitoring with heartbeats
+pub mod node_monitor;
+
+// v1.8.0 Automatic failover handling with split-brain prevention
+pub mod failover_manager;
+
+/// Anti-entropy protocol for distributed consistency (v1.9.0).
+pub mod anti_entropy;
+
+/// Replication bandwidth throttling: token-bucket per-peer rate limiting with adaptive adjustment (v2.0.0).
+pub mod replication_throttle;
+
+/// Data migration between cluster nodes: plan creation, range-based transfer,
+/// checksum-validated chunks, migration lifecycle and statistics (v1.1.0 round 14)
+pub mod data_migrator;
+
+/// Consistent-hash shard routing for distributed cluster nodes (v1.1.0 round 15)
+pub mod shard_router;
+
+/// Raft-style election timer: randomised timeout, TimerState (Idle/Running/Expired),
+/// reset/check/stop lifecycle, LCG seed for deterministic tests (v1.1.0 round 16)
+pub mod election_timer;
 
 pub use error::{ClusterError, Result};
 pub use failover::{FailoverConfig, FailoverManager, FailoverStrategy, RecoveryAction};

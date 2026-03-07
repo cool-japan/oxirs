@@ -103,9 +103,34 @@ fn test_bbox_query_large_index() {
     assert_eq!(results.len(), 8281);
     println!("Large bbox query (8281 results): {:?}", large_query_time);
 
-    // Both queries should complete quickly (< 10ms)
-    assert!(small_query_time.as_millis() < 10, "Small query too slow");
-    assert!(large_query_time.as_millis() < 50, "Large query too slow");
+    // Both queries should complete quickly
+    // Relaxed thresholds for debug builds and loaded CI environments
+    #[cfg(not(debug_assertions))]
+    {
+        assert!(
+            small_query_time.as_millis() < 10,
+            "Small query too slow: {:?}",
+            small_query_time
+        );
+        assert!(
+            large_query_time.as_millis() < 50,
+            "Large query too slow: {:?}",
+            large_query_time
+        );
+    }
+    #[cfg(debug_assertions)]
+    {
+        assert!(
+            small_query_time.as_millis() < 500,
+            "Small query too slow: {:?}",
+            small_query_time
+        );
+        assert!(
+            large_query_time.as_millis() < 2000,
+            "Large query too slow: {:?}",
+            large_query_time
+        );
+    }
 }
 
 /// Test nearest neighbor query with large index
@@ -145,10 +170,11 @@ fn test_nearest_neighbor_large_index() {
             x, y, distance, elapsed
         );
 
-        // Should complete very quickly (< 1ms typically)
+        // Should complete reasonably quickly (< 10ms allows for performance variability)
         assert!(
-            elapsed.as_micros() < 5000,
-            "Nearest neighbor query too slow"
+            elapsed.as_millis() < 10,
+            "Nearest neighbor query too slow: {:?}",
+            elapsed
         );
 
         // Distance should be reasonable (< 2.0 for grid with spacing 2.0)

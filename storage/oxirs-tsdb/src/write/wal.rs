@@ -257,7 +257,7 @@ mod tests {
         let bytes = entry.to_bytes();
         assert_eq!(bytes.len(), 24);
 
-        let recovered = WalEntry::from_bytes(&bytes).unwrap();
+        let recovered = WalEntry::from_bytes(&bytes).expect("conversion should succeed");
         assert_eq!(recovered.series_id, 42);
         assert_eq!(recovered.timestamp, entry.timestamp);
         assert_eq!(recovered.value, 22.5);
@@ -272,7 +272,8 @@ mod tests {
         let _ = std::fs::remove_file(&wal_path);
 
         {
-            let mut wal = WriteAheadLog::new(&wal_path, false).unwrap();
+            let mut wal =
+                WriteAheadLog::new(&wal_path, false).expect("construction should succeed");
 
             let timestamp = Utc::now();
             let point1 = DataPoint {
@@ -284,15 +285,15 @@ mod tests {
                 value: 20.0,
             };
 
-            wal.append(1, point1).unwrap();
-            wal.append(2, point2).unwrap();
+            wal.append(1, point1).expect("WAL append should succeed");
+            wal.append(2, point2).expect("WAL append should succeed");
 
             assert_eq!(wal.entry_count(), 2);
         }
 
         // Replay from disk
-        let wal = WriteAheadLog::new(&wal_path, false).unwrap();
-        let entries = wal.replay().unwrap();
+        let wal = WriteAheadLog::new(&wal_path, false).expect("construction should succeed");
+        let entries = wal.replay().expect("WAL replay should succeed");
 
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].0, 1);
@@ -313,23 +314,24 @@ mod tests {
         let _ = std::fs::remove_file(&wal_path);
 
         {
-            let mut wal = WriteAheadLog::new(&wal_path, false).unwrap();
+            let mut wal =
+                WriteAheadLog::new(&wal_path, false).expect("construction should succeed");
 
             let point = DataPoint {
                 timestamp: Utc::now(),
                 value: 42.0,
             };
 
-            wal.append(1, point).unwrap();
+            wal.append(1, point).expect("WAL append should succeed");
             assert_eq!(wal.entry_count(), 1);
 
-            wal.clear().unwrap();
+            wal.clear().expect("clear should succeed");
             assert_eq!(wal.entry_count(), 0);
         }
 
         // Verify file is empty
-        let wal = WriteAheadLog::new(&wal_path, false).unwrap();
-        let entries = wal.replay().unwrap();
+        let wal = WriteAheadLog::new(&wal_path, false).expect("construction should succeed");
+        let entries = wal.replay().expect("WAL replay should succeed");
         assert_eq!(entries.len(), 0);
 
         // Cleanup
@@ -345,7 +347,8 @@ mod tests {
         let _ = std::fs::remove_file(&wal_path);
 
         {
-            let mut wal = WriteAheadLog::new(&wal_path, false).unwrap();
+            let mut wal =
+                WriteAheadLog::new(&wal_path, false).expect("construction should succeed");
 
             let base_time = Utc::now();
             let mut batch = Vec::new();
@@ -358,13 +361,13 @@ mod tests {
                 batch.push((i as u64, point));
             }
 
-            wal.append_batch(&batch).unwrap();
+            wal.append_batch(&batch).expect("append should succeed");
             assert_eq!(wal.entry_count(), 100);
         }
 
         // Replay and verify
-        let wal = WriteAheadLog::new(&wal_path, false).unwrap();
-        let entries = wal.replay().unwrap();
+        let wal = WriteAheadLog::new(&wal_path, false).expect("construction should succeed");
+        let entries = wal.replay().expect("WAL replay should succeed");
 
         assert_eq!(entries.len(), 100);
         for (i, (series_id, point)) in entries.iter().enumerate() {
@@ -385,19 +388,19 @@ mod tests {
         let _ = std::fs::remove_file(&wal_path);
 
         {
-            let mut wal = WriteAheadLog::new(&wal_path, true).unwrap(); // sync_on_write = true
+            let mut wal = WriteAheadLog::new(&wal_path, true).expect("construction should succeed"); // sync_on_write = true
 
             let point = DataPoint {
                 timestamp: Utc::now(),
                 value: 123.456,
             };
 
-            wal.append(1, point).unwrap();
+            wal.append(1, point).expect("WAL append should succeed");
         }
 
         // Verify data persisted
-        let wal = WriteAheadLog::new(&wal_path, false).unwrap();
-        let entries = wal.replay().unwrap();
+        let wal = WriteAheadLog::new(&wal_path, false).expect("construction should succeed");
+        let entries = wal.replay().expect("WAL replay should succeed");
 
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].0, 1);

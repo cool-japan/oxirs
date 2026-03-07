@@ -133,13 +133,17 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod convenience;
+pub mod diff;
 pub mod error;
 pub mod formats;
 pub mod incremental;
 pub mod lexer;
+pub mod parser;
+pub mod patch;
 pub mod profiling;
 pub mod streaming;
 pub mod toolkit;
+pub mod writer;
 
 #[cfg(feature = "parallel")]
 pub mod parallel;
@@ -175,15 +179,106 @@ pub mod n3 {
     pub use crate::formats::n3_serializer::*;
     pub use crate::formats::n3_types::*;
 
-    /// N3 reasoning primitives
+    /// N3 reasoning primitives (forward chaining)
     pub mod reasoning {
         pub use crate::formats::n3_reasoning::*;
+    }
+
+    /// N3 backward chaining engine and proof tracing
+    pub mod backward_chaining {
+        pub use crate::formats::n3_backward_chaining::*;
+    }
+
+    /// N3 built-in predicate evaluators (math, string, list, logic)
+    pub mod builtins {
+        pub use crate::formats::n3_builtins::*;
+    }
+
+    /// Enhanced N3 rule file parser and serializer
+    pub mod rule_parser {
+        pub use crate::formats::n3_rule_parser::*;
     }
 }
 
 // Re-export common types
+pub use diff::{compute_diff, parse_patch, RdfDiff};
 pub use error::{TurtleParseError, TurtleSyntaxError};
 pub use incremental::{IncrementalParser, ParseCheckpoint, ParseState};
+pub use parser::{
+    NQuad, NQuadsLiteParser, NTriple, NTriplesLiteParser, ParseError as NtParseError,
+};
 pub use profiling::{ParsingStats, TtlProfiler};
 pub use streaming::{PrintProgress, ProgressCallback, StreamingConfig, StreamingParser};
 pub use toolkit::{Parser, RuleRecognizer, Serializer, TokenRecognizer};
+pub use writer::{RdfTerm, TermType, TurtleWriter, TurtleWriterConfig};
+
+pub use patch::{
+    apply_patch, diff_to_patch, Graph, PatchChange, PatchError, PatchHeader, PatchParser,
+    PatchQuad, PatchResult, PatchSerializer, PatchStats, PatchTerm, PatchTriple, RdfPatch,
+};
+
+pub mod mapping;
+/// Turtle pretty printer with prefix analysis.
+pub mod pretty_printer;
+
+/// @base / @prefix IRI resolution for Turtle/TriG (v1.1.0 round 6)
+pub mod base_directive;
+
+/// Incremental/streaming Turtle parser for large files (v1.1.0 round 7)
+pub mod streaming_parser;
+
+/// Namespace/prefix management for Turtle and SPARQL serialization (v1.1.0 round 8)
+pub mod namespace_mapper;
+
+/// Turtle/TriG document syntax validation (v1.1.0 round 9)
+pub mod turtle_validator;
+
+/// Prefix/CURIE resolver for Turtle and TriG documents (v1.1.0 round 10)
+pub mod prefix_resolver;
+
+/// JSON-LD framing: apply a frame template to a node set (v1.1.0 round 11)
+pub mod json_ld_framing;
+
+/// IRI prefix catalog with CURIE expansion and compression (v1.1.0 round 13)
+pub mod iri_catalog;
+
+/// Compact Turtle serialization with subject/predicate grouping (v1.1.0 round 12)
+pub mod compact_serializer;
+
+/// N-Triples/N-Quads serialization with proper escaping (v1.1.0 round 11)
+pub mod ntriples_writer;
+
+/// Basic RDFa 1.1 Lite parser: property/typeof/resource/about/prefix attributes,
+/// literal extraction, rel/rev links, context inheritance (v1.1.0 round 13)
+pub mod rdfa_parser;
+
+/// N-Triples and N-Quads streaming parser: IRI/blank-node/literal tokens,
+/// comment/blank line skip, typed literals, language tags, Unicode escapes (v1.1.0 round 14)
+pub mod nt_parser;
+
+pub use mapping::{DataSource, MappingEngine, MappingRule, MappingRuleBuilder, ObjectSpec};
+
+pub mod jsonld {
+    //! JSON-LD 1.1 format parser, serializer, and processing algorithms
+    pub use crate::formats::jsonld::*;
+}
+
+pub use formats::jsonld::{
+    JsonLdContext, JsonLdError, JsonLdProcessor, JsonLdQuad, JsonLdResult, JsonLdTerm,
+    JsonLdWriter, TermDefinition,
+};
+
+pub mod rdf_thrift {
+    //! RDF Binary (Thrift) format — read + write support
+    //!
+    //! Implements the Jena-compatible RDF Binary Thrift encoding as described at
+    //! <https://jena.apache.org/documentation/io/rdf-binary.html>.
+    pub use crate::formats::rdf_thrift::*;
+}
+
+/// JSON-LD compaction: converts expanded JSON-LD to compact form using a context (v1.1.0 round 15)
+pub mod jsonld_compactor;
+
+/// TriG named-graph Turtle parser: @prefix/PREFIX declarations, GRAPH blocks,
+/// default-graph triples, prefix expansion, graph_sizes, named_graphs (v1.1.0 round 16)
+pub mod trig_parser;

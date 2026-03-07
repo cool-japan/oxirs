@@ -122,7 +122,7 @@ pub async fn handle_gsp_options() -> impl IntoResponse {
             "text/turtle, application/rdf+xml, application/n-triples, application/ld+json",
         )
         .body(Body::empty())
-        .unwrap()
+        .expect("empty body response should be valid")
 }
 
 #[cfg(test)]

@@ -205,8 +205,14 @@ impl AdamOptimizer {
             self.v = Some(Array2::zeros(params.raw_dim()));
         }
 
-        let m = self.m.as_mut().unwrap();
-        let v = self.v.as_mut().unwrap();
+        let m = self
+            .m
+            .as_mut()
+            .expect("moment estimate m should be initialized");
+        let v = self
+            .v
+            .as_mut()
+            .expect("moment estimate v should be initialized");
 
         // Update biased first moment estimate
         *m = &*m * self.beta1 + grads * (1.0 - self.beta1);
@@ -796,7 +802,9 @@ impl DistributedTrainer {
 
                         // Simulate gradient accumulation and all-reduce
                         {
-                            let _accumulator = gradient_accumulator.lock().unwrap();
+                            let _accumulator = gradient_accumulator
+                                .lock()
+                                .expect("lock should not be poisoned");
                             // In a real implementation, this would accumulate actual gradients
                             // For now, we just simulate the process
                         }

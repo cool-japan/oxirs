@@ -650,8 +650,12 @@ impl EvolutionaryOptimizer {
     pub fn best_individual(&self) -> &Individual {
         self.population
             .iter()
-            .max_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap())
-            .unwrap()
+            .max_by(|a, b| {
+                a.fitness
+                    .partial_cmp(&b.fitness)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .expect("population should not be empty")
     }
 }
 

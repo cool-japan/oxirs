@@ -315,13 +315,16 @@ impl Primase {
             let nucleotide = match i % 4 {
                 0 => NucleotideData::Cytosine(SpecialMarker::StartCodon),
                 1 => NucleotideData::Adenine(crate::model::Term::NamedNode(
-                    crate::model::NamedNode::new(format!("primer:{i}")).unwrap(),
+                    crate::model::NamedNode::new(format!("primer:{i}"))
+                        .expect("primer IRI is valid"),
                 )),
                 2 => NucleotideData::Thymine(crate::model::Term::NamedNode(
-                    crate::model::NamedNode::new(format!("primer:{i}")).unwrap(),
+                    crate::model::NamedNode::new(format!("primer:{i}"))
+                        .expect("primer IRI is valid"),
                 )),
                 3 => NucleotideData::Guanine(crate::model::Term::NamedNode(
-                    crate::model::NamedNode::new(format!("primer:{i}")).unwrap(),
+                    crate::model::NamedNode::new(format!("primer:{i}"))
+                        .expect("primer IRI is valid"),
                 )),
                 _ => unreachable!(),
             };

@@ -51,7 +51,9 @@ impl RateLimiter {
 
     /// Check if request is allowed
     pub fn check_limit(&self, user_id: &str, tokens: usize) -> Result<bool> {
-        let mut user_states = self.user_states.write()
+        let mut user_states = self
+            .user_states
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
         let now = Instant::now();
@@ -99,7 +101,9 @@ impl RateLimiter {
 
     /// Get remaining quota for user
     pub fn get_remaining_quota(&self, user_id: &str) -> Result<RateLimitQuota> {
-        let user_states = self.user_states.read()
+        let user_states = self
+            .user_states
+            .read()
             .map_err(|e| anyhow!("Failed to acquire read lock: {}", e))?;
 
         let state = user_states.get(user_id);
@@ -111,8 +115,14 @@ impl RateLimiter {
                 let remaining_time = Duration::from_secs(60).saturating_sub(elapsed);
 
                 Ok(RateLimitQuota {
-                    remaining_requests: self.config.requests_per_minute.saturating_sub(state.request_count),
-                    remaining_tokens: self.config.tokens_per_minute.saturating_sub(state.token_count),
+                    remaining_requests: self
+                        .config
+                        .requests_per_minute
+                        .saturating_sub(state.request_count),
+                    remaining_tokens: self
+                        .config
+                        .tokens_per_minute
+                        .saturating_sub(state.token_count),
                     reset_in: remaining_time,
                     burst_tokens_remaining: state.burst_tokens,
                 })
@@ -128,7 +138,9 @@ impl RateLimiter {
 
     /// Reset limit for user (admin function)
     pub fn reset_limit(&self, user_id: &str) -> Result<()> {
-        let mut user_states = self.user_states.write()
+        let mut user_states = self
+            .user_states
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
         user_states.remove(user_id);
@@ -137,7 +149,9 @@ impl RateLimiter {
 
     /// Clean up expired states
     pub fn cleanup_expired(&self) -> Result<usize> {
-        let mut user_states = self.user_states.write()
+        let mut user_states = self
+            .user_states
+            .write()
             .map_err(|e| anyhow!("Failed to acquire write lock: {}", e))?;
 
         let now = Instant::now();
@@ -145,9 +159,7 @@ impl RateLimiter {
 
         let initial_count = user_states.len();
 
-        user_states.retain(|_, state| {
-            now.duration_since(state.window_start) < window_duration * 2
-        });
+        user_states.retain(|_, state| now.duration_since(state.window_start) < window_duration * 2);
 
         Ok(initial_count - user_states.len())
     }
@@ -165,7 +177,6 @@ pub struct RateLimitQuota {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_rate_limiter_allows_within_limit() {

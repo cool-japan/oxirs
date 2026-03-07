@@ -629,7 +629,7 @@ impl EnhancedPerformanceMonitor {
         }
 
         let mut sorted = self.cpu_usage_samples.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let index = ((sorted.len() as f64 - 1.0) * percentile / 100.0).round() as usize;
         sorted[index.min(sorted.len() - 1)]
     }

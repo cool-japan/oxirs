@@ -373,13 +373,33 @@ mod tests {
 
     #[test]
     fn test_opq_search() -> Result<()> {
-        let config = OPQConfig::default();
+        // Use small config to keep test fast (<30s):
+        // - 4 centroids (not 256), 2 subquantizers (not 8), 2 OPQ iterations (not 10)
+        let pq_config = PQConfig {
+            n_subquantizers: 2,
+            n_centroids: 4,
+            n_bits: 2,
+            max_iterations: 5,
+            convergence_threshold: 1e-3,
+            seed: None,
+            enable_residual_quantization: false,
+            residual_levels: 2,
+            enable_multi_codebook: false,
+            num_codebooks: 2,
+            enable_symmetric_distance: false,
+        };
+        let config = OPQConfig {
+            pq_config,
+            n_iterations: 2,
+            center_data: true,
+            regularization: 0.0,
+        };
         let mut opq = OPQIndex::new(config);
 
-        // Create and train on random vectors
-        let vectors: Vec<Vector> = (0..50)
+        // Create and train on a small set of vectors (dim=4, 20 vectors)
+        let vectors: Vec<Vector> = (0..20)
             .map(|i| {
-                let values: Vec<f32> = (0..8).map(|j| ((i * j) as f32).sin()).collect();
+                let values: Vec<f32> = (0..4).map(|j| ((i * j) as f32).sin()).collect();
                 Vector::new(values)
             })
             .collect();
@@ -392,7 +412,7 @@ mod tests {
         }
 
         // Search
-        let query = Vector::new(vec![0.5; 8]);
+        let query = Vector::new(vec![0.5; 4]);
         let results = opq.search(&query, 5)?;
 
         assert_eq!(results.len(), 5);

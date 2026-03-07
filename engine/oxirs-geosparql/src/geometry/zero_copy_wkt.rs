@@ -482,13 +482,13 @@ impl ZeroCopyWktParser {
 
     /// Get statistics about string interning
     pub fn arena_stats(&self) -> (usize, usize) {
-        let arena = self.arena.lock().unwrap();
+        let arena = self.arena.lock().expect("lock should not be poisoned");
         (arena.len(), arena.memory_usage())
     }
 
     /// Clear the string arena
     pub fn clear_arena(&self) {
-        let mut arena = self.arena.lock().unwrap();
+        let mut arena = self.arena.lock().expect("lock should not be poisoned");
         arena.clear();
     }
 }

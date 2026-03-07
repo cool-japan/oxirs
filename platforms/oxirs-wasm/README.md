@@ -257,4 +257,4 @@ For full SPARQL support, use the server-side `oxirs-fuseki` crate.
 
 ## License
 
-Licensed under either of Apache License, Version 2.0 or MIT license at your option.
+Licensed under the Apache License, Version 2.0.

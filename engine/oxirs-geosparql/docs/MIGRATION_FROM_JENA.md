@@ -72,7 +72,7 @@ This guide helps you migrate from Apache Jena's GeoSPARQL implementation to OxiR
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-geosparql = { version = "0.1.0", features = ["performance"] }
+oxirs-geosparql = { version = "0.2.0", features = ["performance"] }
 ```
 
 ### Hello World Comparison
@@ -755,7 +755,7 @@ geom.crs = Crs::from_uri(&jena_crs_uri)?;
 **Solution:** Enable performance features:
 ```toml
 [dependencies]
-oxirs-geosparql = { version = "0.1", features = ["performance", "parallel", "gpu"] }
+oxirs-geosparql = { version = "0.2", features = ["performance", "parallel", "gpu"] }
 ```
 
 Build with optimizations:

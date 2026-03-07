@@ -123,9 +123,9 @@ mod literal_tests {
         assert_eq!(lit.language().unwrap(), "en");
         assert_eq!(format!("{lit}"), "\"hello\"@en");
 
-        // Complex language tags
+        // Complex language tags - language tags are normalized to lowercase per RDF 1.1 spec
         let lit2 = Literal::new_lang("hello", "en-US").unwrap();
-        assert_eq!(lit2.language().unwrap(), "en-US");
+        assert_eq!(lit2.language().unwrap(), "en-us");
 
         // Invalid language tags
         assert!(Literal::new_lang("hello", "123").is_err());

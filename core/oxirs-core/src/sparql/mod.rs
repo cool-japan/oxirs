@@ -1,5 +1,23 @@
 //! SPARQL query processing modules
 
+// v1.1.0 round 16 SPARQL DESCRIBE query builder
+pub mod describe_builder;
+
+// v1.1.0 round 15 SPARQL ASK query evaluation engine
+pub mod ask_evaluator;
+
+// v1.11.0 SPARQL subquery construction and nesting utilities
+pub mod subquery_builder;
+
+// v1.5.0 Parser combinators for SPARQL token stream processing
+pub mod parser_combinators;
+
+// v1.10.0 SPARQL result serialization (JSON, XML, CSV, TSV)
+pub mod result_formatter;
+
+// v1.8.0 SPARQL UPDATE statement parser
+pub mod update_parser;
+
 pub mod aggregates;
 pub mod executor;
 pub mod expressions;

@@ -154,7 +154,11 @@ impl VectorSearchIndex {
         // Store embeddings
         self.embeddings = embeddings.clone();
         self.entity_ids = embeddings.keys().cloned().collect();
-        self.dimensions = embeddings.values().next().unwrap().len();
+        self.dimensions = embeddings
+            .values()
+            .next()
+            .expect("embeddings should not be empty")
+            .len();
 
         // Build embedding matrix for efficient search
         let mut matrix = Vec::new();
@@ -207,7 +211,10 @@ impl VectorSearchIndex {
 
     /// Exact brute-force search
     fn exact_search(&self, query: &[f32], k: usize) -> Result<Vec<SearchResult>> {
-        let matrix = self.embedding_matrix.as_ref().unwrap();
+        let matrix = self
+            .embedding_matrix
+            .as_ref()
+            .expect("embedding matrix should be built before search");
 
         // Compute distances/similarities to all entities
         let scores: Vec<(usize, f32)> = if self.config.parallel {

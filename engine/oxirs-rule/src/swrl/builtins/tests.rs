@@ -401,3 +401,378 @@ fn test_builtin_list_intersection() {
     ];
     assert!(builtin_list_intersection(&args).unwrap());
 }
+
+// ---- Extended tests ----
+
+#[test]
+fn test_builtin_equal_numbers() {
+    let args = vec![
+        SwrlArgument::Literal("42.0".to_string()),
+        SwrlArgument::Literal("42.0".to_string()),
+    ];
+    assert!(builtin_equal(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_equal_unequal_returns_false() {
+    let args = vec![
+        SwrlArgument::Literal("1.0".to_string()),
+        SwrlArgument::Literal("2.0".to_string()),
+    ];
+    assert!(!builtin_equal(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_not_equal_different_values() {
+    let args = vec![
+        SwrlArgument::Literal("3.0".to_string()),
+        SwrlArgument::Literal("4.0".to_string()),
+    ];
+    assert!(builtin_not_equal(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_not_equal_same_values_returns_false() {
+    let args = vec![
+        SwrlArgument::Literal("7.0".to_string()),
+        SwrlArgument::Literal("7.0".to_string()),
+    ];
+    assert!(!builtin_not_equal(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_less_than_true() {
+    let args = vec![
+        SwrlArgument::Literal("1.0".to_string()),
+        SwrlArgument::Literal("2.0".to_string()),
+    ];
+    assert!(builtin_less_than(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_less_than_equal_returns_false() {
+    let args = vec![
+        SwrlArgument::Literal("5.0".to_string()),
+        SwrlArgument::Literal("5.0".to_string()),
+    ];
+    assert!(!builtin_less_than(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_greater_than_true() {
+    let args = vec![
+        SwrlArgument::Literal("9.0".to_string()),
+        SwrlArgument::Literal("3.0".to_string()),
+    ];
+    assert!(builtin_greater_than(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_greater_than_equal_returns_false() {
+    let args = vec![
+        SwrlArgument::Literal("4.0".to_string()),
+        SwrlArgument::Literal("4.0".to_string()),
+    ];
+    assert!(!builtin_greater_than(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_add_three_plus_four() {
+    // add(a, b, result): a + b == result
+    let args = vec![
+        SwrlArgument::Literal("3.0".to_string()),
+        SwrlArgument::Literal("4.0".to_string()),
+        SwrlArgument::Literal("7.0".to_string()),
+    ];
+    assert!(builtin_add(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_subtract_ten_minus_three() {
+    // subtract(a, b, result): a - b == result
+    let args = vec![
+        SwrlArgument::Literal("10.0".to_string()),
+        SwrlArgument::Literal("3.0".to_string()),
+        SwrlArgument::Literal("7.0".to_string()),
+    ];
+    assert!(builtin_subtract(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_multiply_six_by_seven() {
+    // multiply(a, b, result): a * b == result
+    let args = vec![
+        SwrlArgument::Literal("6.0".to_string()),
+        SwrlArgument::Literal("7.0".to_string()),
+        SwrlArgument::Literal("42.0".to_string()),
+    ];
+    assert!(builtin_multiply(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_mod_ten_mod_three() {
+    // mod(dividend, divisor, result): dividend % divisor == result
+    let args = vec![
+        SwrlArgument::Literal("10.0".to_string()),
+        SwrlArgument::Literal("3.0".to_string()),
+        SwrlArgument::Literal("1.0".to_string()),
+    ];
+    assert!(builtin_mod(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_pow_two_to_ten() {
+    // pow(base, exp, result): base ^ exp == result
+    let args = vec![
+        SwrlArgument::Literal("2.0".to_string()),
+        SwrlArgument::Literal("10.0".to_string()),
+        SwrlArgument::Literal("1024.0".to_string()),
+    ];
+    assert!(builtin_pow(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_sqrt_nine() {
+    // sqrt(input, result): sqrt(input) == result
+    let args = vec![
+        SwrlArgument::Literal("9.0".to_string()),
+        SwrlArgument::Literal("3.0".to_string()),
+    ];
+    assert!(builtin_sqrt(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_sin_zero() {
+    // sin(input, result): sin(input) == result
+    let args = vec![
+        SwrlArgument::Literal("0.0".to_string()),
+        SwrlArgument::Literal("0.0".to_string()),
+    ];
+    assert!(builtin_sin(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_cos_zero_is_one() {
+    // cos(input, result): cos(input) == result
+    let args = vec![
+        SwrlArgument::Literal("0.0".to_string()),
+        SwrlArgument::Literal("1.0".to_string()),
+    ];
+    assert!(builtin_cos(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_string_concat_hello_world() {
+    // stringConcat(s1, s2, ..., result): concat(s[0..n-1]) == s[n-1]
+    let args = vec![
+        SwrlArgument::Literal("hello".to_string()),
+        SwrlArgument::Literal(" ".to_string()),
+        SwrlArgument::Literal("world".to_string()),
+        SwrlArgument::Literal("hello world".to_string()),
+    ];
+    assert!(builtin_string_concat(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_string_length_five() {
+    // stringLength(string, length): len(string) == length
+    let args = vec![
+        SwrlArgument::Literal("hello".to_string()),
+        SwrlArgument::Literal("5".to_string()),
+    ];
+    assert!(builtin_string_length(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_upper_case_hello() {
+    // upperCase(input, result): input.to_uppercase() == result
+    let args = vec![
+        SwrlArgument::Literal("hello".to_string()),
+        SwrlArgument::Literal("HELLO".to_string()),
+    ];
+    assert!(builtin_upper_case(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_lower_case_world() {
+    // lowerCase(input, result): input.to_lowercase() == result
+    let args = vec![
+        SwrlArgument::Literal("WORLD".to_string()),
+        SwrlArgument::Literal("world".to_string()),
+    ];
+    assert!(builtin_lower_case(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_string_contains_false() {
+    let args = vec![
+        SwrlArgument::Literal("hello".to_string()),
+        SwrlArgument::Literal("xyz".to_string()),
+    ];
+    assert!(!builtin_string_contains(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_starts_with_false() {
+    let args = vec![
+        SwrlArgument::Literal("hello world".to_string()),
+        SwrlArgument::Literal("world".to_string()),
+    ];
+    assert!(!builtin_starts_with(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_ends_with_false() {
+    let args = vec![
+        SwrlArgument::Literal("hello world".to_string()),
+        SwrlArgument::Literal("hello".to_string()),
+    ];
+    assert!(!builtin_ends_with(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_trim_no_spaces() {
+    let args = vec![
+        SwrlArgument::Literal("hello".to_string()),
+        SwrlArgument::Literal("hello".to_string()),
+    ];
+    assert!(builtin_trim(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_normalize_space_single_spaces() {
+    let args = vec![
+        SwrlArgument::Literal("a b c".to_string()),
+        SwrlArgument::Literal("a b c".to_string()),
+    ];
+    assert!(builtin_normalize_space(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_between_at_lower_bound() {
+    let args = vec![
+        SwrlArgument::Literal("1.0".to_string()),
+        SwrlArgument::Literal("1.0".to_string()),
+        SwrlArgument::Literal("10.0".to_string()),
+    ];
+    assert!(builtin_between(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_between_at_upper_bound() {
+    let args = vec![
+        SwrlArgument::Literal("10.0".to_string()),
+        SwrlArgument::Literal("1.0".to_string()),
+        SwrlArgument::Literal("10.0".to_string()),
+    ];
+    assert!(builtin_between(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_between_out_of_range() {
+    let args = vec![
+        SwrlArgument::Literal("11.0".to_string()),
+        SwrlArgument::Literal("1.0".to_string()),
+        SwrlArgument::Literal("10.0".to_string()),
+    ];
+    assert!(!builtin_between(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_member_not_found() {
+    let args = vec![
+        SwrlArgument::Literal("a,b,c".to_string()),
+        SwrlArgument::Literal("z".to_string()),
+    ];
+    assert!(!builtin_member(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_list_length_basic() {
+    let args = vec![
+        SwrlArgument::Literal("a,b,c,d".to_string()),
+        SwrlArgument::Literal("4".to_string()),
+    ];
+    assert!(builtin_list_length(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_boolean_value_false() {
+    let args = vec![SwrlArgument::Literal("false".to_string())];
+    // "false" as boolean literal — builtin_boolean_value checks the value
+    let result = builtin_boolean_value(&args);
+    assert!(
+        result.is_ok(),
+        "builtin_boolean_value should not error on 'false'"
+    );
+}
+
+#[test]
+fn test_builtin_integer_divide_floor() {
+    // 7 / 3 = 2 (floor)
+    let args = vec![
+        SwrlArgument::Literal("7".to_string()),
+        SwrlArgument::Literal("3".to_string()),
+        SwrlArgument::Literal("2".to_string()),
+    ];
+    assert!(builtin_integer_divide(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_is_literal_with_individual_returns_false() {
+    let args = vec![SwrlArgument::Individual(
+        "http://example.org/Alice".to_string(),
+    )];
+    assert!(!builtin_is_literal(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_replace_no_match() {
+    // Replace "xyz" in "hello" with "abc" — no match, result is "hello"
+    let args = vec![
+        SwrlArgument::Literal("hello".to_string()),
+        SwrlArgument::Literal("xyz".to_string()),
+        SwrlArgument::Literal("abc".to_string()),
+        SwrlArgument::Literal("hello".to_string()),
+    ];
+    assert!(builtin_replace(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_index_of_at_start() {
+    let args = vec![
+        SwrlArgument::Literal("hello world".to_string()),
+        SwrlArgument::Literal("hello".to_string()),
+        SwrlArgument::Literal("0".to_string()),
+    ];
+    assert!(builtin_index_of(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_min_single_value() {
+    let args = vec![
+        SwrlArgument::Literal("5.0".to_string()),
+        SwrlArgument::Literal("5.0".to_string()),
+    ];
+    assert!(builtin_min(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_max_single_value() {
+    let args = vec![
+        SwrlArgument::Literal("7.0".to_string()),
+        SwrlArgument::Literal("7.0".to_string()),
+    ];
+    assert!(builtin_max(&args).unwrap());
+}
+
+#[test]
+fn test_builtin_divide_by_two() {
+    // divide(a, b, result): a / b == result
+    let args = vec![
+        SwrlArgument::Literal("10.0".to_string()),
+        SwrlArgument::Literal("2.0".to_string()),
+        SwrlArgument::Literal("5.0".to_string()),
+    ];
+    assert!(builtin_divide(&args).unwrap());
+}

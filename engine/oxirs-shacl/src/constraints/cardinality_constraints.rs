@@ -183,3 +183,254 @@ impl ConstraintEvaluator for MaxCountConstraint {
         Ok(ConstraintEvaluationResult::satisfied())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{PropertyPath, ShapeId};
+    use oxirs_core::{
+        model::{Literal, NamedNode, Term},
+        ConcreteStore,
+    };
+
+    fn make_focus_node() -> Term {
+        Term::NamedNode(NamedNode::new("http://example.org/node1").expect("valid IRI"))
+    }
+
+    fn make_shape_id() -> ShapeId {
+        ShapeId::new("http://example.org/shape1")
+    }
+
+    fn make_property_path() -> PropertyPath {
+        PropertyPath::Predicate(NamedNode::new("http://example.org/name").expect("valid IRI"))
+    }
+
+    fn string_term(s: &str) -> Term {
+        Term::Literal(Literal::new(s))
+    }
+
+    // ---- MinCountConstraint tests ----
+
+    #[test]
+    fn test_min_count_satisfied_exact() {
+        let constraint = MinCountConstraint { min_count: 2 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![string_term("Alice"), string_term("Bob")]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Expected satisfied for exact min count"
+        );
+    }
+
+    #[test]
+    fn test_min_count_satisfied_more_than_required() {
+        let constraint = MinCountConstraint { min_count: 1 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![string_term("a"), string_term("b"), string_term("c")]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Expected satisfied for more than min count"
+        );
+    }
+
+    #[test]
+    fn test_min_count_violated_zero_values() {
+        let constraint = MinCountConstraint { min_count: 1 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "Expected violation for zero values when min_count=1"
+        );
+        assert!(result.message().is_some(), "Expected violation message");
+    }
+
+    #[test]
+    fn test_min_count_violated_insufficient_values() {
+        let constraint = MinCountConstraint { min_count: 3 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![string_term("a"), string_term("b")]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "Expected violation for insufficient values"
+        );
+    }
+
+    #[test]
+    fn test_min_count_zero_always_satisfied() {
+        let constraint = MinCountConstraint { min_count: 0 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "min_count=0 should always be satisfied"
+        );
+    }
+
+    #[test]
+    fn test_min_count_validate_ok() {
+        let constraint = MinCountConstraint { min_count: 1 };
+        assert!(
+            constraint.validate().is_ok(),
+            "MinCountConstraint should validate OK"
+        );
+    }
+
+    // ---- MaxCountConstraint tests ----
+
+    #[test]
+    fn test_max_count_satisfied_zero_values() {
+        let constraint = MaxCountConstraint { max_count: 3 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(result.is_satisfied(), "Expected satisfied for no values");
+    }
+
+    #[test]
+    fn test_max_count_satisfied_exact() {
+        let constraint = MaxCountConstraint { max_count: 2 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![string_term("a"), string_term("b")]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "Expected satisfied for exact max count"
+        );
+    }
+
+    #[test]
+    fn test_max_count_violated() {
+        let constraint = MaxCountConstraint { max_count: 1 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![string_term("a"), string_term("b")]);
+
+        let result = constraint.evaluate(&store, &context).expect("evaluation");
+        assert!(
+            result.is_violated(),
+            "Expected violation for too many values"
+        );
+        assert!(result.message().is_some(), "Expected violation message");
+    }
+
+    #[test]
+    fn test_max_count_zero_requires_no_values() {
+        let constraint = MaxCountConstraint { max_count: 0 };
+        let store = ConcreteStore::new().expect("store creation");
+
+        let empty_context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![]);
+        let result = constraint
+            .evaluate(&store, &empty_context)
+            .expect("evaluation");
+        assert!(
+            result.is_satisfied(),
+            "max_count=0 with no values should be satisfied"
+        );
+
+        let non_empty_context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![string_term("value")]);
+        let result2 = constraint
+            .evaluate(&store, &non_empty_context)
+            .expect("evaluation");
+        assert!(
+            result2.is_violated(),
+            "max_count=0 with one value should be violated"
+        );
+    }
+
+    #[test]
+    fn test_max_count_validate_ok() {
+        let constraint = MaxCountConstraint { max_count: 5 };
+        assert!(
+            constraint.validate().is_ok(),
+            "MaxCountConstraint should validate OK"
+        );
+    }
+
+    // ---- Combined min/max (exactly-one pattern) ----
+
+    #[test]
+    fn test_exactly_one_value_satisfied() {
+        let min_constraint = MinCountConstraint { min_count: 1 };
+        let max_constraint = MaxCountConstraint { max_count: 1 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![string_term("single value")]);
+
+        let min_result = min_constraint
+            .evaluate(&store, &context)
+            .expect("evaluation");
+        let max_result = max_constraint
+            .evaluate(&store, &context)
+            .expect("evaluation");
+
+        assert!(
+            min_result.is_satisfied(),
+            "min=1 should be satisfied for exactly one value"
+        );
+        assert!(
+            max_result.is_satisfied(),
+            "max=1 should be satisfied for exactly one value"
+        );
+    }
+
+    #[test]
+    fn test_exactly_one_value_violated_by_zero() {
+        let min_constraint = MinCountConstraint { min_count: 1 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![]);
+
+        let result = min_constraint
+            .evaluate(&store, &context)
+            .expect("evaluation");
+        assert!(result.is_violated(), "Exactly-one violated by zero values");
+    }
+
+    #[test]
+    fn test_exactly_one_value_violated_by_two() {
+        let max_constraint = MaxCountConstraint { max_count: 1 };
+        let store = ConcreteStore::new().expect("store creation");
+        let context = ConstraintContext::new(make_focus_node(), make_shape_id())
+            .with_path(make_property_path())
+            .with_values(vec![string_term("v1"), string_term("v2")]);
+
+        let result = max_constraint
+            .evaluate(&store, &context)
+            .expect("evaluation");
+        assert!(result.is_violated(), "Exactly-one violated by two values");
+    }
+}

@@ -400,7 +400,7 @@ impl AdaptiveLoadBalancer {
         let best_service = available_services
             .iter()
             .min_by_key(|m| m.active_connections)
-            .unwrap();
+            .expect("collection should not be empty");
 
         Ok(best_service.service_id.clone())
     }
@@ -417,7 +417,7 @@ impl AdaptiveLoadBalancer {
         let best_service = available_services
             .iter()
             .min_by_key(|m| m.avg_response_time)
-            .unwrap();
+            .expect("collection should not be empty");
 
         Ok(best_service.service_id.clone())
     }
@@ -438,7 +438,7 @@ impl AdaptiveLoadBalancer {
                     .partial_cmp(&b.calculate_selection_score())
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
-            .unwrap();
+            .expect("operation should succeed");
 
         Ok(best_service.service_id.clone())
     }
@@ -472,7 +472,7 @@ impl AdaptiveLoadBalancer {
                     .partial_cmp(&b.load_score)
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
-            .unwrap();
+            .expect("operation should succeed");
 
         Ok(best_service.service_id.clone())
     }
@@ -737,9 +737,18 @@ mod tests {
         lb.register_service("service-1".to_string(), None).await;
         lb.register_service("service-2".to_string(), None).await;
 
-        let first = lb.select_service(None, "test").await.unwrap();
-        let second = lb.select_service(None, "test").await.unwrap();
-        let third = lb.select_service(None, "test").await.unwrap();
+        let first = lb
+            .select_service(None, "test")
+            .await
+            .expect("async operation should succeed");
+        let second = lb
+            .select_service(None, "test")
+            .await
+            .expect("async operation should succeed");
+        let third = lb
+            .select_service(None, "test")
+            .await
+            .expect("async operation should succeed");
 
         // Should cycle through services
         assert_ne!(first, second);
@@ -761,7 +770,10 @@ mod tests {
         lb.record_execution("slow-service", Duration::from_millis(200), true)
             .await;
 
-        let selected = lb.select_service(None, "test").await.unwrap();
+        let selected = lb
+            .select_service(None, "test")
+            .await
+            .expect("async operation should succeed");
         // Should prefer the faster service
         assert_eq!(selected, "fast-service");
     }

@@ -178,7 +178,12 @@ impl Iterator for JsonLdProfileBagIter {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.set.value.count_ones().try_into().unwrap();
+        let size = self
+            .set
+            .value
+            .count_ones()
+            .try_into()
+            .expect("count_ones fits in usize");
         (size, Some(size))
     }
 }

@@ -146,8 +146,12 @@ pub async fn login_handler(
                         "session_id={}; HttpOnly; Secure; SameSite=Strict; Max-Age={}",
                         session_id, _state.config.security.session.timeout_secs
                     );
-                    resp.headers_mut()
-                        .insert(SET_COOKIE, cookie_value.parse().unwrap());
+                    resp.headers_mut().insert(
+                        SET_COOKIE,
+                        cookie_value
+                            .parse()
+                            .expect("cookie value should be valid header"),
+                    );
                 }
             }
 
@@ -244,7 +248,7 @@ pub async fn logout_handler(
             SET_COOKIE,
             "session_id=; HttpOnly; Secure; SameSite=Strict; Max-Age=0"
                 .parse()
-                .unwrap(),
+                .expect("cookie value should be valid header"),
         );
 
         info!("User logged out successfully");
@@ -352,7 +356,10 @@ pub async fn register_user_handler(
         .await?;
 
     // Compute permissions for response - simplified for now
-    let _user_config = auth_service.get_user(&request.username).await.unwrap();
+    let _user_config = auth_service
+        .get_user(&request.username)
+        .await
+        .expect("user should exist after creation");
     let permissions = vec![crate::auth::Permission::GlobalRead]; // Simplified
 
     let response = UserInfoResponse {

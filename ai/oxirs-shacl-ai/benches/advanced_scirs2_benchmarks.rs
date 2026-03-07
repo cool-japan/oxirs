@@ -51,11 +51,13 @@ fn bench_gpu_embeddings(c: &mut Criterion) {
                     let node_data = Array2::from_elem((n, i), 1.0f32);
                     let edge_data = Array2::from_elem((i, o), 1.0f32);
 
-                    b.to_async(&rt).iter(|| async {
-                        let result = gpu_engine
-                            .compute_embeddings_gpu(&node_data, &edge_data)
-                            .await;
-                        black_box(result)
+                    b.iter(|| {
+                        rt.block_on(async {
+                            let result = gpu_engine
+                                .compute_embeddings_gpu(&node_data, &edge_data)
+                                .await;
+                            black_box(result)
+                        })
                     });
                 },
             );
@@ -77,11 +79,13 @@ fn bench_gpu_embeddings(c: &mut Criterion) {
                 let node_data = Array2::from_elem((n, i), 1.0f32);
                 let edge_data = Array2::from_elem((i, o), 1.0f32);
 
-                b.to_async(&rt).iter(|| async {
-                    let result = simd_engine
-                        .compute_embeddings_simd(&node_data, &edge_data)
-                        .await;
-                    black_box(result)
+                b.iter(|| {
+                    rt.block_on(async {
+                        let result = simd_engine
+                            .compute_embeddings_simd(&node_data, &edge_data)
+                            .await;
+                        black_box(result)
+                    })
                 });
             },
         );
@@ -112,9 +116,11 @@ fn bench_simd_triple_processing(c: &mut Criterion) {
             |b, &cnt| {
                 let triples = Array2::from_elem((cnt, 64), 1.0f32);
 
-                b.to_async(&rt).iter(|| async {
-                    let result = simd_engine.process_triples_parallel(triples.view()).await;
-                    black_box(result)
+                b.iter(|| {
+                    rt.block_on(async {
+                        let result = simd_engine.process_triples_parallel(triples.view()).await;
+                        black_box(result)
+                    })
                 });
             },
         );
@@ -133,11 +139,13 @@ fn bench_simd_triple_processing(c: &mut Criterion) {
             |b, &cnt| {
                 let triples = Array2::from_elem((cnt, 64), 1.0f32);
 
-                b.to_async(&rt).iter(|| async {
-                    let result = no_simd_engine
-                        .process_triples_parallel(triples.view())
-                        .await;
-                    black_box(result)
+                b.iter(|| {
+                    rt.block_on(async {
+                        let result = no_simd_engine
+                            .process_triples_parallel(triples.view())
+                            .await;
+                        black_box(result)
+                    })
                 });
             },
         );
@@ -167,9 +175,11 @@ fn bench_parallel_scalability(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("workers", workers), &workers, |b, _| {
             let triples = Array2::from_elem((triple_count, 64), 1.0f32);
 
-            b.to_async(&rt).iter(|| async {
-                let result = engine.process_triples_parallel(triples.view()).await;
-                black_box(result)
+            b.iter(|| {
+                rt.block_on(async {
+                    let result = engine.process_triples_parallel(triples.view()).await;
+                    black_box(result)
+                })
             });
         });
     }
@@ -212,14 +222,16 @@ fn bench_memory_efficiency(c: &mut Criterion) {
                     file.write_all(&bytes).unwrap();
                 }
 
-                b.to_async(&rt).iter(|| async {
-                    let mmap = engine.load_large_dataset(test_file.to_str().unwrap()).await;
-                    if let Ok(mmap) = mmap {
-                        let result = engine.process_with_adaptive_chunking(&mmap).await;
-                        black_box(result)
-                    } else {
-                        black_box(Ok(vec![]))
-                    }
+                b.iter(|| {
+                    rt.block_on(async {
+                        let mmap = engine.load_large_dataset(test_file.to_str().unwrap()).await;
+                        if let Ok(mmap) = mmap {
+                            let result = engine.process_with_adaptive_chunking(&mmap).await;
+                            black_box(result)
+                        } else {
+                            black_box(Ok(vec![]))
+                        }
+                    })
                 });
 
                 // Clean up
@@ -263,15 +275,17 @@ fn bench_end_to_end_workflow(c: &mut Criterion) {
                     let graph_data = Array2::from_elem((nodes, dims), 1.0f32);
                     let edge_data = Array2::from_elem((dims, dims * 2), 1.0f32);
 
-                    b.to_async(&rt).iter(|| async {
-                        // Simulate full validation workflow
-                        let embeddings = full_engine
-                            .compute_embeddings_gpu(&graph_data, &edge_data)
-                            .await;
-                        let processed = full_engine
-                            .process_triples_parallel(graph_data.view())
-                            .await;
-                        black_box((embeddings, processed))
+                    b.iter(|| {
+                        rt.block_on(async {
+                            // Simulate full validation workflow
+                            let embeddings = full_engine
+                                .compute_embeddings_gpu(&graph_data, &edge_data)
+                                .await;
+                            let processed = full_engine
+                                .process_triples_parallel(graph_data.view())
+                                .await;
+                            black_box((embeddings, processed))
+                        })
                     });
                 },
             );
@@ -296,14 +310,16 @@ fn bench_end_to_end_workflow(c: &mut Criterion) {
                 let graph_data = Array2::from_elem((nodes, dims), 1.0f32);
                 let edge_data = Array2::from_elem((dims, dims * 2), 1.0f32);
 
-                b.to_async(&rt).iter(|| async {
-                    let embeddings = minimal_engine
-                        .compute_embeddings_simd(&graph_data, &edge_data)
-                        .await;
-                    let processed = minimal_engine
-                        .process_triples_parallel(graph_data.view())
-                        .await;
-                    black_box((embeddings, processed))
+                b.iter(|| {
+                    rt.block_on(async {
+                        let embeddings = minimal_engine
+                            .compute_embeddings_simd(&graph_data, &edge_data)
+                            .await;
+                        let processed = minimal_engine
+                            .process_triples_parallel(graph_data.view())
+                            .await;
+                        black_box((embeddings, processed))
+                    })
                 });
             },
         );
@@ -328,9 +344,11 @@ fn bench_profiling_overhead(c: &mut Criterion) {
     let prof_engine = AdvancedSciRS2Engine::with_config(with_profiling).unwrap();
 
     group.bench_function("with_profiling", |b| {
-        b.to_async(&rt).iter(|| async {
-            let result = prof_engine.process_triples_parallel(test_data.view()).await;
-            black_box(result)
+        b.iter(|| {
+            rt.block_on(async {
+                let result = prof_engine.process_triples_parallel(test_data.view()).await;
+                black_box(result)
+            })
         });
     });
 
@@ -342,11 +360,13 @@ fn bench_profiling_overhead(c: &mut Criterion) {
     let no_prof_engine = AdvancedSciRS2Engine::with_config(without_profiling).unwrap();
 
     group.bench_function("without_profiling", |b| {
-        b.to_async(&rt).iter(|| async {
-            let result = no_prof_engine
-                .process_triples_parallel(test_data.view())
-                .await;
-            black_box(result)
+        b.iter(|| {
+            rt.block_on(async {
+                let result = no_prof_engine
+                    .process_triples_parallel(test_data.view())
+                    .await;
+                black_box(result)
+            })
         });
     });
 

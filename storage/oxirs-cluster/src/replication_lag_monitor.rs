@@ -223,8 +223,14 @@ impl ReplicationLagMonitor {
 
         // Calculate replication rate
         if status.lag_history.len() >= 2 {
-            let oldest = status.lag_history.front().unwrap();
-            let newest = status.lag_history.back().unwrap();
+            let oldest = status
+                .lag_history
+                .front()
+                .expect("lag_history should not be empty when len >= 2");
+            let newest = status
+                .lag_history
+                .back()
+                .expect("lag_history should not be empty when len >= 2");
 
             let time_diff = newest
                 .timestamp

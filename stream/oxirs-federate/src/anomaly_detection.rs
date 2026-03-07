@@ -278,7 +278,7 @@ impl StatisticalDetector {
 
     fn calculate_iqr_score(&self, values: &[f64], point: f64) -> Result<f64> {
         let mut sorted = values.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let q1 = sorted[sorted.len() / 4];
         let q3 = sorted[3 * sorted.len() / 4];
@@ -305,7 +305,7 @@ impl StatisticalDetector {
 
     fn median(&self, values: &[f64]) -> Result<f64> {
         let mut sorted = values.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let mid = sorted.len() / 2;
         if sorted.len() % 2 == 0 {
@@ -461,11 +461,16 @@ mod tests {
         // Add normal data points
         for i in 0..100 {
             let value = 50.0 + (i as f64 % 10.0);
-            let result = detector.add_point(value, SystemTime::now()).unwrap();
+            let result = detector
+                .add_point(value, SystemTime::now())
+                .expect("detection should succeed");
 
             // Should not detect anomalies in normal data
             if i > 30 {
-                assert!(result.is_none() || result.unwrap().anomaly_score < 0.8);
+                assert!(
+                    result.is_none()
+                        || result.expect("operation should succeed").anomaly_score < 0.8
+                );
             }
         }
     }
@@ -485,7 +490,9 @@ mod tests {
         }
 
         // Add anomalous point
-        let result = detector.add_point(200.0, SystemTime::now()).unwrap();
+        let result = detector
+            .add_point(200.0, SystemTime::now())
+            .expect("detection should succeed");
 
         // Should detect anomaly
         assert!(result.is_some());
@@ -530,14 +537,18 @@ mod tests {
         }
 
         // Test normal value
-        let score1 = detector.detect(&history, 52.0).unwrap();
+        let score1 = detector
+            .detect(&history, 52.0)
+            .expect("detection should succeed");
         assert!(score1.is_some());
-        assert!(score1.unwrap() < 0.5);
+        assert!(score1.expect("operation should succeed") < 0.5);
 
         // Test anomalous value
-        let score2 = detector.detect(&history, 150.0).unwrap();
+        let score2 = detector
+            .detect(&history, 150.0)
+            .expect("detection should succeed");
         assert!(score2.is_some());
-        assert!(score2.unwrap() > 0.5);
+        assert!(score2.expect("operation should succeed") > 0.5);
     }
 
     #[test]
@@ -554,7 +565,9 @@ mod tests {
         }
 
         // Test prediction-based detection
-        let score = detector.detect(&history, 100.0).unwrap();
+        let score = detector
+            .detect(&history, 100.0)
+            .expect("detection should succeed");
         assert!(score.is_some());
     }
 }

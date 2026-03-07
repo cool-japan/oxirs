@@ -324,7 +324,10 @@ impl AiOrchestrator {
         graph_name: Option<&str>,
     ) -> Result<Vec<crate::patterns::Pattern>> {
         tracing::debug!("Discovering patterns using PatternAnalyzer");
-        let mut pattern_analyzer = self.pattern_analyzer.lock().unwrap();
+        let mut pattern_analyzer = self
+            .pattern_analyzer
+            .lock()
+            .expect("lock should not be poisoned");
         pattern_analyzer.analyze_graph_patterns(store, graph_name)
     }
 
@@ -334,13 +337,19 @@ impl AiOrchestrator {
         _patterns: &[crate::patterns::Pattern],
         graph_name: Option<&str>,
     ) -> Result<Vec<Shape>> {
-        let mut shape_learner = self.shape_learner.lock().unwrap();
+        let mut shape_learner = self
+            .shape_learner
+            .lock()
+            .expect("lock should not be poisoned");
         shape_learner.learn_shapes_from_store(store, graph_name)
     }
 
     fn assess_quality(&self, store: &dyn Store, shapes: &[Shape]) -> Result<QualityAnalysisResult> {
         tracing::debug!("Assessing quality using QualityAssessor");
-        let mut quality_assessor = self.quality_assessor.lock().unwrap();
+        let mut quality_assessor = self
+            .quality_assessor
+            .lock()
+            .expect("lock should not be poisoned");
         let quality_report = quality_assessor.assess_comprehensive_quality(store, shapes)?;
 
         // Convert QualityReport to QualityAnalysisResult

@@ -21,7 +21,9 @@ use tracing::{debug, info};
 // Module declarations
 pub mod api_key_service; // API key management with rotation and revocation
 pub mod certificate;
-pub mod graph_auth; // 🆕 Graph-level authorization (Phase 2)
+pub mod graph_acl; // Graph-level ACL on top of dataset RBAC (v1.0 LTS)
+pub mod graph_auth; // Graph-level authorization (ReBAC-based, Phase 2)
+pub mod http_auth; // Simplified HTTP auth middleware (ApiKey, Basic, Bearer, None)
 pub mod jwt; // JWT token generation and validation
 pub mod jwt_validation; // JWT validation and JWK management
 pub mod ldap;
@@ -35,6 +37,7 @@ pub mod rbac; // Enhanced Role-Based Access Control
 pub mod rdf_rebac; // 🆕 RDF-native ReBAC implementation (Phase 4)
 pub mod rebac; // 🆕 Relationship-Based Access Control
 pub mod rebac_migration; // 🆕 ReBAC migration tools (Export/Import/Migrate)
+pub mod refresh_token; // OAuth 2.0 Refresh Token Rotation (RFC 6749 §10.4)
 #[cfg(feature = "saml")]
 pub mod saml;
 pub mod session;

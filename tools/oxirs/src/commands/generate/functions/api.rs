@@ -43,7 +43,7 @@ pub async fn run(
         use std::time::SystemTime;
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         Random::seed(timestamp)
     };
@@ -153,7 +153,7 @@ pub async fn from_shacl(
         use std::time::SystemTime;
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         Random::seed(timestamp)
     };
@@ -237,7 +237,7 @@ pub async fn from_rdfs(
         use std::time::SystemTime;
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         Random::seed(timestamp)
     };
@@ -324,7 +324,7 @@ pub async fn from_owl(
         use std::time::SystemTime;
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         Random::seed(timestamp)
     };
@@ -411,7 +411,7 @@ async fn run_schema_based_generation(
         use std::time::SystemTime;
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("SystemTime should be after UNIX_EPOCH")
             .as_secs();
         Random::seed(timestamp)
     };

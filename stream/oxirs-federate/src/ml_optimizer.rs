@@ -796,7 +796,7 @@ impl MLOptimizer {
             .map(|(service, &score)| (service.clone(), score))
             .collect();
 
-        recommended.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        recommended.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let mut recommended_services: Vec<String> = recommended
             .iter()
@@ -810,7 +810,7 @@ impl MLOptimizer {
                 .iter()
                 .map(|(service, &score)| (service.clone(), score))
                 .collect();
-            all_services.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            all_services.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
             recommended_services = all_services
                 .iter()
@@ -869,7 +869,7 @@ impl MLOptimizer {
         }
 
         // Sort by cost (lower is better)
-        order_scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        order_scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let best_order = order_scores
             .first()
@@ -972,7 +972,7 @@ impl MLOptimizer {
             .iter()
             .map(|(pattern, rec)| (pattern.clone(), rec.priority))
             .collect();
-        eviction_order.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        eviction_order.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         let eviction_order: Vec<String> = eviction_order.into_iter().map(|(p, _)| p).collect();
 
         // Estimate hit rate
@@ -1177,7 +1177,7 @@ impl MLOptimizer {
             .map(|s| (s.clone(), scores.get(s).copied().unwrap_or(0.0)))
             .collect();
 
-        scored_services.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scored_services.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         Some(
             scored_services
@@ -1534,7 +1534,10 @@ mod tests {
             variable_count: 3,
         };
 
-        let prediction = optimizer.predict_performance(&features).await.unwrap();
+        let prediction = optimizer
+            .predict_performance(&features)
+            .await
+            .expect("async operation should succeed");
         assert!(prediction >= 0.0);
     }
 
@@ -1565,7 +1568,7 @@ mod tests {
         let recommendation = optimizer
             .recommend_source_selection(&features, &services)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(!recommendation.recommended_services.is_empty());
     }
@@ -1603,7 +1606,7 @@ mod tests {
         let detection = optimizer
             .detect_anomalies(&features, &outcome)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert!(detection.anomaly_score >= 0.0);
     }
 
@@ -1645,11 +1648,17 @@ mod tests {
             variable_count: 4,
         };
 
-        let prediction = optimizer.predict_performance(&features).await.unwrap();
+        let prediction = optimizer
+            .predict_performance(&features)
+            .await
+            .expect("async operation should succeed");
         assert!(prediction >= 0.0);
 
         // Test that we get consistent predictions
-        let prediction2 = optimizer.predict_performance(&features).await.unwrap();
+        let prediction2 = optimizer
+            .predict_performance(&features)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(prediction, prediction2);
     }
 }

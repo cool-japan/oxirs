@@ -212,7 +212,7 @@ fn is_valid_scheme_chars(s: &str) -> bool {
     let mut chars = s.chars();
 
     // First character must be ASCII letter
-    let first = chars.next().unwrap();
+    let first = chars.next().expect("iterator should have next element");
     if !first.is_ascii_alphabetic() {
         return false;
     }

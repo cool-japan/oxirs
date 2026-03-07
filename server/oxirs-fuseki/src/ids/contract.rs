@@ -516,7 +516,8 @@ impl ContractNegotiator for InMemoryNegotiator {
             .ok_or_else(|| IdsError::NegotiationFailed("No current offer to accept".to_string()))?;
 
         // Create contract from accepted offer
-        let contract_id = IdsUri::new(format!("urn:ids:contract:{}", Uuid::new_v4())).unwrap();
+        let contract_id = IdsUri::new(format!("urn:ids:contract:{}", Uuid::new_v4()))
+            .expect("generated contract URI should be valid");
 
         let now = Utc::now();
         let contract_end = offer.duration_days.map(|days| now + Duration::days(days));
@@ -579,12 +580,16 @@ impl ContractNegotiator for InMemoryNegotiator {
                 .current_offer
                 .as_ref()
                 .map(|o| o.consumer.id.clone())
-                .unwrap_or_else(|| IdsUri::new("urn:ids:unknown").unwrap()),
+                .unwrap_or_else(|| {
+                    IdsUri::new("urn:ids:unknown").expect("fallback URI should be valid")
+                }),
             receiver: status
                 .current_offer
                 .as_ref()
                 .map(|o| o.provider.id.clone())
-                .unwrap_or_else(|| IdsUri::new("urn:ids:unknown").unwrap()),
+                .unwrap_or_else(|| {
+                    IdsUri::new("urn:ids:unknown").expect("fallback URI should be valid")
+                }),
             timestamp: Utc::now(),
             policy: None,
             message: Some(reason),

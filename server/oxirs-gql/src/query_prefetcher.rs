@@ -551,7 +551,11 @@ impl QueryPrefetcher {
             }
         }
 
-        predictions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        predictions.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         predictions.truncate(max_predictions);
 
         Ok(predictions)
@@ -623,7 +627,11 @@ impl QueryPrefetcher {
         let mut seen = HashSet::new();
         predictions.retain(|p| seen.insert(p.query.clone()));
 
-        predictions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        predictions.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         predictions.truncate(max_predictions);
 
         Ok(predictions)

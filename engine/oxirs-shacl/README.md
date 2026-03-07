@@ -1,10 +1,10 @@
 # OxiRS SHACL 🔍
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: Production Release (v0.1.0) - Released January 7, 2026
+**Status**: Production Release (v0.2.0) - Released March 5, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -38,8 +38,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-shacl = "0.1.0"
-oxirs-core = "0.1.0"
+oxirs-shacl = "0.2.0"
+oxirs-core = "0.2.0"
 ```
 
 ### Basic Usage
@@ -152,7 +152,7 @@ This crate is under active development. Contributions are welcome! Current prior
 
 ## 📜 License
 
-Licensed under either of Apache License, Version 2.0 or MIT license at your option.
+Licensed under the Apache License, Version 2.0.
 
 ## 📚 Related Projects
 

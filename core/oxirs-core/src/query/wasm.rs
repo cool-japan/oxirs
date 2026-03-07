@@ -831,7 +831,7 @@ mod tests {
     fn test_wasm_compiler_creation() {
         let compiler = WasmQueryCompiler::new(WasmTarget::Wasm1_0, OptimizationLevel::Standard);
 
-        let cache = compiler.cache.read().unwrap();
+        let cache = compiler.cache.read().expect("lock should not be poisoned");
         assert_eq!(cache.modules.len(), 0);
     }
 

@@ -826,7 +826,7 @@ mod tests {
 
         let manager = ErrorRecoveryManager::new(config);
         let context = ConstraintContext::new(
-            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
+            Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI")),
             ShapeId::new("TestShape"),
         );
 

@@ -190,7 +190,10 @@ impl UltraStreamingJsonLdParser {
                 let mut batch_buffer = Vec::with_capacity(config.buffer_size);
 
                 while let Some(chunk) = rx.recv().await {
-                    let _permit = semaphore.acquire().await.unwrap();
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .expect("semaphore should not be closed");
 
                     // Process chunk with SIMD acceleration if available
                     let processed_triples = if config.enable_simd {

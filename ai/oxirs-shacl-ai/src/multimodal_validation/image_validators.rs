@@ -50,9 +50,12 @@ impl ImageValidator for ImageFormatValidator {
 
         let format = self.detect_image_format(&content.data);
         let is_valid = format.is_some()
-            && self
-                .supported_formats
-                .contains(&format.as_ref().unwrap().to_lowercase());
+            && self.supported_formats.contains(
+                &format
+                    .as_ref()
+                    .expect("format should be Some after is_some check")
+                    .to_lowercase(),
+            );
 
         let mut details = HashMap::new();
         details.insert(
