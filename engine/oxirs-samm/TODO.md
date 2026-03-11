@@ -1,6 +1,6 @@
 # OxiRS SAMM - TODO
 
-*Version: 0.2.0 | Last Updated: 2026-03-05*
+*Version: 0.2.1 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -40,7 +40,7 @@ OxiRS SAMM provides comprehensive support for the Semantic Aspect Meta Model (SA
 - ✅ SAMM/AAS parsing, 16 code generators, model analytics, SIMD, plugin system
 - ✅ 398 tests passing
 
-### v0.2.0 - Current Release (March 5, 2026)
+### v0.2.1 - Current Release (March 5, 2026)
 - ✅ Additional correlation analysis methods (Spearman, Kendall)
 - ✅ Partial correlation analysis
 - ✅ Distribution fitting for model metrics
@@ -65,4 +65,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS SAMM v0.2.0 - Semantic Aspect Meta Model support*
+*OxiRS SAMM v0.2.1 - Semantic Aspect Meta Model support*

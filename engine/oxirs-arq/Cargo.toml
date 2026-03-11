@@ -38,33 +38,33 @@ async-trait.workspace = true
 num_cpus = { workspace = true, optional = true }
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 # fastrand removed - using scirs2_core::random instead
-regex = "1.12"
+regex.workspace = true
 reqwest.workspace = true
-md5 = "0.8"
-sha1 = "0.10"
-sha2 = "0.10"
+md5.workspace = true
+sha1.workspace = true
+sha2.workspace = true
 urlencoding = "2.1"
 uuid.workspace = true
-dashmap = "6.1"
-parking_lot = "0.12"
+dashmap.workspace = true
+parking_lot.workspace = true
 ordered-float = "5.1"
 rust_decimal = "1.40"
-hex = "0.4"
-base64 = "0.22"
+hex.workspace = true
+base64.workspace = true
 # lazy_static removed - using std::sync::OnceLock instead (Rust 1.70+)
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 tempfile.workspace = true
 flate2 = "1.1"
-lz4_flex.workspace = true
-zstd = "0.13"
-redis = { version = "0.27.6", features = ["tokio-comp", "connection-manager"], optional = true }
+oxiarc-lz4.workspace = true
+oxiarc-zstd.workspace = true
+redis = { version = "1.0", features = ["tokio-comp", "connection-manager"], optional = true }
 lru = { version = "0.16.3", optional = true }
 futures = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
 tracing-subscriber.workspace = true
-redis = { version = "0.27.6", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "1.0", features = ["tokio-comp", "connection-manager"] }
 futures = "0.3"
 
 [features]

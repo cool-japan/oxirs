@@ -4,7 +4,7 @@
 //! with performance analytics, memory optimization testing,
 //! and high performance scenarios.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
     ConcreteStore,
@@ -13,6 +13,7 @@ use oxirs_shacl::{
     constraints::*, Constraint, ConstraintComponentId, PropertyPath, Shape, ShapeId, Target,
     ValidationConfig, ValidationStrategy, Validator,
 };
+use std::hint::black_box;
 
 /// Advanced benchmark configuration for ultra-high performance testing
 #[derive(Debug, Clone)]

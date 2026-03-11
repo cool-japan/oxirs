@@ -324,21 +324,21 @@ This policy ensures OxiRS properly leverages SciRS2's scientific computing found
 ### Current OxiRS Integration (Production Setup)
 ```toml
 # Essential SciRS2 dependencies for OxiRS (from workspace Cargo.toml)
-scirs2 = { version = "0.1.0-rc.4" }
-scirs2-core = { version = "0.1.0-rc.4", features = ["random"] }  # Foundation (includes array! macro)
+scirs2 = { version = "0.3.0" }
+scirs2-core = { version = "0.3.0", features = ["random"] }  # Foundation (includes array! macro)
 
 # Production integrated crates
-scirs2-linalg = { version = "0.1.0-rc.6" }       # Vector operations, embeddings
-scirs2-stats = { version = "0.1.0-rc.4" }        # Statistical analysis, AI reasoning
-scirs2-neural = { version = "0.1.0-rc.4" }       # Neural networks, deep learning
-scirs2-graph = { version = "0.1.0-rc.4" }        # Graph algorithms on RDF
-scirs2-metrics = { version = "0.1.0-rc.4" }      # Performance monitoring
-scirs2-fft = { version = "0.1.0-rc.4" }          # Signal processing
-scirs2-signal = { version = "0.1.0-rc.4" }       # Stream processing
-scirs2-optimize = { version = "0.1.0-rc.4" }     # Query optimization
-scirs2-cluster = { version = "0.1.0-rc.4" }      # Distributed clustering
-scirs2-text = { version = "0.1.0-rc.4" }         # NLP and text processing
-scirs2-vision = { version = "0.1.0-rc.4" }       # Multi-modal AI capabilities
+scirs2-linalg = { version = "0.3.0" }       # Vector operations, embeddings
+scirs2-stats = { version = "0.3.0" }        # Statistical analysis, AI reasoning
+scirs2-neural = { version = "0.3.0" }       # Neural networks, deep learning
+scirs2-graph = { version = "0.3.0" }        # Graph algorithms on RDF
+scirs2-metrics = { version = "0.3.0" }      # Performance monitoring
+scirs2-fft = { version = "0.3.0" }          # Signal processing
+scirs2-signal = { version = "0.3.0" }       # Stream processing
+scirs2-optimize = { version = "0.3.0" }     # Query optimization
+scirs2-cluster = { version = "0.3.0" }      # Distributed clustering
+scirs2-text = { version = "0.3.0" }         # NLP and text processing
+scirs2-vision = { version = "0.3.0" }       # Multi-modal AI capabilities
 ```
 
 **Remember**: Start minimal, add based on evidence, document everything!

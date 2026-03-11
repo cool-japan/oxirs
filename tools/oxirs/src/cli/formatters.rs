@@ -876,16 +876,15 @@ impl ResultFormatter for PdfFormatter {
         ops.push(Op::SetTextCursor {
             pos: Point::new(left_margin, Mm(280.0)),
         });
-        ops.push(Op::SetFontSizeBuiltinFont {
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
             size: title_font_size,
-            font: BuiltinFont::HelveticaBold,
         });
         ops.push(Op::SetLineHeight {
             lh: title_font_size,
         });
-        ops.push(Op::WriteTextBuiltinFont {
+        ops.push(Op::ShowText {
             items: vec![TextItem::Text(self.title.clone())],
-            font: BuiltinFont::HelveticaBold,
         });
         ops.push(Op::AddLineBreak);
         ops.push(Op::AddLineBreak);
@@ -894,33 +893,31 @@ impl ResultFormatter for PdfFormatter {
         if self.include_metadata {
             let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
-            ops.push(Op::SetFontSizeBuiltinFont {
+            ops.push(Op::SetFont {
+                font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
                 size: font_size,
-                font: BuiltinFont::Helvetica,
             });
             ops.push(Op::SetLineHeight { lh: line_height });
-            ops.push(Op::WriteTextBuiltinFont {
+            ops.push(Op::ShowText {
                 items: vec![TextItem::Text(format!("Generated: {}", timestamp))],
-                font: BuiltinFont::Helvetica,
             });
             ops.push(Op::AddLineBreak);
 
-            ops.push(Op::WriteTextBuiltinFont {
+            ops.push(Op::ShowText {
                 items: vec![TextItem::Text(format!(
                     "{} results with {} variables",
                     results.bindings.len(),
                     results.variables.len()
                 ))],
-                font: BuiltinFont::Helvetica,
             });
             ops.push(Op::AddLineBreak);
             ops.push(Op::AddLineBreak);
         }
 
         // Add table header
-        ops.push(Op::SetFontSizeBuiltinFont {
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
             size: font_size,
-            font: BuiltinFont::HelveticaBold,
         });
         let header_text = results
             .variables
@@ -928,20 +925,18 @@ impl ResultFormatter for PdfFormatter {
             .map(|v| format!("?{}", v))
             .collect::<Vec<_>>()
             .join("\t");
-        ops.push(Op::WriteTextBuiltinFont {
+        ops.push(Op::ShowText {
             items: vec![TextItem::Text(header_text)],
-            font: BuiltinFont::HelveticaBold,
         });
         ops.push(Op::AddLineBreak);
 
         // Add separator
-        ops.push(Op::SetFontSizeBuiltinFont {
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
             size: font_size,
-            font: BuiltinFont::Helvetica,
         });
-        ops.push(Op::WriteTextBuiltinFont {
+        ops.push(Op::ShowText {
             items: vec![TextItem::Text("─".repeat(60))],
-            font: BuiltinFont::Helvetica,
         });
         ops.push(Op::AddLineBreak);
 
@@ -964,9 +959,8 @@ impl ResultFormatter for PdfFormatter {
                 .collect::<Vec<_>>()
                 .join("\t");
 
-            ops.push(Op::WriteTextBuiltinFont {
+            ops.push(Op::ShowText {
                 items: vec![TextItem::Text(row_text)],
-                font: BuiltinFont::Helvetica,
             });
             ops.push(Op::AddLineBreak);
         }

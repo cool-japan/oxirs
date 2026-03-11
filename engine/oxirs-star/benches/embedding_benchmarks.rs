@@ -8,10 +8,11 @@
 //!
 //! Run with: `cargo bench --bench embedding_benchmarks`
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_star::kg_embeddings::{ComplEx, DistMult, EmbeddingConfig, EmbeddingModel, TransE};
 use oxirs_star::ml_embedding_pipeline::{EmbeddingPipeline, PipelineConfig};
 use oxirs_star::{model::NamedNode, StarTerm, StarTriple};
+use std::hint::black_box;
 
 /// Create test triples for benchmarking
 fn create_benchmark_triples(size: usize) -> Vec<StarTriple> {

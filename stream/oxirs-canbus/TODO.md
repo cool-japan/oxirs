@@ -21,7 +21,7 @@ OxiRS CAN Bus v0.1.0 provides automotive CAN bus integration with J1939 protocol
 
 ## Future Roadmap
 
-### v0.2.0 - Production Testing (Q1 2026 - Expanded)
+### v0.2.1 - Production Testing (Q1 2026 - Expanded)
 - [ ] OBD-II testing with real vehicles
 - [ ] J1939 testing with heavy vehicles
 - [ ] Performance validation (10,000 messages/sec)

@@ -141,8 +141,10 @@ impl PersistenceManager {
         // Compress if needed
         let data = match self.config.compression {
             CompressionAlgorithm::None => nodes,
-            CompressionAlgorithm::Zstd { level } => zstd::encode_all(&nodes[..], level)?,
-            CompressionAlgorithm::ZstdMax => zstd::encode_all(&nodes[..], 21)?,
+            CompressionAlgorithm::Zstd { level } => oxiarc_zstd::encode_all(&nodes, level)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?,
+            CompressionAlgorithm::ZstdMax => oxiarc_zstd::encode_all(&nodes, 21)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?,
         };
 
         // Write data length and data
@@ -222,7 +224,8 @@ impl PersistenceManager {
         let nodes_data = match header.compression {
             CompressionAlgorithm::None => compressed_data,
             CompressionAlgorithm::Zstd { .. } | CompressionAlgorithm::ZstdMax => {
-                zstd::decode_all(&compressed_data[..])?
+                oxiarc_zstd::decode_all(&compressed_data)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?
             }
         };
 
@@ -385,8 +388,12 @@ impl PersistenceManager {
 
         let compressed_size = match self.config.compression {
             CompressionAlgorithm::None => nodes.len(),
-            CompressionAlgorithm::Zstd { level } => zstd::encode_all(&nodes[..], level)?.len(),
-            CompressionAlgorithm::ZstdMax => zstd::encode_all(&nodes[..], 21)?.len(),
+            CompressionAlgorithm::Zstd { level } => oxiarc_zstd::encode_all(&nodes, level)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?
+                .len(),
+            CompressionAlgorithm::ZstdMax => oxiarc_zstd::encode_all(&nodes, 21)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?
+                .len(),
         };
 
         Ok(compressed_size)

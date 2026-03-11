@@ -3,8 +3,9 @@
 //! Benchmarks CANbus protocol operations including frame parsing,
 //! J1939 processing, DBC signal decoding, and RDF triple generation.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_canbus::{CanFrame, CanId, J1939Processor, Pgn};
+use std::hint::black_box;
 
 /// Generate test CAN frames
 fn generate_can_frames(count: usize) -> Vec<CanFrame> {

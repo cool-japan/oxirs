@@ -72,7 +72,7 @@ cargo tree -p oxirs --depth 1 | grep scirs2
 
 **Result**:
 ```
-├── scirs2-core v0.1.0
+├── scirs2-core v0.3.0
 ```
 
 ✅ scirs2-core is properly included as a direct dependency
@@ -125,4 +125,4 @@ All random number generation, array operations, and scientific computing properl
 
 **Verified by**: Automated compliance scan  
 **Date**: January 7, 2026  
-**Version**: v0.1.0
+**Version**: v0.3.0

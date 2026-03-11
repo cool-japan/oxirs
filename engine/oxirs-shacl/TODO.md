@@ -1,10 +1,10 @@
 # OxiRS SHACL - TODO
 
-*Version: 0.2.0 | Last Updated: 2026-03-05*
+*Version: 0.2.1 | Last Updated: 2026-03-05*
 
 ## Current Status
 
-OxiRS SHACL v0.2.0 is production-ready, providing W3C SHACL validation with cross-module integration and advanced features.
+OxiRS SHACL v0.2.1 is production-ready, providing W3C SHACL validation with cross-module integration and advanced features.
 
 ### Production Features
 - ✅ **W3C SHACL Compliance** - 27/27 W3C constraint types passing
@@ -28,7 +28,7 @@ OxiRS SHACL v0.2.0 is production-ready, providing W3C SHACL validation with cros
 - ✅ SHACL-SPARQL, cross-module integration, distributed validation
 - ✅ 498 tests passing
 
-### v0.2.0 - Current Release (March 5, 2026)
+### v0.2.1 - Current Release (March 5, 2026)
 - ✅ Advanced constraint types
 - ✅ Performance optimization for large datasets
 - ✅ Enhanced error reporting
@@ -50,4 +50,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS SHACL v0.2.0 - W3C SHACL validation engine*
+*OxiRS SHACL v0.2.1 - W3C SHACL validation engine*

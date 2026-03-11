@@ -641,12 +641,14 @@ impl ImmutableStorage {
     /// Compress block data
     fn compress_block(&self, block: &Block) -> Result<Vec<u8>, OxirsError> {
         let serialized = oxicode::serde::encode_to_vec(block, oxicode::config::standard())?;
-        zstd::encode_all(&serialized[..], 3).map_err(Into::into)
+        oxiarc_zstd::encode_all(&serialized, 3)
+            .map_err(|e| OxirsError::Io(format!("Zstd compression failed: {}", e)))
     }
 
     /// Decompress block data
     fn decompress_block(&self, data: &[u8]) -> Result<Block, OxirsError> {
-        let decompressed = zstd::decode_all(data)?;
+        let decompressed = oxiarc_zstd::decode_all(data)
+            .map_err(|e| OxirsError::Io(format!("Zstd decompression failed: {}", e)))?;
         oxicode::serde::decode_from_slice(&decompressed, oxicode::config::standard())
             .map(|(v, _)| v)
             .map_err(Into::into)

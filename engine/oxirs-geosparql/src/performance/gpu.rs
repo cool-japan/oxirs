@@ -128,7 +128,7 @@ impl GpuGeometryContext {
         let mut distances = Array2::zeros((n, n));
         for i in 0..n {
             for j in i..n {
-                let dist = Euclidean::distance(points[i], points[j]) as f32;
+                let dist = Euclidean.distance(points[i], points[j]) as f32;
                 distances[[i, j]] = dist;
                 distances[[j, i]] = dist;
             }
@@ -244,7 +244,7 @@ impl GpuGeometryContext {
 
         for i in 0..m {
             for j in 0..n {
-                distances[[i, j]] = Euclidean::distance(query_points[i], target_points[j]) as f32;
+                distances[[i, j]] = Euclidean.distance(query_points[i], target_points[j]) as f32;
             }
         }
 
@@ -759,7 +759,7 @@ mod tests {
         assert_eq!(distances.shape(), &[50, 30]);
 
         // Verify diagonal (point to itself) is approximately 0
-        for i in 0..30.min(50) {
+        for i in 0..30 {
             assert!(distances[[i, i]].abs() < 1e-3);
         }
 
@@ -778,8 +778,8 @@ mod tests {
         assert_eq!(results[0].len(), 10);
 
         // Points at same location should intersect
-        for i in 0..10 {
-            assert!(results[i][i]);
+        for (i, row) in results.iter().enumerate() {
+            assert!(row[i]);
         }
 
         Ok(())

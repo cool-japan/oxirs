@@ -6,10 +6,11 @@
 //! - Join order optimization for 5-way join
 //! - Result merging from multiple endpoints
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_federate::query_rewrite::{
     CostEstimator, EndpointInfo, EndpointSubquery, FederationOptimizer, QueryDecomposer,
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 // --- Helpers ---

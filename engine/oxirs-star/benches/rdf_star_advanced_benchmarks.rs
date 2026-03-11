@@ -7,13 +7,14 @@
 //!
 //! Run with: `cargo bench --bench rdf_star_advanced_benchmarks`
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_star::hdt_star::{HdtStarBuilder, HdtStarConfig, HdtStarReader};
 use oxirs_star::property_graph_bridge::{
     ConversionConfig, LabeledPropertyGraph, LpgEdge, LpgNode, PropertyGraphBridge, PropertyValue,
 };
 use oxirs_star::streaming_query::{CepMatcher, CepPattern, WindowConfig, WindowedAggregator};
 use oxirs_star::{StarStore, StarTerm, StarTriple};
+use std::hint::black_box;
 use std::io::Cursor;
 
 // ============================================================================

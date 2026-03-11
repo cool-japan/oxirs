@@ -11,11 +11,9 @@ use tracing::{debug, info};
 #[cfg(feature = "compression")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 #[cfg(feature = "compression")]
-use lz4_flex::{compress_prepend_size, decompress_size_prepended};
+use oxiarc_zstd::{ZstdStreamDecoder as ZstdDecoder, ZstdStreamEncoder as ZstdEncoder};
 #[cfg(feature = "compression")]
 use snap::{read::FrameDecoder as SnapDecoder, write::FrameEncoder as SnapEncoder};
-#[cfg(feature = "compression")]
-use zstd::{Decoder as ZstdDecoder, Encoder as ZstdEncoder};
 
 use std::io::{Read, Write};
 
@@ -312,7 +310,8 @@ impl CompressionManager {
 
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Lz4 => {
-                let compressed = compress_prepend_size(data);
+                let compressed = oxiarc_lz4::compress(data)
+                    .map_err(|e| anyhow!("LZ4 compression failed: {}", e))?;
                 Ok(compressed)
             }
 
@@ -327,7 +326,7 @@ impl CompressionManager {
 
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Zstd => {
-                let mut encoder = ZstdEncoder::new(Vec::new(), self.config.level as i32)?;
+                let mut encoder = ZstdEncoder::new(Vec::new(), self.config.level as i32);
                 encoder.write_all(data)?;
                 encoder
                     .finish()
@@ -363,8 +362,8 @@ impl CompressionManager {
 
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Lz4 => {
-                let decompressed = decompress_size_prepended(data)
-                    .map_err(|e| anyhow!("Lz4 decompression failed: {}", e))?;
+                let decompressed = oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
+                    .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
                 Ok(decompressed)
             }
 
@@ -378,7 +377,7 @@ impl CompressionManager {
 
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Zstd => {
-                let mut decoder = ZstdDecoder::new(data)?;
+                let mut decoder = ZstdDecoder::new(data);
                 let mut decompressed = Vec::new();
                 decoder.read_to_end(&mut decompressed)?;
                 Ok(decompressed)

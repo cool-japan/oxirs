@@ -263,7 +263,7 @@ async fn handle_collaboration_websocket(
                 if let Ok(json) = serde_json::to_string(&update) {
                     let mut sender = sender_clone.lock().await;
                     if sender
-                        .send(axum::extract::ws::Message::Text(json))
+                        .send(axum::extract::ws::Message::Text(json.into()))
                         .await
                         .is_err()
                     {

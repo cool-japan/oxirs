@@ -33,8 +33,6 @@
 //! assert!(report.coherence_rate > 0.99);
 //! ```
 
-#![cfg(feature = "distributed-cache")]
-
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
@@ -163,8 +161,10 @@ impl CacheCoherenceProtocol {
 
         info!("Starting coherence verification for {} nodes", caches.len());
 
-        let mut report = CoherenceReport::default();
-        report.num_nodes = caches.len();
+        let mut report = CoherenceReport {
+            num_nodes: caches.len(),
+            ..Default::default()
+        };
 
         // Sample keys to check
         let sample_keys = self.sample_keys(100)?;
@@ -218,7 +218,7 @@ impl CacheCoherenceProtocol {
                 Ok(Some(value)) => {
                     // Hash the value to compare
                     let value_hash = Self::hash_value(&value);
-                    values.entry(value_hash).or_insert_with(Vec::new).push(idx);
+                    values.entry(value_hash).or_default().push(idx);
                 }
                 Ok(None) => {
                     // Node doesn't have the value (cache miss)
@@ -385,12 +385,14 @@ mod tests {
 
     #[test]
     fn test_coherence_report() {
-        let mut report = CoherenceReport::default();
-        report.num_nodes = 3;
-        report.total_keys_checked = 100;
-        report.consistent_keys = 99;
-        report.inconsistent_keys = vec![CacheKey::new("key1".to_string())];
-        report.coherence_rate = 0.99;
+        let report = CoherenceReport {
+            num_nodes: 3,
+            total_keys_checked: 100,
+            consistent_keys: 99,
+            inconsistent_keys: vec![CacheKey::new("key1".to_string())],
+            coherence_rate: 0.99,
+            ..Default::default()
+        };
 
         assert!(report.is_acceptable(0.95));
         assert!(!report.is_acceptable(0.995));

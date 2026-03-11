@@ -298,13 +298,17 @@ pub struct SearchStats {
     pub heap_size_mb: usize,
 }
 
+/// Type alias for the SPARQL text function registry
+#[cfg(feature = "tantivy-search")]
+pub type TextFunctionRegistry = HashMap<String, Box<dyn Fn(&[String]) -> Result<String>>>;
+
 /// Helper function to register text search functions in SPARQL engine
 ///
 /// This should be called during SPARQL engine initialization to make
 /// text search functions available in queries.
 #[cfg(feature = "tantivy-search")]
 pub fn register_text_functions(
-    function_registry: &mut HashMap<String, Box<dyn Fn(&[String]) -> Result<String>>>,
+    function_registry: &mut TextFunctionRegistry,
     text_functions: Arc<SparqlTextFunctions>,
 ) {
     // Register vec:text_search
@@ -438,7 +442,6 @@ mod tests {
         // Test text search
         let results = text_funcs.text_search("", "learning", Some(10), Some(0.0))?;
         assert!(!results.is_empty(), "Should find matching documents");
-        assert!(results.len() >= 1);
 
         Ok(())
     }

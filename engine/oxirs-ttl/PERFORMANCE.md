@@ -1,6 +1,6 @@
 # Performance Optimizations - OxiRS TTL
 
-**Status**: ✅ Complete (v0.2.0)
+**Status**: ✅ Complete (v0.2.1)
 **Date**: 2026-01-06
 **Tests**: 245/245 passing (100%)
 

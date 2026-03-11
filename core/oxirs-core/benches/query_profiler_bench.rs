@@ -3,8 +3,9 @@
 //! Measures the overhead of query profiling to ensure it has minimal impact
 //! on query execution performance.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::query::query_profiler::{ProfilerConfig, QueryProfiler};
+use std::hint::black_box;
 use std::time::Duration;
 
 fn profiler_overhead_benchmark(c: &mut Criterion) {

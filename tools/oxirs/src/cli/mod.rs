@@ -100,7 +100,8 @@ pub struct CliContext {
 
 impl CliContext {
     pub fn new() -> Self {
-        let no_color = std::env::var("NO_COLOR").is_ok() || !atty::is(atty::Stream::Stdout);
+        use std::io::IsTerminal;
+        let no_color = std::env::var("NO_COLOR").is_ok() || !std::io::stdout().is_terminal();
 
         Self {
             verbose: false,

@@ -230,7 +230,7 @@ impl WalOptimizer {
         let (compressed, data) = if self.config.enable_compression
             && serialized.len() > self.config.compression_threshold
         {
-            let data = lz4_flex::compress_prepend_size(&serialized);
+            let data = oxiarc_lz4::compress(&serialized).unwrap_or_else(|_| serialized.clone());
             self.stats
                 .compressed_entries
                 .fetch_add(1, Ordering::Relaxed);

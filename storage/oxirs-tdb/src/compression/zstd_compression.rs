@@ -115,7 +115,7 @@ impl CompressionAlgorithm for ZstdCompressor {
         let start = Instant::now();
 
         // Compress using zstd
-        let mut encoder = zstd::Encoder::new(Vec::new(), self.level)?;
+        let mut encoder = oxiarc_zstd::ZstdStreamEncoder::new(Vec::new(), self.level);
         encoder.write_all(data)?;
         let compressed = encoder.finish()?;
 
@@ -150,7 +150,7 @@ impl CompressionAlgorithm for ZstdCompressor {
         let start = Instant::now();
 
         // Decompress using zstd
-        let mut decoder = zstd::Decoder::new(&compressed.data[..])?;
+        let mut decoder = oxiarc_zstd::ZstdStreamDecoder::new(&compressed.data[..]);
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
 

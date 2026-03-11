@@ -1,11 +1,11 @@
 //! Coordinate Reference System (CRS) transformation functions
 //!
 //! This module provides functions for transforming geometries between different
-//! Coordinate Reference Systems using the PROJ library.
+//! Coordinate Reference Systems using oxigdal-proj (pure Rust).
 //!
 //! # Performance
 //!
-//! - `transform_batch()` reuses a single PROJ object for all geometries (~10x speedup)
+//! - `transform_batch()` reuses a single Transformer for all geometries (~10x speedup)
 //! - For large batches (>100 geometries), use `transform_batch_parallel()` with the
 //!   `parallel` feature enabled for significant speedup on multi-core systems
 
@@ -14,7 +14,7 @@ use crate::geometry::{Crs, Geometry};
 
 /// Transform a geometry from its current CRS to a target CRS
 ///
-/// This function uses the PROJ library to perform coordinate transformations.
+/// This function uses oxigdal-proj (pure Rust) to perform coordinate transformations.
 /// Both the source and target CRS must have EPSG codes.
 ///
 /// # Arguments
@@ -30,7 +30,7 @@ use crate::geometry::{Crs, Geometry};
 ///
 /// Returns an error if:
 /// - The source or target CRS doesn't have an EPSG code
-/// - The PROJ transformation fails
+/// - The coordinate transformation fails
 /// - The `proj-support` feature is not enabled
 ///
 /// # Examples
@@ -55,7 +55,7 @@ use crate::geometry::{Crs, Geometry};
 #[cfg(feature = "proj-support")]
 pub fn transform(geom: &Geometry, target_crs: &Crs) -> Result<Geometry> {
     use geo::algorithm::map_coords::MapCoords;
-    use proj::Proj;
+    use oxigdal_proj::Transformer;
 
     // If already in target CRS, return clone
     if geom.crs == *target_crs {
@@ -77,33 +77,35 @@ pub fn transform(geom: &Geometry, target_crs: &Crs) -> Result<Geometry> {
         ))
     })?;
 
-    // Create PROJ transformation
-    let proj_string = format!("EPSG:{}", source_epsg);
-    let target_string = format!("EPSG:{}", target_epsg);
-
-    let proj = Proj::new_known_crs(&proj_string, &target_string, None).map_err(|e| {
+    // Create oxigdal-proj transformer (pure Rust)
+    let transformer = Transformer::from_epsg(source_epsg, target_epsg).map_err(|e| {
         GeoSparqlError::CrsTransformationFailed(format!(
-            "Failed to create PROJ transformation from EPSG:{} to EPSG:{}: {}",
+            "Failed to create transformation from EPSG:{} to EPSG:{}: {}",
             source_epsg, target_epsg, e
         ))
     })?;
 
     // Transform coordinates
     let transformed_geom = geom.geom.map_coords(|coord| {
-        // PROJ expects (longitude, latitude) order for geographic CRS
-        let point: (f64, f64) = proj.convert((coord.x, coord.y)).unwrap_or_else(|e| {
-            // Log error but fallback to original coordinates
-            tracing::warn!(
-                "PROJ conversion failed for ({}, {}): {}. Using original coordinates.",
-                coord.x,
-                coord.y,
-                e
-            );
-            (coord.x, coord.y)
-        });
-        geo_types::Coord {
-            x: point.0,
-            y: point.1,
+        let input = oxigdal_proj::Coordinate::new(coord.x, coord.y);
+        match transformer.transform(&input) {
+            Ok(output) => geo_types::Coord {
+                x: output.x,
+                y: output.y,
+            },
+            Err(e) => {
+                // Log error but fallback to original coordinates
+                tracing::warn!(
+                    "CRS conversion failed for ({}, {}): {}. Using original coordinates.",
+                    coord.x,
+                    coord.y,
+                    e
+                );
+                geo_types::Coord {
+                    x: coord.x,
+                    y: coord.y,
+                }
+            }
         }
     });
 
@@ -120,12 +122,12 @@ pub fn transform(_geom: &Geometry, _target_crs: &Crs) -> Result<Geometry> {
 
 /// Transform multiple geometries to a target CRS
 ///
-/// This function reuses a single PROJ transformation object for all geometries,
+/// This function reuses a single Transformer for all geometries,
 /// providing ~10x speedup over calling `transform()` multiple times.
 ///
 /// # Performance
 ///
-/// - Creates ONE Proj object for the entire batch
+/// - Creates ONE Transformer for the entire batch
 /// - All geometries must have the same source CRS
 /// - For large batches (>100 geometries), consider using `transform_batch_parallel()`
 ///
@@ -150,7 +152,7 @@ pub fn transform(_geom: &Geometry, _target_crs: &Crs) -> Result<Geometry> {
 #[cfg(feature = "proj-support")]
 pub fn transform_batch(geometries: &[Geometry], target_crs: &Crs) -> Result<Vec<Geometry>> {
     use geo::algorithm::map_coords::MapCoords;
-    use proj::Proj;
+    use oxigdal_proj::Transformer;
 
     if geometries.is_empty() {
         return Ok(Vec::new());
@@ -184,34 +186,37 @@ pub fn transform_batch(geometries: &[Geometry], target_crs: &Crs) -> Result<Vec<
         ))
     })?;
 
-    // Create ONE PROJ transformation for all geometries
-    let proj_string = format!("EPSG:{}", source_epsg);
-    let target_string = format!("EPSG:{}", target_epsg);
-
-    let proj = Proj::new_known_crs(&proj_string, &target_string, None).map_err(|e| {
+    // Create ONE transformer for all geometries (pure Rust)
+    let transformer = Transformer::from_epsg(source_epsg, target_epsg).map_err(|e| {
         GeoSparqlError::CrsTransformationFailed(format!(
-            "Failed to create PROJ transformation from EPSG:{} to EPSG:{}: {}",
+            "Failed to create transformation from EPSG:{} to EPSG:{}: {}",
             source_epsg, target_epsg, e
         ))
     })?;
 
-    // Transform all geometries using the same Proj object
+    // Transform all geometries using the same Transformer object
     let transformed: Result<Vec<_>> = geometries
         .iter()
         .map(|geom| {
             let transformed_geom = geom.geom.map_coords(|coord| {
-                let point: (f64, f64) = proj.convert((coord.x, coord.y)).unwrap_or_else(|e| {
-                    tracing::warn!(
-                        "PROJ conversion failed for ({}, {}): {}. Using original coordinates.",
-                        coord.x,
-                        coord.y,
-                        e
-                    );
-                    (coord.x, coord.y)
-                });
-                geo_types::Coord {
-                    x: point.0,
-                    y: point.1,
+                let input = oxigdal_proj::Coordinate::new(coord.x, coord.y);
+                match transformer.transform(&input) {
+                    Ok(output) => geo_types::Coord {
+                        x: output.x,
+                        y: output.y,
+                    },
+                    Err(e) => {
+                        tracing::warn!(
+                            "CRS conversion failed for ({}, {}): {}. Using original coordinates.",
+                            coord.x,
+                            coord.y,
+                            e
+                        );
+                        geo_types::Coord {
+                            x: coord.x,
+                            y: coord.y,
+                        }
+                    }
                 }
             });
             Ok(Geometry::with_crs(transformed_geom, target_crs.clone()))
@@ -407,7 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn test_transform_batch_reuses_proj() {
+    fn test_transform_batch_reuses_transformer() {
         // Create batch of geometries (all same source CRS)
         let geometries: Vec<_> = (0..10)
             .map(|i| {
@@ -418,7 +423,7 @@ mod tests {
             })
             .collect();
 
-        // Transform batch - should create ONE Proj object and reuse it
+        // Transform batch - should create ONE Transformer and reuse it
         let transformed = transform_batch(&geometries, &Crs::epsg(3857)).unwrap();
 
         assert_eq!(transformed.len(), 10);

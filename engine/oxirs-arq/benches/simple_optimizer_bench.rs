@@ -2,10 +2,11 @@
 //!
 //! This benchmark validates optimizer performance with the current codebase API.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_arq::algebra::{Algebra, BinaryOperator, Expression, Term, TriplePattern, Variable};
 use oxirs_arq::optimizer::{Optimizer, OptimizerConfig};
 use oxirs_core::NamedNode;
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Create a simple BGP with n patterns

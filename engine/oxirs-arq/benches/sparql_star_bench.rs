@@ -10,8 +10,8 @@
 //! - Statistics tracking overhead
 //! - Scalability with different nesting levels
 
-#[cfg(feature = "star")]
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+#[allow(unused_imports)]
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 #[cfg(feature = "star")]
 use oxirs_arq::star_integration::{
     pattern_matching, sparql_star_functions, star_statistics::SparqlStarStatistics,
@@ -19,6 +19,8 @@ use oxirs_arq::star_integration::{
 };
 #[cfg(feature = "star")]
 use oxirs_star::{StarTerm, StarTriple};
+#[cfg(feature = "star")]
+use std::hint::black_box;
 #[cfg(feature = "star")]
 use std::time::Duration;
 

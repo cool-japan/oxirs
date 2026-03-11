@@ -3,9 +3,10 @@
 //! Comprehensive benchmarks for property path evaluation performance after SplitRS refactoring.
 //! These benchmarks ensure that the module reorganization maintains optimal performance.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::model::NamedNode;
 use oxirs_shacl::{paths::PropertyPathEvaluator, PropertyPath};
+use std::hint::black_box;
 
 /// Create a simple predicate path
 fn create_predicate_path() -> PropertyPath {

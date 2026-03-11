@@ -26,7 +26,7 @@ use std::time::Instant;
 
 /// LZ4 compression algorithm
 ///
-/// Uses lz4_flex for pure Rust LZ4 compression.
+/// Uses oxiarc_lz4 for pure Rust LZ4 compression.
 /// Provides very fast compression and decompression with moderate compression ratios.
 #[derive(Debug, Clone)]
 pub struct Lz4Compressor {
@@ -104,13 +104,14 @@ impl CompressionAlgorithm for Lz4Compressor {
 
         let start = Instant::now();
 
-        // Use lz4_flex for compression
+        // Use oxiarc_lz4 for compression
         let compressed = if self.level == 0 {
             // Fast path: no compression
             data.to_vec()
         } else {
             // Compress with specified level
-            lz4_flex::compress_prepend_size(data)
+            oxiarc_lz4::compress(data)
+                .map_err(|e| anyhow::anyhow!("LZ4 compression failed: {}", e))?
         };
 
         let compression_time = start.elapsed();
@@ -143,13 +144,14 @@ impl CompressionAlgorithm for Lz4Compressor {
 
         let start = Instant::now();
 
-        // Use lz4_flex for decompression
+        // Use oxiarc_lz4 for decompression
         let decompressed =
             if compressed.metadata.original_size == compressed.metadata.compressed_size {
                 // Data was not compressed (level 0)
                 compressed.data.clone()
             } else {
-                lz4_flex::decompress_size_prepended(&compressed.data)?
+                oxiarc_lz4::decompress(&compressed.data, compressed.metadata.original_size as usize)
+                    .map_err(|e| anyhow::anyhow!("LZ4 decompression failed: {}", e))?
             };
 
         let decompression_time = start.elapsed();

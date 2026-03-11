@@ -131,7 +131,7 @@ impl Network {
                 });
 
                 // Calculate edge weight (Euclidean distance)
-                let weight = Euclidean::distance(Point::from(start_coord), Point::from(end_coord));
+                let weight = Euclidean.distance(Point::from(start_coord), Point::from(end_coord));
 
                 // Create edge
                 let edge_id = network.edges.len();
@@ -227,8 +227,8 @@ impl Network {
         self.nodes
             .iter()
             .min_by(|a, b| {
-                let dist_a = Euclidean::distance(point, Point::from(a.coord));
-                let dist_b = Euclidean::distance(point, Point::from(b.coord));
+                let dist_a = Euclidean.distance(point, Point::from(a.coord));
+                let dist_b = Euclidean.distance(point, Point::from(b.coord));
                 dist_a
                     .partial_cmp(&dist_b)
                     .unwrap_or(std::cmp::Ordering::Equal)
@@ -421,7 +421,7 @@ pub fn astar_shortest_path(network: &Network, start: usize, end: usize) -> Resul
 
     let heuristic = |node_id: usize| -> f64 {
         let node_coord = network.nodes[node_id].coord;
-        Euclidean::distance(Point::from(node_coord), Point::from(goal_coord))
+        Euclidean.distance(Point::from(node_coord), Point::from(goal_coord))
     };
 
     let mut g_scores: Vec<f64> = vec![f64::INFINITY; network.nodes.len()];

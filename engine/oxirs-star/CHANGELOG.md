@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Version bump to 0.2.0 release
-- All v0.1.x features stabilized and production-hardened
+- All v0.1.0x features stabilized and production-hardened
 
 ---
 
@@ -276,7 +276,7 @@ All v0.1.0 roadmap features implemented and tested. 292/292 tests passing. Produ
 
 ### Dependencies
 
-- `scirs2-core` ^0.2.0 - Scientific computing foundation
+- `scirs2-core` ^0.3.0 - Scientific computing foundation
 - `serde` ^1.0 - Serialization framework
 - `thiserror` ^2.0 - Error handling
 - `tracing` ^0.1 - Logging and instrumentation

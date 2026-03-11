@@ -33,7 +33,7 @@ Modbus TCP and RTU protocol support for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-modbus = "0.2.0"
+oxirs-modbus = "0.2.1"
 ```
 
 ### Basic Modbus TCP Example

@@ -32,8 +32,11 @@ base64.workspace = true
 hex.workspace = true
 k256.workspace = true
 p256.workspace = true
-rsa.workspace = true
+ring.workspace = true
 bls12_381_plus.workspace = true
+# rsa is only used for RSA key *generation* (keygen feature).
+# All signing and verification use ring (constant-time, RUSTSEC-2023-0071 free).
+rsa = { workspace = true, optional = true }
 
 # Multiformat encoding
 multibase.workspace = true
@@ -71,6 +74,9 @@ tempfile.workspace = true
 
 [features]
 default = ["did-key", "vc-data-model-2", "did-ethr", "did-ion", "bbs-plus", "zkp"]
+# keygen: enables RSA key-pair generation (uses the `rsa` crate; not needed for
+# signing/verification which always go through ring).
+keygen = ["dep:rsa"]
 did-key = []
 did-web = ["reqwest"]
 did-ebsi = ["reqwest"]

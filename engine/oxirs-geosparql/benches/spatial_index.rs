@@ -6,9 +6,10 @@
 //! - Nearest neighbor queries
 //! - Scaling with dataset size
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_geosparql::geometry::Geometry;
 use oxirs_geosparql::index::SpatialIndex;
+use std::hint::black_box;
 
 /// Benchmark R-tree insertions
 fn bench_rtree_insert(c: &mut Criterion) {

@@ -1,6 +1,6 @@
 # OxiRS TDB - TODO
 
-*Version: 0.2.0 | Last Updated: 2026-03-05*
+*Version: 0.2.1 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -24,7 +24,7 @@
 
 ## Future Roadmap
 
-### v0.2.0 - Performance & Scale (Q1 2026 - Expanded)
+### v0.2.1 - Performance & Scale (Q1 2026 - Expanded)
 - [ ] Advanced compression algorithms
 - [ ] Enhanced index strategies
 - [ ] Improved query optimization

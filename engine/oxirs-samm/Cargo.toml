@@ -37,16 +37,16 @@ scirs2-stats = { workspace = true }
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
 async-trait.workspace = true
-rayon = "1.10"
+rayon.workspace = true
 async-stream = "0.3"
-futures = "0.3"
+futures.workspace = true
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-quick-xml = { version = "0.38", features = ["serialize"] }
+quick-xml = { version = "0.39", features = ["serialize"] }
 oxiarc-archive.workspace = true
-base64 = "0.22"
+base64.workspace = true
 
 # Error handling and logging
 anyhow.workspace = true
@@ -57,14 +57,14 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 # Utilities
 url.workspace = true
 once_cell.workspace = true
-regex = "1.12"
-num_cpus = "1.17"
+regex.workspace = true
+num_cpus.workspace = true
 bytecount = "0.6"
 reqwest.workspace = true
 sha2.workspace = true
 hmac.workspace = true
 hex.workspace = true
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { workspace = true, features = ["serde"] }
 
 # Template engine for custom code generation
 tera = "1.20"
@@ -78,8 +78,8 @@ graphviz-rust = { version = "0.9", optional = true }
 [dev-dependencies]
 tempfile.workspace = true
 tokio-test = "0.4"
-criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
-proptest = "1.7"
+criterion = { workspace = true, features = ["async_tokio"] }
+proptest.workspace = true
 
 [[bench]]
 name = "parser_benchmarks"

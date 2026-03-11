@@ -358,7 +358,6 @@ fn test_sparql_integration() -> Result<()> {
     let results = text_funcs.text_search("", "learning", Some(10), Some(0.0))?;
 
     assert!(!results.is_empty(), "Should find matching documents");
-    assert!(results.len() >= 1);
 
     // Test phrase search
     let phrase_results = text_funcs.phrase_search("", "natural language processing", Some(10))?;

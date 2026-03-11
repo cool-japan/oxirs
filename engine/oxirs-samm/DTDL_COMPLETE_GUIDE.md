@@ -1,6 +1,6 @@
 # DTDL Complete Implementation Guide
 
-**Version**: OxiRS v0.2.0 (0.2.0)
+**Version**: OxiRS v0.2.1 (0.2.1)
 **Implementation**: Phase 1 + Phase 2 Complete
 **Status**: ✅ Production-Ready
 **Test Coverage**: 446 tests (100% passing)

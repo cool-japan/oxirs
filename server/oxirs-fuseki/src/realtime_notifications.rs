@@ -395,7 +395,7 @@ impl NotificationManager {
         });
 
         if let Err(e) = socket
-            .send(Message::Text(serde_json::to_string(&welcome)?))
+            .send(Message::Text(serde_json::to_string(&welcome)?.into()))
             .await
         {
             error!("Failed to send welcome message: {}", e);
@@ -417,7 +417,7 @@ impl NotificationManager {
 
                             // Send notification to client
                             let json = serde_json::to_string(&notification)?;
-                            if let Err(e) = socket.send(Message::Text(json)).await {
+                            if let Err(e) = socket.send(Message::Text(json.into())).await {
                                 error!("Failed to send notification to client {}: {}", client_id, e);
                                 break;
                             }
@@ -429,7 +429,7 @@ impl NotificationManager {
                                 "type": "lag_warning",
                                 "lagged_by": n,
                             });
-                            let _ = socket.send(Message::Text(serde_json::to_string(&lag_msg)?)).await;
+                            let _ = socket.send(Message::Text(serde_json::to_string(&lag_msg)?.into())).await;
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             info!("Notification channel closed for client {}", client_id);

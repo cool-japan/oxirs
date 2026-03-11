@@ -4,11 +4,12 @@
 //!
 //! Run with: cargo bench --bench performance_comparison --features "parallel"
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use geo_types::{Geometry as GeoGeometry, Point};
 use oxirs_geosparql::functions::geometric_operations::distance as standard_distance;
 use oxirs_geosparql::geometry::Geometry;
 use oxirs_geosparql::performance::{simd, BatchProcessor};
+use std::hint::black_box;
 
 #[cfg(feature = "parallel")]
 use oxirs_geosparql::performance::parallel;

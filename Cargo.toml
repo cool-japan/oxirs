@@ -34,7 +34,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 authors = ["KitaSan <info@kitasan.io>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -65,31 +65,31 @@ unsafe_code = "warn"
 
 [workspace.dependencies]
 # Internal OxiRS crates (version inherited from workspace.package)
-oxirs-core = { version = "0.2.0", path = "core/oxirs-core" }
-oxirs-fuseki = { version = "0.2.0", path = "server/oxirs-fuseki" }
-oxirs-gql = { version = "0.2.0", path = "server/oxirs-gql" }
-oxirs-arq = { version = "0.2.0", path = "engine/oxirs-arq" }
-oxirs-geosparql = { version = "0.2.0", path = "engine/oxirs-geosparql" }
-oxirs-rule = { version = "0.2.0", path = "engine/oxirs-rule" }
-oxirs-samm = { version = "0.2.0", path = "engine/oxirs-samm" }
-oxirs-shacl = { version = "0.2.0", path = "engine/oxirs-shacl" }
-oxirs-star = { version = "0.2.0", path = "engine/oxirs-star" }
-oxirs-ttl = { version = "0.2.0", path = "engine/oxirs-ttl" }
-oxirs-vec = { version = "0.2.0", path = "engine/oxirs-vec" }
-oxirs-tdb = { version = "0.2.0", path = "storage/oxirs-tdb" }
-oxirs-cluster = { version = "0.2.0", path = "storage/oxirs-cluster" }
-oxirs-stream = { version = "0.2.0", path = "stream/oxirs-stream" }
-oxirs-federate = { version = "0.2.0", path = "stream/oxirs-federate" }
-oxirs-embed = { version = "0.2.0", path = "ai/oxirs-embed" }
-oxirs-shacl-ai = { version = "0.2.0", path = "ai/oxirs-shacl-ai" }
-oxirs-chat = { version = "0.2.0", path = "ai/oxirs-chat" }
-oxirs-physics = { version = "0.2.0", path = "ai/oxirs-physics" }
-oxirs-graphrag = { version = "0.2.0", path = "ai/oxirs-graphrag" }
-oxirs-did = { version = "0.2.0", path = "security/oxirs-did" }
-oxirs-wasm = { version = "0.2.0", path = "platforms/oxirs-wasm" }
-oxirs-modbus = { version = "0.2.0", path = "stream/oxirs-modbus" }
-oxirs-tsdb = { version = "0.2.0", path = "storage/oxirs-tsdb" }
-oxirs-canbus = { version = "0.2.0", path = "stream/oxirs-canbus" }
+oxirs-core = { version = "0.2.1", path = "core/oxirs-core" }
+oxirs-fuseki = { version = "0.2.1", path = "server/oxirs-fuseki" }
+oxirs-gql = { version = "0.2.1", path = "server/oxirs-gql" }
+oxirs-arq = { version = "0.2.1", path = "engine/oxirs-arq" }
+oxirs-geosparql = { version = "0.2.1", path = "engine/oxirs-geosparql" }
+oxirs-rule = { version = "0.2.1", path = "engine/oxirs-rule" }
+oxirs-samm = { version = "0.2.1", path = "engine/oxirs-samm" }
+oxirs-shacl = { version = "0.2.1", path = "engine/oxirs-shacl" }
+oxirs-star = { version = "0.2.1", path = "engine/oxirs-star" }
+oxirs-ttl = { version = "0.2.1", path = "engine/oxirs-ttl" }
+oxirs-vec = { version = "0.2.1", path = "engine/oxirs-vec" }
+oxirs-tdb = { version = "0.2.1", path = "storage/oxirs-tdb" }
+oxirs-cluster = { version = "0.2.1", path = "storage/oxirs-cluster" }
+oxirs-stream = { version = "0.2.1", path = "stream/oxirs-stream" }
+oxirs-federate = { version = "0.2.1", path = "stream/oxirs-federate" }
+oxirs-embed = { version = "0.2.1", path = "ai/oxirs-embed" }
+oxirs-shacl-ai = { version = "0.2.1", path = "ai/oxirs-shacl-ai" }
+oxirs-chat = { version = "0.2.1", path = "ai/oxirs-chat" }
+oxirs-physics = { version = "0.2.1", path = "ai/oxirs-physics" }
+oxirs-graphrag = { version = "0.2.1", path = "ai/oxirs-graphrag" }
+oxirs-did = { version = "0.2.1", path = "security/oxirs-did" }
+oxirs-wasm = { version = "0.2.1", path = "platforms/oxirs-wasm" }
+oxirs-modbus = { version = "0.2.1", path = "stream/oxirs-modbus" }
+oxirs-tsdb = { version = "0.2.1", path = "storage/oxirs-tsdb" }
+oxirs-canbus = { version = "0.2.1", path = "stream/oxirs-canbus" }
 
 # Core RDF and SPARQL functionality (native OxiRS implementations)
 # oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations
@@ -100,18 +100,18 @@ rio_turtle = "0.8"
 rio_xml = "0.8"
 
 # Stable OxiGraph parser dependencies (v0.2.x/v0.3.x)
-oxttl = "0.2.1"         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
-oxrdfxml = "0.2.1"      # RDF/XML parser
-oxjsonld = "0.2.1"      # JSON-LD parser
+oxttl = "0.2.3"         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
+oxrdfxml = { version = "0.2.3", features = ["async-tokio"] }      # RDF/XML parser
+oxjsonld = { version = "0.2.3", features = ["async-tokio"] }      # JSON-LD parser
 oxrdf = "0.3"           # RDF data model (required by parsers)
 
 # High-performance validation dependencies from oxrdf ecosystem
 oxiri = "0.2"         # Fast IRI validation and parsing
 oxilangtag = "0.1"    # Fast language tag validation
-oxsdatatypes = "0.1"  # Fast XSD datatype validation and parsing
+oxsdatatypes = "0.2"  # Fast XSD datatype validation and parsing
 
 # Async runtime and HTTP
-tokio = { version = "1.47.3", features = ["full"] }
+tokio = { version = "1.50.0", features = ["full"] }
 tokio-util = "0.7"
 tokio-stream = { version = "0.1", features = ["sync"] }
 hyper = { version = "1.8.1", features = ["full"] }
@@ -128,7 +128,9 @@ async-graphql = "7.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 serde_yaml = "0.9"
-toml = "0.9"
+rmp-serde = "1.3"
+toml = "1.0"
+ciborium = "0.2"
 
 # Error handling and logging
 anyhow = "1.0"
@@ -143,28 +145,27 @@ rocksdb = "0.24"
 tantivy = "0.25"
 
 # Vector search
-hnsw_rs = "0.3"
 
 # Streaming
-rdkafka = "0.37"
-async-nats = "0.45"
+rdkafka = "0.39"
+async-nats = "0.46"
 
 # Clustering
 openraft = "0.9"
 
 # CLI
-clap = { version = "4.4", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 
 # Testing
-criterion = { version = "0.5", features = ["html_reports"] }
-proptest = "1.7"
-tempfile = "3.25"
+criterion = { version = "0.8", features = ["html_reports"] }
+proptest = "1.10"
+tempfile = "3.27"
 
 # Additional dependencies
 async-trait = "0.1"
-uuid = { version = "1.20", features = ["v4", "serde"] }
-chrono = { version = "0.4.43", features = ["serde"] }
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "rustls-native-certs", "json", "form", "query", "multipart", "http2"] }
+uuid = { version = "1.22", features = ["v4", "serde"] }
+chrono = { version = "0.4.44", features = ["serde"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "form", "query", "multipart", "http2"] }
 bytes = "1.11.1"  # HTTP body handling - CVE-2026-25541 fix
 http = "1.4"    # HTTP types
 
@@ -204,32 +205,32 @@ futures = "0.3"
 
 # SciRS2 dependencies (Scientific Computing Library) - Using 0.2.0 from crates.io
 # Note: scirs2 meta crate removed - we only use specific sub-crates as needed
-scirs2-core = { version = "0.3.0", features = ["random"] }
-scirs2-linalg = { version = "0.3.0" }
-scirs2-stats = { version = "0.3.0" }
-scirs2-neural = { version = "0.3.0" }
-scirs2-graph = { version = "0.3.0" }
-scirs2-metrics = { version = "0.3.0" }
-scirs2-fft = { version = "0.3.0" }
-scirs2-signal = { version = "0.3.0" }
-scirs2-optimize = { version = "0.3.0" }
-scirs2-integrate = { version = "0.3.0" }
-scirs2-cluster = { version = "0.3.0" }
-scirs2-text = { version = "0.3.0" }
+scirs2-core = { version = "0.3.1", features = ["random"] }
+scirs2-linalg = { version = "0.3.1" }
+scirs2-stats = { version = "0.3.1" }
+scirs2-neural = { version = "0.3.1" }
+scirs2-graph = { version = "0.3.1" }
+scirs2-metrics = { version = "0.3.1" }
+scirs2-fft = { version = "0.3.1" }
+scirs2-signal = { version = "0.3.1" }
+scirs2-optimize = { version = "0.3.1" }
+scirs2-integrate = { version = "0.3.1" }
+scirs2-cluster = { version = "0.3.1" }
+scirs2-text = { version = "0.3.1" }
 # array! macro is now in scirs2-core, scirs2-autograd not needed
 
 # OxiCode - modern binary serialization (replaces bincode per COOLJAPAN Policy)
 oxicode = { version = "0.1.1", features = ["serde", "derive"] }
 
 # OxiArc - Pure Rust archive handling (replaces zip crate per COOLJAPAN Policy)
-oxiarc-archive = "0.2.1"
+oxiarc-archive = "0.2.3"
 
 # System utilities
 num_cpus = "1.17"
 url = { version = "2.5.8", features = ["serde"] }
-rayon = "1.10"
+rayon = "1.11"
 once_cell = "1.21"
-sysinfo = "0.33"  # System information for memory/CPU monitoring
+sysinfo = "0.38"  # System information for memory/CPU monitoring
 regex = "1.12.3"
 urlencoding = "2.1.3"
 fastrand = "2.3.0"
@@ -239,27 +240,27 @@ libc = "0.2"
 
 # Compression libraries
 flate2 = "1.1"     # Gzip compression
-zstd = { version = "0.13", default-features = false, features = ["zdict_builder"] }  # Zstandard compression
-lz4_flex = "0.12"  # LZ4 compression
+oxiarc-zstd = "0.2.3"  # Zstandard compression (Pure Rust)
+oxiarc-lz4 = "0.2.3"  # LZ4 compression (Pure Rust)
 snap = "1.1"       # Snappy compression
 brotli = "8.0"     # Brotli compression
 
 # Memory and data structures
 memmap2 = "0.9"
-indexmap = "2.11"
-nalgebra = "0.33"
+indexmap = "2.13"
+nalgebra = "0.34"
 
 # XML parsing
-quick-xml = "0.38"
+quick-xml = "0.39"
 
 # Geospatial libraries (GeoSPARQL support)
-geo = "0.29"       # Geospatial algorithms
+geo = "0.32"       # Geospatial algorithms
 rstar = "0.12"     # R*-tree spatial indexing
 geojson = "0.24"   # GeoJSON serialization
 wkt = "0.14"       # Well-Known Text parsing
 
 # Caching
-redis = { version = "0.27.6", features = ["async-std-comp"] }
+redis = { version = "1.0", features = ["tokio-comp"] }
 lru = "0.16.3"
 
 # Cryptography
@@ -270,6 +271,7 @@ hmac = "0.12.1"
 hex = "0.4.3"
 base64 = "0.22"
 ring = "0.17"
+jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 aes-gcm = "0.10"
 chacha20poly1305 = "0.10"
 argon2 = "0.5"
@@ -278,7 +280,7 @@ multibase = "0.9"
 bs58 = "0.5"
 k256 = { version = "0.13.4", features = ["ecdsa", "sha256"] }
 p256 = { version = "0.13.2", features = ["ecdsa", "sha256"] }
-rsa = { version = "0.9.7", features = ["sha2"] }
+rsa = { version = "0.9.10", features = ["sha2"] }
 bls12_381_plus = { version = "0.8.18" }
 sha3 = "0.10"
 digest = "0.10"
@@ -289,11 +291,11 @@ petgraph = "0.8"
 # Phase D: Industrial Connectivity Dependencies
 tokio-serial = "5.4"      # Modbus RTU serial port support
 socketcan = "3.5"         # Linux CAN interface
-bit-vec = "0.8"           # Bit manipulation for Gorilla compression
+bit-vec = "0.9"           # Bit manipulation for Gorilla compression
 arrow = "58"              # Apache Arrow for zero-copy Python integration
 parquet = "58"            # Apache Parquet columnar storage format
 crc32fast = "1.5"         # Fast SIMD-accelerated CRC32 checksum
-deadpool = "0.12"         # Generic async connection pooling
+deadpool = "0.13"         # Generic async connection pooling
 humantime-serde = "1.1"   # Human-readable duration serialization
 
 # WASM support
@@ -325,11 +327,13 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [profile.dev]
 incremental = true
-debug = 1                      # Reduced from 2 (less debug info, smaller binaries)
-split-debuginfo = "packed"     # Linux: separate debug info into .dwo files
+debug = 1                      # Line-tables-only (smaller than full debug info)
+split-debuginfo = "unpacked"   # macOS: skip dsymutil, avoid large .dSYM bundles
+strip = "debuginfo"            # Strip debug info from output binaries
 
 [profile.dev.package."*"]
 debug = 0                      # No debug info for dependencies (major space savings)
+opt-level = 1                  # Slight optimization reduces dependency binary size
 
 [profile.dev.build-override]
 opt-level = 0
@@ -338,10 +342,12 @@ debug = false                  # No debug info for build scripts
 [profile.test]
 incremental = true
 debug = 1
-split-debuginfo = "packed"
+split-debuginfo = "unpacked"   # macOS: skip dsymutil, avoid large .dSYM bundles
+strip = "debuginfo"            # Strip debug info from output test binaries
 
 [profile.test.package."*"]
 debug = 0
+opt-level = 1                  # Slight optimization reduces dependency binary size
 
 # Release profile optimizations
 [profile.release]

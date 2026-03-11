@@ -5,12 +5,13 @@
 //!
 //! Run with: cargo bench --bench sampling_benchmarks --all-features
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_stream::{
     AdvancedSamplingManager, BloomFilter, CountMinSketch, EventMetadata, HyperLogLog,
     ReservoirSampler, SamplingConfig, StreamEvent, TDigest,
 };
 use std::collections::HashMap;
+use std::hint::black_box;
 
 fn create_test_event(id: usize) -> StreamEvent {
     StreamEvent::TripleAdded {

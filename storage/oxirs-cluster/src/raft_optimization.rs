@@ -431,8 +431,13 @@ impl RaftOptimizer {
         }
 
         let compressed = match self.compression_config.algorithm {
-            CompressionAlgorithm::Zstd => zstd::encode_all(data, self.compression_config.level)?,
-            CompressionAlgorithm::Lz4 => lz4_flex::compress_prepend_size(data),
+            CompressionAlgorithm::Zstd => {
+                oxiarc_zstd::encode_all(data, self.compression_config.level)
+                    .map_err(|e| anyhow::anyhow!("Zstd compression failed: {}", e))?
+            }
+            CompressionAlgorithm::Lz4 => {
+                oxiarc_lz4::compress(data).unwrap_or_else(|_| data.to_vec())
+            }
             CompressionAlgorithm::Flate2 => {
                 use flate2::write::GzEncoder;
                 use flate2::Compression;
@@ -463,8 +468,9 @@ impl RaftOptimizer {
         }
 
         let decompressed = match self.compression_config.algorithm {
-            CompressionAlgorithm::Zstd => zstd::decode_all(compressed)?,
-            CompressionAlgorithm::Lz4 => lz4_flex::decompress_size_prepended(compressed)
+            CompressionAlgorithm::Zstd => oxiarc_zstd::decode_all(compressed)
+                .map_err(|e| anyhow::anyhow!("Zstd decompression failed: {}", e))?,
+            CompressionAlgorithm::Lz4 => oxiarc_lz4::decompress(compressed, 100 * 1024 * 1024)
                 .map_err(|e| anyhow::anyhow!("LZ4 decompression failed: {}", e))?,
             CompressionAlgorithm::Flate2 => {
                 use flate2::read::GzDecoder;
@@ -525,10 +531,12 @@ impl RaftOptimizer {
                     // Compress each entry independently
                     match self.compression_config.algorithm {
                         CompressionAlgorithm::Zstd => {
-                            zstd::encode_all(entry.as_slice(), self.compression_config.level)
+                            oxiarc_zstd::encode_all(entry.as_slice(), self.compression_config.level)
                                 .unwrap_or_else(|_| entry.clone())
                         }
-                        CompressionAlgorithm::Lz4 => lz4_flex::compress_prepend_size(entry),
+                        CompressionAlgorithm::Lz4 => {
+                            oxiarc_lz4::compress(entry).unwrap_or_else(|_| entry.clone())
+                        }
                         CompressionAlgorithm::Flate2 => {
                             use flate2::write::GzEncoder;
                             use flate2::Compression;

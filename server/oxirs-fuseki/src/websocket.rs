@@ -935,7 +935,8 @@ impl SubscriptionManager {
         let json = serde_json::to_string(&msg)
             .map_err(|e| FusekiError::internal(format!("Serialization error: {e}")))?;
 
-        self.send_message(connection_id, Message::Text(json)).await
+        self.send_message(connection_id, Message::Text(json.into()))
+            .await
     }
 
     /// Send error message

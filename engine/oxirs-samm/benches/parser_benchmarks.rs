@@ -2,8 +2,9 @@
 //!
 //! These benchmarks measure the performance of parsing SAMM models from Turtle format.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_samm::parser::parse_aspect_from_string;
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Sample SAMM Aspect model for benchmarking

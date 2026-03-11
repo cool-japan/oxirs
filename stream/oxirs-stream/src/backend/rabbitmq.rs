@@ -377,7 +377,7 @@ impl RabbitMQConnection {
         // Declare exchange
         channel
             .exchange_declare(
-                &self.config.exchange,
+                self.config.exchange.as_str().into(),
                 ExchangeKind::from(&self.config.exchange_type),
                 ExchangeDeclareOptions {
                     passive: false,
@@ -395,7 +395,7 @@ impl RabbitMQConnection {
         if let Some(dlx) = &self.config.dlx_exchange {
             channel
                 .exchange_declare(
-                    dlx,
+                    dlx.as_str().into(),
                     ExchangeKind::Fanout,
                     ExchangeDeclareOptions {
                         passive: false,
@@ -555,8 +555,8 @@ impl RabbitMQProducer {
             let channel = conn.channel()?;
             channel
                 .basic_publish(
-                    &self.rabbitmq_config.exchange,
-                    &self.rabbitmq_config.routing_key,
+                    self.rabbitmq_config.exchange.as_str().into(),
+                    self.rabbitmq_config.routing_key.as_str().into(),
                     BasicPublishOptions::default(),
                     &serialized,
                     properties,
@@ -780,7 +780,7 @@ impl RabbitMQConsumer {
 
             channel
                 .queue_declare(
-                    &self.rabbitmq_config.queue,
+                    self.rabbitmq_config.queue.as_str().into(),
                     QueueDeclareOptions {
                         passive: false,
                         durable: true,
@@ -796,9 +796,9 @@ impl RabbitMQConsumer {
             // Bind queue to exchange
             channel
                 .queue_bind(
-                    &self.rabbitmq_config.queue,
-                    &self.rabbitmq_config.exchange,
-                    &self.rabbitmq_config.routing_key,
+                    self.rabbitmq_config.queue.as_str().into(),
+                    self.rabbitmq_config.exchange.as_str().into(),
+                    self.rabbitmq_config.routing_key.as_str().into(),
                     QueueBindOptions::default(),
                     FieldTable::default(),
                 )
@@ -817,8 +817,8 @@ impl RabbitMQConsumer {
             // Start consuming
             let consumer = channel
                 .basic_consume(
-                    &self.rabbitmq_config.queue,
-                    &self.rabbitmq_config.consumer_tag,
+                    self.rabbitmq_config.queue.as_str().into(),
+                    self.rabbitmq_config.consumer_tag.as_str().into(),
                     BasicConsumeOptions {
                         no_local: false,
                         no_ack: self.rabbitmq_config.auto_ack,

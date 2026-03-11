@@ -717,14 +717,16 @@ fn compress_data(data: &[u8], algorithm: CompressionAlgorithm) -> StarResult<Vec
         CompressionAlgorithm::None => Ok(data.to_vec()),
 
         CompressionAlgorithm::Zstd => {
-            let compressed = zstd::encode_all(data, 3).map_err(|e| {
+            let compressed = oxiarc_zstd::encode_all(data, 3).map_err(|e| {
                 StarError::serialization_error(format!("Zstd compression failed: {}", e))
             })?;
             Ok(compressed)
         }
 
         CompressionAlgorithm::Lz4 => {
-            let compressed = lz4_flex::compress_prepend_size(data);
+            let compressed = oxiarc_lz4::compress(data).map_err(|e| {
+                StarError::serialization_error(format!("LZ4 compression failed: {}", e))
+            })?;
             Ok(compressed)
         }
 
@@ -750,14 +752,14 @@ fn decompress_data(data: &[u8], algorithm: CompressionAlgorithm) -> StarResult<V
         CompressionAlgorithm::None => Ok(data.to_vec()),
 
         CompressionAlgorithm::Zstd => {
-            let decompressed = zstd::decode_all(data).map_err(|e| {
+            let decompressed = oxiarc_zstd::decode_all(data).map_err(|e| {
                 StarError::resource_error(format!("Zstd decompression failed: {}", e))
             })?;
             Ok(decompressed)
         }
 
         CompressionAlgorithm::Lz4 => {
-            let decompressed = lz4_flex::decompress_size_prepended(data).map_err(|e| {
+            let decompressed = oxiarc_lz4::decompress(data, 100 * 1024 * 1024).map_err(|e| {
                 StarError::resource_error(format!("LZ4 decompression failed: {}", e))
             })?;
             Ok(decompressed)

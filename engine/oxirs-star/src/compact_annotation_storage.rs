@@ -474,7 +474,7 @@ impl CompactAnnotationStore {
         .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
 
         if self.compression_level != CompressionLevel::None {
-            let compressed = zstd::encode_all(&data[..], self.compression_level.zstd_level())
+            let compressed = oxiarc_zstd::encode_all(&data, self.compression_level.zstd_level())
                 .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
 
             let mut w = writer;
@@ -500,7 +500,8 @@ impl CompactAnnotationStore {
             .map_err(|e| crate::StarError::parse_error(e.to_string()))?;
 
         let decompressed = if compression_level != CompressionLevel::None {
-            zstd::decode_all(&data[..]).map_err(|e| crate::StarError::parse_error(e.to_string()))?
+            oxiarc_zstd::decode_all(&data)
+                .map_err(|e| crate::StarError::parse_error(e.to_string()))?
         } else {
             data
         };

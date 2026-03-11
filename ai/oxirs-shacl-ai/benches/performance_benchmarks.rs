@@ -3,11 +3,12 @@
 //! This module contains comprehensive benchmarks for measuring the performance
 //! of AI-powered SHACL validation and shape generation components.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::model::{Literal, NamedNode, Term, Triple};
 use oxirs_core::Store;
 use oxirs_shacl_ai::insights::ValidationData;
 use oxirs_shacl_ai::*;
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Generate test RDF data for benchmarking

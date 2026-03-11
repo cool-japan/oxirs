@@ -102,11 +102,11 @@
 //! # #[cfg(feature = "async")]
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let parser = AsyncStreamingParser::new(RdfFormat::Turtle);
-//! let mut sink = parser.parse_stream(tokio::io::stdin()).await?;
-//!
-//! while let Some(quad) = sink.next_quad().await? {
-//!     // Process quad asynchronously
-//! }
+//! let mut quads = Vec::new();
+//! parser.parse_stream(tokio::io::stdin(), |quad| {
+//!     quads.push(quad);
+//!     async { Ok(()) }
+//! }).await?;
 //! # Ok(())
 //! # }
 //! ```

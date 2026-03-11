@@ -4,10 +4,11 @@
 //! including custom RDF-specific compression techniques.
 
 use crate::OxirsError;
-use lz4::{Decoder, EncoderBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use zstd;
+
+/// Maximum decompression output size (100MB) for LZ4 safety limit
+const LZ4_MAX_DECOMPRESS_SIZE: usize = 100 * 1024 * 1024;
 
 /// Compression algorithm
 #[derive(Debug, Clone)]
@@ -160,29 +161,27 @@ impl Compressor {
     }
 
     /// Compress using LZ4
-    fn compress_lz4(&self, data: &[u8], level: u32) -> Result<Vec<u8>, OxirsError> {
-        let mut encoder = EncoderBuilder::new().level(level).build(Vec::new())?;
-        std::io::copy(&mut &data[..], &mut encoder)?;
-        let (compressed, _) = encoder.finish();
-        Ok(compressed)
+    fn compress_lz4(&self, data: &[u8], _level: u32) -> Result<Vec<u8>, OxirsError> {
+        oxiarc_lz4::compress(data)
+            .map_err(|e| OxirsError::Io(format!("LZ4 compression failed: {}", e)))
     }
 
     /// Decompress LZ4
     fn decompress_lz4(&self, data: &[u8]) -> Result<Vec<u8>, OxirsError> {
-        let mut decoder = Decoder::new(data)?;
-        let mut decompressed = Vec::new();
-        std::io::copy(&mut decoder, &mut decompressed)?;
-        Ok(decompressed)
+        oxiarc_lz4::decompress(data, LZ4_MAX_DECOMPRESS_SIZE)
+            .map_err(|e| OxirsError::Io(format!("LZ4 decompression failed: {}", e)))
     }
 
     /// Compress using Zstandard
     fn compress_zstd(&self, data: &[u8], level: i32) -> Result<Vec<u8>, OxirsError> {
-        zstd::encode_all(data, level).map_err(Into::into)
+        oxiarc_zstd::encode_all(data, level)
+            .map_err(|e| OxirsError::Io(format!("Zstd compression failed: {}", e)))
     }
 
     /// Decompress Zstandard
     fn decompress_zstd(&self, data: &[u8]) -> Result<Vec<u8>, OxirsError> {
-        zstd::decode_all(data).map_err(Into::into)
+        oxiarc_zstd::decode_all(data)
+            .map_err(|e| OxirsError::Io(format!("Zstd decompression failed: {}", e)))
     }
 
     /// Custom RDF compression
@@ -389,13 +388,21 @@ mod tests {
 
     #[test]
     fn test_zstd_compression() {
-        let data = b"<http://example.org/s> <http://example.org/p> \"literal value\" .";
+        let triple = b"<http://example.org/s> <http://example.org/p> \"literal value\" .\n";
+        let data: Vec<u8> = triple
+            .iter()
+            .copied()
+            .cycle()
+            .take(triple.len() * 50)
+            .collect();
         let mut compressor = Compressor::new(Algorithm::Zstd { level: 3 });
 
-        let result = compressor.compress(data).unwrap();
+        let result = compressor.compress(&data).expect("zstd compression failed");
         assert!(result.compressed_size < result.original_size);
 
-        let decompressed = compressor.decompress(&result.data).unwrap();
+        let decompressed = compressor
+            .decompress(&result.data)
+            .expect("zstd decompression failed");
         assert_eq!(decompressed, data);
     }
 

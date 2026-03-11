@@ -15,13 +15,14 @@
 //! cargo run --bin compare_benchmarks -- v0.1.0 v0.1.1
 //! ```
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_geosparql::functions::geometric_operations::*;
 use oxirs_geosparql::functions::simple_features::*;
 use oxirs_geosparql::geometry::Geometry;
 use oxirs_geosparql::index::SpatialIndex;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::hint::black_box;
 use std::path::Path;
 use std::time::SystemTime;
 

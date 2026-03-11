@@ -5,13 +5,14 @@
 //! - Topological relations (Simple Features)
 //! - Geometric operations (distance, envelope, convex hull)
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_geosparql::functions::geometric_operations::{convex_hull, distance, envelope};
 use oxirs_geosparql::functions::simple_features::{
     sf_contains, sf_crosses, sf_disjoint, sf_equals, sf_intersects, sf_overlaps, sf_touches,
     sf_within,
 };
 use oxirs_geosparql::geometry::Geometry;
+use std::hint::black_box;
 
 /// Benchmark WKT parsing for different geometry types
 fn bench_wkt_parsing(c: &mut Criterion) {

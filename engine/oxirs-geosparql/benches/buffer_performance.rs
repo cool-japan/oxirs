@@ -2,11 +2,11 @@
 //!
 //! Run with: cargo bench --bench buffer_performance --features rust-buffer,geos-backend
 
-use criterion::{criterion_group, criterion_main, Criterion};
+#[allow(unused_imports)]
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_geosparql::geometry::Geometry;
-
-#[cfg(any(feature = "rust-buffer", feature = "geos-backend"))]
-use criterion::{black_box, BenchmarkId};
+#[allow(unused_imports)]
+use std::hint::black_box;
 
 #[cfg(feature = "rust-buffer")]
 use oxirs_geosparql::functions::geometric_operations::buffer_rust;

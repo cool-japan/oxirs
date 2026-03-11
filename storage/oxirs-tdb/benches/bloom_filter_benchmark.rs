@@ -7,9 +7,10 @@
 //! - Memory efficiency
 //! - Counting bloom filter operations
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_tdb::index::bloom_filter::{BloomFilter, BloomFilterConfig, CountingBloomFilter};
 use std::collections::HashSet;
+use std::hint::black_box;
 
 /// Benchmark basic bloom filter insertion
 fn bench_bloom_filter_insert(c: &mut Criterion) {

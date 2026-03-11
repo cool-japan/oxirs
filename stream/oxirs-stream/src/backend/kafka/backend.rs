@@ -980,7 +980,7 @@ impl StreamBackendTrait for KafkaBackend {
                         StreamError::Send(format!("Failed to send to Kafka: {}", e))
                     })?;
 
-                Ok(Offset::new(result.1 as u64))
+                Ok(Offset::new(result.offset as u64))
             } else {
                 Err(StreamError::Connection(
                     "Producer not initialized".to_string(),

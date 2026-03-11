@@ -748,14 +748,13 @@ impl ReportCommand {
         ops.push(Op::SetTextCursor {
             pos: Point::new(Mm(20.0), Mm(270.0)),
         });
-        ops.push(Op::SetFontSizeBuiltinFont {
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
             size: Pt(24.0),
-            font: BuiltinFont::HelveticaBold,
         });
         ops.push(Op::SetLineHeight { lh: Pt(24.0) });
-        ops.push(Op::WriteTextBuiltinFont {
+        ops.push(Op::ShowText {
             items: vec![TextItem::Text("OxiRS Performance Report".to_string())],
-            font: BuiltinFont::HelveticaBold,
         });
         ops.push(Op::AddLineBreak);
         ops.push(Op::AddLineBreak);
@@ -764,33 +763,31 @@ impl ReportCommand {
         let timestamp = chrono::Utc::now()
             .format("%Y-%m-%d %H:%M:%S UTC")
             .to_string();
-        ops.push(Op::SetFontSizeBuiltinFont {
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
             size: Pt(10.0),
-            font: BuiltinFont::Helvetica,
         });
         ops.push(Op::SetLineHeight { lh: Pt(12.0) });
-        ops.push(Op::WriteTextBuiltinFont {
+        ops.push(Op::ShowText {
             items: vec![TextItem::Text(format!("Generated: {}", timestamp))],
-            font: BuiltinFont::Helvetica,
         });
         ops.push(Op::AddLineBreak);
         ops.push(Op::AddLineBreak);
 
         // System Health Section
-        ops.push(Op::SetFontSizeBuiltinFont {
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
             size: Pt(16.0),
-            font: BuiltinFont::HelveticaBold,
         });
         ops.push(Op::SetLineHeight { lh: Pt(18.0) });
-        ops.push(Op::WriteTextBuiltinFont {
+        ops.push(Op::ShowText {
             items: vec![TextItem::Text("System Health".to_string())],
-            font: BuiltinFont::HelveticaBold,
         });
         ops.push(Op::AddLineBreak);
 
-        ops.push(Op::SetFontSizeBuiltinFont {
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
             size: Pt(10.0),
-            font: BuiltinFont::Helvetica,
         });
         ops.push(Op::SetLineHeight { lh: Pt(12.0) });
 
@@ -815,29 +812,27 @@ impl ReportCommand {
         ];
 
         for item in health_items {
-            ops.push(Op::WriteTextBuiltinFont {
+            ops.push(Op::ShowText {
                 items: vec![TextItem::Text(item)],
-                font: BuiltinFont::Helvetica,
             });
             ops.push(Op::AddLineBreak);
         }
         ops.push(Op::AddLineBreak);
 
         // Performance Metrics Section
-        ops.push(Op::SetFontSizeBuiltinFont {
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
             size: Pt(16.0),
-            font: BuiltinFont::HelveticaBold,
         });
         ops.push(Op::SetLineHeight { lh: Pt(18.0) });
-        ops.push(Op::WriteTextBuiltinFont {
+        ops.push(Op::ShowText {
             items: vec![TextItem::Text("Performance Metrics".to_string())],
-            font: BuiltinFont::HelveticaBold,
         });
         ops.push(Op::AddLineBreak);
 
-        ops.push(Op::SetFontSizeBuiltinFont {
+        ops.push(Op::SetFont {
+            font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
             size: Pt(10.0),
-            font: BuiltinFont::Helvetica,
         });
         ops.push(Op::SetLineHeight { lh: Pt(12.0) });
 
@@ -858,9 +853,8 @@ impl ReportCommand {
         ];
 
         for item in metrics {
-            ops.push(Op::WriteTextBuiltinFont {
+            ops.push(Op::ShowText {
                 items: vec![TextItem::Text(item)],
-                font: BuiltinFont::Helvetica,
             });
             ops.push(Op::AddLineBreak);
         }
@@ -868,20 +862,19 @@ impl ReportCommand {
 
         // Recommendations Section (limited to first 20 to avoid page overflow)
         if !report.recommendations.is_empty() {
-            ops.push(Op::SetFontSizeBuiltinFont {
+            ops.push(Op::SetFont {
+                font: PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
                 size: Pt(16.0),
-                font: BuiltinFont::HelveticaBold,
             });
             ops.push(Op::SetLineHeight { lh: Pt(18.0) });
-            ops.push(Op::WriteTextBuiltinFont {
+            ops.push(Op::ShowText {
                 items: vec![TextItem::Text("Recommendations".to_string())],
-                font: BuiltinFont::HelveticaBold,
             });
             ops.push(Op::AddLineBreak);
 
-            ops.push(Op::SetFontSizeBuiltinFont {
+            ops.push(Op::SetFont {
+                font: PdfFontHandle::Builtin(BuiltinFont::Helvetica),
                 size: Pt(10.0),
-                font: BuiltinFont::Helvetica,
             });
             ops.push(Op::SetLineHeight { lh: Pt(12.0) });
 
@@ -892,9 +885,8 @@ impl ReportCommand {
                     format!("• {}", rec)
                 };
 
-                ops.push(Op::WriteTextBuiltinFont {
+                ops.push(Op::ShowText {
                     items: vec![TextItem::Text(rec_text)],
-                    font: BuiltinFont::Helvetica,
                 });
                 ops.push(Op::AddLineBreak);
             }

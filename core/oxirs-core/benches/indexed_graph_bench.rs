@@ -1,9 +1,10 @@
 //! Benchmarks for IndexedGraph performance
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::model::{Literal, NamedNode, Object, Predicate, Subject, Triple};
 use oxirs_core::store::IndexedGraph;
 use scirs2_core::random::Random;
+use std::hint::black_box;
 
 /// Helper to create a test triple
 fn create_triple(s: &str, p: &str, o: &str) -> Triple {

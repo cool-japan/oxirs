@@ -34,16 +34,15 @@ reqwest.workspace = true  # HTTP client for triplestore migrations
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 uuid.workspace = true
 sysinfo = { workspace = true }    # System information
-tempfile = "3.25"    # Temporary file handling
+tempfile.workspace = true    # Temporary file handling
 
 # Enhanced CLI features
 indicatif = "0.18"  # Progress bars
-colored = "2.2"     # Colored output
+colored = "3.1"     # Colored output
 prettytable-rs = "0.10"  # Table formatting
 rustyline = "17.0"  # Interactive mode
 rustyline-derive = "0.11"  # Helper derive macros
 strsim = "0.11"     # String similarity for suggestions
-atty = "0.2"        # Terminal detection
 regex.workspace = true
 once_cell.workspace = true
 url.workspace = true
@@ -61,11 +60,11 @@ dialoguer = "0.12"  # Interactive prompts
 flate2.workspace = true
 hostname = "0.4"    # System hostname for test reports
 md5.workspace = true
-hex = "0.4"         # Hex encoding for checksums
-rust_xlsxwriter = { version = "0.79", optional = true }  # Excel XLSX file generation (feature-gated for Pure Rust policy)
+hex.workspace = true         # Hex encoding for checksums
+rust_xlsxwriter = { version = "0.94", optional = true }  # Excel XLSX file generation (feature-gated for Pure Rust policy)
 inferno = "0.12"    # Flame graph generation for profiling
-printpdf = "0.8"    # PDF generation for reports
-handlebars = "5.1"  # Template engine for custom output formats
+printpdf = "0.9"    # PDF generation for reports
+handlebars = "6.4"  # Template engine for custom output formats
 
 [dev-dependencies]
 criterion.workspace = true

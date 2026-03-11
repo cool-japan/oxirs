@@ -4,7 +4,7 @@ This document describes the advanced modules that have been prepared for oxirs-c
 
 ## Status
 
-These modules are currently **prepared but disabled** because they require features from **scirs2-core 0.1.0+** that are not yet available in the current **0.1.0** version.
+These modules are currently **prepared but disabled** because they require features from **scirs2-core 0.3.0+** that are not yet available in the current **0.3.0** version.
 
 The modules are ready to be enabled once the required scirs2-core version is available.
 
@@ -184,7 +184,7 @@ println!("GDPR events: {}", report.gdpr_relevant_events);
 
 ## Activation Instructions
 
-When scirs2-core 0.1.0 (or later) is available:
+When scirs2-core 0.3.0 (or later) is available:
 
 1. **Update Cargo.toml dependency**:
    ```toml

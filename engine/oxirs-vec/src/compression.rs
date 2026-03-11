@@ -1,7 +1,6 @@
 use crate::{Vector, VectorData, VectorError};
 use half::f16;
 use std::io::{Read, Write};
-use zstd;
 
 #[derive(Debug, Clone, Default)]
 pub enum CompressionMethod {
@@ -54,13 +53,13 @@ impl ZstdCompressor {
 impl VectorCompressor for ZstdCompressor {
     fn compress(&self, vector: &Vector) -> Result<Vec<u8>, VectorError> {
         let bytes = vector_to_bytes(vector)?;
-        zstd::encode_all(&bytes[..], self.level)
+        oxiarc_zstd::encode_all(&bytes, self.level)
             .map_err(|e| VectorError::CompressionError(e.to_string()))
     }
 
     fn decompress(&self, data: &[u8], dimensions: usize) -> Result<Vector, VectorError> {
-        let decompressed =
-            zstd::decode_all(data).map_err(|e| VectorError::CompressionError(e.to_string()))?;
+        let decompressed = oxiarc_zstd::decode_all(data)
+            .map_err(|e| VectorError::CompressionError(e.to_string()))?;
         bytes_to_vector(&decompressed, dimensions)
     }
 

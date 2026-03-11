@@ -15,10 +15,11 @@
 //! cargo bench --bench advanced_scirs2_benchmarks
 //! ```
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_shacl_ai::advanced_scirs2_integration::{AdvancedSciRS2Config, AdvancedSciRS2Engine};
 use scirs2_core::gpu::GpuBackend;
 use scirs2_core::ndarray_ext::Array2;
+use std::hint::black_box;
 use tokio::runtime::Runtime;
 
 /// Benchmark GPU-accelerated embeddings computation

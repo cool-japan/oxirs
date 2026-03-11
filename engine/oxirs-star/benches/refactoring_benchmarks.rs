@@ -3,10 +3,11 @@
 //! These benchmarks verify that the refactoring did not introduce performance regressions.
 //! They measure the performance of core operations after extracting modules.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_star::model::{StarTerm, StarTriple};
 use oxirs_star::parser::StarParser;
 use oxirs_star::store::StarStore;
+use std::hint::black_box;
 use std::io::Cursor;
 use std::time::Duration;
 

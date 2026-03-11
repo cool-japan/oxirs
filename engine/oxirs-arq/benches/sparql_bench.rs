@@ -9,7 +9,7 @@
 //! - Property path (p*) traversal
 //! - Nested subquery performance
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_arq::{
     executor::{ConcreteStoreDataset, QueryExecutor},
     query::QueryParser,
@@ -18,6 +18,7 @@ use oxirs_core::{
     model::{Literal, NamedNode, Quad},
     rdf_store::ConcreteStore,
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 // --- Setup helpers ---

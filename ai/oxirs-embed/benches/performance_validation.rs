@@ -3,10 +3,11 @@
 //! This benchmark suite validates that our scirs2 integration provides
 //! significant performance improvements over baseline implementations.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_embed::models::common::*;
 use scirs2_core::ndarray_ext::{Array1, Array2};
 use scirs2_core::random::Random;
+use std::hint::black_box;
 
 /// Benchmark vectorized vs non-vectorized distance computations
 fn bench_distance_computations(c: &mut Criterion) {

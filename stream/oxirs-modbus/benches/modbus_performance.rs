@@ -4,11 +4,12 @@
 //! CRC calculation, register mapping, and RDF triple generation.
 
 use chrono::Utc;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_modbus::mapping::{ModbusDataType, RegisterMap, RegisterMapping};
 use oxirs_modbus::protocol::{calculate_crc, verify_crc};
 use oxirs_modbus::rdf::{ModbusTripleGenerator, QudtUnit};
 use std::collections::HashMap;
+use std::hint::black_box;
 
 /// Generate test register values
 fn generate_register_values(count: usize) -> Vec<u16> {

@@ -24,7 +24,7 @@ OxiRS GraphQL v0.1.0 is production-ready, providing a modern GraphQL interface f
 
 ## Future Roadmap
 
-### v0.2.0 - Enhanced Features (Q1 2026 - Expanded)
+### v0.2.1 - Enhanced Features (Q1 2026 - Expanded)
 - [ ] GraphQL caching improvements
 - [ ] Advanced federation capabilities
 - [ ] Enhanced subscription features

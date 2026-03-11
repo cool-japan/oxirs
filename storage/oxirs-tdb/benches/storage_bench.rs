@@ -8,12 +8,13 @@
 //! - Compression (delta store)
 //! - Full-text query over literals
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_tdb::{
     compression::{DeltaStoreConfig, TripleDeltaStore},
     index::EncodedTriple,
     store::{TdbConfig, TdbStore},
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 // --- Helpers ---

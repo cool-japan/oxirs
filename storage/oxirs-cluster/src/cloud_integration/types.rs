@@ -827,12 +827,12 @@ impl GpuCompressor {
     }
     /// CPU fallback compression (zstd)
     fn cpu_compress(&self, data: &[u8]) -> Result<Vec<u8>, CloudError> {
-        zstd::encode_all(data, 3)
+        oxiarc_zstd::encode_all(data, 3)
             .map_err(|e| CloudError::ProviderError(format!("Compression failed: {}", e)))
     }
     /// CPU fallback decompression (zstd)
     fn cpu_decompress(&self, data: &[u8]) -> Result<Vec<u8>, CloudError> {
-        zstd::decode_all(data)
+        oxiarc_zstd::decode_all(data)
             .map_err(|e| CloudError::ProviderError(format!("Decompression failed: {}", e)))
     }
     /// Check if GPU acceleration is available

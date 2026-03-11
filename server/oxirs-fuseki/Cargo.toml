@@ -25,9 +25,9 @@ oxirs-shacl.workspace = true
 # HTTP server framework
 tokio = { workspace = true, features = ["full"] }
 tokio-util = "0.7"
-hyper = { version = "1.8", features = ["full"] }
-axum = { version = "0.7", features = ["ws", "multipart"] }
-axum-extra = { version = "0.9", features = ["typed-header"] }
+hyper = { workspace = true, features = ["full"] }
+axum = { version = "0.8", features = ["ws", "multipart"] }
+axum-extra = { version = "0.12", features = ["typed-header"] }
 tower = { version = "0.5", features = ["timeout", "load-shed", "buffer"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "timeout", "compression-gzip", "compression-br", "request-id", "sensitive-headers"] }
 
@@ -38,26 +38,26 @@ rustls-pemfile = { version = "2.2", optional = true }
 axum-server = { version = "0.8", features = ["tls-rustls"], optional = true }
 
 # CLI and configuration
-clap = { version = "4.4", features = ["derive", "env"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+clap = { workspace = true, features = ["derive", "env"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 serde_yaml.workspace = true
 serde_urlencoded = "0.7"
-toml = "0.9"
+toml.workspace = true
 config = "0.15"
 figment = { version = "0.10", features = ["toml", "yaml", "env"] }
 
 # Error handling
-anyhow = "1.0"
-thiserror = "2.0"
+anyhow.workspace = true
+thiserror.workspace = true
 
 # Hashing
 md5.workspace = true
 
 # Logging and tracing
-tracing = "0.1"
+tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }
-tracing-opentelemetry = { version = "0.28", optional = true }
+tracing-opentelemetry = { version = "0.32", optional = true }
 opentelemetry = { workspace = true, features = ["trace"] }
 opentelemetry-otlp = { workspace = true }
 opentelemetry_sdk = { workspace = true, features = ["trace"] }
@@ -65,10 +65,10 @@ opentelemetry_sdk = { workspace = true, features = ["trace"] }
 # Authentication and security
 uuid.workspace = true
 argon2.workspace = true
-jsonwebtoken = { version = "9.2", optional = true }
-bcrypt = { version = "0.17", optional = true }
-sha2 = "0.10"
-base64 = "0.22"
+jsonwebtoken = { workspace = true, optional = true }
+bcrypt = { version = "0.19", optional = true }
+sha2.workspace = true
+base64.workspace = true
 
 # Time and dates
 chrono.workspace = true
@@ -81,11 +81,11 @@ http-body-util = "0.1"
 # Metrics and monitoring
 prometheus = { version = "0.14", optional = true }
 axum-prometheus = { version = "0.10", optional = true }
-metrics = "0.23"
+metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 
 # Caching
-lru = "0.16"
+lru.workspace = true
 moka = { version = "0.12", features = ["future"] }
 tantivy = { workspace = true }
 
@@ -95,14 +95,14 @@ dashmap.workspace = true
 parking_lot.workspace = true
 
 # Streaming
-rdkafka = { version = "0.37", optional = true }
-async-nats = { version = "0.45", optional = true }
+rdkafka = { version = "0.39", optional = true }
+async-nats = { version = "0.46", optional = true }
 bytes = { workspace = true }
 brotli = "8.0"
 num_cpus.workspace = true
 
 # Validation
-validator = { version = "0.19", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 
 # Random number generation
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
@@ -112,13 +112,13 @@ regex.workspace = true
 
 # Serialization and encoding
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
-hex = "0.4"
+hex.workspace = true
 
 # Additional dependencies for MFA and authentication
 urlencoding = "2.1"
 base32 = "0.5"
 qrcode = "0.14"
-hmac = "0.12"
+hmac.workspace = true
 sha1.workspace = true
 flate2.workspace = true
 
@@ -142,26 +142,26 @@ libc.workspace = true
 sysinfo.workspace = true  # System monitoring
 
 # Kubernetes operator support (optional)
-kube = { version = "0.96", default-features = false, features = ["client", "rustls-tls", "runtime", "derive"], optional = true }
-k8s-openapi = { version = "0.23", default-features = false, features = ["v1_31"], optional = true }
-schemars = { version = "0.8", optional = true }
+kube = { version = "3.0", default-features = false, features = ["client", "rustls-tls", "runtime", "derive"], optional = true }
+k8s-openapi = { version = "0.27", default-features = false, features = ["v1_31"], optional = true }
+schemars = { version = "1.2", optional = true }
 
 # Async utilities
-futures = "0.3"
-futures-util = "0.3"
+futures.workspace = true
+futures-util.workspace = true
 tokio-stream = "0.1"
-async-trait = "0.1"
+async-trait.workspace = true
 
 # GraphQL
 async-graphql.workspace = true
 async-graphql-axum = "7.2"
 
 # OpenAPI
-utoipa = { version = "4.2", features = ["chrono"] }
+utoipa = { version = "5.4", features = ["chrono"] }
 utoipa-swagger-ui = { version = "9.0", features = ["axum", "vendored"] }
 
 # DNS resolution for service discovery (migrated from trust-dns to hickory-dns)
-hickory-resolver = "0.24"
+hickory-resolver = "0.25"
 
 # X.509 certificate parsing for client authentication
 x509-parser = "0.18"
@@ -175,26 +175,26 @@ instant-acme = { version = "0.8", optional = true }
 rcgen = { version = "0.14", optional = true }
 
 # File watching for hot reload
-notify = { version = "6.1", optional = true }
+notify = { version = "8.2", optional = true }
 
 # Template engine for admin UI
-askama = { version = "0.12", features = ["with-axum"], optional = true }
+askama = { version = "0.15", optional = true }
 
 # Environment
 dotenv = "0.15"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { workspace = true, features = ["html_reports"] }
 tokio-test = "0.4"
-axum-test = "15"
+axum-test = "19"
 http = { workspace = true }
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
-tempfile = "3.25"
+tempfile.workspace = true
 rstest = "0.26"
-proptest = "1.7"
 insta = "1.46"
-serial_test = "3.3"
+serial_test = "3.4"
+proptest.workspace = true
 wiremock = "0.6"
 
 [features]

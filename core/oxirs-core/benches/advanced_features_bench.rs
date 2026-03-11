@@ -7,7 +7,7 @@
 //! - SIMD triple matching
 //! - Query plan caching
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::concurrent::lock_free_graph::ConcurrentGraph;
 use oxirs_core::model::{
     pattern::{PredicatePattern, SubjectPattern, TriplePattern},
@@ -15,6 +15,7 @@ use oxirs_core::model::{
 };
 use oxirs_core::simd_triple_matching::SimdTripleMatcher;
 use oxirs_core::zero_copy_rdf::ZeroCopyTripleStore;
+use std::hint::black_box;
 use std::sync::Arc;
 use tempfile::tempdir;
 

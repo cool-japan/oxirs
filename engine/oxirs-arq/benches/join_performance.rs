@@ -3,13 +3,14 @@
 //! Comprehensive benchmarks to verify the 10-50x performance improvements
 //! in join operations, which are the most critical part of query execution.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_arq::{
     algebra::{Binding, Solution, Term, Variable},
     executor::parallel_optimized::{CacheFriendlyHashJoin, SortMergeJoin},
 };
 use oxirs_core::model::NamedNode;
 use std::collections::HashMap;
+use std::hint::black_box;
 
 // ===== Data Generation =====
 

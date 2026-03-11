@@ -54,19 +54,20 @@ impl Compressor {
     }
 
     fn compress_zstd(&self, data: &[u8]) -> Result<Vec<u8>> {
-        zstd::encode_all(data, 3).map_err(|e| anyhow!("Zstd compression failed: {}", e))
+        oxiarc_zstd::encode_all(data, 3).map_err(|e| anyhow!("Zstd compression failed: {}", e))
     }
 
     fn decompress_zstd(&self, data: &[u8]) -> Result<Vec<u8>> {
-        zstd::decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {}", e))
+        oxiarc_zstd::decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {}", e))
     }
 
     fn compress_lz4(&self, data: &[u8]) -> Result<Vec<u8>> {
-        Ok(lz4_flex::compress_prepend_size(data))
+        oxiarc_lz4::compress(data)
+            .map_err(|e| anyhow!("LZ4 compression failed: {}", e))
     }
 
     fn decompress_lz4(&self, data: &[u8]) -> Result<Vec<u8>> {
-        lz4_flex::decompress_size_prepended(data)
+        oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
             .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))
     }
 

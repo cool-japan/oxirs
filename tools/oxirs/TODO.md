@@ -17,7 +17,7 @@ OxiRS CLI v0.1.0 is production-ready with comprehensive SPARQL support, interact
 
 ## Future Roadmap
 
-### v0.2.0 - Performance & Scalability (Q1 2026 - Expanded)
+### v0.2.1 - Performance & Scalability (Q1 2026 - Expanded)
 - [ ] Enhanced caching strategies for large datasets
 - [ ] Distributed query execution improvements
 - [ ] Advanced indexing optimizations

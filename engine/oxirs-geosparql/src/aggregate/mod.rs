@@ -372,7 +372,7 @@ fn compute_geometry_weight(geom: &GeoGeometry<f64>) -> f64 {
             }
         }
         GeoGeometry::LineString(ls) => {
-            let len = ls.length::<Euclidean>();
+            let len = Euclidean.length(ls);
             if len > 0.0 {
                 len
             } else {
@@ -380,7 +380,7 @@ fn compute_geometry_weight(geom: &GeoGeometry<f64>) -> f64 {
             }
         }
         GeoGeometry::MultiLineString(mls) => {
-            let len: f64 = mls.iter().map(|ls| ls.length::<Euclidean>()).sum();
+            let len: f64 = mls.iter().map(|ls| Euclidean.length(ls)).sum();
             if len > 0.0 {
                 len
             } else {

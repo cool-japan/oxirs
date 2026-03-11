@@ -128,7 +128,7 @@ impl Point {
         use geo::{Distance, Haversine};
         let p1 = self.to_geo();
         let p2 = other.to_geo();
-        Haversine::distance(p1, p2)
+        Haversine.distance(p1, p2)
     }
 
     /// Check if two points are equal (with floating point tolerance)
@@ -269,7 +269,7 @@ impl LineString {
         use geo::{Distance, Euclidean};
         let ls = self.to_geo();
         let p = point.to_geo();
-        Euclidean::distance(&ls, &p)
+        Euclidean.distance(&ls, &p)
     }
 }
 
@@ -378,7 +378,7 @@ impl Polygon {
         use geo::{Distance, Euclidean};
         let poly = self.to_geo();
         let p = point.to_geo();
-        Euclidean::distance(&poly, &p)
+        Euclidean.distance(&poly, &p)
     }
 }
 

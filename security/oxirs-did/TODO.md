@@ -18,7 +18,7 @@ OxiRS DID v0.1.0 provides W3C Decentralized Identifiers (DID) and Verifiable Cre
 
 ## Future Roadmap
 
-### v0.2.0 - Extended Methods & Signatures (Q1 2026 - Expanded)
+### v0.2.1 - Extended Methods & Signatures (Q1 2026 - Expanded)
 - [ ] Additional DID methods (`did:ethr`, `did:ion`, `did:pkh`)
 - [ ] JWS signature support (JsonWebSignature2020)
 - [ ] Additional signature suites (ES256K, RS256, BBS+)

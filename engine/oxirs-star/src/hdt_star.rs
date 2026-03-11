@@ -1003,13 +1003,13 @@ impl HdtStarReader {
 
 /// Compress data using zstd
 fn compress_data(data: &[u8], level: u8) -> StarResult<Vec<u8>> {
-    zstd::encode_all(std::io::Cursor::new(data), level as i32)
+    oxiarc_zstd::encode_all(data, level as i32)
         .map_err(|e| StarError::serialization_error(format!("Compression failed: {e}")))
 }
 
 /// Decompress data using zstd
 fn decompress_data(data: &[u8]) -> StarResult<Vec<u8>> {
-    zstd::decode_all(std::io::Cursor::new(data))
+    oxiarc_zstd::decode_all(data)
         .map_err(|e| StarError::parse_error(format!("Decompression failed: {e}")))
 }
 

@@ -2,9 +2,10 @@
 //!
 //! Validates performance characteristics of core RDF operations
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::format::{RdfFormat, RdfParser, RdfSerializer};
 use oxirs_core::model::{GraphName, NamedNode, Quad, Subject, Term};
+use std::hint::black_box;
 use std::io::Cursor;
 
 /// Generate sample RDF data for benchmarking

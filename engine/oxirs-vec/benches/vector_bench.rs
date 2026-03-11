@@ -8,8 +8,9 @@
 //! - SIMD vs scalar dot product
 //! - Full index build for 10k vectors
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_vec::{index::DistanceMetric, MemoryVectorIndex, Vector, VectorIndex};
+use std::hint::black_box;
 use std::time::Duration;
 
 // --- Helpers ---

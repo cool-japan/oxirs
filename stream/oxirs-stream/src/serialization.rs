@@ -12,7 +12,6 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use chrono::{DateTime, Utc};
 use crc32fast;
 use futures::stream::{BoxStream, StreamExt as _};
-use lz4_flex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read as _;
@@ -516,12 +515,15 @@ impl EventSerializer {
 
     /// Serialize to CBOR
     fn serialize_cbor(&self, event: &StreamEvent) -> Result<Vec<u8>> {
-        serde_cbor::to_vec(event).map_err(|e| anyhow!("CBOR serialization failed: {e}"))
+        let mut buf = Vec::new();
+        ciborium::ser::into_writer(event, &mut buf)
+            .map_err(|e| anyhow!("CBOR serialization failed: {e}"))?;
+        Ok(buf)
     }
 
     /// Deserialize from CBOR
     fn deserialize_cbor(&self, data: &[u8]) -> Result<StreamEvent> {
-        serde_cbor::from_slice(data).map_err(|e| anyhow!("CBOR deserialization failed: {e}"))
+        ciborium::de::from_reader(data).map_err(|e| anyhow!("CBOR deserialization failed: {e}"))
     }
 
     /// Serialize to Protocol Buffers
@@ -598,9 +600,8 @@ impl EventSerializer {
                     .finish()
                     .map_err(|e| anyhow!("Gzip compression failed: {e}"))
             }
-            CompressionType::Zstd => {
-                zstd::encode_all(data, 3).map_err(|e| anyhow!("Zstd compression failed: {e}"))
-            }
+            CompressionType::Zstd => oxiarc_zstd::encode_all(data, 3)
+                .map_err(|e| anyhow!("Zstd compression failed: {e}")),
             _ => Err(anyhow!("Compression type {compression:?} not implemented")),
         }
     }
@@ -619,7 +620,7 @@ impl EventSerializer {
                 Ok(decompressed)
             }
             CompressionType::Zstd => {
-                zstd::decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {e}"))
+                oxiarc_zstd::decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {e}"))
             }
             _ => Err(anyhow!(
                 "Decompression type {compression:?} not implemented"
@@ -1164,7 +1165,8 @@ impl DeltaCompressor {
 
         // Simple delta: store additions and removals
         let diff_bytes = self.calculate_byte_diff(&prev_bytes, &curr_bytes);
-        let compressed = lz4_flex::compress_prepend_size(&diff_bytes);
+        let compressed = oxiarc_lz4::compress(&diff_bytes)
+            .map_err(|e| anyhow!("LZ4 compression failed: {}", e))?;
 
         Ok(EventDelta::Lz4(compressed))
     }
@@ -1316,7 +1318,8 @@ impl DeltaCompressor {
                 Ok(event)
             }
             EventDelta::Lz4(compressed_bytes) => {
-                let decompressed = lz4_flex::decompress_size_prepended(compressed_bytes)?;
+                let decompressed = oxiarc_lz4::decompress(compressed_bytes, 100 * 1024 * 1024)
+                    .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
                 // Restore from diff (simplified - would need more sophisticated restoration)
                 let event = serde_json::from_slice(&decompressed)?;
                 Ok(event)
@@ -1556,7 +1559,8 @@ impl EnhancedBinaryFormat {
 
         // Apply compression if enabled
         let data = if self.enable_compression {
-            lz4_flex::compress_prepend_size(&event_json)
+            oxiarc_lz4::compress(&event_json)
+                .map_err(|e| anyhow!("LZ4 compression failed: {}", e))?
         } else {
             event_json
         };
@@ -1624,7 +1628,8 @@ impl EnhancedBinaryFormat {
 
         // Decompress if needed
         let decompressed = if has_compression {
-            lz4_flex::decompress_size_prepended(&event_data)?
+            oxiarc_lz4::decompress(&event_data, 100 * 1024 * 1024)
+                .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?
         } else {
             event_data
         };

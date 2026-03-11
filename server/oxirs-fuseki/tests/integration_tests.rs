@@ -60,7 +60,7 @@ impl TestServerBuilder {
 
     async fn build(self) -> TestServer {
         let app = create_test_router();
-        TestServer::new(app).unwrap()
+        TestServer::new(app)
     }
 }
 
@@ -329,15 +329,22 @@ fn create_test_router() -> axum::Router {
 
     async fn test_sparql_update(
         query_params: axum::extract::Query<HashMap<String, String>>,
-        body: Option<String>,
+        body: axum::body::Bytes,
     ) -> impl IntoResponse {
         use axum::http::StatusCode;
+
+        let body_str = String::from_utf8_lossy(&body).to_string();
+        let body_opt = if body_str.trim().is_empty() {
+            None
+        } else {
+            Some(body_str)
+        };
 
         // Check if update query is provided via query params or body
         let update = query_params
             .get("query")
             .or_else(|| query_params.get("update"))
-            .or(body.as_ref())
+            .or(body_opt.as_ref())
             .filter(|q| !q.trim().is_empty());
 
         if update.is_none() {

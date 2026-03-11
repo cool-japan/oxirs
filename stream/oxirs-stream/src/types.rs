@@ -438,7 +438,10 @@ pub mod serialization {
             SerializationFormat::MessagePack => rmp_serde::to_vec(metadata)
                 .map_err(|e| anyhow!("MessagePack serialization failed: {e}")),
             SerializationFormat::Cbor => {
-                serde_cbor::to_vec(metadata).map_err(|e| anyhow!("CBOR serialization failed: {e}"))
+                let mut buf = Vec::new();
+                ciborium::ser::into_writer(metadata, &mut buf)
+                    .map_err(|e| anyhow!("CBOR serialization failed: {e}"))?;
+                Ok(buf)
             }
             SerializationFormat::Bincode => {
                 oxicode::serde::encode_to_vec(metadata, oxicode::config::standard())
@@ -460,7 +463,7 @@ pub mod serialization {
                 .map_err(|e| anyhow!("JSON deserialization failed: {e}")),
             SerializationFormat::MessagePack => rmp_serde::from_slice(data)
                 .map_err(|e| anyhow!("MessagePack deserialization failed: {e}")),
-            SerializationFormat::Cbor => serde_cbor::from_slice(data)
+            SerializationFormat::Cbor => ciborium::de::from_reader(data)
                 .map_err(|e| anyhow!("CBOR deserialization failed: {e}")),
             SerializationFormat::Bincode => {
                 oxicode::serde::decode_from_slice(data, oxicode::config::standard())
@@ -489,9 +492,11 @@ pub mod serialization {
                 encoder.write_all(data)?;
                 Ok(encoder.finish()?)
             }
-            CompressionType::Lz4 => Ok(lz4_flex::compress_prepend_size(data)),
+            CompressionType::Lz4 => {
+                oxiarc_lz4::compress(data).map_err(|e| anyhow!("LZ4 compression failed: {e}"))
+            }
             CompressionType::Zstd => {
-                zstd::bulk::compress(data, 0).map_err(|e| anyhow!("Zstd compression failed: {e}"))
+                oxiarc_zstd::compress(data).map_err(|e| anyhow!("Zstd compression failed: {e}"))
             }
             CompressionType::Snappy => Ok(snap::raw::Encoder::new().compress_vec(data)?),
             CompressionType::Brotli => {
@@ -520,11 +525,10 @@ pub mod serialization {
                 decoder.read_to_end(&mut decompressed)?;
                 Ok(decompressed)
             }
-            CompressionType::Lz4 => lz4_flex::decompress_size_prepended(data)
+            CompressionType::Lz4 => oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
                 .map_err(|e| anyhow!("LZ4 decompression failed: {e}")),
             CompressionType::Zstd => {
-                zstd::bulk::decompress(data, 1024 * 1024) // 1MB max decompressed size
-                    .map_err(|e| anyhow!("Zstd decompression failed: {e}"))
+                oxiarc_zstd::decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {e}"))
             }
             CompressionType::Snappy => snap::raw::Decoder::new()
                 .decompress_vec(data)

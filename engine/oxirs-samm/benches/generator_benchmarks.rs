@@ -2,7 +2,7 @@
 //!
 //! These benchmarks measure the performance of generating code from SAMM models.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_samm::generators::{
     generate_graphql, generate_java, generate_python, generate_sql, generate_typescript,
     JavaOptions, PythonOptions, SqlDialect, TsOptions,
@@ -10,6 +10,7 @@ use oxirs_samm::generators::{
 use oxirs_samm::metamodel::{
     Aspect, Characteristic, CharacteristicKind, ElementMetadata, Property,
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Create a test aspect with a given number of properties

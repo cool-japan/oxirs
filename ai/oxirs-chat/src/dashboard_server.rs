@@ -171,7 +171,7 @@ async fn handle_dashboard_websocket(socket: axum::extract::ws::WebSocket, state:
             if let Ok(json) = serde_json::to_string(&overview) {
                 let mut sender = sender_clone.lock().await;
                 if sender
-                    .send(axum::extract::ws::Message::Text(json))
+                    .send(axum::extract::ws::Message::Text(json.into()))
                     .await
                     .is_err()
                 {
@@ -231,7 +231,9 @@ async fn handle_dashboard_command(
             let overview = state.analytics.get_overview().await;
             if let Ok(json) = serde_json::to_string(&overview) {
                 let mut sender = sender.lock().await;
-                let _ = sender.send(axum::extract::ws::Message::Text(json)).await;
+                let _ = sender
+                    .send(axum::extract::ws::Message::Text(json.into()))
+                    .await;
             }
         }
         DashboardCommand::QueryAnalytics { time_range } => {
@@ -246,7 +248,9 @@ async fn handle_dashboard_command(
             let analytics = state.analytics.get_query_analytics(range).await;
             if let Ok(json) = serde_json::to_string(&analytics) {
                 let mut sender = sender.lock().await;
-                let _ = sender.send(axum::extract::ws::Message::Text(json)).await;
+                let _ = sender
+                    .send(axum::extract::ws::Message::Text(json.into()))
+                    .await;
             }
         }
         DashboardCommand::UserAnalytics { time_range } => {
@@ -261,7 +265,9 @@ async fn handle_dashboard_command(
             let analytics = state.analytics.get_user_analytics(range).await;
             if let Ok(json) = serde_json::to_string(&analytics) {
                 let mut sender = sender.lock().await;
-                let _ = sender.send(axum::extract::ws::Message::Text(json)).await;
+                let _ = sender
+                    .send(axum::extract::ws::Message::Text(json.into()))
+                    .await;
             }
         }
     }

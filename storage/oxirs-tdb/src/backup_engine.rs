@@ -331,7 +331,7 @@ impl BackupEngine {
     fn compress(data: Vec<u8>, compression: BackupCompression) -> Result<Vec<u8>> {
         match compression {
             BackupCompression::None => Ok(data),
-            BackupCompression::Zstd => zstd::bulk::compress(&data, 3)
+            BackupCompression::Zstd => oxiarc_zstd::encode_all(&data, 3)
                 .map_err(|e| TdbError::Other(format!("zstd compress: {}", e))),
             BackupCompression::Gzip => {
                 use flate2::write::GzEncoder;
@@ -349,7 +349,7 @@ impl BackupEngine {
     fn decompress(data: Vec<u8>, compression: BackupCompression) -> Result<Vec<u8>> {
         match compression {
             BackupCompression::None => Ok(data),
-            BackupCompression::Zstd => zstd::bulk::decompress(&data, 64 * 1024 * 1024)
+            BackupCompression::Zstd => oxiarc_zstd::decode_all(&data)
                 .map_err(|e| TdbError::Other(format!("zstd decompress: {}", e))),
             BackupCompression::Gzip => {
                 use flate2::read::GzDecoder;

@@ -1,6 +1,6 @@
 # OxiRS Physics - TODO
 
-*Version: 0.2.0 | Last Updated: 2026-03-05*
+*Version: 0.2.1 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -23,7 +23,7 @@
 
 ## Future Roadmap
 
-### v0.2.0 - Core RDF Integration (Q1 2026 - Expanded)
+### v0.2.1 - Core RDF Integration (Q1 2026 - Expanded)
 - [ ] SPARQL queries to extract entity properties
 - [ ] Parse RDF literals to Rust types with unit conversion
 - [ ] Generate SPARQL UPDATE queries for simulation results

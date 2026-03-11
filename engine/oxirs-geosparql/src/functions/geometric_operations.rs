@@ -43,13 +43,13 @@ pub fn geometry_euclidean_distance(
 
     // For Point-to-Point, use exact distance
     if let (G::Point(p1), G::Point(p2)) = (geom1, geom2) {
-        return Euclidean::distance(*p1, *p2);
+        return Euclidean.distance(*p1, *p2);
     }
 
     // For other combinations, use centroid-based distance
     // This is an approximation suitable for k-NN and similar operations
     match (geometry_to_point(geom1), geometry_to_point(geom2)) {
-        (Some(p1), Some(p2)) => Euclidean::distance(p1, p2),
+        (Some(p1), Some(p2)) => Euclidean.distance(p1, p2),
         _ => f64::INFINITY, // Empty geometries
     }
 }
@@ -1737,7 +1737,7 @@ mod tests {
     #[test]
     #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
     fn test_buffer_3d_point() {
-        use geo::{Area, Euclidean, Length};
+        use geo::{Area, Euclidean};
 
         let point = Geometry::from_wkt("POINT Z(0 0 5)").unwrap();
         let buffered = buffer_3d(&point, 1.0).unwrap();
@@ -1748,8 +1748,8 @@ mod tests {
         // Check that the buffer was created (geometry type might change to Polygon)
         // The exact result depends on the buffer implementation
         let length = match &buffered.geom {
-            GeoGeometry::LineString(ls) => ls.length::<Euclidean>(),
-            GeoGeometry::Polygon(p) => p.exterior().length::<Euclidean>(),
+            GeoGeometry::LineString(ls) => Euclidean.length(ls),
+            GeoGeometry::Polygon(p) => Euclidean.length(p.exterior()),
             _ => 0.0,
         };
         assert!(length > 0.0 || buffered.geom.unsigned_area() > 0.0);

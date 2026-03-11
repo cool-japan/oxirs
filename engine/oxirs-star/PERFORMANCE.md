@@ -21,7 +21,7 @@
 
 ## Performance Overview
 
-### Production Features Performance (v0.2.0)
+### Production Features Performance (v0.2.1)
 
 Latest performance metrics for Session 5 production features:
 

@@ -1,6 +1,6 @@
 //! Service discovery for federated SPARQL endpoints
 
-use hickory_resolver::{config::*, Resolver};
+use hickory_resolver::TokioResolver;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -323,18 +323,17 @@ impl ServiceDiscovery {
         );
 
         // Create DNS resolver
-        let resolver =
-            Resolver::new(ResolverConfig::default(), ResolverOpts::default()).map_err(|e| {
-                FusekiError::Internal {
-                    message: format!("Failed to create DNS resolver: {e}"),
-                }
-            })?;
+        let resolver = TokioResolver::builder_tokio()
+            .map_err(|e| FusekiError::Internal {
+                message: format!("Failed to create DNS resolver: {e}"),
+            })?
+            .build();
 
         // Look up SRV records for SPARQL services
         // Convention: _sparql._tcp.domain.com
         let srv_query = format!("_sparql._tcp.{domain}");
 
-        match resolver.srv_lookup(&srv_query) {
+        match resolver.srv_lookup(&srv_query).await {
             Ok(lookup) => {
                 let mut eps = endpoints.write().await;
                 let mut discovered_count = 0;

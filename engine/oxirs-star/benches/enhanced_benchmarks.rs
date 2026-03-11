@@ -3,13 +3,14 @@
 //! This module provides detailed benchmarks for parsing, serialization,
 //! storage, and memory performance characteristics.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_star::{
     model::{StarGraph, StarQuad, StarTerm, StarTriple},
     parser::{StarFormat, StarParser},
     serializer::StarSerializer,
     store::StarStore,
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Benchmark parsing performance with different complexity levels

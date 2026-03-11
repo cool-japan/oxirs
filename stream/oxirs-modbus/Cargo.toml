@@ -24,7 +24,7 @@ scirs2-core.workspace = true
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync", "rt-multi-thread"] }
 tokio-serial = { version = "5.4", optional = true }
 tokio-rustls = { version = "0.26.1", optional = true }
-bytes = "1.11"
+bytes.workspace = true
 
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -35,9 +35,9 @@ anyhow.workspace = true
 tracing.workspace = true
 
 chrono = { workspace = true, features = ["serde"] }
-futures = "0.3"
-async-trait = "0.1"
-deadpool = "0.12"
+futures.workspace = true
+async-trait.workspace = true
+deadpool = "0.13"
 reqwest = { workspace = true, optional = true }
 
 # TLS dependencies (feature-gated)

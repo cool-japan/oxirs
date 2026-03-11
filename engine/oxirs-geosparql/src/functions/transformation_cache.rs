@@ -101,7 +101,7 @@ impl TransformationCache {
     /// ```
     pub fn transform(&self, geom: &Geometry, target_crs: &Crs) -> Result<Geometry> {
         use geo::algorithm::map_coords::MapCoords;
-        use proj::Proj;
+        use oxigdal_proj::Transformer;
 
         if &geom.crs == target_crs {
             return Ok(geom.clone());
@@ -109,26 +109,52 @@ impl TransformationCache {
 
         let (source_string, target_string) = self.get_transform_params(&geom.crs, target_crs)?;
 
-        let proj = Proj::new_known_crs(&source_string, &target_string, None).map_err(|e| {
+        // Parse EPSG codes from "EPSG:XXXX" strings
+        let source_epsg: u32 = source_string
+            .strip_prefix("EPSG:")
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| {
+                GeoSparqlError::CrsTransformationFailed(format!(
+                    "Invalid EPSG string: {}",
+                    source_string
+                ))
+            })?;
+        let target_epsg: u32 = target_string
+            .strip_prefix("EPSG:")
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| {
+                GeoSparqlError::CrsTransformationFailed(format!(
+                    "Invalid EPSG string: {}",
+                    target_string
+                ))
+            })?;
+
+        let transformer = Transformer::from_epsg(source_epsg, target_epsg).map_err(|e| {
             GeoSparqlError::CrsTransformationFailed(format!(
-                "Failed to create PROJ transformation from {} to {}: {}",
+                "Failed to create transformation from {} to {}: {}",
                 source_string, target_string, e
             ))
         })?;
 
         let transformed_geom = geom.geom.map_coords(|coord| {
-            let point: (f64, f64) = proj.convert((coord.x, coord.y)).unwrap_or_else(|e| {
-                tracing::warn!(
-                    "PROJ conversion failed for ({}, {}): {}. Using original coordinates.",
-                    coord.x,
-                    coord.y,
-                    e
-                );
-                (coord.x, coord.y)
-            });
-            geo_types::Coord {
-                x: point.0,
-                y: point.1,
+            let input = oxigdal_proj::Coordinate::new(coord.x, coord.y);
+            match transformer.transform(&input) {
+                Ok(output) => geo_types::Coord {
+                    x: output.x,
+                    y: output.y,
+                },
+                Err(e) => {
+                    tracing::warn!(
+                        "CRS conversion failed for ({}, {}): {}. Using original coordinates.",
+                        coord.x,
+                        coord.y,
+                        e
+                    );
+                    geo_types::Coord {
+                        x: coord.x,
+                        y: coord.y,
+                    }
+                }
             }
         });
 
@@ -255,7 +281,7 @@ mod tests {
 
         // Third transformation: Web Mercator -> WGS84 (reverse)
         let web_merc_point = Geometry::with_crs(
-            Point::new(1113194.91, 6446275.84).into(),
+            Point::new(1_113_194.91, 6_446_275.84).into(),
             web_mercator.clone(),
         );
         let _ = cache.transform(&web_merc_point, &wgs84).unwrap();

@@ -3,7 +3,7 @@
 //! Comprehensive benchmarks demonstrating highest possible performance
 //! across all major features implemented in alpha.3
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_stream::event::EventMetadata;
 use oxirs_stream::processing::{
     JoinConfig, JoinType, JoinWindowStrategy, Pattern, PatternMatcher, PipelineBuilder,
@@ -12,6 +12,7 @@ use oxirs_stream::processing::{
 use oxirs_stream::{
     BackpressureConfig, BackpressureController, DeadLetterQueue, DlqConfig, StreamEvent,
 };
+use std::hint::black_box;
 use tokio::runtime::Runtime;
 
 // Helper to create test events

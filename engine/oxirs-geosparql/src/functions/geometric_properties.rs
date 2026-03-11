@@ -94,23 +94,23 @@ pub fn length(geom: &Geometry) -> Result<f64> {
     use geo::{Euclidean, Length};
 
     let len = match &geom.geom {
-        GeoGeometry::Line(l) => l.length::<Euclidean>(),
-        GeoGeometry::LineString(ls) => ls.length::<Euclidean>(),
-        GeoGeometry::MultiLineString(mls) => mls.length::<Euclidean>(),
+        GeoGeometry::Line(l) => Euclidean.length(l),
+        GeoGeometry::LineString(ls) => Euclidean.length(ls),
+        GeoGeometry::MultiLineString(mls) => Euclidean.length(mls),
         GeoGeometry::Polygon(p) => {
             // Perimeter = exterior + all interiors
-            let mut total = p.exterior().length::<Euclidean>();
+            let mut total = Euclidean.length(p.exterior());
             for interior in p.interiors() {
-                total += interior.length::<Euclidean>();
+                total += Euclidean.length(interior);
             }
             total
         }
         GeoGeometry::MultiPolygon(mp) => {
             let mut total = 0.0;
             for poly in &mp.0 {
-                total += poly.exterior().length::<Euclidean>();
+                total += Euclidean.length(poly.exterior());
                 for interior in poly.interiors() {
-                    total += interior.length::<Euclidean>();
+                    total += Euclidean.length(interior);
                 }
             }
             total

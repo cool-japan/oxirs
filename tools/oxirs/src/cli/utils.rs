@@ -169,7 +169,8 @@ pub fn clear_line() {
 
 /// Check if output is to a terminal (supports colors)
 pub fn is_terminal() -> bool {
-    atty::is(atty::Stream::Stdout)
+    use std::io::IsTerminal;
+    std::io::stdout().is_terminal()
 }
 
 /// Get terminal width, default to 80 if not available

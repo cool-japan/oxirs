@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
     ConcreteStore,
@@ -7,6 +7,7 @@ use oxirs_shacl::{
     constraints::*, shapes::ShapeFactory, Constraint, PropertyPath, Shape, ShapeId,
     ValidationConfig, Validator,
 };
+use std::hint::black_box;
 
 fn create_test_data(size: usize) -> (ConcreteStore, Vec<Shape>) {
     let store = ConcreteStore::new().unwrap();

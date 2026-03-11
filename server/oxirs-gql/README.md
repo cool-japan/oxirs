@@ -1,10 +1,10 @@
 # OxiRS GraphQL
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **High-performance GraphQL server for RDF data with automatic schema generation**
 
-**Status**: v0.2.0 - Released March 5, 2026
+**Status**: v0.2.1 - Released March 10, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-gql = "0.2.0"
+oxirs-gql = "0.2.1"
 ```
 
 ## Quick Start

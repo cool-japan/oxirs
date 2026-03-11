@@ -1,6 +1,6 @@
 # OxiRS Vec - Best Practices Guide
 
-**Version**: v0.2.0
+**Version**: v0.2.1
 **Last Updated**: 2026-01-06
 
 ## Table of Contents
@@ -920,5 +920,5 @@ fn test_search_during_index_rebuild() {
 ---
 
 **Document Version**: 1.0
-**OxiRS Vec Version**: v0.2.0
+**OxiRS Vec Version**: v0.2.1
 **Last Updated**: 2026-01-06

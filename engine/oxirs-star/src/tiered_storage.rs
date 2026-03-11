@@ -355,7 +355,7 @@ impl WarmTier {
             .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
 
         let final_bytes = if self.config.enable_compression {
-            zstd::encode_all(&bytes[..], 3)
+            oxiarc_zstd::encode_all(&bytes, 3)
                 .map_err(|e| crate::StarError::serialization_error(e.to_string()))?
         } else {
             bytes
@@ -391,7 +391,7 @@ impl WarmTier {
             .map_err(|e| crate::StarError::parse_error(e.to_string()))?;
 
         let decompressed = if self.config.enable_compression {
-            zstd::decode_all(&bytes[..])
+            oxiarc_zstd::decode_all(&bytes)
                 .map_err(|e| crate::StarError::parse_error(e.to_string()))?
         } else {
             bytes
@@ -455,7 +455,7 @@ impl ColdTier {
         let bytes = oxicode::serde::encode_to_vec(annotation, oxicode::config::standard())
             .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
 
-        let compressed = zstd::encode_all(&bytes[..], self.config.compression_level)
+        let compressed = oxiarc_zstd::encode_all(&bytes, self.config.compression_level)
             .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
 
         std::io::Write::write_all(
@@ -487,7 +487,7 @@ impl ColdTier {
         std::io::Read::read_to_end(&mut reader, &mut compressed)
             .map_err(|e| crate::StarError::parse_error(e.to_string()))?;
 
-        let bytes = zstd::decode_all(&compressed[..])
+        let bytes = oxiarc_zstd::decode_all(&compressed)
             .map_err(|e| crate::StarError::parse_error(e.to_string()))?;
 
         let annotation: TripleAnnotation =

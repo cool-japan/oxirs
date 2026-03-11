@@ -18,14 +18,14 @@ pub fn distance(g1: &Geometry, g2: &Geometry) -> f64 {
         (Geometry::Point(p1), Geometry::Point(p2)) => {
             let geo_p1 = p1.to_geo();
             let geo_p2 = p2.to_geo();
-            Haversine::distance(geo_p1, geo_p2)
+            Haversine.distance(geo_p1, geo_p2)
         }
         (Geometry::Point(p), other) | (other, Geometry::Point(p)) => other.distance_to(p),
         (g1, g2) => {
             // For non-point geometries, use Euclidean distance
             let geo_g1 = g1.to_geo();
             let geo_g2 = g2.to_geo();
-            Euclidean::distance(&geo_g1, &geo_g2)
+            Euclidean.distance(&geo_g1, &geo_g2)
         }
     }
 }

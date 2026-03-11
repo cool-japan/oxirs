@@ -17,7 +17,7 @@ OxiRS Core v0.1.0 is production-ready, providing the foundation for semantic web
 
 ## Future Roadmap
 
-### v0.2.0 - Advanced Query Optimization (Q1 2026 - Expanded)
+### v0.2.1 - Advanced Query Optimization (Q1 2026 - Expanded)
 - [ ] Cost-based optimizer enhancements
 - [ ] Advanced join ordering strategies
 - [ ] Query result caching with invalidation

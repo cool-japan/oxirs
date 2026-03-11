@@ -588,13 +588,13 @@ impl BackupRestoreManager {
 
     /// Compress data using zstd
     fn compress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
-        zstd::encode_all(data, self.config.compression_level)
+        oxiarc_zstd::encode_all(data, self.config.compression_level)
             .map_err(|e| ClusterError::Other(format!("Compression failed: {}", e)))
     }
 
     /// Decompress data
     fn decompress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
-        zstd::decode_all(data)
+        oxiarc_zstd::decode_all(data)
             .map_err(|e| ClusterError::Other(format!("Decompression failed: {}", e)))
     }
 

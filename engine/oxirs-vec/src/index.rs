@@ -12,8 +12,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::sync::Arc;
 
-#[cfg(feature = "hnsw")]
-use hnsw_rs::prelude::*;
+use crate::hnsw::{HnswConfig, HnswIndex};
 
 /// Type alias for filter functions
 pub type FilterFunction = Box<dyn Fn(&str) -> bool>;
@@ -127,8 +126,7 @@ pub struct AdvancedVectorIndex {
     config: IndexConfig,
     vectors: Vec<(String, Vector)>,
     uri_to_id: HashMap<String, usize>,
-    #[cfg(feature = "hnsw")]
-    hnsw_index: Option<Hnsw<'static, f32, DistCosine>>,
+    hnsw_index: Option<HnswIndex>,
     dimensions: Option<usize>,
 }
 
@@ -138,7 +136,6 @@ impl AdvancedVectorIndex {
             config,
             vectors: Vec::new(),
             uri_to_id: HashMap::new(),
-            #[cfg(feature = "hnsw")]
             hnsw_index: None,
             dimensions: None,
         }
@@ -152,14 +149,7 @@ impl AdvancedVectorIndex {
 
         match self.config.index_type {
             IndexType::Hnsw => {
-                #[cfg(feature = "hnsw")]
-                {
-                    self.build_hnsw_index()?;
-                }
-                #[cfg(not(feature = "hnsw"))]
-                {
-                    return Err(anyhow!("HNSW feature not enabled"));
-                }
+                self.build_hnsw_index()?;
             }
             IndexType::Flat => {
                 // No special building needed for flat index
@@ -172,20 +162,20 @@ impl AdvancedVectorIndex {
         Ok(())
     }
 
-    #[cfg(feature = "hnsw")]
     fn build_hnsw_index(&mut self) -> Result<()> {
-        if let Some(_dimensions) = self.dimensions {
-            let hnsw = Hnsw::<f32, DistCosine>::new(
-                self.config.max_connections,
-                self.vectors.len(),
-                16, // layer factor
-                self.config.ef_construction,
-                DistCosine,
-            );
+        if self.dimensions.is_some() {
+            let hnsw_config = HnswConfig {
+                m: self.config.max_connections,
+                m_l0: self.config.max_connections * 2,
+                ef_construction: self.config.ef_construction,
+                ef: self.config.ef_search,
+                ..HnswConfig::default()
+            };
 
-            for (id, (_, vector)) in self.vectors.iter().enumerate() {
-                let vector_f32 = vector.as_f32();
-                hnsw.insert((&vector_f32, id));
+            let mut hnsw = HnswIndex::new_cpu_only(hnsw_config);
+
+            for (uri, vector) in &self.vectors {
+                hnsw.insert(uri.clone(), vector.clone())?;
             }
 
             self.hnsw_index = Some(hnsw);
@@ -206,43 +196,25 @@ impl AdvancedVectorIndex {
         &self,
         query: &Vector,
         k: usize,
-        ef: Option<usize>,
+        _ef: Option<usize>,
         filter: Option<FilterFunction>,
     ) -> Result<Vec<SearchResult>> {
         match self.config.index_type {
-            IndexType::Hnsw => {
-                #[cfg(feature = "hnsw")]
-                {
-                    self.search_hnsw(query, k, ef)
-                }
-                #[cfg(not(feature = "hnsw"))]
-                {
-                    let _ = ef;
-                    self.search_flat(query, k, filter)
-                }
-            }
+            IndexType::Hnsw => self.search_hnsw(query, k),
             _ => self.search_flat(query, k, filter),
         }
     }
 
-    #[cfg(feature = "hnsw")]
-    fn search_hnsw(
-        &self,
-        query: &Vector,
-        k: usize,
-        ef: Option<usize>,
-    ) -> Result<Vec<SearchResult>> {
+    fn search_hnsw(&self, query: &Vector, k: usize) -> Result<Vec<SearchResult>> {
         if let Some(ref hnsw) = self.hnsw_index {
-            let search_ef = ef.unwrap_or(self.config.ef_search);
-            let query_f32 = query.as_f32();
-            let results = hnsw.search(&query_f32, k, search_ef);
+            let results = hnsw.search_knn(query, k)?;
 
             Ok(results
                 .into_iter()
-                .map(|result| SearchResult {
-                    uri: self.vectors[result.d_id].0.clone(),
-                    distance: result.distance,
-                    score: 1.0 - result.distance, // Convert distance to similarity score
+                .map(|(uri, distance)| SearchResult {
+                    uri,
+                    distance,
+                    score: 1.0 - distance,
                     metadata: None,
                 })
                 .collect())

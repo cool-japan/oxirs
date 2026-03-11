@@ -1,8 +1,8 @@
 # OxiRS Rule Engine
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Production Release (v0.2.0) - Released March 5, 2026
+**Status**: Production Release (v0.2.1) - Released March 10, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -36,7 +36,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-rule = "0.2.0"
+oxirs-rule = "0.2.1"
 ```
 
 ## Quick Start
@@ -347,7 +347,7 @@ Licensed under the Apache License, Version 2.0.
 
 ## Status
 
-🚀 **Production Release (v0.2.0)** – March 5, 2026
+🚀 **Production Release (v0.2.1)** – March 10, 2026
 
 Highlights:
 - ✅ Forward/backward chaining over persisted datasets with automatic inference snapshots

@@ -437,7 +437,7 @@ fn test_large_scale_3d_operations() {
             .iter()
             .take(100)
             .map(|b| {
-                if let Some((x, y, z)) = centroid_3d(b).ok() {
+                if let Ok((x, y, z)) = centroid_3d(b) {
                     Geometry3D::point(x, y, z)
                 } else {
                     Geometry3D::point(0.0, 0.0, 0.0)

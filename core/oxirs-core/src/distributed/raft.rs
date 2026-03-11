@@ -923,7 +923,7 @@ impl RaftNode {
         // Apply compression
         let compressed = if config.delta_compression {
             // Delta compression would go here
-            zstd::encode_all(&compacted_data[..], 3).expect("zstd compression should succeed")
+            oxiarc_zstd::encode_all(&compacted_data, 3).expect("zstd compression should succeed")
         } else {
             compacted_data
         };

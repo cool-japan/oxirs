@@ -2,11 +2,12 @@
 //!
 //! These benchmarks measure the performance of validating SAMM models.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_samm::metamodel::{
     Aspect, Characteristic, CharacteristicKind, ElementMetadata, Property,
 };
 use oxirs_samm::validator::ShaclValidator;
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Create a valid test aspect

@@ -408,16 +408,14 @@ impl ResultStreamingManager {
                 Ok(output)
             }
             CompressionAlgorithm::Lz4 => {
-                use lz4_flex::compress_prepend_size;
-
-                let compressed = compress_prepend_size(data);
+                let compressed = oxiarc_lz4::compress(data)
+                    .map_err(|e| anyhow!("LZ4 compression failed: {}", e))?;
                 Ok(compressed)
             }
             CompressionAlgorithm::Zstd => {
-                use zstd::stream::encode_all;
-
-                let compressed = encode_all(data, self.config.compression_level as i32)
-                    .map_err(|e| anyhow!("Zstd compression failed: {}", e))?;
+                let compressed =
+                    oxiarc_zstd::encode_all(data, self.config.compression_level as i32)
+                        .map_err(|e| anyhow!("Zstd compression failed: {}", e))?;
 
                 Ok(compressed)
             }
@@ -465,18 +463,14 @@ impl ResultStreamingManager {
                 Ok(output)
             }
             CompressionAlgorithm::Lz4 => {
-                use lz4_flex::decompress_size_prepended;
-
-                let decompressed = decompress_size_prepended(data)
+                let decompressed = oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
                     .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
 
                 Ok(decompressed)
             }
             CompressionAlgorithm::Zstd => {
-                use zstd::stream::decode_all;
-
-                let decompressed =
-                    decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {}", e))?;
+                let decompressed = oxiarc_zstd::decode_all(data)
+                    .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?;
 
                 Ok(decompressed)
             }

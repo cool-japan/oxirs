@@ -600,7 +600,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
 
                         if let Ok(json) = serde_json::to_string(&response) {
                             if sender
-                                .send(axum::extract::ws::Message::Text(json))
+                                .send(axum::extract::ws::Message::Text(json.into()))
                                 .await
                                 .is_err()
                             {
@@ -612,7 +612,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                 // Handle direct messages
                 Some(msg) = rx.recv() => {
                     if sender
-                        .send(axum::extract::ws::Message::Text(msg))
+                        .send(axum::extract::ws::Message::Text(msg.into()))
                         .await
                         .is_err()
                     {

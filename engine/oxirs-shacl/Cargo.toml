@@ -31,7 +31,7 @@ tracing.workspace = true
 regex.workspace = true
 uuid.workspace = true
 indexmap = { workspace = true, features = ["serde"] }
-petgraph = "0.8"
+petgraph.workspace = true
 rayon = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt", "sync", "time"], optional = true }
 futures = { version = "0.3", optional = true }

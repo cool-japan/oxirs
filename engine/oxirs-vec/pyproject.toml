@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "oxirs-vec"
 description = "High-performance vector search engine with SPARQL integration"
 readme = "README_PYTHON.md"
-license = {text = "MIT OR Apache-2.0"}
+license = {text = "Apache-2.0"}
 requires-python = ">=3.8"
 authors = [
     {name = "OxiRS Team"},
@@ -25,7 +25,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",

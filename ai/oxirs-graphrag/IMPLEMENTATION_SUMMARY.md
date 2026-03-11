@@ -204,7 +204,7 @@ let value = rng.random_range(0.0..1.0);
 ✅ **SUCCESS** - Clean compilation with zero errors:
 ```bash
 $ cargo clippy -p oxirs-graphrag --lib --no-deps
-   Compiling oxirs-graphrag v0.2.0
+   Compiling oxirs-graphrag v0.2.1
 warning: `oxirs-graphrag` (lib) generated 1 warning
     Finished `dev` profile in 5m 45s
 ```
@@ -365,7 +365,7 @@ No new dependencies added - all functionality uses existing workspace dependenci
 - Zero compilation errors
 - 25/25 library tests passing
 
-**Production Ready**: The code compiles cleanly, tests pass, and follows all OxiRS/SciRS2 policies. Ready for integration into OxiRS v0.2.0.
+**Production Ready**: The code compiles cleanly, tests pass, and follows all OxiRS/SciRS2 policies. Ready for integration into OxiRS v0.2.1.
 
 ---
 

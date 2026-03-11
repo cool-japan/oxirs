@@ -21,7 +21,7 @@ OxiRS Federate v0.1.0 is production-ready, providing SPARQL federation with adva
 
 ## Future Roadmap
 
-### v0.2.0 - Enhanced Performance (Q1 2026 - Expanded)
+### v0.2.1 - Enhanced Performance (Q1 2026 - Expanded)
 - [ ] Advanced query optimization strategies
 - [ ] Enhanced distributed execution
 - [ ] Improved caching mechanisms

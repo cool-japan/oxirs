@@ -9,10 +9,55 @@ use crate::parser::StarFormat;
 use crate::{StarConfig, StarError, StarResult};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use lz4_flex::frame::FrameEncoder;
+use oxiarc_zstd::ZstdStreamEncoder as ZstdEncoder;
 use std::io::{BufWriter, Write};
 use tracing::{debug, span, Level};
-use zstd::stream::write::Encoder as ZstdEncoder;
+
+/// A buffering writer that accumulates data and compresses it with LZ4
+/// via oxiarc_lz4 when flushed or dropped.
+struct Lz4BufferWriter<W: Write> {
+    inner: Option<W>,
+    buffer: Vec<u8>,
+}
+
+impl<W: Write> Lz4BufferWriter<W> {
+    fn new(writer: W) -> Self {
+        Self {
+            inner: Some(writer),
+            buffer: Vec::new(),
+        }
+    }
+
+    fn flush_compressed(&mut self) -> std::io::Result<()> {
+        if self.buffer.is_empty() {
+            return Ok(());
+        }
+        if let Some(ref mut writer) = self.inner {
+            let compressed = oxiarc_lz4::compress(&self.buffer)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            writer.write_all(&compressed)?;
+            self.buffer.clear();
+        }
+        Ok(())
+    }
+}
+
+impl<W: Write> Write for Lz4BufferWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.buffer.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.flush_compressed()
+    }
+}
+
+impl<W: Write> Drop for Lz4BufferWriter<W> {
+    fn drop(&mut self) {
+        let _ = self.flush_compressed();
+    }
+}
 
 impl StarSerializer {
     /// Create a new serializer with default configuration
@@ -116,15 +161,13 @@ impl StarSerializer {
             }
             CompressionType::Zstd => {
                 debug!("Creating Zstd compressed writer");
-                let encoder = ZstdEncoder::new(writer, 3).map_err(|e| {
-                    StarError::serialization_error(format!("Zstd encoder error: {e}"))
-                })?;
+                let encoder = ZstdEncoder::new(writer, 3);
                 Ok(Box::new(encoder))
             }
             CompressionType::Lz4 => {
                 debug!("Creating LZ4 compressed writer");
-                let encoder = FrameEncoder::new(writer);
-                Ok(Box::new(encoder))
+                // oxiarc_lz4 is buffer-based; wrap in a buffering writer that compresses on drop
+                Ok(Box::new(Lz4BufferWriter::new(writer)))
             }
         }
     }

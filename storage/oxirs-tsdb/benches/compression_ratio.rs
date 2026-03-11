@@ -2,8 +2,9 @@
 //!
 //! Benchmarks Gorilla and delta-of-delta compression performance.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_tsdb::{DeltaOfDeltaCompressor, GorillaCompressor, GorillaDecompressor};
+use std::hint::black_box;
 
 /// Generate test data simulating temperature sensor readings
 fn generate_temperature_data(count: usize) -> Vec<f64> {

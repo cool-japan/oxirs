@@ -698,7 +698,7 @@ impl AdvancedStorageBackend {
 
         // For small data, use regular compression
         if data.len() < PARALLEL_THRESHOLD {
-            return lz4_flex::compress_prepend_size(data);
+            return oxiarc_lz4::compress(data).unwrap_or_else(|_| data.to_vec());
         }
 
         // Parallel chunk-based compression for large data
@@ -711,7 +711,7 @@ impl AdvancedStorageBackend {
         // Compress each chunk in parallel
         let compressed_chunks: Vec<Vec<u8>> = chunks
             .par_iter()
-            .map(|chunk| lz4_flex::compress(chunk))
+            .map(|chunk| oxiarc_lz4::compress_block(chunk).unwrap_or_else(|_| chunk.to_vec()))
             .collect();
 
         // Calculate total size and build metadata
@@ -753,7 +753,7 @@ impl AdvancedStorageBackend {
         // Check if this is parallel-compressed format or regular format
         if data.len() < 12 {
             // Too small to be parallel format, try regular decompression
-            return lz4_flex::decompress_size_prepended(data)
+            return oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
                 .map_err(|e| anyhow!("Decompression failed: {}", e));
         }
 
@@ -772,7 +772,7 @@ impl AdvancedStorageBackend {
         // Sanity check: if num_chunks is unreasonably large, it's probably regular format
         if num_chunks == 0 || num_chunks > 100000 {
             // Fall back to regular decompression
-            return lz4_flex::decompress_size_prepended(data)
+            return oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
                 .map_err(|e| anyhow!("Decompression failed: {}", e));
         }
 
@@ -780,7 +780,7 @@ impl AdvancedStorageBackend {
         let metadata_size = 12 + (num_chunks * 4);
         if data.len() < metadata_size {
             // Fall back to regular decompression
-            return lz4_flex::decompress_size_prepended(data)
+            return oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
                 .map_err(|e| anyhow!("Decompression failed: {}", e));
         }
 
@@ -812,7 +812,7 @@ impl AdvancedStorageBackend {
         let decompressed_chunks: Result<Vec<Vec<u8>>, _> = chunks
             .par_iter()
             .map(|chunk| {
-                lz4_flex::decompress(chunk, original_size)
+                oxiarc_lz4::decompress_block(chunk, original_size)
                     .map_err(|e| anyhow!("Chunk decompression failed: {}", e))
             })
             .collect();

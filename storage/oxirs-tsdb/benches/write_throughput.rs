@@ -4,8 +4,9 @@
 //! compression overhead, and buffer management.
 
 use chrono::{Duration, TimeZone, Utc};
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_tsdb::{DataPoint, GorillaCompressor};
+use std::hint::black_box;
 
 /// Generate test data points
 fn generate_data_points(count: usize) -> Vec<DataPoint> {

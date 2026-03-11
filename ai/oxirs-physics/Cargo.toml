@@ -27,11 +27,11 @@ scirs2-linalg = { workspace = true, optional = true }
 scirs2-stats = { workspace = true, optional = true }
 
 # Units of measurement (type-safe physics)
-uom = { version = "0.37", optional = true }
+uom = { version = "0.38", optional = true }
 
 # Async runtime
 tokio.workspace = true
-async-trait = "0.1"
+async-trait.workspace = true
 
 # Serialization
 serde.workspace = true

@@ -409,14 +409,24 @@ impl EncryptionManager {
 
         let key = self.current_key.read().await;
 
-        // Generate nonce (96-bit)
-        let mut nonce_bytes = [0u8; 12];
-        // Use SystemTime with nanosecond precision for better randomness
-        let seed = std::time::SystemTime::now()
+        // Generate nonce (96-bit) using atomic counter + timestamp for guaranteed uniqueness.
+        // AES-GCM security requires nonces to NEVER repeat under the same key.
+        // A pure timestamp seed can collide when encryptions happen within the same nanosecond.
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NONCE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        let counter = NONCE_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos() as u64);
-        let mut rng = Random::seed(seed);
-        rng.fill_bytes(&mut nonce_bytes);
+
+        let mut nonce_bytes = [0u8; 12];
+        // First 8 bytes: XOR of counter and timestamp (counter ensures uniqueness,
+        // timestamp adds entropy across process restarts)
+        let unique_val = counter ^ timestamp;
+        nonce_bytes[..8].copy_from_slice(&unique_val.to_le_bytes());
+        // Last 4 bytes: counter low bits (guarantees uniqueness even if XOR collides)
+        nonce_bytes[8..12].copy_from_slice(&(counter as u32).to_le_bytes());
         let nonce = Nonce::assume_unique_for_key(nonce_bytes);
 
         // Get the key material

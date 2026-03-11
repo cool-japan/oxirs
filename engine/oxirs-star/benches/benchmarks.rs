@@ -3,13 +3,14 @@
 //! This module provides benchmarks for all major components of the RDF-star implementation
 //! including parsing, serialization, querying, and storage operations.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_star::{
     model::{StarGraph, StarTerm, StarTriple},
     parser::{StarFormat, StarParser},
     serializer::StarSerializer,
     store::StarStore,
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Benchmark parsing performance for different RDF-star formats

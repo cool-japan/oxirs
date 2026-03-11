@@ -22,7 +22,7 @@ OxiRS Fuseki v0.1.0 is production-ready, providing a complete SPARQL 1.1/1.2 HTT
 
 ## Future Roadmap
 
-### v0.2.0 - Enhanced Performance & Scalability (Q1 2026 - Expanded)
+### v0.2.1 - Enhanced Performance & Scalability (Q1 2026 - Expanded)
 - [ ] Query result caching with intelligent invalidation
 - [ ] Advanced connection pooling strategies
 - [ ] Distributed query execution optimization

@@ -7,12 +7,13 @@
 //! - Triple pattern matching
 //! - IRI string parsing
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::{
     model::{BlankNode, Literal, NamedNode, Object, Predicate, Quad, Subject, Triple},
     rdf_store::ConcreteStore,
     store::IndexedGraph,
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 // --- Term creation benchmarks ---

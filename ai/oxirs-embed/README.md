@@ -1,8 +1,8 @@
 # OxiRS Embed - Knowledge Graph Embeddings
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.2.0 - Released March 5, 2026
+**Status**: v0.2.1 - Released March 10, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -75,10 +75,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-embed = "0.2.0"
+oxirs-embed = "0.2.1"
 
 # Enable specific providers
-oxirs-embed = { version = "0.2.0", features = ["openai", "sentence-transformers"] }
+oxirs-embed = { version = "0.2.1", features = ["openai", "sentence-transformers"] }
 ```
 
 ## Quick Start
@@ -632,7 +632,7 @@ let model = EmbeddingModel::builder()
 - ✅ Semantic similarity search via `oxirs-vec` + SPARQL federation hooks
 - 🚧 Contextual embeddings (expanded graph context) – in progress
 - 🚧 Relation prediction (knowledge completion) – in progress
-- ⏳ Fine-tuning support (planned for v0.2.0)
+- ⏳ Fine-tuning support (planned for v0.2.1)
 
 ## Contributing
 

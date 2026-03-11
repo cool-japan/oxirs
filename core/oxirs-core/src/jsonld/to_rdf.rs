@@ -582,7 +582,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_ref());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// parser.next().await.unwrap()?; // We read the first quad
+    /// let _ = parser.next().await.transpose()?; // We read the first quad
     /// assert_eq!(
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
@@ -612,7 +612,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     /// let mut parser = JsonLdParser::new().for_tokio_async_reader(file.as_ref());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// parser.next().await.unwrap()?; // We read the first quad
+    /// let _ = parser.next().await.transpose()?; // We read the first quad
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Ok(())
     /// # }

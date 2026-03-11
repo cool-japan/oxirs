@@ -739,12 +739,11 @@ impl From<User> for AuthUser {
 
 /// Axum extractor implementation for AuthUser
 use axum::{
-    extract::FromRequestParts,
+    extract::{FromRequestParts, OptionalFromRequestParts},
     http::{request::Parts, StatusCode},
 };
 use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: Send + Sync,
@@ -765,6 +764,24 @@ where
         // Try session-based authentication
         // This would need proper cookie handling implementation
         Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+impl<S> OptionalFromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &S,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        Ok(
+            <Self as FromRequestParts<S>>::from_request_parts(parts, state)
+                .await
+                .ok(),
+        )
     }
 }
 

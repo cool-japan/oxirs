@@ -4,7 +4,6 @@
 //! and schema evolution support for distributed consensus messages.
 
 use anyhow::{anyhow, Result};
-use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Cursor, Read, Write};
@@ -231,11 +230,12 @@ impl MessageSerializer {
             let compressed = match self.config.compression {
                 CompressionAlgorithm::None => (serialized_data.clone(), CompressionAlgorithm::None),
                 CompressionAlgorithm::Lz4 => {
-                    let compressed = compress_prepend_size(&serialized_data);
+                    let compressed = oxiarc_lz4::compress(&serialized_data)
+                        .map_err(|e| anyhow!("LZ4 compression failed: {}", e))?;
                     (compressed, CompressionAlgorithm::Lz4)
                 }
                 CompressionAlgorithm::Zstd => {
-                    let compressed = zstd::bulk::compress(&serialized_data, 3)
+                    let compressed = oxiarc_zstd::encode_all(&serialized_data, 3)
                         .map_err(|e| anyhow!("Zstd compression failed: {}", e))?;
                     (compressed, CompressionAlgorithm::Zstd)
                 }
@@ -344,12 +344,13 @@ impl MessageSerializer {
         let decompression_start = Instant::now();
         let decompressed_data = match message.compression {
             CompressionAlgorithm::None => message.payload.clone(),
-            CompressionAlgorithm::Lz4 => decompress_size_prepended(&message.payload)
-                .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?,
-            CompressionAlgorithm::Zstd => {
-                zstd::bulk::decompress(&message.payload, message.original_size)
-                    .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?
-            }
+            CompressionAlgorithm::Lz4 => oxiarc_lz4::decompress(
+                &message.payload,
+                message.original_size.max(100 * 1024 * 1024),
+            )
+            .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?,
+            CompressionAlgorithm::Zstd => oxiarc_zstd::decode_all(&message.payload)
+                .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?,
             CompressionAlgorithm::Deflate => {
                 use flate2::read::DeflateDecoder;
                 let mut decoder = DeflateDecoder::new(Cursor::new(&message.payload));
@@ -598,8 +599,10 @@ impl AdaptiveCompression {
 
         let compressed_size = match algorithm {
             CompressionAlgorithm::None => data.len(),
-            CompressionAlgorithm::Lz4 => compress_prepend_size(data).len(),
-            CompressionAlgorithm::Zstd => zstd::bulk::compress(data, 3)
+            CompressionAlgorithm::Lz4 => oxiarc_lz4::compress(data)
+                .map_err(|e| anyhow!("LZ4 benchmark failed: {}", e))?
+                .len(),
+            CompressionAlgorithm::Zstd => oxiarc_zstd::encode_all(data, 3)
                 .map_err(|e| anyhow!("Zstd benchmark failed: {}", e))?
                 .len(),
             CompressionAlgorithm::Deflate => {

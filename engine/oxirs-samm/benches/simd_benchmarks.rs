@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_samm::simd_ops::*;
+use std::hint::black_box;
 
 /// Benchmark URN validation for single URN
 fn bench_validate_single_urn(c: &mut Criterion) {

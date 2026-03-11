@@ -8,14 +8,14 @@
 //! - Multi-objective optimization
 
 use criterion::{
-    black_box, criterion_group, criterion_main, BenchmarkId, Criterion, PlotConfiguration,
-    Throughput,
+    criterion_group, criterion_main, BenchmarkId, Criterion, PlotConfiguration, Throughput,
 };
 use oxirs_star::{
     adaptive_query_optimizer::{AdaptiveQueryOptimizer, OptimizationObjective},
     model::{StarTerm, StarTriple},
     serializer::star_serializer::ChunkedIterator,
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Benchmark ChunkedIterator with various data sizes and chunk sizes

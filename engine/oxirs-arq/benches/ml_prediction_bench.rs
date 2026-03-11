@@ -7,7 +7,8 @@
 //! 4. Feature extraction performance (target: < 1ms)
 //! 5. Model save/load performance
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 
 use oxirs_arq::advanced_optimizer::ml_predictor::{
     MLConfig, MLModelType, MLPredictor, QueryCharacteristics, TrainingExample,

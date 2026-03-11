@@ -1,7 +1,8 @@
 // Performance benchmarking suite for new rc.1 optimizations
 // Run with: cargo bench --bench performance_benchmarks
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 

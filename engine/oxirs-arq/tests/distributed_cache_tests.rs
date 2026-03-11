@@ -14,10 +14,7 @@ use oxirs_arq::cache::{
 /// Helper to check if Redis is available
 async fn is_redis_available() -> bool {
     match redis::Client::open("redis://localhost:6379") {
-        Ok(client) => match client.get_multiplexed_async_connection().await {
-            Ok(_) => true,
-            Err(_) => false,
-        },
+        Ok(client) => client.get_multiplexed_async_connection().await.is_ok(),
         Err(_) => false,
     }
 }

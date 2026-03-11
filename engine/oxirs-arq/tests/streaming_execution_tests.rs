@@ -9,10 +9,12 @@
 //! - Memory usage constraints
 //! - Performance improvements
 
+use anyhow::Result;
 use oxirs_arq::advanced_optimizer::{QueryPlan, StreamingAnalyzer, StreamingConfig};
 use oxirs_arq::algebra::{Algebra, Binding, Solution, Term, TriplePattern, Variable};
 use oxirs_arq::executor::{SpillConfig, SpillManager};
 use oxirs_core::model::NamedNode;
+use tempfile::TempDir;
 
 // Helper function to create test solutions
 fn create_test_solution(size: usize) -> Solution {
@@ -172,22 +174,26 @@ fn test_spill_and_read_small_data() {
 }
 
 #[test]
-fn test_spill_and_read_large_data() {
-    let config = SpillConfig::default();
-    let mut manager = SpillManager::new(config).expect("Failed to create manager");
+fn test_spill_and_read_large_data() -> Result<()> {
+    let tmp_dir = TempDir::new()?;
+    let config = SpillConfig {
+        spill_dir: tmp_dir.path().to_path_buf(),
+        ..Default::default()
+    };
+    let mut manager = SpillManager::new(config)?;
 
     // Create large dataset (10,000 rows)
     let test_data = create_test_solution(10_000);
-    let spill_id = manager.spill(&test_data).expect("Failed to spill");
+    let spill_id = manager.spill(&test_data)?;
 
-    let read_data = manager.read_spill(spill_id).expect("Failed to read spill");
+    let read_data = manager.read_spill(spill_id)?;
     assert_eq!(
         test_data.len(),
         read_data.len(),
         "Large spilled data should match"
     );
 
-    let stats = manager.statistics().expect("Failed to get statistics");
+    let stats = manager.statistics()?;
     assert_eq!(stats.num_spills, 1);
     assert_eq!(stats.total_rows, 10_000);
     assert!(
@@ -195,36 +201,40 @@ fn test_spill_and_read_large_data() {
         "Spill should have non-zero size"
     );
 
-    manager.cleanup(spill_id).expect("Failed to cleanup");
+    manager.cleanup(spill_id)?;
+    Ok(())
 }
 
 #[test]
-fn test_spill_compression() {
+fn test_spill_compression() -> Result<()> {
+    let tmp_dir = TempDir::new()?;
     let config = SpillConfig {
         compression: true,
+        spill_dir: tmp_dir.path().to_path_buf(),
         ..Default::default()
     };
 
-    let mut manager = SpillManager::new(config).expect("Failed to create manager");
+    let mut manager = SpillManager::new(config)?;
 
     let test_data = create_test_solution(1000);
-    let spill_id = manager.spill(&test_data).expect("Failed to spill");
+    let spill_id = manager.spill(&test_data)?;
 
-    let stats = manager.statistics().expect("Failed to get statistics");
+    let stats = manager.statistics()?;
     assert!(
         stats.average_compression_ratio < 1.0,
         "Compression should reduce size"
     );
 
     // Verify data integrity after compression
-    let read_data = manager.read_spill(spill_id).expect("Failed to read spill");
+    let read_data = manager.read_spill(spill_id)?;
     assert_eq!(
         test_data.len(),
         read_data.len(),
         "Compressed data should be intact"
     );
 
-    manager.cleanup(spill_id).expect("Failed to cleanup");
+    manager.cleanup(spill_id)?;
+    Ok(())
 }
 
 #[test]
@@ -245,25 +255,29 @@ fn test_spill_threshold_detection() {
 }
 
 #[test]
-fn test_multiple_spills() {
-    let config = SpillConfig::default();
-    let mut manager = SpillManager::new(config).expect("Failed to create manager");
+fn test_multiple_spills() -> Result<()> {
+    let tmp_dir = TempDir::new()?;
+    let config = SpillConfig {
+        spill_dir: tmp_dir.path().to_path_buf(),
+        ..Default::default()
+    };
+    let mut manager = SpillManager::new(config)?;
 
     let mut spill_ids = Vec::new();
 
     // Create multiple spills
     for i in 0..5 {
         let test_data = create_test_solution(100 * (i + 1));
-        let spill_id = manager.spill(&test_data).expect("Failed to spill");
+        let spill_id = manager.spill(&test_data)?;
         spill_ids.push((spill_id, test_data));
     }
 
-    let stats = manager.statistics().expect("Failed to get statistics");
+    let stats = manager.statistics()?;
     assert_eq!(stats.num_spills, 5, "Should have 5 active spills");
 
     // Verify all spills
     for (spill_id, original_data) in &spill_ids {
-        let read_data = manager.read_spill(*spill_id).expect("Failed to read spill");
+        let read_data = manager.read_spill(*spill_id)?;
         assert_eq!(
             original_data.len(),
             read_data.len(),
@@ -273,7 +287,7 @@ fn test_multiple_spills() {
 
     // Cleanup all
     for (spill_id, _) in spill_ids {
-        manager.cleanup(spill_id).expect("Failed to cleanup");
+        manager.cleanup(spill_id)?;
     }
 
     assert_eq!(
@@ -281,25 +295,31 @@ fn test_multiple_spills() {
         0,
         "All spills should be cleaned up"
     );
+    Ok(())
 }
 
 #[test]
-fn test_spill_statistics() {
-    let config = SpillConfig::default();
-    let mut manager = SpillManager::new(config).expect("Failed to create manager");
+fn test_spill_statistics() -> Result<()> {
+    let tmp_dir = TempDir::new()?;
+    let config = SpillConfig {
+        spill_dir: tmp_dir.path().to_path_buf(),
+        ..Default::default()
+    };
+    let mut manager = SpillManager::new(config)?;
 
     let test_data1 = create_test_solution(50);
     let test_data2 = create_test_solution(150);
 
-    let _spill_id1 = manager.spill(&test_data1).expect("Failed to spill");
-    let _spill_id2 = manager.spill(&test_data2).expect("Failed to spill");
+    let _spill_id1 = manager.spill(&test_data1)?;
+    let _spill_id2 = manager.spill(&test_data2)?;
 
-    let stats = manager.statistics().expect("Failed to get statistics");
+    let stats = manager.statistics()?;
     assert_eq!(stats.num_spills, 2);
     assert_eq!(stats.total_rows, 200);
     assert!(stats.total_size_bytes > 0);
 
-    manager.cleanup_all().expect("Failed to cleanup");
+    manager.cleanup_all()?;
+    Ok(())
 }
 
 #[test]

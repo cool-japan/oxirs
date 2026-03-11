@@ -1,8 +1,9 @@
 //! Benchmarks for concurrent graph operations
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::concurrent::ConcurrentGraph;
 use oxirs_core::model::{NamedNode, Object, Predicate, Subject, Triple};
+use std::hint::black_box;
 use std::sync::Arc;
 use std::thread;
 

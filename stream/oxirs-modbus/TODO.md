@@ -23,7 +23,7 @@ OxiRS Modbus v0.1.0 provides industrial Modbus protocol support with RDF mapping
 
 ## Future Roadmap
 
-### v0.2.0 - Extended Protocol Support (Q1 2026 - Expanded)
+### v0.2.1 - Extended Protocol Support (Q1 2026 - Expanded)
 - [ ] Additional function codes (Read Coils 0x01, Read Discrete Inputs 0x02)
 - [ ] Write Multiple Registers (0x10) and Write Multiple Coils (0x0F)
 - [ ] SAMM aspect model integration

@@ -7,17 +7,15 @@ use anyhow::{anyhow, Result};
 use brotli::{enc::BrotliEncoderParams, CompressorWriter, Decompressor};
 use bytes::Bytes;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use lz4_flex::{compress_prepend_size, decompress_size_prepended};
+use oxiarc_zstd::{decode_all, encode_all};
 use rmp_serde::to_vec;
 use serde::{Deserialize, Serialize};
-use serde_cbor;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::debug;
-use zstd::{decode_all, encode_all};
 
 use crate::FederatedService;
 
@@ -437,7 +435,8 @@ impl NetworkOptimizer {
     }
 
     async fn compress_lz4(&self, data: &[u8]) -> Result<Bytes> {
-        let compressed = compress_prepend_size(data);
+        let compressed =
+            oxiarc_lz4::compress(data).map_err(|e| anyhow!("LZ4 compression failed: {}", e))?;
         debug!(
             "LZ4 compressed {} bytes to {} bytes",
             data.len(),
@@ -447,7 +446,7 @@ impl NetworkOptimizer {
     }
 
     async fn decompress_lz4(&self, data: &[u8]) -> Result<Bytes> {
-        let decompressed = decompress_size_prepended(data)
+        let decompressed = oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
             .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
         debug!(
             "LZ4 decompressed {} bytes to {} bytes",
@@ -517,7 +516,8 @@ impl NetworkOptimizer {
                 // Parse JSON and encode as CBOR
                 match serde_json::from_slice::<serde_json::Value>(data) {
                     Ok(value) => {
-                        let encoded = serde_cbor::to_vec(&value)
+                        let mut encoded = Vec::new();
+                        ciborium::ser::into_writer(&value, &mut encoded)
                             .map_err(|e| anyhow!("CBOR encoding failed: {}", e))?;
                         debug!(
                             "CBOR encoded {} bytes to {} bytes",
@@ -528,7 +528,8 @@ impl NetworkOptimizer {
                     }
                     Err(_) => {
                         // If not valid JSON, encode raw data as CBOR bytes
-                        let encoded = serde_cbor::to_vec(&data)
+                        let mut encoded = Vec::new();
+                        ciborium::ser::into_writer(&data, &mut encoded)
                             .map_err(|e| anyhow!("CBOR encoding failed: {}", e))?;
                         Ok(encoded)
                     }

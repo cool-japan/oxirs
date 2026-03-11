@@ -1,6 +1,6 @@
 # OxiRS SHACL-AI - TODO
 
-*Version: 0.2.0 | Last Updated: 2026-03-05*
+*Version: 0.2.1 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -83,7 +83,7 @@
 
 ## Future Roadmap
 
-### v0.2.0 - Enhanced Performance (Q1 2026 - Expanded)
+### v0.2.1 - Enhanced Performance (Q1 2026 - Expanded)
 - [ ] Enhanced GPU acceleration across all models
 - [ ] Distributed training support
 - [ ] Advanced model ensembles

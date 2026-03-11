@@ -7,7 +7,7 @@
 //! - Performance analysis and comparison
 //! - Optimization hint generation
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::model::{NamedNode, Variable};
 use oxirs_core::query::algebra::{AlgebraTriplePattern, GraphPattern, TermPattern};
 use oxirs_core::query::cost_based_optimizer::CostBasedOptimizer;
@@ -15,6 +15,7 @@ use oxirs_core::query::profiled_plan_builder::ProfiledPlanBuilder;
 use oxirs_core::query::query_plan_visualizer::QueryPlanVisualizer;
 use oxirs_core::query::query_profiler::{ProfilerConfig, QueryProfiler, QueryStatistics};
 use std::collections::HashMap;
+use std::hint::black_box;
 
 // Helper functions for creating test patterns
 

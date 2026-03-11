@@ -28,7 +28,7 @@ use aes_gcm::{
     Aes256Gcm, Key, Nonce,
 };
 use base64::{engine::general_purpose, Engine};
-use zstd::{Decoder, Encoder};
+use oxiarc_zstd::{ZstdStreamDecoder, ZstdStreamEncoder};
 
 // Cryptographically secure RNG (SCIRS2 POLICY)
 use scirs2_core::random::SecureRandom;
@@ -862,7 +862,7 @@ impl SessionPersistenceManager {
         // Apply compression if enabled
         let compressed = if self.config.compression_enabled {
             // Use zstd for compression
-            let mut encoder = Encoder::new(Vec::new(), 3)?; // Level 3 for balanced compression
+            let mut encoder = ZstdStreamEncoder::new(Vec::new(), 3);
             encoder.write_all(&serialized)?;
             encoder.finish()?
         } else {
@@ -888,7 +888,7 @@ impl SessionPersistenceManager {
         // Then decompress if compression is enabled
         let decompressed = if self.config.compression_enabled {
             // Use zstd for decompression
-            let mut decoder = Decoder::new(&decrypted[..])?;
+            let mut decoder = ZstdStreamDecoder::new(&decrypted[..]);
             let mut decompressed = Vec::new();
             std::io::copy(&mut decoder, &mut decompressed)?;
             decompressed

@@ -4,13 +4,14 @@
 //!
 //! Run with: cargo bench --bench comprehensive_benchmarks
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_chat::{
     rag::{RagConfig, RagEngine},
     schema_introspection::SchemaIntrospector,
     ChatConfig, ChatSession, Message, MessageContent, MessageRole, OxiRSChat,
 };
 use oxirs_core::ConcreteStore;
+use std::hint::black_box;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 

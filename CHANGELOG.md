@@ -5,6 +5,22 @@ All notable changes to OxiRS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-03-11
+
+### Fixed
+- Fixed flaky `test_performance_speedup` in oxirs-arq (removed timing-dependent assertion)
+- Fixed flaky `test_multiple_spills` in oxirs-arq (use isolated temp dirs)
+- Fixed all clippy warnings (duplicated attributes, redundant patterns, type complexity)
+- Upgraded `scirs2-integrate` from 0.1.5 to 0.3.0 (eliminated stale `scirs2-fft` v0.1.5 dependency)
+
+### Changed
+- All internal dependencies use workspace version management
+- Added `scirs2-integrate` to workspace dependencies
+- Upgraded scirs2 dependencies from 0.3.0 to 0.3.1
+- Upgraded oxiarc-archive, oxiarc-zstd, oxiarc-lz4 from 0.2.2 to 0.2.3
+- Added build profile optimizations to reduce target directory size
+- Added Round 16 development modules (+describe_builder, +query_logger, +enum_resolver, and 23 more)
+
 ## [0.2.0] - 2026-03-05
 
 ### Overview

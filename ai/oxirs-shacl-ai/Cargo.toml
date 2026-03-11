@@ -35,29 +35,29 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-chrono = "0.4.43"
+chrono.workspace = true
 tokio.workspace = true
-num_cpus = "1.17"
+num_cpus.workspace = true
 # ndarray and rand now provided by scirs2-core (SciRS2 compliance)
-regex = "1.12"
-indexmap = "2.11"
-uuid = { version = "1.20", features = ["v4", "serde"] }
+regex.workspace = true
+indexmap.workspace = true
+uuid.workspace = true
 threadpool = "1.8"
 sysinfo.workspace = true  # Updated to 0.33 to fix objc2-core-foundation conflict
-nalgebra = { version = "0.33", features = ["serde-serialize"] }
+nalgebra = { workspace = true, features = ["serde-serialize"] }
 num-complex = { version = "0.4", features = ["serde"] }
-async-trait = "0.1"
-futures = "0.3"
-dashmap = "6.1"
+async-trait.workspace = true
+futures.workspace = true
+dashmap.workspace = true
 # datafusion.workspace = true  # Temporarily disabled due to version conflicts
 fastrand = "2.3"
-base64 = "0.22"
+base64.workspace = true
 url = { version = "2.5", features = ["serde"] }
-tokio-stream = "0.1"
+tokio-stream.workspace = true
 libm = "0.2"  # For erf function
 flate2 = { workspace = true }
-zstd = { workspace = true }
-lz4_flex = { workspace = true }
+oxiarc-zstd = { workspace = true }
+oxiarc-lz4 = { workspace = true }
 
 [dev-dependencies]
 criterion.workspace = true

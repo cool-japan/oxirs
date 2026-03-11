@@ -52,7 +52,7 @@ pub fn sf_equals_3d(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     let xy_equal = match (&geom1.geom, &geom2.geom) {
         (geo_types::Geometry::Point(p1), geo_types::Geometry::Point(p2)) => {
             use geo::{Distance, Euclidean};
-            Euclidean::distance(*p1, *p2) < 1e-10
+            Euclidean.distance(*p1, *p2) < 1e-10
         }
         (geo_types::Geometry::LineString(ls1), geo_types::Geometry::LineString(ls2)) => {
             ls1.0 == ls2.0
@@ -409,7 +409,7 @@ pub fn distance_3d(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
     use geo::{Distance, Euclidean};
 
     // Get 2D distance first
-    let dist_2d = Euclidean::distance(&geom1.geom, &geom2.geom);
+    let dist_2d = Euclidean.distance(&geom1.geom, &geom2.geom);
 
     // Get Z ranges
     let (z1_min, z1_max) = z_range(geom1);

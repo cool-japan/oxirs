@@ -4,10 +4,11 @@
 //!
 //! Run with: `cargo bench --bench advanced_rule_benchmarks`
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_rule::asp::{AspLiteral, AspSolver, AspTerm, Atom};
 use oxirs_rule::chr::{ChrEngine, ChrRule, ChrTerm, Constraint};
 use oxirs_rule::rif::{RifDialect, RifParser, RifSerializer};
+use std::hint::black_box;
 
 /// Benchmark RIF parsing performance
 fn bench_rif_parsing(c: &mut Criterion) {

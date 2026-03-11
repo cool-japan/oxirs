@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the multimodal search fusion implementation for OxiRS v0.2.0. The system provides intelligent fusion of text, vector, and spatial search modalities with support for multiple fusion strategies and score normalization methods.
+This document describes the multimodal search fusion implementation for OxiRS v0.2.1. The system provides intelligent fusion of text, vector, and spatial search modalities with support for multiple fusion strategies and score normalization methods.
 
 ## Architecture
 

@@ -163,8 +163,7 @@ mod tests {
         let config = OpcUaConfig::default();
         let client = OpcUaClient::new(config);
 
-        assert!(!tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(client.is_connected()));
+        let rt = tokio::runtime::Runtime::new().expect("runtime creation failed");
+        assert!(!rt.block_on(client.is_connected()));
     }
 }

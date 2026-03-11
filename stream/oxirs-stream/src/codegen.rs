@@ -853,7 +853,8 @@ impl CodeGenerator {
 
         code.push_str("//! Performance benchmarks\n\n");
         code.push_str(
-            "use criterion::{black_box, criterion_group, criterion_main, Criterion};\n\n",
+            "use std::hint::black_box;
+use criterion::{criterion_group, criterion_main, Criterion};\n\n",
         );
 
         code.push_str(&format!(

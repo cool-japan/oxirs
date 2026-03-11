@@ -5,7 +5,7 @@
 use anyhow::{anyhow, Result};
 use async_openai::{
     config::OpenAIConfig,
-    types::{
+    types::chat::{
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageContent,
         CreateChatCompletionRequestArgs,
     },
@@ -39,7 +39,7 @@ impl OpenAIProvider {
 #[async_trait]
 impl LLMProvider for OpenAIProvider {
     async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse> {
-        use async_openai::types::{
+        use async_openai::types::chat::{
             ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage,
         };
 
@@ -161,7 +161,7 @@ impl LLMProvider for OpenAIProvider {
         model: &str,
         request: &LLMRequest,
     ) -> Result<LLMResponseStream> {
-        use async_openai::types::{
+        use async_openai::types::chat::{
             ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage,
         };
         use futures_util::StreamExt;

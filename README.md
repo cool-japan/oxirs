@@ -3,13 +3,13 @@
 > A Rust-native, modular platform for Semantic Web, SPARQL 1.2, GraphQL, and AI-augmented reasoning
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.2.0 - Released - March 5, 2026
+**Status**: v0.2.1 - Released - March 11, 2026
 
-**Production Ready**: Complete SPARQL 1.1/1.2 implementation with **3.8x faster optimizer**, industrial IoT support, and AI-powered features. **39,000+ tests passing** with zero warnings across all 26 crates.
+**Production Ready**: Complete SPARQL 1.1/1.2 implementation with **3.8x faster optimizer**, industrial IoT support, and AI-powered features. **40,700+ tests passing** with zero warnings across all 26 crates.
 
-**v0.2.0 Highlights (March 5, 2026)**: 26 new functional modules added across 15 development rounds. Advanced SPARQL algebra (EXISTS, MINUS, subquery, service clause), production-grade storage (six-index store, index merger/rebuilder), AI capabilities (vector store, constraint inference, conversation history), and security hardening (credential store, trust chain validation).
+**v0.2.1 Highlights (March 11, 2026)**: 26 new functional modules added across 16 development rounds. Advanced SPARQL algebra (EXISTS, MINUS, subquery, service clause), production-grade storage (six-index store, index merger/rebuilder), AI capabilities (vector store, constraint inference, conversation history), and security hardening (credential store, trust chain validation).
 
 ## Vision
 
@@ -34,11 +34,11 @@ cd oxirs
 cargo build --workspace --release
 ```
 
-### What's New in v0.2.0 (March 5, 2026)
+### What's New in v0.2.1 (March 11, 2026)
 
-**Major Feature Release: 26 New Modules Across 15 Development Rounds**
+**Major Feature Release: 26 New Modules Across 16 Development Rounds**
 
-OxiRS v0.2.0 significantly expands the platform with deep SPARQL algebra, production storage, AI capabilities, and security hardening:
+OxiRS v0.2.1 significantly expands the platform with deep SPARQL algebra, production storage, AI capabilities, and security hardening:
 
 **Core Capabilities:**
 - **Complete SPARQL 1.1/1.2** - Full W3C compliance with advanced query optimization
@@ -51,12 +51,12 @@ OxiRS v0.2.0 significantly expands the platform with deep SPARQL algebra, produc
 - **Complete Observability** - Prometheus metrics, OpenTelemetry tracing
 - **Cloud Native** - Kubernetes operator, Terraform modules, Docker support
 
-**Quality Metrics (v0.2.0):**
-- ✅ **39,468 tests passing** (100% pass rate, ~115 skipped)
+**Quality Metrics (v0.2.1):**
+- ✅ **40,791 tests passing** (100% pass rate, ~115 skipped)
 - ✅ **Zero compilation warnings** across all 26 crates
 - ✅ **95%+ test coverage** and documentation coverage
 - ✅ **Production validated** in industrial deployments
-- ✅ **26 new functional modules** added across 15 development rounds
+- ✅ **26 new functional modules** added across 16 development rounds
 
 ---
 
@@ -211,7 +211,7 @@ oxirs/                  # Cargo workspace root
 │  ├─ oxirs-shacl       # SHACL Core + SHACL-SPARQL validator
 │  ├─ oxirs-star        # RDF-star / SPARQL-star grammar support
 │  ├─ oxirs-ttl         # Turtle/TriG parser and serializer
-│  └─ oxirs-vec         # Vector index abstractions (SciRS2, hnsw_rs)
+│  └─ oxirs-vec         # Vector index abstractions (SciRS2, native HNSW)
 ├─ storage/
 │  ├─ oxirs-tdb         # MVCC layer & assembler grammar (TDB2 parity)
 │  └─ oxirs-cluster     # Raft-backed distributed dataset
@@ -233,44 +233,44 @@ oxirs/                  # Cargo workspace root
     └─ benchmarks/       # SP2Bench, WatDiv, LDBC SGS
 ```
 
-## Feature Matrix (v0.2.0)
+## Feature Matrix (v0.2.1)
 
 | Capability | Oxirs crate(s) | Status | Jena / Fuseki parity |
 |------------|----------------|--------|----------------------|
 | **Core RDF & SPARQL** | | | |
-| RDF 1.2 & syntaxes (7 formats) | `oxirs-core` | ✅ Stable (2413 tests) | ✅ |
-| SPARQL 1.1 Query & Update | `oxirs-fuseki` + `oxirs-arq` | ✅ Stable (1578 + 2562 tests) | ✅ |
+| RDF 1.2 & syntaxes (7 formats) | `oxirs-core` | ✅ Stable (2458 tests) | ✅ |
+| SPARQL 1.1 Query & Update | `oxirs-fuseki` + `oxirs-arq` | ✅ Stable (1626 + 2628 tests) | ✅ |
 | SPARQL 1.2 / SPARQL-star | `oxirs-arq` (`star` flag) | ✅ Stable | 🔸 |
 | Advanced SPARQL Algebra (EXISTS/MINUS/subquery) | `oxirs-arq` | ✅ Stable | ✅ |
 | Persistent storage (N-Quads) | `oxirs-core` | ✅ Stable | ✅ |
 | **Semantic Web Extensions** | | | |
-| RDF-star parse/serialise | `oxirs-star` | ✅ Stable (1472 tests) | 🔸 (Jena dev build) |
-| SHACL Core+API (W3C compliant) | `oxirs-shacl` | ✅ Stable (1871 tests, 27/27 W3C) | ✅ |
-| Rule reasoning (RDFS/OWL 2 DL) | `oxirs-rule` | ✅ Stable (2069 tests) | ✅ |
-| SAMM 2.0-2.3 & AAS (Industry 4.0) | `oxirs-samm` | ✅ Stable (1274 tests, 16 generators) | ❌ |
+| RDF-star parse/serialise | `oxirs-star` | ✅ Stable (1507 tests) | 🔸 (Jena dev build) |
+| SHACL Core+API (W3C compliant) | `oxirs-shacl` | ✅ Stable (1915 tests, 27/27 W3C) | ✅ |
+| Rule reasoning (RDFS/OWL 2 DL) | `oxirs-rule` | ✅ Stable (2114 tests) | ✅ |
+| SAMM 2.0-2.3 & AAS (Industry 4.0) | `oxirs-samm` | ✅ Stable (1326 tests, 16 generators) | ❌ |
 | **Query & Federation** | | | |
-| GraphQL API | `oxirs-gql` | ✅ Stable (1659 tests) | ❌ |
-| SPARQL Federation (SERVICE) | `oxirs-federate` | ✅ Stable (1102 tests, 2PC) | ✅ |
+| GraphQL API | `oxirs-gql` | ✅ Stable (1706 tests) | ❌ |
+| SPARQL Federation (SERVICE) | `oxirs-federate` | ✅ Stable (1148 tests, 2PC) | ✅ |
 | Federated authentication | `oxirs-federate` | ✅ Stable (OAuth2/SAML/JWT) | 🔸 |
 | **Real-time & Streaming** | | | |
-| Stream processing (Kafka/NATS) | `oxirs-stream` | ✅ Stable (1138 tests, SIMD) | 🔸 (Jena + external) |
+| Stream processing (Kafka/NATS) | `oxirs-stream` | ✅ Stable (1191 tests, SIMD) | 🔸 (Jena + external) |
 | RDF Patch & SPARQL Update delta | `oxirs-stream` | ✅ Stable | 🔸 |
 | **Search & Geo** | | | |
 | Full-text search (`text:`) | `oxirs-textsearch` | ⏳ Planned | ✅ |
-| GeoSPARQL (OGC 1.1) | `oxirs-geosparql` (`geo`) | ✅ Stable (1715 tests) | ✅ |
-| Vector search / embeddings | `oxirs-vec` (1560 tests), `oxirs-embed` (1371 tests) | ✅ Stable | ❌ |
+| GeoSPARQL (OGC 1.1) | `oxirs-geosparql` (`geo`) | ✅ Stable (1756 tests) | ✅ |
+| Vector search / embeddings | `oxirs-vec` (1587 tests), `oxirs-embed` (1408 tests) | ✅ Stable | ❌ |
 | **Storage & Distribution** | | | |
-| TDB2-compatible storage (six-index) | `oxirs-tdb` | ✅ Stable (2047 tests) | ✅ |
-| Distributed / HA store (Raft) | `oxirs-cluster` (`cluster`) | ✅ Stable (986 tests) | 🔸 (Jena + external) |
-| Time-series database | `oxirs-tsdb` | ✅ Stable (1215 tests) | ❌ |
+| TDB2-compatible storage (six-index) | `oxirs-tdb` | ✅ Stable (2068 tests) | ✅ |
+| Distributed / HA store (Raft) | `oxirs-cluster` (`cluster`) | ✅ Stable (1019 tests) | 🔸 (Jena + external) |
+| Time-series database | `oxirs-tsdb` | ✅ Stable (1250 tests) | ❌ |
 | **AI & Advanced Features** | | | |
-| RAG chat API (LLM integration) | `oxirs-chat` | ✅ Stable (1062 tests) | ❌ |
-| AI-powered SHACL constraint inference | `oxirs-shacl-ai` | ✅ Stable (1476 tests) | ❌ |
-| GraphRAG hybrid search (Vector x Graph) | `oxirs-graphrag` | ✅ Stable (977 tests) | ❌ |
-| Physics-informed digital twins | `oxirs-physics` | ✅ Stable (1184 tests) | ❌ |
-| Knowledge graph embeddings (TransE, etc.) | `oxirs-embed` | ✅ Stable (1371 tests) | ❌ |
+| RAG chat API (LLM integration) | `oxirs-chat` | ✅ Stable (1095 tests) | ❌ |
+| AI-powered SHACL constraint inference | `oxirs-shacl-ai` | ✅ Stable (1509 tests) | ❌ |
+| GraphRAG hybrid search (Vector x Graph) | `oxirs-graphrag` | ✅ Stable (998 tests) | ❌ |
+| Physics-informed digital twins | `oxirs-physics` | ✅ Stable (1225 tests) | ❌ |
+| Knowledge graph embeddings (TransE, etc.) | `oxirs-embed` | ✅ Stable (1408 tests) | ❌ |
 | **Security & Trust** | | | |
-| W3C DID & Verifiable Credentials | `oxirs-did` | ✅ Stable (1153 tests) | ❌ |
+| W3C DID & Verifiable Credentials | `oxirs-did` | ✅ Stable (1196 tests) | ❌ |
 | Trust chain validation | `oxirs-did` | ✅ Stable | ❌ |
 | Signed RDF graphs (RDFC-1.0) | `oxirs-did` | ✅ Stable | ❌ |
 | Ed25519 cryptographic proofs | `oxirs-did` | ✅ Stable | ❌ |
@@ -280,21 +280,21 @@ oxirs/                  # Cargo workspace root
 | SPARQL-based authorization storage | `oxirs-fuseki` | ✅ Stable | ❌ |
 | OAuth2/OIDC/SAML authentication | `oxirs-fuseki` | ✅ Stable | 🔸 |
 | **Browser & Edge Deployment** | | | |
-| WebAssembly (WASM) bindings | `oxirs-wasm` | ✅ Stable (997 tests) | ❌ |
+| WebAssembly (WASM) bindings | `oxirs-wasm` | ✅ Stable (1036 tests) | ❌ |
 | Browser RDF/SPARQL execution | `oxirs-wasm` | ✅ Stable | ❌ |
 | TypeScript type definitions | `oxirs-wasm` | ✅ Stable | ❌ |
 | Cloudflare Workers / Deno support | `oxirs-wasm` | ✅ Stable | ❌ |
 | **Industrial IoT** | | | |
-| Modbus TCP/RTU protocol | `oxirs-modbus` | ✅ Stable (1068 tests) | ❌ |
-| CANbus / J1939 protocol | `oxirs-canbus` | ✅ Stable (1103 tests) | ❌ |
+| Modbus TCP/RTU protocol | `oxirs-modbus` | ✅ Stable (1115 tests) | ❌ |
+| CANbus / J1939 protocol | `oxirs-canbus` | ✅ Stable (1158 tests) | ❌ |
 
 **Legend:**
 - ✅ Stable: Production-ready with comprehensive tests, API stability guaranteed
 - ⏳ Planned: Not yet implemented
 - 🔸 Partial/plug-in support in Jena
 
-**Quality Metrics (v0.2.0):**
-- **39,468 tests passing** (100% pass rate, ~115 skipped)
+**Quality Metrics (v0.2.1):**
+- **40,791 tests passing** (100% pass rate, ~115 skipped)
 - **Zero compilation warnings** (enforced with `-D warnings`)
 - **95%+ test coverage** across all 26 modules
 - **95%+ documentation coverage**
@@ -302,7 +302,7 @@ oxirs/                  # Cargo workspace root
 - **Production-grade security audit completed**
 - **CUDA GPU support** for AI acceleration
 - **3.8x faster query optimization** via adaptive complexity detection
-- **26 new functional modules** added in v0.2.0 (15 development rounds)
+- **26 new functional modules** added in v0.2.1 (16 development rounds)
 
 ## Usage Examples
 
@@ -503,12 +503,12 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 | Version | Target Date | Milestone | Deliverables | Status |
 |---------|-------------|-----------|--------------|---------|
 | **v0.1.0** | **✅ Jan 7, 2026** | **Initial Production Release** | Complete SPARQL 1.1/1.2, Industrial IoT, AI features, 13,123 tests | ✅ Released |
-| **v0.2.0** | **✅ Mar 5, 2026** | **Deep Feature Expansion** | 39,468+ tests, 26 new modules, 3.8x faster optimizer, advanced SPARQL algebra, AI production-grade | ✅ Released (current) |
+| **v0.2.1** | **✅ Mar 10, 2026** | **Deep Feature Expansion** | 40,791+ tests, 26 new modules, 3.8x faster optimizer, advanced SPARQL algebra, AI production-grade | ✅ Released (current) |
 | **v0.3.0** | **Q2 2026** | **Full-text Search & Scale** | Full-text search (Tantivy), 10x performance, multi-region clustering | Planned |
 
-### Current Release: v0.2.0 (March 5, 2026)
+### Current Release: v0.2.1 (March 11, 2026)
 
-**v0.2.0 Focus Areas (15 rounds complete):**
+**v0.2.1 Focus Areas (16 rounds complete):**
 - Advanced SPARQL algebra: EXISTS/MINUS evaluators, subquery builder, service clause, LATERAL join
 - Storage hardening: six-index store, index merger/rebuilder, B-tree compaction, triple cache
 - AI production readiness: vector store, constraint inference, conversation history, response cache
@@ -517,11 +517,24 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - Stream enhancements: partition manager, consumer groups, schema registry, dead-letter queue
 - Time-series: continuous queries, write buffer, tag index, retention management
 
+## Sponsorship
+
+OxiRS is developed and maintained by **COOLJAPAN OU (Team Kitasan)**.
+
+If you find OxiRS useful, please consider sponsoring the project to support continued development of the Pure Rust ecosystem.
+
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-red?logo=github)](https://github.com/sponsors/cool-japan)
+
+**[https://github.com/sponsors/cool-japan](https://github.com/sponsors/cool-japan)**
+
+Your sponsorship helps us:
+- Maintain and improve the COOLJAPAN ecosystem
+- Keep the entire ecosystem (OxiBLAS, OxiFFT, SciRS2, etc.) 100% Pure Rust
+- Provide long-term support and security updates
+
 ## License
 
 OxiRS is licensed under:
-
-- **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 
 See [LICENSE](LICENSE) for details.
 
@@ -530,13 +543,13 @@ See [LICENSE](LICENSE) for details.
 - **Issues & RFCs**: https://github.com/cool-japan/oxirs
 - **Maintainer**: @cool-japan (KitaSan)
 
-## Release Notes (v0.2.0)
+## Release Notes (v0.2.1)
 
 Full notes live in [CHANGELOG.md](CHANGELOG.md).
 
-### Highlights (March 5, 2026)
-- **39,468+ tests passing** across all 26 crates
-- **26 new functional modules** added across all 26 crates in 15 development rounds
+### Highlights (March 11, 2026)
+- **40,791+ tests passing** across all 26 crates
+- **26 new functional modules** added across all 26 crates in 16 development rounds
 - **Advanced SPARQL algebra**: EXISTS evaluator, MINUS evaluator, subquery builder, service clause handler
 - **Storage hardening**: six-index store (SPO/POS/OSP/GSPO/GPOS/GOPS), index merger/rebuilder, B-tree compaction
 - **AI production-grade**: vector store, constraint inference, conversation history, response cache, reranker
@@ -546,36 +559,36 @@ Full notes live in [CHANGELOG.md](CHANGELOG.md).
 - **Geospatial**: convex hull (Graham scan), distance calculator, intersection detector, area calculator
 - **Stream processing**: partition manager, consumer groups, schema registry, dead-letter queue, watermark tracking
 
-### Per-Crate Test Counts (v0.2.0)
+### Per-Crate Test Counts (v0.2.1)
 | Crate | Tests |
 |-------|-------|
-| oxirs-core | 2413 |
-| oxirs-arq | 2562 |
-| oxirs-rule | 2069 |
-| oxirs-tdb | 2047 |
-| oxirs-fuseki | 1578 |
-| oxirs-gql | 1659 |
-| oxirs-shacl | 1871 |
-| oxirs-geosparql | 1715 |
-| oxirs-vec | 1560 |
-| oxirs-shacl-ai | 1476 |
-| oxirs-samm | 1274 |
-| oxirs-ttl | 1308 |
-| oxirs-star | 1472 |
-| oxirs-tsdb | 1215 |
-| oxirs-embed | 1371 |
-| oxirs-did | 1153 |
-| oxirs (tools) | 1527 |
-| oxirs-stream | 1138 |
-| oxirs-federate | 1102 |
-| oxirs-canbus | 1103 |
-| oxirs-modbus | 1068 |
-| oxirs-chat | 1062 |
-| oxirs-wasm | 997 |
-| oxirs-cluster | 986 |
-| oxirs-physics | 1184 |
-| oxirs-graphrag | 977 |
-| **Total** | **39,468** |
+| oxirs-core | 2458 |
+| oxirs-arq | 2628 |
+| oxirs-rule | 2114 |
+| oxirs-tdb | 2068 |
+| oxirs-fuseki | 1626 |
+| oxirs-gql | 1706 |
+| oxirs-shacl | 1915 |
+| oxirs-geosparql | 1756 |
+| oxirs-vec | 1587 |
+| oxirs-shacl-ai | 1509 |
+| oxirs-samm | 1326 |
+| oxirs-ttl | 1350 |
+| oxirs-star | 1507 |
+| oxirs-tsdb | 1250 |
+| oxirs-embed | 1408 |
+| oxirs-did | 1196 |
+| oxirs (tools) | 1582 |
+| oxirs-stream | 1191 |
+| oxirs-federate | 1148 |
+| oxirs-canbus | 1158 |
+| oxirs-modbus | 1115 |
+| oxirs-chat | 1095 |
+| oxirs-wasm | 1036 |
+| oxirs-cluster | 1019 |
+| oxirs-physics | 1225 |
+| oxirs-graphrag | 998 |
+| **Total** | **40,791** |
 
 ### Performance Benchmarks
 ```
@@ -605,4 +618,4 @@ Production Impact (100K QPS):
 
 *"Rust makes memory safety table stakes; OxiRS makes knowledge-graph engineering table stakes."*
 
-**v0.2.0 - Released - March 5, 2026**
+**v0.2.1 - Released - March 11, 2026**

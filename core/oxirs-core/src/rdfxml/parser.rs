@@ -7,7 +7,7 @@ use oxiri::{Iri, IriParseError};
 use quick_xml::escape::{resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
-use quick_xml::name::{LocalName, PrefixDeclaration, PrefixIter, QName, ResolveResult};
+use quick_xml::name::{LocalName, NamespaceBindingsIter, PrefixDeclaration, QName, ResolveResult};
 use quick_xml::{Decoder, Error, NsReader, Writer};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -318,7 +318,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
-            inner: self.parser.reader.prefixes(),
+            inner: self.parser.reader.resolver().bindings(),
             decoder: self.parser.reader.decoder(),
             lenient: self.parser.lenient,
         }
@@ -457,7 +457,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
-            inner: self.parser.reader.prefixes(),
+            inner: self.parser.reader.resolver().bindings(),
             decoder: self.parser.reader.decoder(),
             lenient: self.parser.lenient,
         }
@@ -593,7 +593,7 @@ impl SliceRdfXmlParser<'_> {
     /// ```
     pub fn prefixes(&self) -> RdfXmlPrefixesIter<'_> {
         RdfXmlPrefixesIter {
-            inner: self.parser.reader.prefixes(),
+            inner: self.parser.reader.resolver().bindings(),
             decoder: self.parser.reader.decoder(),
             lenient: self.parser.lenient,
         }
@@ -640,7 +640,7 @@ impl SliceRdfXmlParser<'_> {
 ///
 /// See [`ReaderRdfXmlParser::prefixes`].
 pub struct RdfXmlPrefixesIter<'a> {
-    inner: PrefixIter<'a>,
+    inner: NamespaceBindingsIter<'a>,
     decoder: Decoder,
     lenient: bool,
 }
@@ -1276,12 +1276,12 @@ impl<R> InternalRdfXmlParser<R> {
     }
 
     fn resolve_tag_name(&self, qname: QName<'_>) -> Result<String, RdfXmlParseError> {
-        let (namespace, local_name) = self.reader.resolve_element(qname);
+        let (namespace, local_name) = self.reader.resolver().resolve_element(qname);
         self.resolve_ns_name(namespace, local_name)
     }
 
     fn resolve_attribute_name(&self, qname: QName<'_>) -> Result<String, RdfXmlParseError> {
-        let (namespace, local_name) = self.reader.resolve_attribute(qname);
+        let (namespace, local_name) = self.reader.resolver().resolve_attribute(qname);
         self.resolve_ns_name(namespace, local_name)
     }
 

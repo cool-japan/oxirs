@@ -261,10 +261,10 @@ pub fn simplify_geometry(geometry: &Geometry, epsilon: f64) -> Result<Geometry> 
     }
 
     let simplified_geom = match &geometry.geom {
-        GeoGeometry::LineString(ls) => GeoGeometry::LineString(ls.simplify(&epsilon)),
-        GeoGeometry::Polygon(poly) => GeoGeometry::Polygon(poly.simplify(&epsilon)),
-        GeoGeometry::MultiLineString(mls) => GeoGeometry::MultiLineString(mls.simplify(&epsilon)),
-        GeoGeometry::MultiPolygon(mpoly) => GeoGeometry::MultiPolygon(mpoly.simplify(&epsilon)),
+        GeoGeometry::LineString(ls) => GeoGeometry::LineString(ls.simplify(epsilon)),
+        GeoGeometry::Polygon(poly) => GeoGeometry::Polygon(poly.simplify(epsilon)),
+        GeoGeometry::MultiLineString(mls) => GeoGeometry::MultiLineString(mls.simplify(epsilon)),
+        GeoGeometry::MultiPolygon(mpoly) => GeoGeometry::MultiPolygon(mpoly.simplify(epsilon)),
         // Other geometry types don't benefit from simplification
         _ => geometry.geom.clone(),
     };
@@ -307,13 +307,13 @@ pub fn simplify_geometry_vw(geometry: &Geometry, epsilon: f64) -> Result<Geometr
     }
 
     let simplified_geom = match &geometry.geom {
-        GeoGeometry::LineString(ls) => GeoGeometry::LineString(ls.simplify_vw_preserve(&epsilon)),
-        GeoGeometry::Polygon(poly) => GeoGeometry::Polygon(poly.simplify_vw_preserve(&epsilon)),
+        GeoGeometry::LineString(ls) => GeoGeometry::LineString(ls.simplify_vw_preserve(epsilon)),
+        GeoGeometry::Polygon(poly) => GeoGeometry::Polygon(poly.simplify_vw_preserve(epsilon)),
         GeoGeometry::MultiLineString(mls) => {
-            GeoGeometry::MultiLineString(mls.simplify_vw_preserve(&epsilon))
+            GeoGeometry::MultiLineString(mls.simplify_vw_preserve(epsilon))
         }
         GeoGeometry::MultiPolygon(mpoly) => {
-            GeoGeometry::MultiPolygon(mpoly.simplify_vw_preserve(&epsilon))
+            GeoGeometry::MultiPolygon(mpoly.simplify_vw_preserve(epsilon))
         }
         _ => geometry.geom.clone(),
     };
@@ -725,7 +725,7 @@ pub fn validate_geometry_with_config(
 
             // Check length
             use geo::{Euclidean, Length};
-            let length = ls.length::<Euclidean>();
+            let length = Euclidean.length(ls);
             if length < config.min_linestring_length {
                 result = result.with_warning(format!(
                     "LineString length ({}) is below minimum ({})",
@@ -936,7 +936,7 @@ pub fn compute_quality_metrics(geometry: &Geometry) -> GeometryQualityMetrics {
 
             use geo::{Euclidean, Length};
             let area = poly.unsigned_area();
-            let perimeter = poly.exterior().length::<Euclidean>();
+            let perimeter = Euclidean.length(poly.exterior());
 
             // Compactness: 4π * area / perimeter²  (circle = 1.0, other shapes < 1.0)
             let compactness = if perimeter > 1e-10 {

@@ -1,20 +1,20 @@
 # OxiRS Development Roadmap
 
-*Version: 0.2.0 | Last Updated: March 5, 2026*
+*Version: 0.2.1 | Last Updated: March 11, 2026*
 
-## Current Status: v0.2.0 - Released (March 5, 2026)
+## Current Status: v0.2.1 - Released (March 11, 2026)
 
 **OxiRS** is an advanced AI-augmented semantic web platform built in Rust, delivering a production-ready alternative to Apache Jena + Fuseki with cutting-edge AI/ML capabilities.
 
-### Release Metrics (v0.2.0, March 5, 2026)
-- **Version**: 0.2.0
+### Release Metrics (v0.2.1, March 11, 2026)
+- **Version**: 0.2.1
 - **Architecture**: 26-crate workspace
 - **Build Status**: Clean compilation - Zero errors/warnings across all modules
-- **Test Status**: 39,000+ tests passing (100% pass rate, ~115 skipped)
-- **Development Rounds Complete**: 15
+- **Test Status**: 40,791+ tests passing (100% pass rate, ~115 skipped)
+- **Development Rounds Complete**: 16
 - **New Modules Added**: 150+ modules across all crates
 
-### v0.2.0 Feature Highlights
+### v0.2.1 Feature Highlights
 - Advanced SPARQL 1.2: ASK evaluator, EXISTS evaluator, service clause federation, subquery builder, MINUS evaluator, values clause
 - RDF Processing: literal parser (15 XSD types), WKT geometry parser, annotation graph, prefix resolver, quantizer (k-means++ PQ)
 - Storage: six-index store (SPO/POS/OSP), partition manager (Kafka-style), endpoint registry, shard router
@@ -37,38 +37,38 @@
 - Time-Series Analytics: anomaly detection, Holt-Winters forecasting, Prometheus remote write
 - WASM: query builder, triple store, storage adapter
 
-## v0.2.0 Test Coverage (March 5, 2026)
+## v0.2.1 Test Coverage (March 11, 2026)
 
 Per-crate test counts:
-- oxirs-core: 2413 tests
-- oxirs-fuseki: 1578 tests
-- oxirs-gql: 1659 tests
-- oxirs-arq: 2562 tests
-- oxirs-rule: 2069 tests
-- oxirs-shacl: 1871 tests
-- oxirs-samm: 1274 tests
-- oxirs-geosparql: 1715 tests
-- oxirs-star: 1472 tests
-- oxirs-ttl: 1308 tests
-- oxirs-vec: 1560 tests
-- oxirs-tdb: 2047 tests
-- oxirs-cluster: 986 tests
-- oxirs-tsdb: 1215 tests
-- oxirs-stream: 1138 tests
-- oxirs-federate: 1102 tests
-- oxirs-modbus: 1068 tests
-- oxirs-canbus: 1103 tests
-- oxirs-embed: 1371 tests
-- oxirs-shacl-ai: 1476 tests
-- oxirs-chat: 1062 tests
-- oxirs-physics: 1184 tests
-- oxirs-graphrag: 977 tests
-- oxirs-did: 1153 tests
-- oxirs-wasm: 997 tests
-- oxirs (tools): 1527 tests
-- **Total: 39,000+ tests**
+- oxirs-core: 2458 tests
+- oxirs-fuseki: 1626 tests
+- oxirs-gql: 1706 tests
+- oxirs-arq: 2628 tests
+- oxirs-rule: 2114 tests
+- oxirs-shacl: 1915 tests
+- oxirs-samm: 1326 tests
+- oxirs-geosparql: 1756 tests
+- oxirs-star: 1507 tests
+- oxirs-ttl: 1350 tests
+- oxirs-vec: 1587 tests
+- oxirs-tdb: 2068 tests
+- oxirs-cluster: 1019 tests
+- oxirs-tsdb: 1250 tests
+- oxirs-stream: 1191 tests
+- oxirs-federate: 1148 tests
+- oxirs-modbus: 1115 tests
+- oxirs-canbus: 1158 tests
+- oxirs-embed: 1408 tests
+- oxirs-shacl-ai: 1509 tests
+- oxirs-chat: 1095 tests
+- oxirs-physics: 1225 tests
+- oxirs-graphrag: 998 tests
+- oxirs-did: 1196 tests
+- oxirs-wasm: 1036 tests
+- oxirs (tools): 1582 tests
+- **Total: 40,791+ tests**
 
-## v0.2.0 Development Rounds
+## v0.2.1 Development Rounds
 
 **Round 1**: +basic_auth, +websocket_handler, +type_resolver, +query_cache, +rule_compiler, +shape_matcher, +aspect_export, +bounding_box, +rdf_star_serializer, +iri_catalog, +delta_encoder, +wal_archive, +consensus_log, +compression_codec, +dead_letter_queue, +endpoint_discovery, +alarm_manager, +signal_monitor, +cross_encoder, +anomaly_detector, +tool_registry, +signal_processing, +graph_partitioner, +revocation_list, +wasm_bridge, +cache commands
 
@@ -98,6 +98,8 @@ Per-crate test counts:
 
 **Round 15**: +ask_evaluator, +endpoint_router, +argument_coercer, +exists_evaluator, +rule_executor, +datatype_checker, +property_mapper, +simplifier, +graph_merger, +jsonld_compactor, +approximate_counter, +triple_cache, +shard_router, +forecaster, +replay_buffer, +load_balancer, +protocol_analyzer, +obd_decoder, +batch_encoder, +constraint_ranker, +dialogue_manager, +control_systems, +entity_classifier, +authentication, +event_dispatcher, +benchmark_command
 
+**Round 16**: +describe_builder, +query_logger, +enum_resolver, +path_expression, +rule_statistics, +node_constraint, +constraint_validator, +coordinate_converter, +reification_mapper, +trig_parser, +pq_encoder, +bloom_index, +election_timer, +rollup_engine, +event_filter, +capability_negotiator, +register_watcher, +pgn_decoder, +embedding_compressor, +pattern_scorer, +session_store, +kinematics, +community_detector, +presentation_request, +namespace_manager, +serve_command
+
 ## Roadmap
 
 ### v0.1.0 - Initial Release (Released - January 7, 2026)
@@ -110,8 +112,8 @@ Per-crate test counts:
 - Initial SHACL validation
 - Project workspace with foundational crates
 
-### v0.2.0 - Full-Featured Platform (Released - March 5, 2026)
-- 26-crate workspace with 39,000+ tests
+### v0.2.1 - Full-Featured Platform (Released - March 11, 2026)
+- 26-crate workspace with 40,791+ tests
 - Complete SPARQL 1.2 feature set (federated ASK, EXISTS, LATERAL, MINUS, VALUES, subqueries)
 - Full GeoSPARQL 1.1 compliance with convex hull, topology, spatial indexing
 - OWL 2 DL reasoning with ABox, property hierarchy, complex constructors
@@ -139,4 +141,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS v0.2.0 - Production-ready semantic web platform with full Apache Jena parity, enterprise-grade AI/ML capabilities, and 39,000+ tests.*
+*OxiRS v0.2.1 - Production-ready semantic web platform with full Apache Jena parity, enterprise-grade AI/ML capabilities, and 40,791+ tests.*

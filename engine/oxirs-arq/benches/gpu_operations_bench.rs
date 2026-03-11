@@ -8,9 +8,10 @@
 //! - Batch processing throughput
 //! - Configuration impact on performance
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_arq::gpu_accelerated_ops::{GpuConfig, GpuQueryEngine};
 use scirs2_core::ndarray_ext::{Array1, Array2};
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Generate synthetic embedding vectors for benchmarking

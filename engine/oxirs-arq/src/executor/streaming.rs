@@ -467,7 +467,8 @@ impl StreamingSolution {
             CompressionAlgorithm::None => Ok(serialized),
             CompressionAlgorithm::Lz4 => {
                 // Fast LZ4 compression for performance-critical scenarios
-                Ok(lz4_flex::compress_prepend_size(&serialized))
+                oxiarc_lz4::compress(&serialized)
+                    .map_err(|e| anyhow!("LZ4 compression failed: {}", e))
             }
             CompressionAlgorithm::Gzip => {
                 // Balanced gzip compression (existing implementation)
@@ -479,7 +480,7 @@ impl StreamingSolution {
             }
             CompressionAlgorithm::Zstd => {
                 // High compression zstd for space-critical scenarios
-                zstd::bulk::compress(&serialized, 3)
+                oxiarc_zstd::encode_all(&serialized, 3)
                     .map_err(|e| anyhow!("Zstd compression failed: {}", e))
             }
         }
@@ -494,7 +495,7 @@ impl StreamingSolution {
             }
             CompressionAlgorithm::Lz4 => {
                 // LZ4 decompression
-                lz4_flex::decompress_size_prepended(compressed)
+                oxiarc_lz4::decompress(compressed, 100 * 1024 * 1024)
                     .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?
             }
             CompressionAlgorithm::Gzip => {
@@ -507,7 +508,7 @@ impl StreamingSolution {
             }
             CompressionAlgorithm::Zstd => {
                 // Zstd decompression
-                zstd::bulk::decompress(compressed, 1024 * 1024 * 100) // 100MB max
+                oxiarc_zstd::decode_all(compressed)
                     .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?
             }
         };

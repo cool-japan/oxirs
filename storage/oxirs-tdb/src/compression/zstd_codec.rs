@@ -111,8 +111,8 @@ impl ZstdCodec {
         let compressed = match &self.dict {
             None => {
                 // Standard Zstd compression without dictionary
-                let mut encoder = zstd::Encoder::new(Vec::new(), self.compression_level)
-                    .map_err(|e| TdbError::Other(format!("zstd encoder init failed: {e}")))?;
+                let mut encoder =
+                    oxiarc_zstd::ZstdStreamEncoder::new(Vec::new(), self.compression_level);
                 encoder
                     .write_all(data)
                     .map_err(|e| TdbError::Other(format!("zstd write failed: {e}")))?;
@@ -122,17 +122,11 @@ impl ZstdCodec {
             }
             Some(dict_bytes) => {
                 // Dictionary-based Zstd compression
-                let mut encoder =
-                    zstd::Encoder::with_dictionary(Vec::new(), self.compression_level, dict_bytes)
-                        .map_err(|e| {
-                            TdbError::Other(format!("zstd dict encoder init failed: {e}"))
-                        })?;
-                encoder
-                    .write_all(data)
-                    .map_err(|e| TdbError::Other(format!("zstd dict write failed: {e}")))?;
-                encoder
-                    .finish()
-                    .map_err(|e| TdbError::Other(format!("zstd dict finish failed: {e}")))?
+                let mut enc = oxiarc_zstd::ZstdEncoder::new();
+                enc.set_level(self.compression_level);
+                enc.set_dictionary(dict_bytes);
+                enc.compress(data)
+                    .map_err(|e| TdbError::Other(format!("zstd dict compress failed: {e}")))?
             }
         };
 
@@ -151,8 +145,7 @@ impl ZstdCodec {
 
         let decompressed = match &self.dict {
             None => {
-                let mut decoder = zstd::Decoder::new(data)
-                    .map_err(|e| TdbError::Other(format!("zstd decoder init failed: {e}")))?;
+                let mut decoder = oxiarc_zstd::ZstdStreamDecoder::new(data);
                 let mut out = Vec::new();
                 decoder
                     .read_to_end(&mut out)
@@ -160,13 +153,9 @@ impl ZstdCodec {
                 out
             }
             Some(dict_bytes) => {
-                let mut decoder = zstd::Decoder::with_dictionary(data, dict_bytes)
-                    .map_err(|e| TdbError::Other(format!("zstd dict decoder init failed: {e}")))?;
-                let mut out = Vec::new();
-                decoder
-                    .read_to_end(&mut out)
-                    .map_err(|e| TdbError::Other(format!("zstd dict decompress failed: {e}")))?;
-                out
+                // Dictionary decompression - must pass the dictionary used during compression
+                oxiarc_zstd::decompress_with_dict(data, dict_bytes)
+                    .map_err(|e| TdbError::Other(format!("zstd dict decompress failed: {e}")))?
             }
         };
 
@@ -262,17 +251,10 @@ impl ZstdCodec {
             )));
         }
 
-        // Concatenate all sample data and record individual sizes
-        let mut concatenated = Vec::with_capacity(total_size);
-        let mut sample_sizes = Vec::with_capacity(valid_samples.len());
-        for sample in &valid_samples {
-            concatenated.extend_from_slice(sample);
-            sample_sizes.push(sample.len());
-        }
-
-        // Use the zstd dictionary trainer
-        let dict = zstd::dict::from_continuous(&concatenated, &sample_sizes, dict_size)
+        // Use the oxiarc_zstd dictionary trainer
+        let dict_obj = oxiarc_zstd::train_dictionary(&valid_samples, dict_size)
             .map_err(|e| TdbError::Other(format!("zstd dictionary training failed: {e}")))?;
+        let dict = dict_obj.data().to_vec();
 
         log::debug!(
             "Trained Zstd dictionary: {} samples, {} total bytes -> {} byte dictionary",

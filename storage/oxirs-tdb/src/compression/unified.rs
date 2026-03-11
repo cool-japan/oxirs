@@ -227,21 +227,22 @@ impl UnifiedCompression {
     // Algorithm-specific implementations
 
     fn compress_lz4(&self, data: &[u8]) -> Result<Vec<u8>> {
-        Ok(lz4_flex::compress_prepend_size(data))
+        oxiarc_lz4::compress(data)
+            .map_err(|e| TdbError::Other(format!("LZ4 compression failed: {:?}", e)))
     }
 
     fn decompress_lz4(&self, data: &[u8]) -> Result<Vec<u8>> {
-        lz4_flex::decompress_size_prepended(data)
+        oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
             .map_err(|e| TdbError::Other(format!("LZ4 decompression failed: {:?}", e)))
     }
 
     fn compress_zstd(&self, data: &[u8], level: i32) -> Result<Vec<u8>> {
-        zstd::encode_all(data, level)
+        oxiarc_zstd::encode_all(data, level)
             .map_err(|e| TdbError::Other(format!("Zstd compression failed: {}", e)))
     }
 
     fn decompress_zstd(&self, data: &[u8]) -> Result<Vec<u8>> {
-        zstd::decode_all(data)
+        oxiarc_zstd::decode_all(data)
             .map_err(|e| TdbError::Other(format!("Zstd decompression failed: {}", e)))
     }
 

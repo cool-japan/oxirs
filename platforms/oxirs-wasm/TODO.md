@@ -17,7 +17,7 @@ OxiRS WASM v0.1.0 provides WebAssembly bindings for browser-based RDF and SPARQL
 
 ## Future Roadmap
 
-### v0.2.0 - Enhanced Query Support (Q1 2026 - Expanded)
+### v0.2.1 - Enhanced Query Support (Q1 2026 - Expanded)
 - [ ] Full SPARQL 1.1 query support (OPTIONAL, UNION, FILTER)
 - [ ] SPARQL UPDATE operations (INSERT, DELETE)
 - [ ] Property paths in patterns

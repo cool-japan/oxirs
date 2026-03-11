@@ -409,7 +409,7 @@ impl GossipMessageCompressor {
             out.extend_from_slice(data);
             out
         } else {
-            let compressed = zstd::bulk::compress(data, self.level)
+            let compressed = oxiarc_zstd::encode_all(data, self.level)
                 .map_err(|e| ClusterError::Compression(e.to_string()))?;
             let mut out = Vec::with_capacity(compressed.len() + 1);
             out.push(0x01_u8);
@@ -433,7 +433,7 @@ impl GossipMessageCompressor {
 
         match tag {
             0x00 => Ok(payload.to_vec()),
-            0x01 => zstd::bulk::decompress(payload, 64 * 1024 * 1024)
+            0x01 => oxiarc_zstd::decode_all(payload)
                 .map_err(|e| ClusterError::Compression(e.to_string())),
             other => Err(ClusterError::Compression(format!(
                 "unknown compression tag: {:#x}",

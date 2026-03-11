@@ -1,6 +1,6 @@
 //! Benchmarks for parallel batch processing
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::concurrent::{
     BatchBuilder, BatchBuilderConfig, BatchConfig, BatchOperation, CoalescingStrategy,
     ParallelBatchProcessor,
@@ -9,6 +9,7 @@ use oxirs_core::graph::Graph;
 use oxirs_core::model::{NamedNode, Object, Predicate, Subject, Triple};
 use oxirs_core::store::IndexedGraph;
 use rayon::prelude::*;
+use std::hint::black_box;
 use std::sync::Arc;
 
 fn create_test_triple(id: usize) -> Triple {

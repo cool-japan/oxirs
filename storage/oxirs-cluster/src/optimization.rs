@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-use zstd;
 
 /// Binary serialization format with compression
 #[derive(Debug, Clone)]
@@ -72,7 +71,12 @@ impl BinarySerializer {
         let mut binary_data = match self.config.format {
             SerializationFormat::Json => serde_json::to_vec(data)?,
             SerializationFormat::MessagePack => rmp_serde::to_vec(data)?,
-            SerializationFormat::Cbor => serde_cbor::to_vec(data)?,
+            SerializationFormat::Cbor => {
+                let mut buf = Vec::new();
+                ciborium::ser::into_writer(data, &mut buf)
+                    .map_err(|e| anyhow::anyhow!("CBOR serialization failed: {e}"))?;
+                buf
+            }
             SerializationFormat::Bincode => {
                 oxicode::serde::encode_to_vec(data, oxicode::config::standard())?
             }
@@ -137,7 +141,8 @@ impl BinarySerializer {
         let result = match self.config.format {
             SerializationFormat::Json => serde_json::from_slice(&decompressed_data)?,
             SerializationFormat::MessagePack => rmp_serde::from_slice(&decompressed_data)?,
-            SerializationFormat::Cbor => serde_cbor::from_slice(&decompressed_data)?,
+            SerializationFormat::Cbor => ciborium::de::from_reader(&decompressed_data[..])
+                .map_err(|e| anyhow::anyhow!("CBOR deserialization failed: {e}"))?,
             SerializationFormat::Bincode => {
                 oxicode::serde::decode_from_slice(&decompressed_data, oxicode::config::standard())
                     .map(|(v, _)| v)?
@@ -149,26 +154,25 @@ impl BinarySerializer {
 
     /// Compress data using LZ4
     fn compress_lz4(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use lz4_flex::compress_prepend_size;
-        Ok(compress_prepend_size(data))
+        oxiarc_lz4::compress(data).map_err(|e| anyhow::anyhow!("LZ4 compression failed: {}", e))
     }
 
     /// Decompress LZ4 data
     fn decompress_lz4(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use lz4_flex::decompress_size_prepended;
-        decompress_size_prepended(data)
+        oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
             .map_err(|e| anyhow::anyhow!("LZ4 decompression failed: {}", e))
     }
 
     /// Compress data using Zstd
     fn compress_zstd(&self, data: &[u8]) -> Result<Vec<u8>> {
-        zstd::encode_all(data, self.config.compression_level)
+        oxiarc_zstd::encode_all(data, self.config.compression_level)
             .map_err(|e| anyhow::anyhow!("Zstd compression failed: {}", e))
     }
 
     /// Decompress Zstd data
     fn decompress_zstd(&self, data: &[u8]) -> Result<Vec<u8>> {
-        zstd::decode_all(data).map_err(|e| anyhow::anyhow!("Zstd decompression failed: {}", e))
+        oxiarc_zstd::decode_all(data)
+            .map_err(|e| anyhow::anyhow!("Zstd decompression failed: {}", e))
     }
 
     /// Compress data using Deflate

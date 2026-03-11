@@ -469,7 +469,11 @@ mod tests {
 
     #[test]
     fn test_spill_and_read() {
-        let config = SpillConfig::default();
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+        let config = SpillConfig {
+            spill_dir: temp_dir.path().to_path_buf(),
+            ..SpillConfig::default()
+        };
         let mut manager = SpillManager::new(config).expect("Failed to create manager");
 
         let test_data = create_test_solution(100);
@@ -483,7 +487,11 @@ mod tests {
 
     #[test]
     fn test_spill_statistics() {
-        let config = SpillConfig::default();
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+        let config = SpillConfig {
+            spill_dir: temp_dir.path().to_path_buf(),
+            ..SpillConfig::default()
+        };
         let mut manager = SpillManager::new(config).expect("Failed to create manager");
 
         let test_data = create_test_solution(50);

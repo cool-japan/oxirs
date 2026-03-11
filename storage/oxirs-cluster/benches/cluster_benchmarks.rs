@@ -20,11 +20,12 @@
 //! cargo bench --bench cluster_benchmarks -- --save-baseline main
 //! ```
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_cluster::gpu_acceleration::{
     GpuAcceleratedCluster, GpuConfig, LoadForecastParams, ReplicaMetrics,
 };
 use oxirs_cluster::merkle_tree::MerkleTree;
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Benchmark GPU-accelerated replica selection with varying replica counts

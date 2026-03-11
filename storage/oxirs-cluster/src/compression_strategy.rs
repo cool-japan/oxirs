@@ -286,27 +286,26 @@ impl CompressionStrategy {
         1.0 - (entropy / 8.0)
     }
 
-    // LZ4 implementation using lz4_flex
+    // LZ4 implementation using oxiarc_lz4
     fn compress_lz4(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use lz4_flex::compress_prepend_size;
-        Ok(compress_prepend_size(data))
+        oxiarc_lz4::compress(data)
+            .map_err(|e| ClusterError::Compression(format!("LZ4 compression failed: {e}")))
     }
 
     fn decompress_lz4(&self, data: &[u8], _expected_size: usize) -> Result<Vec<u8>> {
-        use lz4_flex::decompress_size_prepended;
-        decompress_size_prepended(data)
+        oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
             .map_err(|e| ClusterError::Compression(format!("LZ4 decompression failed: {e}")))
     }
 
     // Zstd implementation
     fn compress_zstd(&self, data: &[u8]) -> Result<Vec<u8>> {
-        zstd::bulk::compress(data, 3)
+        oxiarc_zstd::encode_all(data, 3)
             .map_err(|e| ClusterError::Compression(format!("Zstd compression failed: {e}")))
     }
 
-    fn decompress_zstd(&self, data: &[u8], expected_size: usize) -> Result<Vec<u8>> {
+    fn decompress_zstd(&self, data: &[u8], _expected_size: usize) -> Result<Vec<u8>> {
         // Use expected_size * 4 as buffer size hint (can grow if needed)
-        zstd::bulk::decompress(data, expected_size * 4)
+        oxiarc_zstd::decode_all(data)
             .map_err(|e| ClusterError::Compression(format!("Zstd decompression failed: {e}")))
     }
 

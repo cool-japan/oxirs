@@ -1,8 +1,9 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_stream::processing::{
     AggregateFunction, EventProcessor, ProcessorConfig, WindowConfig, WindowTrigger, WindowType,
 };
 use oxirs_stream::*;
+use std::hint::black_box;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
@@ -351,7 +352,9 @@ fn bench_serialization_formats(c: &mut Criterion) {
     // Benchmark CBOR serialization
     group.bench_function("cbor_serialize", |b| {
         b.iter(|| {
-            let result = serde_cbor::to_vec(black_box(&event)).unwrap();
+            let mut result = Vec::new();
+            ciborium::ser::into_writer(black_box(&event), &mut result)
+                .expect("CBOR serialization failed");
             black_box(result)
         });
     });
@@ -458,7 +461,7 @@ fn bench_compression_formats(c: &mut Criterion) {
     // Benchmark LZ4 compression
     group.bench_function("lz4_compress_10kb", |b| {
         b.iter(|| {
-            let result = lz4_flex::compress_prepend_size(black_box(&data));
+            let result = oxiarc_lz4::compress(black_box(&data)).unwrap();
             black_box(result)
         });
     });

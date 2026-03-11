@@ -1,6 +1,6 @@
 # OxiRS Engine Directory - TODO
 
-*Version: 0.2.0 | Last Updated: 2026-03-05*
+*Version: 0.2.1 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready
 
@@ -36,7 +36,7 @@ The OxiRS Engine directory contains query processing, validation, and reasoning 
 - ✅ Production-ready engine modules
 - ✅ SPARQL 1.1/1.2, SHACL, RDF-star, vector search, TTL, SAMM, GeoSPARQL
 
-### v0.2.0 - Current Release (March 5, 2026)
+### v0.2.1 - Current Release (March 5, 2026)
 - ✅ Advanced query optimization techniques
 - ✅ Enhanced reasoning strategies
 - ✅ Performance improvements for large datasets
@@ -58,4 +58,4 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Engine v0.2.0 - Query, validation, and reasoning infrastructure*
+*OxiRS Engine v0.2.1 - Query, validation, and reasoning infrastructure*

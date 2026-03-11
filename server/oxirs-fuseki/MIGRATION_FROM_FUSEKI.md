@@ -664,8 +664,8 @@ terraform apply
 
 ❌ **TDB1/TDB2 Format**: Use N-Quads instead (easy migration)
 ❌ **Assembler Files**: Use TOML configuration (cleaner)
-❌ **Inference**: Coming in v0.2.0
-❌ **Text Search (Jena Text)**: Coming in v0.2.0 with better integration
+❌ **Inference**: Coming in v0.2.1
+❌ **Text Search (Jena Text)**: Coming in v0.2.1 with better integration
 
 ### Feature Parity Table
 
@@ -678,9 +678,9 @@ terraform apply
 | **Validation Services** | ✅ | ✅ | + langtag validation |
 | **Admin UI** | ✅ | ✅ | Modern React UI |
 | **TDB Storage** | ✅ | ❌ | Use N-Quads |
-| **Inference** | ✅ | 🚧 | Coming v0.2.0 |
-| **Text Search** | ✅ | 🚧 | Coming v0.2.0 |
-| **GeoSPARQL** | Plugin | 🚧 | Coming v0.2.0 |
+| **Inference** | ✅ | 🚧 | Coming v0.2.1 |
+| **Text Search** | ✅ | 🚧 | Coming v0.2.1 |
+| **GeoSPARQL** | Plugin | 🚧 | Coming v0.2.1 |
 | **Federation (SERVICE)** | ✅ | ✅ | Enhanced |
 | **Authentication** | Basic | OAuth2/JWT | Much better |
 | **Authorization** | Basic | RBAC/ReBAC | Fine-grained |

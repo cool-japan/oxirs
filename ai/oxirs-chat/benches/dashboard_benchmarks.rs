@@ -3,10 +3,11 @@
 //! Tests the performance of dashboard analytics export functionality
 //! including CSV and Excel generation.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use oxirs_chat::dashboard::{
     DashboardAnalytics, DashboardConfig, ExportFormat, QueryRecord, QueryType, TimeRange,
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 fn setup_dashboard_with_data() -> DashboardAnalytics {

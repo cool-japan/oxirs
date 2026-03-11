@@ -219,6 +219,7 @@ impl DapsClient {
         let token_data: TokenData<DapsTokenClaims> = if options.skip_signature_verification {
             // Unsafe: Skip signature verification (development only!)
             let mut unsafe_validation = Validation::new(Algorithm::RS256);
+            #[allow(deprecated)]
             unsafe_validation.insecure_disable_signature_validation();
             unsafe_validation.validate_exp = options.check_expiration;
 
@@ -265,6 +266,7 @@ impl DapsClient {
     /// Extract claims from token without validation (for debugging)
     pub fn decode_token_unverified(&self, token: &str) -> IdsResult<DapsTokenClaims> {
         let mut validation = Validation::new(Algorithm::RS256);
+        #[allow(deprecated)]
         validation.insecure_disable_signature_validation();
         validation.validate_exp = false;
 

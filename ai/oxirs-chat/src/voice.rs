@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use async_openai::{
     config::OpenAIConfig,
-    types::{
+    types::audio::{
         AudioResponseFormat, CreateSpeechRequest, CreateTranscriptionRequestArgs, SpeechModel,
         SpeechResponseFormat, Voice,
     },
@@ -250,7 +250,7 @@ impl SpeechToTextProvider for OpenAISttProvider {
 
         // Create transcription request using OpenAI Whisper
         let request = CreateTranscriptionRequestArgs::default()
-            .file(async_openai::types::AudioInput {
+            .file(async_openai::types::audio::AudioInput {
                 source: async_openai::types::InputSource::Bytes {
                     filename: "audio.mp3".to_string(),
                     bytes: audio_data.to_vec().into(),
@@ -266,7 +266,8 @@ impl SpeechToTextProvider for OpenAISttProvider {
         let response = self
             .client
             .audio()
-            .transcribe(request)
+            .transcription()
+            .create(request)
             .await
             .context("Failed to transcribe audio with OpenAI Whisper")?;
 
@@ -312,7 +313,7 @@ impl SpeechToTextProvider for OpenAISttProvider {
                 if accumulated_audio.len() >= 160_000 {
                     // Create transcription request
                     match CreateTranscriptionRequestArgs::default()
-                        .file(async_openai::types::AudioInput {
+                        .file(async_openai::types::audio::AudioInput {
                             source: async_openai::types::InputSource::Bytes {
                                 filename: "audio_chunk.mp3".to_string(),
                                 bytes: accumulated_audio.clone().into(),
@@ -324,7 +325,9 @@ impl SpeechToTextProvider for OpenAISttProvider {
                         .build()
                     {
                         Ok(request) => {
-                            if let Ok(response) = client.audio().transcribe(request).await {
+                            if let Ok(response) =
+                                client.audio().transcription().create(request).await
+                            {
                                 let _ = tx
                                     .send(SttStreamResult {
                                         text: response.text,
@@ -347,7 +350,7 @@ impl SpeechToTextProvider for OpenAISttProvider {
             // Process any remaining audio
             if !accumulated_audio.is_empty() {
                 if let Ok(request) = CreateTranscriptionRequestArgs::default()
-                    .file(async_openai::types::AudioInput {
+                    .file(async_openai::types::audio::AudioInput {
                         source: async_openai::types::InputSource::Bytes {
                             filename: "audio_final.mp3".to_string(),
                             bytes: accumulated_audio.into(),
@@ -358,7 +361,7 @@ impl SpeechToTextProvider for OpenAISttProvider {
                     .response_format(AudioResponseFormat::Json)
                     .build()
                 {
-                    if let Ok(response) = client.audio().transcribe(request).await {
+                    if let Ok(response) = client.audio().transcription().create(request).await {
                         let _ = tx
                             .send(SttStreamResult {
                                 text: response.text,
@@ -516,15 +519,18 @@ impl TextToSpeechProvider for OpenAITtsProvider {
             model: SpeechModel::Tts1,
             input: text.to_string(),
             voice,
+            instructions: None,
             response_format: Some(SpeechResponseFormat::Mp3),
             speed: Some(1.0),
+            stream_format: None,
         };
 
         // Call OpenAI TTS API
         let response = self
             .client
             .audio()
-            .speech(request)
+            .speech()
+            .create(request)
             .await
             .context("Failed to synthesize speech with OpenAI TTS")?;
 
@@ -581,11 +587,13 @@ impl TextToSpeechProvider for OpenAITtsProvider {
                     model: SpeechModel::Tts1,
                     input: sentence.trim().to_string(),
                     voice: voice.clone(),
+                    instructions: None,
                     response_format: Some(SpeechResponseFormat::Mp3),
                     speed: Some(1.0),
+                    stream_format: None,
                 };
 
-                match client.audio().speech(request).await {
+                match client.audio().speech().create(request).await {
                     Ok(response) => {
                         let audio_chunk = response.bytes.to_vec();
                         if tx.send(audio_chunk).await.is_err() {

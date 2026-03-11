@@ -150,7 +150,8 @@ impl StorageBackend for WarmTierStorage {
         let data = std::fs::read(&path)?;
 
         if self.compression_enabled {
-            Ok(zstd::decode_all(&data[..])?)
+            Ok(oxiarc_zstd::decode_all(&data)
+                .map_err(|e| anyhow::anyhow!("Zstd decompression failed: {}", e))?)
         } else {
             Ok(data)
         }
@@ -160,7 +161,8 @@ impl StorageBackend for WarmTierStorage {
         let path = self.get_index_path(index_id);
 
         let final_data = if self.compression_enabled {
-            zstd::encode_all(data, self.compression_level)?
+            oxiarc_zstd::encode_all(data, self.compression_level)
+                .map_err(|e| anyhow::anyhow!("Zstd compression failed: {}", e))?
         } else {
             data.to_vec()
         };
@@ -236,12 +238,14 @@ impl StorageBackend for ColdTierStorage {
     fn load_index(&self, index_id: &str) -> Result<Vec<u8>> {
         let path = self.get_index_path(index_id);
         let compressed_data = std::fs::read(&path)?;
-        Ok(zstd::decode_all(&compressed_data[..])?)
+        oxiarc_zstd::decode_all(&compressed_data)
+            .map_err(|e| anyhow::anyhow!("Zstd decompression failed: {}", e))
     }
 
     fn save_index(&mut self, index_id: &str, data: &[u8]) -> Result<()> {
         let path = self.get_index_path(index_id);
-        let compressed_data = zstd::encode_all(data, self.compression_level)?;
+        let compressed_data = oxiarc_zstd::encode_all(data, self.compression_level)
+            .map_err(|e| anyhow::anyhow!("Zstd compression failed: {}", e))?;
         std::fs::write(&path, compressed_data)?;
         Ok(())
     }

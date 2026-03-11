@@ -46,7 +46,7 @@ bumpalo = "3.14"
 memmap2.workspace = true
 parking_lot.workspace = true
 ahash = "0.8"
-simd-json = "0.14"
+simd-json = "0.17"
 wide = { version = "1.1", optional = true }
 num_cpus.workspace = true
 sys-info = "0.9"
@@ -84,8 +84,8 @@ glob = "0.3"
 # parquet.workspace = true
 
 # Compression dependencies
-lz4 = "1.28"
-zstd.workspace = true
+oxiarc-lz4 = { workspace = true }
+oxiarc-zstd.workspace = true
 
 # Cryptographic dependencies
 blake3 = "1.8"
@@ -101,7 +101,7 @@ bytes = { workspace = true }
 scirs2-core = { workspace = true, features = ["memory_management", "memory_efficient", "parallel"] }
 
 # GPU monitoring (optional)
-nvml-wrapper = { version = "0.11", optional = true }
+nvml-wrapper = { version = "0.12", optional = true }
 
 # High-performance validation dependencies from oxrdf ecosystem
 oxiri.workspace = true         # Fast IRI validation and parsing
@@ -118,7 +118,7 @@ icu_properties = "2.1"
 [dev-dependencies]
 criterion.workspace = true
 tokio = { workspace = true, features = ["test-util", "rt", "io-util", "macros"] }
-tempfile = "3.25"
+tempfile.workspace = true
 
 [features]
 default = ["serde", "parallel", "rdf-12", "rdf-star", "sparql-12"]

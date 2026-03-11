@@ -314,12 +314,13 @@ impl BackupEncryption {
 
     /// Compress data using LZ4
     fn compress(&self, data: &[u8]) -> Result<Vec<u8>> {
-        Ok(lz4_flex::compress_prepend_size(data))
+        oxiarc_lz4::compress(data)
+            .map_err(|e| TdbError::Other(format!("LZ4 compression failed: {}", e)))
     }
 
     /// Decompress data using LZ4
     fn decompress(&self, data: &[u8]) -> Result<Vec<u8>> {
-        lz4_flex::decompress_size_prepended(data)
+        oxiarc_lz4::decompress(data, 100 * 1024 * 1024)
             .map_err(|e| TdbError::Other(format!("Decompression failed: {}", e)))
     }
 

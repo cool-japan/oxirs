@@ -8,7 +8,7 @@
 //!
 //! Session 18: Large Model Scalability Testing
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_samm::metamodel::{
     Aspect, Characteristic, CharacteristicKind, ElementMetadata, Entity, ModelElement, Operation,
     Property,
@@ -19,6 +19,7 @@ use oxirs_samm::query::ModelQuery;
 use oxirs_samm::transformation::ModelTransformation;
 use oxirs_samm::validator::helpers::quick_validate;
 use scirs2_core::random::{rng, Random, Rng};
+use std::hint::black_box;
 
 /// Generate a large SAMM Aspect with specified number of properties
 fn generate_large_aspect(num_properties: usize) -> Aspect {

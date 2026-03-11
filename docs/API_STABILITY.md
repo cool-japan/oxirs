@@ -49,7 +49,7 @@ impl QueryEngine {
 **Guarantee**: These APIs may change between minor versions (v0.1.x → v0.2.x) but will provide migration guides
 
 **Policy**:
-- ⚠️ May change in v0.2.0
+- ⚠️ May change in v0.2.1
 - ⚠️ Suitable for testing and evaluation
 - ⚠️ Changes documented in CHANGELOG
 - ⚠️ Migration examples provided
@@ -60,14 +60,14 @@ impl QueryEngine {
 pub struct ShapeLearner { /* ... */ }
 impl ShapeLearner {
     pub fn learn_shapes(&self, graph: &Graph) -> Result<ShapeSchema>;
-    // May change to take additional parameters in v0.2.0
+    // May change to take additional parameters in v0.2.1
 }
 
 // Unstable APIs in oxirs-embed
 pub struct EmbeddingModel { /* ... */ }
 impl EmbeddingModel {
     pub fn encode(&self, text: &str) -> Result<Vec<f32>>;
-    // Vector size may become configurable in v0.2.0
+    // Vector size may become configurable in v0.2.1
 }
 ```
 
@@ -110,7 +110,7 @@ OxiRS follows [Semantic Versioning 2.0.0](https://semver.org/) with Rust-specifi
 - Changes to trait requirements
 - Incompatible data format changes
 
-**Timeline**: v1.0.0 planned for Q2 2026 (after v0.1.0 → v0.2.0 → Stable)
+**Timeline**: v1.0.0 planned for Q2 2026 (after v0.1.0 → v0.2.1 → Stable)
 
 #### Minor Version (0.1.x → 0.2.x)
 **Non-breaking additions and unstable API changes**:
@@ -120,7 +120,7 @@ OxiRS follows [Semantic Versioning 2.0.0](https://semver.org/) with Rust-specifi
 - Changes to unstable APIs
 - Performance improvements
 
-**Timeline**: v0.2.0 planned for Q1 2026 (3 months after v0.1.0)
+**Timeline**: v0.2.1 planned for Q1 2026 (3 months after v0.1.0)
 
 #### Patch Version (0.1.0 → 0.1.1)
 **Bug fixes only**:
@@ -165,7 +165,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
     // Still works, but emits warning
 }
 
-// Version 0.2.0 (Removal - 3 months later)
+// Version 0.2.1 (Removal - 3 months later)
 // ConcreteStore::new() removed entirely
 ```
 
@@ -445,7 +445,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: 10% overall
 
-### v0.2.0 (Current - March 2026)
+### v0.2.1 (Current - March 2026)
 **Focus**: Stabilize distributed storage, GraphQL, and AI modules
 
 - 🟢 **Stable**: oxirs-cluster, oxirs-gql promoted to stable (90%+ frozen)
@@ -495,7 +495,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 # Cargo.toml
 [package]
 name = "oxirs-core"
-version = "0.2.0"
+version = "0.2.1"
 rust-version = "1.75.0"  # MSRV declared
 ```
 
@@ -565,7 +565,7 @@ experimental-neuro = ["dep:oxirs-neuro"]
 // BEFORE (v0.1.0)
 pub fn execute(&self, query: &str) -> Result<QueryResults>;
 
-// AFTER (v0.2.0) - BREAKING: New required parameter
+// AFTER (v0.2.1) - BREAKING: New required parameter
 pub fn execute(&self, query: &str, options: QueryOptions) -> Result<QueryResults>;
 ```
 
@@ -577,7 +577,7 @@ pub struct Triple {
     pub object: Term,
 }
 
-// AFTER (v0.2.0) - BREAKING: Field removed
+// AFTER (v0.2.1) - BREAKING: Field removed
 pub struct Triple {
     pub subject: Term,
     pub predicate: IriRef,  // Changed type
@@ -591,7 +591,7 @@ pub struct Triple {
 // BEFORE (v0.1.0)
 pub fn execute(&self, query: &str) -> Result<QueryResults>;
 
-// AFTER (v0.2.0) - NON-BREAKING: New optional parameter via overload
+// AFTER (v0.2.1) - NON-BREAKING: New optional parameter via overload
 pub fn execute_with_options(&self, query: &str, options: QueryOptions) -> Result<QueryResults>;
 ```
 
@@ -603,7 +603,7 @@ pub struct Triple {
     pub object: Term,
 }
 
-// AFTER (v0.2.0) - NON-BREAKING: New optional field with default
+// AFTER (v0.2.1) - NON-BREAKING: New optional field with default
 pub struct Triple {
     pub subject: Term,
     pub predicate: Term,

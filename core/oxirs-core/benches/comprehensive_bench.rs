@@ -10,13 +10,14 @@
 //! - Concurrent operations
 //! - Memory usage and scalability
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::{
     format::turtle::{TurtleParser, TurtleSerializer},
     model::{GraphName, Literal, NamedNode, Quad, Subject, Triple},
     optimization::{OptimizedGraph, RdfArena},
     rdf_store::ConcreteStore,
 };
+use std::hint::black_box;
 use std::time::Duration;
 
 /// Benchmark RDF parsing performance across different formats

@@ -1,6 +1,6 @@
 # OxiRS Chat - TODO
 
-*Version: 0.2.0 | Last Updated: 2026-03-05*
+*Version: 0.2.1 | Last Updated: 2026-03-05*
 
 ## Status: Production Ready (Experimental)
 
@@ -54,7 +54,7 @@
 
 ## Future Roadmap
 
-### v0.2.0 - Enhanced NLP (Q1 2026 - Expanded)
+### v0.2.1 - Enhanced NLP (Q1 2026 - Expanded)
 - [ ] Web-based chat UI components
 - [ ] Visual query builder UI
 - [ ] Additional LLM providers (Cohere, Groq, Mistral)

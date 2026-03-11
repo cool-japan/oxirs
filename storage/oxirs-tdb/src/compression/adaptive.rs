@@ -769,20 +769,18 @@ impl AdaptiveCodec {
         use std::io::Write;
         let compressed = match dict {
             None => {
-                let mut enc = zstd::Encoder::new(Vec::new(), level)
-                    .map_err(|e| TdbError::Other(format!("zstd init: {e}")))?;
+                let mut enc = oxiarc_zstd::ZstdStreamEncoder::new(Vec::new(), level);
                 enc.write_all(data)
                     .map_err(|e| TdbError::Other(format!("zstd write: {e}")))?;
                 enc.finish()
                     .map_err(|e| TdbError::Other(format!("zstd finish: {e}")))?
             }
             Some(d) => {
-                let mut enc = zstd::Encoder::with_dictionary(Vec::new(), level, d)
-                    .map_err(|e| TdbError::Other(format!("zstd dict init: {e}")))?;
-                enc.write_all(data)
-                    .map_err(|e| TdbError::Other(format!("zstd dict write: {e}")))?;
-                enc.finish()
-                    .map_err(|e| TdbError::Other(format!("zstd dict finish: {e}")))?
+                let mut enc = oxiarc_zstd::ZstdEncoder::new();
+                enc.set_level(level);
+                enc.set_dictionary(d);
+                enc.compress(data)
+                    .map_err(|e| TdbError::Other(format!("zstd dict compress: {e}")))?
             }
         };
         Ok(compressed)
@@ -792,18 +790,15 @@ impl AdaptiveCodec {
         use std::io::Read;
         match dict {
             None => {
-                let mut dec = zstd::Decoder::new(data)
-                    .map_err(|e| TdbError::Other(format!("zstd dec init: {e}")))?;
+                let mut dec = oxiarc_zstd::ZstdStreamDecoder::new(data);
                 let mut out = Vec::new();
                 dec.read_to_end(&mut out)
                     .map_err(|e| TdbError::Other(format!("zstd decompress: {e}")))?;
                 Ok(out)
             }
             Some(d) => {
-                let mut dec = zstd::Decoder::with_dictionary(data, d)
-                    .map_err(|e| TdbError::Other(format!("zstd dict dec init: {e}")))?;
-                let mut out = Vec::new();
-                dec.read_to_end(&mut out)
+                // Dictionary decompression - must pass the dictionary used during compression
+                let out = oxiarc_zstd::decompress_with_dict(data, d)
                     .map_err(|e| TdbError::Other(format!("zstd dict decompress: {e}")))?;
                 Ok(out)
             }

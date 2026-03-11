@@ -3,9 +3,10 @@
 //! Tests the performance of retrieval-augmented generation including
 //! quantum-enhanced retrieval, consciousness-aware processing, and reasoning.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_chat::rag::{RagConfig, RagEngine, RetrievalConfig};
 use oxirs_core::ConcreteStore;
+use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Duration;
 

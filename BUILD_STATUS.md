@@ -1,12 +1,12 @@
 # OxiRS Build Status Report
 
 **Last Updated**: 2026-03-05
-**Version**: 0.2.0
+**Version**: 0.2.1
 **Status**: Production Ready
 
 ## Summary
 
-OxiRS 0.2.0 is our latest production release. All core libraries compile successfully with **zero compilation errors** and **zero warnings**. The project is fully ready for production deployment.
+OxiRS 0.2.1 is our latest production release. All core libraries compile successfully with **zero compilation errors** and **zero warnings**. The project is fully ready for production deployment.
 
 ## Core Libraries Status
 
