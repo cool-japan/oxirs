@@ -30,11 +30,11 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-clap = { version = "4.4", features = ["derive"] }
+clap = { workspace = true, features = ["derive"] }
 chrono.workspace = true
 
 # HTTP Server and WebSocket
-axum = { version = "0.8", features = ["ws"] }
+axum = { workspace = true, features = ["ws"] }
 tower.workspace = true
 tower-http.workspace = true
 futures-util.workspace = true
@@ -48,19 +48,19 @@ async-openai = { version = "0.33", features = ["chat-completion", "audio"] }
 uuid.workspace = true
 
 # Configuration
-config = "0.15"
-toml = "1.0"
+config.workspace = true
+toml.workspace = true
 serde_yaml.workspace = true
 
 # Metrics and Monitoring
-metrics = "0.24"
+metrics.workspace = true
 
 # Template Engine for SPARQL
-handlebars = "6.4"
+handlebars.workspace = true
 regex.workspace = true
 
 # Async traits
-async-trait = "0.1"
+async-trait.workspace = true
 
 # Cryptographic functions for webhooks
 hmac.workspace = true
@@ -80,7 +80,7 @@ base64.workspace = true
 fastrand.workspace = true
 
 # Excel export (feature-gated for Pure Rust policy)
-rust_xlsxwriter = { version = "0.94", optional = true }
+rust_xlsxwriter = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true

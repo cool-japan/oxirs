@@ -648,30 +648,30 @@ mod tests {
         // Add training data
         model
             .add_triple(Triple::new(
-                NamedNode::new("alice").unwrap(),
-                NamedNode::new("knows").unwrap(),
-                NamedNode::new("bob").unwrap(),
+                NamedNode::new("alice").expect("should succeed"),
+                NamedNode::new("knows").expect("should succeed"),
+                NamedNode::new("bob").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         model
             .add_triple(Triple::new(
-                NamedNode::new("alice").unwrap(),
-                NamedNode::new("knows").unwrap(),
-                NamedNode::new("charlie").unwrap(),
+                NamedNode::new("alice").expect("should succeed"),
+                NamedNode::new("knows").expect("should succeed"),
+                NamedNode::new("charlie").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         model
             .add_triple(Triple::new(
-                NamedNode::new("bob").unwrap(),
-                NamedNode::new("likes").unwrap(),
-                NamedNode::new("dave").unwrap(),
+                NamedNode::new("bob").expect("should succeed"),
+                NamedNode::new("likes").expect("should succeed"),
+                NamedNode::new("dave").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         // Train model
-        model.train(Some(50)).await.unwrap();
+        model.train(Some(50)).await.expect("should succeed");
 
         // Create link predictor
         let pred_config = LinkPredictionConfig {
@@ -687,7 +687,7 @@ mod tests {
 
         let predictions = predictor
             .predict_tail("alice", "knows", &candidates)
-            .unwrap();
+            .expect("should succeed");
 
         assert!(!predictions.is_empty());
         assert!(predictions.len() <= 5);
@@ -725,13 +725,13 @@ mod tests {
 
         model
             .add_triple(Triple::new(
-                NamedNode::new("a").unwrap(),
-                NamedNode::new("r1").unwrap(),
-                NamedNode::new("b").unwrap(),
+                NamedNode::new("a").expect("should succeed"),
+                NamedNode::new("r1").expect("should succeed"),
+                NamedNode::new("b").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
-        model.train(Some(30)).await.unwrap();
+        model.train(Some(30)).await.expect("should succeed");
 
         let predictor = LinkPredictor::new(LinkPredictionConfig::default(), model);
 
@@ -741,7 +741,7 @@ mod tests {
 
         let results = predictor
             .predict_tails_batch(&queries, &candidates)
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(results.len(), 1);
     }

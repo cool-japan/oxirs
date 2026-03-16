@@ -494,6 +494,7 @@ impl EmbeddingGenerator for PyTorchEmbedder {
 #[allow(clippy::useless_vec)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn test_pytorch_config_creation() {
@@ -504,11 +505,12 @@ mod tests {
     }
 
     #[test]
-    fn test_pytorch_embedder_creation() {
+    fn test_pytorch_embedder_creation() -> Result<()> {
         let config = PyTorchConfig::default();
         let embedder = PyTorchEmbedder::new(config);
         assert!(embedder.is_ok());
-        assert!(!embedder.unwrap().model_loaded);
+        assert!(!embedder.expect("test value").model_loaded);
+        Ok(())
     }
 
     #[test]

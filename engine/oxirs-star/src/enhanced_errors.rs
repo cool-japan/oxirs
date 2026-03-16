@@ -179,6 +179,7 @@ impl EnhancedError {
             StarError::ConfigurationError { .. } => {
                 (ErrorSeverity::Error, ErrorCategory::Configuration)
             }
+            StarError::InternalError { .. } => (ErrorSeverity::Critical, ErrorCategory::Runtime),
         }
     }
 

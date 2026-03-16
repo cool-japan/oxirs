@@ -1318,7 +1318,7 @@ mod tests {
     #[tokio::test]
     async fn test_meta_transcendence_engine_creation() {
         let engine = MetaTranscendenceEngine::new();
-        assert_eq!(engine.transcendence_transcenders.lock().unwrap().len(), 0);
+        assert_eq!(engine.transcendence_transcenders.lock().expect("should succeed").len(), 0);
     }
 
     #[tokio::test]
@@ -1327,20 +1327,20 @@ mod tests {
         let result = engine.initialize_meta_transcendence().await;
         assert!(result.is_ok());
         
-        assert_eq!(engine.transcendence_transcenders.lock().unwrap().len(), 10);
-        assert_eq!(engine.meta_reality_generators.lock().unwrap().len(), 5);
-        assert_eq!(engine.infinite_recursion_processors.lock().unwrap().len(), 8);
+        assert_eq!(engine.transcendence_transcenders.lock().expect("should succeed").len(), 10);
+        assert_eq!(engine.meta_reality_generators.lock().expect("should succeed").len(), 5);
+        assert_eq!(engine.infinite_recursion_processors.lock().expect("should succeed").len(), 8);
     }
 
     #[tokio::test]
     async fn test_meta_transcendence_validation() {
         let engine = MetaTranscendenceEngine::new();
-        engine.initialize_meta_transcendence().await.unwrap();
+        engine.initialize_meta_transcendence().await.expect("should succeed");
         
         let result = engine.process_meta_transcendence_validation("test meta-transcendence query").await;
         assert!(result.is_ok());
         
-        let validation_result = result.unwrap();
+        let validation_result = result.expect("should succeed");
         assert!(validation_result.beyond_existence_power_utilized > 0.0);
         assert!(!validation_result.meta_dimensional_results.is_empty());
         assert!(!validation_result.paradox_synthesis_outcomes.is_empty());

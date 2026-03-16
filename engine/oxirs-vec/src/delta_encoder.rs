@@ -201,6 +201,7 @@ impl DeltaEncoder {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     const EPS: f32 = 1e-5;
@@ -340,29 +341,35 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_single_delta() {
+    fn test_merge_single_delta() -> Result<()> {
         let d = VectorDelta::new(0, vec![1.0, 2.0], 2.0, 0);
-        let merged = DeltaEncoder::merge(&[d]).unwrap();
+        let merged =
+            DeltaEncoder::merge(&[d]).expect("merge of non-empty slice should return Some");
         assert!(approx_eq(merged.delta[0], 1.0));
         assert!(approx_eq(merged.delta[1], 2.0));
+        Ok(())
     }
 
     #[test]
-    fn test_merge_sums_deltas() {
+    fn test_merge_sums_deltas() -> Result<()> {
         let d1 = VectorDelta::new(0, vec![1.0, 2.0], 2.0, 0);
         let d2 = VectorDelta::new(0, vec![3.0, 4.0], 4.0, 0);
-        let merged = DeltaEncoder::merge(&[d1, d2]).unwrap();
+        let merged =
+            DeltaEncoder::merge(&[d1, d2]).expect("merge of non-empty slice should return Some");
         assert!(approx_eq(merged.delta[0], 4.0));
         assert!(approx_eq(merged.delta[1], 6.0));
+        Ok(())
     }
 
     #[test]
-    fn test_merge_scale_is_max_abs_sum() {
+    fn test_merge_scale_is_max_abs_sum() -> Result<()> {
         let d1 = VectorDelta::new(0, vec![1.0], 1.0, 0);
         let d2 = VectorDelta::new(0, vec![-3.0], 3.0, 0);
-        let merged = DeltaEncoder::merge(&[d1, d2]).unwrap();
+        let merged =
+            DeltaEncoder::merge(&[d1, d2]).expect("merge of non-empty slice should return Some");
         // sum = -2.0 → scale = 2.0
         assert!(approx_eq(merged.scale, 2.0));
+        Ok(())
     }
 
     // ── stats ─────────────────────────────────────────────────────────────
@@ -527,13 +534,15 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_three_deltas_sums_all() {
+    fn test_merge_three_deltas_sums_all() -> Result<()> {
         let d1 = VectorDelta::new(1, vec![1.0, 0.0], 1.0, 0);
         let d2 = VectorDelta::new(2, vec![2.0, 0.0], 2.0, 0);
         let d3 = VectorDelta::new(3, vec![3.0, 0.0], 3.0, 0);
-        let merged = DeltaEncoder::merge(&[d1, d2, d3]).unwrap();
+        let merged = DeltaEncoder::merge(&[d1, d2, d3])
+            .expect("merge of non-empty slice should return Some");
         assert!(approx_eq(merged.delta[0], 6.0));
         assert_eq!(merged.id, 0); // merged id is always 0
+        Ok(())
     }
 
     #[test]

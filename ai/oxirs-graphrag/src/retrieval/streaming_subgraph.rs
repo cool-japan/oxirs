@@ -342,7 +342,9 @@ mod tests {
     }
 
     fn run<F: std::future::Future>(f: F) -> F::Output {
-        tokio::runtime::Runtime::new().unwrap().block_on(f)
+        tokio::runtime::Runtime::new()
+            .expect("should succeed")
+            .block_on(f)
     }
 
     // ── StreamConfig default tests ──────────────────────────────────────────
@@ -442,11 +444,11 @@ mod tests {
         };
         let batches = run_bfs_expansion(engine, "CONSTRUCT {}", &config)
             .await
-            .unwrap();
+            .expect("should succeed");
         // Only the initial query at depth 0
         let total: usize = batches.iter().map(|b| b.triples.len()).sum();
         assert_eq!(total, 10);
-        assert!(batches.last().unwrap().is_final);
+        assert!(batches.last().expect("should succeed").is_final);
     }
 
     // ── BFS expansion: max_total_triples cap ────────────────────────────────
@@ -463,7 +465,7 @@ mod tests {
         };
         let batches = run_bfs_expansion(engine, "CONSTRUCT {}", &config)
             .await
-            .unwrap();
+            .expect("should succeed");
         let total: usize = batches.iter().map(|b| b.triples.len()).sum();
         assert!(total <= 50);
     }
@@ -483,7 +485,7 @@ mod tests {
         };
         let batches = run_bfs_expansion(engine, "CONSTRUCT {}", &config)
             .await
-            .unwrap();
+            .expect("should succeed");
         let total: usize = batches.iter().map(|b| b.triples.len()).sum();
         assert_eq!(total, 1);
     }
@@ -503,7 +505,7 @@ mod tests {
         };
         let batches = run_bfs_expansion(engine, "CONSTRUCT {}", &config)
             .await
-            .unwrap();
+            .expect("should succeed");
         let total: usize = batches.iter().map(|b| b.triples.len()).sum();
         assert_eq!(total, 20);
     }
@@ -613,7 +615,7 @@ mod tests {
         };
         let batches = run_bfs_expansion(engine, "CONSTRUCT {}", &config)
             .await
-            .unwrap();
+            .expect("should succeed");
         let total: usize = batches.iter().map(|b| b.triples.len()).sum();
         assert_eq!(total, 0);
     }
@@ -632,7 +634,7 @@ mod tests {
         };
         let batches = run_bfs_expansion(engine, "CONSTRUCT {}", &config)
             .await
-            .unwrap();
+            .expect("should succeed");
         for (expected_id, batch) in batches.iter().enumerate() {
             assert_eq!(batch.batch_id, expected_id);
         }
@@ -652,7 +654,7 @@ mod tests {
         };
         let batches = run_bfs_expansion(engine, "CONSTRUCT {}", &config)
             .await
-            .unwrap();
+            .expect("should succeed");
         for (i, batch) in batches.iter().enumerate() {
             if i < batches.len() - 1 {
                 assert!(!batch.is_final, "Batch {i} should not be final");
@@ -676,7 +678,7 @@ mod tests {
         };
         let batches = run_bfs_expansion(engine, "CONSTRUCT {}", &config)
             .await
-            .unwrap();
+            .expect("should succeed");
         for batch in &batches {
             assert_eq!(batch.current_depth, 0);
         }

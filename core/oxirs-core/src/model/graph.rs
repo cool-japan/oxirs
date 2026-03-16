@@ -20,14 +20,14 @@ use std::iter::FromIterator;
 ///
 /// // Create some triples
 /// let triple1 = Triple::new(
-///     NamedNode::new("http://example.org/alice").unwrap(),
-///     NamedNode::new("http://example.org/name").unwrap(),
+///     NamedNode::new("http://example.org/alice").expect("valid IRI"),
+///     NamedNode::new("http://example.org/name").expect("valid IRI"),
 ///     Literal::new("Alice"),
 /// );
 ///
 /// let triple2 = Triple::new(
-///     NamedNode::new("http://example.org/alice").unwrap(),
-///     NamedNode::new("http://example.org/age").unwrap(),
+///     NamedNode::new("http://example.org/alice").expect("valid IRI"),
+///     NamedNode::new("http://example.org/age").expect("valid IRI"),
 ///     Literal::new("30"),
 /// );
 ///
@@ -108,13 +108,13 @@ impl Graph {
     ///
     /// let triples = vec![
     ///     Triple::new(
-    ///         NamedNode::new("http://example.org/alice").unwrap(),
-    ///         NamedNode::new("http://example.org/name").unwrap(),
+    ///         NamedNode::new("http://example.org/alice").expect("valid IRI"),
+    ///         NamedNode::new("http://example.org/name").expect("valid IRI"),
     ///         Literal::new("Alice"),
     ///     ),
     ///     Triple::new(
-    ///         NamedNode::new("http://example.org/bob").unwrap(),
-    ///         NamedNode::new("http://example.org/name").unwrap(),
+    ///         NamedNode::new("http://example.org/bob").expect("valid IRI"),
+    ///         NamedNode::new("http://example.org/name").expect("valid IRI"),
     ///         Literal::new("Bob"),
     ///     ),
     /// ];
@@ -331,8 +331,8 @@ mod tests {
     use crate::model::{Literal, NamedNode};
 
     fn create_test_triple() -> Triple {
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("object");
         Triple::new(subject, predicate, object)
     }
@@ -364,8 +364,8 @@ mod tests {
         let mut graph = Graph::new();
         let triple1 = create_test_triple();
 
-        let subject2 = NamedNode::new("http://example.org/subject2").unwrap();
-        let predicate2 = NamedNode::new("http://example.org/predicate2").unwrap();
+        let subject2 = NamedNode::new("http://example.org/subject2").expect("valid IRI");
+        let predicate2 = NamedNode::new("http://example.org/predicate2").expect("valid IRI");
         let object2 = Literal::new("object2");
         let triple2 = Triple::new(subject2, predicate2, object2);
 
@@ -384,9 +384,9 @@ mod tests {
     fn test_graph_pattern_matching() {
         let mut graph = Graph::new();
 
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate1 = NamedNode::new("http://example.org/predicate1").unwrap();
-        let predicate2 = NamedNode::new("http://example.org/predicate2").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate1 = NamedNode::new("http://example.org/predicate1").expect("valid IRI");
+        let predicate2 = NamedNode::new("http://example.org/predicate2").expect("valid IRI");
         let object1 = Literal::new("object1");
         let object2 = Literal::new("object2");
 
@@ -418,8 +418,8 @@ mod tests {
         let mut graph2 = Graph::new();
 
         let triple1 = create_test_triple();
-        let subject2 = NamedNode::new("http://example.org/subject2").unwrap();
-        let predicate2 = NamedNode::new("http://example.org/predicate2").unwrap();
+        let subject2 = NamedNode::new("http://example.org/subject2").expect("valid IRI");
+        let predicate2 = NamedNode::new("http://example.org/predicate2").expect("valid IRI");
         let object2 = Literal::new("object2");
         let triple2 = Triple::new(subject2, predicate2, object2);
 

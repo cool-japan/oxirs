@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_parse_no_placeholders() {
-        let tpl = MessageFormatter::parse_template("Hello, world!").unwrap();
+        let tpl = MessageFormatter::parse_template("Hello, world!").expect("should succeed");
         assert_eq!(tpl.tokens.len(), 1);
         assert_eq!(
             tpl.tokens[0],
@@ -239,20 +239,21 @@ mod tests {
 
     #[test]
     fn test_parse_empty_template() {
-        let tpl = MessageFormatter::parse_template("").unwrap();
+        let tpl = MessageFormatter::parse_template("").expect("should succeed");
         assert!(tpl.tokens.is_empty());
     }
 
     #[test]
     fn test_parse_single_placeholder() {
-        let tpl = MessageFormatter::parse_template("{name}").unwrap();
+        let tpl = MessageFormatter::parse_template("{name}").expect("should succeed");
         assert_eq!(tpl.tokens.len(), 1);
         assert_eq!(tpl.tokens[0], MessageToken::Placeholder("name".to_string()));
     }
 
     #[test]
     fn test_parse_placeholder_with_surrounding_text() {
-        let tpl = MessageFormatter::parse_template("Value {val} is invalid").unwrap();
+        let tpl =
+            MessageFormatter::parse_template("Value {val} is invalid").expect("should succeed");
         assert_eq!(tpl.tokens.len(), 3);
         assert_eq!(tpl.tokens[0], MessageToken::Text("Value ".to_string()));
         assert_eq!(tpl.tokens[1], MessageToken::Placeholder("val".to_string()));
@@ -261,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_parse_multiple_placeholders() {
-        let tpl = MessageFormatter::parse_template("{a} and {b}").unwrap();
+        let tpl = MessageFormatter::parse_template("{a} and {b}").expect("should succeed");
         let placeholders: Vec<_> = tpl
             .tokens
             .iter()
@@ -272,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_parse_adjacent_placeholders() {
-        let tpl = MessageFormatter::parse_template("{x}{y}").unwrap();
+        let tpl = MessageFormatter::parse_template("{x}{y}").expect("should succeed");
         assert_eq!(tpl.tokens.len(), 2);
         assert_eq!(tpl.tokens[0], MessageToken::Placeholder("x".to_string()));
         assert_eq!(tpl.tokens[1], MessageToken::Placeholder("y".to_string()));
@@ -296,7 +297,7 @@ mod tests {
             "{value} is invalid",
             Some("en".to_string()),
         )
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(tpl.lang, Some("en".to_string()));
         assert!(!tpl.tokens.is_empty());
     }
@@ -305,16 +306,18 @@ mod tests {
 
     #[test]
     fn test_format_all_placeholders_filled() {
-        let tpl = MessageFormatter::parse_template("{name} must be {type}").unwrap();
+        let tpl =
+            MessageFormatter::parse_template("{name} must be {type}").expect("should succeed");
         let b = bindings(&[("name", "Alice"), ("type", "Person")]);
-        let msg = MessageFormatter::format(&tpl, &b, MessageSeverity::Violation).unwrap();
+        let msg =
+            MessageFormatter::format(&tpl, &b, MessageSeverity::Violation).expect("should succeed");
         assert_eq!(msg.text, "Alice must be Person");
         assert_eq!(msg.severity, MessageSeverity::Violation);
     }
 
     #[test]
     fn test_format_unknown_placeholder_error() {
-        let tpl = MessageFormatter::parse_template("{name} is {age}").unwrap();
+        let tpl = MessageFormatter::parse_template("{name} is {age}").expect("should succeed");
         let b = bindings(&[("name", "Bob")]);
         let result = MessageFormatter::format(&tpl, &b, MessageSeverity::Warning);
         assert!(matches!(result, Err(MessageError::UnknownPlaceholder(_))));
@@ -322,35 +325,39 @@ mod tests {
 
     #[test]
     fn test_format_no_placeholders() {
-        let tpl = MessageFormatter::parse_template("Static message").unwrap();
+        let tpl = MessageFormatter::parse_template("Static message").expect("should succeed");
         let b = bindings(&[]);
-        let msg = MessageFormatter::format(&tpl, &b, MessageSeverity::Info).unwrap();
+        let msg =
+            MessageFormatter::format(&tpl, &b, MessageSeverity::Info).expect("should succeed");
         assert_eq!(msg.text, "Static message");
         assert_eq!(msg.severity, MessageSeverity::Info);
     }
 
     #[test]
     fn test_format_severity_warning() {
-        let tpl = MessageFormatter::parse_template("warning").unwrap();
+        let tpl = MessageFormatter::parse_template("warning").expect("should succeed");
         let b = bindings(&[]);
-        let msg = MessageFormatter::format(&tpl, &b, MessageSeverity::Warning).unwrap();
+        let msg =
+            MessageFormatter::format(&tpl, &b, MessageSeverity::Warning).expect("should succeed");
         assert_eq!(msg.severity, MessageSeverity::Warning);
     }
 
     #[test]
     fn test_format_severity_info() {
-        let tpl = MessageFormatter::parse_template("info").unwrap();
+        let tpl = MessageFormatter::parse_template("info").expect("should succeed");
         let b = bindings(&[]);
-        let msg = MessageFormatter::format(&tpl, &b, MessageSeverity::Info).unwrap();
+        let msg =
+            MessageFormatter::format(&tpl, &b, MessageSeverity::Info).expect("should succeed");
         assert_eq!(msg.severity, MessageSeverity::Info);
     }
 
     #[test]
     fn test_format_with_lang() {
-        let tpl =
-            MessageFormatter::parse_template_with_lang("{x}", Some("de".to_string())).unwrap();
+        let tpl = MessageFormatter::parse_template_with_lang("{x}", Some("de".to_string()))
+            .expect("should succeed");
         let b = bindings(&[("x", "Wert")]);
-        let msg = MessageFormatter::format(&tpl, &b, MessageSeverity::Violation).unwrap();
+        let msg =
+            MessageFormatter::format(&tpl, &b, MessageSeverity::Violation).expect("should succeed");
         assert_eq!(msg.lang, Some("de".to_string()));
         assert_eq!(msg.text, "Wert");
     }

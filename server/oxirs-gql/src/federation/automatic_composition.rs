@@ -675,7 +675,10 @@ mod tests {
         let composer = AutomaticSchemaComposer::new();
         let schema = SubgraphSchema::new("service1".to_string());
 
-        composer.register_subgraph(schema).await.unwrap();
+        composer
+            .register_subgraph(schema)
+            .await
+            .expect("should succeed");
         let subgraphs = composer.list_subgraphs().await;
         assert_eq!(subgraphs.len(), 1);
         assert!(subgraphs.contains(&"service1".to_string()));
@@ -686,8 +689,14 @@ mod tests {
         let composer = AutomaticSchemaComposer::new();
         let schema = SubgraphSchema::new("service1".to_string());
 
-        composer.register_subgraph(schema).await.unwrap();
-        composer.unregister_subgraph("service1").await.unwrap();
+        composer
+            .register_subgraph(schema)
+            .await
+            .expect("should succeed");
+        composer
+            .unregister_subgraph("service1")
+            .await
+            .expect("should succeed");
 
         let subgraphs = composer.list_subgraphs().await;
         assert_eq!(subgraphs.len(), 0);
@@ -696,7 +705,7 @@ mod tests {
     #[tokio::test]
     async fn test_compose_empty_schemas() {
         let composer = AutomaticSchemaComposer::new();
-        let result = composer.compose().await.unwrap();
+        let result = composer.compose().await.expect("should succeed");
 
         assert!(!result.success);
         assert!(result.schema.is_none());
@@ -719,8 +728,11 @@ mod tests {
         ));
         schema.add_type(type_def);
 
-        composer.register_subgraph(schema).await.unwrap();
-        let result = composer.compose().await.unwrap();
+        composer
+            .register_subgraph(schema)
+            .await
+            .expect("should succeed");
+        let result = composer.compose().await.expect("should succeed");
 
         assert!(result.success);
         assert!(result.schema.is_some());
@@ -757,14 +769,20 @@ mod tests {
         ));
         schema2.add_type(type2);
 
-        composer.register_subgraph(schema1).await.unwrap();
-        composer.register_subgraph(schema2).await.unwrap();
+        composer
+            .register_subgraph(schema1)
+            .await
+            .expect("should succeed");
+        composer
+            .register_subgraph(schema2)
+            .await
+            .expect("should succeed");
 
-        let result = composer.compose().await.unwrap();
+        let result = composer.compose().await.expect("should succeed");
         assert!(result.success);
 
-        let schema = result.schema.unwrap();
-        let query_type = schema.types.get("Query").unwrap();
+        let schema = result.schema.expect("should succeed");
+        let query_type = schema.types.get("Query").expect("should succeed");
         assert_eq!(query_type.fields.len(), 2);
     }
 
@@ -779,8 +797,11 @@ mod tests {
         );
         schema.add_type(type_def);
 
-        composer.register_subgraph(schema).await.unwrap();
-        composer.compose().await.unwrap();
+        composer
+            .register_subgraph(schema)
+            .await
+            .expect("should succeed");
+        composer.compose().await.expect("should succeed");
 
         let composed = composer.get_composed_schema().await;
         assert!(composed.is_some());
@@ -792,7 +813,7 @@ mod tests {
         composer
             .set_metadata("version".to_string(), "1.0.0".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let value = composer.get_metadata("version").await;
         assert_eq!(value, Some("1.0.0".to_string()));
@@ -802,11 +823,14 @@ mod tests {
     async fn test_get_subgraph() {
         let composer = AutomaticSchemaComposer::new();
         let schema = SubgraphSchema::new("service1".to_string());
-        composer.register_subgraph(schema).await.unwrap();
+        composer
+            .register_subgraph(schema)
+            .await
+            .expect("should succeed");
 
         let retrieved = composer.get_subgraph("service1").await;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().name, "service1");
+        assert_eq!(retrieved.expect("should succeed").name, "service1");
     }
 
     #[test]

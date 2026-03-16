@@ -28,7 +28,7 @@
 //! let generator = DbcSammGenerator::new(config);
 //!
 //! let ttl = generator.generate_from_database(&db);
-//! std::fs::write("EngineData.ttl", ttl).unwrap();
+//! std::fs::write("EngineData.ttl", ttl).expect("should succeed");
 //! ```
 
 use crate::dbc::{ByteOrder, DbcDatabase, DbcMessage, DbcSignal, MultiplexerType, ValueType};

@@ -439,8 +439,8 @@ mod tests {
 
     #[test]
     fn test_property_path_creation() {
-        let p1 = NamedNode::new("http://example.org/knows").unwrap();
-        let p2 = NamedNode::new("http://example.org/likes").unwrap();
+        let p1 = NamedNode::new("http://example.org/knows").expect("valid IRI");
+        let p2 = NamedNode::new("http://example.org/likes").expect("valid IRI");
 
         // Simple predicate
         let path = PropertyPath::predicate(p1.clone());
@@ -468,8 +468,8 @@ mod tests {
 
     #[test]
     fn test_property_path_display() {
-        let p1 = NamedNode::new("http://example.org/p").unwrap();
-        let p2 = NamedNode::new("http://example.org/q").unwrap();
+        let p1 = NamedNode::new("http://example.org/p").expect("valid IRI");
+        let p2 = NamedNode::new("http://example.org/q").expect("valid IRI");
 
         let path = PropertyPath::sequence(
             PropertyPath::predicate(p1.clone()),
@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn test_path_optimization() {
         let optimizer = PropertyPathOptimizer::new();
-        let p = PropertyPath::predicate(NamedNode::new("http://example.org/p").unwrap());
+        let p = PropertyPath::predicate(NamedNode::new("http://example.org/p").expect("valid IRI"));
 
         // Optimize p/p to p{2}
         let seq = PropertyPath::sequence(p.clone(), p.clone());

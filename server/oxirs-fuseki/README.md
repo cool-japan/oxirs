@@ -1,10 +1,10 @@
 # OxiRS Fuseki
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility**
 
-**Status**: v0.2.1 - Released March 10, 2026
+**Status**: v0.2.2 - Released March 16, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-oxirs-fuseki = "0.2.1"
+oxirs-fuseki = "0.2.2"
 ```
 
 ### As a Binary

@@ -600,7 +600,11 @@ mod tests {
         let entries = logger.get_recent_entries(1);
         assert!(entries[0].request_context.is_some());
         assert_eq!(
-            entries[0].request_context.as_ref().unwrap().request_id,
+            entries[0]
+                .request_context
+                .as_ref()
+                .expect("should succeed")
+                .request_id,
             "req-123"
         );
     }
@@ -626,7 +630,11 @@ mod tests {
         let entries = logger.get_recent_entries(1);
         assert!(entries[0].query_context.is_some());
         assert_eq!(
-            entries[0].query_context.as_ref().unwrap().operation_name,
+            entries[0]
+                .query_context
+                .as_ref()
+                .expect("should succeed")
+                .operation_name,
             Some("GetUser".to_string())
         );
     }
@@ -652,7 +660,11 @@ mod tests {
         let entries = logger.get_recent_entries(1);
         assert!(entries[0].performance_metrics.is_some());
         assert_eq!(
-            entries[0].performance_metrics.as_ref().unwrap().duration_ms,
+            entries[0]
+                .performance_metrics
+                .as_ref()
+                .expect("should succeed")
+                .duration_ms,
             123.45
         );
     }
@@ -676,7 +688,11 @@ mod tests {
         let entries = logger.get_recent_entries(1);
         assert!(entries[0].error_context.is_some());
         assert_eq!(
-            entries[0].error_context.as_ref().unwrap().error_message,
+            entries[0]
+                .error_context
+                .as_ref()
+                .expect("should succeed")
+                .error_message,
             "Invalid input"
         );
     }
@@ -809,9 +825,13 @@ mod tests {
         logger.log(entry);
 
         let entries = logger.get_recent_entries(1);
-        let vars = &entries[0].query_context.as_ref().unwrap().variables;
-        assert_eq!(vars.get("username").unwrap(), "john");
-        assert_eq!(vars.get("password").unwrap(), "[REDACTED]");
+        let vars = &entries[0]
+            .query_context
+            .as_ref()
+            .expect("should succeed")
+            .variables;
+        assert_eq!(vars.get("username").expect("should succeed"), "john");
+        assert_eq!(vars.get("password").expect("should succeed"), "[REDACTED]");
     }
 
     #[test]
@@ -843,7 +863,10 @@ mod tests {
         let entries = logger.get_recent_entries(1);
         assert_eq!(entries[0].custom_fields.len(), 2);
         assert_eq!(
-            entries[0].custom_fields.get("environment").unwrap(),
+            entries[0]
+                .custom_fields
+                .get("environment")
+                .expect("should succeed"),
             "production"
         );
     }
@@ -922,7 +945,11 @@ mod tests {
         logger.log(entry);
 
         let entries = logger.get_recent_entries(1);
-        let fields = &entries[0].query_context.as_ref().unwrap().requested_fields;
+        let fields = &entries[0]
+            .query_context
+            .as_ref()
+            .expect("should succeed")
+            .requested_fields;
         assert_eq!(fields.len(), 3); // Truncated to max_field_count
     }
 }

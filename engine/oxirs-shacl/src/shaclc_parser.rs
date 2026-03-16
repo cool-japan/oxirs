@@ -41,7 +41,7 @@
 //! }
 //! "#;
 //!
-//! let doc = ShaclcParser::parse(input).unwrap();
+//! let doc = ShaclcParser::parse(input).expect("should succeed");
 //! assert_eq!(doc.shapes.len(), 1);
 //! ```
 

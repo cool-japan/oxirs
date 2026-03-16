@@ -625,7 +625,7 @@ mod tests {
         let optimizer = QuantumGeneticOptimizer::new(consciousness, 0.5);
         assert!(optimizer.is_ok());
 
-        let optimizer = optimizer.unwrap();
+        let optimizer = optimizer.expect("optimizer should be created");
         assert!(optimizer.quantum_coherence > 0.0);
         assert_eq!(optimizer.emotional_mutation_modifiers.len(), 6);
     }
@@ -634,7 +634,8 @@ mod tests {
     fn test_strategy_superposition_collapse() {
         let stats = Arc::new(IndexStats::new());
         let consciousness = Arc::new(RwLock::new(ConsciousnessModule::new(stats)));
-        let mut optimizer = QuantumGeneticOptimizer::new(consciousness, 0.5).unwrap();
+        let mut optimizer =
+            QuantumGeneticOptimizer::new(consciousness, 0.5).expect("construction should succeed");
 
         let strategy = optimizer.collapse_strategy_superposition();
 
@@ -655,7 +656,8 @@ mod tests {
     fn test_quantum_coherence_update() {
         let stats = Arc::new(IndexStats::new());
         let consciousness = Arc::new(RwLock::new(ConsciousnessModule::new(stats)));
-        let mut optimizer = QuantumGeneticOptimizer::new(consciousness, 0.5).unwrap();
+        let mut optimizer =
+            QuantumGeneticOptimizer::new(consciousness, 0.5).expect("construction should succeed");
 
         let initial_coherence = optimizer.quantum_coherence;
         optimizer.update_quantum_coherence(10);

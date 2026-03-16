@@ -1236,7 +1236,7 @@ mod tests {
         );
 
         assert!(workspace_id.is_ok());
-        let workspace_id = workspace_id.unwrap();
+        let workspace_id = workspace_id.expect("should succeed");
         assert!(manager.workspaces.contains_key(&workspace_id));
     }
 
@@ -1255,7 +1255,7 @@ mod tests {
         let session_id = manager.start_collaborative_session(workspace_id, shape_id, user_id);
         assert!(session_id.is_ok());
 
-        let session_id = session_id.unwrap();
+        let session_id = session_id.expect("should succeed");
         assert!(manager.active_sessions.contains_key(&session_id));
     }
 
@@ -1311,7 +1311,7 @@ mod tests {
         });
 
         assert!(review_id.is_ok());
-        let review_id = review_id.unwrap();
+        let review_id = review_id.expect("should succeed");
 
         let result = manager.submit_review(review_id, reviewer, ReviewDecision::Approve, vec![]);
 

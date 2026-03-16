@@ -824,7 +824,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_enhanced_token_merge() {
+    fn test_enhanced_token_merge() -> Result<(), Box<dyn std::error::Error>> {
         let mut token1 = EnhancedToken::new();
         token1
             .bindings
@@ -841,7 +841,7 @@ mod tests {
             .bindings
             .insert("Z".to_string(), Term::Constant("c".to_string()));
 
-        let merged = EnhancedToken::merge(&token1, &token2).unwrap();
+        let merged = EnhancedToken::merge(&token1, &token2)?;
         assert_eq!(merged.bindings.len(), 3);
         assert_eq!(
             merged.bindings.get("X"),
@@ -855,6 +855,7 @@ mod tests {
             merged.bindings.get("Z"),
             Some(&Term::Constant("c".to_string()))
         );
+        Ok(())
     }
 
     #[test]
@@ -906,7 +907,7 @@ mod tests {
     }
 
     #[test]
-    fn test_join_conditions() {
+    fn test_join_conditions() -> Result<(), Box<dyn std::error::Error>> {
         let node = BetaJoinNode::new(
             1,
             0,
@@ -931,11 +932,12 @@ mod tests {
             op: ComparisonOp::Less,
         };
 
-        assert!(node.evaluate_condition(&cond, &left, &right).unwrap());
+        assert!(node.evaluate_condition(&cond, &left, &right)?);
+        Ok(())
     }
 
     #[test]
-    fn test_builtin_evaluation() {
+    fn test_builtin_evaluation() -> Result<(), Box<dyn std::error::Error>> {
         let mut left = EnhancedToken::new();
         left.bindings
             .insert("text".to_string(), Term::Literal("hello world".to_string()));
@@ -948,7 +950,7 @@ mod tests {
             JoinArg::Constant(Term::Literal("hello.*".to_string())),
         ];
 
-        assert!(evaluate_builtin("regex", &args, &left, &right).unwrap());
+        assert!(evaluate_builtin("regex", &args, &left, &right)?);
 
         // Test contains builtin
         let args = vec![
@@ -956,7 +958,8 @@ mod tests {
             JoinArg::Constant(Term::Literal("world".to_string())),
         ];
 
-        assert!(evaluate_builtin("contains", &args, &left, &right).unwrap());
+        assert!(evaluate_builtin("contains", &args, &left, &right)?);
+        Ok(())
     }
 
     #[test]

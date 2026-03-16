@@ -642,7 +642,7 @@ mod tests {
             )
             .build();
 
-        let html = VisualizationRenderer::to_html_table(&spec).unwrap();
+        let html = VisualizationRenderer::to_html_table(&spec).expect("should succeed");
         assert!(html.contains("<table>"));
         assert!(html.contains("<th>Name</th>"));
         assert!(html.contains("<td>Test</td>"));

@@ -41,7 +41,7 @@
 //! let characteristics = selector.analyze_dataset(&facts);
 //!
 //! // Select optimal strategy
-//! let strategy = selector.select_strategy(&characteristics).unwrap();
+//! let strategy = selector.select_strategy(&characteristics).expect("should succeed");
 //! println!("Selected strategy: {:?}", strategy);
 //! ```
 
@@ -743,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    fn test_select_strategy() {
+    fn test_select_strategy() -> Result<(), Box<dyn std::error::Error>> {
         let mut selector = AdaptiveStrategySelector::new();
         selector.register_strategy(ReasoningStrategy::Forward);
         selector.register_strategy(ReasoningStrategy::Backward);
@@ -759,8 +759,9 @@ mod tests {
             data_skew: 0.2,
         };
 
-        let strategy = selector.select_strategy(&characteristics).unwrap();
+        let strategy = selector.select_strategy(&characteristics)?;
         assert!(strategy == ReasoningStrategy::Forward || strategy == ReasoningStrategy::Backward);
+        Ok(())
     }
 
     #[test]
@@ -785,7 +786,7 @@ mod tests {
     }
 
     #[test]
-    fn test_performance_recording() {
+    fn test_performance_recording() -> Result<(), Box<dyn std::error::Error>> {
         let mut selector = AdaptiveStrategySelector::new();
         selector.register_strategy(ReasoningStrategy::Forward);
 
@@ -801,7 +802,8 @@ mod tests {
 
         let history = selector.get_performance_history(ReasoningStrategy::Forward);
         assert!(history.is_some());
-        assert_eq!(history.unwrap().len(), 1);
+        assert_eq!(history.ok_or("expected Some value")?.len(), 1);
+        Ok(())
     }
 
     #[test]
@@ -908,14 +910,15 @@ mod tests {
     }
 
     #[test]
-    fn test_adaptive_engine_reason() {
+    fn test_adaptive_engine_reason() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = AdaptiveReasoningEngine::new();
         let facts = vec![create_test_fact("a", "p", "b")];
 
         engine.add_facts(facts);
-        let results = engine.reason().unwrap();
+        let results = engine.reason()?;
 
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -927,7 +930,7 @@ mod tests {
     }
 
     #[test]
-    fn test_strategy_switching() {
+    fn test_strategy_switching() -> Result<(), Box<dyn std::error::Error>> {
         let mut selector = AdaptiveStrategySelector::new();
         selector.register_strategy(ReasoningStrategy::Forward);
         selector.register_strategy(ReasoningStrategy::Backward);
@@ -944,17 +947,18 @@ mod tests {
         };
 
         // First selection
-        let _strategy1 = selector.select_strategy(&characteristics).unwrap();
+        let _strategy1 = selector.select_strategy(&characteristics)?;
 
         // Second selection (may switch)
-        let _strategy2 = selector.select_strategy(&characteristics).unwrap();
+        let _strategy2 = selector.select_strategy(&characteristics)?;
 
         // Should have recorded at least one selection
         // Note: Metrics tracked internally
+        Ok(())
     }
 
     #[test]
-    fn test_performance_history_limit() {
+    fn test_performance_history_limit() -> Result<(), Box<dyn std::error::Error>> {
         let mut selector = AdaptiveStrategySelector::new();
         selector.register_strategy(ReasoningStrategy::Forward);
 
@@ -971,6 +975,7 @@ mod tests {
         }
 
         let history = selector.get_performance_history(ReasoningStrategy::Forward);
-        assert_eq!(history.unwrap().len(), 100);
+        assert_eq!(history.ok_or("expected Some value")?.len(), 100);
+        Ok(())
     }
 }

@@ -218,7 +218,7 @@ mod tests {
         let crs = Crs::epsg(4326);
         let point = Geometry::with_crs(Point::new(10.0, 20.0).into(), crs.clone());
 
-        let result = cache.transform(&point, &crs).unwrap();
+        let result = cache.transform(&point, &crs).expect("should succeed");
 
         // Should return clone without transformation
         assert_eq!(result.crs, crs);
@@ -244,7 +244,9 @@ mod tests {
         let point = Geometry::with_crs(Point::new(10.0, 20.0).into(), wgs84.clone());
 
         // Transform to Web Mercator
-        let result = cache.transform(&point, &web_mercator).unwrap();
+        let result = cache
+            .transform(&point, &web_mercator)
+            .expect("should succeed");
 
         assert_eq!(result.crs, web_mercator);
 
@@ -254,7 +256,9 @@ mod tests {
 
         // Transform another point - should use cached parameters
         let point2 = Geometry::with_crs(Point::new(15.0, 25.0).into(), wgs84);
-        let result2 = cache.transform(&point2, &web_mercator).unwrap();
+        let result2 = cache
+            .transform(&point2, &web_mercator)
+            .expect("should succeed");
 
         assert_eq!(result2.crs, web_mercator);
 
@@ -272,11 +276,15 @@ mod tests {
         let point = Geometry::with_crs(Point::new(10.0, 50.0).into(), wgs84.clone());
 
         // First transformation: WGS84 -> Web Mercator
-        let _ = cache.transform(&point, &web_mercator).unwrap();
+        let _ = cache
+            .transform(&point, &web_mercator)
+            .expect("should succeed");
         assert_eq!(cache.len(), 1);
 
         // Second transformation: WGS84 -> UTM Zone 32N
-        let _ = cache.transform(&point, &utm_zone_32n).unwrap();
+        let _ = cache
+            .transform(&point, &utm_zone_32n)
+            .expect("should succeed");
         assert_eq!(cache.len(), 2);
 
         // Third transformation: Web Mercator -> WGS84 (reverse)
@@ -284,7 +292,9 @@ mod tests {
             Point::new(1_113_194.91, 6_446_275.84).into(),
             web_mercator.clone(),
         );
-        let _ = cache.transform(&web_merc_point, &wgs84).unwrap();
+        let _ = cache
+            .transform(&web_merc_point, &wgs84)
+            .expect("should succeed");
         assert_eq!(cache.len(), 3);
     }
 
@@ -316,10 +326,14 @@ mod tests {
         let original = Geometry::with_crs(Point::new(10.0, 50.0).into(), wgs84.clone());
 
         // Transform to Web Mercator
-        let transformed = cache.transform(&original, &web_mercator).unwrap();
+        let transformed = cache
+            .transform(&original, &web_mercator)
+            .expect("should succeed");
 
         // Transform back to WGS84
-        let roundtrip = cache.transform(&transformed, &wgs84).unwrap();
+        let roundtrip = cache
+            .transform(&transformed, &wgs84)
+            .expect("should succeed");
 
         // Should be approximately equal (within floating point tolerance)
         match (&original.geom, &roundtrip.geom) {
@@ -354,7 +368,9 @@ mod tests {
             let handle = thread::spawn(move || {
                 let point =
                     Geometry::with_crs(Point::new(10.0 + i as f64, 50.0).into(), wgs84_clone);
-                cache_clone.transform(&point, &web_merc_clone).unwrap()
+                cache_clone
+                    .transform(&point, &web_merc_clone)
+                    .expect("should succeed")
             });
 
             handles.push(handle);
@@ -362,7 +378,7 @@ mod tests {
 
         // Wait for all threads to complete
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().expect("thread should not panic");
         }
 
         // All threads used the same CRS pair, so cache should have 1 entry
@@ -384,7 +400,9 @@ mod tests {
 
         let geom = Geometry::with_crs(line.into(), wgs84);
 
-        let transformed = cache.transform(&geom, &web_mercator).unwrap();
+        let transformed = cache
+            .transform(&geom, &web_mercator)
+            .expect("should succeed");
 
         assert_eq!(transformed.crs, web_mercator);
         assert_eq!(cache.len(), 1);
@@ -418,7 +436,9 @@ mod tests {
 
         let geom = Geometry::with_crs(poly.into(), wgs84);
 
-        let transformed = cache.transform(&geom, &web_mercator).unwrap();
+        let transformed = cache
+            .transform(&geom, &web_mercator)
+            .expect("should succeed");
 
         assert_eq!(transformed.crs, web_mercator);
         assert_eq!(cache.len(), 1);

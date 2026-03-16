@@ -975,7 +975,7 @@ mod tests {
             detailed_metrics: None,
         }];
 
-        let csv = suite.results_to_csv(&results).unwrap();
+        let csv = suite.results_to_csv(&results).expect("should succeed");
         assert!(csv.contains("SimpleQuery"));
         assert!(csv.contains("ML"));
         assert!(csv.contains("95"));

@@ -1213,7 +1213,7 @@ mod tests {
             .with_claim("role".to_string(), serde_json::json!("admin"));
 
         assert_eq!(
-            claims.custom.get("role").unwrap(),
+            claims.custom.get("role").expect("should succeed"),
             &serde_json::json!("admin")
         );
     }

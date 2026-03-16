@@ -704,7 +704,7 @@ mod tests {
         values.push(1000.0);
         let data = pts(&values);
         let scores = det.score_all(&data);
-        let last_score = scores.last().unwrap().1;
+        let last_score = scores.last().expect("should succeed").1;
         assert!(
             last_score > 2.0,
             "Outlier should have score > 2.0, got {last_score}"

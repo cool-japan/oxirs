@@ -226,17 +226,17 @@ mod tests {
         let mut writer = Vec::new();
 
         let triple = Triple::new(
-            Subject::NamedNode(NamedNode::new("http://example.org/subject").unwrap()),
-            NamedNode::new("http://example.org/predicate").unwrap(),
-            Object::NamedNode(NamedNode::new("http://example.org/object").unwrap()),
+            Subject::NamedNode(NamedNode::new("http://example.org/subject").expect("valid IRI")),
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
+            Object::NamedNode(NamedNode::new("http://example.org/object").expect("valid IRI")),
         );
 
         let quad = Quad::from(triple);
         serializer
             .serialize_quad(quad.as_ref(), &mut writer)
-            .unwrap();
+            .expect("operation should succeed");
 
-        let output = String::from_utf8(writer).unwrap();
+        let output = String::from_utf8(writer).expect("bytes should be valid UTF-8");
         assert_eq!(
             output,
             "<http://example.org/subject> <http://example.org/predicate> <http://example.org/object> .\n"
@@ -249,17 +249,17 @@ mod tests {
         let mut writer = Vec::new();
 
         let triple = Triple::new(
-            Subject::NamedNode(NamedNode::new("http://example.org/subject").unwrap()),
-            NamedNode::new("http://example.org/predicate").unwrap(),
+            Subject::NamedNode(NamedNode::new("http://example.org/subject").expect("valid IRI")),
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
             Object::Literal(Literal::new("Hello World")),
         );
 
         let quad = Quad::from(triple);
         serializer
             .serialize_quad(quad.as_ref(), &mut writer)
-            .unwrap();
+            .expect("operation should succeed");
 
-        let output = String::from_utf8(writer).unwrap();
+        let output = String::from_utf8(writer).expect("bytes should be valid UTF-8");
         assert_eq!(
             output,
             "<http://example.org/subject> <http://example.org/predicate> \"Hello World\" .\n"

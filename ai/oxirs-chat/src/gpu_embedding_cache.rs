@@ -626,7 +626,7 @@ mod tests {
 
         let retrieved = cache.get("test_key").await;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap(), embedding);
+        assert_eq!(retrieved.expect("should succeed"), embedding);
 
         Ok(())
     }

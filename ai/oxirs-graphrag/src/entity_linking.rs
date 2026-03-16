@@ -609,7 +609,7 @@ mod tests {
         let mention = EntityMention::new("Einstein", 0, 8);
         let best = linker.disambiguate(&mention, &cands, "Einstein worked on relativity");
         assert!(best.is_some());
-        assert!(best.unwrap().iri.contains("Einstein"));
+        assert!(best.expect("should succeed").iri.contains("Einstein"));
     }
 
     #[test]

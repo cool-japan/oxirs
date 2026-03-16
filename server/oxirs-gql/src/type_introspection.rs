@@ -438,7 +438,7 @@ mod tests {
         let engine = simple_engine();
         let result = engine.schema_introspection();
         assert!(!result.is_empty());
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
         assert!(parsed.is_object());
     }
 
@@ -446,7 +446,7 @@ mod tests {
     fn test_schema_introspection_has_data_key() {
         let engine = simple_engine();
         let result = engine.schema_introspection();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
         assert!(parsed["data"].is_object());
     }
 
@@ -454,7 +454,7 @@ mod tests {
     fn test_schema_introspection_has_schema_key() {
         let engine = simple_engine();
         let result = engine.schema_introspection();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
         assert!(parsed["data"]["__schema"].is_object());
     }
 
@@ -462,7 +462,7 @@ mod tests {
     fn test_schema_introspection_query_type_name() {
         let engine = simple_engine();
         let result = engine.schema_introspection();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
         let qtype = &parsed["data"]["__schema"]["queryType"]["name"];
         assert_eq!(qtype, "Query");
     }
@@ -471,18 +471,20 @@ mod tests {
     fn test_schema_introspection_types_array() {
         let engine = simple_engine();
         let result = engine.schema_introspection();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
         let types = &parsed["data"]["__schema"]["types"];
         assert!(types.is_array());
-        assert!(!types.as_array().unwrap().is_empty());
+        assert!(!types.as_array().expect("should succeed").is_empty());
     }
 
     #[test]
     fn test_schema_introspection_includes_builtin_scalars() {
         let engine = simple_engine();
         let result = engine.schema_introspection();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
-        let types = parsed["data"]["__schema"]["types"].as_array().unwrap();
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
+        let types = parsed["data"]["__schema"]["types"]
+            .as_array()
+            .expect("should succeed");
         let names: Vec<&str> = types.iter().filter_map(|t| t["name"].as_str()).collect();
         assert!(names.contains(&"String"));
         assert!(names.contains(&"Int"));
@@ -495,7 +497,7 @@ mod tests {
     fn test_schema_introspection_no_mutation_type_by_default() {
         let engine = simple_engine();
         let result = engine.schema_introspection();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
         let mut_type = &parsed["data"]["__schema"]["mutationType"];
         assert!(mut_type.is_null());
     }
@@ -510,7 +512,7 @@ mod tests {
         schema_desc.mutation_type = Some("Mutation".to_string());
         let engine = IntrospectionEngine::new(schema_desc);
         let result = engine.schema_introspection();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
         assert_eq!(
             parsed["data"]["__schema"]["mutationType"]["name"],
             "Mutation"
@@ -538,7 +540,8 @@ mod tests {
         let engine = simple_engine();
         let result = engine.type_introspection("Episode");
         assert!(result.is_some());
-        let parsed: JsonValue = serde_json::from_str(&result.unwrap()).unwrap();
+        let parsed: JsonValue =
+            serde_json::from_str(&result.expect("should succeed")).expect("should succeed");
         assert_eq!(parsed["data"]["__type"]["kind"], "ENUM");
     }
 
@@ -552,11 +555,18 @@ mod tests {
     #[test]
     fn test_type_introspection_object_has_fields() {
         let engine = simple_engine();
-        let result = engine.type_introspection("Character").unwrap();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
-        let fields = parsed["data"]["__type"]["fields"].as_array().unwrap();
+        let result = engine
+            .type_introspection("Character")
+            .expect("should succeed");
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
+        let fields = parsed["data"]["__type"]["fields"]
+            .as_array()
+            .expect("should succeed");
         assert_eq!(fields.len(), 2);
-        let field_names: Vec<&str> = fields.iter().map(|f| f["name"].as_str().unwrap()).collect();
+        let field_names: Vec<&str> = fields
+            .iter()
+            .map(|f| f["name"].as_str().expect("should succeed"))
+            .collect();
         assert!(field_names.contains(&"id"));
         assert!(field_names.contains(&"name"));
     }
@@ -564,8 +574,8 @@ mod tests {
     #[test]
     fn test_type_introspection_scalar_kind() {
         let engine = simple_engine();
-        let result = engine.type_introspection("String").unwrap();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
+        let result = engine.type_introspection("String").expect("should succeed");
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
         assert_eq!(parsed["data"]["__type"]["kind"], "SCALAR");
     }
 
@@ -637,7 +647,7 @@ mod tests {
     #[test]
     fn test_get_type_returns_correct_kind() {
         let engine = simple_engine();
-        let t = engine.get_type("Episode").unwrap();
+        let t = engine.get_type("Episode").expect("should succeed");
         assert_eq!(t.kind, TypeKind::Enum);
     }
 
@@ -683,7 +693,7 @@ mod tests {
         let list = TypeRef::list(inner);
         let outer = TypeRef::non_null(list);
         assert_eq!(outer.kind, TypeKind::NonNull);
-        let list_ref = outer.of_type.as_ref().unwrap();
+        let list_ref = outer.of_type.as_ref().expect("should succeed");
         assert_eq!(list_ref.kind, TypeKind::List);
     }
 
@@ -712,8 +722,12 @@ mod tests {
     fn test_deprecated_field_flag() {
         let engine = simple_engine();
         // "search" field on Query was marked deprecated
-        let t = engine.get_type("Query").unwrap();
-        let search = t.fields.iter().find(|f| f.name == "search").unwrap();
+        let t = engine.get_type("Query").expect("should succeed");
+        let search = t
+            .fields
+            .iter()
+            .find(|f| f.name == "search")
+            .expect("should succeed");
         assert!(search.is_deprecated);
         assert!(search.deprecation_reason.is_some());
     }
@@ -721,10 +735,15 @@ mod tests {
     #[test]
     fn test_deprecated_field_in_json() {
         let engine = simple_engine();
-        let result = engine.type_introspection("Query").unwrap();
-        let parsed: JsonValue = serde_json::from_str(&result).unwrap();
-        let fields = parsed["data"]["__type"]["fields"].as_array().unwrap();
-        let search = fields.iter().find(|f| f["name"] == "search").unwrap();
+        let result = engine.type_introspection("Query").expect("should succeed");
+        let parsed: JsonValue = serde_json::from_str(&result).expect("should succeed");
+        let fields = parsed["data"]["__type"]["fields"]
+            .as_array()
+            .expect("should succeed");
+        let search = fields
+            .iter()
+            .find(|f| f["name"] == "search")
+            .expect("should succeed");
         assert_eq!(search["isDeprecated"], true);
     }
 

@@ -534,47 +534,77 @@ mod tests {
     fn test_wkt_lexer_numbers() {
         let mut lexer = WktLexer::new("123.456 -789.012 3.14e10");
 
-        assert_eq!(lexer.next_token().unwrap(), Token::Number("123.456"));
-        assert_eq!(lexer.next_token().unwrap(), Token::Number("-789.012"));
-        assert_eq!(lexer.next_token().unwrap(), Token::Number("3.14e10"));
-        assert_eq!(lexer.next_token().unwrap(), Token::Eof);
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
+            Token::Number("123.456")
+        );
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
+            Token::Number("-789.012")
+        );
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
+            Token::Number("3.14e10")
+        );
+        assert_eq!(lexer.next_token().expect("should succeed"), Token::Eof);
     }
 
     #[test]
     fn test_wkt_lexer_geometry_type() {
         let mut lexer = WktLexer::new("POINT LINESTRING POLYGON");
 
-        assert_eq!(lexer.next_token().unwrap(), Token::GeometryType("POINT"));
         assert_eq!(
-            lexer.next_token().unwrap(),
+            lexer.next_token().expect("should succeed"),
+            Token::GeometryType("POINT")
+        );
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
             Token::GeometryType("LINESTRING")
         );
-        assert_eq!(lexer.next_token().unwrap(), Token::GeometryType("POLYGON"));
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
+            Token::GeometryType("POLYGON")
+        );
     }
 
     #[test]
     fn test_wkt_lexer_modifiers() {
         let mut lexer = WktLexer::new("Z M ZM");
 
-        assert_eq!(lexer.next_token().unwrap(), Token::Modifier("Z"));
-        assert_eq!(lexer.next_token().unwrap(), Token::Modifier("M"));
-        assert_eq!(lexer.next_token().unwrap(), Token::Modifier("ZM"));
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
+            Token::Modifier("Z")
+        );
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
+            Token::Modifier("M")
+        );
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
+            Token::Modifier("ZM")
+        );
     }
 
     #[test]
     fn test_wkt_lexer_punctuation() {
         let mut lexer = WktLexer::new("( ) ,");
 
-        assert_eq!(lexer.next_token().unwrap(), Token::LeftParen);
-        assert_eq!(lexer.next_token().unwrap(), Token::RightParen);
-        assert_eq!(lexer.next_token().unwrap(), Token::Comma);
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
+            Token::LeftParen
+        );
+        assert_eq!(
+            lexer.next_token().expect("should succeed"),
+            Token::RightParen
+        );
+        assert_eq!(lexer.next_token().expect("should succeed"), Token::Comma);
     }
 
     #[test]
     fn test_wkt_lexer_crs() {
         let mut lexer = WktLexer::new("<http://www.opengis.net/def/crs/EPSG/0/4326>");
 
-        match lexer.next_token().unwrap() {
+        match lexer.next_token().expect("should succeed") {
             Token::CrsIri(iri) => {
                 assert_eq!(iri, "<http://www.opengis.net/def/crs/EPSG/0/4326>");
             }
@@ -585,7 +615,7 @@ mod tests {
     #[test]
     fn test_zero_copy_parser_point() {
         let parser = ZeroCopyWktParser::new();
-        let geom = parser.parse("POINT (1.5 2.5)").unwrap();
+        let geom = parser.parse("POINT (1.5 2.5)").expect("should succeed");
 
         match geom.geom {
             GeoGeometry::Point(p) => {
@@ -599,7 +629,9 @@ mod tests {
     #[test]
     fn test_zero_copy_parser_linestring() {
         let parser = ZeroCopyWktParser::new();
-        let geom = parser.parse("LINESTRING (0 0, 1 1, 2 2)").unwrap();
+        let geom = parser
+            .parse("LINESTRING (0 0, 1 1, 2 2)")
+            .expect("should succeed");
 
         match geom.geom {
             GeoGeometry::LineString(ls) => {
@@ -616,7 +648,9 @@ mod tests {
     #[test]
     fn test_zero_copy_parser_polygon() {
         let parser = ZeroCopyWktParser::new();
-        let geom = parser.parse("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap();
+        let geom = parser
+            .parse("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))")
+            .expect("should succeed");
 
         match geom.geom {
             GeoGeometry::Polygon(p) => {
@@ -632,7 +666,7 @@ mod tests {
         let parser = ZeroCopyWktParser::new();
         let geom = parser
             .parse("POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 3, 3 3, 3 1, 1 1))")
-            .unwrap();
+            .expect("should succeed");
 
         match geom.geom {
             GeoGeometry::Polygon(p) => {
@@ -649,7 +683,7 @@ mod tests {
         let parser = ZeroCopyWktParser::new();
         let geom = parser
             .parse("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT (1 2)")
-            .unwrap();
+            .expect("should succeed");
 
         // Check that CRS was parsed
         assert!(geom.crs.uri.contains("EPSG"));

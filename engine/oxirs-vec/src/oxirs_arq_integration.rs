@@ -1293,22 +1293,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_vector_query_planner_creation() {
+    fn test_vector_query_planner_creation() -> Result<()> {
         let config = VectorQueryConfig::default();
         let planner = VectorQueryPlanner::new(config);
 
-        assert_eq!(planner.vector_indices.read().unwrap().len(), 0);
+        assert_eq!(planner.vector_indices.read().expect("test value").len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_vector_function_registry() {
+    fn test_vector_function_registry() -> Result<()> {
         let registry = VectorFunctionRegistry::new();
 
-        assert_eq!(registry.functions.read().unwrap().len(), 0);
+        assert_eq!(registry.functions.read().expect("test value").len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_optimization_plan_creation() {
+    fn test_optimization_plan_creation() -> Result<()> {
         let config = VectorQueryConfig::default();
         let planner = VectorQueryPlanner::new(config);
 
@@ -1320,8 +1322,9 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        let plan = planner.create_optimization_plan(&query).unwrap();
+        let plan = planner.create_optimization_plan(&query)?;
         assert!(!plan.steps.is_empty());
+        Ok(())
     }
 
     #[test]

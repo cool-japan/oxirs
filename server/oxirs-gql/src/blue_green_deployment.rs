@@ -1009,7 +1009,10 @@ mod tests {
         let config = DeploymentConfig::default();
         let controller = BlueGreenController::new(config);
 
-        let record = controller.deploy_to_green("v2.0.0").await.unwrap();
+        let record = controller
+            .deploy_to_green("v2.0.0")
+            .await
+            .expect("should succeed");
         assert_eq!(record.environment, Environment::Green);
         assert_eq!(record.version, "v2.0.0");
         assert!(record.success);
@@ -1022,7 +1025,10 @@ mod tests {
         let controller = BlueGreenController::new(config);
 
         // Deploy to green first
-        controller.deploy_to_green("v2.0.0").await.unwrap();
+        controller
+            .deploy_to_green("v2.0.0")
+            .await
+            .expect("should succeed");
 
         // Update health
         controller
@@ -1030,7 +1036,7 @@ mod tests {
             .await;
 
         // Switch traffic
-        controller.switch_to_green().await.unwrap();
+        controller.switch_to_green().await.expect("should succeed");
 
         let status = controller.get_status().await;
         assert_eq!(status.active_environment, Environment::Green);
@@ -1050,14 +1056,20 @@ mod tests {
         }
 
         // Deploy to green
-        controller.deploy_to_green("v2.0.0").await.unwrap();
+        controller
+            .deploy_to_green("v2.0.0")
+            .await
+            .expect("should succeed");
         controller
             .update_health(Environment::Green, HealthStatus::Healthy)
             .await;
-        controller.switch_to_green().await.unwrap();
+        controller.switch_to_green().await.expect("should succeed");
 
         // Rollback
-        controller.rollback("Test rollback").await.unwrap();
+        controller
+            .rollback("Test rollback")
+            .await
+            .expect("should succeed");
 
         let status = controller.get_status().await;
         assert_eq!(status.active_environment, Environment::Blue);
@@ -1093,8 +1105,14 @@ mod tests {
         let config = DeploymentConfig::default();
         let controller = BlueGreenController::new(config);
 
-        controller.deploy_to_green("v2.0.0").await.unwrap();
-        controller.deploy_to_green("v2.1.0").await.unwrap();
+        controller
+            .deploy_to_green("v2.0.0")
+            .await
+            .expect("should succeed");
+        controller
+            .deploy_to_green("v2.1.0")
+            .await
+            .expect("should succeed");
 
         let history = controller.get_deployment_history(None).await;
         assert_eq!(history.len(), 2);
@@ -1126,7 +1144,10 @@ mod tests {
         let config = DeploymentConfig::default();
         let controller = BlueGreenController::new(config);
 
-        controller.deploy_to_green("v2.0.0").await.unwrap();
+        controller
+            .deploy_to_green("v2.0.0")
+            .await
+            .expect("should succeed");
         // Don't update health to healthy
 
         let result = controller.switch_to_green().await;
@@ -1159,12 +1180,15 @@ mod tests {
         };
         let controller = BlueGreenController::new(config);
 
-        controller.deploy_to_green("v2.0.0").await.unwrap();
+        controller
+            .deploy_to_green("v2.0.0")
+            .await
+            .expect("should succeed");
         controller
             .update_health(Environment::Green, HealthStatus::Healthy)
             .await;
 
-        controller.switch_to_green().await.unwrap();
+        controller.switch_to_green().await.expect("should succeed");
 
         let status = controller.get_status().await;
         assert_eq!(status.active_environment, Environment::Green);
@@ -1176,7 +1200,10 @@ mod tests {
         let config = DeploymentConfig::default();
         let controller = BlueGreenController::new(config);
 
-        controller.deploy_to_green("v2.0.0").await.unwrap();
+        controller
+            .deploy_to_green("v2.0.0")
+            .await
+            .expect("should succeed");
 
         let events = controller.get_recent_events(10).await;
         assert!(!events.is_empty());

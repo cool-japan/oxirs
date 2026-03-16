@@ -657,11 +657,13 @@ mod tests {
 
         // Set reference data
         let reference_data = Array2::from_shape_fn((100, 3), |(i, j)| i as f64 + j as f64);
-        monitor.set_reference_data(&reference_data).unwrap();
+        monitor
+            .set_reference_data(&reference_data)
+            .expect("should succeed");
 
         // Check for drift with similar data (should not detect drift)
         let current_data = Array2::from_shape_fn((100, 3), |(i, j)| i as f64 + j as f64 + 0.1);
-        let report = monitor.check_drift(&current_data).unwrap();
+        let report = monitor.check_drift(&current_data).expect("should succeed");
 
         assert!(!report.drift_measurements.is_empty());
     }
@@ -674,7 +676,9 @@ mod tests {
         let p = vec![0.25, 0.25, 0.25, 0.25];
         let q = vec![0.25, 0.25, 0.25, 0.25];
 
-        let kl_div = monitor.compute_kl_divergence(&p, &q).unwrap();
+        let kl_div = monitor
+            .compute_kl_divergence(&p, &q)
+            .expect("should succeed");
         assert!(kl_div.abs() < 1e-6); // Should be ~0 for identical distributions
     }
 
@@ -686,7 +690,9 @@ mod tests {
         let reference = vec![0.25, 0.25, 0.25, 0.25];
         let current = vec![0.25, 0.25, 0.25, 0.25];
 
-        let psi = monitor.compute_psi(&reference, &current).unwrap();
+        let psi = monitor
+            .compute_psi(&reference, &current)
+            .expect("should succeed");
         assert!(psi.abs() < 1e-6); // Should be ~0 for identical distributions
     }
 }

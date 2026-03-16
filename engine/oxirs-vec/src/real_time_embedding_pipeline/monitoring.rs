@@ -439,20 +439,23 @@ impl AlertHandler for ConsoleAlertHandler {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     
     #[tokio::test]
-    async fn test_metrics_collector_creation() {
+    async fn test_metrics_collector_creation() -> Result<()> {
         let collector = MetricsCollector::new();
-        let metrics = collector.collect_metrics().await.unwrap();
+        let metrics = collector.collect_metrics().await?;
         assert!(!metrics.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_health_checker() {
+    async fn test_health_checker() -> Result<()> {
         let checker = HealthChecker::new();
-        let health = checker.get_overall_health().await.unwrap();
+        let health = checker.get_overall_health().await?;
         assert_eq!(health, HealthStatus::Healthy);
+        Ok(())
     }
 
     #[tokio::test]

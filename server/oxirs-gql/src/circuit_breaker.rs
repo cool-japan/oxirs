@@ -1049,7 +1049,7 @@ mod tests {
         let result = cb.execute(|| async { Ok::<_, anyhow::Error>(42) }).await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
 
         let metrics = cb.get_metrics().await;
         assert_eq!(metrics.successful_requests, 1);
@@ -1110,7 +1110,7 @@ mod tests {
             .await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
     }
 
     #[tokio::test]

@@ -1,10 +1,10 @@
 # OxiRS TDB - High-Performance RDF Storage Engine
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Status**: v0.2.1 - Released March 10, 2026
+**Status**: v0.2.2 - Released March 16, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -61,7 +61,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-tdb = "0.2.1"
+oxirs-tdb = "0.2.2"
 ```
 
 ### Basic Usage

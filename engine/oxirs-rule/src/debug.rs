@@ -1068,15 +1068,16 @@ mod tests {
     }
 
     #[test]
-    fn test_debug_data_export() {
+    fn test_debug_data_export() -> Result<(), Box<dyn std::error::Error>> {
         let engine = DebuggableRuleEngine::new();
         let json_result = engine.export_debug_data();
         assert!(json_result.is_ok());
 
-        let json_data = json_result.unwrap();
+        let json_data = json_result?;
         assert!(json_data.contains("trace"));
         assert!(json_data.contains("metrics"));
         assert!(json_data.contains("conflicts"));
+        Ok(())
     }
 
     #[test]
@@ -1151,7 +1152,7 @@ mod tests {
     }
 
     #[test]
-    fn test_call_stack() {
+    fn test_call_stack() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = DebuggableRuleEngine::new();
         engine.enable_debugging(false);
 
@@ -1166,10 +1167,11 @@ mod tests {
         // Pop frame
         let frame = engine.pop_frame();
         assert!(frame.is_some());
-        assert_eq!(frame.unwrap().rule_name, "rule3");
+        assert_eq!(frame.ok_or("expected Some value")?.rule_name, "rule3");
 
         // Check stack after pop
         assert_eq!(engine.get_call_stack().len(), 2);
+        Ok(())
     }
 
     #[test]

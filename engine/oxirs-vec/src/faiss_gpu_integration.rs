@@ -1418,14 +1418,15 @@ mod tests {
     }
 
     #[test]
-    fn test_gpu_memory_pool() {
-        let pool = FaissGpuMemoryPool::new(0, 1024 * 1024).unwrap(); // 1MB pool
+    fn test_gpu_memory_pool() -> Result<()> {
+        let pool = FaissGpuMemoryPool::new(0, 1024 * 1024)?; // 1MB pool
 
-        let block = pool.allocate(1024, MemoryBlockType::Vectors).unwrap();
+        let block = pool.allocate(1024, MemoryBlockType::Vectors)?;
         assert_eq!(block.size, 1024);
 
-        pool.deallocate(&block).unwrap();
+        pool.deallocate(&block)?;
         assert_eq!(pool.allocated_size.load(Ordering::Relaxed), 0);
+        Ok(())
     }
 
     #[test]

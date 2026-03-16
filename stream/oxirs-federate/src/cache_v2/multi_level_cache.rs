@@ -729,7 +729,7 @@ mod tests {
         cache.put(e.clone());
         let got = cache.get(&CacheKey::from_str("q1"));
         assert!(got.is_some());
-        assert_eq!(got.unwrap().key.as_str(), "q1");
+        assert_eq!(got.expect("should succeed").key.as_str(), "q1");
     }
 
     #[test]
@@ -819,7 +819,7 @@ mod tests {
         cache.put(&e).expect("put should succeed");
         let got = cache.get(&CacheKey::from_str("disk-k1"));
         assert!(got.is_some());
-        assert_eq!(got.unwrap().key.as_str(), "disk-k1");
+        assert_eq!(got.expect("should succeed").key.as_str(), "disk-k1");
         cache.clear();
     }
 
@@ -970,6 +970,6 @@ mod tests {
         );
         let got = cache.get(&CacheKey::from_str("ttl"));
         assert!(got.is_some());
-        assert_eq!(got.unwrap().ttl_secs, 60);
+        assert_eq!(got.expect("should succeed").ttl_secs, 60);
     }
 }

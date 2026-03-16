@@ -123,3 +123,6 @@ engine/oxirs-samm/vehicle*.dot
 
 # Test-generated files
 engine/oxirs-vec/metadata.json
+
+# Rustc ICE dumps
+rustc-ice-*.txt

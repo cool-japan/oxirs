@@ -111,7 +111,7 @@ mod tests {
             constraints: Vec::new(),
         };
 
-        let result = sim.run(&params).await.unwrap();
+        let result = sim.run(&params).await.expect("should succeed");
 
         assert_eq!(result.state_trajectory.len(), 10);
         assert!(result.convergence_info.converged);

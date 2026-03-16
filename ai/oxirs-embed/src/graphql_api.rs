@@ -663,7 +663,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_graphql_context_creation() {
-        let storage_path = tempfile::tempdir().unwrap().path().to_path_buf();
+        let storage_path = tempfile::tempdir()
+            .expect("should succeed")
+            .path()
+            .to_path_buf();
         let model_registry = Arc::new(ModelRegistry::new(storage_path));
         let cache_config = crate::caching::CacheConfig::default();
         let cache_manager = Arc::new(CacheManager::new(cache_config));
@@ -674,7 +677,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_schema_creation() {
-        let storage_path = tempfile::tempdir().unwrap().path().to_path_buf();
+        let storage_path = tempfile::tempdir()
+            .expect("should succeed")
+            .path()
+            .to_path_buf();
         let model_registry = Arc::new(ModelRegistry::new(storage_path));
         let cache_config = crate::caching::CacheConfig::default();
         let cache_manager = Arc::new(CacheManager::new(cache_config));

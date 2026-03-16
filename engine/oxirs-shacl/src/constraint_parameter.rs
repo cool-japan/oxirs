@@ -468,7 +468,10 @@ mod tests {
         reg.register(ConstraintComponent::new("ex:C").with_message("v2"));
         assert_eq!(reg.list().len(), 1);
         assert_eq!(
-            reg.get("ex:C").unwrap().message_template.as_deref(),
+            reg.get("ex:C")
+                .expect("should succeed")
+                .message_template
+                .as_deref(),
             Some("v2")
         );
     }
@@ -501,7 +504,7 @@ mod tests {
     fn test_instantiate_no_params_success() {
         let mut reg = ParameterRegistry::new();
         reg.register(ConstraintComponent::new("ex:C"));
-        let inst = reg.instantiate("ex:C", vec![]).unwrap();
+        let inst = reg.instantiate("ex:C", vec![]).expect("should succeed");
         assert_eq!(inst.component.iri, "ex:C");
         assert_eq!(inst.binding_count(), 0);
     }
@@ -514,7 +517,7 @@ mod tests {
                 .with_parameter(Parameter::required("pattern", ParameterKind::Literal)),
         );
         let bindings = vec![ParameterValue::new("pattern", "\"^[A-Z]+\"")];
-        let inst = reg.instantiate("ex:C", bindings).unwrap();
+        let inst = reg.instantiate("ex:C", bindings).expect("should succeed");
         assert_eq!(inst.binding_count(), 1);
     }
 
@@ -536,7 +539,7 @@ mod tests {
             ConstraintComponent::new("ex:C")
                 .with_parameter(Parameter::optional("message", ParameterKind::Literal)),
         );
-        let inst = reg.instantiate("ex:C", vec![]).unwrap();
+        let inst = reg.instantiate("ex:C", vec![]).expect("should succeed");
         assert_eq!(inst.binding_count(), 0);
     }
 
@@ -578,7 +581,7 @@ mod tests {
             "targetClass",
             "<http://example.org/Person>",
         )];
-        let inst = reg.instantiate("ex:C", bindings).unwrap();
+        let inst = reg.instantiate("ex:C", bindings).expect("should succeed");
         assert_eq!(inst.binding_count(), 1);
     }
 
@@ -606,7 +609,7 @@ mod tests {
         );
         let inst = reg
             .instantiate("ex:C", vec![ParameterValue::new("x", "hello")])
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(inst.resolve("x"), Some("hello"));
     }
 
@@ -620,7 +623,7 @@ mod tests {
                 "sh:Violation",
             )),
         );
-        let inst = reg.instantiate("ex:C", vec![]).unwrap();
+        let inst = reg.instantiate("ex:C", vec![]).expect("should succeed");
         assert_eq!(inst.resolve("severity"), Some("sh:Violation"));
     }
 
@@ -631,7 +634,7 @@ mod tests {
             ConstraintComponent::new("ex:C")
                 .with_parameter(Parameter::optional("msg", ParameterKind::Literal)),
         );
-        let inst = reg.instantiate("ex:C", vec![]).unwrap();
+        let inst = reg.instantiate("ex:C", vec![]).expect("should succeed");
         assert_eq!(inst.resolve("msg"), None);
     }
 
@@ -684,7 +687,9 @@ mod tests {
                 .with_message("Value does not match pattern {$pattern}"),
         );
         let bindings = vec![ParameterValue::new("pattern", "\"^A\"")];
-        let inst = reg.instantiate("ex:PatternConstraint", bindings).unwrap();
+        let inst = reg
+            .instantiate("ex:PatternConstraint", bindings)
+            .expect("should succeed");
         assert_eq!(inst.resolve("pattern"), Some("\"^A\""));
         assert_eq!(inst.resolve("flags"), Some("\"i\""));
         assert!(inst.component.message_template.is_some());

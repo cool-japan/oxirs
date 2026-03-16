@@ -1341,7 +1341,7 @@ mod tests {
     }
 
     #[test]
-    fn test_chr_engine_basic() {
+    fn test_chr_engine_basic() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ChrEngine::new();
 
         // Reflexivity rule: leq(X, X) <=> true
@@ -1358,13 +1358,14 @@ mod tests {
             vec![ChrTerm::const_("a"), ChrTerm::const_("a")],
         ));
 
-        let result = engine.solve().unwrap();
+        let result = engine.solve()?;
         // Should be simplified away
         assert!(result.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_chr_antisymmetry() {
+    fn test_chr_antisymmetry() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ChrEngine::new();
 
         // Antisymmetry: leq(X, Y), leq(Y, X) <=> X = Y
@@ -1387,13 +1388,14 @@ mod tests {
             vec![ChrTerm::const_("b"), ChrTerm::const_("a")],
         ));
 
-        let result = engine.solve().unwrap();
+        let result = engine.solve()?;
         // Should produce equality constraint
         assert!(result.iter().any(|c| c.name == "="));
+        Ok(())
     }
 
     #[test]
-    fn test_chr_propagation() {
+    fn test_chr_propagation() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ChrEngine::new();
 
         // Transitivity propagation: leq(X, Y), leq(Y, Z) ==> leq(X, Z)
@@ -1416,7 +1418,7 @@ mod tests {
             vec![ChrTerm::const_("b"), ChrTerm::const_("c")],
         ));
 
-        let result = engine.solve().unwrap();
+        let result = engine.solve()?;
 
         // Should contain original constraints plus derived leq(a, c)
         assert!(result.iter().any(|c| {
@@ -1425,6 +1427,7 @@ mod tests {
                 && c.args[0] == ChrTerm::const_("a")
                 && c.args[1] == ChrTerm::const_("c")
         }));
+        Ok(())
     }
 
     #[test]
@@ -1440,31 +1443,33 @@ mod tests {
     }
 
     #[test]
-    fn test_chr_parser_simplification() {
-        let rule = ChrParser::parse_rule("reflexivity: leq(X, X) <=> true").unwrap();
+    fn test_chr_parser_simplification() -> Result<(), Box<dyn std::error::Error>> {
+        let rule = ChrParser::parse_rule("reflexivity: leq(X, X) <=> true")?;
         assert_eq!(rule.name, "reflexivity");
         assert_eq!(rule.rule_type, ChrRuleType::Simplification);
         assert_eq!(rule.removed_head.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_chr_parser_propagation() {
-        let rule = ChrParser::parse_rule("trans: leq(X, Y), leq(Y, Z) ==> leq(X, Z)").unwrap();
+    fn test_chr_parser_propagation() -> Result<(), Box<dyn std::error::Error>> {
+        let rule = ChrParser::parse_rule("trans: leq(X, Y), leq(Y, Z) ==> leq(X, Z)")?;
         assert_eq!(rule.name, "trans");
         assert_eq!(rule.rule_type, ChrRuleType::Propagation);
         assert_eq!(rule.kept_head.len(), 2);
         assert_eq!(rule.body.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_chr_parser_with_guard() {
-        let rule = ChrParser::parse_rule("idempotence: leq(X, Y), leq(X, Y) <=> true | leq(X, Y)")
-            .unwrap();
+    fn test_chr_parser_with_guard() -> Result<(), Box<dyn std::error::Error>> {
+        let rule = ChrParser::parse_rule("idempotence: leq(X, Y), leq(X, Y) <=> true | leq(X, Y)")?;
         assert_eq!(rule.name, "idempotence");
+        Ok(())
     }
 
     #[test]
-    fn test_chr_stats() {
+    fn test_chr_stats() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ChrEngine::new();
 
         engine.add_rule(ChrRule::simplification(
@@ -1479,9 +1484,10 @@ mod tests {
             vec![ChrTerm::const_("a"), ChrTerm::const_("a")],
         ));
 
-        engine.solve().unwrap();
+        engine.solve()?;
 
         assert!(engine.stats().rule_applications > 0);
+        Ok(())
     }
 
     #[test]

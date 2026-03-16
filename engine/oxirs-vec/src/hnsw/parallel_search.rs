@@ -80,14 +80,14 @@ mod tests {
     use crate::VectorIndex;
 
     #[test]
-    fn test_parallel_batch_search() {
+    fn test_parallel_batch_search() -> Result<()> {
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         // Add some vectors
         for i in 0..100 {
             let vector = Vector::new(vec![i as f32, (i * 2) as f32, (i * 3) as f32]);
-            index.insert(format!("vec_{}", i), vector).unwrap();
+            index.insert(format!("vec_{}", i), vector)?;
         }
 
         // Create multiple queries
@@ -98,23 +98,24 @@ mod tests {
         ];
 
         // Perform parallel search
-        let results = index.parallel_batch_search(&queries, 5).unwrap();
+        let results = index.parallel_batch_search(&queries, 5)?;
 
         assert_eq!(results.len(), 3);
         for result in &results {
             assert!(result.len() <= 5);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parallel_range_search() {
+    fn test_parallel_range_search() -> Result<()> {
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         // Add some vectors
         for i in 0..50 {
             let vector = Vector::new(vec![i as f32, 0.0, 0.0]);
-            index.insert(format!("vec_{}", i), vector).unwrap();
+            index.insert(format!("vec_{}", i), vector)?;
         }
 
         // Create multiple queries
@@ -124,10 +125,11 @@ mod tests {
         ];
 
         // Perform parallel range search
-        let results = index.parallel_range_search(&queries, 10.0).unwrap();
+        let results = index.parallel_range_search(&queries, 10.0)?;
 
         assert_eq!(results.len(), 2);
         assert!(!results[0].is_empty());
         assert!(!results[1].is_empty());
+        Ok(())
     }
 }

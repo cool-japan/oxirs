@@ -376,12 +376,13 @@ mod tests {
     }
 
     #[test]
-    fn test_function_registration() {
-        let service = convenience::create_basic_service().unwrap();
+    fn test_function_registration() -> Result<()> {
+        let service = convenience::create_basic_service()?;
 
         assert!(service.is_function_registered("similarity"));
         assert!(service.is_function_registered("search"));
         assert!(!service.is_function_registered("nonexistent"));
+        Ok(())
     }
 
     #[test]
@@ -398,8 +399,8 @@ mod tests {
     }
 
     #[test]
-    fn test_configuration_update() {
-        let mut service = convenience::create_basic_service().unwrap();
+    fn test_configuration_update() -> Result<()> {
+        let mut service = convenience::create_basic_service()?;
 
         let new_config = VectorServiceConfig {
             default_threshold: 0.8,
@@ -410,18 +411,20 @@ mod tests {
         service.update_config(new_config.clone());
         assert_eq!(service.get_config().default_threshold, 0.8);
         assert_eq!(service.get_config().default_limit, 20);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_function_documentation() {
-        let service = convenience::create_basic_service().unwrap();
+    async fn test_function_documentation() -> Result<()> {
+        let service = convenience::create_basic_service()?;
 
         let doc = service.get_function_documentation("similarity");
         assert!(doc.is_some());
-        assert!(doc.unwrap().contains("similarity"));
+        assert!(doc.expect("test value").contains("similarity"));
 
         let sparql_defs = service.generate_sparql_definitions();
         assert!(sparql_defs.contains("vec:similarity"));
         assert!(sparql_defs.contains("SELECT"));
+        Ok(())
     }
 }

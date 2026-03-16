@@ -1,9 +1,9 @@
 //! # OxiRS RDF-Star
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
 //!
-//! **Status**: Production Release (v0.1.0)
+//! **Status**: Production Release (v0.2.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! RDF-star and SPARQL-star implementation providing comprehensive support for quoted triples.
@@ -389,6 +389,11 @@ pub enum StarError {
         parameter: Option<String>,
         valid_range: Option<String>,
     },
+    #[error("Internal error: {message}")]
+    InternalError {
+        message: String,
+        context: Option<String>,
+    },
 }
 
 /// Result type for RDF-star operations
@@ -464,6 +469,31 @@ impl StarError {
             max_depth,
             current_depth,
             context,
+        }
+    }
+
+    /// Create a configuration error
+    pub fn configuration_error(message: impl Into<String>) -> Self {
+        Self::ConfigurationError {
+            message: message.into(),
+            parameter: None,
+            valid_range: None,
+        }
+    }
+
+    /// Create an internal error (for unexpected conditions such as lock poisoning)
+    pub fn internal_error(message: impl Into<String>) -> Self {
+        Self::InternalError {
+            message: message.into(),
+            context: None,
+        }
+    }
+
+    /// Create an internal error for lock poisoning
+    pub fn lock_error(context: impl Into<String>) -> Self {
+        Self::InternalError {
+            message: "Lock poisoned".to_string(),
+            context: Some(context.into()),
         }
     }
 

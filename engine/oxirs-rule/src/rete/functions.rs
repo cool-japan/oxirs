@@ -27,7 +27,7 @@ mod tests {
         assert_eq!(stats.production_nodes, 0);
     }
     #[test]
-    fn test_simple_rule_compilation() {
+    fn test_simple_rule_compilation() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::new();
         let rule = Rule {
             name: "test_rule".to_string(),
@@ -42,13 +42,14 @@ mod tests {
                 object: Term::Constant("mortal".to_string()),
             }],
         };
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         let stats = network.get_stats();
         assert!(stats.alpha_nodes > 0);
         assert!(stats.production_nodes > 0);
+        Ok(())
     }
     #[test]
-    fn test_fact_processing() {
+    fn test_fact_processing() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::new();
         let rule = Rule {
             name: "test_rule".to_string(),
@@ -63,13 +64,13 @@ mod tests {
                 object: Term::Constant("mortal".to_string()),
             }],
         };
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         let fact = RuleAtom::Triple {
             subject: Term::Constant("socrates".to_string()),
             predicate: Term::Constant("type".to_string()),
             object: Term::Constant("human".to_string()),
         };
-        let derived = network.add_fact(fact).unwrap();
+        let derived = network.add_fact(fact)?;
         assert!(!derived.is_empty());
         let expected = RuleAtom::Triple {
             subject: Term::Constant("socrates".to_string()),
@@ -77,9 +78,10 @@ mod tests {
             object: Term::Constant("mortal".to_string()),
         };
         assert!(derived.contains(&expected));
+        Ok(())
     }
     #[test]
-    fn test_forward_chaining() {
+    fn test_forward_chaining() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::new();
         let rule = Rule {
             name: "simple_rule".to_string(),
@@ -94,7 +96,7 @@ mod tests {
                 object: Term::Variable("Y".to_string()),
             }],
         };
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         let initial_facts = vec![
             RuleAtom::Triple {
                 subject: Term::Constant("john".to_string()),
@@ -107,7 +109,7 @@ mod tests {
                 object: Term::Constant("bob".to_string()),
             },
         ];
-        let all_facts = network.forward_chain(initial_facts).unwrap();
+        let all_facts = network.forward_chain(initial_facts)?;
         let expected1 = RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
             predicate: Term::Constant("ancestor".to_string()),
@@ -120,9 +122,10 @@ mod tests {
         };
         assert!(all_facts.contains(&expected1));
         assert!(all_facts.contains(&expected2));
+        Ok(())
     }
     #[test]
-    fn test_enhanced_beta_join() {
+    fn test_enhanced_beta_join() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::with_strategies(
             MemoryStrategy::LimitCount(100),
             ConflictResolution::Specificity,
@@ -149,7 +152,7 @@ mod tests {
             }],
         };
         println!("Adding rule to network...");
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         println!("Rule added successfully");
         let facts = vec![
             RuleAtom::Triple {
@@ -164,7 +167,7 @@ mod tests {
             },
         ];
         println!("Input facts: {facts:?}");
-        let results = network.forward_chain(facts).unwrap();
+        let results = network.forward_chain(facts)?;
         println!("Actual results: {results:?}");
         let expected = RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
@@ -177,9 +180,10 @@ mod tests {
         assert!(stats.total_beta_joins > 0);
         assert!(stats.successful_beta_joins > 0);
         assert!(stats.enhanced_nodes > 0);
+        Ok(())
     }
     #[test]
-    fn test_memory_management() {
+    fn test_memory_management() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::with_strategies(
             MemoryStrategy::LimitCount(5),
             ConflictResolution::Recency,
@@ -204,7 +208,7 @@ mod tests {
                 object: Term::Variable("T".to_string()),
             }],
         };
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         let mut facts = Vec::new();
         for i in 0..20 {
             facts.push(RuleAtom::Triple {
@@ -218,7 +222,7 @@ mod tests {
                 object: Term::Constant(format!("type_{val}", val = i % 3)),
             });
         }
-        network.forward_chain(facts).unwrap();
+        network.forward_chain(facts)?;
         let stats = network.get_enhanced_stats();
         println!(
             "Memory management stats: memory_evictions={}, peak_memory_usage={}, enhanced_nodes={}",
@@ -226,9 +230,10 @@ mod tests {
         );
         assert!(stats.memory_evictions > 0);
         assert!(stats.enhanced_nodes > 0);
+        Ok(())
     }
     #[test]
-    fn test_conflict_resolution() {
+    fn test_conflict_resolution() -> Result<(), Box<dyn std::error::Error>> {
         let mut network =
             ReteNetwork::with_strategies(MemoryStrategy::Unlimited, ConflictResolution::Priority);
         network.set_debug_mode(true);
@@ -245,17 +250,18 @@ mod tests {
                 object: Term::Variable("Y".to_string()),
             }],
         };
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         let fact = RuleAtom::Triple {
             subject: Term::Constant("a".to_string()),
             predicate: Term::Constant("p".to_string()),
             object: Term::Constant("b".to_string()),
         };
-        let results = network.add_fact(fact).unwrap();
+        let results = network.add_fact(fact)?;
         assert!(!results.is_empty());
+        Ok(())
     }
     #[test]
-    fn test_comparison_operator_greater_than() {
+    fn test_comparison_operator_greater_than() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::new();
         network.set_debug_mode(true);
         let rule = Rule {
@@ -277,13 +283,13 @@ mod tests {
                 object: Term::Literal("true".to_string()),
             }],
         };
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         let facts = vec![RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
             predicate: Term::Constant(":hasAge".to_string()),
             object: Term::Literal("20".to_string()),
         }];
-        let result = network.forward_chain(facts).unwrap();
+        let result = network.forward_chain(facts)?;
         let expected = RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
             predicate: Term::Constant(":isAdult".to_string()),
@@ -295,9 +301,10 @@ mod tests {
             expected,
             result
         );
+        Ok(())
     }
     #[test]
-    fn test_comparison_operator_less_than() {
+    fn test_comparison_operator_less_than() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::new();
         let rule = Rule {
             name: "isMinor".to_string(),
@@ -318,13 +325,13 @@ mod tests {
                 object: Term::Literal("true".to_string()),
             }],
         };
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         let facts = vec![RuleAtom::Triple {
             subject: Term::Constant("alice".to_string()),
             predicate: Term::Constant(":hasAge".to_string()),
             object: Term::Literal("15".to_string()),
         }];
-        let result = network.forward_chain(facts).unwrap();
+        let result = network.forward_chain(facts)?;
         let expected = RuleAtom::Triple {
             subject: Term::Constant("alice".to_string()),
             predicate: Term::Constant(":isMinor".to_string()),
@@ -336,9 +343,10 @@ mod tests {
             expected,
             result
         );
+        Ok(())
     }
     #[test]
-    fn test_comparison_operator_filter_fails() {
+    fn test_comparison_operator_filter_fails() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::new();
         let rule = Rule {
             name: "isAdult".to_string(),
@@ -359,13 +367,13 @@ mod tests {
                 object: Term::Literal("true".to_string()),
             }],
         };
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         let facts = vec![RuleAtom::Triple {
             subject: Term::Constant("bob".to_string()),
             predicate: Term::Constant(":hasAge".to_string()),
             object: Term::Literal("10".to_string()),
         }];
-        let result = network.forward_chain(facts).unwrap();
+        let result = network.forward_chain(facts)?;
         let not_expected = RuleAtom::Triple {
             subject: Term::Constant("bob".to_string()),
             predicate: Term::Constant(":isAdult".to_string()),
@@ -377,9 +385,10 @@ mod tests {
             not_expected,
             result
         );
+        Ok(())
     }
     #[test]
-    fn test_remove_fact() {
+    fn test_remove_fact() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::new();
         let rule = Rule {
             name: "test_rule".to_string(),
@@ -394,14 +403,14 @@ mod tests {
                 object: Term::Constant("mortal".to_string()),
             }],
         };
-        network.add_rule(&rule).unwrap();
+        network.add_rule(&rule)?;
         let initial_fact = RuleAtom::Triple {
             subject: Term::Constant("Socrates".to_string()),
             predicate: Term::Constant(":type".to_string()),
             object: Term::Constant("human".to_string()),
         };
         let facts = vec![initial_fact.clone()];
-        let result = network.forward_chain(facts).unwrap();
+        let result = network.forward_chain(facts)?;
         let expected_derived = RuleAtom::Triple {
             subject: Term::Constant("Socrates".to_string()),
             predicate: Term::Constant(":type".to_string()),
@@ -452,9 +461,10 @@ mod tests {
             !facts_after.contains(&initial_fact),
             "Should not contain initial fact after removal"
         );
+        Ok(())
     }
     #[test]
-    fn test_remove_fact_with_multiple_patterns() {
+    fn test_remove_fact_with_multiple_patterns() -> Result<(), Box<dyn std::error::Error>> {
         let mut network = ReteNetwork::new();
         let rule1 = Rule {
             name: "rule1".to_string(),
@@ -482,25 +492,26 @@ mod tests {
                 object: Term::Constant("alive".to_string()),
             }],
         };
-        network.add_rule(&rule1).unwrap();
-        network.add_rule(&rule2).unwrap();
+        network.add_rule(&rule1)?;
+        network.add_rule(&rule2)?;
         let fact = RuleAtom::Triple {
             subject: Term::Constant("Alice".to_string()),
             predicate: Term::Constant(":type".to_string()),
             object: Term::Constant("human".to_string()),
         };
-        let result = network.forward_chain(vec![fact.clone()]).unwrap();
+        let result = network.forward_chain(vec![fact.clone()])?;
         assert_eq!(result.len(), 3, "Should have 3 facts after forward chain");
         let facts_before = network.get_facts();
         assert!(
             facts_before.contains(&fact),
             "Should contain fact before removal"
         );
-        network.remove_fact(&fact).unwrap();
+        network.remove_fact(&fact)?;
         let facts_after = network.get_facts();
         assert!(
             !facts_after.contains(&fact),
             "Should not contain fact after removal"
         );
+        Ok(())
     }
 }

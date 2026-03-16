@@ -21,7 +21,7 @@
 //! let mut engine = RuleEngine::new();
 //!
 //! // Begin transaction
-//! let tx_id = manager.begin_transaction(IsolationLevel::ReadCommitted).unwrap();
+//! let tx_id = manager.begin_transaction(IsolationLevel::ReadCommitted).expect("should succeed");
 //!
 //! // Perform operations
 //! let fact = RuleAtom::Triple {
@@ -30,10 +30,10 @@
 //!     object: Term::Literal("30".to_string()),
 //! };
 //!
-//! manager.add_fact(tx_id, fact).unwrap();
+//! manager.add_fact(tx_id, fact).expect("should succeed");
 //!
 //! // Commit or rollback
-//! manager.commit(tx_id).unwrap();
+//! manager.commit(tx_id).expect("should succeed");
 //! ```
 
 use crate::RuleAtom;
@@ -441,22 +441,19 @@ mod tests {
     use crate::Term;
 
     #[test]
-    fn test_begin_transaction() {
+    fn test_begin_transaction() -> Result<(), Box<dyn std::error::Error>> {
         let manager = TransactionManager::new();
-        let tx_id = manager
-            .begin_transaction(IsolationLevel::ReadCommitted)
-            .unwrap();
+        let tx_id = manager.begin_transaction(IsolationLevel::ReadCommitted)?;
 
         assert_eq!(tx_id, 0);
         assert!(manager.is_active(tx_id));
+        Ok(())
     }
 
     #[test]
-    fn test_add_fact() {
+    fn test_add_fact() -> Result<(), Box<dyn std::error::Error>> {
         let manager = TransactionManager::new();
-        let tx_id = manager
-            .begin_transaction(IsolationLevel::ReadCommitted)
-            .unwrap();
+        let tx_id = manager.begin_transaction(IsolationLevel::ReadCommitted)?;
 
         let fact = RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
@@ -464,16 +461,15 @@ mod tests {
             object: Term::Literal("30".to_string()),
         };
 
-        manager.add_fact(tx_id, fact).unwrap();
+        manager.add_fact(tx_id, fact)?;
         assert!(manager.is_active(tx_id));
+        Ok(())
     }
 
     #[test]
-    fn test_commit() {
+    fn test_commit() -> Result<(), Box<dyn std::error::Error>> {
         let manager = TransactionManager::new();
-        let tx_id = manager
-            .begin_transaction(IsolationLevel::ReadCommitted)
-            .unwrap();
+        let tx_id = manager.begin_transaction(IsolationLevel::ReadCommitted)?;
 
         let fact = RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
@@ -481,8 +477,8 @@ mod tests {
             object: Term::Literal("30".to_string()),
         };
 
-        manager.add_fact(tx_id, fact).unwrap();
-        manager.commit(tx_id).unwrap();
+        manager.add_fact(tx_id, fact)?;
+        manager.commit(tx_id)?;
 
         let committed_facts = manager.get_committed_facts();
         assert_eq!(committed_facts.len(), 1);
@@ -490,14 +486,13 @@ mod tests {
             manager.get_transaction_state(tx_id),
             Some(TransactionState::Committed)
         );
+        Ok(())
     }
 
     #[test]
-    fn test_rollback() {
+    fn test_rollback() -> Result<(), Box<dyn std::error::Error>> {
         let manager = TransactionManager::new();
-        let tx_id = manager
-            .begin_transaction(IsolationLevel::ReadCommitted)
-            .unwrap();
+        let tx_id = manager.begin_transaction(IsolationLevel::ReadCommitted)?;
 
         let fact = RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
@@ -505,8 +500,8 @@ mod tests {
             object: Term::Literal("30".to_string()),
         };
 
-        manager.add_fact(tx_id, fact).unwrap();
-        manager.rollback(tx_id).unwrap();
+        manager.add_fact(tx_id, fact)?;
+        manager.rollback(tx_id)?;
 
         let committed_facts = manager.get_committed_facts();
         assert_eq!(committed_facts.len(), 0);
@@ -514,33 +509,30 @@ mod tests {
             manager.get_transaction_state(tx_id),
             Some(TransactionState::Aborted)
         );
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_transactions() {
+    fn test_multiple_transactions() -> Result<(), Box<dyn std::error::Error>> {
         let manager = TransactionManager::new();
 
-        let tx1 = manager
-            .begin_transaction(IsolationLevel::ReadCommitted)
-            .unwrap();
-        let tx2 = manager
-            .begin_transaction(IsolationLevel::ReadCommitted)
-            .unwrap();
+        let tx1 = manager.begin_transaction(IsolationLevel::ReadCommitted)?;
+        let tx2 = manager.begin_transaction(IsolationLevel::ReadCommitted)?;
 
         assert_ne!(tx1, tx2);
         assert!(manager.is_active(tx1));
         assert!(manager.is_active(tx2));
+        Ok(())
     }
 
     #[test]
-    fn test_stats() {
+    fn test_stats() -> Result<(), Box<dyn std::error::Error>> {
         let manager = TransactionManager::new();
-        manager
-            .begin_transaction(IsolationLevel::ReadCommitted)
-            .unwrap();
+        manager.begin_transaction(IsolationLevel::ReadCommitted)?;
 
         let stats = manager.get_stats();
         assert_eq!(stats.active_transactions, 1);
         assert_eq!(stats.total_transactions, 1);
+        Ok(())
     }
 }

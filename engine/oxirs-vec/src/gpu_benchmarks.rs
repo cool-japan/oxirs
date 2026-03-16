@@ -436,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_test_data() {
+    fn test_generate_test_data() -> Result<()> {
         let config = GpuBenchmarkConfig {
             database_size: 100,
             query_count: 10,
@@ -447,8 +447,9 @@ mod tests {
         let result = suite.generate_test_data(128);
         assert!(result.is_ok());
 
-        let (database, queries) = result.unwrap();
+        let (database, queries) = result?;
         assert_eq!(database.len(), 100);
         assert_eq!(queries.len(), 10);
+        Ok(())
     }
 }

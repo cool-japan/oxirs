@@ -41,7 +41,7 @@
 //!     &values,
 //!     RegisterType::Holding,
 //!     Utc::now()
-//! ).unwrap();
+//! ).expect("should succeed");
 //!
 //! // Create graph updater for SPARQL UPDATE
 //! let config = SparqlEndpointConfig::new("http://localhost:3030/dataset/update");
@@ -49,7 +49,7 @@
 //!     .with_graph("http://factory.example.com/graph/modbus");
 //!
 //! // Build INSERT DATA query (or execute via HTTP)
-//! let query = updater.insert_generated_local(&triples).unwrap();
+//! let query = updater.insert_generated_local(&triples).expect("should succeed");
 //! println!("SPARQL: {}", query);
 //! ```
 

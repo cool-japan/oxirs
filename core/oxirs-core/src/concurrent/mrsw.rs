@@ -394,8 +394,14 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(format!("http://example.org/s{}", id)).unwrap()),
-            Predicate::NamedNode(NamedNode::new(format!("http://example.org/p{}", id)).unwrap()),
+            Subject::NamedNode(
+                NamedNode::new(format!("http://example.org/s{}", id))
+                    .expect("valid IRI from format"),
+            ),
+            Predicate::NamedNode(
+                NamedNode::new(format!("http://example.org/p{}", id))
+                    .expect("valid IRI from format"),
+            ),
             Object::Literal(Literal::new(format!("value{}", id))),
         )
     }
@@ -469,7 +475,10 @@ mod tests {
         assert_eq!(reader.len(), 1);
 
         // Can't get write lock while reader exists
-        assert!(store.try_write().unwrap().is_none());
+        assert!(store
+            .try_write()
+            .expect("store operation should succeed")
+            .is_none());
     }
 
     #[test]
@@ -508,8 +517,11 @@ mod tests {
             .collect();
 
         // Wait for completion
-        writer_handle.join().unwrap();
-        let total_reads: usize = reader_handles.into_iter().map(|h| h.join().unwrap()).sum();
+        writer_handle.join().expect("thread should not panic");
+        let total_reads: usize = reader_handles
+            .into_iter()
+            .map(|h| h.join().expect("thread should not panic"))
+            .sum();
 
         let stats = store.metrics();
         assert_eq!(stats.total_writes, num_writes as u64);

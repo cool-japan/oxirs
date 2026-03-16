@@ -455,10 +455,16 @@ mod tests {
             required_headers: vec![],
         };
 
-        manager.register_service(config).await.unwrap();
+        manager
+            .register_service(config)
+            .await
+            .expect("should succeed");
         let retrieved = manager.get_service_config("test_service").await;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().service_name, "test_service");
+        assert_eq!(
+            retrieved.expect("should succeed").service_name,
+            "test_service"
+        );
     }
 
     #[tokio::test]
@@ -472,12 +478,18 @@ mod tests {
             transform_fn: None,
             required_headers: vec![],
         };
-        manager.register_service(config).await.unwrap();
+        manager
+            .register_service(config)
+            .await
+            .expect("should succeed");
 
         let cred = AuthCredential::bearer("test_token".to_string());
-        let headers = manager.propagate(&cred, "test_service").await.unwrap();
+        let headers = manager
+            .propagate(&cred, "test_service")
+            .await
+            .expect("should succeed");
         assert!(headers.is_some());
-        let headers = headers.unwrap();
+        let headers = headers.expect("should succeed");
         assert_eq!(
             headers.get("Authorization"),
             Some(&"Bearer test_token".to_string())
@@ -495,10 +507,16 @@ mod tests {
             transform_fn: None,
             required_headers: vec![],
         };
-        manager.register_service(config).await.unwrap();
+        manager
+            .register_service(config)
+            .await
+            .expect("should succeed");
 
         let cred = AuthCredential::bearer("test_token".to_string());
-        let headers = manager.propagate(&cred, "test_service").await.unwrap();
+        let headers = manager
+            .propagate(&cred, "test_service")
+            .await
+            .expect("should succeed");
         assert!(headers.is_none());
     }
 
@@ -514,8 +532,14 @@ mod tests {
             ..Default::default()
         };
 
-        manager.register_service(config1).await.unwrap();
-        manager.register_service(config2).await.unwrap();
+        manager
+            .register_service(config1)
+            .await
+            .expect("should succeed");
+        manager
+            .register_service(config2)
+            .await
+            .expect("should succeed");
 
         let services = manager.list_services().await;
         assert_eq!(services.len(), 2);
@@ -530,17 +554,23 @@ mod tests {
             service_name: "test_service".to_string(),
             ..Default::default()
         };
-        manager.register_service(config).await.unwrap();
+        manager
+            .register_service(config)
+            .await
+            .expect("should succeed");
 
         assert!(manager.get_service_config("test_service").await.is_some());
-        manager.unregister_service("test_service").await.unwrap();
+        manager
+            .unregister_service("test_service")
+            .await
+            .expect("should succeed");
         assert!(manager.get_service_config("test_service").await.is_none());
     }
 
     #[tokio::test]
     async fn test_clear_cache() {
         let manager = AuthPropagationManager::new();
-        manager.clear_cache().await.unwrap();
+        manager.clear_cache().await.expect("should succeed");
         // Just verify it doesn't panic
     }
 
@@ -549,7 +579,9 @@ mod tests {
         let transformer =
             JwtTransformer::new().with_issuer_mapping("issuer1".to_string(), "issuer2".to_string());
         let cred = AuthCredential::bearer("jwt_token".to_string());
-        let result = transformer.transform(&cred, "test_service").unwrap();
+        let result = transformer
+            .transform(&cred, "test_service")
+            .expect("should succeed");
         assert_eq!(result.scheme, AuthScheme::Bearer);
     }
 
@@ -558,7 +590,9 @@ mod tests {
         let transformer = ApiKeyTransformer::new()
             .with_key_mapping("test_service".to_string(), "service_api_key".to_string());
         let cred = AuthCredential::api_key("original_key".to_string());
-        let result = transformer.transform(&cred, "test_service").unwrap();
+        let result = transformer
+            .transform(&cred, "test_service")
+            .expect("should succeed");
         assert_eq!(result.value, "service_api_key");
     }
 
@@ -573,14 +607,20 @@ mod tests {
             transform_fn: None,
             required_headers: vec![],
         };
-        manager.register_service(config).await.unwrap();
+        manager
+            .register_service(config)
+            .await
+            .expect("should succeed");
 
         let cred = AuthCredential::bearer("token".to_string())
             .with_header("X-Custom-Header".to_string(), "custom_value".to_string());
 
-        let headers = manager.propagate(&cred, "test_service").await.unwrap();
+        let headers = manager
+            .propagate(&cred, "test_service")
+            .await
+            .expect("should succeed");
         assert!(headers.is_some());
-        let headers = headers.unwrap();
+        let headers = headers.expect("should succeed");
         assert_eq!(
             headers.get("X-Custom-Header"),
             Some(&"custom_value".to_string())
@@ -598,17 +638,26 @@ mod tests {
             transform_fn: None,
             required_headers: vec!["X-Required".to_string()],
         };
-        manager.register_service(config).await.unwrap();
+        manager
+            .register_service(config)
+            .await
+            .expect("should succeed");
 
         // Should not propagate without required header
         let cred1 = AuthCredential::bearer("token".to_string());
-        let headers1 = manager.propagate(&cred1, "test_service").await.unwrap();
+        let headers1 = manager
+            .propagate(&cred1, "test_service")
+            .await
+            .expect("should succeed");
         assert!(headers1.is_none());
 
         // Should propagate with required header
         let cred2 = AuthCredential::bearer("token".to_string())
             .with_header("X-Required".to_string(), "value".to_string());
-        let headers2 = manager.propagate(&cred2, "test_service").await.unwrap();
+        let headers2 = manager
+            .propagate(&cred2, "test_service")
+            .await
+            .expect("should succeed");
         assert!(headers2.is_some());
     }
 
@@ -619,7 +668,7 @@ mod tests {
         manager
             .register_transformer("jwt".to_string(), transformer)
             .await
-            .unwrap();
+            .expect("should succeed");
         // Verify it doesn't panic
     }
 
@@ -634,10 +683,16 @@ mod tests {
             transform_fn: None,
             required_headers: vec![],
         };
-        manager.register_service(config).await.unwrap();
+        manager
+            .register_service(config)
+            .await
+            .expect("should succeed");
 
         let cred = AuthCredential::bearer("original_token".to_string());
-        let headers = manager.propagate(&cred, "test_service").await.unwrap();
+        let headers = manager
+            .propagate(&cred, "test_service")
+            .await
+            .expect("should succeed");
         assert!(headers.is_some());
     }
 }

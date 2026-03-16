@@ -812,7 +812,7 @@ mod tests {
     fn test_prefetcher_creation() {
         let prefetcher = QueryPrefetcher::new();
         assert_eq!(
-            prefetcher.get_strategy().unwrap(),
+            prefetcher.get_strategy().expect("should succeed"),
             PrefetchStrategy::Adaptive
         );
     }
@@ -822,9 +822,9 @@ mod tests {
         let mut prefetcher = QueryPrefetcher::new();
         prefetcher
             .set_strategy(PrefetchStrategy::Sequential)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(
-            prefetcher.get_strategy().unwrap(),
+            prefetcher.get_strategy().expect("should succeed"),
             PrefetchStrategy::Sequential
         );
     }
@@ -832,10 +832,14 @@ mod tests {
     #[test]
     fn test_record_query() {
         let mut prefetcher = QueryPrefetcher::new();
-        prefetcher.record_query("query { user }").unwrap();
-        prefetcher.record_query("query { posts }").unwrap();
+        prefetcher
+            .record_query("query { user }")
+            .expect("should succeed");
+        prefetcher
+            .record_query("query { posts }")
+            .expect("should succeed");
 
-        let stats = prefetcher.get_statistics().unwrap();
+        let stats = prefetcher.get_statistics().expect("should succeed");
         assert!(stats.total_patterns > 0 || stats.total_cooccurrences > 0);
     }
 
@@ -847,19 +851,23 @@ mod tests {
         });
         prefetcher
             .set_strategy(PrefetchStrategy::Sequential)
-            .unwrap();
+            .expect("should succeed");
 
         // Create a pattern: query A -> query B
         for _ in 0..5 {
-            prefetcher.record_query("query { user }").unwrap();
+            prefetcher
+                .record_query("query { user }")
+                .expect("should succeed");
             thread::sleep(Duration::from_millis(10));
-            prefetcher.record_query("query { posts }").unwrap();
+            prefetcher
+                .record_query("query { posts }")
+                .expect("should succeed");
             thread::sleep(Duration::from_millis(10));
         }
 
         let predictions = prefetcher
             .predict_next_queries("query { user }", 5)
-            .unwrap();
+            .expect("should succeed");
 
         // Should predict "query { posts }" after "query { user }"
         assert!(!predictions.is_empty());
@@ -876,11 +884,13 @@ mod tests {
 
         // Create pattern
         for _ in 0..3 {
-            prefetcher.record_query("query A").unwrap();
-            prefetcher.record_query("query B").unwrap();
+            prefetcher.record_query("query A").expect("should succeed");
+            prefetcher.record_query("query B").expect("should succeed");
         }
 
-        let predictions = prefetcher.predict_next_queries("query A", 5).unwrap();
+        let predictions = prefetcher
+            .predict_next_queries("query A", 5)
+            .expect("should succeed");
 
         for prediction in &predictions {
             assert!(prediction.confidence >= 0.0 && prediction.confidence <= 1.0);
@@ -900,9 +910,11 @@ mod tests {
             reason: "Test".to_string(),
         };
 
-        prefetcher.queue_prefetch(prediction).unwrap();
+        prefetcher
+            .queue_prefetch(prediction)
+            .expect("should succeed");
 
-        let stats = prefetcher.get_statistics().unwrap();
+        let stats = prefetcher.get_statistics().expect("should succeed");
         assert_eq!(stats.queue_size, 1);
     }
 
@@ -918,12 +930,16 @@ mod tests {
             reason: "Test".to_string(),
         };
 
-        prefetcher.queue_prefetch(prediction).unwrap();
+        prefetcher
+            .queue_prefetch(prediction)
+            .expect("should succeed");
 
         // Record the query that was prefetched
-        prefetcher.record_query("query { user }").unwrap();
+        prefetcher
+            .record_query("query { user }")
+            .expect("should succeed");
 
-        let stats = prefetcher.get_statistics().unwrap();
+        let stats = prefetcher.get_statistics().expect("should succeed");
         assert_eq!(stats.prefetch_hits, 1);
         assert_eq!(stats.queue_size, 0); // Should be removed from queue
     }
@@ -933,9 +949,11 @@ mod tests {
         let mut prefetcher = QueryPrefetcher::new();
 
         // Record a query that wasn't prefetched
-        prefetcher.record_query("query { user }").unwrap();
+        prefetcher
+            .record_query("query { user }")
+            .expect("should succeed");
 
-        let stats = prefetcher.get_statistics().unwrap();
+        let stats = prefetcher.get_statistics().expect("should succeed");
         assert_eq!(stats.prefetch_misses, 1);
     }
 
@@ -944,11 +962,15 @@ mod tests {
         let mut prefetcher = QueryPrefetcher::new();
 
         for _ in 0..3 {
-            prefetcher.record_query("query { user }").unwrap();
-            prefetcher.record_query("query { posts }").unwrap();
+            prefetcher
+                .record_query("query { user }")
+                .expect("should succeed");
+            prefetcher
+                .record_query("query { posts }")
+                .expect("should succeed");
         }
 
-        let stats = prefetcher.get_statistics().unwrap();
+        let stats = prefetcher.get_statistics().expect("should succeed");
         assert!(stats.total_patterns > 0 || stats.total_cooccurrences > 0);
     }
 
@@ -956,15 +978,19 @@ mod tests {
     fn test_clear() {
         let mut prefetcher = QueryPrefetcher::new();
 
-        prefetcher.record_query("query { user }").unwrap();
-        prefetcher.record_query("query { posts }").unwrap();
+        prefetcher
+            .record_query("query { user }")
+            .expect("should succeed");
+        prefetcher
+            .record_query("query { posts }")
+            .expect("should succeed");
 
-        let stats1 = prefetcher.get_statistics().unwrap();
+        let stats1 = prefetcher.get_statistics().expect("should succeed");
         assert!(stats1.total_patterns > 0 || stats1.total_cooccurrences > 0);
 
-        prefetcher.clear().unwrap();
+        prefetcher.clear().expect("should succeed");
 
-        let stats2 = prefetcher.get_statistics().unwrap();
+        let stats2 = prefetcher.get_statistics().expect("should succeed");
         assert_eq!(stats2.total_patterns, 0);
         assert_eq!(stats2.total_cooccurrences, 0);
         assert_eq!(stats2.prefetch_hits, 0);
@@ -976,17 +1002,23 @@ mod tests {
         let mut prefetcher = QueryPrefetcher::new();
         prefetcher
             .set_strategy(PrefetchStrategy::Popularity)
-            .unwrap();
+            .expect("should succeed");
 
         // Record some queries
         for _ in 0..10 {
-            prefetcher.record_query("query { popular }").unwrap();
+            prefetcher
+                .record_query("query { popular }")
+                .expect("should succeed");
         }
         for _ in 0..3 {
-            prefetcher.record_query("query { rare }").unwrap();
+            prefetcher
+                .record_query("query { rare }")
+                .expect("should succeed");
         }
 
-        let predictions = prefetcher.predict_next_queries("query { any }", 5).unwrap();
+        let predictions = prefetcher
+            .predict_next_queries("query { any }", 5)
+            .expect("should succeed");
 
         // Should predict popular query
         if !predictions.is_empty() {
@@ -999,15 +1031,19 @@ mod tests {
     #[test]
     fn test_adaptive_strategy() {
         let mut prefetcher = QueryPrefetcher::new();
-        prefetcher.set_strategy(PrefetchStrategy::Adaptive).unwrap();
+        prefetcher
+            .set_strategy(PrefetchStrategy::Adaptive)
+            .expect("should succeed");
 
         // Create various patterns
         for _ in 0..3 {
-            prefetcher.record_query("query A").unwrap();
-            prefetcher.record_query("query B").unwrap();
+            prefetcher.record_query("query A").expect("should succeed");
+            prefetcher.record_query("query B").expect("should succeed");
         }
 
-        let predictions = prefetcher.predict_next_queries("query A", 5).unwrap();
+        let predictions = prefetcher
+            .predict_next_queries("query A", 5)
+            .expect("should succeed");
 
         // Adaptive should combine strategies
         assert!(predictions.len() <= 5);
@@ -1044,8 +1080,8 @@ mod tests {
             reason: "Test".to_string(),
         };
 
-        prefetcher.queue_prefetch(pred1).unwrap();
-        prefetcher.queue_prefetch(pred2).unwrap();
+        prefetcher.queue_prefetch(pred1).expect("should succeed");
+        prefetcher.queue_prefetch(pred2).expect("should succeed");
 
         // Should fail - queue is full
         assert!(prefetcher.queue_prefetch(pred3).is_err());

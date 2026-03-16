@@ -646,7 +646,7 @@ mod tests {
         let expanded = expander
             .expand("search person", &QueryContext::new("test".to_string()))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert!(expanded.contains("search"));
         assert!(expanded.contains("person"));

@@ -747,7 +747,7 @@ mod tests {
             Triple::new("http://x", "http://rel", "http://z"),
         ];
 
-        let communities = detector.detect(&triples).unwrap();
+        let communities = detector.detect(&triples).expect("should succeed");
 
         // Should detect at least 1 community (a-b-c and x-y-z may be merged by Leiden)
         assert!(!communities.is_empty());
@@ -756,7 +756,7 @@ mod tests {
     #[test]
     fn test_empty_graph() {
         let detector = CommunityDetector::default();
-        let communities = detector.detect(&[]).unwrap();
+        let communities = detector.detect(&[]).expect("should succeed");
         assert!(communities.is_empty());
     }
 }

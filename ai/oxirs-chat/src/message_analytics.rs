@@ -803,7 +803,10 @@ mod tests {
             rich_elements: Vec::new(),
         };
 
-        let analytics = engine.analyze_message(&message, &[], None).await.unwrap();
+        let analytics = engine
+            .analyze_message(&message, &[], None)
+            .await
+            .expect("should succeed");
 
         assert!(matches!(
             analytics.intent_classification.primary_intent,
@@ -833,7 +836,10 @@ mod tests {
             rich_elements: Vec::new(),
         };
 
-        let classification = classifier.classify(&message, &[]).await.unwrap();
+        let classification = classifier
+            .classify(&message, &[])
+            .await
+            .expect("should succeed");
 
         assert!(matches!(
             classification.primary_intent,
@@ -860,7 +866,10 @@ mod tests {
             rich_elements: Vec::new(),
         };
 
-        let sentiment = analyzer.analyze(&positive_message).await.unwrap();
+        let sentiment = analyzer
+            .analyze(&positive_message)
+            .await
+            .expect("should succeed");
 
         assert!(matches!(sentiment.overall_sentiment, Sentiment::Positive));
         assert!(sentiment.sentiment_score > 0.0);

@@ -269,8 +269,8 @@ mod tests {
     fn test_register_and_get() {
         let mut reg = OperationRegistry::new();
         let op = op_no_output("op:1", "myOp");
-        reg.register(op.clone()).unwrap();
-        let retrieved = reg.get("op:1").unwrap();
+        reg.register(op.clone()).expect("should succeed");
+        let retrieved = reg.get("op:1").expect("should succeed");
         assert_eq!(retrieved.name, "myOp");
     }
 
@@ -283,7 +283,8 @@ mod tests {
     #[test]
     fn test_register_duplicate_id_error() {
         let mut reg = OperationRegistry::new();
-        reg.register(op_no_output("op:1", "a")).unwrap();
+        reg.register(op_no_output("op:1", "a"))
+            .expect("should succeed");
         let err = reg.register(op_no_output("op:1", "b")).unwrap_err();
         assert!(matches!(err, RegistryError::DuplicateId(id) if id == "op:1"));
     }
@@ -300,7 +301,8 @@ mod tests {
     #[test]
     fn test_remove_existing() {
         let mut reg = OperationRegistry::new();
-        reg.register(op_no_output("op:1", "a")).unwrap();
+        reg.register(op_no_output("op:1", "a"))
+            .expect("should succeed");
         assert!(reg.remove("op:1"));
         assert!(reg.get("op:1").is_none());
     }
@@ -314,8 +316,10 @@ mod tests {
     #[test]
     fn test_remove_decrements_count() {
         let mut reg = OperationRegistry::new();
-        reg.register(op_no_output("op:1", "a")).unwrap();
-        reg.register(op_no_output("op:2", "b")).unwrap();
+        reg.register(op_no_output("op:1", "a"))
+            .expect("should succeed");
+        reg.register(op_no_output("op:2", "b"))
+            .expect("should succeed");
         reg.remove("op:1");
         assert_eq!(reg.count(), 1);
     }
@@ -325,7 +329,8 @@ mod tests {
     #[test]
     fn test_find_by_name_single() {
         let mut reg = OperationRegistry::new();
-        reg.register(op_no_output("op:1", "getStatus")).unwrap();
+        reg.register(op_no_output("op:1", "getStatus"))
+            .expect("should succeed");
         let found = reg.find_by_name("getStatus");
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].id, "op:1");
@@ -334,8 +339,10 @@ mod tests {
     #[test]
     fn test_find_by_name_multiple() {
         let mut reg = OperationRegistry::new();
-        reg.register(op_no_output("op:1", "reset")).unwrap();
-        reg.register(op_no_output("op:2", "reset")).unwrap();
+        reg.register(op_no_output("op:1", "reset"))
+            .expect("should succeed");
+        reg.register(op_no_output("op:2", "reset"))
+            .expect("should succeed");
         let found = reg.find_by_name("reset");
         assert_eq!(found.len(), 2);
     }
@@ -352,8 +359,9 @@ mod tests {
     fn test_operations_with_output() {
         let mut reg = OperationRegistry::new();
         reg.register(op_with_output("op:1", "a", single("String")))
-            .unwrap();
-        reg.register(op_no_output("op:2", "b")).unwrap();
+            .expect("should succeed");
+        reg.register(op_no_output("op:2", "b"))
+            .expect("should succeed");
         let with_out = reg.operations_with_output();
         assert_eq!(with_out.len(), 1);
         assert_eq!(with_out[0].id, "op:1");
@@ -362,9 +370,10 @@ mod tests {
     #[test]
     fn test_operations_without_output() {
         let mut reg = OperationRegistry::new();
-        reg.register(op_no_output("op:1", "a")).unwrap();
+        reg.register(op_no_output("op:1", "a"))
+            .expect("should succeed");
         reg.register(op_with_output("op:2", "b", single("Bool")))
-            .unwrap();
+            .expect("should succeed");
         let without = reg.operations_without_output();
         assert_eq!(without.len(), 1);
         assert_eq!(without[0].id, "op:1");
@@ -431,16 +440,20 @@ mod tests {
     #[test]
     fn test_count_after_register() {
         let mut reg = OperationRegistry::new();
-        reg.register(op_no_output("op:1", "a")).unwrap();
-        reg.register(op_no_output("op:2", "b")).unwrap();
+        reg.register(op_no_output("op:1", "a"))
+            .expect("should succeed");
+        reg.register(op_no_output("op:2", "b"))
+            .expect("should succeed");
         assert_eq!(reg.count(), 2);
     }
 
     #[test]
     fn test_all_returns_all() {
         let mut reg = OperationRegistry::new();
-        reg.register(op_no_output("op:1", "a")).unwrap();
-        reg.register(op_no_output("op:2", "b")).unwrap();
+        reg.register(op_no_output("op:1", "a"))
+            .expect("should succeed");
+        reg.register(op_no_output("op:2", "b"))
+            .expect("should succeed");
         assert_eq!(reg.all().len(), 2);
     }
 
@@ -456,8 +469,9 @@ mod tests {
     fn test_summary_totals() {
         let mut reg = OperationRegistry::new();
         reg.register(op_with_output("op:1", "a", single("String")))
-            .unwrap();
-        reg.register(op_no_output("op:2", "b")).unwrap();
+            .expect("should succeed");
+        reg.register(op_no_output("op:2", "b"))
+            .expect("should succeed");
         let s = reg.summary();
         assert_eq!(s.total, 2);
         assert_eq!(s.with_output, 1);
@@ -486,8 +500,8 @@ mod tests {
             output: None,
             errors: vec![],
         };
-        reg.register(op1).unwrap();
-        reg.register(op2).unwrap();
+        reg.register(op1).expect("should succeed");
+        reg.register(op2).expect("should succeed");
         let s = reg.summary();
         assert_eq!(s.total_inputs, 3);
     }
@@ -533,8 +547,8 @@ mod tests {
             errors: vec![],
         };
         let mut reg = OperationRegistry::new();
-        reg.register(op).unwrap();
-        let retrieved = reg.get("op:desc").unwrap();
+        reg.register(op).expect("should succeed");
+        let retrieved = reg.get("op:desc").expect("should succeed");
         assert_eq!(retrieved.description.as_deref(), Some("does something"));
     }
 
@@ -549,8 +563,8 @@ mod tests {
             errors: vec!["urn:example:NotFound".into(), "urn:example:Timeout".into()],
         };
         let mut reg = OperationRegistry::new();
-        reg.register(op).unwrap();
-        assert_eq!(reg.get("op:err").unwrap().errors.len(), 2);
+        reg.register(op).expect("should succeed");
+        assert_eq!(reg.get("op:err").expect("should succeed").errors.len(), 2);
     }
 
     #[test]
@@ -564,8 +578,8 @@ mod tests {
             errors: vec![],
         };
         let mut reg = OperationRegistry::new();
-        reg.register(op).unwrap();
-        let retrieved = reg.get("op:col").unwrap();
+        reg.register(op).expect("should succeed");
+        let retrieved = reg.get("op:col").expect("should succeed");
         assert!(matches!(
             retrieved.inputs[0].input_type,
             InputOutputType::Collection(_)

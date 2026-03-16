@@ -1063,19 +1063,19 @@ mod tests {
     #[test]
     fn test_data_type_from_str() {
         assert_eq!(
-            "xsd:string".parse::<DataType>().unwrap(),
+            "xsd:string".parse::<DataType>().expect("should succeed"),
             DataType::XsdString
         );
         assert_eq!(
-            "xsd:integer".parse::<DataType>().unwrap(),
+            "xsd:integer".parse::<DataType>().expect("should succeed"),
             DataType::XsdInteger
         );
         assert_eq!(
-            "xsd:boolean".parse::<DataType>().unwrap(),
+            "xsd:boolean".parse::<DataType>().expect("should succeed"),
             DataType::XsdBoolean
         );
         assert!(matches!(
-            "custom:MyType".parse::<DataType>().unwrap(),
+            "custom:MyType".parse::<DataType>().expect("should succeed"),
             DataType::Custom(_)
         ));
     }
@@ -1284,7 +1284,7 @@ mod tests {
     fn test_data_type_from_full_iri_string() {
         let dt = "http://www.w3.org/2001/XMLSchema#string"
             .parse::<DataType>()
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(dt, DataType::XsdString);
     }
 

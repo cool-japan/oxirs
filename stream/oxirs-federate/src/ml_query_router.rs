@@ -533,7 +533,10 @@ mod tests {
         let mut fast_count = 0_u32;
         let candidates = vec!["fast".to_string(), "slow".to_string()];
         for _ in 0..50 {
-            let decision = router.route(&features, &candidates).await.unwrap();
+            let decision = router
+                .route(&features, &candidates)
+                .await
+                .expect("should succeed");
             if decision.endpoint_id == "fast" {
                 fast_count += 1;
             }
@@ -552,7 +555,7 @@ mod tests {
         let features = simple_features(2.0);
 
         router.record_outcome("ep1", &features, 100.0, true).await;
-        let stats = router.endpoint_stats("ep1").await.unwrap();
+        let stats = router.endpoint_stats("ep1").await.expect("should succeed");
         assert!(stats.ema_latency_ms > 0.0);
         assert_eq!(stats.decision_count, 1);
     }
@@ -565,7 +568,7 @@ mod tests {
 
         // Initially latency is 0; after failure it should be penalised.
         router.record_outcome("ep1", &features, 50.0, false).await;
-        let stats = router.endpoint_stats("ep1").await.unwrap();
+        let stats = router.endpoint_stats("ep1").await.expect("should succeed");
         assert_eq!(stats.failure_count, 1);
     }
 
@@ -586,7 +589,10 @@ mod tests {
 
         let candidates = vec!["bad".to_string(), "good".to_string()];
         for _ in 0..10 {
-            let decision = router.route(&features, &candidates).await.unwrap();
+            let decision = router
+                .route(&features, &candidates)
+                .await
+                .expect("should succeed");
             assert_eq!(
                 decision.endpoint_id, "good",
                 "Unhealthy endpoint should not be chosen"
@@ -599,11 +605,11 @@ mod tests {
         let router = MlQueryRouter::new();
         router.register_endpoint("ep1").await;
         router.set_endpoint_health("ep1", false).await;
-        let stats = router.endpoint_stats("ep1").await.unwrap();
+        let stats = router.endpoint_stats("ep1").await.expect("should succeed");
         assert!(!stats.healthy);
 
         router.set_endpoint_health("ep1", true).await;
-        let stats = router.endpoint_stats("ep1").await.unwrap();
+        let stats = router.endpoint_stats("ep1").await.expect("should succeed");
         assert!(stats.healthy);
     }
 
@@ -615,7 +621,7 @@ mod tests {
         router.record_outcome("ep1", &features, 100.0, true).await;
 
         router.reset_endpoint("ep1").await;
-        let stats = router.endpoint_stats("ep1").await.unwrap();
+        let stats = router.endpoint_stats("ep1").await.expect("should succeed");
         assert_eq!(stats.decision_count, 0);
         assert_eq!(stats.ema_latency_ms, 0.0);
     }
@@ -664,7 +670,7 @@ mod tests {
         for _ in 0..25 {
             router.record_outcome("ep1", &features, 50.0, true).await;
         }
-        let stats = router.endpoint_stats("ep1").await.unwrap();
+        let stats = router.endpoint_stats("ep1").await.expect("should succeed");
         assert!(
             stats.recent_records.len() <= 10,
             "Recent records should be bounded to 10"
@@ -685,7 +691,7 @@ mod tests {
         for _ in 0..30 {
             router.record_outcome("ep1", &features, 100.0, true).await;
         }
-        let stats = router.endpoint_stats("ep1").await.unwrap();
+        let stats = router.endpoint_stats("ep1").await.expect("should succeed");
         assert!(
             (stats.ema_latency_ms - 100.0).abs() < 1.0,
             "EMA should converge to 100.0, got {}",
@@ -698,7 +704,10 @@ mod tests {
         let router = MlQueryRouter::new();
         router.register_endpoint("ep1").await;
         let features = simple_features(4.0);
-        let decision = router.route(&features, &["ep1".to_string()]).await.unwrap();
+        let decision = router
+            .route(&features, &["ep1".to_string()])
+            .await
+            .expect("should succeed");
         assert!(!decision.endpoint_id.is_empty());
         assert!(decision.routing_score >= 0.0);
     }
@@ -719,7 +728,7 @@ mod tests {
         for _ in 0..4 {
             router.record_outcome("ep1", &features, 0.0, false).await;
         }
-        let stats = router.endpoint_stats("ep1").await.unwrap();
+        let stats = router.endpoint_stats("ep1").await.expect("should succeed");
         assert!(
             !stats.healthy,
             "Endpoint should be unhealthy after high failure rate"
@@ -742,7 +751,10 @@ mod tests {
 
         let candidates = vec!["known".to_string(), "unknown".to_string()];
         // Should not panic; just pick one of the candidates.
-        let decision = router.route(&features, &candidates).await.unwrap();
+        let decision = router
+            .route(&features, &candidates)
+            .await
+            .expect("should succeed");
         assert!(candidates.contains(&decision.endpoint_id));
     }
 
@@ -784,7 +796,10 @@ mod tests {
                 .await;
         }
 
-        let decision = det_router.route(&features, &candidates).await.unwrap();
+        let decision = det_router
+            .route(&features, &candidates)
+            .await
+            .expect("should succeed");
         assert_eq!(
             decision.endpoint_id, "alpha",
             "Alpha should be chosen as fastest"
@@ -818,7 +833,7 @@ mod tests {
         // With alpha=0.9, latest observation dominates quickly.
         router.record_outcome("ep1", &features, 200.0, true).await;
         router.record_outcome("ep1", &features, 10.0, true).await;
-        let stats = router.endpoint_stats("ep1").await.unwrap();
+        let stats = router.endpoint_stats("ep1").await.expect("should succeed");
         // After two observations: first gives 200, second: 0.9*10 + 0.1*200 = 29
         assert!(
             stats.ema_latency_ms < 50.0,

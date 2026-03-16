@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn test_function_code_conversion() {
         assert_eq!(
-            FunctionCode::from_u8(0x03).unwrap(),
+            FunctionCode::from_u8(0x03).expect("should succeed"),
             FunctionCode::ReadHoldingRegisters
         );
         assert_eq!(FunctionCode::ReadHoldingRegisters.as_u8(), 0x03);
@@ -276,11 +276,11 @@ mod tests {
             0x01, 0xF4, // Register 5: 500
         ];
 
-        let frame = ModbusTcpFrame::from_bytes(&response).unwrap();
+        let frame = ModbusTcpFrame::from_bytes(&response).expect("should succeed");
         assert_eq!(frame.transaction_id, 1);
         assert_eq!(frame.function_code, FunctionCode::ReadHoldingRegisters);
 
-        let registers = frame.extract_registers().unwrap();
+        let registers = frame.extract_registers().expect("should succeed");
         assert_eq!(registers, vec![100, 200, 300, 400, 500]);
     }
 

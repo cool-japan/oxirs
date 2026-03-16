@@ -23,7 +23,8 @@ fn test_validation_engine_creation() {
 
 #[test]
 fn test_validation_violation() {
-    let focus_node = Term::NamedNode(NamedNode::new("http://example.org/john").unwrap());
+    let focus_node =
+        Term::NamedNode(NamedNode::new("http://example.org/john").expect("should succeed"));
     let shape_id = ShapeId::new("http://example.org/PersonShape");
     let component_id = ConstraintComponentId::new("sh:ClassConstraintComponent");
 
@@ -85,10 +86,12 @@ fn test_constraint_evaluation_result() {
 
 #[test]
 fn test_constraint_cache_key() {
-    let focus_node = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
+    let focus_node =
+        Term::NamedNode(NamedNode::new("http://example.org/test").expect("should succeed"));
     let shape_id = ShapeId::new("test_shape");
     let component_id = ConstraintComponentId::new("sh:NodeKindConstraintComponent");
-    let path = PropertyPath::Predicate(NamedNode::new("http://example.org/prop").unwrap());
+    let path =
+        PropertyPath::Predicate(NamedNode::new("http://example.org/prop").expect("should succeed"));
 
     let key1 = ConstraintCacheKey {
         focus_node: focus_node.clone(),
@@ -113,7 +116,9 @@ fn test_constraint_cache() {
     let cache = ConstraintCache::new();
 
     let key = ConstraintCacheKey {
-        focus_node: Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
+        focus_node: Term::NamedNode(
+            NamedNode::new("http://example.org/test").expect("should succeed"),
+        ),
         shape_id: ShapeId::new("test_shape"),
         constraint_component_id: ConstraintComponentId::new("sh:NodeKindConstraintComponent"),
         property_path: None,
@@ -131,7 +136,7 @@ fn test_constraint_cache() {
     cache.insert(key.clone(), result.clone());
     let cached_result = cache.get(&key);
     assert!(cached_result.is_some());
-    assert!(cached_result.unwrap().is_satisfied());
+    assert!(cached_result.expect("should succeed").is_satisfied());
 
     let (hits, misses) = cache.stats();
     assert_eq!(hits, 1);
@@ -159,7 +164,7 @@ fn test_inheritance_cache() {
     cache.insert(shape_id.clone(), constraints.clone());
     let cached_constraints = cache.get(&shape_id);
     assert!(cached_constraints.is_some());
-    assert_eq!(cached_constraints.unwrap().len(), 1);
+    assert_eq!(cached_constraints.expect("should succeed").len(), 1);
 }
 
 #[test]
@@ -168,8 +173,8 @@ fn test_validation_engine_with_empty_shapes() {
     let config = ValidationConfig::default();
     let mut engine = ValidationEngine::new(&shapes, config);
 
-    let store = ConcreteStore::new().unwrap();
-    let result = engine.validate_store(&store).unwrap();
+    let store = ConcreteStore::new().expect("should succeed");
+    let result = engine.validate_store(&store).expect("should succeed");
 
     assert!(result.conforms());
     assert_eq!(result.violation_count(), 0);

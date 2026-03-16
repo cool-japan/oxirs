@@ -548,7 +548,7 @@ mod tests {
         let e = K_B * 1.0; // very small energy gap
         let n = StatMech::bose_einstein(e, mu, 1e6);
         assert!(n.is_some());
-        assert!(n.unwrap() > 1.0);
+        assert!(n.expect("should succeed") > 1.0);
     }
 
     #[test]
@@ -577,7 +577,7 @@ mod tests {
         let mu = -1e-20; // μ < E (physical)
         let n = StatMech::bose_einstein(e, mu, 300.0);
         assert!(n.is_some());
-        assert!(n.unwrap() > 0.0);
+        assert!(n.expect("should succeed") > 0.0);
     }
 
     // ── Mean free path ────────────────────────────────────────────────────────
@@ -587,7 +587,7 @@ mod tests {
         // N₂ at STP: d ≈ 370 pm, n ≈ 2.69e25 m⁻³
         let d = 370e-12_f64;
         let n = 2.69e25_f64;
-        let lambda = StatMech::mean_free_path(d, n).unwrap();
+        let lambda = StatMech::mean_free_path(d, n).expect("should succeed");
         // Expected ≈ 60–70 nm
         assert!(lambda > 50e-9 && lambda < 100e-9);
     }
@@ -595,7 +595,8 @@ mod tests {
     #[test]
     fn test_mean_free_path_from_pressure() {
         // N₂ at STP: T=273K, P=101325 Pa, d=370 pm
-        let lambda = StatMech::mean_free_path_from_pressure(370e-12, 101_325.0, 273.15).unwrap();
+        let lambda = StatMech::mean_free_path_from_pressure(370e-12, 101_325.0, 273.15)
+            .expect("should succeed");
         assert!(lambda > 30e-9 && lambda < 120e-9);
     }
 
@@ -617,8 +618,8 @@ mod tests {
     #[test]
     fn test_mean_free_path_increases_with_lower_density() {
         let d = 370e-12_f64;
-        let lambda_high = StatMech::mean_free_path(d, 1e25).unwrap();
-        let lambda_low = StatMech::mean_free_path(d, 1e20).unwrap();
+        let lambda_high = StatMech::mean_free_path(d, 1e25).expect("should succeed");
+        let lambda_low = StatMech::mean_free_path(d, 1e20).expect("should succeed");
         assert!(lambda_low > lambda_high);
     }
 

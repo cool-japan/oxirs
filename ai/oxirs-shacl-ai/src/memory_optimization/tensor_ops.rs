@@ -249,7 +249,7 @@ mod tests {
         let optimizer = TensorOptimizer::new(true);
         let data = vec![1.0, 2.0, 3.0, 4.0];
 
-        let optimized = optimizer.optimize(&data).unwrap();
+        let optimized = optimizer.optimize(&data).expect("should succeed");
         assert_eq!(optimized.memory_size(), 8); // 4 * 2 bytes
 
         let recovered = optimized.to_f32();
@@ -261,7 +261,7 @@ mod tests {
         let optimizer = TensorOptimizer::new(false).with_quantization();
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 
-        let optimized = optimizer.optimize(&data).unwrap();
+        let optimized = optimizer.optimize(&data).expect("should succeed");
         let recovered = optimized.to_f32();
 
         assert_eq!(recovered.len(), data.len());
@@ -277,7 +277,7 @@ mod tests {
         let optimizer = TensorOptimizer::new(false).with_sparse_threshold(0.5);
         let data = vec![0.0, 1.0, 0.0, 0.0, 2.0, 0.0]; // 66% sparse
 
-        let optimized = optimizer.optimize(&data).unwrap();
+        let optimized = optimizer.optimize(&data).expect("should succeed");
         assert!(matches!(optimized, MemoryEfficientTensor::Sparse { .. }));
 
         let recovered = optimized.to_f32();
@@ -304,7 +304,7 @@ mod tests {
         let optimizer = TensorOptimizer::new(false).with_quantization();
         let data = vec![1.0; 1000];
 
-        let optimized = optimizer.optimize(&data).unwrap();
+        let optimized = optimizer.optimize(&data).expect("should succeed");
         let savings = optimizer.memory_savings(&data, &optimized);
 
         assert!(savings > 0.7); // Should save >70% with i8 quantization

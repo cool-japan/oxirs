@@ -581,7 +581,9 @@ mod tests {
         let pattern = TriplePattern::new(None, None, None);
         let triples = vec![];
 
-        let matches = matcher.match_batch(&pattern, &triples).unwrap();
+        let matches = matcher
+            .match_batch(&pattern, &triples)
+            .expect("operation should succeed");
         assert_eq!(matches.len(), 0);
     }
 
@@ -638,8 +640,10 @@ mod tests {
         assert_eq!(matcher.estimate_selectivity(&pattern_all, 1000), 1.0);
 
         // No wildcards - lowest selectivity
-        let s = SubjectPattern::NamedNode(NamedNode::new("http://example.org/s").unwrap());
-        let p = PredicatePattern::NamedNode(NamedNode::new("http://example.org/p").unwrap());
+        let s =
+            SubjectPattern::NamedNode(NamedNode::new("http://example.org/s").expect("valid IRI"));
+        let p =
+            PredicatePattern::NamedNode(NamedNode::new("http://example.org/p").expect("valid IRI"));
         let o = ObjectPattern::Literal(Literal::new("test"));
         let pattern_none = TriplePattern::new(Some(s), Some(p), Some(o));
         assert_eq!(matcher.estimate_selectivity(&pattern_none, 1000), 0.001);

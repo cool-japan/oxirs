@@ -228,7 +228,7 @@ mod tests {
             has_joins: false,
         };
 
-        let result = predictor.predict(features).await.unwrap();
+        let result = predictor.predict(features).await.expect("should succeed");
         assert!(result.execution_time_ms > 0.0);
         assert!(result.confidence > 0.0);
     }
@@ -244,7 +244,7 @@ mod tests {
             has_joins: true,
         };
 
-        let result = predictor.predict(features).await.unwrap();
+        let result = predictor.predict(features).await.expect("should succeed");
         assert!(!result.bottlenecks.is_empty());
     }
 
@@ -259,6 +259,9 @@ mod tests {
             has_joins: false,
         };
 
-        predictor.train(features, 100.0).await.unwrap();
+        predictor
+            .train(features, 100.0)
+            .await
+            .expect("should succeed");
     }
 }

@@ -796,7 +796,7 @@ mod merge_tests {
     #[test]
     fn test_stitch_single_fragment() {
         let stitcher = MergeDirectiveSchemaStitcher::new();
-        let result = stitcher.stitch(&[user_fragment()]).unwrap();
+        let result = stitcher.stitch(&[user_fragment()]).expect("should succeed");
         assert_eq!(result.type_count(), 2); // User + Query
         assert!(!result.has_conflicts());
         assert_eq!(result.sources, vec!["users"]);
@@ -807,10 +807,10 @@ mod merge_tests {
         let stitcher = MergeDirectiveSchemaStitcher::new();
         let result = stitcher
             .stitch(&[user_fragment(), product_fragment()])
-            .unwrap();
+            .expect("should succeed");
         // User, Product, Query (merged)
         assert_eq!(result.type_count(), 3);
-        let query = result.get_type("Query").unwrap();
+        let query = result.get_type("Query").expect("should succeed");
         // user + products fields
         assert_eq!(query.fields.len(), 2);
     }
@@ -820,7 +820,7 @@ mod merge_tests {
         let stitcher = MergeDirectiveSchemaStitcher::new();
         let result = stitcher
             .stitch(&[user_fragment(), product_fragment()])
-            .unwrap();
+            .expect("should succeed");
         // Only Query has a conflict (merge).
         // conflicts list records the merge event.
         // User and Product are unique — no conflicts.
@@ -842,8 +842,8 @@ mod merge_tests {
                 .with_field(StitchFieldDef::new("id", "ID!", "b")) // duplicate
                 .with_field(StitchFieldDef::new("extra", "Int", "b")),
         );
-        let result = stitcher.stitch(&[frag_a, frag_b]).unwrap();
-        let shared = result.get_type("Shared").unwrap();
+        let result = stitcher.stitch(&[frag_a, frag_b]).expect("should succeed");
+        let shared = result.get_type("Shared").expect("should succeed");
         // id, name, extra — id deduplicated
         assert_eq!(shared.fields.len(), 3);
     }
@@ -859,8 +859,8 @@ mod merge_tests {
             StitchTypeDefinition::new("Config")
                 .with_field(StitchFieldDef::new("debug", "Boolean", "b")),
         );
-        let result = stitcher.stitch(&[frag_a, frag_b]).unwrap();
-        let cfg = result.get_type("Config").unwrap();
+        let result = stitcher.stitch(&[frag_a, frag_b]).expect("should succeed");
+        let cfg = result.get_type("Config").expect("should succeed");
         // Only frag_a's field kept.
         assert_eq!(cfg.fields.len(), 1);
         assert_eq!(cfg.fields[0].name, "version");
@@ -877,8 +877,8 @@ mod merge_tests {
             StitchTypeDefinition::new("Config")
                 .with_field(StitchFieldDef::new("debug", "Boolean", "b")),
         );
-        let result = stitcher.stitch(&[frag_a, frag_b]).unwrap();
-        let cfg = result.get_type("Config").unwrap();
+        let result = stitcher.stitch(&[frag_a, frag_b]).expect("should succeed");
+        let cfg = result.get_type("Config").expect("should succeed");
         // Only frag_b's field kept.
         assert_eq!(cfg.fields.len(), 1);
         assert_eq!(cfg.fields[0].name, "debug");
@@ -918,8 +918,8 @@ mod merge_tests {
                     deduplicate_fields: true,
                 },
             );
-        let result = stitcher.stitch(&[frag_a, frag_b]).unwrap();
-        let widget = result.get_type("Widget").unwrap();
+        let result = stitcher.stitch(&[frag_a, frag_b]).expect("should succeed");
+        let widget = result.get_type("Widget").expect("should succeed");
         // Both fields merged thanks to per-type directive.
         assert_eq!(widget.fields.len(), 2);
     }
@@ -929,7 +929,7 @@ mod merge_tests {
         let stitcher = MergeDirectiveSchemaStitcher::new();
         let result = stitcher
             .stitch(&[user_fragment(), product_fragment()])
-            .unwrap();
+            .expect("should succeed");
         assert!(result.sources.contains(&"users".to_string()));
         assert!(result.sources.contains(&"products".to_string()));
     }
@@ -937,7 +937,7 @@ mod merge_tests {
     #[test]
     fn test_stitch_empty_input() {
         let stitcher = MergeDirectiveSchemaStitcher::new();
-        let result = stitcher.stitch(&[]).unwrap();
+        let result = stitcher.stitch(&[]).expect("should succeed");
         assert_eq!(result.type_count(), 0);
         assert!(!result.has_conflicts());
     }
@@ -947,7 +947,7 @@ mod merge_tests {
         let stitcher = MergeDirectiveSchemaStitcher::new();
         let result = stitcher
             .stitch(&[user_fragment(), product_fragment()])
-            .unwrap();
+            .expect("should succeed");
         // User(2) + Product(2) + Query(2) = 6
         assert_eq!(result.total_field_count(), 6);
     }
@@ -955,7 +955,7 @@ mod merge_tests {
     #[test]
     fn test_stitch_get_type_unknown_returns_none() {
         let stitcher = MergeDirectiveSchemaStitcher::new();
-        let result = stitcher.stitch(&[user_fragment()]).unwrap();
+        let result = stitcher.stitch(&[user_fragment()]).expect("should succeed");
         assert!(result.get_type("NonExistent").is_none());
     }
 
@@ -964,7 +964,7 @@ mod merge_tests {
         let stitcher = MergeDirectiveSchemaStitcher::new();
         let result = stitcher
             .stitch(&[user_fragment(), product_fragment()])
-            .unwrap();
+            .expect("should succeed");
         // Query type was merged — should appear in conflicts.
         let query_conflict = result.conflicts.iter().any(|c| c.type_name == "Query");
         assert!(query_conflict);
@@ -973,8 +973,8 @@ mod merge_tests {
     #[test]
     fn test_stitch_root_type_marked() {
         let stitcher = MergeDirectiveSchemaStitcher::new();
-        let result = stitcher.stitch(&[user_fragment()]).unwrap();
-        let query = result.get_type("Query").unwrap();
+        let result = stitcher.stitch(&[user_fragment()]).expect("should succeed");
+        let query = result.get_type("Query").expect("should succeed");
         assert!(query.is_root);
     }
 
@@ -987,7 +987,7 @@ mod merge_tests {
         );
         let result = stitcher
             .stitch(&[user_fragment(), product_fragment(), frag_c])
-            .unwrap();
+            .expect("should succeed");
         assert!(result.get_type("Review").is_some());
         assert_eq!(result.sources.len(), 3);
     }
@@ -995,8 +995,8 @@ mod merge_tests {
     #[test]
     fn test_stitch_field_source_preserved() {
         let stitcher = MergeDirectiveSchemaStitcher::new();
-        let result = stitcher.stitch(&[user_fragment()]).unwrap();
-        let user = result.get_type("User").unwrap();
+        let result = stitcher.stitch(&[user_fragment()]).expect("should succeed");
+        let user = result.get_type("User").expect("should succeed");
         assert!(user.fields.iter().all(|f| f.source == "users"));
     }
 }

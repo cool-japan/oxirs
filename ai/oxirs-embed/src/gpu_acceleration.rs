@@ -1188,13 +1188,13 @@ mod tests {
         let config = GpuAccelerationConfig::default();
         let pool = GpuMemoryPool::new(config);
 
-        let block_id = pool.allocate(1024, 0).unwrap();
+        let block_id = pool.allocate(1024, 0).expect("should succeed");
         assert!(block_id > 0);
 
-        pool.deallocate(block_id).unwrap();
+        pool.deallocate(block_id).expect("should succeed");
 
         // Should reuse the block
-        let block_id2 = pool.allocate(1024, 0).unwrap();
+        let block_id2 = pool.allocate(1024, 0).expect("should succeed");
         assert_eq!(block_id, block_id2);
     }
 
@@ -1206,7 +1206,9 @@ mod tests {
         let tensor = Array2::zeros((10, 20));
         cache.cache_entity_tensor("test_entity", tensor.clone(), 0);
 
-        let cached = cache.get_entity_tensor("test_entity").unwrap();
+        let cached = cache
+            .get_entity_tensor("test_entity")
+            .expect("should succeed");
         assert_eq!(cached.shape(), tensor.shape());
     }
 
@@ -1241,7 +1243,7 @@ mod tests {
         let results = processor
             .process_batch_parallel(entities, process_fn)
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(results.len(), 2);
     }
 

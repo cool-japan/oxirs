@@ -23,7 +23,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tracing-subscriber = "0.3"
+tracing-subscriber.workspace = true
 
 # SciRS2 dependencies for high-performance RDF-star processing (SCIRS2 POLICY)
 scirs2-core = { workspace = true, features = ["simd", "parallel", "memory_efficient", "profiling", "benchmarking", "random", "jit"] }
@@ -32,9 +32,9 @@ scirs2-stats.workspace = true   # For statistical analysis
 scirs2-metrics.workspace = true # For performance metrics
 
 # CLI and tooling dependencies
-clap = { version = "4.4", features = ["derive"] }
+clap = { workspace = true, features = ["derive"] }
 num_cpus.workspace = true
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { workspace = true, features = ["serde"] }
 lru.workspace = true
 rayon.workspace = true  # For parallel operations
 oxicode.workspace = true  # For efficient serialization (replaces bincode per COOLJAPAN Policy)
@@ -45,10 +45,10 @@ oxiarc-zstd.workspace = true
 oxiarc-lz4.workspace = true
 
 # Async runtime for production features
-tokio = { version = "1.47", features = ["sync"] }
+tokio = { workspace = true, features = ["sync"] }
 
 # Cryptographic dependencies for provenance signatures
-ed25519-dalek = { version = "2.1", features = ["serde"] }
+ed25519-dalek = { workspace = true, features = ["serde"] }
 sha2.workspace = true
 hex.workspace = true
 base64.workspace = true

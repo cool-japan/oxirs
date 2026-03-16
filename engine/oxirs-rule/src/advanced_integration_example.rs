@@ -375,38 +375,41 @@ mod tests {
     }
 
     #[test]
-    fn test_initialize_product_rules() {
+    fn test_initialize_product_rules() -> Result<(), Box<dyn std::error::Error>> {
         let mut system = EcommerceReasoningSystem::new();
-        system.initialize_product_rules().unwrap();
+        system.initialize_product_rules()?;
 
         let stats = system.get_statistics();
         assert!(stats.total_modules > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_setup_distributed_reasoning() {
+    fn test_setup_distributed_reasoning() -> Result<(), Box<dyn std::error::Error>> {
         let mut system = EcommerceReasoningSystem::new();
-        system.setup_distributed_reasoning().unwrap();
+        system.setup_distributed_reasoning()?;
 
         assert_eq!(system.distributed.node_count(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_process_order() {
+    fn test_process_order() -> Result<(), Box<dyn std::error::Error>> {
         let mut system = EcommerceReasoningSystem::new();
-        system.initialize_product_rules().unwrap();
+        system.initialize_product_rules()?;
 
         let result = system.process_order("customer1", "product1");
         assert!(result.is_ok());
 
         let stats = system.get_statistics();
         assert!(stats.transactions > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_validate_inventory() {
+    fn test_validate_inventory() -> Result<(), Box<dyn std::error::Error>> {
         let mut system = EcommerceReasoningSystem::new();
-        system.initialize_inventory_validation().unwrap();
+        system.initialize_inventory_validation()?;
 
         let inventory_facts = vec![RuleAtom::Triple {
             subject: Term::Constant("product1".to_string()),
@@ -414,23 +417,24 @@ mod tests {
             object: Term::Literal("100".to_string()),
         }];
 
-        let valid = system.validate_inventory(&inventory_facts).unwrap();
+        let valid = system.validate_inventory(&inventory_facts)?;
         assert!(valid);
+        Ok(())
     }
 
     #[test]
-    fn test_full_integration_workflow() {
+    fn test_full_integration_workflow() -> Result<(), Box<dyn std::error::Error>> {
         let mut system = EcommerceReasoningSystem::new();
 
         // Initialize all components
-        system.initialize_product_rules().unwrap();
-        system.initialize_inventory_validation().unwrap();
-        system.setup_distributed_reasoning().unwrap();
+        system.initialize_product_rules()?;
+        system.initialize_inventory_validation()?;
+        system.setup_distributed_reasoning()?;
 
         // Process some orders
-        system.process_order("alice", "laptop").unwrap();
-        system.process_order("bob", "laptop").unwrap();
-        system.process_order("bob", "mouse").unwrap();
+        system.process_order("alice", "laptop")?;
+        system.process_order("bob", "laptop")?;
+        system.process_order("bob", "mouse")?;
 
         // Query recommendations (alice should get mouse recommended)
         let recommendations = system.query_recommendations("alice").unwrap_or_default();
@@ -442,6 +446,7 @@ mod tests {
 
         println!("\n{}", stats);
         println!("Recommendations for alice: {:?}", recommendations);
+        Ok(())
     }
 
     #[test]

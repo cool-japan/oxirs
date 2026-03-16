@@ -31,7 +31,7 @@
 //! [rule2: (?x parent ?y) -> (?y hasParent ?x)]
 //! "#;
 //!
-//! let result = migrator.migrate(jena_rules, SourceFormat::Jena).unwrap();
+//! let result = migrator.migrate(jena_rules, SourceFormat::Jena).expect("should succeed");
 //!
 //! println!("Migrated {} rules", result.rules.len());
 //! println!("Report:\n{}", result.generate_report());
@@ -825,22 +825,23 @@ mod tests {
     }
 
     #[test]
-    fn test_jena_simple_rule_migration() {
+    fn test_jena_simple_rule_migration() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let jena_rules = r#"
 [rule1: (?a rdf:type Person) -> (?a rdf:type Human)]
 "#;
 
-        let result = tool.migrate(jena_rules, SourceFormat::Jena).unwrap();
+        let result = tool.migrate(jena_rules, SourceFormat::Jena)?;
 
         assert_eq!(result.rules.len(), 1);
         assert_eq!(result.rules[0].name, "rule1");
         assert_eq!(result.source_format, SourceFormat::Jena);
+        Ok(())
     }
 
     #[test]
-    fn test_jena_multiple_rules() {
+    fn test_jena_multiple_rules() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let jena_rules = r#"
@@ -848,15 +849,16 @@ mod tests {
 [rule2: (?a knows ?b) -> (?b knows ?a)]
 "#;
 
-        let result = tool.migrate(jena_rules, SourceFormat::Jena).unwrap();
+        let result = tool.migrate(jena_rules, SourceFormat::Jena)?;
 
         assert_eq!(result.rules.len(), 2);
         assert_eq!(result.rules[0].name, "rule1");
         assert_eq!(result.rules[1].name, "rule2");
+        Ok(())
     }
 
     #[test]
-    fn test_jena_with_comments() {
+    fn test_jena_with_comments() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let jena_rules = r#"
@@ -866,33 +868,37 @@ mod tests {
 [rule2: (?a knows ?b) -> (?b knows ?a)]
 "#;
 
-        let result = tool.migrate(jena_rules, SourceFormat::Jena).unwrap();
+        let result = tool.migrate(jena_rules, SourceFormat::Jena)?;
 
         assert_eq!(result.rules.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_jena_term_variable() {
+    fn test_parse_jena_term_variable() -> Result<(), Box<dyn std::error::Error>> {
         let tool = MigrationTool::new();
 
-        let term = tool.parse_jena_term("?x").unwrap();
+        let term = tool.parse_jena_term("?x")?;
         assert!(matches!(term, Term::Variable(v) if v == "x"));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_jena_term_constant() {
+    fn test_parse_jena_term_constant() -> Result<(), Box<dyn std::error::Error>> {
         let tool = MigrationTool::new();
 
-        let term = tool.parse_jena_term("rdf:type").unwrap();
+        let term = tool.parse_jena_term("rdf:type")?;
         assert!(matches!(term, Term::Constant(c) if c == "rdf:type"));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_jena_term_literal() {
+    fn test_parse_jena_term_literal() -> Result<(), Box<dyn std::error::Error>> {
         let tool = MigrationTool::new();
 
-        let term = tool.parse_jena_term("\"John\"").unwrap();
+        let term = tool.parse_jena_term("\"John\"")?;
         assert!(matches!(term, Term::Literal(l) if l == "John"));
+        Ok(())
     }
 
     #[test]
@@ -965,7 +971,7 @@ mod tests {
     }
 
     #[test]
-    fn test_drools_simple_rule() {
+    fn test_drools_simple_rule() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let drools_rules = r#"
@@ -977,16 +983,17 @@ then
 end
 "#;
 
-        let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
+        let result = tool.migrate(drools_rules, SourceFormat::Drools)?;
 
         assert_eq!(result.rules.len(), 1);
         assert_eq!(result.rules[0].name, "adult-rule");
         assert!(!result.rules[0].body.is_empty());
         assert!(!result.rules[0].head.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_drools_with_insert() {
+    fn test_drools_with_insert() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let drools_rules = r#"
@@ -998,7 +1005,7 @@ then
 end
 "#;
 
-        let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
+        let result = tool.migrate(drools_rules, SourceFormat::Drools)?;
 
         assert_eq!(result.rules.len(), 1);
         let rule = &result.rules[0];
@@ -1010,10 +1017,11 @@ end
                 object: Term::Constant(o), ..
             } if p == "rdf:type" && o == "Employee")
         }));
+        Ok(())
     }
 
     #[test]
-    fn test_drools_with_modify() {
+    fn test_drools_with_modify() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let drools_rules = r#"
@@ -1025,7 +1033,7 @@ then
 end
 "#;
 
-        let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
+        let result = tool.migrate(drools_rules, SourceFormat::Drools)?;
 
         assert_eq!(result.rules.len(), 1);
         let rule = &result.rules[0];
@@ -1036,6 +1044,7 @@ end
                 predicate: Term::Constant(p), ..
             } if p == "Status")
         }));
+        Ok(())
     }
 
     #[test]
@@ -1060,43 +1069,49 @@ end
     }
 
     #[test]
-    fn test_drools_condition_parsing() {
+    fn test_drools_condition_parsing() -> Result<(), Box<dyn std::error::Error>> {
         let tool = MigrationTool::new();
 
         // Test == operator
-        let (field, value) = tool.parse_drools_condition("age == 18").unwrap();
+        let (field, value) = tool
+            .parse_drools_condition("age == 18")
+            .ok_or("expected Some value")?;
         assert_eq!(field, "age");
         assert_eq!(value, "18");
 
         // Test : operator
-        let (field2, value2) = tool.parse_drools_condition("status : active").unwrap();
+        let (field2, value2) = tool
+            .parse_drools_condition("status : active")
+            .ok_or("expected Some value")?;
         assert_eq!(field2, "status");
         assert_eq!(value2, "active");
+        Ok(())
     }
 
     #[test]
-    fn test_clips_simple_rule() {
+    fn test_clips_simple_rule() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let clips_rules = r#"
 (defrule adult-check (person (age 25)) => (assert (adult (verified yes))))
 "#;
 
-        let result = tool.migrate(clips_rules, SourceFormat::Clips).unwrap();
+        let result = tool.migrate(clips_rules, SourceFormat::Clips)?;
 
         assert_eq!(result.rules.len(), 1);
         assert_eq!(result.rules[0].name, "adult-check");
+        Ok(())
     }
 
     #[test]
-    fn test_clips_with_assert() {
+    fn test_clips_with_assert() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let clips_rules = r#"
 (defrule make-employee (person (name John)) => (assert (employee (name John))))
 "#;
 
-        let result = tool.migrate(clips_rules, SourceFormat::Clips).unwrap();
+        let result = tool.migrate(clips_rules, SourceFormat::Clips)?;
 
         // Rule should be created
         assert_eq!(result.rules.len(), 1);
@@ -1104,17 +1119,18 @@ end
 
         // Migration should complete successfully
         assert!(result.source_format == SourceFormat::Clips);
+        Ok(())
     }
 
     #[test]
-    fn test_clips_with_modify() {
+    fn test_clips_with_modify() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let clips_rules = r#"
 (defrule update-status (person) => (modify ?person (status active)))
 "#;
 
-        let result = tool.migrate(clips_rules, SourceFormat::Clips).unwrap();
+        let result = tool.migrate(clips_rules, SourceFormat::Clips)?;
 
         // Rule should be created
         assert_eq!(result.rules.len(), 1);
@@ -1122,10 +1138,11 @@ end
 
         // Migration should complete successfully
         assert!(result.source_format == SourceFormat::Clips);
+        Ok(())
     }
 
     #[test]
-    fn test_clips_value_parsing() {
+    fn test_clips_value_parsing() -> Result<(), Box<dyn std::error::Error>> {
         let tool = MigrationTool::new();
 
         // Test variable
@@ -1143,10 +1160,11 @@ end
         // Test symbol
         let value4 = tool.parse_clips_value("active");
         assert!(matches!(value4, Term::Constant(v) if v == "active"));
+        Ok(())
     }
 
     #[test]
-    fn test_drools_multiple_conditions() {
+    fn test_drools_multiple_conditions() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let drools_rules = r#"
@@ -1158,13 +1176,14 @@ then
 end
 "#;
 
-        let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
+        let result = tool.migrate(drools_rules, SourceFormat::Drools)?;
 
         assert_eq!(result.rules.len(), 1);
         let rule = &result.rules[0];
 
         // Should have multiple body atoms for multiple conditions
         assert!(rule.body.len() >= 2);
+        Ok(())
     }
 
     #[test]
@@ -1201,7 +1220,7 @@ end
     }
 
     #[test]
-    fn test_empty_drools_rule() {
+    fn test_empty_drools_rule() -> Result<(), Box<dyn std::error::Error>> {
         let mut tool = MigrationTool::new();
 
         let drools_rules = r#"
@@ -1211,7 +1230,7 @@ then
 end
 "#;
 
-        let result = tool.migrate(drools_rules, SourceFormat::Drools).unwrap();
+        let result = tool.migrate(drools_rules, SourceFormat::Drools)?;
 
         // Empty rules should either be skipped (0 rules) or have no body/head
         // Migration should complete without error
@@ -1220,15 +1239,16 @@ end
             // If rule was created, it should be empty
             assert!(result.rules[0].body.is_empty() && result.rules[0].head.is_empty());
         }
+        Ok(())
     }
 
     #[test]
-    fn test_clips_pattern_filtering() {
+    fn test_clips_pattern_filtering() -> Result<(), Box<dyn std::error::Error>> {
         let tool = MigrationTool::new();
 
         // Control patterns should be skipped
         let patterns = "(test (> ?x 5)) (person (age ?x))";
-        let atoms = tool.parse_clips_patterns(patterns).unwrap();
+        let atoms = tool.parse_clips_patterns(patterns)?;
 
         // Should only include person pattern, not test
         assert!(atoms.iter().any(|atom| {
@@ -1236,5 +1256,6 @@ end
                 object: Term::Constant(o), ..
             } if o == "person")
         }));
+        Ok(())
     }
 }

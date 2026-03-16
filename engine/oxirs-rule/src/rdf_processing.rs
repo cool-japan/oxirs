@@ -781,7 +781,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_turtle() {
-        let store = Arc::new(Store::new().unwrap());
+        let store = Arc::new(Store::new()?);
         let mut processor = RdfProcessor::new(store.clone());
 
         let turtle_data = r#"
@@ -789,28 +789,28 @@ mod tests {
             ex:subject ex:predicate ex:object .
         "#;
 
-        let stats = processor.process_data(turtle_data.as_bytes(), RdfFormat::Turtle).await.unwrap();
+        let stats = processor.process_data(turtle_data.as_bytes(), RdfFormat::Turtle).await?;
 
         assert_eq!(stats.triples_processed, 1);
-        assert_eq!(store.len().unwrap(), 1);
+        assert_eq!(store.len()?, 1);
     }
 
     #[tokio::test]
     async fn test_process_ntriples() {
-        let store = Arc::new(Store::new().unwrap());
+        let store = Arc::new(Store::new()?);
         let mut processor = RdfProcessor::new(store.clone());
 
         let ntriples_data = r#"<http://example.org/subject> <http://example.org/predicate> <http://example.org/object> ."#;
 
-        let stats = processor.process_data(ntriples_data.as_bytes(), RdfFormat::NTriples).await.unwrap();
+        let stats = processor.process_data(ntriples_data.as_bytes(), RdfFormat::NTriples).await?;
 
         assert_eq!(stats.triples_processed, 1);
-        assert_eq!(store.len().unwrap(), 1);
+        assert_eq!(store.len()?, 1);
     }
 
     #[tokio::test]
     async fn test_streaming_processing() {
-        let store = Arc::new(Store::new().unwrap());
+        let store = Arc::new(Store::new()?);
         let config = ProcessingConfig {
             use_streaming: true,
             streaming_threshold: 0, // Force streaming
@@ -819,33 +819,34 @@ mod tests {
         let mut processor = RdfProcessor::with_config(store.clone(), config);
 
         // Create a temporary file with N-Triples data
-        let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .").unwrap();
-        writeln!(temp_file, "<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .").unwrap();
+        let mut temp_file = NamedTempFile::new()?;
+        writeln!(temp_file, "<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .")?;
+        writeln!(temp_file, "<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .")?;
 
-        let stats = processor.process_file(temp_file.path()).await.unwrap();
+        let stats = processor.process_file(temp_file.path()).await?;
 
         assert_eq!(stats.triples_processed, 2);
-        assert_eq!(store.len().unwrap(), 2);
+        assert_eq!(store.len()?, 2);
     }
 
     #[test]
-    fn test_fact_manager() {
+    fn test_fact_manager() -> anyhow::Result<()> {
         let mut manager = FactManager::new(2);
 
         let fact1 = RdfRuleAtom::Triple {
-            subject: RdfTerm::NamedNode(NamedNode::new("http://example.org/s1").unwrap()),
-            predicate: RdfTerm::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
-            object: RdfTerm::NamedNode(NamedNode::new("http://example.org/o1").unwrap()),
+            subject: RdfTerm::NamedNode(NamedNode::new("http://example.org/s1")?),
+            predicate: RdfTerm::NamedNode(NamedNode::new("http://example.org/p")?),
+            object: RdfTerm::NamedNode(NamedNode::new("http://example.org/o1")?),
         };
 
-        manager.add_fact(fact1.clone()).unwrap();
+        manager.add_fact(fact1.clone())?;
         assert_eq!(manager.total_count(), 1);
 
-        manager.add_fact(fact1.clone()).unwrap();
+        manager.add_fact(fact1.clone())?;
         assert_eq!(manager.total_count(), 2);
 
         // Third fact would exceed memory limit without storage
         assert!(manager.add_fact(fact1).is_err());
+        Ok(())
     }
 }

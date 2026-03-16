@@ -722,33 +722,35 @@ mod tests {
     }
 
     #[test]
-    fn test_postprocessing_normalization() {
+    fn test_postprocessing_normalization() -> Result<()> {
         let pipeline = PostprocessingPipeline {
             normalization: VectorNormalization::L2,
             ..Default::default()
         };
 
         let mut vector = Vector::new(vec![3.0, 4.0, 0.0]);
-        let quality = pipeline.process(&mut vector).unwrap();
+        let quality = pipeline.process(&mut vector)?;
 
         // Check L2 normalization
         let magnitude = vector.magnitude();
         assert!((magnitude - 1.0).abs() < 1e-6);
         assert!(quality > 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_quality_scoring() {
+    fn test_quality_scoring() -> Result<()> {
         let pipeline = PostprocessingPipeline::default();
 
         // Good quality vector
         let mut good_vector = Vector::new(vec![0.5, 0.3, -0.2, 0.8]);
-        let good_quality = pipeline.process(&mut good_vector).unwrap();
+        let good_quality = pipeline.process(&mut good_vector)?;
         assert!(good_quality > 0.9);
 
         // Poor quality vector (all zeros)
         let poor_vector = Vector::new(vec![0.0, 0.0, 0.0, 0.0]);
         let poor_quality = pipeline.calculate_quality_score(&poor_vector);
         assert!(poor_quality < 0.5);
+        Ok(())
     }
 }

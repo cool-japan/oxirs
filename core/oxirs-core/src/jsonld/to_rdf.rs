@@ -442,7 +442,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// let mut parser = JsonLdParser::new().for_reader(file.as_ref());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// parser.next().unwrap()?; // We read the first quad
+    /// parser.next().expect("should have next item")?; // We read the first quad
     /// assert_eq!(
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
@@ -469,7 +469,7 @@ impl<R: Read> ReaderJsonLdParser<R> {
     /// let mut parser = JsonLdParser::new().for_reader(file.as_ref());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// parser.next().unwrap()?; // We read the first quad
+    /// parser.next().expect("should have next item")?; // We read the first quad
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```
@@ -780,7 +780,7 @@ impl SliceJsonLdParser<'_> {
     /// let mut parser = JsonLdParser::new().for_slice(file);
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// parser.next().unwrap()?; // We read the first quad
+    /// parser.next().expect("should have next item")?; // We read the first quad
     /// assert_eq!(
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [("schema", "http://schema.org/")]
@@ -807,7 +807,7 @@ impl SliceJsonLdParser<'_> {
     /// let mut parser = JsonLdParser::new().for_slice(file);
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// parser.next().unwrap()?; // We read the first quad
+    /// parser.next().expect("should have next item")?; // We read the first quad
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// ```

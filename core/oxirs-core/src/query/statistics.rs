@@ -496,13 +496,15 @@ mod tests {
     fn test_record_insert() {
         let stats = GraphStatistics::new();
 
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("value");
 
         let triple = Triple::new(subject, predicate, object);
 
-        stats.record_insert(&triple).unwrap();
+        stats
+            .record_insert(&triple)
+            .expect("operation should succeed");
         assert_eq!(stats.total_triples(), 1);
     }
 
@@ -510,16 +512,20 @@ mod tests {
     fn test_record_remove() {
         let stats = GraphStatistics::new();
 
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("value");
 
         let triple = Triple::new(subject, predicate, object);
 
-        stats.record_insert(&triple).unwrap();
+        stats
+            .record_insert(&triple)
+            .expect("operation should succeed");
         assert_eq!(stats.total_triples(), 1);
 
-        stats.record_remove(&triple).unwrap();
+        stats
+            .record_remove(&triple)
+            .expect("operation should succeed");
         assert_eq!(stats.total_triples(), 0);
     }
 
@@ -527,17 +533,19 @@ mod tests {
     fn test_predicate_statistics() {
         let stats = GraphStatistics::new();
 
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("value");
 
         let triple = Triple::new(subject, predicate.clone(), object);
 
-        stats.record_insert(&triple).unwrap();
+        stats
+            .record_insert(&triple)
+            .expect("operation should succeed");
 
         let pred_stats = stats.get_predicate_stats(predicate.as_str());
         assert!(pred_stats.is_some());
-        assert_eq!(pred_stats.unwrap().count, 1);
+        assert_eq!(pred_stats.expect("predicate stats should exist").count, 1);
     }
 
     #[test]
@@ -546,19 +554,22 @@ mod tests {
 
         // Add some triples
         for i in 0..100 {
-            let subject = NamedNode::new(format!("http://example.org/s{}", i)).unwrap();
-            let predicate = NamedNode::new("http://example.org/p").unwrap();
+            let subject = NamedNode::new(format!("http://example.org/s{}", i))
+                .expect("valid IRI from format");
+            let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
             let object = Literal::new(format!("value{}", i));
 
             let triple = Triple::new(subject, predicate, object);
-            stats.record_insert(&triple).unwrap();
+            stats
+                .record_insert(&triple)
+                .expect("operation should succeed");
         }
 
         // Estimate cardinality for a pattern with bound predicate
         let pattern = TriplePattern::new(
             None,
             Some(crate::model::pattern::PredicatePattern::NamedNode(
-                NamedNode::new("http://example.org/p").unwrap(),
+                NamedNode::new("http://example.org/p").expect("valid IRI"),
             )),
             None,
         );
@@ -582,7 +593,9 @@ mod tests {
             cpu_time: Duration::from_millis(30),
         };
 
-        stats.record_query_execution(exec_stats).unwrap();
+        stats
+            .record_query_execution(exec_stats)
+            .expect("operation should succeed");
 
         let learned = stats.get_learned_selectivity("SELECT ?s WHERE { ?s ?p ?o }");
         assert!(learned.is_some());
@@ -593,20 +606,24 @@ mod tests {
         let stats = GraphStatistics::new();
 
         // Add some data
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("value");
 
         let triple = Triple::new(subject, predicate, object);
-        stats.record_insert(&triple).unwrap();
+        stats
+            .record_insert(&triple)
+            .expect("operation should succeed");
 
         // Export
-        let json = stats.export_to_json().unwrap();
+        let json = stats.export_to_json().expect("operation should succeed");
         assert!(!json.is_empty());
 
         // Import to new instance
         let stats2 = GraphStatistics::new();
-        stats2.import_from_json(&json).unwrap();
+        stats2
+            .import_from_json(&json)
+            .expect("operation should succeed");
 
         assert_eq!(stats2.total_triples(), 1);
     }

@@ -846,7 +846,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_basic_backward_chaining() {
+    fn test_basic_backward_chaining() -> Result<(), Box<dyn std::error::Error>> {
         let mut chainer = BackwardChainer::new();
 
         // Add rule: mortal(X) :- human(X)
@@ -878,11 +878,12 @@ mod tests {
             object: Term::Constant("mortal".to_string()),
         };
 
-        assert!(chainer.prove(&goal).unwrap());
+        assert!(chainer.prove(&goal)?);
+        Ok(())
     }
 
     #[test]
-    fn test_fact_matching() {
+    fn test_fact_matching() -> Result<(), Box<dyn std::error::Error>> {
         let mut chainer = BackwardChainer::new();
 
         chainer.add_fact(RuleAtom::Triple {
@@ -897,11 +898,12 @@ mod tests {
             object: Term::Constant("human".to_string()),
         };
 
-        assert!(chainer.prove(&goal).unwrap());
+        assert!(chainer.prove(&goal)?);
+        Ok(())
     }
 
     #[test]
-    fn test_variable_substitution() {
+    fn test_variable_substitution() -> Result<(), Box<dyn std::error::Error>> {
         let mut chainer = BackwardChainer::new();
 
         chainer.add_fact(RuleAtom::Triple {
@@ -916,16 +918,17 @@ mod tests {
             object: Term::Constant("human".to_string()),
         };
 
-        let substitutions = chainer.prove_all(&goal).unwrap();
+        let substitutions = chainer.prove_all(&goal)?;
         assert_eq!(substitutions.len(), 1);
         assert_eq!(
             substitutions[0].get("X"),
             Some(&Term::Constant("socrates".to_string()))
         );
+        Ok(())
     }
 
     #[test]
-    fn test_transitive_proof() {
+    fn test_transitive_proof() -> Result<(), Box<dyn std::error::Error>> {
         let mut chainer = BackwardChainer::with_config(20, true); // Enable debug mode
 
         // Test just direct ancestor first
@@ -957,11 +960,12 @@ mod tests {
             object: Term::Constant("mary".to_string()),
         };
 
-        assert!(chainer.prove(&direct_goal).unwrap());
+        assert!(chainer.prove(&direct_goal)?);
+        Ok(())
     }
 
     #[test]
-    fn test_query_functionality() {
+    fn test_query_functionality() -> Result<(), Box<dyn std::error::Error>> {
         let mut chainer = BackwardChainer::new();
 
         chainer.add_fact(RuleAtom::Triple {
@@ -981,7 +985,8 @@ mod tests {
             object: Term::Constant("human".to_string()),
         };
 
-        let results = chainer.query(&pattern).unwrap();
+        let results = chainer.query(&pattern)?;
         assert_eq!(results.len(), 2);
+        Ok(())
     }
 }

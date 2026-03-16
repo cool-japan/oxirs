@@ -407,20 +407,24 @@ mod tests {
             EncodedTerm::NamedNode {
                 iri_id: StrHash::new("http://example.org/test"),
             },
-            EncodedTerm::SmallBlankNode(SmallString::new("test").unwrap()),
-            EncodedTerm::SmallStringLiteral(SmallString::new("hello").unwrap()),
+            EncodedTerm::SmallBlankNode(
+                SmallString::new("test").expect("construction should succeed"),
+            ),
+            EncodedTerm::SmallStringLiteral(
+                SmallString::new("hello").expect("construction should succeed"),
+            ),
             EncodedTerm::SmallSmallLangStringLiteral {
-                value: SmallString::new("hello").unwrap(),
-                language: SmallString::new("en").unwrap(),
+                value: SmallString::new("hello").expect("construction should succeed"),
+                language: SmallString::new("en").expect("construction should succeed"),
             },
         ];
 
         for term in terms {
             let mut buffer = Vec::new();
-            encode_term(&term, &mut buffer).unwrap();
+            encode_term(&term, &mut buffer).expect("term encoding should succeed");
 
             let mut cursor = Cursor::new(buffer.as_slice());
-            let decoded = decode_term(&mut cursor).unwrap();
+            let decoded = decode_term(&mut cursor).expect("term decoding should succeed");
 
             assert_eq!(term, decoded);
         }
@@ -435,7 +439,9 @@ mod tests {
             EncodedTerm::NamedNode {
                 iri_id: StrHash::new("http://example.org/p"),
             },
-            EncodedTerm::SmallStringLiteral(SmallString::new("object").unwrap()),
+            EncodedTerm::SmallStringLiteral(
+                SmallString::new("object").expect("construction should succeed"),
+            ),
             EncodedTerm::DefaultGraph,
         );
 
@@ -450,9 +456,11 @@ mod tests {
 
         for encoding in &encodings {
             let mut buffer = Vec::new();
-            encoding.encode(&quad, &mut buffer).unwrap();
+            encoding
+                .encode(&quad, &mut buffer)
+                .expect("encoding should succeed");
 
-            let decoded = encoding.decode(&buffer).unwrap();
+            let decoded = encoding.decode(&buffer).expect("decoding should succeed");
             assert_eq!(quad, decoded);
         }
     }
@@ -467,7 +475,8 @@ mod tests {
                 encode_small_string(&small_string, &mut buffer);
 
                 let mut cursor = Cursor::new(buffer.as_slice());
-                let decoded = decode_small_string(&mut cursor).unwrap();
+                let decoded =
+                    decode_small_string(&mut cursor).expect("string decoding should succeed");
 
                 assert_eq!(small_string.as_str(), decoded.as_str());
             }

@@ -57,7 +57,7 @@ use serde_json::{json, Value};
 ///   }
 /// }"#;
 ///
-/// let geometries = parse_topojson(topojson).unwrap();
+/// let geometries = parse_topojson(topojson).expect("should succeed");
 /// assert_eq!(geometries.len(), 1);
 /// # }
 /// ```
@@ -482,7 +482,7 @@ fn apply_transform(x: f64, y: f64, transform: Option<&Value>) -> (f64, f64) {
 /// let geom = Geometry::new(GeoGeometry::Point(Point::new(100.0, 200.0)));
 /// let geometries = vec![geom];
 ///
-/// let topojson = geometries_to_topojson(&geometries).unwrap();
+/// let topojson = geometries_to_topojson(&geometries).expect("should succeed");
 /// // Pretty-printed JSON has spaces: "type": "Topology"
 /// assert!(topojson.contains("\"type\": \"Topology\""));
 /// # }

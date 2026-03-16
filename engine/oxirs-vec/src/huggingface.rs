@@ -315,6 +315,7 @@ impl From<EmbeddingConfig> for HuggingFaceConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[tokio::test]
     async fn test_huggingface_embedder_creation() {
@@ -323,8 +324,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_model_loading() {
-        let mut embedder = HuggingFaceEmbedder::with_default_config().unwrap();
+    async fn test_model_loading() -> Result<()> {
+        let mut embedder = HuggingFaceEmbedder::with_default_config()?;
         let result = embedder
             .load_model("sentence-transformers/all-MiniLM-L6-v2")
             .await;
@@ -332,23 +333,25 @@ mod tests {
 
         let dimensions = embedder.get_model_dimensions("sentence-transformers/all-MiniLM-L6-v2");
         assert_eq!(dimensions, Some(384));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_text_embedding() {
-        let mut embedder = HuggingFaceEmbedder::with_default_config().unwrap();
+    async fn test_text_embedding() -> Result<()> {
+        let mut embedder = HuggingFaceEmbedder::with_default_config()?;
         let content = EmbeddableContent::Text("Hello, world!".to_string());
 
         let result = embedder.embed(&content).await;
         assert!(result.is_ok());
 
-        let embedding = result.unwrap();
+        let embedding = result?;
         assert_eq!(embedding.dimensions, 384);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_rdf_resource_embedding() {
-        let mut embedder = HuggingFaceEmbedder::with_default_config().unwrap();
+    async fn test_rdf_resource_embedding() -> Result<()> {
+        let mut embedder = HuggingFaceEmbedder::with_default_config()?;
         let mut properties = HashMap::new();
         properties.insert("type".to_string(), vec!["Person".to_string()]);
 
@@ -361,11 +364,12 @@ mod tests {
 
         let result = embedder.embed(&content).await;
         assert!(result.is_ok());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_batch_embedding() {
-        let mut embedder = HuggingFaceEmbedder::with_default_config().unwrap();
+    async fn test_batch_embedding() -> Result<()> {
+        let mut embedder = HuggingFaceEmbedder::with_default_config()?;
         let contents = vec![
             EmbeddableContent::Text("First text".to_string()),
             EmbeddableContent::Text("Second text".to_string()),
@@ -375,8 +379,9 @@ mod tests {
         let result = embedder.embed_batch(&contents).await;
         assert!(result.is_ok());
 
-        let embeddings = result.unwrap();
+        let embeddings = result?;
         assert_eq!(embeddings.len(), 3);
+        Ok(())
     }
 
     #[tokio::test]

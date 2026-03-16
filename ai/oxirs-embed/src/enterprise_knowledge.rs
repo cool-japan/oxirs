@@ -1751,9 +1751,30 @@ mod tests {
         let analyzer = EnterpriseKnowledgeAnalyzer::new(config);
 
         // Test that analyzer is created successfully
-        assert_eq!(analyzer.product_embeddings.read().unwrap().len(), 0);
-        assert_eq!(analyzer.employee_embeddings.read().unwrap().len(), 0);
-        assert_eq!(analyzer.customer_embeddings.read().unwrap().len(), 0);
+        assert_eq!(
+            analyzer
+                .product_embeddings
+                .read()
+                .expect("should succeed")
+                .len(),
+            0
+        );
+        assert_eq!(
+            analyzer
+                .employee_embeddings
+                .read()
+                .expect("should succeed")
+                .len(),
+            0
+        );
+        assert_eq!(
+            analyzer
+                .customer_embeddings
+                .read()
+                .expect("should succeed")
+                .len(),
+            0
+        );
     }
 
     #[tokio::test]
@@ -1764,7 +1785,7 @@ mod tests {
         let result = analyzer.generate_product_embedding("test_product").await;
         assert!(result.is_ok());
 
-        let embedding = result.unwrap();
+        let embedding = result.expect("should succeed");
         assert_eq!(embedding.product_id, "test_product");
         assert!(embedding.market_position >= 0.0);
         assert!(embedding.market_position <= 1.0);
@@ -1779,7 +1800,7 @@ mod tests {
         let result = analyzer.generate_employee_embedding("test_employee").await;
         assert!(result.is_ok());
 
-        let embedding = result.unwrap();
+        let embedding = result.expect("should succeed");
         assert_eq!(embedding.employee_id, "test_employee");
         assert!(embedding.career_predictions.promotion_likelihood >= 0.0);
         assert!(embedding.career_predictions.promotion_likelihood <= 1.0);
@@ -1793,7 +1814,7 @@ mod tests {
         let result = analyzer.generate_customer_embedding("test_customer").await;
         assert!(result.is_ok());
 
-        let embedding = result.unwrap();
+        let embedding = result.expect("should succeed");
         assert_eq!(embedding.customer_id, "test_customer");
         assert!(embedding.predicted_ltv >= 0.0);
         assert!(embedding.churn_risk >= 0.0);
@@ -1809,12 +1830,12 @@ mod tests {
         let _customer = analyzer
             .generate_customer_embedding("test_customer")
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let recommendations = analyzer.recommend_products("test_customer", 5).await;
         assert!(recommendations.is_ok());
 
-        let recs = recommendations.unwrap();
+        let recs = recommendations.expect("should succeed");
         assert!(!recs.is_empty());
         assert!(recs.len() <= 5);
 
@@ -1835,16 +1856,16 @@ mod tests {
         let _product = analyzer
             .generate_product_embedding("test_product")
             .await
-            .unwrap();
+            .expect("should succeed");
         let _customer = analyzer
             .generate_customer_embedding("test_customer")
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let analysis = analyzer.analyze_market_trends().await;
         assert!(analysis.is_ok());
 
-        let market_analysis = analysis.unwrap();
+        let market_analysis = analysis.expect("should succeed");
         assert!(!market_analysis.competitive_landscape.is_empty());
         assert!(!market_analysis.forecast.is_empty());
     }
@@ -1858,20 +1879,20 @@ mod tests {
         let _product = analyzer
             .generate_product_embedding("test_product")
             .await
-            .unwrap();
+            .expect("should succeed");
         let _employee = analyzer
             .generate_employee_embedding("test_employee")
             .await
-            .unwrap();
+            .expect("should succeed");
         let _customer = analyzer
             .generate_customer_embedding("test_customer")
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let metrics = analyzer.get_enterprise_metrics().await;
         assert!(metrics.is_ok());
 
-        let enterprise_metrics = metrics.unwrap();
+        let enterprise_metrics = metrics.expect("should succeed");
         assert_eq!(enterprise_metrics.total_products, 1);
         assert_eq!(enterprise_metrics.total_employees, 1);
         assert_eq!(enterprise_metrics.total_customers, 1);

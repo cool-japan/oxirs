@@ -498,7 +498,7 @@ mod tests {
         assert!(!result.conforms);
         assert!(result.is_violated());
         assert!(result.violation.is_some());
-        let v = result.violation.unwrap();
+        let v = result.violation.expect("should succeed");
         assert!(v.message.contains("ActivePerson"));
     }
 

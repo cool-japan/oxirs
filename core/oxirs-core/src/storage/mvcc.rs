@@ -856,27 +856,39 @@ mod tests {
         let store = MvccStore::new(config);
 
         // Begin transaction
-        let tx1 = store.begin_transaction(IsolationLevel::Snapshot).unwrap();
+        let tx1 = store
+            .begin_transaction(IsolationLevel::Snapshot)
+            .expect("store operation should succeed");
 
         // Insert triple
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             Literal::new("value"),
         );
 
-        store.insert(tx1, triple.clone()).unwrap();
+        store
+            .insert(tx1, triple.clone())
+            .expect("MVCC insert should succeed");
 
         // Query should see the triple (read-your-writes)
-        let results = store.query(tx1, None, None, None).unwrap();
+        let results = store
+            .query(tx1, None, None, None)
+            .expect("store operation should succeed");
         assert_eq!(results.len(), 1);
 
         // Commit transaction
-        store.commit_transaction(tx1).unwrap();
+        store
+            .commit_transaction(tx1)
+            .expect("store operation should succeed");
 
         // New transaction should see committed data
-        let tx2 = store.begin_transaction(IsolationLevel::Snapshot).unwrap();
-        let results = store.query(tx2, None, None, None).unwrap();
+        let tx2 = store
+            .begin_transaction(IsolationLevel::Snapshot)
+            .expect("store operation should succeed");
+        let results = store
+            .query(tx2, None, None, None)
+            .expect("store operation should succeed");
         assert_eq!(results.len(), 1);
     }
 
@@ -886,48 +898,84 @@ mod tests {
         let store = MvccStore::new(config);
 
         // Insert initial data
-        let tx0 = store.begin_transaction(IsolationLevel::Snapshot).unwrap();
+        let tx0 = store
+            .begin_transaction(IsolationLevel::Snapshot)
+            .expect("store operation should succeed");
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             Literal::new("initial"),
         );
-        store.insert(tx0, triple.clone()).unwrap();
-        store.commit_transaction(tx0).unwrap();
+        store
+            .insert(tx0, triple.clone())
+            .expect("MVCC insert should succeed");
+        store
+            .commit_transaction(tx0)
+            .expect("store operation should succeed");
 
         // Start two concurrent transactions
-        let tx1 = store.begin_transaction(IsolationLevel::Snapshot).unwrap();
-        let tx2 = store.begin_transaction(IsolationLevel::Snapshot).unwrap();
+        let tx1 = store
+            .begin_transaction(IsolationLevel::Snapshot)
+            .expect("store operation should succeed");
+        let tx2 = store
+            .begin_transaction(IsolationLevel::Snapshot)
+            .expect("store operation should succeed");
 
         // Both should see initial data
-        assert_eq!(store.query(tx1, None, None, None).unwrap().len(), 1);
-        assert_eq!(store.query(tx2, None, None, None).unwrap().len(), 1);
+        assert_eq!(
+            store
+                .query(tx1, None, None, None)
+                .expect("store operation should succeed")
+                .len(),
+            1
+        );
+        assert_eq!(
+            store
+                .query(tx2, None, None, None)
+                .expect("store operation should succeed")
+                .len(),
+            1
+        );
 
         // TX1 modifies data
-        store.delete(tx1, &triple).unwrap();
+        store
+            .delete(tx1, &triple)
+            .expect("store operation should succeed");
         let new_triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             Literal::new("modified"),
         );
-        store.insert(tx1, new_triple).unwrap();
+        store
+            .insert(tx1, new_triple)
+            .expect("store operation should succeed");
 
         // TX2 shouldn't see TX1's changes yet
-        let tx2_results = store.query(tx2, None, None, None).unwrap();
+        let tx2_results = store
+            .query(tx2, None, None, None)
+            .expect("store operation should succeed");
         assert_eq!(tx2_results.len(), 1);
         assert_eq!(tx2_results[0].object().to_string(), "\"initial\"");
 
         // Commit TX1
-        store.commit_transaction(tx1).unwrap();
+        store
+            .commit_transaction(tx1)
+            .expect("store operation should succeed");
 
         // TX2 still sees snapshot
-        let tx2_results = store.query(tx2, None, None, None).unwrap();
+        let tx2_results = store
+            .query(tx2, None, None, None)
+            .expect("store operation should succeed");
         assert_eq!(tx2_results.len(), 1);
         assert_eq!(tx2_results[0].object().to_string(), "\"initial\"");
 
         // New transaction sees committed changes
-        let tx3 = store.begin_transaction(IsolationLevel::Snapshot).unwrap();
-        let tx3_results = store.query(tx3, None, None, None).unwrap();
+        let tx3 = store
+            .begin_transaction(IsolationLevel::Snapshot)
+            .expect("store operation should succeed");
+        let tx3_results = store
+            .query(tx3, None, None, None)
+            .expect("store operation should succeed");
         assert_eq!(tx3_results.len(), 1);
         assert_eq!(tx3_results[0].object().to_string(), "\"modified\"");
     }
@@ -941,22 +989,36 @@ mod tests {
         let store = MvccStore::new(config);
 
         // Insert initial data
-        let tx0 = store.begin_transaction(IsolationLevel::Snapshot).unwrap();
+        let tx0 = store
+            .begin_transaction(IsolationLevel::Snapshot)
+            .expect("store operation should succeed");
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             Literal::new("initial"),
         );
-        store.insert(tx0, triple.clone()).unwrap();
-        store.commit_transaction(tx0).unwrap();
+        store
+            .insert(tx0, triple.clone())
+            .expect("MVCC insert should succeed");
+        store
+            .commit_transaction(tx0)
+            .expect("store operation should succeed");
 
         // Start two transactions
-        let tx1 = store.begin_transaction(IsolationLevel::Snapshot).unwrap();
-        let tx2 = store.begin_transaction(IsolationLevel::Snapshot).unwrap();
+        let tx1 = store
+            .begin_transaction(IsolationLevel::Snapshot)
+            .expect("store operation should succeed");
+        let tx2 = store
+            .begin_transaction(IsolationLevel::Snapshot)
+            .expect("store operation should succeed");
 
         // Both modify the same triple
-        store.delete(tx1, &triple).unwrap();
-        store.delete(tx2, &triple).unwrap();
+        store
+            .delete(tx1, &triple)
+            .expect("store operation should succeed");
+        store
+            .delete(tx2, &triple)
+            .expect("store operation should succeed");
 
         // First commit succeeds
         assert!(store.commit_transaction(tx1).is_ok());
@@ -983,8 +1045,20 @@ mod tests {
         }
 
         // Test visibility
-        assert_eq!(chain.get_visible_version(25).unwrap().id, 2);
-        assert_eq!(chain.get_visible_version(45).unwrap().id, 4);
+        assert_eq!(
+            chain
+                .get_visible_version(25)
+                .expect("operation should succeed")
+                .id,
+            2
+        );
+        assert_eq!(
+            chain
+                .get_visible_version(45)
+                .expect("operation should succeed")
+                .id,
+            4
+        );
 
         // Test GC
         chain.gc_versions(20, 3);

@@ -1,8 +1,8 @@
 //! # OxiRS DID
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.1.0)
+//! **Status**: Production Release (v0.2.2)
 //!
 //! W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) implementation
 //! for OxiRS, enabling signed RDF graphs and trust layer for data sovereignty.

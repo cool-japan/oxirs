@@ -186,7 +186,7 @@ mod tests {
         assert!(stats.is_ok());
 
         if monitor.is_available() {
-            let stats = stats.unwrap();
+            let stats = stats.expect("stats should be available");
             assert!(stats.utilization >= 0.0 && stats.utilization <= 100.0);
         }
     }

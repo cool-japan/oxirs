@@ -31,11 +31,11 @@ tracing.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
-tokio-test = "0.4"
+tokio-test.workspace = true
 criterion.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
-socketcan = "3.5"
+socketcan.workspace = true
 
 [features]
 default = []

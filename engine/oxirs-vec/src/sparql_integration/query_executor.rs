@@ -519,11 +519,12 @@ fn hash_string(s: &str) -> u64 {
 mod tests {
     use super::*;
     use crate::embeddings::EmbeddingStrategy;
+    use anyhow::Result;
 
     #[test]
-    fn test_query_optimization() {
+    fn test_query_optimization() -> Result<()> {
         let vector_store = VectorStore::new();
-        let embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100).unwrap();
+        let embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100)?;
         let optimizer = VectorQueryOptimizer::default();
 
         let executor = QueryExecutor::new(vector_store, embedding_manager, optimizer, None, None);
@@ -536,8 +537,9 @@ mod tests {
             ],
         );
 
-        let optimized = executor.optimize_query(&query).unwrap();
+        let optimized = executor.optimize_query(&query)?;
         assert!(optimized.use_cache);
+        Ok(())
     }
 
     #[test]
@@ -556,9 +558,9 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_search_results() {
+    fn test_merge_search_results() -> Result<()> {
         let vector_store = VectorStore::new();
-        let embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100).unwrap();
+        let embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100)?;
         let optimizer = VectorQueryOptimizer::default();
 
         let executor = QueryExecutor::new(vector_store, embedding_manager, optimizer, None, None);
@@ -575,5 +577,6 @@ mod tests {
         assert_eq!(merged.len(), 3);
         assert_eq!(merged[0].0, "doc2"); // Highest score first
         assert_eq!(merged[1].1, 0.8); // doc1 should have max score of 0.8
+        Ok(())
     }
 }

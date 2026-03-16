@@ -435,7 +435,7 @@ impl ModbusDevice {
 ///     .with_tcp("192.168.1.10", 502)
 ///     .with_register_map(map);
 ///
-/// registry.register(device).unwrap();
+/// registry.register(device).expect("should succeed");
 ///
 /// assert_eq!(registry.device_count(), 1);
 /// ```
@@ -585,11 +585,11 @@ mod tests {
     fn test_register_and_lookup() {
         let mut registry = DeviceRegistry::new();
         let device = make_temperature_device("sensor_01", 1);
-        registry.register(device).unwrap();
+        registry.register(device).expect("should succeed");
 
         assert_eq!(registry.device_count(), 1);
 
-        let found = registry.get("sensor_01").unwrap();
+        let found = registry.get("sensor_01").expect("should succeed");
         assert_eq!(found.unit_id, 1);
         assert_eq!(found.poll_interval_ms, 500);
     }
@@ -599,7 +599,7 @@ mod tests {
         let mut registry = DeviceRegistry::new();
         registry
             .register(make_temperature_device("dev_a", 1))
-            .unwrap();
+            .expect("should succeed");
         let result = registry.register(make_temperature_device("dev_a", 2));
         assert!(result.is_err());
     }
@@ -609,11 +609,11 @@ mod tests {
         let mut registry = DeviceRegistry::new();
         registry
             .upsert(make_temperature_device("dev_a", 1))
-            .unwrap();
+            .expect("should succeed");
         registry
             .upsert(make_temperature_device("dev_a", 2))
-            .unwrap();
-        assert_eq!(registry.get("dev_a").unwrap().unit_id, 2);
+            .expect("should succeed");
+        assert_eq!(registry.get("dev_a").expect("should succeed").unit_id, 2);
     }
 
     #[test]
@@ -621,7 +621,7 @@ mod tests {
         let mut registry = DeviceRegistry::new();
         registry
             .register(make_temperature_device("dev_x", 5))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(registry.device_count(), 1);
 
         let removed = registry.remove("dev_x");
@@ -634,13 +634,13 @@ mod tests {
         let mut registry = DeviceRegistry::new();
         registry
             .register(make_temperature_device("dev_1", 3))
-            .unwrap();
+            .expect("should succeed");
         registry
             .register(make_temperature_device("dev_2", 3))
-            .unwrap();
+            .expect("should succeed");
         registry
             .register(make_temperature_device("dev_3", 7))
-            .unwrap();
+            .expect("should succeed");
 
         let found = registry.find_by_unit_id(3);
         assert_eq!(found.len(), 2);
@@ -649,14 +649,18 @@ mod tests {
     #[test]
     fn test_find_by_type() {
         let mut registry = DeviceRegistry::new();
-        registry.register(make_temperature_device("t1", 1)).unwrap();
-        registry.register(make_temperature_device("t2", 2)).unwrap();
+        registry
+            .register(make_temperature_device("t1", 1))
+            .expect("should succeed");
+        registry
+            .register(make_temperature_device("t2", 2))
+            .expect("should succeed");
 
         let mut plc = ModbusDevice::new("plc_1", 10, DeviceType::Plc)
             .with_tcp("10.0.0.1", 502)
             .with_register_map(RegisterMap::new());
         plc.poll_interval_ms = 2000;
-        registry.upsert(plc).unwrap();
+        registry.upsert(plc).expect("should succeed");
 
         let temp_devices = registry.find_by_type(&DeviceType::TemperatureSensor);
         assert_eq!(temp_devices.len(), 2);
@@ -671,7 +675,7 @@ mod tests {
         let device = make_temperature_device("tagged_dev", 4)
             .with_tag("location", "building_a")
             .with_tag("floor", "2");
-        registry.register(device).unwrap();
+        registry.register(device).expect("should succeed");
 
         let found = registry.find_by_tag("location", "building_a");
         assert_eq!(found.len(), 1);
@@ -734,11 +738,15 @@ mod tests {
     #[test]
     fn test_json_roundtrip() {
         let mut registry = DeviceRegistry::new();
-        registry.register(make_temperature_device("s1", 1)).unwrap();
-        registry.register(make_temperature_device("s2", 2)).unwrap();
+        registry
+            .register(make_temperature_device("s1", 1))
+            .expect("should succeed");
+        registry
+            .register(make_temperature_device("s2", 2))
+            .expect("should succeed");
 
-        let json = registry.to_json().unwrap();
-        let restored = DeviceRegistry::from_json(&json).unwrap();
+        let json = registry.to_json().expect("should succeed");
+        let restored = DeviceRegistry::from_json(&json).expect("should succeed");
 
         assert_eq!(restored.device_count(), 2);
         assert!(restored.get("s1").is_some());
@@ -767,13 +775,13 @@ mod tests {
         let mut registry = DeviceRegistry::new();
         registry
             .register(make_temperature_device("zzz", 3))
-            .unwrap();
+            .expect("should succeed");
         registry
             .register(make_temperature_device("aaa", 1))
-            .unwrap();
+            .expect("should succeed");
         registry
             .register(make_temperature_device("mmm", 2))
-            .unwrap();
+            .expect("should succeed");
 
         let sorted = registry.list_sorted();
         assert_eq!(sorted[0].device_id, "aaa");

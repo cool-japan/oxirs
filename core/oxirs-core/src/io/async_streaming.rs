@@ -762,7 +762,7 @@ mod tests {
         let quads = parser
             .parse_async(reader, AsyncStreamingConfig::default(), None, None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(quads.len(), 2);
         assert!(quads[0].is_default_graph());
@@ -796,7 +796,7 @@ mod tests {
                 None,
             )
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(quads.len(), 3);
         assert!(progress_count.load(Ordering::Relaxed) > 0);
@@ -847,13 +847,13 @@ mod tests {
     async fn test_async_ntriples_serialization() {
         let mut quads = Vec::new();
 
-        let alice = NamedNode::new("http://example.org/alice").unwrap();
-        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
+        let alice = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI");
         let alice_name = Literal::new("Alice");
         let triple1 = Triple::new(alice.clone(), name_pred.clone(), alice_name);
         quads.push(Quad::from_triple(triple1));
 
-        let bob = NamedNode::new("http://example.org/bob").unwrap();
+        let bob = NamedNode::new("http://example.org/bob").expect("valid IRI");
         let bob_name = Literal::new("Bob");
         let triple2 = Triple::new(bob, name_pred, bob_name);
         quads.push(Quad::from_triple(triple2));
@@ -870,9 +870,9 @@ mod tests {
                 None,
             )
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
-        let result = String::from_utf8(output).unwrap();
+        let result = String::from_utf8(output).expect("bytes should be valid UTF-8");
         assert!(result.contains("http://example.org/alice"));
         assert!(result.contains("http://example.org/bob"));
         assert!(result.contains("\"Alice\""));
@@ -884,8 +884,9 @@ mod tests {
         let mut triples = Vec::new();
 
         for i in 0..10 {
-            let subject = NamedNode::new(format!("http://example.org/item{i}")).unwrap();
-            let pred = NamedNode::new("http://example.org/value").unwrap();
+            let subject = NamedNode::new(format!("http://example.org/item{i}"))
+                .expect("valid IRI from format");
+            let pred = NamedNode::new("http://example.org/value").expect("valid IRI");
             let obj = Literal::new(i.to_string());
             triples.push(Triple::new(subject, pred, obj));
         }
@@ -916,7 +917,7 @@ mod tests {
                 None,
             )
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert!(progress_count.load(Ordering::Relaxed) > 0);
     }
@@ -939,7 +940,7 @@ INVALID LINE HERE
         let quads = parser
             .parse_async(reader, config, None, None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Should parse the two valid lines
         assert_eq!(quads.len(), 2);
@@ -952,7 +953,10 @@ INVALID LINE HERE
         let mut reader = BackpressureReader::new(cursor, 16); // Buffer size larger than data
 
         let mut output = Vec::new();
-        reader.read_to_end(&mut output).await.unwrap();
+        reader
+            .read_to_end(&mut output)
+            .await
+            .expect("async operation should succeed");
 
         assert_eq!(output, data);
     }
@@ -969,7 +973,7 @@ INVALID LINE HERE
         let quads = parser
             .parse_async(reader, AsyncStreamingConfig::default(), None, None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(quads.len(), 2);
         assert!(!quads[0].is_default_graph());
@@ -998,7 +1002,7 @@ INVALID LINE HERE
         let quads = parser
             .parse_async(reader, config, None, None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(quads.len(), 1000);
     }
@@ -1019,7 +1023,7 @@ ex:alice ex:knows ex:bob ."#;
         let quads = parser
             .parse_async(reader, config, None, None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(quads.len(), 1);
         let triple = quads[0].to_triple();

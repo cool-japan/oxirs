@@ -527,7 +527,7 @@ mod tests {
         }
 
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().expect("thread should not panic");
         }
 
         // Verify cache is in a consistent state

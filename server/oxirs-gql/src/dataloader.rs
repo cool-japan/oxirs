@@ -601,7 +601,7 @@ mod tests {
         let batch_fn = Arc::new(TestBatchLoader);
         let loader = DataLoader::new(batch_fn);
 
-        let result = loader.load(1).await.unwrap();
+        let result = loader.load(1).await.expect("should succeed");
         assert_eq!(result, Some("value_1".to_string()));
 
         let stats = loader.get_stats().await;
@@ -614,11 +614,11 @@ mod tests {
         let loader = DataLoader::new(batch_fn);
 
         // First load - cache miss
-        let result1 = loader.load(1).await.unwrap();
+        let result1 = loader.load(1).await.expect("should succeed");
         assert_eq!(result1, Some("value_1".to_string()));
 
         // Second load - cache hit
-        let result2 = loader.load(1).await.unwrap();
+        let result2 = loader.load(1).await.expect("should succeed");
         assert_eq!(result2, Some("value_1".to_string()));
 
         let stats = loader.get_stats().await;
@@ -633,7 +633,7 @@ mod tests {
         let loader = DataLoader::new(batch_fn);
 
         let keys = vec![1, 2, 3];
-        let results = loader.load_many(keys).await.unwrap();
+        let results = loader.load_many(keys).await.expect("should succeed");
 
         assert_eq!(results.len(), 3);
         assert_eq!(results.get(&1), Some(&"value_1".to_string()));

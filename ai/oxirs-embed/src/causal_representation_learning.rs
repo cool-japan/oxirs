@@ -1626,7 +1626,7 @@ mod tests {
         data1.insert("Y".to_string(), 2.0);
         model.add_observational_data(data1);
 
-        let stats = model.train(Some(5)).await.unwrap();
+        let stats = model.train(Some(5)).await.expect("should succeed");
         assert_eq!(stats.epochs_completed, 5);
         assert!(model.is_trained());
     }

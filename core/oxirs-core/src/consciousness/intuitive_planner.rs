@@ -757,9 +757,11 @@ mod tests {
     fn test_creativity_engine() {
         let mut engine = CreativityEngine::new();
         let patterns = vec![AlgebraTriplePattern::new(
-            AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/pred").unwrap()),
-            AlgebraTermPattern::Variable(Variable::new("o").unwrap()),
+            AlgebraTermPattern::Variable(Variable::new("s").expect("valid variable name")),
+            AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/pred").expect("valid IRI"),
+            ),
+            AlgebraTermPattern::Variable(Variable::new("o").expect("valid variable name")),
         )];
 
         let optimizations = engine.generate_creative_optimizations(&patterns);
@@ -773,8 +775,12 @@ mod tests {
         let planner = IntuitiveQueryPlanner::new(stats);
 
         let patterns = vec![AlgebraTriplePattern::new(
-            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/subj").unwrap()),
-            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+            AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/subj").expect("valid IRI"),
+            ),
+            AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/type").expect("valid IRI"),
+            ),
             AlgebraTermPattern::Literal(Literal::new("test")),
         )];
 

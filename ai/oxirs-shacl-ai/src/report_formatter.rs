@@ -767,7 +767,7 @@ mod tests {
     fn test_format_turtle() {
         let r = ReportFormatter::format(&sample_report(), "turtle");
         assert!(r.is_ok());
-        assert!(r.unwrap().contains("sh:ValidationReport"));
+        assert!(r.expect("should succeed").contains("sh:ValidationReport"));
     }
 
     #[test]

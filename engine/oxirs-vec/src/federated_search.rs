@@ -1044,6 +1044,7 @@ impl PrivacyBudgetTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[tokio::test]
     async fn test_federated_search_creation() {
@@ -1053,9 +1054,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_federation_endpoint_registration() {
+    async fn test_federation_endpoint_registration() -> Result<()> {
         let config = FederatedSearchConfig::default();
-        let federated_search = FederatedVectorSearch::new(config).await.unwrap();
+        let federated_search = FederatedVectorSearch::new(config).await?;
 
         let endpoint = FederationEndpoint {
             federation_id: "test_federation".to_string(),
@@ -1106,12 +1107,13 @@ mod tests {
             health_status.get("test_federation"),
             Some(&NodeHealthStatus::Healthy)
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_federated_search_execution() {
+    async fn test_federated_search_execution() -> Result<()> {
         let config = FederatedSearchConfig::default();
-        let federated_search = FederatedVectorSearch::new(config).await.unwrap();
+        let federated_search = FederatedVectorSearch::new(config).await?;
 
         // Register a test federation
         let endpoint = FederationEndpoint {
@@ -1154,10 +1156,7 @@ mod tests {
             },
         };
 
-        federated_search
-            .register_federation(endpoint)
-            .await
-            .unwrap();
+        federated_search.register_federation(endpoint).await?;
 
         // Create a test query
         let query = FederatedQuery {
@@ -1181,12 +1180,13 @@ mod tests {
             timeout: Duration::from_secs(5),
         };
 
-        let response = federated_search.federated_search(query).await.unwrap();
+        let response = federated_search.federated_search(query).await?;
 
         assert_eq!(response.query_id, "test_query_1");
         assert!(!response.results.is_empty());
         assert!(response.federation_stats.federations_contacted > 0);
         assert!(response.federation_stats.federations_responded > 0);
+        Ok(())
     }
 
     #[test]

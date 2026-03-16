@@ -38,7 +38,7 @@
 //! ];
 //!
 //! // Automatically selects optimal strategy based on dataset size
-//! let distances = processor.distances(&query, &targets).unwrap();
+//! let distances = processor.distances(&query, &targets).expect("should succeed");
 //! ```
 
 pub mod batch;

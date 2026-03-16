@@ -1097,7 +1097,7 @@ mod tests {
     async fn test_self_adaptive_ai() {
         let config = SelfAdaptiveConfig::default();
         let ai = SelfAdaptiveAI::new(config);
-        let stats = ai.get_adaptation_stats().await.unwrap();
+        let stats = ai.get_adaptation_stats().await.expect("should succeed");
         assert_eq!(stats.total_adaptations, 0);
     }
 

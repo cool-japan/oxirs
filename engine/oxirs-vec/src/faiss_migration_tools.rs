@@ -1209,23 +1209,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_format_detection() {
+    async fn test_format_detection() -> Result<()> {
         let config = MigrationConfig::default();
         let tool = FaissMigrationTool::new(config);
 
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = tempdir()?;
         let test_path = temp_dir.path().join("test_index");
-        std::fs::create_dir(&test_path).unwrap();
+        std::fs::create_dir(&test_path)?;
 
         // Create fake oxirs-vec format files
-        std::fs::write(test_path.join("vectors.bin"), b"fake vector data").unwrap();
-        std::fs::write(test_path.join("metadata.json"), b"{}").unwrap();
+        std::fs::write(test_path.join("vectors.bin"), b"fake vector data")?;
+        std::fs::write(test_path.join("metadata.json"), b"{}")?;
 
-        let detected_format = tool.detect_format(&test_path).await.unwrap();
+        let detected_format = tool.detect_format(&test_path).await?;
         match detected_format {
             MigrationFormat::OxirsVec { .. } => (),
             _ => panic!("Expected OxirsVec format"),
         }
+        Ok(())
     }
 
     #[test]

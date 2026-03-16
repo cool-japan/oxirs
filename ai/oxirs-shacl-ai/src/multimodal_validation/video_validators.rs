@@ -475,9 +475,19 @@ mod tests {
         ];
         let content = create_test_video_content(&mp4_data);
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
-        assert_eq!(result.details.get("detected_format").unwrap(), "mp4");
+        assert_eq!(
+            result
+                .details
+                .get("detected_format")
+                .expect("should succeed"),
+            "mp4"
+        );
     }
 
     #[tokio::test]
@@ -485,7 +495,11 @@ mod tests {
         let validator = SceneAnalysisValidator::new();
         let content = create_test_video_content(&[0x66, 0x74, 0x79, 0x70]);
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("scene_count"));
         assert!(result.details.contains_key("confidence"));
@@ -496,7 +510,11 @@ mod tests {
         let validator = MotionDetectionValidator::new();
         let content = create_test_video_content(&[0x66, 0x74, 0x79, 0x70]);
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("motion_detected"));
         assert!(result.details.contains_key("motion_intensity"));

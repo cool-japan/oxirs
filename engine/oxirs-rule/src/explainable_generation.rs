@@ -475,7 +475,7 @@ mod tests {
     }
 
     #[test]
-    fn test_natural_language_explanation() {
+    fn test_natural_language_explanation() -> Result<(), Box<dyn std::error::Error>> {
         let mut generator = ExplainableGenerator::new();
         let rule = create_test_rule("test_rule");
 
@@ -484,13 +484,14 @@ mod tests {
         let explanation = generator.explain("test_rule", ExplanationType::NaturalLanguage);
         assert!(explanation.is_some());
 
-        let exp = explanation.unwrap();
+        let exp = explanation.ok_or("expected Some value")?;
         assert!(exp.contains("test_rule"));
         assert!(exp.contains("manually authored"));
+        Ok(())
     }
 
     #[test]
-    fn test_feature_importance_explanation() {
+    fn test_feature_importance_explanation() -> Result<(), Box<dyn std::error::Error>> {
         let mut generator = ExplainableGenerator::new();
         let rule = create_test_rule("test_rule");
 
@@ -515,13 +516,14 @@ mod tests {
         let explanation = generator.explain("test_rule", ExplanationType::FeatureImportance);
         assert!(explanation.is_some());
 
-        let exp = explanation.unwrap();
+        let exp = explanation.ok_or("expected Some value")?;
         assert!(exp.contains("feature1"));
         assert!(exp.contains("60.0%"));
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_explanation() {
+    fn test_confidence_explanation() -> Result<(), Box<dyn std::error::Error>> {
         let mut generator = ExplainableGenerator::new();
         let rule = create_test_rule("high_conf_rule");
 
@@ -541,14 +543,15 @@ mod tests {
         let explanation = generator.explain("high_conf_rule", ExplanationType::ConfidenceAnalysis);
         assert!(explanation.is_some());
 
-        let exp = explanation.unwrap();
+        let exp = explanation.ok_or("expected Some value")?;
         assert!(exp.contains("92.0%"));
         assert!(exp.contains("500"));
         assert!(exp.contains("Very High"));
+        Ok(())
     }
 
     #[test]
-    fn test_provenance_explanation() {
+    fn test_provenance_explanation() -> Result<(), Box<dyn std::error::Error>> {
         let mut generator = ExplainableGenerator::new();
         let rule = create_test_rule("derived_rule");
 
@@ -568,10 +571,11 @@ mod tests {
         let explanation = generator.explain("derived_rule", ExplanationType::Provenance);
         assert!(explanation.is_some());
 
-        let exp = explanation.unwrap();
+        let exp = explanation.ok_or("expected Some value")?;
         assert!(exp.contains("Derivation"));
         assert!(exp.contains("parent1"));
         assert!(exp.contains("parent2"));
+        Ok(())
     }
 
     #[test]

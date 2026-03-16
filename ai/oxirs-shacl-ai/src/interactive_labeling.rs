@@ -639,7 +639,7 @@ mod tests {
         let mut interface = InteractiveLabelingInterface::new();
         let task = create_test_task("task1", 0.8);
 
-        interface.add_task(task).unwrap();
+        interface.add_task(task).expect("should succeed");
         assert_eq!(interface.tasks.len(), 1);
         assert_eq!(interface.task_queue.len(), 1);
     }
@@ -648,9 +648,15 @@ mod tests {
     fn test_priority_ordering() {
         let mut interface = InteractiveLabelingInterface::new();
 
-        interface.add_task(create_test_task("task1", 0.5)).unwrap();
-        interface.add_task(create_test_task("task2", 0.9)).unwrap();
-        interface.add_task(create_test_task("task3", 0.7)).unwrap();
+        interface
+            .add_task(create_test_task("task1", 0.5))
+            .expect("should succeed");
+        interface
+            .add_task(create_test_task("task2", 0.9))
+            .expect("should succeed");
+        interface
+            .add_task(create_test_task("task3", 0.7))
+            .expect("should succeed");
 
         // Highest priority should be first
         assert_eq!(interface.task_queue[0], "task2");
@@ -663,7 +669,9 @@ mod tests {
         let mut interface = InteractiveLabelingInterface::new();
         let annotator = create_test_annotator("ann1");
 
-        interface.register_annotator(annotator).unwrap();
+        interface
+            .register_annotator(annotator)
+            .expect("should succeed");
         assert_eq!(interface.annotators.len(), 1);
     }
 
@@ -673,12 +681,14 @@ mod tests {
         let annotator = create_test_annotator("ann1");
         let task = create_test_task("task1", 0.8);
 
-        interface.register_annotator(annotator).unwrap();
-        interface.add_task(task).unwrap();
+        interface
+            .register_annotator(annotator)
+            .expect("should succeed");
+        interface.add_task(task).expect("should succeed");
 
         let next_task = interface.get_next_task("ann1");
         assert!(next_task.is_some());
-        assert_eq!(next_task.unwrap().id, "task1");
+        assert_eq!(next_task.expect("should succeed").id, "task1");
     }
 
     #[test]
@@ -687,8 +697,10 @@ mod tests {
         let annotator = create_test_annotator("ann1");
         let task = create_test_task("task1", 0.8);
 
-        interface.register_annotator(annotator).unwrap();
-        interface.add_task(task).unwrap();
+        interface
+            .register_annotator(annotator)
+            .expect("should succeed");
+        interface.add_task(task).expect("should succeed");
 
         let annotation = Annotation {
             id: "ann_1".to_string(),
@@ -701,9 +713,11 @@ mod tests {
             timestamp: chrono::Utc::now(),
         };
 
-        interface.submit_annotation("task1", annotation).unwrap();
+        interface
+            .submit_annotation("task1", annotation)
+            .expect("should succeed");
 
-        let task = interface.tasks.get("task1").unwrap();
+        let task = interface.tasks.get("task1").expect("should succeed");
         assert_eq!(task.annotations.len(), 1);
         assert_eq!(task.status, TaskStatus::InProgress);
     }
@@ -754,10 +768,10 @@ mod tests {
         let mut interface = InteractiveLabelingInterface::new();
         interface
             .register_annotator(create_test_annotator("ann1"))
-            .unwrap();
+            .expect("should succeed");
         interface
             .register_annotator(create_test_annotator("ann2"))
-            .unwrap();
+            .expect("should succeed");
 
         let mut task = create_test_task("task1", 0.8);
         task.annotations = vec![
@@ -792,7 +806,9 @@ mod tests {
     #[test]
     fn test_quality_metrics() {
         let mut interface = InteractiveLabelingInterface::new();
-        interface.add_task(create_test_task("task1", 0.8)).unwrap();
+        interface
+            .add_task(create_test_task("task1", 0.8))
+            .expect("should succeed");
 
         let metrics = interface.calculate_quality_metrics();
         assert_eq!(metrics.disputed_tasks, 0);
@@ -801,8 +817,12 @@ mod tests {
     #[test]
     fn test_task_statistics() {
         let mut interface = InteractiveLabelingInterface::new();
-        interface.add_task(create_test_task("task1", 0.8)).unwrap();
-        interface.add_task(create_test_task("task2", 0.6)).unwrap();
+        interface
+            .add_task(create_test_task("task1", 0.8))
+            .expect("should succeed");
+        interface
+            .add_task(create_test_task("task2", 0.6))
+            .expect("should succeed");
 
         let stats = interface.get_task_statistics();
         assert_eq!(stats.total_tasks, 2);

@@ -976,7 +976,7 @@ mod tests {
                 dependencies,
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Notify change
         let change = RdfChange {
@@ -987,10 +987,10 @@ mod tests {
             graph: None,
             timestamp: Instant::now(),
         };
-        manager.notify_change(change).await.unwrap();
+        manager.notify_change(change).await.expect("should succeed");
 
         // Process changes
-        let affected = manager.process_changes().await.unwrap();
+        let affected = manager.process_changes().await.expect("should succeed");
         assert_eq!(affected, 1);
     }
 
@@ -1041,7 +1041,7 @@ mod tests {
         let diff = manager.compute_diff(&old, &new);
         assert!(diff.is_some());
 
-        let diff_value = diff.unwrap();
+        let diff_value = diff.expect("should succeed");
         assert_eq!(diff_value["b"], 3);
     }
 
@@ -1056,7 +1056,7 @@ mod tests {
         let diff = manager.compute_diff(&old, &new);
         assert!(diff.is_some());
 
-        let diff_value = diff.unwrap();
+        let diff_value = diff.expect("should succeed");
         assert_eq!(diff_value["b"], 2);
     }
 
@@ -1071,7 +1071,7 @@ mod tests {
         let diff = manager.compute_diff(&old, &new);
         assert!(diff.is_some());
 
-        let diff_value = diff.unwrap();
+        let diff_value = diff.expect("should succeed");
         assert!(diff_value["b"].is_null());
     }
 
@@ -1086,7 +1086,7 @@ mod tests {
         let diff = manager.compute_diff(&old, &new);
         assert!(diff.is_some());
 
-        let diff_value = diff.unwrap();
+        let diff_value = diff.expect("should succeed");
         assert_eq!(diff_value["a"]["b"], 2);
     }
 
@@ -1116,7 +1116,7 @@ mod tests {
         let diff = manager.compute_diff(&old, &new);
         // When diffing is disabled, should return the full new value
         assert!(diff.is_some());
-        assert_eq!(diff.unwrap(), new);
+        assert_eq!(diff.expect("should succeed"), new);
     }
 
     #[test]
@@ -1134,7 +1134,7 @@ mod tests {
         let diff = manager.compute_diff(&old, &new);
         // Should return full result since it exceeds max_diff_size
         assert!(diff.is_some());
-        assert_eq!(diff.unwrap(), new);
+        assert_eq!(diff.expect("should succeed"), new);
     }
 
     #[tokio::test]

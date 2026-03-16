@@ -354,7 +354,9 @@ mod tests {
     #[test]
     fn test_render_simple_substitution() {
         let t = PromptTemplate::new("greet", "Hello, {{name}}!").required("name");
-        let result = t.render(&vars(&[("name", "World")])).unwrap();
+        let result = t
+            .render(&vars(&[("name", "World")]))
+            .expect("should succeed");
         assert_eq!(result, "Hello, World!");
     }
 
@@ -363,21 +365,23 @@ mod tests {
         let t = PromptTemplate::new("t", "{{a}} and {{b}}")
             .required("a")
             .required("b");
-        let result = t.render(&vars(&[("a", "foo"), ("b", "bar")])).unwrap();
+        let result = t
+            .render(&vars(&[("a", "foo"), ("b", "bar")]))
+            .expect("should succeed");
         assert_eq!(result, "foo and bar");
     }
 
     #[test]
     fn test_render_repeated_var() {
         let t = PromptTemplate::new("t", "{{x}} {{x}} {{x}}").required("x");
-        let result = t.render(&vars(&[("x", "go")])).unwrap();
+        let result = t.render(&vars(&[("x", "go")])).expect("should succeed");
         assert_eq!(result, "go go go");
     }
 
     #[test]
     fn test_render_optional_missing_is_empty_string() {
         let t = PromptTemplate::new("t", "start {{opt}} end").optional("opt");
-        let result = t.render(&HashMap::new()).unwrap();
+        let result = t.render(&HashMap::new()).expect("should succeed");
         assert_eq!(result, "start  end");
     }
 
@@ -391,21 +395,23 @@ mod tests {
     #[test]
     fn test_render_no_placeholders() {
         let t = PromptTemplate::new("t", "Hello, World!");
-        let result = t.render(&HashMap::new()).unwrap();
+        let result = t.render(&HashMap::new()).expect("should succeed");
         assert_eq!(result, "Hello, World!");
     }
 
     #[test]
     fn test_render_whitespace_in_placeholder() {
         let t = PromptTemplate::new("t", "{{ name }}").optional("name");
-        let result = t.render(&vars(&[("name", "Alice")])).unwrap();
+        let result = t
+            .render(&vars(&[("name", "Alice")]))
+            .expect("should succeed");
         assert_eq!(result, "Alice");
     }
 
     #[test]
     fn test_render_empty_template() {
         let t = PromptTemplate::new("t", "");
-        let result = t.render(&HashMap::new()).unwrap();
+        let result = t.render(&HashMap::new()).expect("should succeed");
         assert_eq!(result, "");
     }
 
@@ -438,7 +444,9 @@ mod tests {
     fn test_builder_build_basic() {
         let mut b = PromptBuilder::new();
         b.add_template(PromptTemplate::new("hi", "Hi {{name}}!").required("name"));
-        let result = b.build("hi", vars(&[("name", "Alice")])).unwrap();
+        let result = b
+            .build("hi", vars(&[("name", "Alice")]))
+            .expect("should succeed");
         assert_eq!(result, "Hi Alice!");
     }
 
@@ -454,7 +462,7 @@ mod tests {
         let mut b = PromptBuilder::new();
         b.set_global("lang", "Rust");
         b.add_template(PromptTemplate::new("prog", "I love {{lang}}!").optional("lang"));
-        let result = b.build("prog", HashMap::new()).unwrap();
+        let result = b.build("prog", HashMap::new()).expect("should succeed");
         assert_eq!(result, "I love Rust!");
     }
 
@@ -463,7 +471,9 @@ mod tests {
         let mut b = PromptBuilder::new();
         b.set_global("lang", "Rust");
         b.add_template(PromptTemplate::new("prog", "Language: {{lang}}").optional("lang"));
-        let result = b.build("prog", vars(&[("lang", "Python")])).unwrap();
+        let result = b
+            .build("prog", vars(&[("lang", "Python")]))
+            .expect("should succeed");
         assert_eq!(result, "Language: Python");
     }
 
@@ -473,7 +483,7 @@ mod tests {
         b.add_template(PromptTemplate::new("t", "version 1"));
         b.add_template(PromptTemplate::new("t", "version 2"));
         assert_eq!(b.template_count(), 1);
-        let result = b.build("t", HashMap::new()).unwrap();
+        let result = b.build("t", HashMap::new()).expect("should succeed");
         assert_eq!(result, "version 2");
     }
 
@@ -483,8 +493,14 @@ mod tests {
         b.add_template(PromptTemplate::new("a", "{{x}}").required("x"));
         b.add_template(PromptTemplate::new("b", "{{y}}").required("y"));
 
-        assert_eq!(b.build("a", vars(&[("x", "1")])).unwrap(), "1");
-        assert_eq!(b.build("b", vars(&[("y", "2")])).unwrap(), "2");
+        assert_eq!(
+            b.build("a", vars(&[("x", "1")])).expect("should succeed"),
+            "1"
+        );
+        assert_eq!(
+            b.build("b", vars(&[("y", "2")])).expect("should succeed"),
+            "2"
+        );
     }
 
     #[test]
@@ -496,7 +512,9 @@ mod tests {
                 .optional("system")
                 .required("user"),
         );
-        let result = b.build("intro", vars(&[("user", "Bob")])).unwrap();
+        let result = b
+            .build("intro", vars(&[("user", "Bob")]))
+            .expect("should succeed");
         assert_eq!(result, "OxiRS welcomes Bob");
     }
 
@@ -519,7 +537,7 @@ mod tests {
         );
         let result = b
             .build("multi", vars(&[("a", "hello"), ("b", "world")]))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(result, "Line 1: hello\nLine 2: world\nLine 3: hello");
     }
 
@@ -547,7 +565,7 @@ mod tests {
                 .optional("a")
                 .optional("b"),
         );
-        let result = b.build("t", HashMap::new()).unwrap();
+        let result = b.build("t", HashMap::new()).expect("should succeed");
         assert_eq!(result, "3 2");
     }
 }

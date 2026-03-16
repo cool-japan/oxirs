@@ -184,6 +184,8 @@ pub enum StitchError {
     NoSchemas,
     /// A conflict was encountered under the [`ConflictPolicy::Error`] policy.
     ConflictOnError(MergeConflict),
+    /// Internal error: a type was expected in the merged map but was missing.
+    InternalTypeMissing(String),
 }
 
 impl std::fmt::Display for StitchError {
@@ -191,6 +193,9 @@ impl std::fmt::Display for StitchError {
         match self {
             StitchError::NoSchemas => write!(f, "No schemas to stitch"),
             StitchError::ConflictOnError(c) => write!(f, "Conflict during stitching: {:?}", c),
+            StitchError::InternalTypeMissing(name) => {
+                write!(f, "Internal error: type '{}' missing from merged map", name)
+            }
         }
     }
 }
@@ -275,7 +280,9 @@ impl SchemaStitcher {
                         // Collect existing field name→index mapping with owned Strings to
                         // avoid holding borrows into `merged_entry.fields` while mutating it.
                         let existing_fields: HashMap<String, usize> = {
-                            let entry = merged_types.get(type_name).unwrap();
+                            let entry = merged_types.get(type_name).ok_or_else(|| {
+                                StitchError::InternalTypeMissing(type_name.clone())
+                            })?;
                             entry
                                 .fields
                                 .iter()
@@ -330,11 +337,17 @@ impl SchemaStitcher {
                                 }
                                 FieldAction::Overwrite(idx, c, new_field) => {
                                     conflicts.push(c);
-                                    let entry = merged_types.get_mut(type_name).unwrap();
+                                    let entry =
+                                        merged_types.get_mut(type_name).ok_or_else(|| {
+                                            StitchError::InternalTypeMissing(type_name.clone())
+                                        })?;
                                     entry.fields[idx] = new_field;
                                 }
                                 FieldAction::Append(new_field) => {
-                                    let entry = merged_types.get_mut(type_name).unwrap();
+                                    let entry =
+                                        merged_types.get_mut(type_name).ok_or_else(|| {
+                                            StitchError::InternalTypeMissing(type_name.clone())
+                                        })?;
                                     entry.fields.push(new_field);
                                 }
                             }
@@ -429,9 +442,9 @@ mod tests {
         schema.add_type(query_type(&[("hello", "String")]));
         s.add_schema(schema);
 
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert!(result.conflicts.is_empty());
-        let q = result.schema.get_type("Query").unwrap();
+        let q = result.schema.get_type("Query").expect("should succeed");
         assert_eq!(q.fields.len(), 1);
         assert_eq!(q.fields[0].name, "hello");
     }
@@ -449,7 +462,7 @@ mod tests {
         schema2.add_type(TypeDef::new("Product", TypeKind::Object));
         s.add_schema(schema2);
 
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert!(result.conflicts.is_empty());
         assert!(result.schema.get_type("User").is_some());
         assert!(result.schema.get_type("Product").is_some());
@@ -466,9 +479,9 @@ mod tests {
         schema2.add_type(query_type(&[("products", "[Product]")]));
         s.add_schema(schema2);
 
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert!(result.conflicts.is_empty());
-        let q = result.schema.get_type("Query").unwrap();
+        let q = result.schema.get_type("Query").expect("should succeed");
         assert_eq!(q.fields.len(), 2);
     }
 
@@ -485,11 +498,11 @@ mod tests {
         schema2.add_type(TypeDef::new("Overlap", TypeKind::Enum));
         s.add_schema(schema2);
 
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert_eq!(result.conflicts.len(), 1);
         // First definition (Object) wins.
         assert_eq!(
-            result.schema.get_type("Overlap").unwrap().kind,
+            result.schema.get_type("Overlap").expect("should succeed").kind,
             TypeKind::Object
         );
     }
@@ -505,11 +518,11 @@ mod tests {
         schema2.add_type(TypeDef::new("Overlap", TypeKind::Enum));
         s.add_schema(schema2);
 
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert_eq!(result.conflicts.len(), 1);
         // Last definition (Enum) wins.
         assert_eq!(
-            result.schema.get_type("Overlap").unwrap().kind,
+            result.schema.get_type("Overlap").expect("should succeed").kind,
             TypeKind::Enum
         );
     }
@@ -542,10 +555,10 @@ mod tests {
         schema2.add_type(query_type(&[("hello", "Int")]));
         s.add_schema(schema2);
 
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert_eq!(result.conflicts.len(), 1);
         // First field type wins.
-        let q = result.schema.get_type("Query").unwrap();
+        let q = result.schema.get_type("Query").expect("should succeed");
         assert_eq!(q.fields[0].field_type, "String");
     }
 
@@ -560,9 +573,9 @@ mod tests {
         schema2.add_type(query_type(&[("hello", "Int")]));
         s.add_schema(schema2);
 
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert_eq!(result.conflicts.len(), 1);
-        let q = result.schema.get_type("Query").unwrap();
+        let q = result.schema.get_type("Query").expect("should succeed");
         assert_eq!(q.fields[0].field_type, "Int");
     }
 
@@ -586,7 +599,7 @@ mod tests {
     fn test_query_root_from_first_schema() {
         let mut s = SchemaStitcher::new(ConflictPolicy::SkipConflicting);
         s.add_schema(make_schema("MyQuery"));
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert_eq!(result.schema.query_type, "MyQuery");
     }
 
@@ -594,7 +607,7 @@ mod tests {
     fn test_mutation_type_propagated() {
         let mut s = SchemaStitcher::new(ConflictPolicy::SkipConflicting);
         s.add_schema(make_schema("Query").with_mutation("Mutation"));
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert_eq!(result.schema.mutation_type, Some("Mutation".to_owned()));
     }
 
@@ -603,7 +616,7 @@ mod tests {
         let mut s = SchemaStitcher::new(ConflictPolicy::SkipConflicting);
         s.add_schema(make_schema("Query"));
         s.add_schema(make_schema("Query").with_mutation("Mutation2"));
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert_eq!(result.schema.mutation_type, Some("Mutation2".to_owned()));
     }
 
@@ -611,7 +624,7 @@ mod tests {
     fn test_subscription_type_propagated() {
         let mut s = SchemaStitcher::new(ConflictPolicy::SkipConflicting);
         s.add_schema(make_schema("Query").with_subscription("Subscription"));
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert_eq!(
             result.schema.subscription_type,
             Some("Subscription".to_owned())
@@ -653,7 +666,7 @@ mod tests {
             schema.add_type(TypeDef::new(format!("Type{}", i), TypeKind::Object));
             s.add_schema(schema);
         }
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert!(result.conflicts.is_empty());
         assert_eq!(result.schema.types.len(), 20);
     }
@@ -669,7 +682,7 @@ mod tests {
         schema2.add_type(TypeDef::new("B", TypeKind::Object));
         s.add_schema(schema2);
 
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert!(result.conflicts.is_empty());
     }
 
@@ -678,7 +691,7 @@ mod tests {
         let mut s = SchemaStitcher::new(ConflictPolicy::SkipConflicting);
         s.add_schema(make_schema("Query"));
         s.add_schema(make_schema("Query"));
-        let result = s.stitch().unwrap();
+        let result = s.stitch().expect("should succeed");
         assert!(result.conflicts.is_empty());
         assert_eq!(result.schema.query_type, "Query");
     }
@@ -689,7 +702,7 @@ mod tests {
     fn test_stitch_result_schema_has_query_type() {
         let mut s = SchemaStitcher::new(ConflictPolicy::SkipConflicting);
         s.add_schema(make_schema("RootQuery"));
-        let r = s.stitch().unwrap();
+        let r = s.stitch().expect("should succeed");
         assert_eq!(r.schema.query_type, "RootQuery");
     }
 
@@ -734,7 +747,7 @@ mod tests {
         let mut schema = SchemaDef::new("Query");
         schema.add_type(TypeDef::new("User", TypeKind::Object));
         schema.add_type(TypeDef::new("User", TypeKind::Interface)); // overwrite
-        assert_eq!(schema.get_type("User").unwrap().kind, TypeKind::Interface);
+        assert_eq!(schema.get_type("User").expect("should succeed").kind, TypeKind::Interface);
     }
 
     #[test]
@@ -788,7 +801,7 @@ mod tests {
         let mut schema2 = make_schema("Query");
         schema2.add_type(TypeDef::new("B", TypeKind::Scalar));
         s.add_schema(schema2);
-        let r = s.stitch().unwrap();
+        let r = s.stitch().expect("should succeed");
         assert!(r.conflicts.is_empty());
         assert_eq!(r.schema.types.len(), 2);
     }

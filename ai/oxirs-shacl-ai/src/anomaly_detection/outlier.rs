@@ -544,7 +544,7 @@ mod tests {
         let detector = OutlierDetector::new(OutlierMethod::IQR).with_min_samples(5);
         let data = Array1::from_vec(vec![1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 100.0]);
 
-        let result = detector.detect_outliers_1d(&data).unwrap();
+        let result = detector.detect_outliers_1d(&data).expect("should succeed");
         assert!(!result.outliers.is_empty());
         assert_eq!(result.method, OutlierMethod::IQR);
     }
@@ -554,7 +554,7 @@ mod tests {
         let detector = OutlierDetector::new(OutlierMethod::ZScore);
         let data = Array1::from_vec(vec![1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 50.0]);
 
-        let result = detector.detect_outliers_1d(&data).unwrap();
+        let result = detector.detect_outliers_1d(&data).expect("should succeed");
         assert!(!result.outliers.is_empty());
     }
 
@@ -563,7 +563,9 @@ mod tests {
         let detector = OutlierDetector::new(OutlierMethod::IQR);
         let data = Array1::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
 
-        let dist = detector.calculate_distribution(&data).unwrap();
+        let dist = detector
+            .calculate_distribution(&data)
+            .expect("should succeed");
         assert_eq!(dist.mean, 5.5);
         assert_eq!(dist.median, 5.5);
         assert_eq!(dist.count, 10);

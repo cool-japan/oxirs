@@ -473,7 +473,7 @@ mod tests {
         let query = "What movies were directed by Christopher Nolan in 2020?";
         let context = "Christopher Nolan directed Tenet in 2020. Tenet is a science fiction film.";
 
-        let result = engine.reason(query, context).await.unwrap();
+        let result = engine.reason(query, context).await.expect("should succeed");
 
         assert!(!result.steps.is_empty());
         assert!(!result.answer.is_empty());
@@ -486,7 +486,7 @@ mod tests {
         let engine = ChainOfThoughtEngine::new(config);
 
         let query = "Find all proteins related to cancer";
-        let step = engine.decompose_problem(query, "").unwrap();
+        let step = engine.decompose_problem(query, "").expect("should succeed");
 
         assert_eq!(step.step_number, 1);
         assert_eq!(step.step_type, StepType::Decomposition);

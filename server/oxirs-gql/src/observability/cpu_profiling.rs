@@ -503,12 +503,15 @@ mod tests {
                 "Query.user".to_string(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let profile = profiler.get_profile("profile-1").await;
         assert!(profile.is_some());
 
-        let completed = profiler.stop_profiling("profile-1").await.unwrap();
+        let completed = profiler
+            .stop_profiling("profile-1")
+            .await
+            .expect("should succeed");
         assert_eq!(completed.resolver_name, "UserResolver");
 
         let profile = profiler.get_profile("profile-1").await;
@@ -526,12 +529,21 @@ mod tests {
                 "Query.user".to_string(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        profiler.record_sample("profile-1").await.unwrap();
-        profiler.record_sample("profile-1").await.unwrap();
+        profiler
+            .record_sample("profile-1")
+            .await
+            .expect("should succeed");
+        profiler
+            .record_sample("profile-1")
+            .await
+            .expect("should succeed");
 
-        let profile = profiler.get_profile("profile-1").await.unwrap();
+        let profile = profiler
+            .get_profile("profile-1")
+            .await
+            .expect("should succeed");
         assert!(profile.samples.len() >= 2);
     }
 
@@ -546,9 +558,12 @@ mod tests {
                 "Query.user".to_string(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        profiler.stop_profiling("profile-1").await.unwrap();
+        profiler
+            .stop_profiling("profile-1")
+            .await
+            .expect("should succeed");
 
         let completed = profiler.get_completed_profiles().await;
         assert_eq!(completed.len(), 1);
@@ -566,9 +581,12 @@ mod tests {
                 "Query.user".to_string(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        profiler.stop_profiling("profile-1").await.unwrap();
+        profiler
+            .stop_profiling("profile-1")
+            .await
+            .expect("should succeed");
 
         profiler
             .start_profiling(
@@ -577,9 +595,12 @@ mod tests {
                 "Query.posts".to_string(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        profiler.stop_profiling("profile-2").await.unwrap();
+        profiler
+            .stop_profiling("profile-2")
+            .await
+            .expect("should succeed");
 
         let profiles = profiler.get_profiles_by_resolver("UserResolver").await;
         assert_eq!(profiles.len(), 1);
@@ -598,8 +619,11 @@ mod tests {
                 "Query.low".to_string(),
             )
             .await
-            .unwrap();
-        profiler.stop_profiling("profile-1").await.unwrap();
+            .expect("should succeed");
+        profiler
+            .stop_profiling("profile-1")
+            .await
+            .expect("should succeed");
 
         // Profile 2 - high CPU
         profiler
@@ -609,8 +633,11 @@ mod tests {
                 "Query.high".to_string(),
             )
             .await
-            .unwrap();
-        profiler.stop_profiling("profile-2").await.unwrap();
+            .expect("should succeed");
+        profiler
+            .stop_profiling("profile-2")
+            .await
+            .expect("should succeed");
 
         let top = profiler.get_top_consumers(1).await;
         assert_eq!(top.len(), 1);
@@ -627,7 +654,7 @@ mod tests {
                 "Query.user".to_string(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         profiler
             .start_profiling(
@@ -636,9 +663,12 @@ mod tests {
                 "Query.posts".to_string(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        profiler.stop_profiling("profile-1").await.unwrap();
+        profiler
+            .stop_profiling("profile-1")
+            .await
+            .expect("should succeed");
 
         let stats = profiler.get_statistics().await;
         assert_eq!(stats.active_profiles, 1); // profile-2 still active

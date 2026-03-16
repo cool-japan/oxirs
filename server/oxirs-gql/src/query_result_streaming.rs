@@ -826,14 +826,17 @@ mod tests {
             .with_chunk_size(100);
 
         let executor = StreamingExecutor::new(config);
-        let mut stream = executor.execute_streaming(items).await.unwrap();
+        let mut stream = executor
+            .execute_streaming(items)
+            .await
+            .expect("should succeed");
 
         let mut chunk_count = 0;
         let mut total_items = 0;
         let mut completed = false;
 
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 StreamEvent::Chunk(chunk) => {
                     chunk_count += 1;
                     total_items += chunk.items.len();
@@ -869,13 +872,16 @@ mod tests {
             .with_chunk_size_range(10, 50);
 
         let executor = StreamingExecutor::new(config);
-        let mut stream = executor.execute_streaming(items).await.unwrap();
+        let mut stream = executor
+            .execute_streaming(items)
+            .await
+            .expect("should succeed");
 
         let mut total_items = 0;
         let mut completed = false;
 
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 StreamEvent::Chunk(chunk) => {
                     total_items += chunk.items.len();
                     // Check adaptive sizing constraints
@@ -905,13 +911,16 @@ mod tests {
             .with_time_interval(Duration::from_millis(10));
 
         let executor = StreamingExecutor::new(config);
-        let mut stream = executor.execute_streaming(items).await.unwrap();
+        let mut stream = executor
+            .execute_streaming(items)
+            .await
+            .expect("should succeed");
 
         let mut total_items = 0;
         let mut completed = false;
 
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 StreamEvent::Chunk(chunk) => {
                     total_items += chunk.items.len();
                 }
@@ -937,12 +946,15 @@ mod tests {
             .with_progress_tracking(true);
 
         let executor = StreamingExecutor::new(config);
-        let mut stream = executor.execute_streaming(items).await.unwrap();
+        let mut stream = executor
+            .execute_streaming(items)
+            .await
+            .expect("should succeed");
 
         let mut progress_updates = 0;
 
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 StreamEvent::Progress(progress) => {
                     progress_updates += 1;
                     assert!(progress.throughput >= 0.0);
@@ -962,11 +974,14 @@ mod tests {
 
         let config = StreamingConfig::new();
         let executor = StreamingExecutor::new(config);
-        let mut stream = executor.execute_streaming(items).await.unwrap();
+        let mut stream = executor
+            .execute_streaming(items)
+            .await
+            .expect("should succeed");
 
         let mut completed = false;
         while let Some(event) = stream.next().await {
-            if let StreamEvent::Complete = event.unwrap() {
+            if let StreamEvent::Complete = event.expect("should succeed") {
                 completed = true;
                 break;
             }
@@ -984,11 +999,14 @@ mod tests {
 
         let config = StreamingConfig::new().with_chunk_size(100);
         let executor = StreamingExecutor::new(config);
-        let mut stream = executor.execute_streaming(items).await.unwrap();
+        let mut stream = executor
+            .execute_streaming(items)
+            .await
+            .expect("should succeed");
 
         let mut chunk_count = 0;
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 StreamEvent::Chunk(chunk) => {
                     chunk_count += 1;
                     assert_eq!(chunk.items.len(), 1);
@@ -1008,10 +1026,13 @@ mod tests {
 
         let config = StreamingConfig::new().with_chunk_size(50);
         let executor = StreamingExecutor::new(config);
-        let mut stream = executor.execute_streaming(items).await.unwrap();
+        let mut stream = executor
+            .execute_streaming(items)
+            .await
+            .expect("should succeed");
 
         while let Some(event) = stream.next().await {
-            if matches!(event.unwrap(), StreamEvent::Complete) {
+            if matches!(event.expect("should succeed"), StreamEvent::Complete) {
                 break;
             }
         }
@@ -1035,11 +1056,14 @@ mod tests {
             .with_chunk_size(25);
 
         let executor = StreamingExecutor::new(config);
-        let mut stream = executor.execute_streaming(items).await.unwrap();
+        let mut stream = executor
+            .execute_streaming(items)
+            .await
+            .expect("should succeed");
 
         let mut total_items = 0;
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 StreamEvent::Chunk(chunk) => {
                     total_items += chunk.items.len();
                 }
@@ -1057,10 +1081,13 @@ mod tests {
 
         let config = StreamingConfig::new().with_chunk_size(10);
         let executor = StreamingExecutor::new(config);
-        let mut stream = executor.execute_streaming(items).await.unwrap();
+        let mut stream = executor
+            .execute_streaming(items)
+            .await
+            .expect("should succeed");
 
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 StreamEvent::Chunk(chunk) => {
                     assert!(chunk.metadata.timestamp > 0);
                     assert!(chunk.metadata.size_bytes > 0);

@@ -574,7 +574,9 @@ mod tests {
             create_test_result("Inception is a great movie", 0.4),
         ];
 
-        ranker.rank_bm25(&mut results, "Inception movie").unwrap();
+        ranker
+            .rank_bm25(&mut results, "Inception movie")
+            .expect("should succeed");
 
         // Result with "Inception" should rank higher
         assert!(results[0].document.content.contains("Inception"));
@@ -591,7 +593,7 @@ mod tests {
         let context = QueryContext::new("session1".to_string());
         ranker
             .rank_hybrid(&mut results, "test document", &context)
-            .unwrap();
+            .expect("should succeed");
 
         // Should maintain relative ordering based on multiple signals
         assert!(results[0].score >= results[1].score);

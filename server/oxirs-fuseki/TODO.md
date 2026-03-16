@@ -1,10 +1,10 @@
 # OxiRS Fuseki - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS Fuseki v0.1.0 is production-ready, providing a complete SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility and modern enhancements.
+OxiRS Fuseki v0.2.2 is production-ready, providing a complete SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility and modern enhancements.
 
 ### Production Features
 - ✅ **SPARQL 1.1/1.2 Protocol** - Full W3C compliance with query and update support
@@ -18,22 +18,30 @@ OxiRS Fuseki v0.1.0 is production-ready, providing a complete SPARQL 1.1/1.2 HTT
 - ✅ **Production Operations** - Load balancing, edge caching, DDoS protection, security audit
 - ✅ **Deployment Automation** - Docker, Kubernetes, Kubernetes Operator, Terraform, Ansible
 - ✅ **Admin UI** - Modern web-based dashboard
-- ✅ **812 tests passing** with zero warnings
+- ✅ **Graph-Level RBAC** - Fine-grained graph access control
+- ✅ **OAuth2 Refresh Token Rotation** - Replay detection and secure rotation
+- ✅ **Query Logger** - Structured query audit logging
+- ✅ **2144 tests passing** with zero warnings
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Enhanced Performance & Scalability (Q1 2026 - Expanded)
-- [ ] Query result caching with intelligent invalidation
-- [ ] Advanced connection pooling strategies
-- [ ] Distributed query execution optimization
-- [ ] Enhanced monitoring and alerting
-- [ ] Performance SLA guarantees
-- [ ] Full-text search integration
-- [ ] Advanced federation capabilities
-- [ ] Multi-region clustering improvements
-- [ ] Enhanced AI integration
+### v0.1.0 - Released (January 7, 2026)
+- ✅ Full SPARQL 1.1/1.2 protocol, authentication, GraphQL, WebSocket, 812 tests
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ Query result caching with intelligent invalidation
+- ✅ Advanced connection pooling strategies
+- ✅ Distributed query execution optimization
+- ✅ Enhanced monitoring and alerting
+- ✅ Full-text search integration
+- ✅ Advanced federation capabilities
+- ✅ Multi-region clustering improvements
+- ✅ Enhanced AI integration
+- ✅ Graph-level RBAC
+- ✅ OAuth2 refresh token rotation with replay detection
+- ✅ 2144 tests passing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] API stability guarantees with long-term support
 - [ ] Enterprise support features
 - [ ] Complete Jena/Fuseki parity verification
@@ -45,4 +53,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Fuseki v0.1.0 - Production-ready SPARQL server*
+*OxiRS Fuseki v0.2.2 - Production-ready SPARQL server*

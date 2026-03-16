@@ -1382,7 +1382,7 @@ mod tests {
             attributes: HashMap::new(),
         };
         
-        let embedding = embedder.embed_product("product_1", &features).await.unwrap();
+        let embedding = embedder.embed_product("product_1", &features).await.expect("should succeed");
         assert_eq!(embedding.values.len(), 150); // Total feature vector size
         assert!(embedder.product_embeddings.contains_key("product_1"));
     }
@@ -1397,7 +1397,7 @@ mod tests {
             "design".to_string(),
         ];
         
-        let skill_embeddings = embedder.embed_employee_skills("emp_1", &skills).await.unwrap();
+        let skill_embeddings = embedder.embed_employee_skills("emp_1", &skills).await.expect("should succeed");
         assert_eq!(skill_embeddings.len(), 3);
         assert!(embedder.employee_skills.contains_key("emp_1"));
     }

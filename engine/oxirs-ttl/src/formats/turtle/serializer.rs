@@ -21,7 +21,7 @@
 //! let triple = Triple::new(subject, predicate, object);
 //!
 //! let mut output = Vec::new();
-//! serializer.serialize(&[triple], &mut output).unwrap();
+//! serializer.serialize(&[triple], &mut output).expect("should succeed");
 //! ```
 
 use crate::error::{TurtleParseError, TurtleResult};

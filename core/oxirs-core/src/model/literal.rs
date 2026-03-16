@@ -369,7 +369,7 @@ fn validate_integer_range_oxs(integer: Integer, datatype_iri: &str) -> Result<()
 ///
 /// assert_eq!(
 ///     r#""foo"@en"#,
-///     Literal::new_language_tagged_literal("foo", "en").unwrap().to_string()
+///     Literal::new_language_tagged_literal("foo", "en").expect("valid language literal").to_string()
 /// );
 /// ```
 #[derive(Eq, PartialEq, Debug, Clone, Hash, PartialOrd, Ord)]
@@ -1383,7 +1383,7 @@ mod tests {
 
     #[test]
     fn test_lang_literal() {
-        let literal = Literal::new_lang("Hello", "en").unwrap();
+        let literal = Literal::new_lang("Hello", "en").expect("construction should succeed");
         assert_eq!(literal.value(), "Hello");
         assert_eq!(literal.language(), Some("en"));
         #[allow(deprecated)]

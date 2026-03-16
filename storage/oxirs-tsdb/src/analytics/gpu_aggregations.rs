@@ -309,7 +309,9 @@ mod tests {
     #[test]
     fn test_aggregate_sum() {
         let mut agg = make_aggregator();
-        let result = agg.aggregate(&[1.0, 2.0, 3.0, 4.0], GpuAggOp::Sum).unwrap();
+        let result = agg
+            .aggregate(&[1.0, 2.0, 3.0, 4.0], GpuAggOp::Sum)
+            .expect("should succeed");
         assert_eq!(result, 10.0);
     }
 
@@ -318,7 +320,7 @@ mod tests {
         let mut agg = make_aggregator();
         let result = agg
             .aggregate(&[2.0, 4.0, 6.0, 8.0], GpuAggOp::Mean)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(result, 5.0);
     }
 
@@ -329,7 +331,7 @@ mod tests {
         // Mean = 5.0; deviations: -3,-1,1,3; squares: 9,1,1,9; sum=20; /4=5.0
         let result = agg
             .aggregate(&[2.0, 4.0, 6.0, 8.0], GpuAggOp::Variance)
-            .unwrap();
+            .expect("should succeed");
         assert!((result - 5.0).abs() < 1e-10, "variance={result}");
     }
 
@@ -338,7 +340,7 @@ mod tests {
         let mut agg = make_aggregator();
         let result = agg
             .aggregate(&[2.0, 4.0, 6.0, 8.0], GpuAggOp::StdDev)
-            .unwrap();
+            .expect("should succeed");
         assert!((result - 5.0_f64.sqrt()).abs() < 1e-10, "stddev={result}");
     }
 
@@ -346,8 +348,8 @@ mod tests {
     fn test_aggregate_min_max() {
         let mut agg = make_aggregator();
         let data = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
-        let min = agg.aggregate(&data, GpuAggOp::Min).unwrap();
-        let max = agg.aggregate(&data, GpuAggOp::Max).unwrap();
+        let min = agg.aggregate(&data, GpuAggOp::Min).expect("should succeed");
+        let max = agg.aggregate(&data, GpuAggOp::Max).expect("should succeed");
         assert_eq!(min, 1.0);
         assert_eq!(max, 9.0);
     }
@@ -355,7 +357,9 @@ mod tests {
     #[test]
     fn test_aggregate_count() {
         let mut agg = make_aggregator();
-        let result = agg.aggregate(&[10.0; 7], GpuAggOp::Count).unwrap();
+        let result = agg
+            .aggregate(&[10.0; 7], GpuAggOp::Count)
+            .expect("should succeed");
         assert_eq!(result, 7.0);
     }
 
@@ -363,7 +367,9 @@ mod tests {
     fn test_aggregate_percentile_median() {
         let mut agg = make_aggregator();
         let data: Vec<f64> = (1..=9).map(|i| i as f64).collect();
-        let median = agg.aggregate(&data, GpuAggOp::Percentile(50.0)).unwrap();
+        let median = agg
+            .aggregate(&data, GpuAggOp::Percentile(50.0))
+            .expect("should succeed");
         assert!((median - 5.0).abs() < 1e-10, "median={median}");
     }
 
@@ -371,7 +377,9 @@ mod tests {
     fn test_aggregate_percentile_100() {
         let mut agg = make_aggregator();
         let data: Vec<f64> = (1..=10).map(|i| i as f64).collect();
-        let p100 = agg.aggregate(&data, GpuAggOp::Percentile(100.0)).unwrap();
+        let p100 = agg
+            .aggregate(&data, GpuAggOp::Percentile(100.0))
+            .expect("should succeed");
         assert_eq!(p100, 10.0);
     }
 
@@ -388,7 +396,7 @@ mod tests {
         // (1*1 + 2*3) / (1+3) = 7/4 = 1.75
         let result = agg
             .aggregate(&[1.0, 2.0], GpuAggOp::WeightedMean(vec![1.0, 3.0]))
-            .unwrap();
+            .expect("should succeed");
         assert!((result - 1.75).abs() < 1e-10, "weighted_mean={result}");
     }
 
@@ -409,7 +417,8 @@ mod tests {
     #[test]
     fn test_metrics_updated_after_aggregate() {
         let mut agg = make_aggregator();
-        agg.aggregate(&[1.0, 2.0, 3.0], GpuAggOp::Sum).unwrap();
+        agg.aggregate(&[1.0, 2.0, 3.0], GpuAggOp::Sum)
+            .expect("should succeed");
         assert_eq!(agg.metrics().batches_processed, 1);
     }
 
@@ -419,7 +428,9 @@ mod tests {
     fn test_aggregate_batch_sums() {
         let mut agg = make_aggregator();
         let batches = vec![vec![1.0, 2.0], vec![3.0, 4.0], vec![5.0]];
-        let results = agg.aggregate_batch(&batches, GpuAggOp::Sum).unwrap();
+        let results = agg
+            .aggregate_batch(&batches, GpuAggOp::Sum)
+            .expect("should succeed");
         assert_eq!(results, vec![3.0, 7.0, 5.0]);
     }
 
@@ -444,7 +455,9 @@ mod tests {
             (90, 5.0),
             (110, 6.0),
         ];
-        let result = agg.rollup(&series, 60, GpuAggOp::Sum).unwrap();
+        let result = agg
+            .rollup(&series, 60, GpuAggOp::Sum)
+            .expect("should succeed");
         assert_eq!(result.len(), 2);
         // First bucket sum: 1+2+3=6, second: 4+5+6=15.
         let map: std::collections::HashMap<i64, f64> = result.into_iter().collect();
@@ -455,7 +468,7 @@ mod tests {
     #[test]
     fn test_rollup_empty_series() {
         let mut agg = make_aggregator();
-        let result = agg.rollup(&[], 60, GpuAggOp::Sum).unwrap();
+        let result = agg.rollup(&[], 60, GpuAggOp::Sum).expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -472,7 +485,9 @@ mod tests {
     fn test_downsample_reduces_length() {
         let mut ds = GpuDownsampler::new();
         let series: Vec<(i64, f64)> = (0..100).map(|i| (i as i64, i as f64)).collect();
-        let result = ds.downsample(&series, 10, GpuAggOp::Mean).unwrap();
+        let result = ds
+            .downsample(&series, 10, GpuAggOp::Mean)
+            .expect("should succeed");
         assert!(
             result.len() <= 10,
             "expected ≤10 points, got {}",
@@ -484,7 +499,9 @@ mod tests {
     fn test_downsample_passthrough_when_small() {
         let mut ds = GpuDownsampler::new();
         let series = vec![(0i64, 1.0f64), (1, 2.0), (2, 3.0)];
-        let result = ds.downsample(&series, 10, GpuAggOp::Mean).unwrap();
+        let result = ds
+            .downsample(&series, 10, GpuAggOp::Mean)
+            .expect("should succeed");
         assert_eq!(result, series);
     }
 

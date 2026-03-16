@@ -807,7 +807,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_basic_forward_chaining() {
+    fn test_basic_forward_chaining() -> Result<(), Box<dyn std::error::Error>> {
         let mut chainer = ForwardChainer::new();
 
         // Add rule: mortal(X) :- human(X)
@@ -833,7 +833,7 @@ mod tests {
         });
 
         // Run inference
-        let facts = chainer.infer().unwrap();
+        let facts = chainer.infer()?;
 
         // Should derive: mortal(socrates)
         let expected = RuleAtom::Triple {
@@ -843,10 +843,11 @@ mod tests {
         };
 
         assert!(facts.contains(&expected));
+        Ok(())
     }
 
     #[test]
-    fn test_transitive_chaining() {
+    fn test_transitive_chaining() -> Result<(), Box<dyn std::error::Error>> {
         let mut chainer = ForwardChainer::new();
 
         // Add rule: ancestor(X,Z) :- parent(X,Y), ancestor(Y,Z)
@@ -899,7 +900,7 @@ mod tests {
         });
 
         // Run inference
-        let facts = chainer.infer().unwrap();
+        let facts = chainer.infer()?;
 
         // Should derive ancestor relationships
         assert!(facts.contains(&RuleAtom::Triple {
@@ -917,10 +918,11 @@ mod tests {
             predicate: Term::Constant("ancestor".to_string()),
             object: Term::Constant("bob".to_string()),
         }));
+        Ok(())
     }
 
     #[test]
-    fn test_builtin_predicates() {
+    fn test_builtin_predicates() -> Result<(), Box<dyn std::error::Error>> {
         let mut chainer = ForwardChainer::new();
 
         // Add rule with built-in: same(X,X) :- bound(X)
@@ -950,12 +952,13 @@ mod tests {
             object: Term::Constant("true".to_string()),
         });
 
-        let facts = chainer.infer().unwrap();
+        let facts = chainer.infer()?;
 
         assert!(facts.contains(&RuleAtom::Triple {
             subject: Term::Constant("a".to_string()),
             predicate: Term::Constant("same".to_string()),
             object: Term::Constant("a".to_string()),
         }));
+        Ok(())
     }
 }

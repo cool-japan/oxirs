@@ -296,7 +296,10 @@ mod tests {
         let manager = PluginManager::new();
         let plugin = Box::new(MessageLoggerPlugin::new(None));
 
-        manager.register_plugin(plugin).await.unwrap();
+        manager
+            .register_plugin(plugin)
+            .await
+            .expect("should succeed");
 
         let plugins = manager.list_plugins().await;
         assert_eq!(plugins.len(), 1);
@@ -308,7 +311,10 @@ mod tests {
         let manager = PluginManager::new();
         let plugin = Box::new(MessageLoggerPlugin::new(None));
 
-        manager.register_plugin(plugin).await.unwrap();
+        manager
+            .register_plugin(plugin)
+            .await
+            .expect("should succeed");
 
         let message = Message {
             id: uuid::Uuid::new_v4().to_string(),
@@ -333,6 +339,6 @@ mod tests {
         manager
             .execute_hook(PluginHook::BeforeProcess, &mut context)
             .await
-            .unwrap();
+            .expect("should succeed");
     }
 }

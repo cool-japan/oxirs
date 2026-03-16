@@ -258,7 +258,10 @@ mod tests {
         let mut selector = AdvancedModelSelector::new(ModelSelectionStrategy::PerformanceBased);
         selector.record_performance("my_model", 0.85);
         selector.record_performance("my_model", 0.87);
-        let history = selector.performance_history.get("my_model").unwrap();
+        let history = selector
+            .performance_history
+            .get("my_model")
+            .expect("should succeed");
         assert_eq!(history.len(), 2);
     }
 

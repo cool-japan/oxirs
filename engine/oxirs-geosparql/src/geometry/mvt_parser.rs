@@ -30,10 +30,10 @@
 //!
 //! // Add a point geometry to the "places" layer
 //! let point = Geometry::new(GeoGeometry::Point(Point::new(-122.4, 37.8)));
-//! tile.add_feature("places", point, None).unwrap();
+//! tile.add_feature("places", point, None).expect("should succeed");
 //!
 //! // Encode to MVT bytes
-//! let mvt_bytes = tile.encode().unwrap();
+//! let mvt_bytes = tile.encode().expect("should succeed");
 //! ```
 
 use crate::error::{GeoSparqlError, Result};
@@ -175,7 +175,7 @@ impl MvtTile {
     /// let mut props = HashMap::new();
     /// props.insert("name".to_string(), "San Francisco".to_string());
     ///
-    /// tile.add_feature("cities", point, Some(props)).unwrap();
+    /// tile.add_feature("cities", point, Some(props)).expect("should succeed");
     /// ```
     pub fn add_feature(
         &mut self,
@@ -236,9 +236,9 @@ impl MvtTile {
     ///
     /// let mut tile = MvtTile::new(10, 511, 383);
     /// let point = Geometry::new(GeoGeometry::Point(Point::new(-122.4, 37.8)));
-    /// tile.add_feature("places", point, None).unwrap();
+    /// tile.add_feature("places", point, None).expect("should succeed");
     ///
-    /// let bytes = tile.encode().unwrap();
+    /// let bytes = tile.encode().expect("should succeed");
     /// assert!(!bytes.is_empty());
     /// ```
     pub fn encode(&self) -> Result<Vec<u8>> {
@@ -438,7 +438,8 @@ mod tests {
         let mut tile = MvtTile::new(10, 511, 383);
         let point = Geometry::new(GeoGeometry::Point(Point::new(-122.4, 37.8)));
 
-        tile.add_feature("places", point, None).unwrap();
+        tile.add_feature("places", point, None)
+            .expect("should succeed");
 
         assert_eq!(tile.layers.len(), 1);
         assert_eq!(tile.layers[0].name, "places");
@@ -454,7 +455,8 @@ mod tests {
         props.insert("name".to_string(), "San Francisco".to_string());
         props.insert("population".to_string(), "870000".to_string());
 
-        tile.add_feature("cities", point, Some(props)).unwrap();
+        tile.add_feature("cities", point, Some(props))
+            .expect("should succeed");
 
         assert_eq!(tile.layers[0].features[0].properties.len(), 2);
     }
@@ -464,9 +466,10 @@ mod tests {
         let mut tile = MvtTile::new(10, 511, 383);
         let point = Geometry::new(GeoGeometry::Point(Point::new(-122.4, 37.8)));
 
-        tile.add_feature("places", point, None).unwrap();
+        tile.add_feature("places", point, None)
+            .expect("should succeed");
 
-        let bytes = tile.encode().unwrap();
+        let bytes = tile.encode().expect("should succeed");
         assert!(!bytes.is_empty());
     }
 
@@ -478,9 +481,10 @@ mod tests {
             Coord { x: -122.5, y: 37.9 },
         ])));
 
-        tile.add_feature("roads", line, None).unwrap();
+        tile.add_feature("roads", line, None)
+            .expect("should succeed");
 
-        let bytes = tile.encode().unwrap();
+        let bytes = tile.encode().expect("should succeed");
         assert!(!bytes.is_empty());
     }
 
@@ -498,9 +502,10 @@ mod tests {
             vec![],
         )));
 
-        tile.add_feature("buildings", polygon, None).unwrap();
+        tile.add_feature("buildings", polygon, None)
+            .expect("should succeed");
 
-        let bytes = tile.encode().unwrap();
+        let bytes = tile.encode().expect("should succeed");
         assert!(!bytes.is_empty());
     }
 
@@ -509,17 +514,19 @@ mod tests {
         let mut tile = MvtTile::new(10, 511, 383);
 
         let point = Geometry::new(GeoGeometry::Point(Point::new(-122.4, 37.8)));
-        tile.add_feature("places", point, None).unwrap();
+        tile.add_feature("places", point, None)
+            .expect("should succeed");
 
         let line = Geometry::new(GeoGeometry::LineString(LineString::new(vec![
             Coord { x: -122.4, y: 37.8 },
             Coord { x: -122.5, y: 37.9 },
         ])));
-        tile.add_feature("roads", line, None).unwrap();
+        tile.add_feature("roads", line, None)
+            .expect("should succeed");
 
         assert_eq!(tile.layers.len(), 2);
 
-        let bytes = tile.encode().unwrap();
+        let bytes = tile.encode().expect("should succeed");
         assert!(!bytes.is_empty());
     }
 

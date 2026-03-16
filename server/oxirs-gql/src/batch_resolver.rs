@@ -203,7 +203,7 @@ mod tests {
     fn test_single_key_resolve() {
         let mut r = uppercase_resolver(10);
         r.queue("hello");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.get("hello"), Some(&"HELLO".to_string()));
     }
 
@@ -221,7 +221,7 @@ mod tests {
         r.queue("a");
         r.queue("b");
         r.queue("c");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.get("a"), Some(&"A".to_string()));
         assert_eq!(r.get("b"), Some(&"B".to_string()));
         assert_eq!(r.get("c"), Some(&"C".to_string()));
@@ -236,7 +236,7 @@ mod tests {
         r.queue("b");
         r.queue("c");
         r.queue("d");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         // 4 keys / 2 per batch = 2 batches
         assert_eq!(r.batches_executed(), 2);
         assert_eq!(r.get("a"), Some(&"A".to_string()));
@@ -249,7 +249,7 @@ mod tests {
         for k in ["x1", "x2", "x3", "x4", "x5", "x6"] {
             r.queue(k);
         }
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.batches_executed(), 2);
     }
 
@@ -259,7 +259,7 @@ mod tests {
         for k in ["x1", "x2", "x3", "x4", "x5"] {
             r.queue(k);
         }
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.batches_executed(), 2); // 3 + 2
     }
 
@@ -273,12 +273,12 @@ mod tests {
         let mut r: BatchResolver<String> = BatchResolver::new(loader_dyn, 10);
 
         r.queue("key");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(loader.calls(), 1);
 
         // Queue same key again — should be skipped (already cached)
         r.queue("key");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(loader.calls(), 1); // no new call
     }
 
@@ -287,7 +287,7 @@ mod tests {
         let mut r = uppercase_resolver(10);
         r.queue("a");
         r.queue("b");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.cache_size(), 2);
     }
 
@@ -297,7 +297,7 @@ mod tests {
     fn test_clear_cache() {
         let mut r = uppercase_resolver(10);
         r.queue("a");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.cache_size(), 1);
         r.clear_cache();
         assert_eq!(r.cache_size(), 0);
@@ -312,13 +312,13 @@ mod tests {
         let mut r: BatchResolver<String> = BatchResolver::new(loader_dyn, 10);
 
         r.queue("key");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(loader.calls(), 1);
 
         r.clear_cache();
 
         r.queue("key");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(loader.calls(), 2); // reloaded after cache clear
     }
 
@@ -337,7 +337,7 @@ mod tests {
     fn test_pending_count_after_resolve() {
         let mut r = uppercase_resolver(10);
         r.queue("a");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.pending_count(), 0);
     }
 
@@ -354,7 +354,7 @@ mod tests {
         let mut r = uppercase_resolver(1);
         r.queue("a");
         r.queue("b");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.batches_executed(), 2);
     }
 
@@ -362,9 +362,9 @@ mod tests {
     fn test_batches_executed_accumulates() {
         let mut r = uppercase_resolver(10);
         r.queue("a");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         r.queue("b");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.batches_executed(), 2);
     }
 
@@ -407,7 +407,7 @@ mod tests {
     fn test_dedup_does_not_re_queue_cached() {
         let mut r = uppercase_resolver(10);
         r.queue("a");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         r.queue("a"); // already cached
         assert_eq!(r.pending_count(), 0);
     }
@@ -418,7 +418,7 @@ mod tests {
     fn test_missing_key_returns_none() {
         let mut r = uppercase_resolver(10);
         r.queue("missing:nothere");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.get("missing:nothere"), None);
     }
 
@@ -427,7 +427,7 @@ mod tests {
         let mut r = uppercase_resolver(10);
         r.queue("ok");
         r.queue("missing:nope");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.cache_size(), 1);
     }
 
@@ -449,7 +449,7 @@ mod tests {
         for i in 0..100 {
             r.queue(format!("key{}", i));
         }
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         // All in one batch
         assert_eq!(r.batches_executed(), 1);
         assert_eq!(r.cache_size(), 100);
@@ -463,7 +463,7 @@ mod tests {
         r.queue("foo");
         r.queue("bar");
         r.queue("baz");
-        r.resolve_all().unwrap();
+        r.resolve_all().expect("should succeed");
         assert_eq!(r.get("foo"), Some(&"FOO".to_string()));
         assert_eq!(r.get("bar"), Some(&"BAR".to_string()));
         assert_eq!(r.get("baz"), Some(&"BAZ".to_string()));
@@ -479,12 +479,12 @@ mod tests {
         let mut r2: BatchResolver<String> = BatchResolver::new(loader2, 10);
 
         r1.queue("hello");
-        r1.resolve_all().unwrap();
+        r1.resolve_all().expect("should succeed");
 
         // r2 has its own independent cache
         assert_eq!(r2.get("hello"), None);
         r2.queue("hello");
-        r2.resolve_all().unwrap();
+        r2.resolve_all().expect("should succeed");
         assert_eq!(r2.get("hello"), Some(&"HELLO".to_string()));
     }
 }

@@ -35,20 +35,20 @@
 //!     ..Default::default()
 //! };
 //!
-//! let mut index = NsgIndex::new(config).unwrap();
+//! let mut index = NsgIndex::new(config).expect("should succeed");
 //!
 //! // Add vectors
 //! for i in 0..1000 {
 //!     let vector = Vector::new(vec![i as f32, (i * 2) as f32, (i * 3) as f32]);
-//!     index.insert(format!("vec_{}", i), vector).unwrap();
+//!     index.insert(format!("vec_{}", i), vector).expect("should succeed");
 //! }
 //!
 //! // Build the NSG structure
-//! index.build().unwrap();
+//! index.build().expect("should succeed");
 //!
 //! // Search
 //! let query = Vector::new(vec![100.0, 200.0, 300.0]);
-//! let results = index.search_knn(&query, 10).unwrap();
+//! let results = index.search_knn(&query, 10).expect("should succeed");
 //! ```
 
 use crate::{Vector, VectorIndex};
@@ -868,28 +868,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_nsg_creation() {
+    fn test_nsg_creation() -> Result<()> {
         let config = NsgConfig::default();
-        let index = NsgIndex::new(config).unwrap();
+        let index = NsgIndex::new(config)?;
         assert_eq!(index.len(), 0);
         assert!(!index.is_built());
+        Ok(())
     }
 
     #[test]
-    fn test_nsg_add_vectors() {
+    fn test_nsg_add_vectors() -> Result<()> {
         let config = NsgConfig::default();
-        let mut index = NsgIndex::new(config).unwrap();
+        let mut index = NsgIndex::new(config)?;
 
         for i in 0..10 {
             let vec = Vector::new(vec![i as f32, (i * 2) as f32, (i * 3) as f32]);
-            index.add(format!("vec_{}", i), vec).unwrap();
+            index.add(format!("vec_{}", i), vec)?;
         }
 
         assert_eq!(index.len(), 10);
+        Ok(())
     }
 
     #[test]
-    fn test_nsg_build_and_search() {
+    fn test_nsg_build_and_search() -> Result<()> {
         let config = NsgConfig {
             out_degree: 32,
             candidate_pool_size: 100,
@@ -897,21 +899,21 @@ mod tests {
             initial_knn_degree: 64,
             ..Default::default()
         };
-        let mut index = NsgIndex::new(config).unwrap();
+        let mut index = NsgIndex::new(config)?;
 
         // Add vectors in a more structured way to ensure connectivity
         for i in 0..100 {
             let vec = Vector::new(vec![i as f32, (i * 2) as f32, (i * 3) as f32]);
-            index.add(format!("vec_{}", i), vec).unwrap();
+            index.add(format!("vec_{}", i), vec)?;
         }
 
         // Build index
-        index.build().unwrap();
+        index.build()?;
         assert!(index.is_built());
 
         // Search with a query close to vec_10 (easier to verify)
         let query = Vector::new(vec![10.1, 20.1, 30.1]);
-        let results = index.search_knn(&query, 10).unwrap();
+        let results = index.search_knn(&query, 10)?;
 
         assert!(!results.is_empty());
         assert_eq!(results.len(), 10);
@@ -941,10 +943,11 @@ mod tests {
             nearby_found,
             "Expected nearby vectors (8-12) in top 10 results"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_nsg_distance_metrics() {
+    fn test_nsg_distance_metrics() -> Result<()> {
         for metric in [
             DistanceMetric::Euclidean,
             DistanceMetric::Manhattan,
@@ -956,59 +959,62 @@ mod tests {
                 out_degree: 8,
                 ..Default::default()
             };
-            let mut index = NsgIndex::new(config).unwrap();
+            let mut index = NsgIndex::new(config)?;
 
             for i in 0..20 {
                 let vec = Vector::new(vec![i as f32, (i * 2) as f32]);
-                index.add(format!("vec_{}", i), vec).unwrap();
+                index.add(format!("vec_{}", i), vec)?;
             }
 
-            index.build().unwrap();
+            index.build()?;
 
             let query = Vector::new(vec![10.0, 20.0]);
-            let results = index.search_knn(&query, 3).unwrap();
+            let results = index.search_knn(&query, 3)?;
 
             assert!(!results.is_empty());
         }
+        Ok(())
     }
 
     #[test]
-    fn test_nsg_stats() {
+    fn test_nsg_stats() -> Result<()> {
         let config = NsgConfig::default();
-        let mut index = NsgIndex::new(config).unwrap();
+        let mut index = NsgIndex::new(config)?;
 
         for i in 0..50 {
             let vec = Vector::new(vec![i as f32, (i * 2) as f32]);
-            index.add(format!("vec_{}", i), vec).unwrap();
+            index.add(format!("vec_{}", i), vec)?;
         }
 
-        index.build().unwrap();
+        index.build()?;
 
         let stats = index.stats();
         assert_eq!(stats.num_vectors, 50);
         assert!(stats.num_edges > 0);
         assert!(stats.avg_out_degree > 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_nsg_threshold_search() {
+    fn test_nsg_threshold_search() -> Result<()> {
         let config = NsgConfig::default();
-        let mut index = NsgIndex::new(config).unwrap();
+        let mut index = NsgIndex::new(config)?;
 
         for i in 0..30 {
             let vec = Vector::new(vec![i as f32, (i * 2) as f32]);
-            index.add(format!("vec_{}", i), vec).unwrap();
+            index.add(format!("vec_{}", i), vec)?;
         }
 
-        index.build().unwrap();
+        index.build()?;
 
         let query = Vector::new(vec![15.0, 30.0]);
-        let results = index.search_threshold(&query, 0.5).unwrap();
+        let results = index.search_threshold(&query, 0.5)?;
 
         assert!(!results.is_empty());
         // All results should have similarity >= 0.5
         for (_, similarity) in results {
             assert!(similarity >= 0.5);
         }
+        Ok(())
     }
 }

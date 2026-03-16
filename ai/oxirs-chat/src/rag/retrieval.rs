@@ -490,7 +490,7 @@ mod tests {
         let context = QueryContext::new("test_session".to_string());
         let sparql = retriever.generate_sparql_query("test query", &context);
         assert!(sparql.is_ok());
-        assert!(sparql.unwrap().contains("SELECT"));
+        assert!(sparql.expect("should succeed").contains("SELECT"));
     }
 
     #[test]

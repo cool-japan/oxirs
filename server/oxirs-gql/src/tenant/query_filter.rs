@@ -233,7 +233,7 @@ mod tests {
         let filter = TenantQueryFilter::new();
         let ctx = make_context(&[]);
         let query = "{ User { id name } }";
-        let filtered = filter.filter_query(query, &ctx).unwrap();
+        let filtered = filter.filter_query(query, &ctx).expect("should succeed");
         assert_eq!(filtered, query);
     }
 
@@ -242,7 +242,7 @@ mod tests {
         let filter = TenantQueryFilter::new();
         let ctx = make_context(&["User"]);
         let query = "query {\n  User {\n    id\n  }\n  Admin {\n    secret\n  }\n}";
-        let filtered = filter.filter_query(query, &ctx).unwrap();
+        let filtered = filter.filter_query(query, &ctx).expect("should succeed");
         assert!(!filtered.contains("Admin"), "Admin should be stripped");
         assert!(filtered.contains("User"), "User should remain");
     }
@@ -280,7 +280,7 @@ mod tests {
         let ctx = make_context(&["User"]);
         let violation = filter.validate_field_access("User", "passwordHash", &ctx);
         assert!(violation.is_some());
-        let v = violation.unwrap();
+        let v = violation.expect("should succeed");
         assert!(v.field_path.contains("passwordHash"));
         assert!(v.reason.contains("not allowed"));
     }
@@ -291,7 +291,10 @@ mod tests {
         let ctx = make_context(&["User"]);
         let violation = filter.validate_field_access("Admin", "id", &ctx);
         assert!(violation.is_some());
-        assert!(violation.unwrap().field_path.starts_with("Admin"));
+        assert!(violation
+            .expect("should succeed")
+            .field_path
+            .starts_with("Admin"));
     }
 
     #[test]

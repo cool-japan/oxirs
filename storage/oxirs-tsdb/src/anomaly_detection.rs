@@ -817,8 +817,8 @@ mod tests {
             timestamp: 42,
             value: 3.15,
         };
-        let json = serde_json::to_string(&p).unwrap();
-        let q: DataPoint = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&p).expect("should succeed");
+        let q: DataPoint = serde_json::from_str(&json).expect("should succeed");
         assert_eq!(q.timestamp, 42);
         assert!((q.value - 3.15).abs() < 1e-9);
     }
@@ -833,8 +833,8 @@ mod tests {
             score: 5.5,
             algorithm: "ZScore".to_owned(),
         };
-        let json = serde_json::to_string(&a).unwrap();
-        let b: Anomaly = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&a).expect("should succeed");
+        let b: Anomaly = serde_json::from_str(&json).expect("should succeed");
         assert!((b.score - 5.5).abs() < 1e-9);
         assert_eq!(b.algorithm, "ZScore");
     }
@@ -842,8 +842,8 @@ mod tests {
     #[test]
     fn test_algorithm_serde() {
         let alg = Algorithm::ZScore { threshold: 3.0 };
-        let json = serde_json::to_string(&alg).unwrap();
-        let restored: Algorithm = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&alg).expect("should succeed");
+        let restored: Algorithm = serde_json::from_str(&json).expect("should succeed");
         assert_eq!(restored.name(), "ZScore");
     }
 

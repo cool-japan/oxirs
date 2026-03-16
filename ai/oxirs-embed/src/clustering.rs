@@ -943,7 +943,7 @@ mod tests {
         };
 
         let mut clustering = EntityClustering::new(config);
-        let result = clustering.cluster(&embeddings).unwrap();
+        let result = clustering.cluster(&embeddings).expect("should succeed");
 
         assert_eq!(result.assignments.len(), 4);
         assert_eq!(result.centroids.len(), 2);
@@ -967,7 +967,7 @@ mod tests {
         };
 
         let mut clustering = EntityClustering::new(config);
-        let result = clustering.cluster(&embeddings).unwrap();
+        let result = clustering.cluster(&embeddings).expect("should succeed");
 
         // Silhouette score should be between -1 and 1
         assert!(result.silhouette_score >= -1.0 && result.silhouette_score <= 1.0);

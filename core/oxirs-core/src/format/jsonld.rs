@@ -248,7 +248,7 @@ mod tests {
         let parser = JsonLdParser::new()
             .with_profile(profile.clone())
             .with_base_iri("http://example.org/")
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(parser.profile(), &profile);
     }
@@ -266,9 +266,9 @@ mod tests {
         let serializer = JsonLdSerializer::new()
             .with_profile(profile.clone())
             .with_prefix("schema", "http://schema.org/")
-            .unwrap()
+            .expect("operation should succeed")
             .with_base_iri("http://example.org/")
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(serializer.profile(), &profile);
     }
@@ -291,25 +291,25 @@ mod tests {
     #[test]
     fn test_jsonld_roundtrip() {
         // Create a simple quad
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
         let predicate = rdf::TYPE.clone();
-        let object = NamedNode::new("http://example.org/Type").unwrap();
+        let object = NamedNode::new("http://example.org/Type").expect("valid IRI");
         let quad = Quad::new(subject, predicate, object, GraphName::DefaultGraph);
 
         // Serialize to JSON-LD
         let serializer = JsonLdSerializer::new()
             .with_prefix("ex", "http://example.org/")
-            .unwrap();
+            .expect("operation should succeed");
         let json_ld = serializer.serialize_to_string(std::slice::from_ref(&quad));
         assert!(json_ld.is_ok());
 
         // Parse back
         let parser = JsonLdParser::new();
-        let parsed_quads = parser.parse_str(&json_ld.unwrap());
+        let parsed_quads = parser.parse_str(&json_ld.expect("JSON-LD should be valid"));
         assert!(parsed_quads.is_ok());
 
         // Verify we got at least one quad back
-        let quads = parsed_quads.unwrap();
+        let quads = parsed_quads.expect("quad parsing should succeed");
         assert!(!quads.is_empty());
     }
 }

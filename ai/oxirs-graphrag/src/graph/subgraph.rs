@@ -246,7 +246,7 @@ mod tests {
             Triple::new("http://x", "http://rel", "http://y"),
         ];
 
-        let result = extractor.extract(&seeds, &triples).unwrap();
+        let result = extractor.extract(&seeds, &triples).expect("should succeed");
 
         // Should prioritize a->b (internal) over a->c (external)
         assert!(!result.is_empty());
@@ -279,7 +279,9 @@ mod tests {
             Triple::new("http://b", "http://rel", "http://c"),
         ];
 
-        let result = extractor.extract_steiner(&seeds, &triples).unwrap();
+        let result = extractor
+            .extract_steiner(&seeds, &triples)
+            .expect("should succeed");
 
         // Should find path a->b->c
         assert_eq!(result.len(), 2);

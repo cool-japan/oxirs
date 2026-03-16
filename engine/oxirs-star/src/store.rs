@@ -148,7 +148,7 @@ impl StarStore {
         let mut results = Vec::new();
 
         // Query star triples (those containing quoted triples)
-        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
         for triple in star_triples.iter() {
             let matches = (subject.is_none() || subject == Some(&triple.subject))
                 && (predicate.is_none() || predicate == Some(&triple.predicate))
@@ -213,7 +213,7 @@ impl StarStore {
 
         // Update statistics
         {
-            let mut stats = self.statistics.write().expect("lock poisoned");
+            let mut stats = self.statistics.write().unwrap_or_else(|e| e.into_inner());
             stats.processing_time_us += start_time.elapsed().as_micros() as u64;
             if triple.contains_quoted_triples() {
                 stats.quoted_triples_count += 1;
@@ -237,7 +237,7 @@ impl StarStore {
         // Insert into core store (convert triple to quad in default graph)
         let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
         eprintln!("DEBUG: Created core quad for insertion: {core_quad:?}");
-        let core_store = self.core_store.write().expect("lock poisoned");
+        let core_store = self.core_store.write().unwrap_or_else(|e| e.into_inner());
         let result = CoreStore::insert_quad(&core_store, core_quad).map_err(StarError::CoreError);
         eprintln!("DEBUG: Core store insert result: {result:?}");
         result?;
@@ -257,8 +257,11 @@ impl StarStore {
 
     /// Insert a RDF-star triple (containing quoted triples) into star storage
     fn insert_star_triple(&self, triple: &StarTriple) -> StarResult<()> {
-        let mut star_triples = self.star_triples.write().expect("lock poisoned");
-        let mut index = self.quoted_triple_index.write().expect("lock poisoned");
+        let mut star_triples = self.star_triples.write().unwrap_or_else(|e| e.into_inner());
+        let mut index = self
+            .quoted_triple_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         let triple_index = star_triples.len();
         star_triples.push(triple.clone());
@@ -456,13 +459,16 @@ impl StarStore {
 
         // First try to remove from star triples
         if triple.contains_quoted_triples() {
-            let mut star_triples = self.star_triples.write().expect("lock poisoned");
+            let mut star_triples = self.star_triples.write().unwrap_or_else(|e| e.into_inner());
 
             if let Some(pos) = star_triples.iter().position(|t| t == triple) {
                 star_triples.remove(pos);
 
                 // Update all indices
-                let mut index = self.quoted_triple_index.write().expect("lock poisoned");
+                let mut index = self
+                    .quoted_triple_index
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
 
                 // Update signature index
                 for (_, indices) in index.signature_to_indices.iter_mut() {
@@ -495,7 +501,7 @@ impl StarStore {
         } else {
             // Try to remove from core store for regular triples
             eprintln!("DEBUG: Attempting to remove regular triple from core store");
-            let core_store = self.core_store.write().expect("lock poisoned");
+            let core_store = self.core_store.write().unwrap_or_else(|e| e.into_inner());
             if let Ok(core_triple) = self.convert_to_core_triple(triple) {
                 eprintln!("DEBUG: Successfully converted to core triple");
                 let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
@@ -527,14 +533,14 @@ impl StarStore {
     /// Check if the store contains a specific triple
     pub fn contains(&self, triple: &StarTriple) -> bool {
         // First check star triples
-        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
         if star_triples.contains(triple) {
             return true;
         }
 
         // Then check regular triples in core store
         if !triple.contains_quoted_triples() {
-            let core_store = self.core_store.read().expect("lock poisoned");
+            let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
             if let Ok(core_triple) = self.convert_to_core_triple(triple) {
                 // Convert triple to quad with default graph
                 let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
@@ -558,13 +564,13 @@ impl StarStore {
 
         // Add star triples (clone to release lock quickly)
         {
-            let star_triples = self.star_triples.read().expect("lock poisoned");
+            let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
             all_triples.extend(star_triples.clone());
         }
 
         // Add regular triples from core store (release lock quickly)
         {
-            let core_store = self.core_store.read().expect("lock poisoned");
+            let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
             if let Ok(core_triples) = core_store.triples() {
                 drop(core_store); // Release lock before conversion
                 for core_triple in core_triples {
@@ -584,8 +590,11 @@ impl StarStore {
         let _enter = span.enter();
 
         let key = self.quoted_triple_key(quoted_triple);
-        let index = self.quoted_triple_index.read().expect("lock poisoned");
-        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let index = self
+            .quoted_triple_index
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
 
         if let Some(indices) = index.signature_to_indices.get(&key) {
             indices
@@ -608,8 +617,11 @@ impl StarStore {
         let span = span!(Level::DEBUG, "find_triples_by_quoted_pattern");
         let _enter = span.enter();
 
-        let index = self.quoted_triple_index.read().expect("lock poisoned");
-        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let index = self
+            .quoted_triple_index
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
         let mut candidate_indices: Option<BTreeSet<usize>> = None;
 
         // Use subject index if subject pattern is provided
@@ -714,7 +726,7 @@ impl StarStore {
 
         // If we're looking for depth 0 triples, include regular triples from core_store
         if min_depth == 0 {
-            let core_store = self.core_store.read().expect("lock poisoned");
+            let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
             if let Ok(quads) = core_store.find_quads(None, None, None, None) {
                 for quad in quads {
                     let core_triple = quad.to_triple();
@@ -728,8 +740,11 @@ impl StarStore {
         }
 
         // Find star triples (quoted triples) by nesting depth
-        let index = self.quoted_triple_index.read().expect("lock poisoned");
-        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let index = self
+            .quoted_triple_index
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
         let mut result_indices = BTreeSet::new();
 
         for (&_depth, indices) in index.nesting_depth_index.range(min_depth..=max_d) {
@@ -748,8 +763,8 @@ impl StarStore {
 
     /// Get the number of triples in the store
     pub fn len(&self) -> usize {
-        let star_triples = self.star_triples.read().expect("lock poisoned");
-        let core_store = self.core_store.read().expect("lock poisoned");
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
+        let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
 
         // Count both star triples and regular triples from core store
         let regular_count = core_store.len().unwrap_or(0);
@@ -760,8 +775,8 @@ impl StarStore {
 
     /// Check if the store is empty
     pub fn is_empty(&self) -> bool {
-        let star_triples = self.star_triples.read().expect("lock poisoned");
-        let core_store = self.core_store.read().expect("lock poisoned");
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
+        let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
 
         // Empty only if both stores are empty
         star_triples.is_empty() && core_store.is_empty().unwrap_or(true)
@@ -773,24 +788,27 @@ impl StarStore {
         let _enter = span.enter();
 
         {
-            let mut star_triples = self.star_triples.write().expect("lock poisoned");
+            let mut star_triples = self.star_triples.write().unwrap_or_else(|e| e.into_inner());
             star_triples.clear();
         }
 
         // Clear the core store by recreating it
         // Note: This is a workaround since clear_all/remove_quad have trait/impl conflicts
         {
-            let mut core_store = self.core_store.write().expect("lock poisoned");
+            let mut core_store = self.core_store.write().unwrap_or_else(|e| e.into_inner());
             *core_store = CoreStore::new().map_err(StarError::CoreError)?;
         }
 
         {
-            let mut index = self.quoted_triple_index.write().expect("lock poisoned");
+            let mut index = self
+                .quoted_triple_index
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             index.clear();
         }
 
         {
-            let mut stats = self.statistics.write().expect("lock poisoned");
+            let mut stats = self.statistics.write().unwrap_or_else(|e| e.into_inner());
             *stats = StarStatistics::default();
         }
 
@@ -800,13 +818,13 @@ impl StarStore {
 
     /// Get statistics about the store
     pub fn statistics(&self) -> StarStatistics {
-        let stats = self.statistics.read().expect("lock poisoned");
+        let stats = self.statistics.read().unwrap_or_else(|e| e.into_inner());
         stats.clone()
     }
 
     /// Export the store as a StarGraph
     pub fn to_graph(&self) -> StarGraph {
-        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
         let mut graph = StarGraph::new();
 
         // Add star triples (containing quoted triples)
@@ -818,7 +836,7 @@ impl StarStore {
         }
 
         // Add regular triples from core store
-        let core_store = self.core_store.read().expect("lock poisoned");
+        let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
         if let Ok(quads) = core_store.find_quads(None, None, None, None) {
             for quad in quads {
                 let core_triple = quad.to_triple();
@@ -854,8 +872,11 @@ impl StarStore {
         let span = span!(Level::INFO, "optimize_store");
         let _enter = span.enter();
 
-        let star_triples = self.star_triples.read().expect("lock poisoned");
-        let mut index = self.quoted_triple_index.write().expect("lock poisoned");
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
+        let mut index = self
+            .quoted_triple_index
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         // Rebuild the quoted triple index with all new B-tree structures
         index.clear();
@@ -899,7 +920,7 @@ impl StarStore {
         let mut results = Vec::new();
 
         // Query star triples
-        let star_triples = self.star_triples.read().expect("lock poisoned");
+        let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
         for triple in star_triples.iter() {
             if self.triple_matches(triple, subject, predicate, object) {
                 results.push(triple.clone());
@@ -927,7 +948,7 @@ impl StarStore {
         predicate: Option<&StarTerm>,
         object: Option<&StarTerm>,
     ) -> StarResult<Vec<StarTriple>> {
-        let core_store = self.core_store.read().expect("lock poisoned");
+        let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
 
         // Convert patterns to core types
         let core_subject = match subject {
@@ -1102,13 +1123,13 @@ impl StarStore {
 
         // Add star triples (containing quoted triples)
         {
-            let star_triples = self.star_triples.read().expect("lock poisoned");
+            let star_triples = self.star_triples.read().unwrap_or_else(|e| e.into_inner());
             all_triples.extend(star_triples.clone());
         }
 
         // Add regular triples from core store
         {
-            let core_store = self.core_store.read().expect("lock poisoned");
+            let core_store = self.core_store.read().unwrap_or_else(|e| e.into_inner());
             if let Ok(quads) = core_store.find_quads(None, None, None, None) {
                 drop(core_store); // Release lock before conversion
                 for quad in quads {
@@ -1150,7 +1171,10 @@ impl StarStore {
 
         // Enable bulk mode
         {
-            let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
+            let mut bulk_state = self
+                .bulk_insert_state
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             bulk_state.active = true;
             bulk_state.pending_triples.clear();
             bulk_state.current_memory_usage = 0;
@@ -1175,7 +1199,7 @@ impl StarStore {
 
         // Update statistics
         {
-            let mut stats = self.statistics.write().expect("lock poisoned");
+            let mut stats = self.statistics.write().unwrap_or_else(|e| e.into_inner());
             stats.processing_time_us += elapsed.as_micros() as u64;
         }
 
@@ -1197,7 +1221,10 @@ impl StarStore {
                 if triple.contains_quoted_triples() {
                     if config.defer_index_updates {
                         // Add to pending list for later indexing
-                        let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
+                        let mut bulk_state = self
+                            .bulk_insert_state
+                            .write()
+                            .unwrap_or_else(|e| e.into_inner());
                         bulk_state.pending_triples.push(triple.clone());
                         bulk_state.current_memory_usage += self.estimate_triple_memory_size(triple);
                     } else {
@@ -1210,7 +1237,10 @@ impl StarStore {
 
             // Check memory threshold
             {
-                let bulk_state = self.bulk_insert_state.read().expect("lock poisoned");
+                let bulk_state = self
+                    .bulk_insert_state
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner());
                 if bulk_state.current_memory_usage >= config.memory_threshold {
                     drop(bulk_state);
                     self.flush_pending_triples(config)?;
@@ -1219,7 +1249,10 @@ impl StarStore {
 
             // Update batch count
             {
-                let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
+                let mut bulk_state = self
+                    .bulk_insert_state
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner());
                 bulk_state.batch_count += 1;
             }
         }
@@ -1259,7 +1292,10 @@ impl StarStore {
     /// Flush pending triples and rebuild indices
     fn flush_pending_triples(&self, config: &BulkInsertConfig) -> StarResult<()> {
         let pending_triples = {
-            let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
+            let mut bulk_state = self
+                .bulk_insert_state
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             let triples = bulk_state.pending_triples.clone();
             bulk_state.pending_triples.clear();
             bulk_state.current_memory_usage = 0;
@@ -1271,13 +1307,16 @@ impl StarStore {
 
             // Insert all pending triples into storage
             {
-                let mut star_triples = self.star_triples.write().expect("lock poisoned");
+                let mut star_triples = self.star_triples.write().unwrap_or_else(|e| e.into_inner());
                 let base_index = star_triples.len();
                 star_triples.extend(pending_triples.clone());
 
                 // Build indices for the new triples
                 if !config.defer_index_updates {
-                    let mut index = self.quoted_triple_index.write().expect("lock poisoned");
+                    let mut index = self
+                        .quoted_triple_index
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner());
                     for (i, triple) in pending_triples.iter().enumerate() {
                         self.index_quoted_triples(triple, base_index + i, &mut index);
                     }
@@ -1301,7 +1340,10 @@ impl StarStore {
 
         // Reset bulk state
         {
-            let mut bulk_state = self.bulk_insert_state.write().expect("lock poisoned");
+            let mut bulk_state = self
+                .bulk_insert_state
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             bulk_state.active = false;
             bulk_state.pending_triples.clear();
             bulk_state.current_memory_usage = 0;
@@ -1350,7 +1392,10 @@ impl StarStore {
         info!("Enabling memory-mapped storage at: {}", file_path);
 
         {
-            let mut mm_state = self.memory_mapped.write().expect("lock poisoned");
+            let mut mm_state = self
+                .memory_mapped
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             mm_state.enabled = true;
             mm_state.file_path = Some(file_path.to_string());
             mm_state.compression_enabled = enable_compression;
@@ -1403,11 +1448,17 @@ impl StarStore {
         let base_stats = self.statistics();
         let cache_stats = self.cache.get_statistics();
         let index_stats = {
-            let index = self.quoted_triple_index.read().expect("lock poisoned");
+            let index = self
+                .quoted_triple_index
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
             index.get_statistics()
         };
-        let bulk_state = self.bulk_insert_state.read().expect("lock poisoned");
-        let mm_state = self.memory_mapped.read().expect("lock poisoned");
+        let bulk_state = self
+            .bulk_insert_state
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let mm_state = self.memory_mapped.read().unwrap_or_else(|e| e.into_inner());
 
         DetailedStorageStatistics {
             basic_stats: base_stats,
@@ -1520,121 +1571,123 @@ mod tests {
     use crate::model::StarTerm;
 
     #[test]
-    fn test_store_creation() {
+    fn test_store_creation() -> StarResult<()> {
         let store = StarStore::new();
         assert!(store.is_empty());
         assert_eq!(store.len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_basic_operations() {
+    fn test_basic_operations() -> StarResult<()> {
         let store = StarStore::new();
 
         let triple = StarTriple::new(
-            StarTerm::iri("http://example.org/alice").unwrap(),
-            StarTerm::iri("http://example.org/knows").unwrap(),
-            StarTerm::iri("http://example.org/bob").unwrap(),
+            StarTerm::iri("http://example.org/alice")?,
+            StarTerm::iri("http://example.org/knows")?,
+            StarTerm::iri("http://example.org/bob")?,
         );
 
         // Insert
-        store.insert(&triple).unwrap();
+        store.insert(&triple)?;
         assert_eq!(store.len(), 1);
         assert!(store.contains(&triple));
 
         // Query
-        let results = store
-            .query_triples(
-                Some(&StarTerm::iri("http://example.org/alice").unwrap()),
-                None,
-                None,
-            )
-            .unwrap();
+        let results = store.query_triples(
+            Some(&StarTerm::iri("http://example.org/alice")?),
+            None,
+            None,
+        )?;
         assert_eq!(results.len(), 1);
 
         // Remove
-        assert!(store.remove(&triple).unwrap());
+        assert!(store.remove(&triple)?);
         assert!(store.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_quoted_triple_operations() {
+    fn test_quoted_triple_operations() -> StarResult<()> {
         let store = StarStore::new();
 
         // Create a quoted triple
         let inner = StarTriple::new(
-            StarTerm::iri("http://example.org/alice").unwrap(),
-            StarTerm::iri("http://example.org/age").unwrap(),
-            StarTerm::literal("25").unwrap(),
+            StarTerm::iri("http://example.org/alice")?,
+            StarTerm::iri("http://example.org/age")?,
+            StarTerm::literal("25")?,
         );
 
         let outer = StarTriple::new(
             StarTerm::quoted_triple(inner.clone()),
-            StarTerm::iri("http://example.org/certainty").unwrap(),
-            StarTerm::literal("0.9").unwrap(),
+            StarTerm::iri("http://example.org/certainty")?,
+            StarTerm::literal("0.9")?,
         );
 
-        store.insert(&outer).unwrap();
+        store.insert(&outer)?;
         assert_eq!(store.len(), 1);
 
         // Find triples containing the quoted triple
         let containing = store.find_triples_containing_quoted(&inner);
         assert_eq!(containing.len(), 1);
         assert_eq!(containing[0], outer);
+        Ok(())
     }
 
     #[test]
-    fn test_store_statistics() {
+    fn test_store_statistics() -> StarResult<()> {
         let store = StarStore::new();
 
         let regular = StarTriple::new(
-            StarTerm::iri("http://example.org/s").unwrap(),
-            StarTerm::iri("http://example.org/p").unwrap(),
-            StarTerm::iri("http://example.org/o").unwrap(),
+            StarTerm::iri("http://example.org/s")?,
+            StarTerm::iri("http://example.org/p")?,
+            StarTerm::iri("http://example.org/o")?,
         );
 
         let quoted = StarTriple::new(
             StarTerm::quoted_triple(regular.clone()),
-            StarTerm::iri("http://example.org/certainty").unwrap(),
-            StarTerm::literal("high").unwrap(),
+            StarTerm::iri("http://example.org/certainty")?,
+            StarTerm::literal("high")?,
         );
 
-        store.insert(&regular).unwrap();
-        store.insert(&quoted).unwrap();
+        store.insert(&regular)?;
+        store.insert(&quoted)?;
 
         let stats = store.statistics();
         assert_eq!(stats.quoted_triples_count, 1);
         assert_eq!(stats.max_nesting_encountered, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_btree_indexing_performance() {
+    fn test_btree_indexing_performance() -> StarResult<()> {
         let store = StarStore::new();
 
         // Create multiple quoted triples with different patterns
         let base_triple = StarTriple::new(
-            StarTerm::iri("http://example.org/alice").unwrap(),
-            StarTerm::iri("http://example.org/age").unwrap(),
-            StarTerm::literal("25").unwrap(),
+            StarTerm::iri("http://example.org/alice")?,
+            StarTerm::iri("http://example.org/age")?,
+            StarTerm::literal("25")?,
         );
 
         let quoted1 = StarTriple::new(
             StarTerm::quoted_triple(base_triple.clone()),
-            StarTerm::iri("http://example.org/certainty").unwrap(),
-            StarTerm::literal("0.9").unwrap(),
+            StarTerm::iri("http://example.org/certainty")?,
+            StarTerm::literal("0.9")?,
         );
 
         let quoted2 = StarTriple::new(
-            StarTerm::iri("http://example.org/bob").unwrap(),
-            StarTerm::iri("http://example.org/believes").unwrap(),
+            StarTerm::iri("http://example.org/bob")?,
+            StarTerm::iri("http://example.org/believes")?,
             StarTerm::quoted_triple(base_triple.clone()),
         );
 
-        store.insert(&quoted1).unwrap();
-        store.insert(&quoted2).unwrap();
+        store.insert(&quoted1)?;
+        store.insert(&quoted2)?;
 
         // Test pattern-based queries using the new B-tree indices
         let results = store.find_triples_by_quoted_pattern(
-            Some(&StarTerm::iri("http://example.org/alice").unwrap()),
+            Some(&StarTerm::iri("http://example.org/alice")?),
             None,
             None,
         );
@@ -1646,21 +1699,22 @@ mod tests {
 
         let depth_1_results = store.find_triples_by_nesting_depth(1, Some(1));
         assert_eq!(depth_1_results.len(), 2); // Both quoted triples have depth 1
+        Ok(())
     }
 
     #[test]
-    fn test_graph_import_export() {
+    fn test_graph_import_export() -> StarResult<()> {
         let store = StarStore::new();
         let mut graph = StarGraph::new();
 
         let triple = StarTriple::new(
-            StarTerm::iri("http://example.org/s").unwrap(),
-            StarTerm::iri("http://example.org/p").unwrap(),
-            StarTerm::iri("http://example.org/o").unwrap(),
+            StarTerm::iri("http://example.org/s")?,
+            StarTerm::iri("http://example.org/p")?,
+            StarTerm::iri("http://example.org/o")?,
         );
 
-        graph.insert(triple.clone()).unwrap();
-        store.from_graph(&graph).unwrap();
+        graph.insert(triple.clone())?;
+        store.from_graph(&graph)?;
 
         assert_eq!(store.len(), 1);
         assert!(store.contains(&triple));
@@ -1668,20 +1722,21 @@ mod tests {
         let exported = store.to_graph();
         assert_eq!(exported.len(), 1);
         assert!(exported.contains(&triple));
+        Ok(())
     }
 
     #[test]
-    fn test_streaming_iterator() {
+    fn test_streaming_iterator() -> StarResult<()> {
         let store = StarStore::new();
 
         // Insert multiple triples
         for i in 0..100 {
             let triple = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
-                StarTerm::iri("http://example.org/p").unwrap(),
-                StarTerm::iri(&format!("http://example.org/o{i}")).unwrap(),
+                StarTerm::iri(&format!("http://example.org/s{i}"))?,
+                StarTerm::iri("http://example.org/p")?,
+                StarTerm::iri(&format!("http://example.org/o{i}"))?,
             );
-            store.insert(&triple).unwrap();
+            store.insert(&triple)?;
         }
 
         // Test streaming iterator with different chunk sizes
@@ -1708,5 +1763,6 @@ mod tests {
         for triple in &regular_triples {
             assert!(streaming_triples.contains(triple));
         }
+        Ok(())
     }
 }

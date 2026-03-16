@@ -677,86 +677,90 @@ mod tests {
     // ── SQ add / get ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_sq_add_and_get() {
+    fn test_sq_add_and_get() -> Result<()> {
         let mut cache = make_sq_cache(4);
         let samples = training_vecs(50, 4);
-        cache.train(&samples).unwrap();
-        cache
-            .add("v0".to_string(), vec![0.1, 0.2, 0.3, 0.4])
-            .unwrap();
+        cache.train(&samples)?;
+        cache.add("v0".to_string(), vec![0.1, 0.2, 0.3, 0.4])?;
         let reconstructed = cache.get("v0");
         assert!(reconstructed.is_some());
-        let r = reconstructed.unwrap();
+        let r = reconstructed.expect("reconstructed value should be present");
         assert_eq!(r.len(), 4);
         // Reconstruction should be close to original
         for (orig, rec) in [0.1_f32, 0.2, 0.3, 0.4].iter().zip(&r) {
             assert!((orig - rec).abs() < 0.05, "Reconstruction error too large");
         }
+        Ok(())
     }
 
     #[test]
-    fn test_sq_duplicate_id_fails() {
+    fn test_sq_duplicate_id_fails() -> Result<()> {
         let mut cache = make_sq_cache(4);
-        cache.train(&training_vecs(10, 4)).unwrap();
-        cache.add("k".to_string(), vec![0.0; 4]).unwrap();
+        cache.train(&training_vecs(10, 4))?;
+        cache.add("k".to_string(), vec![0.0; 4])?;
         assert!(cache.add("k".to_string(), vec![1.0; 4]).is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_sq_get_missing_returns_none() {
+    fn test_sq_get_missing_returns_none() -> Result<()> {
         let mut cache = make_sq_cache(4);
-        cache.train(&training_vecs(10, 4)).unwrap();
+        cache.train(&training_vecs(10, 4))?;
         assert!(cache.get("absent").is_none());
+        Ok(())
     }
 
     // ── SQ search ──────────────────────────────────────────────────────────
 
     #[test]
-    fn test_sq_search_returns_nearest() {
+    fn test_sq_search_returns_nearest() -> Result<()> {
         let mut cache = make_sq_cache(2);
         let samples = vec![vec![0.0_f32, 0.0], vec![1.0, 0.0], vec![5.0, 0.0]];
-        cache.train(&samples).unwrap();
-        cache.add("origin".to_string(), vec![0.0, 0.0]).unwrap();
-        cache.add("near".to_string(), vec![0.5, 0.0]).unwrap();
-        cache.add("far".to_string(), vec![5.0, 0.0]).unwrap();
+        cache.train(&samples)?;
+        cache.add("origin".to_string(), vec![0.0, 0.0])?;
+        cache.add("near".to_string(), vec![0.5, 0.0])?;
+        cache.add("far".to_string(), vec![5.0, 0.0])?;
 
-        let results = cache.search(&[0.0, 0.0], 1).unwrap();
+        let results = cache.search(&[0.0, 0.0], 1)?;
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "origin");
+        Ok(())
     }
 
     #[test]
-    fn test_sq_search_top_k_ordering() {
+    fn test_sq_search_top_k_ordering() -> Result<()> {
         let mut cache = make_sq_cache(1);
         let samples: Vec<Vec<f32>> = (0..10).map(|i| vec![i as f32]).collect();
-        cache.train(&samples).unwrap();
+        cache.train(&samples)?;
         for i in 0..10_u32 {
-            cache.add(format!("v{}", i), vec![i as f32]).unwrap();
+            cache.add(format!("v{}", i), vec![i as f32])?;
         }
-        let results = cache.search(&[5.0], 3).unwrap();
+        let results = cache.search(&[5.0], 3)?;
         assert!(results.len() <= 3);
         // Results should be ascending distance
         for w in results.windows(2) {
             assert!(w[0].1 <= w[1].1 + 1e-6);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_sq_search_empty_cache() {
+    fn test_sq_search_empty_cache() -> Result<()> {
         let mut cache = make_sq_cache(4);
-        cache.train(&training_vecs(10, 4)).unwrap();
-        let results = cache.search(&[0.0; 4], 5).unwrap();
+        cache.train(&training_vecs(10, 4))?;
+        let results = cache.search(&[0.0; 4], 5)?;
         assert!(results.is_empty());
+        Ok(())
     }
 
     // ── SQ metrics ─────────────────────────────────────────────────────────
 
     #[test]
-    fn test_sq_compression_ratio_greater_than_one() {
+    fn test_sq_compression_ratio_greater_than_one() -> Result<()> {
         let mut cache = make_sq_cache(32);
-        cache.train(&training_vecs(100, 32)).unwrap();
+        cache.train(&training_vecs(100, 32))?;
         for i in 0..10 {
-            cache.add(format!("v{}", i), vec![0.5; 32]).unwrap();
+            cache.add(format!("v{}", i), vec![0.5; 32])?;
         }
         let m = cache.metrics();
         assert!(m.compression_ratio > 1.0);
@@ -765,35 +769,39 @@ mod tests {
             (m.compression_ratio - 4.0).abs() < 0.5,
             "SQ ratio should be ~4"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_sq_metrics_vector_count() {
+    fn test_sq_metrics_vector_count() -> Result<()> {
         let mut cache = make_sq_cache(4);
-        cache.train(&training_vecs(10, 4)).unwrap();
+        cache.train(&training_vecs(10, 4))?;
         for i in 0..5 {
-            cache.add(format!("v{}", i), vec![i as f32; 4]).unwrap();
+            cache.add(format!("v{}", i), vec![i as f32; 4])?;
         }
         assert_eq!(cache.metrics().vector_count, 5);
+        Ok(())
     }
 
     #[test]
-    fn test_sq_queries_served_increments() {
+    fn test_sq_queries_served_increments() -> Result<()> {
         let mut cache = make_sq_cache(4);
-        cache.train(&training_vecs(10, 4)).unwrap();
-        cache.add("a".to_string(), vec![0.0; 4]).unwrap();
-        cache.search(&[0.0; 4], 1).unwrap();
-        cache.search(&[0.0; 4], 1).unwrap();
+        cache.train(&training_vecs(10, 4))?;
+        cache.add("a".to_string(), vec![0.0; 4])?;
+        cache.search(&[0.0; 4], 1)?;
+        cache.search(&[0.0; 4], 1)?;
         assert_eq!(cache.metrics().queries_served, 2);
+        Ok(())
     }
 
     #[test]
-    fn test_sq_reconstruction_error_reasonable() {
+    fn test_sq_reconstruction_error_reasonable() -> Result<()> {
         let mut cache = make_sq_cache(4);
         let samples = training_vecs(100, 4);
-        cache.train(&samples).unwrap();
+        cache.train(&samples)?;
         // For 8-bit SQ, reconstruction error should be small
         assert!(cache.metrics().mean_reconstruction_error < 0.1);
+        Ok(())
     }
 
     // ── PQ training ────────────────────────────────────────────────────────
@@ -814,42 +822,45 @@ mod tests {
     }
 
     #[test]
-    fn test_pq_add_and_get() {
+    fn test_pq_add_and_get() -> Result<()> {
         let mut cache = make_pq_cache(8, 2);
         let samples = training_vecs(50, 8);
-        cache.train(&samples).unwrap();
-        cache.add("v0".to_string(), vec![0.1; 8]).unwrap();
-        let r = cache.get("v0").unwrap();
+        cache.train(&samples)?;
+        cache.add("v0".to_string(), vec![0.1; 8])?;
+        let r = cache.get("v0").expect("v0 should be present in cache");
         assert_eq!(r.len(), 8);
+        Ok(())
     }
 
     #[test]
-    fn test_pq_compression_ratio() {
+    fn test_pq_compression_ratio() -> Result<()> {
         let mut cache = make_pq_cache(16, 4); // 4 sub-spaces
-        cache.train(&training_vecs(50, 16)).unwrap();
+        cache.train(&training_vecs(50, 16))?;
         for i in 0..8 {
-            cache.add(format!("v{}", i), vec![0.5; 16]).unwrap();
+            cache.add(format!("v{}", i), vec![0.5; 16])?;
         }
         let m = cache.metrics();
         // 16 dims × 4 bytes = 64 bytes uncompressed; 4 codes × 1 byte = 4 bytes compressed → ratio = 16
         assert!(m.compression_ratio > 4.0, "PQ ratio should be > 4");
+        Ok(())
     }
 
     #[test]
-    fn test_pq_search() {
+    fn test_pq_search() -> Result<()> {
         let mut cache = make_pq_cache(8, 2);
         let samples = training_vecs(50, 8);
-        cache.train(&samples).unwrap();
-        cache.add("a".to_string(), vec![0.0; 8]).unwrap();
-        cache.add("b".to_string(), vec![10.0; 8]).unwrap();
-        let results = cache.search(&[0.1; 8], 1).unwrap();
+        cache.train(&samples)?;
+        cache.add("a".to_string(), vec![0.0; 8])?;
+        cache.add("b".to_string(), vec![10.0; 8])?;
+        let results = cache.search(&[0.1; 8], 1)?;
         assert!(!results.is_empty());
+        Ok(())
     }
 
     // ── normalization ──────────────────────────────────────────────────────
 
     #[test]
-    fn test_normalized_vectors_stored_as_unit_length() {
+    fn test_normalized_vectors_stored_as_unit_length() -> Result<()> {
         let config = QuantizedCacheConfig {
             scheme: QuantizationScheme::Scalar,
             normalize: true,
@@ -859,14 +870,13 @@ mod tests {
         let long_vecs: Vec<Vec<f32>> = (0..20)
             .map(|i| vec![i as f32 + 1.0, i as f32 + 2.0, 0.0, 0.0])
             .collect();
-        cache.train(&long_vecs).unwrap();
-        cache
-            .add("v".to_string(), vec![3.0, 4.0, 0.0, 0.0])
-            .unwrap();
-        let r = cache.get("v").unwrap();
+        cache.train(&long_vecs)?;
+        cache.add("v".to_string(), vec![3.0, 4.0, 0.0, 0.0])?;
+        let r = cache.get("v").expect("v should be present in cache");
         let norm: f32 = r.iter().map(|&x| x * x).sum::<f32>().sqrt();
         // Reconstructed vector should be approximately unit length (quantization error allowed)
         assert!((norm - 1.0).abs() < 0.1, "norm={}, expected ~1.0", norm);
+        Ok(())
     }
 
     // ── config accessors ───────────────────────────────────────────────────
@@ -885,34 +895,35 @@ mod tests {
     }
 
     #[test]
-    fn test_is_empty_initially() {
+    fn test_is_empty_initially() -> Result<()> {
         let mut cache = make_sq_cache(4);
-        cache.train(&training_vecs(10, 4)).unwrap();
+        cache.train(&training_vecs(10, 4))?;
         assert!(cache.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_len_after_adds() {
+    fn test_len_after_adds() -> Result<()> {
         let mut cache = make_sq_cache(4);
-        cache.train(&training_vecs(10, 4)).unwrap();
+        cache.train(&training_vecs(10, 4))?;
         for i in 0..5 {
-            cache.add(format!("v{}", i), vec![0.0; 4]).unwrap();
+            cache.add(format!("v{}", i), vec![0.0; 4])?;
         }
         assert_eq!(cache.len(), 5);
+        Ok(())
     }
 
     // ── add_with_metadata ──────────────────────────────────────────────────
 
     #[test]
-    fn test_add_with_metadata() {
+    fn test_add_with_metadata() -> Result<()> {
         let mut cache = make_sq_cache(4);
-        cache.train(&training_vecs(10, 4)).unwrap();
+        cache.train(&training_vecs(10, 4))?;
         let mut meta = HashMap::new();
         meta.insert("tag".to_string(), "test".to_string());
-        cache
-            .add_with_metadata("m".to_string(), vec![0.0; 4], meta)
-            .unwrap();
+        cache.add_with_metadata("m".to_string(), vec![0.0; 4], meta)?;
         assert_eq!(cache.len(), 1);
+        Ok(())
     }
 
     // ── scalar dim params ──────────────────────────────────────────────────

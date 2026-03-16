@@ -688,9 +688,10 @@ impl crate::embeddings::AsAny for Word2VecEmbeddingGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
-    fn test_word2vec_generator() {
+    fn test_word2vec_generator() -> Result<()> {
         let config = Word2VecConfig {
             dimensions: 100,
             ..Default::default()
@@ -703,7 +704,7 @@ mod tests {
             normalize: true,
         };
 
-        let mut generator = Word2VecEmbeddingGenerator::new(config, embedding_config).unwrap();
+        let mut generator = Word2VecEmbeddingGenerator::new(config, embedding_config)?;
 
         // Add some test embeddings
         generator
@@ -715,25 +716,26 @@ mod tests {
 
         // Test embedding generation
         let content = EmbeddableContent::Text("hello world".to_string());
-        let embedding = generator.generate(&content).unwrap();
+        let embedding = generator.generate(&content)?;
 
         assert_eq!(embedding.dimensions, 100);
+        Ok(())
     }
 
     #[test]
-    fn test_subword_generation() {
+    fn test_subword_generation() -> Result<()> {
         let config = Word2VecConfig::default();
-        let generator =
-            Word2VecEmbeddingGenerator::new(config, EmbeddingConfig::default()).unwrap();
+        let generator = Word2VecEmbeddingGenerator::new(config, EmbeddingConfig::default())?;
 
         let subwords = generator.get_subwords("hello");
         assert!(subwords.contains(&"<hel>".to_string()));
         assert!(subwords.contains(&"<ell>".to_string()));
         assert!(subwords.contains(&"<llo>".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_aggregation_methods() {
+    fn test_aggregation_methods() -> Result<()> {
         let mut config = Word2VecConfig {
             dimensions: 3,
             normalize: false,
@@ -755,7 +757,7 @@ mod tests {
         ] {
             config.aggregation = method;
             let mut generator =
-                Word2VecEmbeddingGenerator::new(config.clone(), embedding_config.clone()).unwrap();
+                Word2VecEmbeddingGenerator::new(config.clone(), embedding_config.clone())?;
 
             generator
                 .embeddings
@@ -765,7 +767,7 @@ mod tests {
                 .insert("b".to_string(), vec![4.0, 5.0, 6.0]);
 
             let content = EmbeddableContent::Text("a b".to_string());
-            let embedding = generator.generate(&content).unwrap();
+            let embedding = generator.generate(&content)?;
 
             match method {
                 AggregationMethod::Mean => {
@@ -780,5 +782,6 @@ mod tests {
                 _ => {}
             }
         }
+        Ok(())
     }
 }

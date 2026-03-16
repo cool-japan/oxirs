@@ -1220,7 +1220,7 @@ mod tests {
     #[test]
     fn test_type_introspection() {
         let schema = create_test_schema();
-        let query_type = schema.get_type("Query").unwrap();
+        let query_type = schema.get_type("Query").expect("should succeed");
         let type_introspection = TypeIntrospection::new(query_type.clone(), Arc::new(schema));
 
         assert_eq!(type_introspection.kind(), TypeKind::Object);
@@ -1229,7 +1229,7 @@ mod tests {
 
         let fields = type_introspection.fields(false);
         assert!(fields.is_some());
-        assert!(!fields.unwrap().is_empty());
+        assert!(!fields.expect("should succeed").is_empty());
     }
 
     #[test]
@@ -1300,7 +1300,10 @@ mod tests {
         );
         let type_result = resolver.resolve_field("__type", &args, &context).await;
         assert!(type_result.is_ok());
-        assert!(matches!(type_result.unwrap(), Value::NullValue));
+        assert!(matches!(
+            type_result.expect("should succeed"),
+            Value::NullValue
+        ));
     }
 
     #[test]

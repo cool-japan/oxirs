@@ -673,7 +673,7 @@ mod tests {
         let root = plan.root_node();
 
         assert!(root.is_some());
-        assert_eq!(root.unwrap().id, "root");
+        assert_eq!(root.expect("should succeed").id, "root");
     }
 
     #[test]
@@ -761,7 +761,7 @@ mod tests {
         let dot = visualizer.visualize(&plan, VisualizationFormat::Dot);
         assert!(dot.is_ok());
 
-        let output = dot.unwrap();
+        let output = dot.expect("should succeed");
         assert!(output.contains("digraph QueryPlan"));
         assert!(output.contains("root"));
         assert!(output.contains("user"));
@@ -776,7 +776,7 @@ mod tests {
         let mermaid = visualizer.visualize(&plan, VisualizationFormat::Mermaid);
         assert!(mermaid.is_ok());
 
-        let output = mermaid.unwrap();
+        let output = mermaid.expect("should succeed");
         assert!(output.contains("graph TD"));
         assert!(output.contains("root"));
         assert!(output.contains("user"));
@@ -790,7 +790,7 @@ mod tests {
         let tree = visualizer.visualize(&plan, VisualizationFormat::AsciiTree);
         assert!(tree.is_ok());
 
-        let output = tree.unwrap();
+        let output = tree.expect("should succeed");
         assert!(output.contains("Query Plan:"));
         assert!(output.contains("Total Cost:"));
         assert!(output.contains("Query"));
@@ -806,7 +806,7 @@ mod tests {
         let json = visualizer.visualize(&plan, VisualizationFormat::Json);
         assert!(json.is_ok());
 
-        let output = json.unwrap();
+        let output = json.expect("should succeed");
         assert!(output.contains("root_id"));
         assert!(output.contains("nodes"));
         assert!(output.contains("total_cost"));
@@ -820,7 +820,7 @@ mod tests {
         let html = visualizer.visualize(&plan, VisualizationFormat::Html);
         assert!(html.is_ok());
 
-        let output = html.unwrap();
+        let output = html.expect("should succeed");
         assert!(output.contains("<!DOCTYPE html>"));
         assert!(output.contains("Query Plan Visualization"));
         assert!(output.contains("<script>"));
@@ -877,7 +877,7 @@ mod tests {
         plan.add_node(node1);
         plan.add_node(node2);
 
-        let node2_ref = plan.get_node("node2").unwrap();
+        let node2_ref = plan.get_node("node2").expect("should succeed");
         assert_eq!(node2_ref.dependencies.len(), 1);
         assert_eq!(node2_ref.dependencies[0], "node1");
     }
@@ -906,7 +906,7 @@ mod tests {
         let visualizer = QueryPlanVisualizer::new();
         let dot = visualizer
             .visualize(&plan, VisualizationFormat::Dot)
-            .unwrap();
+            .expect("should succeed");
 
         assert!(dot.contains("style=dashed"));
         assert!(dot.contains("color=red"));
@@ -972,7 +972,7 @@ mod tests {
 
         let tree = visualizer
             .visualize(&plan, VisualizationFormat::AsciiTree)
-            .unwrap();
+            .expect("should succeed");
         assert!(!tree.contains("cost:"));
     }
 
@@ -983,7 +983,7 @@ mod tests {
 
         let tree = visualizer
             .visualize(&plan, VisualizationFormat::AsciiTree)
-            .unwrap();
+            .expect("should succeed");
         assert!(!tree.contains("time:"));
     }
 }

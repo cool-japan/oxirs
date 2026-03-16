@@ -36,9 +36,15 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
-            Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
-            Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
+            Subject::NamedNode(
+                NamedNode::new(format!("http://subject/{id}")).expect("valid IRI from format"),
+            ),
+            Predicate::NamedNode(
+                NamedNode::new(format!("http://predicate/{id}")).expect("valid IRI from format"),
+            ),
+            Object::NamedNode(
+                NamedNode::new(format!("http://object/{id}")).expect("valid IRI from format"),
+            ),
         )
     }
 
@@ -58,7 +64,9 @@ mod tests {
                     for i in 0..ops_per_thread {
                         let id = thread_id * ops_per_thread + i;
                         let triple = create_test_triple(id);
-                        graph.insert(triple).unwrap();
+                        graph
+                            .insert(triple)
+                            .expect("graph operation should succeed");
                     }
                 })
             })
@@ -85,11 +93,14 @@ mod tests {
 
         // Wait for writers
         for handle in writer_handles {
-            handle.join().unwrap();
+            handle.join().expect("thread should not panic");
         }
 
         // Wait for readers
-        let total_reads: usize = reader_handles.into_iter().map(|h| h.join().unwrap()).sum();
+        let total_reads: usize = reader_handles
+            .into_iter()
+            .map(|h| h.join().expect("thread should not panic"))
+            .sum();
 
         let duration = start.elapsed();
 
@@ -119,11 +130,15 @@ mod tests {
                 .map(|i| create_test_triple(cycle * triples_per_cycle + i))
                 .collect();
 
-            graph.insert_batch(triples.clone()).unwrap();
+            graph
+                .insert_batch(triples.clone())
+                .expect("batch insert should succeed");
             assert_eq!(graph.len(), triples_per_cycle);
 
             // Remove all triples
-            graph.remove_batch(&triples).unwrap();
+            graph
+                .remove_batch(&triples)
+                .expect("graph operation should succeed");
             assert_eq!(graph.len(), 0);
 
             // Force memory reclamation
@@ -152,7 +167,10 @@ mod tests {
                         match i % 3 {
                             0 => {
                                 // Insert
-                                if graph.insert(triple).unwrap() {
+                                if graph
+                                    .insert(triple)
+                                    .expect("graph operation should succeed")
+                                {
                                     local_count += 1;
                                 }
                             }
@@ -163,7 +181,10 @@ mod tests {
                             }
                             2 => {
                                 // Remove (might fail if not inserted)
-                                if graph.remove(&triple).unwrap() {
+                                if graph
+                                    .remove(&triple)
+                                    .expect("graph operation should succeed")
+                                {
                                     local_count -= 1;
                                 }
                             }
@@ -175,7 +196,10 @@ mod tests {
             })
             .collect();
 
-        let total_net_insertions: i32 = handles.into_iter().map(|h| h.join().unwrap()).sum();
+        let total_net_insertions: i32 = handles
+            .into_iter()
+            .map(|h| h.join().expect("thread should not panic"))
+            .sum();
 
         println!("Mixed operations test:");
         println!("  Net insertions: {total_net_insertions}");
@@ -196,8 +220,12 @@ mod tests {
         // Perform operations
         for i in 0..100 {
             let triple = create_test_triple(i);
-            graph.insert(triple.clone()).unwrap();
-            graph.remove(&triple).unwrap();
+            graph
+                .insert(triple.clone())
+                .expect("graph insert should succeed");
+            graph
+                .remove(&triple)
+                .expect("graph operation should succeed");
         }
 
         // Force collection multiple times

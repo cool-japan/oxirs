@@ -903,7 +903,10 @@ mod tests {
             })
             .collect();
 
-        let results: Vec<Vec<Arc<str>>> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let results: Vec<Vec<Arc<str>>> = handles
+            .into_iter()
+            .map(|h| h.join().expect("thread should not panic"))
+            .collect();
 
         // Verify that all equal strings are the same Arc
         for result_set in &results {
@@ -943,9 +946,18 @@ mod tests {
         assert_eq!(interner.get_id("nonexistent"), None);
 
         // Test string lookup
-        assert_eq!(interner.get_string(id1).unwrap().as_ref(), "test_string");
         assert_eq!(
-            interner.get_string(id3).unwrap().as_ref(),
+            interner
+                .get_string(id1)
+                .expect("operation should succeed")
+                .as_ref(),
+            "test_string"
+        );
+        assert_eq!(
+            interner
+                .get_string(id3)
+                .expect("operation should succeed")
+                .as_ref(),
             "different_string"
         );
         assert_eq!(interner.get_string(999), None);
@@ -1014,7 +1026,13 @@ mod tests {
         assert!(Arc::ptr_eq(&arc1, &arc3));
 
         // ID interning should work independently
-        assert_eq!(interner.get_string(id2).unwrap().as_ref(), "with_id");
+        assert_eq!(
+            interner
+                .get_string(id2)
+                .expect("operation should succeed")
+                .as_ref(),
+            "with_id"
+        );
 
         // Mixed mode length reporting should work
         assert!(interner.len() >= 2);

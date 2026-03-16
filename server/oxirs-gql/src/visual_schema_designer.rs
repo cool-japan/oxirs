@@ -1330,7 +1330,7 @@ mod tests {
     async fn test_add_node() {
         let designer = SchemaDesigner::new();
         let node = SchemaNode::new("", "User", NodeType::ObjectType);
-        let node_id = designer.add_node(node).await.unwrap();
+        let node_id = designer.add_node(node).await.expect("should succeed");
 
         let graph = designer.get_visualization().await;
         assert_eq!(graph.nodes.len(), 1);
@@ -1341,10 +1341,13 @@ mod tests {
     async fn test_add_field() {
         let designer = SchemaDesigner::new();
         let node = SchemaNode::new("", "User", NodeType::ObjectType);
-        let node_id = designer.add_node(node).await.unwrap();
+        let node_id = designer.add_node(node).await.expect("should succeed");
 
         let field = FieldDefinition::new("name", "String").non_null();
-        designer.add_field(&node_id, field).await.unwrap();
+        designer
+            .add_field(&node_id, field)
+            .await
+            .expect("should succeed");
 
         let graph = designer.get_visualization().await;
         assert_eq!(graph.nodes[0].fields.len(), 1);
@@ -1363,7 +1366,7 @@ mod tests {
         // Add Query type
         let query = SchemaNode::new("", "Query", NodeType::ObjectType)
             .with_field(FieldDefinition::new("hello", "String"));
-        designer.add_node(query).await.unwrap();
+        designer.add_node(query).await.expect("should succeed");
 
         let result = designer.validate().await;
         assert!(result.valid);
@@ -1376,7 +1379,7 @@ mod tests {
         let user = SchemaNode::new("", "User", NodeType::ObjectType)
             .with_field(FieldDefinition::new("id", "ID").non_null())
             .with_field(FieldDefinition::new("name", "String"));
-        designer.add_node(user).await.unwrap();
+        designer.add_node(user).await.expect("should succeed");
 
         let sdl = designer.export_sdl().await;
         assert!(sdl.contains("type User"));
@@ -1399,7 +1402,7 @@ mod tests {
             }
         "#;
 
-        designer.import_sdl(sdl).await.unwrap();
+        designer.import_sdl(sdl).await.expect("should succeed");
 
         let graph = designer.get_visualization().await;
         assert_eq!(graph.nodes.len(), 2);
@@ -1412,7 +1415,7 @@ mod tests {
         // Add some nodes
         for i in 0..5 {
             let node = SchemaNode::new("", &format!("Type{}", i), NodeType::ObjectType);
-            designer.add_node(node).await.unwrap();
+            designer.add_node(node).await.expect("should succeed");
         }
 
         // Test force-directed
@@ -1422,7 +1425,7 @@ mod tests {
                 ..Default::default()
             })
             .await;
-        designer.apply_layout().await.unwrap();
+        designer.apply_layout().await.expect("should succeed");
 
         // Test circular
         designer
@@ -1431,7 +1434,7 @@ mod tests {
                 ..Default::default()
             })
             .await;
-        designer.apply_layout().await.unwrap();
+        designer.apply_layout().await.expect("should succeed");
 
         // Test grid
         designer
@@ -1440,7 +1443,7 @@ mod tests {
                 ..Default::default()
             })
             .await;
-        designer.apply_layout().await.unwrap();
+        designer.apply_layout().await.expect("should succeed");
 
         let graph = designer.get_visualization().await;
         // All nodes should have non-zero positions after layout
@@ -1454,9 +1457,12 @@ mod tests {
         let designer = SchemaDesigner::new();
 
         let node = SchemaNode::new("", "User", NodeType::ObjectType);
-        let node_id = designer.add_node(node).await.unwrap();
+        let node_id = designer.add_node(node).await.expect("should succeed");
 
-        designer.remove_node(&node_id).await.unwrap();
+        designer
+            .remove_node(&node_id)
+            .await
+            .expect("should succeed");
 
         let graph = designer.get_visualization().await;
         assert!(graph.nodes.is_empty());

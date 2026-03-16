@@ -1139,7 +1139,7 @@ mod tests {
         let result = analyzer.generate_author_embedding("test_author").await;
         assert!(result.is_ok());
 
-        let embedding = result.unwrap();
+        let embedding = result.expect("should succeed");
         assert_eq!(embedding.author_id, "test_author");
         assert!(embedding.h_index >= 0.0);
         assert_eq!(embedding.embedding.values.len(), 512); // Default dimension
@@ -1155,7 +1155,7 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        let embedding = result.unwrap();
+        let embedding = result.expect("should succeed");
         assert_eq!(embedding.publication_id, "test_publication");
         assert!(embedding.predicted_impact >= 0.0);
         assert!(embedding.predicted_impact <= 1.0);
@@ -1200,26 +1200,29 @@ mod tests {
             },
         ];
 
-        let h_index = analyzer.calculate_h_index(&publications).await.unwrap();
+        let h_index = analyzer
+            .calculate_h_index(&publications)
+            .await
+            .expect("should succeed");
         assert_eq!(h_index, 2.0); // Both papers have at least 2 citations
     }
 
     #[test]
     fn test_career_stage_classification() {
         // Test early career
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("should succeed");
         let config = ResearchNetworkConfig::default();
         let analyzer = ResearchNetworkAnalyzer::new(config);
 
         let stage = rt
             .block_on(analyzer.classify_career_stage(50, 5, 3.0))
-            .unwrap();
+            .expect("should succeed");
         assert!(matches!(stage, CareerStage::EarlyCareer));
 
         // Test senior career
         let stage = rt
             .block_on(analyzer.classify_career_stage(2000, 100, 25.0))
-            .unwrap();
+            .expect("should succeed");
         assert!(matches!(stage, CareerStage::SeniorCareer));
     }
 
@@ -1232,13 +1235,16 @@ mod tests {
         let _author_embedding = analyzer
             .generate_author_embedding("test_author")
             .await
-            .unwrap();
+            .expect("should succeed");
         let _publication_embedding = analyzer
             .generate_publication_embedding("test_publication")
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let metrics = analyzer.get_network_metrics().await.unwrap();
+        let metrics = analyzer
+            .get_network_metrics()
+            .await
+            .expect("should succeed");
         assert_eq!(metrics.total_authors, 1);
         assert_eq!(metrics.total_publications, 1);
     }

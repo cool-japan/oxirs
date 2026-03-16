@@ -760,7 +760,7 @@ mod tests {
         let parser = NTriplesParser::new();
         let result = parser.parse_str("");
         assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        assert!(result.expect("should have value").is_empty());
     }
 
     #[test]
@@ -769,7 +769,7 @@ mod tests {
         let ntriples = "# This is a comment\n# Another comment";
         let result = parser.parse_str(ntriples);
         assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        assert!(result.expect("should have value").is_empty());
     }
 
     #[test]
@@ -796,28 +796,28 @@ mod tests {
         let ntriples = "<http://example.org/s> <http://example.org/p> <http://example.org/o> .";
         let result = parser.parse_str(ntriples);
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("should have value");
         assert_eq!(triples.len(), 1);
 
         // Test with blank node
         let ntriples = "_:s <http://example.org/p> \"literal\" .";
         let result = parser.parse_str(ntriples);
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("should have value");
         assert_eq!(triples.len(), 1);
 
         // Test with language literal
         let ntriples = "<http://example.org/s> <http://example.org/p> \"hello\"@en .";
         let result = parser.parse_str(ntriples);
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("should have value");
         assert_eq!(triples.len(), 1);
 
         // Test with typed literal
         let ntriples = "<http://example.org/s> <http://example.org/p> \"42\"^^<http://www.w3.org/2001/XMLSchema#integer> .";
         let result = parser.parse_str(ntriples);
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("should have value");
         assert_eq!(triples.len(), 1);
     }
 
@@ -826,14 +826,14 @@ mod tests {
         let serializer = NTriplesSerializer::new();
 
         // Create a simple triple
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("test");
         let triple = Triple::new(subject, predicate, object);
 
         let result = serializer.serialize_to_string(&[triple]);
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result.expect("should have value");
         assert!(output.contains("<http://example.org/s>"));
         assert!(output.contains("<http://example.org/p>"));
         assert!(output.contains("\"test\""));
@@ -848,7 +848,7 @@ mod tests {
         let ntriples = r#"<http://example.org/s> <http://example.org/p> "Euro: \u20AC" ."#;
         let result = parser.parse_str(ntriples);
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("should have value");
         assert_eq!(triples.len(), 1);
         if let crate::model::term::Object::Literal(lit) = triples[0].object() {
             assert_eq!(lit.value(), "Euro: €");
@@ -860,7 +860,7 @@ mod tests {
         let ntriples = r#"<http://example.org/s> <http://example.org/p> "Smile: \U0001F600" ."#;
         let result = parser.parse_str(ntriples);
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("should have value");
         assert_eq!(triples.len(), 1);
         if let crate::model::term::Object::Literal(lit) = triples[0].object() {
             assert_eq!(lit.value(), "Smile: 😀");
@@ -877,7 +877,7 @@ mod tests {
         let ntriples = r#"<http://example.org/s> <http://example.org/p> "Line 1\nLine 2\tTabbed\rCarriage Return\\Backslash\"Quote" ."#;
         let result = parser.parse_str(ntriples);
         assert!(result.is_ok());
-        let triples = result.unwrap();
+        let triples = result.expect("should have value");
         assert_eq!(triples.len(), 1);
         if let crate::model::term::Object::Literal(lit) = triples[0].object() {
             assert_eq!(
@@ -894,14 +894,14 @@ mod tests {
         let serializer = NTriplesSerializer::new();
 
         // Create a triple with Unicode characters
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("Hello 世界 🌍");
         let triple = Triple::new(subject, predicate, object);
 
         let result = serializer.serialize_to_string(&[triple]);
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result.expect("should have value");
 
         // Should contain Unicode escape sequences for non-ASCII characters
         assert!(output.contains("\\u4E16")); // 世

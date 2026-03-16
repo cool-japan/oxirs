@@ -544,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn test_duplicate_assertion_names_both_rules() {
+    fn test_duplicate_assertion_names_both_rules() -> Result<(), Box<dyn std::error::Error>> {
         let mut resolver = ConflictResolver::new(ResolutionStrategy::Merge);
         resolver.add_rule(rule("rA", 10, &[], &[head("s", "p", "o")]));
         resolver.add_rule(rule("rB", 5, &[], &[head("s", "p", "o")]));
@@ -552,11 +552,12 @@ mod tests {
         let dup = conflicts
             .iter()
             .find(|c| c.conflict_type == ConflictType::DuplicateAssertion)
-            .unwrap();
+            .ok_or("expected Some value")?;
         assert!(
             (dup.rule_a == "rA" && dup.rule_b == "rB")
                 || (dup.rule_a == "rB" && dup.rule_b == "rA")
         );
+        Ok(())
     }
 
     // ── ContradictoryValues ────────────────────────────────────────────────────
@@ -842,7 +843,7 @@ mod tests {
     }
 
     #[test]
-    fn test_conflict_affected_triple_correct() {
+    fn test_conflict_affected_triple_correct() -> Result<(), Box<dyn std::error::Error>> {
         let mut resolver = ConflictResolver::new(ResolutionStrategy::HigherPriority);
         resolver.add_rule(rule("r1", 10, &[], &[head("alice", "knows", "bob")]));
         resolver.add_rule(rule("r2", 5, &[], &[head("alice", "knows", "carol")]));
@@ -850,8 +851,9 @@ mod tests {
         let cv = conflicts
             .iter()
             .find(|c| c.conflict_type == ConflictType::ContradictoryValues)
-            .unwrap();
+            .ok_or("expected Some value")?;
         assert_eq!(cv.affected_triple.0, "alice");
         assert_eq!(cv.affected_triple.1, "knows");
+        Ok(())
     }
 }

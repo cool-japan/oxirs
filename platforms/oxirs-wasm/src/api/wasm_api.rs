@@ -96,7 +96,7 @@ fn rdf_term_to_str(term: &RdfTerm) -> String {
 /// ```no_run
 /// # use oxirs_wasm::api::wasm_api::WasmSparqlStore;
 /// let mut store = WasmSparqlStore::new();
-/// let count = store.load_ntriples("<http://s> <http://p> <http://o> .\n").unwrap();
+/// let count = store.load_ntriples("<http://s> <http://p> <http://o> .\n").expect("should succeed");
 /// assert_eq!(count, 1);
 ///
 /// let results = store.query_pattern(Some("<http://s>"), None, None);
@@ -306,7 +306,7 @@ impl WasmSparqlStore {
     /// ```no_run
     /// # use oxirs_wasm::api::wasm_api::WasmSparqlStore;
     /// let mut store = WasmSparqlStore::new();
-    /// store.load_ntriples("<http://s> <http://p> <http://o> .\n").unwrap();
+    /// store.load_ntriples("<http://s> <http://p> <http://o> .\n").expect("should succeed");
     ///
     /// // Find all triples with subject <http://s>
     /// let results = store.query_pattern(Some("<http://s>"), None, None);

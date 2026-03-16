@@ -468,7 +468,7 @@ mod tests {
         let ci = engine();
         let pat = ci.infer_pattern(&["alice@example.com".into(), "bob@test.org".into()]);
         assert!(pat.is_some());
-        assert!(pat.unwrap().contains('@'));
+        assert!(pat.expect("should succeed").contains('@'));
     }
 
     #[test]
@@ -502,7 +502,7 @@ mod tests {
         let result =
             ci.detect_closed_values(&["red".into(), "green".into(), "blue".into(), "red".into()]);
         assert!(result.is_some());
-        let vals = result.unwrap();
+        let vals = result.expect("should succeed");
         assert_eq!(vals.len(), 3); // 3 unique
     }
 
@@ -675,14 +675,14 @@ mod tests {
         let ci = engine();
         let result = ci.detect_closed_values(&["yes".into()]);
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), vec!["yes".to_string()]);
+        assert_eq!(result.expect("should succeed"), vec!["yes".to_string()]);
     }
 
     #[test]
     fn test_detect_closed_values_sorted() {
         let ci = engine();
         let result = ci.detect_closed_values(&["c".into(), "a".into(), "b".into()]);
-        assert_eq!(result.unwrap(), vec!["a", "b", "c"]);
+        assert_eq!(result.expect("should succeed"), vec!["a", "b", "c"]);
     }
 
     #[test]
@@ -862,6 +862,6 @@ mod tests {
     fn test_detect_closed_values_deduplicates() {
         let ci = engine();
         let result = ci.detect_closed_values(&["a".into(), "a".into(), "b".into()]);
-        assert_eq!(result.unwrap().len(), 2);
+        assert_eq!(result.expect("should succeed").len(), 2);
     }
 }

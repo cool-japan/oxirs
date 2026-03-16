@@ -360,16 +360,16 @@ PREFIX geo: <http://www.opengis.net/ont/geosparql#>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
-    fn test_parse_fusion_strategy_weighted() {
+    fn test_parse_fusion_strategy_weighted() -> Result<()> {
         let strategy = parse_fusion_strategy(
             Some("weighted"),
             Some("0.5,0.3,0.2"),
             &[0.33, 0.33, 0.34],
             &[0.5, 0.7, 0.8],
-        )
-        .unwrap();
+        )?;
 
         match strategy {
             FusionStrategy::Weighted { weights } => {
@@ -380,51 +380,55 @@ mod tests {
             }
             _ => panic!("Expected Weighted strategy"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parse_fusion_strategy_default() {
-        let strategy =
-            parse_fusion_strategy(None, None, &[0.33, 0.33, 0.34], &[0.5, 0.7, 0.8]).unwrap();
+    fn test_parse_fusion_strategy_default() -> Result<()> {
+        let strategy = parse_fusion_strategy(None, None, &[0.33, 0.33, 0.34], &[0.5, 0.7, 0.8])?;
 
         match strategy {
             FusionStrategy::RankFusion => {}
             _ => panic!("Expected RankFusion as default"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parse_normalization() {
+    fn test_parse_normalization() -> Result<()> {
         assert!(matches!(
-            parse_normalization("minmax").unwrap(),
+            parse_normalization("minmax")?,
             NormalizationMethod::MinMax
         ));
         assert!(matches!(
-            parse_normalization("zscore").unwrap(),
+            parse_normalization("zscore")?,
             NormalizationMethod::ZScore
         ));
         assert!(matches!(
-            parse_normalization("sigmoid").unwrap(),
+            parse_normalization("sigmoid")?,
             NormalizationMethod::Sigmoid
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_weights() {
-        let weights = parse_weights("0.4, 0.35, 0.25").unwrap();
+    fn test_parse_weights() -> Result<()> {
+        let weights = parse_weights("0.4, 0.35, 0.25")?;
         assert_eq!(weights.len(), 3);
         assert!((weights[0] - 0.4).abs() < 1e-6);
         assert!((weights[1] - 0.35).abs() < 1e-6);
         assert!((weights[2] - 0.25).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_vector() {
-        let vector = parse_vector("0.1, 0.2, 0.3").unwrap();
+    fn test_parse_vector() -> Result<()> {
+        let vector = parse_vector("0.1, 0.2, 0.3")?;
         assert_eq!(vector.len(), 3);
         assert!((vector[0] - 0.1).abs() < 1e-6);
         assert!((vector[1] - 0.2).abs() < 1e-6);
         assert!((vector[2] - 0.3).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
@@ -453,29 +457,32 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_text_search() {
-        let results = execute_text_search("test query", 10).unwrap();
+    fn test_execute_text_search() -> Result<()> {
+        let results = execute_text_search("test query", 10)?;
         assert!(!results.is_empty());
         assert!(results[0].doc_id.contains("test query"));
+        Ok(())
     }
 
     #[test]
-    fn test_execute_vector_search() {
+    fn test_execute_vector_search() -> Result<()> {
         let embedding = vec![0.1, 0.2, 0.3];
-        let results = execute_vector_search(&embedding, 10).unwrap();
+        let results = execute_vector_search(&embedding, 10)?;
         assert!(!results.is_empty());
         assert!(results[0].doc_id.contains("dim3"));
+        Ok(())
     }
 
     #[test]
-    fn test_execute_spatial_search() {
-        let results = execute_spatial_search("POINT(10.0 20.0)", 10).unwrap();
+    fn test_execute_spatial_search() -> Result<()> {
+        let results = execute_spatial_search("POINT(10.0 20.0)", 10)?;
         assert!(!results.is_empty());
         assert!(results[0].doc_id.contains("POINT"));
+        Ok(())
     }
 
     #[test]
-    fn test_sparql_multimodal_search_integration() {
+    fn test_sparql_multimodal_search_integration() -> Result<()> {
         let config = MultimodalSearchConfig::default();
 
         let results = sparql_multimodal_search(
@@ -486,11 +493,11 @@ mod tests {
             Some("rankfusion".to_string()),
             10,
             &config,
-        )
-        .unwrap();
+        )?;
 
         assert!(!results.is_empty());
         assert!(results[0].score > 0.0);
+        Ok(())
     }
 
     #[test]

@@ -456,6 +456,7 @@ impl MultiTenantManager {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
@@ -473,59 +474,59 @@ mod tests {
     }
 
     #[test]
-    fn test_manager_creation() {
+    fn test_manager_creation() -> Result<()> {
         let manager = MultiTenantManager::with_defaults();
-        assert_eq!(manager.list_tenants().unwrap().len(), 0);
+        assert_eq!(manager.list_tenants().expect("test value").len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_create_and_get_tenant() {
+    fn test_create_and_get_tenant() -> Result<()> {
         let manager = MultiTenantManager::with_defaults();
         let config = TenantConfig::free_tier("tenant1", "Test Tenant");
 
-        manager.create_tenant("tenant1", config).unwrap();
+        manager.create_tenant("tenant1", config)?;
 
-        let tenant = manager.get_tenant("tenant1").unwrap();
+        let tenant = manager.get_tenant("tenant1")?;
         assert_eq!(tenant.id, "tenant1");
         assert_eq!(tenant.metadata.name, "Test Tenant");
         assert_eq!(tenant.status, TenantStatus::Active);
+        Ok(())
     }
 
     #[test]
-    fn test_tenant_operations() {
+    fn test_tenant_operations() -> Result<()> {
         let manager = MultiTenantManager::with_defaults();
         let config = TenantConfig::free_tier("tenant1", "Test");
-        manager.create_tenant("tenant1", config).unwrap();
+        manager.create_tenant("tenant1", config)?;
 
         let context = TenantContext::new("tenant1");
 
         // Should allow operation
-        manager
-            .check_operation(&context, TenantOperation::VectorSearch, None)
-            .unwrap();
+        manager.check_operation(&context, TenantOperation::VectorSearch, None)?;
 
         // Execute operation with closure
         let result: MultiTenancyResult<i32> =
             manager.execute_operation(&context, TenantOperation::VectorSearch, || Ok(42));
-        assert_eq!(result.unwrap(), 42);
+        let __val = result?;
+        assert_eq!(__val, 42);
 
         // Check statistics updated
-        let stats = manager.get_statistics("tenant1").unwrap();
+        let stats = manager.get_statistics("tenant1")?;
         assert_eq!(stats.total_queries, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_tenant_status_changes() {
+    fn test_tenant_status_changes() -> Result<()> {
         let manager = MultiTenantManager::with_defaults();
         let config = TenantConfig::free_tier("tenant1", "Test");
-        manager.create_tenant("tenant1", config).unwrap();
+        manager.create_tenant("tenant1", config)?;
 
         // Suspend tenant
-        manager
-            .update_tenant_status("tenant1", TenantStatus::Suspended)
-            .unwrap();
+        manager.update_tenant_status("tenant1", TenantStatus::Suspended)?;
 
-        let tenant = manager.get_tenant("tenant1").unwrap();
+        let tenant = manager.get_tenant("tenant1")?;
         assert_eq!(tenant.status, TenantStatus::Suspended);
 
         // Operations should fail when suspended
@@ -533,44 +534,41 @@ mod tests {
         assert!(manager
             .check_operation(&context, TenantOperation::VectorSearch, None)
             .is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_delete_tenant() {
+    fn test_delete_tenant() -> Result<()> {
         let manager = MultiTenantManager::with_defaults();
         let config = TenantConfig::free_tier("tenant1", "Test");
-        manager.create_tenant("tenant1", config).unwrap();
+        manager.create_tenant("tenant1", config)?;
 
         assert!(manager.get_tenant("tenant1").is_ok());
 
-        manager.delete_tenant("tenant1").unwrap();
+        manager.delete_tenant("tenant1")?;
 
         assert!(manager.get_tenant("tenant1").is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_list_tenants() {
+    fn test_list_tenants() -> Result<()> {
         let manager = MultiTenantManager::with_defaults();
 
-        manager
-            .create_tenant("tenant1", TenantConfig::free_tier("tenant1", "T1"))
-            .unwrap();
-        manager
-            .create_tenant("tenant2", TenantConfig::pro_tier("tenant2", "T2"))
-            .unwrap();
-        manager
-            .create_tenant("tenant3", TenantConfig::enterprise_tier("tenant3", "T3"))
-            .unwrap();
+        manager.create_tenant("tenant1", TenantConfig::free_tier("tenant1", "T1"))?;
+        manager.create_tenant("tenant2", TenantConfig::pro_tier("tenant2", "T2"))?;
+        manager.create_tenant("tenant3", TenantConfig::enterprise_tier("tenant3", "T3"))?;
 
-        let tenants = manager.list_tenants().unwrap();
+        let tenants = manager.list_tenants()?;
         assert_eq!(tenants.len(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_billing_integration() {
+    fn test_billing_integration() -> Result<()> {
         let manager = MultiTenantManager::with_defaults();
         let config = TenantConfig::free_tier("tenant1", "Test");
-        manager.create_tenant("tenant1", config).unwrap();
+        manager.create_tenant("tenant1", config)?;
 
         let context = TenantContext::new("tenant1");
 
@@ -580,9 +578,10 @@ mod tests {
         }
 
         // Check billing metrics
-        let metrics = manager.get_billing_metrics("tenant1").unwrap();
+        let metrics = manager.get_billing_metrics("tenant1")?;
         assert_eq!(metrics.total_requests, 10);
         assert!(metrics.total_cost > 0.0);
+        Ok(())
     }
 
     #[test]

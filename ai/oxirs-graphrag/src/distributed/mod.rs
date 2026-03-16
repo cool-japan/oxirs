@@ -1487,7 +1487,10 @@ mod tests {
 
         let expander = FederatedSubgraphExpander::new(config, Arc::new(executor));
         let seeds = vec![make_seed("http://a/s1", 0.9)];
-        let kg = expander.expand_federated(&seeds, None).await.unwrap();
+        let kg = expander
+            .expand_federated(&seeds, None)
+            .await
+            .expect("should succeed");
 
         // 3 unique triples: 2 from ep_a + 1 new from ep_b (duplicate filtered)
         assert_eq!(kg.triple_count(), 3);
@@ -1505,7 +1508,10 @@ mod tests {
             ..Default::default()
         };
         let expander = FederatedSubgraphExpander::new(config, Arc::new(executor));
-        let kg = expander.expand_federated(&[], None).await.unwrap();
+        let kg = expander
+            .expand_federated(&[], None)
+            .await
+            .expect("should succeed");
         assert!(kg.is_empty());
     }
 
@@ -1544,11 +1550,14 @@ mod tests {
 
         let resolver = DistributedEntityResolver::new(config, Arc::new(executor));
         let uris = vec!["http://a/e1".to_string()];
-        let closure = resolver.same_as_closure(&uris).await.unwrap();
+        let closure = resolver
+            .same_as_closure(&uris)
+            .await
+            .expect("should succeed");
 
         // Both http://a/e1 and http://b/e1 should map to the same canonical URI
-        let canon_a = closure.get("http://a/e1").unwrap();
-        let canon_b = closure.get("http://b/e1").unwrap();
+        let canon_a = closure.get("http://a/e1").expect("should succeed");
+        let canon_b = closure.get("http://b/e1").expect("should succeed");
         assert_eq!(
             canon_a, canon_b,
             "Same-as entities should share canonical URI"
@@ -1568,10 +1577,15 @@ mod tests {
 
         let resolver = DistributedEntityResolver::new(config, Arc::new(executor));
         let uris = vec!["http://example.org/e1".to_string()];
-        let closure = resolver.same_as_closure(&uris).await.unwrap();
+        let closure = resolver
+            .same_as_closure(&uris)
+            .await
+            .expect("should succeed");
 
         // Without any sameAs links, e1 maps to itself
-        let canon = closure.get("http://example.org/e1").unwrap();
+        let canon = closure
+            .get("http://example.org/e1")
+            .expect("should succeed");
         assert_eq!(canon, "http://example.org/e1");
     }
 
@@ -1594,7 +1608,10 @@ mod tests {
 
         let resolver = DistributedEntityResolver::new(config, Arc::new(executor));
         let uris = vec!["http://a/e1".to_string()];
-        let closure = resolver.same_as_closure(&uris).await.unwrap();
+        let closure = resolver
+            .same_as_closure(&uris)
+            .await
+            .expect("should succeed");
 
         // Check that the discovered URIs (at least a/e1 and b/e1) share a canonical form
         if let Some(canon_a) = closure.get("http://a/e1") {
@@ -1660,7 +1677,10 @@ mod tests {
         ];
         kg.provenance = vec!["ep_a".to_string(), "ep_b".to_string()];
 
-        let context = builder.build_context(&kg, "test query").await.unwrap();
+        let context = builder
+            .build_context(&kg, "test query")
+            .await
+            .expect("should succeed");
 
         assert!(context.contains("test query"));
         assert!(context.contains("http://s1"));
@@ -1675,7 +1695,10 @@ mod tests {
         let ctx_config = FederatedContextConfig::default();
         let builder = FederatedContextBuilder::new(ctx_config, &graphrag_config);
         let kg = KnowledgeGraph::new();
-        let context = builder.build_context(&kg, "test").await.unwrap();
+        let context = builder
+            .build_context(&kg, "test")
+            .await
+            .expect("should succeed");
         assert!(context.is_empty());
     }
 
@@ -1712,7 +1735,10 @@ mod tests {
             .collect();
         kg.provenance = (0..10).map(|_| "ep_a".to_string()).collect();
 
-        let context = builder.build_context(&kg, "test").await.unwrap();
+        let context = builder
+            .build_context(&kg, "test")
+            .await
+            .expect("should succeed");
 
         // Count lines starting with "- " to determine triple count
         let triple_lines = context.lines().filter(|l| l.starts_with("- ")).count();
@@ -1733,7 +1759,10 @@ mod tests {
         metrics.record_success("ep_a", 150, 42).await;
         metrics.record_success("ep_a", 100, 30).await;
 
-        let snap = metrics.endpoint_snapshot("ep_a").await.unwrap();
+        let snap = metrics
+            .endpoint_snapshot("ep_a")
+            .await
+            .expect("should succeed");
         assert_eq!(snap.total_queries, 2);
         assert_eq!(snap.successful_queries, 2);
         assert_eq!(snap.failed_queries, 0);
@@ -1749,7 +1778,10 @@ mod tests {
         metrics.record_failure("ep_a").await;
         metrics.record_failure("ep_a").await;
 
-        let snap = metrics.endpoint_snapshot("ep_a").await.unwrap();
+        let snap = metrics
+            .endpoint_snapshot("ep_a")
+            .await
+            .expect("should succeed");
         assert_eq!(snap.total_queries, 2);
         assert_eq!(snap.failed_queries, 2);
         assert_eq!(snap.successful_queries, 0);
@@ -1782,7 +1814,7 @@ mod tests {
         metrics.record_success("ep_a", 500, 10).await;
         metrics.record_success("ep_b", 50, 10).await;
 
-        let fastest = metrics.fastest_endpoint().await.unwrap();
+        let fastest = metrics.fastest_endpoint().await.expect("should succeed");
         assert_eq!(fastest, "ep_b");
     }
 
@@ -1794,7 +1826,10 @@ mod tests {
         metrics.record_success("ep_a", 100, 5).await; // hit (triple_count > 0)
         metrics.record_failure("ep_a").await; // miss
 
-        let snap = metrics.endpoint_snapshot("ep_a").await.unwrap();
+        let snap = metrics
+            .endpoint_snapshot("ep_a")
+            .await
+            .expect("should succeed");
         assert_eq!(snap.total_queries, 2);
         // 1 success + 1 failure
         assert!(snap.hit_rate >= 0.0 && snap.hit_rate <= 1.0);
@@ -1805,7 +1840,7 @@ mod tests {
     #[test]
     fn test_parse_n_triples_basic() {
         let body = "<http://s> <http://p> <http://o> .\n";
-        let triples = parse_n_triples(body).unwrap();
+        let triples = parse_n_triples(body).expect("should succeed");
         assert_eq!(triples.len(), 1);
         assert_eq!(triples[0].subject, "http://s");
         assert_eq!(triples[0].predicate, "http://p");
@@ -1815,13 +1850,13 @@ mod tests {
     #[test]
     fn test_parse_n_triples_skips_comments() {
         let body = "# comment\n<http://s> <http://p> <http://o> .\n";
-        let triples = parse_n_triples(body).unwrap();
+        let triples = parse_n_triples(body).expect("should succeed");
         assert_eq!(triples.len(), 1);
     }
 
     #[test]
     fn test_parse_n_triples_empty() {
-        let triples = parse_n_triples("").unwrap();
+        let triples = parse_n_triples("").expect("should succeed");
         assert!(triples.is_empty());
     }
 

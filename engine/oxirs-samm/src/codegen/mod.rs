@@ -16,11 +16,11 @@
 //!
 //! // JSON Schema
 //! let json_gen = JsonSchemaGenerator::new().with_descriptions();
-//! let schema = json_gen.generate(&aspect).unwrap();
+//! let schema = json_gen.generate(&aspect).expect("should succeed");
 //!
 //! // OpenAPI 3.0
 //! let oa_gen = OpenApiGenerator::new("1.0.0", "/api/v1/aspects");
-//! let spec = oa_gen.generate(&aspect).unwrap();
+//! let spec = oa_gen.generate(&aspect).expect("should succeed");
 //! ```
 
 pub mod json_schema;

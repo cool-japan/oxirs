@@ -365,11 +365,12 @@ mod tests {
     // ── Condition tests ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_condition_variables_with_variables() {
+    fn test_condition_variables_with_variables() -> anyhow::Result<()> {
         let c = cond("?x", "rdf:type", "?y");
         let mut vars = c.variables();
         vars.sort();
         assert_eq!(vars, vec!["x", "y"]);
+        Ok(())
     }
 
     #[test]
@@ -379,16 +380,17 @@ mod tests {
     }
 
     #[test]
-    fn test_condition_variables_mixed() {
+    fn test_condition_variables_mixed() -> anyhow::Result<()> {
         let c = cond("?s", "rdfs:label", ":literal");
         let vars = c.variables();
         assert_eq!(vars, vec!["s"]);
+        Ok(())
     }
 
     // ── RuleBody tests ────────────────────────────────────────────────────────
 
     #[test]
-    fn test_rule_body_positive_vars() {
+    fn test_rule_body_positive_vars() -> anyhow::Result<()> {
         let body = RuleBody {
             conditions: vec![
                 cond("?x", "rdf:type", "?y"),
@@ -400,10 +402,11 @@ mod tests {
         assert!(vars.contains("x"));
         assert!(vars.contains("y"));
         assert!(vars.contains("z"));
+        Ok(())
     }
 
     #[test]
-    fn test_rule_body_positive_vars_ignores_negations() {
+    fn test_rule_body_positive_vars_ignores_negations() -> anyhow::Result<()> {
         let body = RuleBody {
             conditions: vec![cond("?x", "rdf:type", ":Person")],
             negations: vec![cond("?x", "rdf:type", "?z")],
@@ -411,12 +414,13 @@ mod tests {
         let vars = body.positive_vars();
         assert!(vars.contains("x"));
         assert!(!vars.contains("z")); // z only in negation
+        Ok(())
     }
 
     // ── validate_rule: valid rules ────────────────────────────────────────────
 
     #[test]
-    fn test_validate_rule_valid_simple() {
+    fn test_validate_rule_valid_simple() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = simple_rule(
             "r1",
@@ -426,18 +430,20 @@ mod tests {
         );
         let errors = validator.validate_rule(&rule);
         assert!(errors.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_rule_valid_no_head_vars() {
+    fn test_validate_rule_valid_no_head_vars() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = simple_rule("r1", "exists", vec![], vec![cond("?x", "rdf:type", ":T")]);
         let errors = validator.validate_rule(&rule);
         assert!(errors.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_rule_valid_with_negation() {
+    fn test_validate_rule_valid_with_negation() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = make_rule(
             "r1",
@@ -449,16 +455,18 @@ mod tests {
         );
         let errors = validator.validate_rule(&rule);
         assert!(errors.is_empty());
+        Ok(())
     }
 
     // ── validate_rule: invalid rules ─────────────────────────────────────────
 
     #[test]
-    fn test_validate_rule_empty_head_predicate() {
+    fn test_validate_rule_empty_head_predicate() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = simple_rule("r1", "", vec![], vec![cond("?x", "rdf:type", ":T")]);
         let errors = validator.validate_rule(&rule);
         assert!(errors.contains(&ValidationError::EmptyHead));
+        Ok(())
     }
 
     #[test]
@@ -470,7 +478,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_rule_unbound_variable() {
+    fn test_validate_rule_unbound_variable() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         // Head has variable "z" but body only binds "x" and "y".
         let rule = simple_rule(
@@ -483,6 +491,7 @@ mod tests {
         assert!(errors
             .iter()
             .any(|e| matches!(e, ValidationError::UnboundVariable(v) if v == "z")));
+        Ok(())
     }
 
     #[test]
@@ -499,17 +508,18 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_rule_invalid_body_predicate() {
+    fn test_validate_rule_invalid_body_predicate() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = simple_rule("r1", "foo", vec![], vec![cond("?x", "", ":T")]);
         let errors = validator.validate_rule(&rule);
         assert!(errors
             .iter()
             .any(|e| matches!(e, ValidationError::InvalidPredicate(_))));
+        Ok(())
     }
 
     #[test]
-    fn test_validate_rule_all_vars_bound() {
+    fn test_validate_rule_all_vars_bound() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = simple_rule(
             "r1",
@@ -519,6 +529,7 @@ mod tests {
         );
         let errors = validator.validate_rule(&rule);
         assert!(errors.is_empty());
+        Ok(())
     }
 
     // ── validate_ruleset: valid sets ──────────────────────────────────────────
@@ -531,7 +542,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_ruleset_single_valid_rule() {
+    fn test_validate_ruleset_single_valid_rule() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = simple_rule(
             "r1",
@@ -541,10 +552,11 @@ mod tests {
         );
         let errors = validator.validate_ruleset(&[rule]);
         assert!(errors.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_ruleset_multiple_valid_rules() {
+    fn test_validate_ruleset_multiple_valid_rules() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let r1 = simple_rule(
             "r1",
@@ -560,12 +572,13 @@ mod tests {
         );
         let errors = validator.validate_ruleset(&[r1, r2]);
         assert!(errors.is_empty());
+        Ok(())
     }
 
     // ── validate_ruleset: duplicate IDs ──────────────────────────────────────
 
     #[test]
-    fn test_validate_ruleset_duplicate_id() {
+    fn test_validate_ruleset_duplicate_id() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let r1 = simple_rule("dup", "a", vec![], vec![cond("?x", "p", ":o")]);
         let r2 = simple_rule("dup", "b", vec![], vec![cond("?y", "q", ":o")]);
@@ -573,10 +586,11 @@ mod tests {
         assert!(errors
             .iter()
             .any(|e| matches!(e, ValidationError::DuplicateId(id) if id == "dup")));
+        Ok(())
     }
 
     #[test]
-    fn test_validate_ruleset_unique_ids_no_error() {
+    fn test_validate_ruleset_unique_ids_no_error() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rules: Vec<Rule> = (0..5)
             .map(|i| {
@@ -592,12 +606,13 @@ mod tests {
         assert!(!errors
             .iter()
             .any(|e| matches!(e, ValidationError::DuplicateId(_))));
+        Ok(())
     }
 
     // ── detect_cycles ─────────────────────────────────────────────────────────
 
     #[test]
-    fn test_detect_cycles_no_cycles() {
+    fn test_detect_cycles_no_cycles() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         // r1: body uses "parent", head defines "ancestor"
         // r2: body uses "ancestor", head defines "knows"
@@ -605,39 +620,43 @@ mod tests {
         let r2 = simple_rule("r2", "knows", vec![], vec![cond("?x", "ancestor", "?y")]);
         let cycles = validator.detect_cycles(&[r1, r2]);
         assert!(cycles.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_detect_cycles_self_loop() {
+    fn test_detect_cycles_self_loop() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         // Rule's body references its own head predicate.
         let rule = simple_rule("r1", "loop", vec![], vec![cond("?x", "loop", "?y")]);
         let cycles = validator.detect_cycles(&[rule]);
         assert!(!cycles.is_empty());
         assert!(cycles[0].contains(&"r1".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_detect_cycles_two_node_cycle() {
+    fn test_detect_cycles_two_node_cycle() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let r1 = simple_rule("r1", "a", vec![], vec![cond("?x", "b", "?y")]);
         let r2 = simple_rule("r2", "b", vec![], vec![cond("?x", "a", "?y")]);
         let cycles = validator.detect_cycles(&[r1, r2]);
         assert!(!cycles.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_detect_cycles_no_cycle_chain() {
+    fn test_detect_cycles_no_cycle_chain() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let r1 = simple_rule("r1", "a", vec![], vec![cond("?x", "base", "?y")]);
         let r2 = simple_rule("r2", "b", vec![], vec![cond("?x", "a", "?y")]);
         let r3 = simple_rule("r3", "c", vec![], vec![cond("?x", "b", "?y")]);
         let cycles = validator.detect_cycles(&[r1, r2, r3]);
         assert!(cycles.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_ruleset_reports_cycle() {
+    fn test_validate_ruleset_reports_cycle() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let r1 = simple_rule("r1", "a", vec![], vec![cond("?x", "b", "?y")]);
         let r2 = simple_rule("r2", "b", vec![], vec![cond("?x", "a", "?y")]);
@@ -645,6 +664,7 @@ mod tests {
         assert!(errors
             .iter()
             .any(|e| matches!(e, ValidationError::CircularDependency(_))));
+        Ok(())
     }
 
     // ── display tests ─────────────────────────────────────────────────────────
@@ -690,7 +710,7 @@ mod tests {
     // ── RuleKind exhaustiveness ───────────────────────────────────────────────
 
     #[test]
-    fn test_all_rule_kinds_accepted() {
+    fn test_all_rule_kinds_accepted() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         for kind in [
             RuleKind::Implication,
@@ -709,12 +729,13 @@ mod tests {
             let errors = validator.validate_rule(&rule);
             assert!(errors.is_empty());
         }
+        Ok(())
     }
 
     // ── extra coverage ────────────────────────────────────────────────────────
 
     #[test]
-    fn test_validate_ruleset_combines_per_rule_and_set_errors() {
+    fn test_validate_ruleset_combines_per_rule_and_set_errors() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         // r1 is valid; r2 has duplicate id with r1 and also empty body.
         let r1 = simple_rule("dup", "foo", vec![], vec![cond("?x", "p", ":o")]);
@@ -726,17 +747,19 @@ mod tests {
         assert!(errors
             .iter()
             .any(|e| matches!(e, ValidationError::EmptyBody)));
+        Ok(())
     }
 
     #[test]
-    fn test_rule_validator_default() {
+    fn test_rule_validator_default() -> anyhow::Result<()> {
         let v = RuleValidator;
         let rule = simple_rule("r1", "p", vec![], vec![cond("?x", "q", ":o")]);
         assert!(v.validate_rule(&rule).is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_unbound_variable_multiple() {
+    fn test_unbound_variable_multiple() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = simple_rule(
             "r1",
@@ -759,20 +782,22 @@ mod tests {
         assert!(unbound.contains(&"x"));
         assert!(unbound.contains(&"y"));
         assert!(unbound.contains(&"z"));
+        Ok(())
     }
 
     #[test]
-    fn test_three_node_cycle() {
+    fn test_three_node_cycle() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let r1 = simple_rule("r1", "a", vec![], vec![cond("?x", "c", "?y")]);
         let r2 = simple_rule("r2", "b", vec![], vec![cond("?x", "a", "?y")]);
         let r3 = simple_rule("r3", "c", vec![], vec![cond("?x", "b", "?y")]);
         let cycles = validator.detect_cycles(&[r1, r2, r3]);
         assert!(!cycles.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_acyclic_diamond() {
+    fn test_acyclic_diamond() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         // a → b, a → c, b → d, c → d (diamond, no cycle)
         let r1 = simple_rule("r1", "b", vec![], vec![cond("?x", "a", "?y")]);
@@ -781,10 +806,11 @@ mod tests {
         let r4 = simple_rule("r4", "d2", vec![], vec![cond("?x", "c", "?y")]);
         let cycles = validator.detect_cycles(&[r1, r2, r3, r4]);
         assert!(cycles.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_rule_equivalence_kind() {
+    fn test_validate_rule_equivalence_kind() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = make_rule(
             "r1",
@@ -795,10 +821,11 @@ mod tests {
             RuleKind::Equivalence,
         );
         assert!(validator.validate_rule(&rule).is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_rule_integrity_kind() {
+    fn test_validate_rule_integrity_kind() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = make_rule(
             "r1",
@@ -809,10 +836,11 @@ mod tests {
             RuleKind::Integrity,
         );
         assert!(validator.validate_rule(&rule).is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_rule_transformation_kind() {
+    fn test_validate_rule_transformation_kind() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = make_rule(
             "r1",
@@ -823,10 +851,11 @@ mod tests {
             RuleKind::Transformation,
         );
         assert!(validator.validate_rule(&rule).is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_validate_ruleset_no_duplicate_different_predicates() {
+    fn test_validate_ruleset_no_duplicate_different_predicates() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let r1 = simple_rule("rule_alpha", "foo", vec![], vec![cond("?x", "p", ":o")]);
         let r2 = simple_rule("rule_beta", "bar", vec![], vec![cond("?y", "q", ":o")]);
@@ -834,18 +863,20 @@ mod tests {
         assert!(!errors
             .iter()
             .any(|e| matches!(e, ValidationError::DuplicateId(_))));
+        Ok(())
     }
 
     #[test]
-    fn test_condition_variable_in_predicate_position() {
+    fn test_condition_variable_in_predicate_position() -> anyhow::Result<()> {
         // Predicate positions starting with '?' are also variables.
         let c = cond(":s", "?p", ":o");
         let vars = c.variables();
         assert_eq!(vars, vec!["p"]);
+        Ok(())
     }
 
     #[test]
-    fn test_validate_rule_body_object_binds_head_var() {
+    fn test_validate_rule_body_object_binds_head_var() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         let rule = simple_rule(
             "r1",
@@ -855,6 +886,7 @@ mod tests {
         );
         let errors = validator.validate_rule(&rule);
         assert!(errors.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -878,7 +910,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_rule_negation_invalid_predicate() {
+    fn test_validate_rule_negation_invalid_predicate() -> anyhow::Result<()> {
         let validator = RuleValidator::new();
         // Empty predicate in negation condition.
         let rule = make_rule(
@@ -893,5 +925,6 @@ mod tests {
         assert!(errors
             .iter()
             .any(|e| matches!(e, ValidationError::InvalidPredicate(_))));
+        Ok(())
     }
 }

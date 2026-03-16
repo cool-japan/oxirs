@@ -1,13 +1,13 @@
 # OxiRS SHACL-AI - TODO
 
-*Version: 0.2.1 | Last Updated: 2026-03-05*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
 **oxirs-shacl-ai** provides AI-enhanced SHACL validation with production-ready MLOps features.
 
 ### Quality Metrics
-- **Test Status**: 555/555 tests passing (100% success rate)
+- **Test Status**: 1589/1589 tests passing (100% success rate)
 - **Code Quality**: Zero warnings, zero errors
 - **SciRS2 Compliance**: Full compliance (no direct ndarray/rand imports)
 - **Code Size**: 153,329 lines total (401 Rust source files)
@@ -81,23 +81,28 @@
 - Cloud storage integration
 - ML pipeline integration
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Enhanced Performance (Q1 2026 - Expanded)
-- [ ] Enhanced GPU acceleration across all models
-- [ ] Distributed training support
-- [ ] Advanced model ensembles
-- [ ] Real-time inference optimization
-- [ ] Large language model integration
-- [ ] Advanced reasoning chains
-- [ ] Multi-modal constraint learning
-- [ ] Graph transformer architectures
+### v0.1.0 - Released (January 7, 2026)
+- ✅ GNNs, Transformer-based constraint generation, RL optimization, federated learning, 555 tests
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ Enhanced GPU acceleration across all models
+- ✅ Distributed training support
+- ✅ Advanced model ensembles
+- ✅ Real-time inference optimization
+- ✅ Advanced reasoning chains
+- ✅ Multi-modal constraint learning
+- ✅ Pattern scorer, constraint ranker, rule generator
+- ✅ 1589 tests passing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Long-term support guarantees
 - [ ] Enterprise features
 - [ ] Comprehensive certification suite
 - [ ] Model zoo and pretrained models
+- [ ] Large language model integration
+- [ ] Graph transformer architectures
 
 ## Contributing
 
@@ -105,4 +110,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS SHACL-AI v0.1.0 - AI-enhanced SHACL validation*
+*OxiRS SHACL-AI v0.2.2 - AI-enhanced SHACL validation*

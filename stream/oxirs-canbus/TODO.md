@@ -1,10 +1,10 @@
 # OxiRS CAN Bus - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
-OxiRS CAN Bus v0.1.0 provides automotive CAN bus integration with J1939 protocol support, DBC file parsing, and RDF mapping for vehicle telematics and industrial automation.
+OxiRS CAN Bus v0.2.2 provides automotive CAN bus integration with J1939 protocol support, DBC file parsing, and RDF mapping for vehicle telematics and industrial automation.
 
 ### Features
 - ✅ SocketCAN integration (Linux)
@@ -13,25 +13,34 @@ OxiRS CAN Bus v0.1.0 provides automotive CAN bus integration with J1939 protocol
 - ✅ J1939 protocol implementation (PGN extraction, multi-packet reassembly)
 - ✅ Common J1939 PGNs (engine data, vehicle speed, temperature)
 - ✅ DBC file parser (messages, signals, value tables)
-- ✅ Signal decoding (little/big endian, scaling, offsets)
+- ✅ Signal decoding (little/big endian, scaling, offsets) Intel/Motorola DBC
 - ✅ RDF triple generation from CAN frames
 - ✅ W3C PROV-O timestamp tracking
 - ✅ SAMM aspect model generation from DBC files
-- ✅ 101 tests passing
+- ✅ UDS (Unified Diagnostic Services, ISO 14229)
+- ✅ CANopen support (DS-301 profiles)
+- ✅ OBD-II decoder
+- ✅ Protocol analyzer
+- ✅ PGN decoder
+- ✅ Frame aggregator, frame validator, signal monitor
+- ✅ CAN scheduler, gateway bridge, recording extensions
+- ✅ 1125 tests passing
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Production Testing (Q1 2026 - Expanded)
-- [ ] OBD-II testing with real vehicles
-- [ ] J1939 testing with heavy vehicles
-- [ ] Performance validation (10,000 messages/sec)
-- [ ] Comprehensive API documentation
-- [ ] UDS (Unified Diagnostic Services, ISO 14229)
-- [ ] CANopen support (DS-301 profiles)
-- [ ] Recording and playback (.asc, .blf formats)
-- [ ] Bus analysis and monitoring tools
+### v0.1.0 - Released (January 7, 2026)
+- ✅ SocketCAN, J1939, DBC parser, RDF generation, SAMM, 101 tests
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ OBD-II decoder
+- ✅ UDS (Unified Diagnostic Services, ISO 14229)
+- ✅ CANopen support (DS-301 profiles)
+- ✅ PGN decoder, protocol analyzer, bit timing
+- ✅ Frame validator, frame aggregator, signal monitor
+- ✅ Gateway bridge, recording extensions
+- ✅ 1125 tests passing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Long-term support guarantees
 - [ ] Enterprise integration features
 - [ ] GUI tools and web interface
@@ -45,4 +54,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS CAN Bus v0.1.0 - Automotive telematics for semantic web*
+*OxiRS CAN Bus v0.2.2 - Automotive telematics for semantic web*

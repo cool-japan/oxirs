@@ -673,7 +673,7 @@ mod tests {
         let config = ExporterConfig::new();
         let exporter = JaegerExporter::new(config);
 
-        let result = exporter.export_spans(vec![]).await.unwrap();
+        let result = exporter.export_spans(vec![]).await.expect("should succeed");
 
         assert_eq!(result.exported_spans, 0);
         assert_eq!(result.failed_spans, 0);
@@ -686,7 +686,10 @@ mod tests {
         let exporter = JaegerExporter::new(config);
 
         let span = create_test_span();
-        let result = exporter.export_spans(vec![span]).await.unwrap();
+        let result = exporter
+            .export_spans(vec![span])
+            .await
+            .expect("should succeed");
 
         assert_eq!(result.exported_spans, 1);
         assert_eq!(result.failed_spans, 0);
@@ -699,7 +702,10 @@ mod tests {
         let exporter = JaegerExporter::new(config);
 
         let span = create_test_span();
-        exporter.export_spans(vec![span]).await.unwrap();
+        exporter
+            .export_spans(vec![span])
+            .await
+            .expect("should succeed");
 
         let stats = exporter.get_stats().await;
         assert_eq!(stats.total_exports, 1);
@@ -725,7 +731,10 @@ mod tests {
         let exporter = ZipkinExporter::new(config);
 
         let span = create_test_span();
-        let result = exporter.export_spans(vec![span]).await.unwrap();
+        let result = exporter
+            .export_spans(vec![span])
+            .await
+            .expect("should succeed");
 
         assert_eq!(result.exported_spans, 1);
         assert_eq!(result.failed_spans, 0);
@@ -738,7 +747,10 @@ mod tests {
         let exporter = ZipkinExporter::new(config);
 
         let span = create_test_span();
-        exporter.export_spans(vec![span]).await.unwrap();
+        exporter
+            .export_spans(vec![span])
+            .await
+            .expect("should succeed");
 
         let stats = exporter.get_stats().await;
         assert_eq!(stats.total_exports, 1);
@@ -767,7 +779,10 @@ mod tests {
         let exporter = TempoExporter::new(config);
 
         let span = create_test_span();
-        let result = exporter.export_spans(vec![span]).await.unwrap();
+        let result = exporter
+            .export_spans(vec![span])
+            .await
+            .expect("should succeed");
 
         assert_eq!(result.exported_spans, 1);
         assert!(result.is_success());
@@ -897,7 +912,7 @@ mod tests {
 
         let spans: Vec<Span> = (0..150).map(|_| create_test_span()).collect();
 
-        let result = exporter.export_spans(spans).await.unwrap();
+        let result = exporter.export_spans(spans).await.expect("should succeed");
 
         assert_eq!(result.exported_spans, 150);
     }

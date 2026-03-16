@@ -1455,7 +1455,10 @@ mod tests {
 
         let tracker = collector.stop_tracker("test_tracker");
         assert!(tracker.is_some());
-        assert!(matches!(tracker.unwrap().state, TrackerState::Stopped));
+        assert!(matches!(
+            tracker.expect("should succeed").state,
+            TrackerState::Stopped
+        ));
     }
 
     #[test]
@@ -1534,11 +1537,14 @@ mod tests {
         let session_id = profiler
             .start_session("Test Session".to_string(), HashMap::new())
             .await
-            .unwrap();
+            .expect("should succeed");
         assert!(!session_id.is_empty());
 
         // Stop session
-        let session = profiler.stop_session(&session_id).await.unwrap();
+        let session = profiler
+            .stop_session(&session_id)
+            .await
+            .expect("should succeed");
         assert!(matches!(session.status, SessionStatus::Completed));
         assert!(session.end_time.is_some());
     }

@@ -443,6 +443,7 @@ impl Drop for RealTimeEmbeddingPipeline {
 mod tests {
     use super::*;
     use crate::real_time_embedding_pipeline::config::ConsistencyLevel;
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
     #[tokio::test]
     async fn test_pipeline_creation() {
@@ -452,9 +453,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_pipeline_start_stop() {
+    async fn test_pipeline_start_stop() -> Result<()> {
         let config = PipelineConfig::default();
-        let pipeline = RealTimeEmbeddingPipeline::new(config).unwrap();
+        let pipeline = RealTimeEmbeddingPipeline::new(config)?;
 
         assert!(!pipeline.is_running());
 
@@ -467,21 +468,23 @@ mod tests {
         // Stop pipeline
         let stop_result = pipeline.stop().await;
         let _ = stop_result;
+        Ok(())
     }
 
     #[test]
-    fn test_pipeline_configuration() {
+    fn test_pipeline_configuration() -> Result<()> {
         let config = PipelineConfig {
             consistency_level: ConsistencyLevel::Strong,
             max_batch_size: 500,
             ..Default::default()
         };
 
-        let pipeline = RealTimeEmbeddingPipeline::new(config).unwrap();
+        let pipeline = RealTimeEmbeddingPipeline::new(config)?;
         assert_eq!(pipeline.get_config().max_batch_size, 500);
         assert_eq!(
             pipeline.get_config().consistency_level,
             ConsistencyLevel::Strong
         );
+        Ok(())
     }
 }

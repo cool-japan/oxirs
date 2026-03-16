@@ -1112,7 +1112,7 @@ mod tests {
             "/tmp/oxirs_virtual_test_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_millis()
         );
 
@@ -1158,22 +1158,33 @@ mod tests {
             });
         }
 
-        let storage = VirtualStorage::new(config).await.unwrap();
-        storage.initialize_backends().await.unwrap();
+        let storage = VirtualStorage::new(config)
+            .await
+            .expect("async operation should succeed");
+        storage
+            .initialize_backends()
+            .await
+            .expect("async operation should succeed");
 
         // Create test triple
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             crate::model::Object::Literal(Literal::new("test")),
         );
 
         // Store triple
-        storage.store_triple(&triple).await.unwrap();
+        storage
+            .store_triple(&triple)
+            .await
+            .expect("async operation should succeed");
 
         // Query triple
         let pattern = TriplePattern::new(None, None, None);
-        let results = storage.query_triples(&pattern).await.unwrap();
+        let results = storage
+            .query_triples(&pattern)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], triple);
     }

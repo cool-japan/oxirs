@@ -1634,19 +1634,20 @@ mod tests {
     }
 
     #[test]
-    fn test_transaction_lifecycle() {
+    fn test_transaction_lifecycle() -> Result<()> {
         let config = StoreIntegrationConfig::default();
         let tm = TransactionManager::new(config);
 
-        let tx_id = tm.begin_transaction(IsolationLevel::ReadCommitted).unwrap();
+        let tx_id = tm.begin_transaction(IsolationLevel::ReadCommitted)?;
         assert!(tx_id > 0);
 
         let result = tm.commit_transaction(tx_id);
         assert!(result.is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_cache_manager() {
+    fn test_cache_manager() -> Result<()> {
         let config = StoreCacheConfig {
             enable_vector_cache: true,
             enable_query_cache: true,
@@ -1662,7 +1663,8 @@ mod tests {
         let cached = cache_manager.get_vector("test_uri");
 
         assert!(cached.is_some());
-        assert_eq!(cached.unwrap().vector, vector);
+        assert_eq!(cached.expect("test value").vector, vector);
+        Ok(())
     }
 
     #[test]
@@ -1687,13 +1689,11 @@ mod tests {
     }
 
     #[test]
-    fn test_integrated_vector_store() {
+    fn test_integrated_vector_store() -> Result<()> {
         let config = StoreIntegrationConfig::default();
-        let store = IntegratedVectorStore::new(config, EmbeddingStrategy::TfIdf).unwrap();
+        let store = IntegratedVectorStore::new(config, EmbeddingStrategy::TfIdf)?;
 
-        let tx_id = store
-            .begin_transaction(IsolationLevel::ReadCommitted)
-            .unwrap();
+        let tx_id = store.begin_transaction(IsolationLevel::ReadCommitted)?;
         assert!(tx_id > 0);
 
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
@@ -1702,5 +1702,6 @@ mod tests {
 
         let commit_result = store.commit_transaction(tx_id);
         assert!(commit_result.is_ok());
+        Ok(())
     }
 }

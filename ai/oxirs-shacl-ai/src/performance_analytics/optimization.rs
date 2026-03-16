@@ -391,7 +391,7 @@ mod tests {
         optimizer.update_system_state(state);
         assert!(optimizer.current_state.is_some());
 
-        let stored_state = optimizer.current_state.as_ref().unwrap();
+        let stored_state = optimizer.current_state.as_ref().expect("should succeed");
         assert_eq!(stored_state.avg_response_time_ms, 3000.0);
         assert_eq!(stored_state.memory_usage_percent, 65.0);
     }
@@ -431,7 +431,7 @@ mod tests {
             "Should contain response time optimization recommendation"
         );
 
-        let rec = response_time_rec.unwrap();
+        let rec = response_time_rec.expect("should succeed");
         assert!(rec.expected_improvement_percent > 0.0);
         assert!(rec.priority >= 5);
         assert!(!rec.description.is_empty());
@@ -453,7 +453,7 @@ mod tests {
             "High memory usage should generate memory optimization recommendation"
         );
 
-        let rec = memory_rec.unwrap();
+        let rec = memory_rec.expect("should succeed");
         assert_eq!(rec.expected_improvement_percent, 30.0);
         assert!(rec.implementation_complexity <= 10);
     }
@@ -474,7 +474,7 @@ mod tests {
             "High CPU usage should generate CPU optimization recommendation"
         );
 
-        let rec = cpu_rec.unwrap();
+        let rec = cpu_rec.expect("should succeed");
         assert_eq!(rec.expected_improvement_percent, 45.0);
         assert!(rec.tags.contains(&"cpu".to_string()));
     }
@@ -495,7 +495,7 @@ mod tests {
             "High error rate should generate error rate reduction recommendation"
         );
 
-        let rec = error_rec.unwrap();
+        let rec = error_rec.expect("should succeed");
         assert_eq!(rec.expected_improvement_percent, 70.0);
         assert_eq!(rec.priority, 8);
     }
@@ -516,7 +516,7 @@ mod tests {
             "Low cache hit rate should generate cache optimization recommendation"
         );
 
-        let rec = cache_rec.unwrap();
+        let rec = cache_rec.expect("should succeed");
         assert_eq!(rec.expected_improvement_percent, 35.0);
         assert!(rec.tags.contains(&"cache".to_string()));
     }
@@ -537,7 +537,7 @@ mod tests {
             "Low throughput should generate throughput enhancement recommendation"
         );
 
-        let rec = throughput_rec.unwrap();
+        let rec = throughput_rec.expect("should succeed");
         assert_eq!(rec.expected_improvement_percent, 50.0);
         assert!(rec.tags.contains(&"throughput".to_string()));
     }
@@ -584,7 +584,7 @@ mod tests {
             "High memory and CPU should generate bottleneck recommendation"
         );
 
-        let rec = bottleneck_rec.unwrap();
+        let rec = bottleneck_rec.expect("should succeed");
         assert_eq!(rec.expected_improvement_percent, 55.0);
         assert_eq!(rec.priority, 9);
         assert!(rec.tags.contains(&"bottleneck".to_string()));
@@ -609,7 +609,7 @@ mod tests {
             "High aggressiveness should generate AI optimization recommendation"
         );
 
-        let rec = ai_rec.unwrap();
+        let rec = ai_rec.expect("should succeed");
         assert_eq!(rec.expected_improvement_percent, 40.0);
         assert!(rec.tags.contains(&"ai".to_string()));
         assert!(rec.tags.contains(&"experimental".to_string()));
@@ -740,7 +740,7 @@ mod tests {
         assert!(!rec.tags.is_empty(), "Tags should not be empty");
         // created_at timestamp should be recent (within last minute)
         let now = SystemTime::now();
-        let duration = now.duration_since(rec.created_at).unwrap();
+        let duration = now.duration_since(rec.created_at).expect("should succeed");
         assert!(
             duration.as_secs() < 60,
             "Created timestamp should be recent"

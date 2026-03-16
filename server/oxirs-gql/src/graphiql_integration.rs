@@ -708,11 +708,11 @@ mod tests {
     #[test]
     fn test_config_serialization() {
         let config = GraphiQLConfig::default();
-        let json = serde_json::to_string(&config).unwrap();
+        let json = serde_json::to_string(&config).expect("should succeed");
         assert!(json.contains("endpoint"));
         assert!(json.contains("enable_history"));
 
-        let deserialized: GraphiQLConfig = serde_json::from_str(&json).unwrap();
+        let deserialized: GraphiQLConfig = serde_json::from_str(&json).expect("should succeed");
         assert_eq!(deserialized.endpoint, config.endpoint);
     }
 
@@ -726,8 +726,8 @@ mod tests {
             variables: HashMap::new(),
         };
 
-        let json = serde_json::to_string(&template).unwrap();
-        let deserialized: QueryTemplate = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&template).expect("should succeed");
+        let deserialized: QueryTemplate = serde_json::from_str(&json).expect("should succeed");
         assert_eq!(deserialized.name, "Test");
         assert_eq!(deserialized.query, "{ test }");
     }
@@ -750,7 +750,10 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(config.subscription_endpoint.unwrap(), "/subscriptions");
+        assert_eq!(
+            config.subscription_endpoint.expect("should succeed"),
+            "/subscriptions"
+        );
     }
 
     #[test]
@@ -776,7 +779,10 @@ mod tests {
     #[test]
     fn test_query_template_variables() {
         let templates = get_default_templates();
-        let sparql_template = templates.iter().find(|t| t.name == "SPARQL Query").unwrap();
+        let sparql_template = templates
+            .iter()
+            .find(|t| t.name == "SPARQL Query")
+            .expect("should succeed");
 
         assert!(sparql_template.variables.contains_key("query"));
         assert!(sparql_template.variables.contains_key("limit"));

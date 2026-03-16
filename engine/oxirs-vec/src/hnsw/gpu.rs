@@ -359,92 +359,88 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_gpu_search_basic() {
+    fn test_gpu_search_basic() -> Result<()> {
         let index = build_test_index(20, 4);
         let query = axis_query(4);
-        let results = index
-            .gpu_batch_distance_calculation(&query, &[0, 1, 2, 3, 4])
-            .unwrap();
+        let results = index.gpu_batch_distance_calculation(&query, &[0, 1, 2, 3, 4])?;
         assert_eq!(results.len(), 5);
         for &d in &results {
             assert!(d.is_finite(), "distance should be finite");
         }
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_warmup_empty_index() {
+    fn test_gpu_warmup_empty_index() -> Result<()> {
         // warmup_gpu on an empty index must succeed silently
-        let index = HnswIndex::new(HnswConfig::default()).unwrap();
+        let index = HnswIndex::new(HnswConfig::default())?;
         // In non-gpu builds the body returns Ok(()); in gpu builds the node
         // guard also returns Ok(()) early.
         #[cfg(feature = "gpu")]
-        index.warmup_gpu().unwrap();
+        index.warmup_gpu()?;
         #[cfg(not(feature = "gpu"))]
         let _ = index; // nothing to do
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_warmup_non_empty_index() {
+    fn test_gpu_warmup_non_empty_index() -> Result<()> {
         let index = build_test_index(16, 8);
         // Should complete without error regardless of GPU feature flag
         #[cfg(feature = "gpu")]
-        index.warmup_gpu().unwrap();
+        index.warmup_gpu()?;
         #[cfg(not(feature = "gpu"))]
         let _ = index;
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_preload_empty_index() {
-        let index = HnswIndex::new(HnswConfig::default()).unwrap();
+    fn test_gpu_preload_empty_index() -> Result<()> {
+        let index = HnswIndex::new(HnswConfig::default())?;
         #[cfg(feature = "gpu")]
-        index.preload_to_gpu().unwrap();
+        index.preload_to_gpu()?;
         #[cfg(not(feature = "gpu"))]
         let _ = index;
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_preload_stores_vectors() {
+    fn test_gpu_preload_stores_vectors() -> Result<()> {
         let index = build_test_index(32, 8);
         #[cfg(feature = "gpu")]
-        index.preload_to_gpu().unwrap();
+        index.preload_to_gpu()?;
         // After preloading, all nodes must still be queryable
         let query = axis_query(8);
         let all_ids: Vec<usize> = (0..32).collect();
-        let distances = index
-            .gpu_batch_distance_calculation(&query, &all_ids)
-            .unwrap();
+        let distances = index.gpu_batch_distance_calculation(&query, &all_ids)?;
         assert_eq!(distances.len(), 32);
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_batch_distance_correctness() {
+    fn test_gpu_batch_distance_correctness() -> Result<()> {
         // distances[0] should equal the manually computed value
         let index = build_test_index(5, 4);
         let query = Vector::new(vec![1.0, 0.0, 0.0, 0.0]);
         let candidates = vec![0_usize, 1, 2];
-        let distances = index
-            .gpu_batch_distance_calculation(&query, &candidates)
-            .unwrap();
+        let distances = index.gpu_batch_distance_calculation(&query, &candidates)?;
         assert_eq!(distances.len(), 3);
         for &d in &distances {
             // cosine distance is in [0, 2]
             assert!((0.0..=2.0).contains(&d), "unexpected distance: {}", d);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_vs_cpu_consistency() {
+    fn test_gpu_vs_cpu_consistency() -> Result<()> {
         // Both paths must return the same distances (within f32 epsilon)
         let index = build_test_index(50, 8);
         let query = axis_query(8);
         let candidates: Vec<usize> = (0..50).collect();
 
-        let cpu_distances = index
-            .cpu_batch_distance_calculation(&query, &candidates)
-            .unwrap();
-        let gpu_distances = index
-            .gpu_batch_distance_calculation(&query, &candidates)
-            .unwrap();
+        let cpu_distances = index.cpu_batch_distance_calculation(&query, &candidates)?;
+        let gpu_distances = index.gpu_batch_distance_calculation(&query, &candidates)?;
 
         assert_eq!(cpu_distances.len(), gpu_distances.len());
         for (cpu_d, gpu_d) in cpu_distances.iter().zip(gpu_distances.iter()) {
@@ -456,42 +452,41 @@ mod tests {
                 gpu_d
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_search_with_filter() {
+    fn test_gpu_search_with_filter() -> Result<()> {
         // Filtered search: only even-indexed candidates
         let index = build_test_index(20, 4);
         let query = axis_query(4);
         let even_candidates: Vec<usize> = (0..20).filter(|i| i % 2 == 0).collect();
 
-        let distances = index
-            .gpu_batch_distance_calculation(&query, &even_candidates)
-            .unwrap();
+        let distances = index.gpu_batch_distance_calculation(&query, &even_candidates)?;
 
         assert_eq!(distances.len(), even_candidates.len());
         for &d in &distances {
             assert!(d.is_finite());
         }
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_multi_query_sequence() {
+    fn test_gpu_multi_query_sequence() -> Result<()> {
         // Running multiple queries in sequence must all succeed
         let index = build_test_index(30, 4);
         let all_ids: Vec<usize> = (0..30).collect();
 
         for i in 0..5_u32 {
             let query = Vector::new(vec![(i as f32).sin(), (i as f32).cos(), 0.0, 0.0]);
-            let distances = index
-                .gpu_batch_distance_calculation(&query, &all_ids)
-                .unwrap();
+            let distances = index.gpu_batch_distance_calculation(&query, &all_ids)?;
             assert_eq!(distances.len(), 30);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_large_dataset() {
+    fn test_gpu_large_dataset() -> Result<()> {
         // 1 000+ vectors, ensure distances come back correctly
         let n = 1_024_usize;
         let dim = 16_usize;
@@ -499,62 +494,64 @@ mod tests {
         let query = axis_query(dim);
         let all_ids: Vec<usize> = (0..n).collect();
 
-        let distances = index
-            .gpu_batch_distance_calculation(&query, &all_ids)
-            .unwrap();
+        let distances = index.gpu_batch_distance_calculation(&query, &all_ids)?;
 
         assert_eq!(distances.len(), n);
         let finite_count = distances.iter().filter(|d| d.is_finite()).count();
         assert_eq!(finite_count, n, "all distances should be finite");
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_empty_candidate_list() {
+    fn test_gpu_empty_candidate_list() -> Result<()> {
         let index = build_test_index(10, 4);
         let query = axis_query(4);
 
-        let distances = index.gpu_batch_distance_calculation(&query, &[]).unwrap();
+        let distances = index.gpu_batch_distance_calculation(&query, &[])?;
         assert!(distances.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_empty_index_no_panic() {
-        let index = HnswIndex::new(HnswConfig::default()).unwrap();
+    fn test_gpu_empty_index_no_panic() -> Result<()> {
+        let index = HnswIndex::new(HnswConfig::default())?;
         let query = Vector::new(vec![1.0, 0.0, 0.0]);
         // Empty candidates on an empty index
-        let distances = index.gpu_batch_distance_calculation(&query, &[]).unwrap();
+        let distances = index.gpu_batch_distance_calculation(&query, &[])?;
         assert!(distances.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_single_vector_index() {
-        let mut index = HnswIndex::new(HnswConfig::default()).unwrap();
-        index
-            .insert("only".to_string(), Vector::new(vec![0.6, 0.8, 0.0]))
-            .unwrap();
+    fn test_gpu_single_vector_index() -> Result<()> {
+        let mut index = HnswIndex::new(HnswConfig::default())?;
+        index.insert("only".to_string(), Vector::new(vec![0.6, 0.8, 0.0]))?;
 
         let query = Vector::new(vec![1.0, 0.0, 0.0]);
-        let distances = index.gpu_batch_distance_calculation(&query, &[0]).unwrap();
+        let distances = index.gpu_batch_distance_calculation(&query, &[0])?;
         assert_eq!(distances.len(), 1);
         assert!(distances[0].is_finite());
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_distances_ordered_by_candidate() {
+    fn test_gpu_distances_ordered_by_candidate() -> Result<()> {
         // Verify that the output ordering matches the candidate ordering, not
         // the sorted-distance ordering.
         let index = build_test_index(10, 4);
         let query = axis_query(4);
         let candidates = vec![5_usize, 2, 8, 0];
 
-        let distances = index
-            .gpu_batch_distance_calculation(&query, &candidates)
-            .unwrap();
+        let distances = index.gpu_batch_distance_calculation(&query, &candidates)?;
 
         // Compute expected distances sequentially
         let expected: Vec<f32> = candidates
             .iter()
-            .map(|&id| index.cpu_batch_distance_calculation(&query, &[id]).unwrap()[0])
+            .map(|&id| {
+                index
+                    .cpu_batch_distance_calculation(&query, &[id])
+                    .expect("cpu distance calculation should succeed")[0]
+            })
             .collect();
 
         assert_eq!(distances.len(), expected.len());
@@ -566,39 +563,40 @@ mod tests {
                 e
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_identical_vectors_zero_distance() {
+    fn test_gpu_identical_vectors_zero_distance() -> Result<()> {
         // A query identical to a stored vector should yield distance ≈ 0
-        let mut index = HnswIndex::new(HnswConfig::default()).unwrap();
+        let mut index = HnswIndex::new(HnswConfig::default())?;
         let v = Vector::new(vec![0.6, 0.8]);
-        index.insert("a".to_string(), v.clone()).unwrap();
+        index.insert("a".to_string(), v.clone())?;
 
-        let distances = index.gpu_batch_distance_calculation(&v, &[0]).unwrap();
+        let distances = index.gpu_batch_distance_calculation(&v, &[0])?;
         assert_eq!(distances.len(), 1);
         assert!(
             distances[0] < 1e-5,
             "identical vectors should have ~0 distance, got {}",
             distances[0]
         );
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_orthogonal_vectors_max_cosine_distance() {
+    fn test_gpu_orthogonal_vectors_max_cosine_distance() -> Result<()> {
         // Orthogonal vectors should have cosine distance ≈ 1.0
-        let mut index = HnswIndex::new(HnswConfig::default()).unwrap();
-        index
-            .insert("y_axis".to_string(), Vector::new(vec![0.0, 1.0]))
-            .unwrap();
+        let mut index = HnswIndex::new(HnswConfig::default())?;
+        index.insert("y_axis".to_string(), Vector::new(vec![0.0, 1.0]))?;
 
         let query = Vector::new(vec![1.0, 0.0]);
-        let distances = index.gpu_batch_distance_calculation(&query, &[0]).unwrap();
+        let distances = index.gpu_batch_distance_calculation(&query, &[0])?;
         assert_eq!(distances.len(), 1);
         assert!(
             (distances[0] - 1.0).abs() < 1e-4,
             "orthogonal cosine distance should be 1.0, got {}",
             distances[0]
         );
+        Ok(())
     }
 }

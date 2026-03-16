@@ -179,7 +179,7 @@ mod tests {
         let analyzer = ValueRangeAnalyzer::new();
         let values = Array1::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
 
-        let constraint = analyzer.analyze_values(&values).unwrap();
+        let constraint = analyzer.analyze_values(&values).expect("should succeed");
         assert!(constraint.min_inclusive.is_some());
         assert!(constraint.max_inclusive.is_some());
         assert!(constraint.confidence > 0.0);
@@ -192,10 +192,10 @@ mod tests {
             1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 100.0, // outlier
         ]);
 
-        let constraint = analyzer.analyze_values(&values).unwrap();
+        let constraint = analyzer.analyze_values(&values).expect("should succeed");
         // Should handle outlier gracefully
-        assert!(constraint.min_inclusive.unwrap() >= 1.0);
-        assert!(constraint.max_inclusive.unwrap() <= 100.0);
+        assert!(constraint.min_inclusive.expect("should succeed") >= 1.0);
+        assert!(constraint.max_inclusive.expect("should succeed") <= 100.0);
     }
 
     #[test]
@@ -206,8 +206,8 @@ mod tests {
         let (min, max) = analyzer.suggest_bounds(&values);
         assert!(min.is_some());
         assert!(max.is_some());
-        assert!(min.unwrap() <= 5.5);
-        assert!(max.unwrap() >= 20.9);
+        assert!(min.expect("should succeed") <= 5.5);
+        assert!(max.expect("should succeed") >= 20.9);
     }
 
     #[test]

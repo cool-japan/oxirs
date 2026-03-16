@@ -704,7 +704,7 @@ mod tests {
     fn test_parse_cache_control_max_age() {
         let directive = FieldLevelCacheDirective::parse("@cacheControl(maxAge: 60)");
         assert!(directive.is_some());
-        let d = directive.unwrap();
+        let d = directive.expect("should succeed");
         assert_eq!(d.max_age_secs, Some(60));
         assert_eq!(d.scope, None);
         assert!(!d.inherit_max_age);

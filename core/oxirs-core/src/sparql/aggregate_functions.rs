@@ -726,7 +726,7 @@ mod tests {
 
     #[test]
     fn test_numeric_value_double() {
-        assert!((numeric_value(&dbl(2.71)).unwrap() - 2.71).abs() < 1e-9);
+        assert!((numeric_value(&dbl(2.71)).expect("numeric value should be extractable") - 2.71).abs() < 1e-9);
     }
 
     #[test]

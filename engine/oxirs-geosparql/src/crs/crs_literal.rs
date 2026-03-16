@@ -179,7 +179,7 @@ pub fn parse_crs_uri(uri: &str) -> Result<CrsKind> {
 ///
 /// let lit = parse_crs_wkt_literal(
 ///     "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10 20)"
-/// ).unwrap();
+/// ).expect("should succeed");
 /// assert_eq!(lit.geometry.geometry_type(), "Point");
 /// ```
 pub fn parse_crs_wkt_literal(literal: &str) -> Result<CrsLiteral> {
@@ -312,25 +312,28 @@ mod tests {
 
     #[test]
     fn test_parse_crs_uri_crs84() {
-        let c = parse_crs_uri(CRS84_URI).unwrap();
+        let c = parse_crs_uri(CRS84_URI).expect("should succeed");
         assert_eq!(c, CrsKind::Wgs84);
     }
 
     #[test]
     fn test_parse_crs_uri_epsg_4326() {
-        let c = parse_crs_uri("http://www.opengis.net/def/crs/EPSG/0/4326").unwrap();
+        let c =
+            parse_crs_uri("http://www.opengis.net/def/crs/EPSG/0/4326").expect("should succeed");
         assert_eq!(c, CrsKind::Wgs84);
     }
 
     #[test]
     fn test_parse_crs_uri_epsg_3857() {
-        let c = parse_crs_uri("http://www.opengis.net/def/crs/EPSG/0/3857").unwrap();
+        let c =
+            parse_crs_uri("http://www.opengis.net/def/crs/EPSG/0/3857").expect("should succeed");
         assert_eq!(c, CrsKind::WebMercator);
     }
 
     #[test]
     fn test_parse_crs_uri_epsg_utm_north() {
-        let c = parse_crs_uri("http://www.opengis.net/def/crs/EPSG/0/32618").unwrap();
+        let c =
+            parse_crs_uri("http://www.opengis.net/def/crs/EPSG/0/32618").expect("should succeed");
         assert_eq!(
             c,
             CrsKind::Utm {
@@ -342,7 +345,8 @@ mod tests {
 
     #[test]
     fn test_parse_crs_uri_epsg_utm_south() {
-        let c = parse_crs_uri("http://www.opengis.net/def/crs/EPSG/0/32756").unwrap();
+        let c =
+            parse_crs_uri("http://www.opengis.net/def/crs/EPSG/0/32756").expect("should succeed");
         assert_eq!(
             c,
             CrsKind::Utm {
@@ -354,13 +358,13 @@ mod tests {
 
     #[test]
     fn test_parse_crs_uri_short_epsg_colon_form() {
-        let c = parse_crs_uri("EPSG:4326").unwrap();
+        let c = parse_crs_uri("EPSG:4326").expect("should succeed");
         assert_eq!(c, CrsKind::Wgs84);
     }
 
     #[test]
     fn test_parse_crs_uri_short_epsg_colon_web_mercator() {
-        let c = parse_crs_uri("EPSG:3857").unwrap();
+        let c = parse_crs_uri("EPSG:3857").expect("should succeed");
         assert_eq!(c, CrsKind::WebMercator);
     }
 
@@ -373,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_parse_plain_wkt() {
-        let lit = parse_crs_wkt_literal("POINT(1 2)").unwrap();
+        let lit = parse_crs_wkt_literal("POINT(1 2)").expect("should succeed");
         assert_eq!(lit.geometry.geometry_type(), "Point");
         assert_eq!(lit.crs, CrsKind::Wgs84);
         assert!(lit.crs_uri.is_none());
@@ -382,7 +386,7 @@ mod tests {
     #[test]
     fn test_parse_wkt_with_epsg_4326_prefix() {
         let raw = "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(10 20)";
-        let lit = parse_crs_wkt_literal(raw).unwrap();
+        let lit = parse_crs_wkt_literal(raw).expect("should succeed");
         assert_eq!(lit.geometry.geometry_type(), "Point");
         assert_eq!(lit.crs, CrsKind::Wgs84);
     }
@@ -390,14 +394,14 @@ mod tests {
     #[test]
     fn test_parse_wkt_with_web_mercator_prefix() {
         let raw = "<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(0 0)";
-        let lit = parse_crs_wkt_literal(raw).unwrap();
+        let lit = parse_crs_wkt_literal(raw).expect("should succeed");
         assert_eq!(lit.crs, CrsKind::WebMercator);
     }
 
     #[test]
     fn test_parse_wkt_with_utm_prefix() {
         let raw = "<http://www.opengis.net/def/crs/EPSG/0/32618> POINT(583960 4507523)";
-        let lit = parse_crs_wkt_literal(raw).unwrap();
+        let lit = parse_crs_wkt_literal(raw).expect("should succeed");
         assert_eq!(
             lit.crs,
             CrsKind::Utm {
@@ -416,7 +420,7 @@ mod tests {
     fn test_parse_wkt_polygon() {
         let raw =
             "<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))";
-        let lit = parse_crs_wkt_literal(raw).unwrap();
+        let lit = parse_crs_wkt_literal(raw).expect("should succeed");
         assert_eq!(lit.geometry.geometry_type(), "Polygon");
         assert_eq!(lit.crs, CrsKind::Wgs84);
     }
@@ -448,7 +452,7 @@ mod tests {
     #[test]
     fn test_roundtrip_parse_encode() {
         let original = "<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(1113195 1118890)";
-        let lit = parse_crs_wkt_literal(original).unwrap();
+        let lit = parse_crs_wkt_literal(original).expect("should succeed");
         let re_encoded = lit.to_wkt_literal();
         // Should contain the EPSG:3857 URI and the WKT
         assert!(re_encoded.contains("3857"), "re_encoded={re_encoded}");
@@ -458,14 +462,14 @@ mod tests {
 
     #[test]
     fn test_crs_literal_new_wgs84() {
-        let geom = Geometry::from_wkt("POINT(5 10)").unwrap();
+        let geom = Geometry::from_wkt("POINT(5 10)").expect("should succeed");
         let lit = CrsLiteral::new(geom, CrsKind::Wgs84);
         assert_eq!(lit.epsg_code(), Some(4326));
     }
 
     #[test]
     fn test_crs_literal_new_web_mercator() {
-        let geom = Geometry::from_wkt("POINT(0 0)").unwrap();
+        let geom = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
         let lit = CrsLiteral::new(geom, CrsKind::WebMercator);
         assert_eq!(lit.epsg_code(), Some(3857));
         assert!(
@@ -478,27 +482,29 @@ mod tests {
 
     #[test]
     fn test_transformer_wgs84_to_web_mercator() {
-        let geom = Geometry::from_wkt("POINT(0 0)").unwrap();
+        let geom = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
         let gwc = GeometryWithCrs::new(geom, CrsKind::Wgs84);
-        let result = CrsGeometryTransformer::transform_point(&gwc, CrsKind::WebMercator).unwrap();
+        let result = CrsGeometryTransformer::transform_point(&gwc, CrsKind::WebMercator)
+            .expect("should succeed");
         assert_eq!(result.crs, CrsKind::WebMercator);
     }
 
     #[test]
     fn test_transformer_wgs84_to_utm() {
-        let geom = Geometry::from_wkt("POINT(-74.006 40.7128)").unwrap();
+        let geom = Geometry::from_wkt("POINT(-74.006 40.7128)").expect("should succeed");
         let gwc = GeometryWithCrs::new(geom, CrsKind::Wgs84);
         let utm18n = CrsKind::Utm {
             zone: 18,
             hemisphere: 'N',
         };
-        let result = CrsGeometryTransformer::transform_point(&gwc, utm18n.clone()).unwrap();
+        let result =
+            CrsGeometryTransformer::transform_point(&gwc, utm18n.clone()).expect("should succeed");
         assert_eq!(result.crs, utm18n);
     }
 
     #[test]
     fn test_transformer_non_point_returns_error() {
-        let geom = Geometry::from_wkt("LINESTRING(0 0, 1 1)").unwrap();
+        let geom = Geometry::from_wkt("LINESTRING(0 0, 1 1)").expect("should succeed");
         let gwc = GeometryWithCrs::new(geom, CrsKind::Wgs84);
         assert!(CrsGeometryTransformer::transform_point(&gwc, CrsKind::WebMercator).is_err());
     }
@@ -506,8 +512,8 @@ mod tests {
     #[test]
     fn test_parse_and_transform_wgs84_to_web_mercator() {
         let lit = "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(0 0)";
-        let result =
-            CrsGeometryTransformer::parse_and_transform(lit, CrsKind::WebMercator).unwrap();
+        let result = CrsGeometryTransformer::parse_and_transform(lit, CrsKind::WebMercator)
+            .expect("should succeed");
         assert_eq!(result.crs, CrsKind::WebMercator);
     }
 

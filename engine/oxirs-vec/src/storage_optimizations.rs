@@ -699,6 +699,7 @@ impl StorageUtils {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -718,19 +719,20 @@ mod tests {
     }
 
     #[test]
-    fn test_storage_utils() {
+    fn test_storage_utils() -> Result<()> {
         let vectors = vec![
             Vector::new(vec![1.0, 2.0, 3.0]),
             Vector::new(vec![4.0, 5.0, 6.0]),
         ];
 
-        let binary_data = StorageUtils::vectors_to_binary(&vectors).unwrap();
-        let restored_vectors = StorageUtils::binary_to_vectors(&binary_data, 3).unwrap();
+        let binary_data = StorageUtils::vectors_to_binary(&vectors)?;
+        let restored_vectors = StorageUtils::binary_to_vectors(&binary_data, 3)?;
 
         assert_eq!(vectors.len(), restored_vectors.len());
         for (original, restored) in vectors.iter().zip(restored_vectors.iter()) {
             assert_eq!(original.as_f32(), restored.as_f32());
         }
+        Ok(())
     }
 
     #[test]
@@ -776,28 +778,29 @@ mod tests {
     }
 
     #[test]
-    fn test_compression_benchmark() {
+    fn test_compression_benchmark() -> Result<()> {
         let vectors = vec![
             Vector::new(vec![1.0; 128]),
             Vector::new(vec![2.0; 128]),
             Vector::new(vec![3.0; 128]),
         ];
 
-        let results = StorageUtils::benchmark_compression(&vectors).unwrap();
+        let results = StorageUtils::benchmark_compression(&vectors)?;
         assert_eq!(results.len(), 5); // 5 compression algorithms
 
         // Verify that some compression types reduce size
         let none_size = results
             .iter()
             .find(|(t, _, _)| *t == CompressionType::None)
-            .unwrap()
+            .expect("None compression type should be present")
             .2;
         let zstd_size = results
             .iter()
             .find(|(t, _, _)| *t == CompressionType::Zstd)
-            .unwrap()
+            .expect("Zstd compression type should be present")
             .2;
 
         assert!(zstd_size < none_size);
+        Ok(())
     }
 }

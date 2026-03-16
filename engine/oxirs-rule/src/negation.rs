@@ -999,7 +999,7 @@ mod tests {
     }
 
     #[test]
-    fn test_naf_rule_has_negation() {
+    fn test_naf_rule_has_negation() -> Result<(), Box<dyn std::error::Error>> {
         let rule_without_neg = create_naf_rule(
             "rule1",
             vec![NafAtom::positive(triple_atom("?X", "parent", "?Y"))],
@@ -1017,10 +1017,11 @@ mod tests {
 
         assert!(!rule_without_neg.has_negation());
         assert!(rule_with_neg.has_negation());
+        Ok(())
     }
 
     #[test]
-    fn test_dependency_graph() {
+    fn test_dependency_graph() -> Result<(), Box<dyn std::error::Error>> {
         let rules = vec![
             create_naf_rule(
                 "rule1",
@@ -1039,10 +1040,11 @@ mod tests {
         assert!(graph.predicates().contains("a"));
         assert!(graph.predicates().contains("b"));
         assert!(graph.predicates().contains("c"));
+        Ok(())
     }
 
     #[test]
-    fn test_stratification_simple() {
+    fn test_stratification_simple() -> Result<(), Box<dyn std::error::Error>> {
         let rules = vec![
             // b :- a (stratum 0)
             create_naf_rule(
@@ -1063,6 +1065,7 @@ mod tests {
 
         assert!(result.is_stratified);
         assert!(result.num_strata >= 2);
+        Ok(())
     }
 
     #[test]
@@ -1094,7 +1097,7 @@ mod tests {
     }
 
     #[test]
-    fn test_stratified_reasoner_basic() {
+    fn test_stratified_reasoner_basic() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = StratifiedReasoner::default();
 
         // Simple rule: b(?X, ?Y) :- a(?X, ?Y)
@@ -1109,35 +1112,39 @@ mod tests {
 
         assert!(reasoner.is_known("john:a:mary"));
         assert!(!reasoner.is_known("john:b:mary"));
+        Ok(())
     }
 
     #[test]
-    fn test_naf_parser_positive() {
+    fn test_naf_parser_positive() -> Result<(), Box<dyn std::error::Error>> {
         let body = "parent(?X, ?Y), person(?X)";
-        let atoms = NafParser::parse_body(body).unwrap();
+        let atoms = NafParser::parse_body(body)?;
 
         assert_eq!(atoms.len(), 2);
         assert!(!atoms[0].is_negated());
         assert!(!atoms[1].is_negated());
+        Ok(())
     }
 
     #[test]
-    fn test_naf_parser_negation() {
+    fn test_naf_parser_negation() -> Result<(), Box<dyn std::error::Error>> {
         let body = "person(?X), \\+ married(?X, ?Y)";
-        let atoms = NafParser::parse_body(body).unwrap();
+        let atoms = NafParser::parse_body(body)?;
 
         assert_eq!(atoms.len(), 2);
         assert!(!atoms[0].is_negated());
         assert!(atoms[1].is_negated());
+        Ok(())
     }
 
     #[test]
-    fn test_naf_parser_not_keyword() {
+    fn test_naf_parser_not_keyword() -> Result<(), Box<dyn std::error::Error>> {
         let body = "person(?X), not dead(?X)";
-        let atoms = NafParser::parse_body(body).unwrap();
+        let atoms = NafParser::parse_body(body)?;
 
         assert_eq!(atoms.len(), 2);
         assert!(atoms[1].is_negated());
+        Ok(())
     }
 
     #[test]
@@ -1153,17 +1160,18 @@ mod tests {
     }
 
     #[test]
-    fn test_dependency_edge_types() {
+    fn test_dependency_edge_types() -> Result<(), Box<dyn std::error::Error>> {
         let mut graph = DependencyGraph::new();
         graph.add_edge("a", "b", DependencyEdge::Positive);
         graph.add_edge("a", "c", DependencyEdge::Negative);
 
-        let edges = graph.get_edges("a").unwrap();
+        let edges = graph.get_edges("a").ok_or("expected Some value")?;
         assert_eq!(edges.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_naf_rule_from_standard() {
+    fn test_naf_rule_from_standard() -> Result<(), Box<dyn std::error::Error>> {
         let standard = Rule {
             name: "test".to_string(),
             body: vec![triple_atom("?X", "a", "?Y")],
@@ -1175,6 +1183,7 @@ mod tests {
         assert_eq!(naf_rule.name, "test");
         assert!(!naf_rule.has_negation());
         assert_eq!(naf_rule.body.len(), 1);
+        Ok(())
     }
 
     #[test]
@@ -1201,7 +1210,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reasoner_clear() {
+    fn test_reasoner_clear() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = StratifiedReasoner::default();
 
         reasoner.add_rule(create_naf_rule(
@@ -1218,10 +1227,11 @@ mod tests {
 
         assert_eq!(reasoner.rule_count(), 0);
         assert_eq!(reasoner.fact_count(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_strata() {
+    fn test_multiple_strata() -> Result<(), Box<dyn std::error::Error>> {
         // Create rules that require multiple strata:
         // b :- a          (stratum 0)
         // c :- \+ b       (stratum 1)
@@ -1249,10 +1259,11 @@ mod tests {
 
         assert!(result.is_stratified);
         assert!(result.num_strata >= 3);
+        Ok(())
     }
 
     #[test]
-    fn test_rules_by_stratum() {
+    fn test_rules_by_stratum() -> Result<(), Box<dyn std::error::Error>> {
         let rules = vec![
             create_naf_rule(
                 "rule1",
@@ -1271,5 +1282,6 @@ mod tests {
 
         // Rules should be grouped by stratum
         assert!(!result.rules_by_stratum.is_empty());
+        Ok(())
     }
 }

@@ -633,7 +633,7 @@ mod tests {
                 let s = s.to_string();
                 thread::spawn(move || {
                     // Simulate concurrent access
-                    let named_node = NamedNode::new(&s).unwrap();
+                    let named_node = NamedNode::new(&s).expect("valid IRI");
                     let encoded = encoder.encode_named_node(&named_node);
                     (i, encoded)
                 })
@@ -641,7 +641,10 @@ mod tests {
             .collect();
 
         // Wait for all threads and collect results
-        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let results: Vec<_> = handles
+            .into_iter()
+            .map(|h| h.join().expect("thread should not panic"))
+            .collect();
         assert_eq!(results.len(), 3);
 
         // Verify all encodings are valid

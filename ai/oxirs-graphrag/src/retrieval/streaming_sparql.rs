@@ -374,7 +374,10 @@ mod tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://example.org/seed1")];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert_eq!(collected.len(), 50);
     }
 
@@ -393,7 +396,10 @@ mod tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://example.org/seed1")];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert!(
             collected.len() <= 2_500,
             "Expected at most 2500 triples, got {}",
@@ -418,7 +424,10 @@ mod tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://example.org/seed1")];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert_eq!(collected.len(), 1);
     }
 
@@ -426,7 +435,10 @@ mod tests {
     async fn test_stream_empty_seeds() {
         let engine = Arc::new(MockSparql::new(vec![]));
         let retriever = StreamingSparqlRetriever::with_defaults(engine);
-        let collected = retriever.collect_subgraph(vec![]).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(vec![])
+            .await
+            .expect("should succeed");
         assert!(collected.is_empty());
     }
 
@@ -446,7 +458,10 @@ mod tests {
             source: ScoreSource::Vector,
             metadata: HashMap::new(),
         }];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert!(collected.is_empty());
     }
 
@@ -489,7 +504,10 @@ mod tests {
             make_seed("http://example.org/s1"),
             make_seed("http://example.org/s2"),
         ];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         // Each seed gets its own deduplicated set of 10 triples
         assert!(!collected.is_empty());
     }
@@ -516,7 +534,10 @@ mod tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://example.org/seed")];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert_eq!(collected.len(), 250);
         // 250 triples with page_size=100 → 3 pages
         assert_eq!(local_count.load(Ordering::Relaxed), 3);
@@ -542,7 +563,7 @@ mod tests {
         let mut pages_received = 0usize;
         let mut total_triples = 0usize;
         while let Some(page_result) = stream.next_page().await {
-            let page = page_result.unwrap();
+            let page = page_result.expect("should succeed");
             total_triples += page.triples.len();
             pages_received += 1;
             assert_eq!(page.page_index, pages_received - 1);
@@ -726,7 +747,10 @@ mod additional_tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://seed", 0.9)];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert!(collected.is_empty());
     }
 
@@ -746,7 +770,10 @@ mod additional_tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://seed", 0.9)];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         // Should collect exactly 10 (stops after empty second page)
         assert_eq!(collected.len(), 10);
     }
@@ -771,7 +798,10 @@ mod additional_tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://seed", 0.9)];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         // 15 unique triples even though 5 were duplicated
         assert_eq!(collected.len(), 15);
     }
@@ -792,7 +822,10 @@ mod additional_tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://seed", 0.9)];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert_eq!(collected.len(), 30);
     }
 
@@ -807,7 +840,10 @@ mod additional_tests {
         let retriever = StreamingSparqlRetriever::new(engine, config);
         // Seed exactly at threshold → should be included (>= comparison)
         let seeds = vec![make_seed("http://seed", 0.5)];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert_eq!(collected.len(), 5);
     }
 
@@ -821,7 +857,10 @@ mod additional_tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://seed", 0.499)];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert!(collected.is_empty());
     }
 
@@ -843,7 +882,7 @@ mod additional_tests {
         let mut stream = retriever.stream_subgraph(seeds);
         let mut expected_idx = 0usize;
         while let Some(page_result) = stream.next_page().await {
-            let page = page_result.unwrap();
+            let page = page_result.expect("should succeed");
             assert_eq!(page.page_index, expected_idx);
             expected_idx += 1;
         }
@@ -868,7 +907,7 @@ mod additional_tests {
         let mut stream = retriever.stream_subgraph(seeds);
         let mut pages = Vec::new();
         while let Some(page_result) = stream.next_page().await {
-            pages.push(page_result.unwrap());
+            pages.push(page_result.expect("should succeed"));
         }
         // Last page must have is_last_page = true
         assert!(pages.last().map(|p| p.is_last_page).unwrap_or(false));
@@ -892,7 +931,7 @@ mod additional_tests {
         let mut stream = retriever.stream_subgraph(seeds);
         let mut prev = 0usize;
         while let Some(page_result) = stream.next_page().await {
-            let page = page_result.unwrap();
+            let page = page_result.expect("should succeed");
             assert!(
                 page.cumulative_count > prev,
                 "cumulative_count should be strictly increasing"
@@ -917,7 +956,11 @@ mod additional_tests {
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://my-seed/42", 0.9)];
         let mut stream = retriever.stream_subgraph(seeds);
-        let page = stream.next_page().await.unwrap().unwrap();
+        let page = stream
+            .next_page()
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert_eq!(page.seed_uri, "http://my-seed/42");
     }
 
@@ -937,7 +980,10 @@ mod additional_tests {
         };
         let retriever = StreamingSparqlRetriever::new(engine, config);
         let seeds = vec![make_seed("http://seed", 0.9)];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert!(collected.len() <= 100);
         assert_eq!(collected.len(), 100);
     }
@@ -947,7 +993,10 @@ mod additional_tests {
         let engine = Arc::new(MockSparql::new(make_triples(3)));
         let retriever = StreamingSparqlRetriever::with_defaults(engine);
         let seeds = vec![make_seed("http://seed", 0.9)];
-        let collected = retriever.collect_subgraph(seeds).await.unwrap();
+        let collected = retriever
+            .collect_subgraph(seeds)
+            .await
+            .expect("should succeed");
         assert_eq!(collected.len(), 3);
     }
 }

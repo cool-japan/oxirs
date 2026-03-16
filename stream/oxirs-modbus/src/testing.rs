@@ -375,14 +375,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_server_starts() {
-        let server = MockModbusServer::start().await.unwrap();
+        let server = MockModbusServer::start().await.expect("should succeed");
         assert!(!server.address().is_empty());
         server.shutdown().await;
     }
 
     #[tokio::test]
     async fn test_mock_server_data() {
-        let server = MockModbusServer::start().await.unwrap();
+        let server = MockModbusServer::start().await.expect("should succeed");
 
         // Verify test data - use scope to drop MutexGuard before shutdown
         {

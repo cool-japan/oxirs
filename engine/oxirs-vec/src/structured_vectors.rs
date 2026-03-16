@@ -501,22 +501,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_named_dimension_vector() {
+    fn test_named_dimension_vector() -> Result<()> {
         let names = vec!["age".to_string(), "income".to_string(), "score".to_string()];
         let values = vec![25.0, 50000.0, 0.85];
 
-        let mut named_vec = NamedDimensionVector::new(names, values).unwrap();
+        let mut named_vec = NamedDimensionVector::new(names, values)?;
 
         assert_eq!(named_vec.get_by_name("age"), Some(25.0));
         assert_eq!(named_vec.get_by_name("income"), Some(50000.0));
         assert_eq!(named_vec.get_by_name("unknown"), None);
 
-        named_vec.set_by_name("score", 0.95).unwrap();
+        named_vec.set_by_name("score", 0.95)?;
         assert_eq!(named_vec.get_by_name("score"), Some(0.95));
+        Ok(())
     }
 
     #[test]
-    fn test_hierarchical_vector() {
+    fn test_hierarchical_vector() -> Result<()> {
         let level1 = Vector::new(vec![1.0, 2.0]);
         let level2 = Vector::new(vec![1.0, 2.0, 3.0, 4.0]);
         let level3 = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
@@ -528,11 +529,18 @@ mod tests {
             "fine".to_string(),
         ];
 
-        let hier_vec = HierarchicalVector::new(levels, names).unwrap();
+        let hier_vec = HierarchicalVector::new(levels, names)?;
 
         assert_eq!(hier_vec.levels.len(), 3);
         assert!(hier_vec.get_level_by_name("medium").is_some());
-        assert_eq!(hier_vec.get_level_by_name("medium").unwrap().dimensions, 4);
+        assert_eq!(
+            hier_vec
+                .get_level_by_name("medium")
+                .expect("test value")
+                .dimensions,
+            4
+        );
+        Ok(())
     }
 
     #[test]
@@ -547,11 +555,11 @@ mod tests {
     }
 
     #[test]
-    fn test_weighted_dimension_vector() {
+    fn test_weighted_dimension_vector() -> Result<()> {
         let values = vec![1.0, 2.0, 3.0];
         let weights = vec![0.1, 0.3, 0.6];
 
-        let mut weighted = WeightedDimensionVector::new(values, weights).unwrap();
+        let mut weighted = WeightedDimensionVector::new(values, weights)?;
         weighted.normalize_weights();
 
         let sum: f32 = weighted.weights.iter().sum();
@@ -560,19 +568,21 @@ mod tests {
         let top = weighted.top_dimensions(2);
         assert_eq!(top.len(), 2);
         assert_eq!(top[0].0, 2); // Index of highest weight
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_scored_vector() {
+    fn test_confidence_scored_vector() -> Result<()> {
         let values = vec![1.0, 2.0, 3.0];
         let confidence = vec![0.9, 0.8, 0.95];
 
-        let conf_vec = ConfidenceScoredVector::new(values, confidence).unwrap();
+        let conf_vec = ConfidenceScoredVector::new(values, confidence)?;
 
         assert!(conf_vec.overall_confidence > 0.8);
 
         let low_conf = conf_vec.low_confidence_dimensions(0.85);
         assert_eq!(low_conf.len(), 1);
         assert_eq!(low_conf[0].0, 1); // Index with 0.8 confidence
+        Ok(())
     }
 }

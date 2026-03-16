@@ -1,10 +1,10 @@
 # OxiRS Federate - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS Federate v0.1.0 is production-ready, providing SPARQL federation with advanced ML optimization and distributed consensus.
+OxiRS Federate v0.2.2 is production-ready, providing SPARQL federation with advanced ML optimization and distributed consensus.
 
 ### Production Features
 - ✅ **SPARQL Federation** - SERVICE clause execution with 2-phase commit
@@ -17,21 +17,28 @@ OxiRS Federate v0.1.0 is production-ready, providing SPARQL federation with adva
 - ✅ **GPU Acceleration** - scirs2-core GPU integration for ML models
 - ✅ **SIMD Optimization** - Accelerated join operations
 - ✅ **JIT Compilation** - Query compilation support
-- ✅ **363+ tests passing** with production-ready code quality
+- ✅ **Capability Negotiator** - Protocol capability exchange for federation peers
+- ✅ **Cache Coordinator** - Multi-level cache coordination across federation nodes
+- ✅ **ML Query Router** - ML-based endpoint routing with adaptive learning
+- ✅ **1397 tests passing** with zero warnings
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Enhanced Performance (Q1 2026 - Expanded)
-- [ ] Advanced query optimization strategies
-- [ ] Enhanced distributed execution
-- [ ] Improved caching mechanisms
-- [ ] Extended ML model support
-- [ ] Multi-region federation
-- [ ] Advanced fault tolerance
-- [ ] Enhanced monitoring
-- [ ] Performance SLAs
+### v0.1.0 - Released (January 7, 2026)
+- ✅ SPARQL federation, ML optimization, BFT consensus, 363+ tests
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ Advanced query optimization strategies
+- ✅ Enhanced distributed execution
+- ✅ Improved caching mechanisms (multi-level cache coordinator)
+- ✅ Extended ML model support
+- ✅ Multi-region federation
+- ✅ Advanced fault tolerance
+- ✅ Enhanced monitoring
+- ✅ Capability negotiator, work stealer, endpoint registry
+- ✅ 1397 tests passing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Long-term support guarantees
 - [ ] Enterprise support features
 - [ ] Complete federation framework
@@ -43,4 +50,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Federate v0.1.0 - Advanced SPARQL federation*
+*OxiRS Federate v0.2.2 - Advanced SPARQL federation*

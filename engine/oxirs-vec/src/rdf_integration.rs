@@ -644,27 +644,33 @@ pub struct RdfIntegrationStats {
 mod tests {
     use super::*;
     use crate::VectorStore;
+    use anyhow::Result;
     use oxirs_core::model::{NamedNode, Term};
 
     #[test]
-    fn test_rdf_term_registration() {
+    fn test_rdf_term_registration() -> Result<()> {
         let config = RdfVectorConfig::default();
         let vector_store = Arc::new(RwLock::new(VectorStore::new()));
         let integration = RdfVectorIntegration::new(config, vector_store);
 
-        let named_node = NamedNode::new("http://example.org/person").unwrap();
+        let named_node = NamedNode::new("http://example.org/person")?;
         let term = Term::NamedNode(named_node);
         let vector = Vector::new(vec![1.0, 0.0, 0.0]);
 
-        let vector_id = integration
-            .register_term(term.clone(), vector, None)
-            .unwrap();
+        let vector_id = integration.register_term(term.clone(), vector, None)?;
 
-        assert!(integration.get_vector_id(&term).unwrap().is_some());
+        assert!(integration
+            .get_vector_id(&term)
+            .expect("test value")
+            .is_some());
         assert_eq!(
-            integration.get_vector_id(&term).unwrap().unwrap(),
+            integration
+                .get_vector_id(&term)
+                .expect("get_vector_id should return Some")
+                .expect("inner Option should be Some"),
             vector_id
         );
+        Ok(())
     }
 
     #[test]
@@ -679,16 +685,17 @@ mod tests {
     }
 
     #[test]
-    fn test_metadata_extraction() {
+    fn test_metadata_extraction() -> Result<()> {
         let config = RdfVectorConfig::default();
         let vector_store = Arc::new(RwLock::new(VectorStore::new()));
         let integration = RdfVectorIntegration::new(config, vector_store);
 
-        let literal = Literal::new_language_tagged_literal("Hello", "en").unwrap();
+        let literal = Literal::new_language_tagged_literal("Hello", "en")?;
         let term = Term::Literal(literal);
 
-        let metadata = integration.extract_term_metadata(&term).unwrap();
+        let metadata = integration.extract_term_metadata(&term)?;
         assert_eq!(metadata.term_type, RdfTermType::Literal);
         assert_eq!(metadata.language, Some("en".to_string()));
+        Ok(())
     }
 }

@@ -1,9 +1,9 @@
 //! # OxiRS Embed: Advanced Knowledge Graph Embeddings
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed)
 //!
-//! **Status**: Production Release (v0.1.0)
+//! **Status**: Production Release (v0.2.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! State-of-the-art knowledge graph embedding methods including TransE, DistMult, ComplEx,
@@ -1024,7 +1024,7 @@ mod quick_start_tests {
     #[test]
     fn test_parse_triple_from_string() {
         let triple_str = "http://example.org/alice http://example.org/knows http://example.org/bob";
-        let triple = parse_triple_from_string(triple_str).unwrap();
+        let triple = parse_triple_from_string(triple_str).expect("should succeed");
         assert_eq!(triple.subject.iri, "http://example.org/alice");
         assert_eq!(triple.predicate.iri, "http://example.org/knows");
         assert_eq!(triple.object.iri, "http://example.org/bob");
@@ -1045,7 +1045,7 @@ mod quick_start_tests {
             "http://example.org/bob http://example.org/likes http://example.org/music",
         ];
 
-        let count = add_triples_from_strings(&mut model, &triple_strings).unwrap();
+        let count = add_triples_from_strings(&mut model, &triple_strings).expect("should succeed");
         assert_eq!(count, 2);
     }
 
@@ -1053,11 +1053,11 @@ mod quick_start_tests {
     fn test_cosine_similarity() {
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![1.0, 0.0, 0.0];
-        let similarity = cosine_similarity(&a, &b).unwrap();
+        let similarity = cosine_similarity(&a, &b).expect("should succeed");
         assert!((similarity - 1.0).abs() < 1e-10);
 
         let c = vec![0.0, 1.0, 0.0];
-        let similarity2 = cosine_similarity(&a, &c).unwrap();
+        let similarity2 = cosine_similarity(&a, &c).expect("should succeed");
         assert!((similarity2 - 0.0).abs() < 1e-10);
 
         // Test different dimensions should fail

@@ -438,6 +438,7 @@ impl HnswPersistence {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use std::env::temp_dir;
     use std::path::PathBuf;
@@ -684,7 +685,7 @@ mod tests {
     }
 
     #[test]
-    fn test_save_atomic_no_tmp_left() {
+    fn test_save_atomic_no_tmp_left() -> Result<()> {
         let path = tmp_path("atomic_no_tmp");
         persist()
             .save_to_file(&path, &sample_meta(), &[])
@@ -692,11 +693,16 @@ mod tests {
 
         // Temporary file should not exist
         let mut tmp = path.clone();
-        let name = path.file_name().unwrap().to_str().unwrap();
+        let name = path
+            .file_name()
+            .expect("path has a file name")
+            .to_str()
+            .expect("file name is valid UTF-8");
         tmp.set_file_name(format!(".{name}.tmp"));
         assert!(!tmp.exists(), "temp file should have been cleaned up");
 
         let _ = std::fs::remove_file(&path);
+        Ok(())
     }
 
     #[test]

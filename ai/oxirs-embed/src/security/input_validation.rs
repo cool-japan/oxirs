@@ -246,14 +246,14 @@ mod tests {
     #[test]
     fn test_valid_input() {
         let validator = InputValidator::new(1024 * 1024, 4096);
-        let result = validator.validate("SELECT ?s ?p ?o WHERE { ?s ?p ?o }").unwrap();
+        let result = validator.validate("SELECT ?s ?p ?o WHERE { ?s ?p ?o }").expect("should succeed");
         assert!(result.is_valid);
     }
 
     #[test]
     fn test_sql_injection_detection() {
         let validator = InputValidator::new(1024 * 1024, 4096);
-        let result = validator.validate("'; DROP TABLE users; --").unwrap();
+        let result = validator.validate("'; DROP TABLE users; --").expect("should succeed");
         assert!(!result.is_valid);
         assert!(!result.violations.is_empty());
     }
@@ -261,14 +261,14 @@ mod tests {
     #[test]
     fn test_xss_detection() {
         let validator = InputValidator::new(1024 * 1024, 4096);
-        let result = validator.validate("<script>alert('xss')</script>").unwrap();
+        let result = validator.validate("<script>alert('xss')</script>").expect("should succeed");
         assert!(!result.is_valid);
     }
 
     #[test]
     fn test_command_injection_detection() {
         let validator = InputValidator::new(1024 * 1024, 4096);
-        let result = validator.validate("test; rm -rf /").unwrap();
+        let result = validator.validate("test; rm -rf /").expect("should succeed");
         assert!(!result.is_valid);
     }
 
@@ -276,7 +276,7 @@ mod tests {
     fn test_excessive_length() {
         let validator = InputValidator::new(100, 4096);
         let long_input = "a".repeat(200);
-        let result = validator.validate(&long_input).unwrap();
+        let result = validator.validate(&long_input).expect("should succeed");
         assert!(!result.violations.is_empty());
     }
 }

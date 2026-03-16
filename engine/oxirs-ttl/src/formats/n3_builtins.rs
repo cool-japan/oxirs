@@ -34,11 +34,11 @@
 //! // Evaluate math:sum([3, 4]) => 7
 //! let three = N3Term::Literal(Literal::new_typed_literal(
 //!     "3",
-//!     NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+//!     NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("should succeed"),
 //! ));
 //! let four = N3Term::Literal(Literal::new_typed_literal(
 //!     "4",
-//!     NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+//!     NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("should succeed"),
 //! ));
 //!
 //! let result = registry.evaluate("http://www.w3.org/2000/10/swap/math#sum", &[three, four]);

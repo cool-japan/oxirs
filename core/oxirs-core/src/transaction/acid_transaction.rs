@@ -470,8 +470,12 @@ mod tests {
 
     fn create_test_quad(id: usize) -> Quad {
         Quad::new(
-            Subject::NamedNode(NamedNode::new(format!("http://s{}", id)).unwrap()),
-            Predicate::NamedNode(NamedNode::new(format!("http://p{}", id)).unwrap()),
+            Subject::NamedNode(
+                NamedNode::new(format!("http://s{}", id)).expect("valid IRI from format"),
+            ),
+            Predicate::NamedNode(
+                NamedNode::new(format!("http://p{}", id)).expect("valid IRI from format"),
+            ),
             Object::Literal(Literal::new(format!("value{}", id))),
             GraphName::DefaultGraph,
         )

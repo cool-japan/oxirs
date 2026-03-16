@@ -382,6 +382,7 @@ impl IvfPqIndex {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     fn make_config(dim: usize, nlist: usize, m: usize, k: usize, nprobe: usize) -> IvfPqConfig {
@@ -467,157 +468,170 @@ mod tests {
     // ---- is_trained / train ----
 
     #[test]
-    fn test_not_trained_initially() {
+    fn test_not_trained_initially() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let index = IvfPqIndex::new(config).unwrap();
+        let index = IvfPqIndex::new(config)?;
         assert!(!index.is_trained());
+        Ok(())
     }
 
     #[test]
-    fn test_train_basic() {
+    fn test_train_basic() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = make_random_vectors(20, 8, 42);
-        index.train(&vectors).unwrap();
+        index.train(&vectors)?;
         assert!(index.is_trained());
+        Ok(())
     }
 
     #[test]
-    fn test_train_too_few_vectors() {
+    fn test_train_too_few_vectors() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         // 0 vectors → error
         let result = index.train(&[]);
         assert!(matches!(result, Err(IvfPqError::InsufficientData(_))));
+        Ok(())
     }
 
     #[test]
-    fn test_train_dimension_mismatch() {
+    fn test_train_dimension_mismatch() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = vec![vec![1.0, 2.0, 3.0]]; // dim=3, not 8
         let result = index.train(&vectors);
         assert!(matches!(result, Err(IvfPqError::DimensionMismatch { .. })));
+        Ok(())
     }
 
     // ---- add ----
 
     #[test]
-    fn test_add_before_training_error() {
+    fn test_add_before_training_error() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let v = vec![0.0; 8];
         let result = index.add(&v);
         assert!(matches!(result, Err(IvfPqError::NotTrained)));
+        Ok(())
     }
 
     #[test]
-    fn test_add_after_training() {
+    fn test_add_after_training() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = make_random_vectors(20, 8, 1);
-        index.train(&vectors).unwrap();
-        let id = index.add(&vectors[0]).unwrap();
+        index.train(&vectors)?;
+        let id = index.add(&vectors[0])?;
         assert_eq!(id, 0);
         assert_eq!(index.size(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_add_dimension_mismatch() {
+    fn test_add_dimension_mismatch() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = make_random_vectors(20, 8, 2);
-        index.train(&vectors).unwrap();
+        index.train(&vectors)?;
         let bad_v = vec![1.0, 2.0]; // wrong dim
         let result = index.add(&bad_v);
         assert!(matches!(result, Err(IvfPqError::DimensionMismatch { .. })));
+        Ok(())
     }
 
     // ---- add_batch ----
 
     #[test]
-    fn test_add_batch() {
+    fn test_add_batch() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let train_data = make_random_vectors(20, 8, 3);
-        index.train(&train_data).unwrap();
+        index.train(&train_data)?;
         let add_data = make_random_vectors(5, 8, 4);
-        let ids = index.add_batch(&add_data).unwrap();
+        let ids = index.add_batch(&add_data)?;
         assert_eq!(ids.len(), 5);
         assert_eq!(index.size(), 5);
+        Ok(())
     }
 
     // ---- size ----
 
     #[test]
-    fn test_size_starts_at_zero() {
+    fn test_size_starts_at_zero() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = make_random_vectors(20, 8, 5);
-        index.train(&vectors).unwrap();
+        index.train(&vectors)?;
         assert_eq!(index.size(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_size_after_adding() {
+    fn test_size_after_adding() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = make_random_vectors(20, 8, 6);
-        index.train(&vectors).unwrap();
+        index.train(&vectors)?;
         for v in &vectors {
-            index.add(v).unwrap();
+            index.add(v)?;
         }
         assert_eq!(index.size(), 20);
+        Ok(())
     }
 
     // ---- search ----
 
     #[test]
-    fn test_search_before_training_error() {
+    fn test_search_before_training_error() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let index = IvfPqIndex::new(config).unwrap();
+        let index = IvfPqIndex::new(config)?;
         let q = vec![0.0; 8];
         let result = index.search(&q, 5);
         assert!(matches!(result, Err(IvfPqError::NotTrained)));
+        Ok(())
     }
 
     #[test]
-    fn test_search_empty_index() {
+    fn test_search_empty_index() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = make_random_vectors(20, 8, 7);
-        index.train(&vectors).unwrap();
+        index.train(&vectors)?;
         let q = vec![0.0; 8];
-        let results = index.search(&q, 5).unwrap();
+        let results = index.search(&q, 5)?;
         assert!(results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_search_returns_k_results() {
+    fn test_search_returns_k_results() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = make_random_vectors(50, 8, 8);
-        index.train(&vectors).unwrap();
+        index.train(&vectors)?;
         for v in &vectors {
-            index.add(v).unwrap();
+            index.add(v)?;
         }
         let q = vec![0.0; 8];
-        let results = index.search(&q, 10).unwrap();
+        let results = index.search(&q, 10)?;
         assert!(results.len() <= 10);
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_search_sorted_by_distance() {
+    fn test_search_sorted_by_distance() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = make_random_vectors(30, 8, 9);
-        index.train(&vectors).unwrap();
+        index.train(&vectors)?;
         for v in &vectors {
-            index.add(v).unwrap();
+            index.add(v)?;
         }
         let q = vec![0.0; 8];
-        let results = index.search(&q, 10).unwrap();
+        let results = index.search(&q, 10)?;
         for i in 1..results.len() {
             assert!(
                 results[i - 1].1 <= results[i].1,
@@ -626,17 +640,19 @@ mod tests {
                 results[i].1
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn test_search_dimension_mismatch() {
+    fn test_search_dimension_mismatch() -> Result<()> {
         let config = make_config(8, 4, 2, 4, 2);
-        let mut index = IvfPqIndex::new(config).unwrap();
+        let mut index = IvfPqIndex::new(config)?;
         let vectors = make_random_vectors(20, 8, 10);
-        index.train(&vectors).unwrap();
+        index.train(&vectors)?;
         let bad_q = vec![1.0, 2.0]; // wrong dim
         let result = index.search(&bad_q, 5);
         assert!(matches!(result, Err(IvfPqError::DimensionMismatch { .. })));
+        Ok(())
     }
 
     // ---- l2_distance ----

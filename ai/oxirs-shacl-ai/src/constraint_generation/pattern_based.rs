@@ -272,7 +272,7 @@ mod tests {
 
         let pattern = generator.infer_pattern(&values);
         assert!(pattern.is_some());
-        let pattern_str = pattern.unwrap();
+        let pattern_str = pattern.expect("should succeed");
         assert!(pattern_str.contains("A-Z") || pattern_str.contains(r"\d"));
     }
 
@@ -287,7 +287,7 @@ mod tests {
 
         let pattern = generator.infer_pattern(&values);
         assert!(pattern.is_some());
-        assert!(pattern.unwrap().contains("-"));
+        assert!(pattern.expect("should succeed").contains("-"));
     }
 
     #[test]
@@ -306,7 +306,7 @@ mod tests {
             "BCD".to_string(),
         ];
 
-        let regex = generator.generate_regex(&examples).unwrap();
+        let regex = generator.generate_regex(&examples).expect("should succeed");
         assert!(!regex.is_empty());
     }
 }

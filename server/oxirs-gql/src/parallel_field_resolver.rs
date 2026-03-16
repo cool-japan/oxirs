@@ -621,13 +621,13 @@ mod tests {
 
         // field1 should be independent
         assert!(matches!(
-            deps.get(&field1).unwrap()[0],
+            deps.get(&field1).expect("should succeed")[0],
             FieldDependency::Independent
         ));
 
         // field2 should depend on field1
         assert!(matches!(
-            deps.get(&field2).unwrap()[0],
+            deps.get(&field2).expect("should succeed")[0],
             FieldDependency::DataDependency { .. }
         ));
     }
@@ -670,11 +670,14 @@ mod tests {
         ];
 
         let graph = Arc::new(DependencyGraph::new());
-        let results = resolver.resolve_fields(tasks, graph).await.unwrap();
+        let results = resolver
+            .resolve_fields(tasks, graph)
+            .await
+            .expect("should succeed");
 
         assert_eq!(results.len(), 2);
-        assert_eq!(results[0].result.as_ref().unwrap(), &42);
-        assert_eq!(results[1].result.as_ref().unwrap(), &24);
+        assert_eq!(results[0].result.as_ref().expect("should succeed"), &42);
+        assert_eq!(results[1].result.as_ref().expect("should succeed"), &24);
     }
 
     #[tokio::test]
@@ -730,7 +733,10 @@ mod tests {
 
         let graph = Arc::new(DependencyGraph::new().with_dependencies(deps));
         let start = Instant::now();
-        let results = resolver.resolve_fields(tasks, graph).await.unwrap();
+        let results = resolver
+            .resolve_fields(tasks, graph)
+            .await
+            .expect("should succeed");
         let elapsed = start.elapsed();
 
         assert_eq!(results.len(), 3);
@@ -785,7 +791,7 @@ mod tests {
                     std::thread::sleep(Duration::from_millis(10));
                     Ok(1)
                 }),
-                dependencies: deps.get(&field1).unwrap().clone(),
+                dependencies: deps.get(&field1).expect("should succeed").clone(),
                 estimated_cost: 1.0,
                 priority: 0,
             },
@@ -795,7 +801,7 @@ mod tests {
                     std::thread::sleep(Duration::from_millis(10));
                     Ok(2)
                 }),
-                dependencies: deps.get(&field2).unwrap().clone(),
+                dependencies: deps.get(&field2).expect("should succeed").clone(),
                 estimated_cost: 1.0,
                 priority: 0,
             },
@@ -805,23 +811,35 @@ mod tests {
                     std::thread::sleep(Duration::from_millis(10));
                     Ok(3)
                 }),
-                dependencies: deps.get(&field3).unwrap().clone(),
+                dependencies: deps.get(&field3).expect("should succeed").clone(),
                 estimated_cost: 1.0,
                 priority: 0,
             },
         ];
 
         let graph = Arc::new(DependencyGraph::new().with_dependencies(deps));
-        let results = resolver.resolve_fields(tasks, graph).await.unwrap();
+        let results = resolver
+            .resolve_fields(tasks, graph)
+            .await
+            .expect("should succeed");
 
         assert_eq!(results.len(), 3);
 
         // Find field1 result
-        let field1_result = results.iter().find(|r| r.field_id == field1).unwrap();
+        let field1_result = results
+            .iter()
+            .find(|r| r.field_id == field1)
+            .expect("should succeed");
 
         // Find field2 and field3 results
-        let field2_result = results.iter().find(|r| r.field_id == field2).unwrap();
-        let field3_result = results.iter().find(|r| r.field_id == field3).unwrap();
+        let field2_result = results
+            .iter()
+            .find(|r| r.field_id == field2)
+            .expect("should succeed");
+        let field3_result = results
+            .iter()
+            .find(|r| r.field_id == field3)
+            .expect("should succeed");
 
         // field1 should be resolved before field2 and field3
         assert!(field1_result.resolved_at <= field2_result.resolved_at);
@@ -855,7 +873,10 @@ mod tests {
         }];
 
         let graph = Arc::new(DependencyGraph::new().with_dependencies(deps));
-        let results = resolver.resolve_fields(tasks, graph).await.unwrap();
+        let results = resolver
+            .resolve_fields(tasks, graph)
+            .await
+            .expect("should succeed");
 
         assert_eq!(results.len(), 1);
         assert!(results[0].result.is_err());

@@ -422,7 +422,7 @@ mod tests {
     // ── RuleCompiler::compile ─────────────────────────────────────────────────
 
     #[test]
-    fn test_compile_simple_rule() {
+    fn test_compile_simple_rule() -> anyhow::Result<()> {
         let body = vec![("?s".to_string(), "rdf:type".to_string(), "?c".to_string())];
         let head = vec![(
             "?s".to_string(),
@@ -433,13 +433,15 @@ mod tests {
         assert_eq!(rule.name, "r1");
         assert!(!rule.instructions.is_empty());
         assert!(matches!(rule.instructions.last(), Some(Instruction::Halt)));
+        Ok(())
     }
 
     #[test]
-    fn test_compile_ends_with_halt() {
+    fn test_compile_ends_with_halt() -> anyhow::Result<()> {
         let body = vec![("?s".to_string(), "rdf:type".to_string(), "?c".to_string())];
         let rule = RuleCompiler::compile("r", body, vec![]);
         assert!(matches!(rule.instructions.last(), Some(Instruction::Halt)));
+        Ok(())
     }
 
     #[test]
@@ -450,14 +452,15 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_var_count() {
+    fn test_compile_var_count() -> anyhow::Result<()> {
         let body = vec![("?s".to_string(), "?p".to_string(), "?o".to_string())];
         let rule = RuleCompiler::compile("r", body, vec![]);
         assert!(rule.var_count >= 3);
+        Ok(())
     }
 
     #[test]
-    fn test_compile_constant_not_var() {
+    fn test_compile_constant_not_var() -> anyhow::Result<()> {
         let body = vec![(
             "http://example.org/Alice".to_string(),
             "rdf:type".to_string(),
@@ -466,10 +469,11 @@ mod tests {
         let rule = RuleCompiler::compile("r", body, vec![]);
         // Only one variable: "class"
         assert_eq!(rule.var_count, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_compile_two_body_patterns() {
+    fn test_compile_two_body_patterns() -> anyhow::Result<()> {
         let body = vec![
             ("?s".to_string(), "rdf:type".to_string(), "?c".to_string()),
             (
@@ -481,10 +485,11 @@ mod tests {
         let rule = RuleCompiler::compile("subclass", body, vec![]);
         // Should have 3 variables: s, c, sc
         assert_eq!(rule.var_count, 3);
+        Ok(())
     }
 
     #[test]
-    fn test_compile_head_produce_instruction() {
+    fn test_compile_head_produce_instruction() -> anyhow::Result<()> {
         let body = vec![("?s".to_string(), "rdf:type".to_string(), "?c".to_string())];
         let head = vec![(
             "?s".to_string(),
@@ -498,10 +503,11 @@ mod tests {
             .filter(|i| matches!(i, Instruction::Produce { .. }))
             .collect();
         assert_eq!(produces.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_compile_head_multiple_triples() {
+    fn test_compile_head_multiple_triples() -> anyhow::Result<()> {
         let body = vec![("?s".to_string(), "rdf:type".to_string(), "?c".to_string())];
         let head = vec![
             (
@@ -521,12 +527,13 @@ mod tests {
         } else {
             panic!("No Produce instruction found");
         }
+        Ok(())
     }
 
     // ── RuleCompiler::instruction_count ──────────────────────────────────────
 
     #[test]
-    fn test_instruction_count() {
+    fn test_instruction_count() -> anyhow::Result<()> {
         let rule = RuleCompiler::compile(
             "r",
             vec![("?s".to_string(), "?p".to_string(), "?o".to_string())],
@@ -536,6 +543,7 @@ mod tests {
             RuleCompiler::instruction_count(&rule),
             rule.instructions.len()
         );
+        Ok(())
     }
 
     #[test]
@@ -548,7 +556,7 @@ mod tests {
     // ── RuleCompiler::var_names ───────────────────────────────────────────────
 
     #[test]
-    fn test_var_names_basic() {
+    fn test_var_names_basic() -> anyhow::Result<()> {
         let rule = RuleCompiler::compile(
             "r",
             vec![("?s".to_string(), "?p".to_string(), "?o".to_string())],
@@ -558,10 +566,11 @@ mod tests {
         assert!(names.contains(&"s".to_string()));
         assert!(names.contains(&"p".to_string()));
         assert!(names.contains(&"o".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_var_names_sorted() {
+    fn test_var_names_sorted() -> anyhow::Result<()> {
         let rule = RuleCompiler::compile(
             "r",
             vec![("?z".to_string(), "?a".to_string(), "?m".to_string())],
@@ -571,10 +580,11 @@ mod tests {
         let mut sorted = names.clone();
         sorted.sort();
         assert_eq!(names, sorted);
+        Ok(())
     }
 
     #[test]
-    fn test_var_names_no_duplicates() {
+    fn test_var_names_no_duplicates() -> anyhow::Result<()> {
         let rule = RuleCompiler::compile(
             "r",
             vec![
@@ -586,12 +596,13 @@ mod tests {
         let names = RuleCompiler::var_names(&rule);
         let unique: std::collections::HashSet<_> = names.iter().collect();
         assert_eq!(names.len(), unique.len());
+        Ok(())
     }
 
     // ── RuleCompiler::optimize ────────────────────────────────────────────────
 
     #[test]
-    fn test_optimize_removes_dead_binds() {
+    fn test_optimize_removes_dead_binds() -> anyhow::Result<()> {
         // Compile a rule where "p" is not used in head or filters.
         let body = vec![("?s".to_string(), "?p".to_string(), "?o".to_string())];
         let head = vec![(
@@ -605,18 +616,20 @@ mod tests {
         let after = RuleCompiler::instruction_count(&rule);
         // Optimised rule should have ≤ instructions
         assert!(after <= before);
+        Ok(())
     }
 
     #[test]
-    fn test_optimize_preserves_halt() {
+    fn test_optimize_preserves_halt() -> anyhow::Result<()> {
         let body = vec![("?s".to_string(), "rdf:type".to_string(), "?c".to_string())];
         let mut rule = RuleCompiler::compile("r", body, vec![]);
         RuleCompiler::optimize(&mut rule);
         assert!(matches!(rule.instructions.last(), Some(Instruction::Halt)));
+        Ok(())
     }
 
     #[test]
-    fn test_optimize_idempotent() {
+    fn test_optimize_idempotent() -> anyhow::Result<()> {
         let body = vec![("?s".to_string(), "rdf:type".to_string(), "?c".to_string())];
         let head = vec![(
             "?s".to_string(),
@@ -629,6 +642,7 @@ mod tests {
         RuleCompiler::optimize(&mut rule);
         let count2 = RuleCompiler::instruction_count(&rule);
         assert_eq!(count1, count2);
+        Ok(())
     }
 
     // ── CompiledRule ─────────────────────────────────────────────────────────
@@ -640,7 +654,7 @@ mod tests {
     }
 
     #[test]
-    fn test_compiled_rule_clone() {
+    fn test_compiled_rule_clone() -> anyhow::Result<()> {
         let rule = RuleCompiler::compile(
             "r",
             vec![("?s".to_string(), "?p".to_string(), "?o".to_string())],
@@ -649,12 +663,13 @@ mod tests {
         let cloned = rule.clone();
         assert_eq!(rule.name, cloned.name);
         assert_eq!(rule.instructions.len(), cloned.instructions.len());
+        Ok(())
     }
 
     // ── Integration ───────────────────────────────────────────────────────────
 
     #[test]
-    fn test_rdfs_subclass_rule() {
+    fn test_rdfs_subclass_rule() -> anyhow::Result<()> {
         // rdfs2: if (X rdfs:subClassOf Y) and (Z rdf:type X) then (Z rdf:type Y)
         let body = vec![
             (
@@ -675,18 +690,20 @@ mod tests {
             .filter(|i| matches!(i, Instruction::LoadTriple { .. }))
             .collect();
         assert_eq!(loads.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_owl_same_as_rule() {
+    fn test_owl_same_as_rule() -> anyhow::Result<()> {
         let body = vec![("?s".to_string(), "owl:sameAs".to_string(), "?t".to_string())];
         let head = vec![("?t".to_string(), "owl:sameAs".to_string(), "?s".to_string())];
         let rule = RuleCompiler::compile("sameAs_symmetric", body, head);
         assert!(rule.var_count >= 2);
+        Ok(())
     }
 
     #[test]
-    fn test_filter_instruction_roundtrip() {
+    fn test_filter_instruction_roundtrip() -> anyhow::Result<()> {
         // Build a rule manually with a Filter instruction and check var_names.
         let mut rule = RuleCompiler::compile(
             "filtered",
@@ -701,6 +718,7 @@ mod tests {
         );
         let names = RuleCompiler::var_names(&rule);
         assert!(names.contains(&"s".to_string()));
+        Ok(())
     }
 
     #[test]
@@ -712,7 +730,7 @@ mod tests {
     }
 
     #[test]
-    fn test_many_body_patterns() {
+    fn test_many_body_patterns() -> anyhow::Result<()> {
         let body: Vec<_> = (0..5)
             .map(|i| (format!("?s{i}"), "rdf:type".to_string(), format!("?c{i}")))
             .collect();
@@ -720,6 +738,7 @@ mod tests {
         // 5 patterns × (LoadTriple + 2 Bind) + Halt = 16 minimum
         assert!(rule.instructions.len() >= 6);
         assert_eq!(rule.var_count, 10); // s0..s4, c0..c4
+        Ok(())
     }
 
     #[test]
@@ -737,28 +756,31 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_condition_var_equals_debug() {
+    fn test_filter_condition_var_equals_debug() -> anyhow::Result<()> {
         let cond = FilterCondition::VarEquals("a".to_string(), "b".to_string());
         let s = format!("{cond:?}");
         assert!(s.contains("VarEquals"));
+        Ok(())
     }
 
     #[test]
-    fn test_filter_condition_var_not_equals_debug() {
+    fn test_filter_condition_var_not_equals_debug() -> anyhow::Result<()> {
         let cond = FilterCondition::VarNotEquals("x".to_string(), "y".to_string());
         let s = format!("{cond:?}");
         assert!(s.contains("VarNotEquals"));
+        Ok(())
     }
 
     #[test]
-    fn test_filter_condition_bound_debug() {
+    fn test_filter_condition_bound_debug() -> anyhow::Result<()> {
         let cond = FilterCondition::Bound("z".to_string());
         let s = format!("{cond:?}");
         assert!(s.contains("Bound"));
+        Ok(())
     }
 
     #[test]
-    fn test_compiled_rule_var_names_single_var() {
+    fn test_compiled_rule_var_names_single_var() -> anyhow::Result<()> {
         let rule = RuleCompiler::compile(
             "r",
             vec![("?x".to_string(), "ex:p".to_string(), "ex:o".to_string())],
@@ -766,6 +788,7 @@ mod tests {
         );
         let names = RuleCompiler::var_names(&rule);
         assert!(names.contains(&"x".to_string()));
+        Ok(())
     }
 
     #[test]
@@ -791,7 +814,7 @@ mod tests {
     }
 
     #[test]
-    fn test_produce_instruction_present_when_head_non_empty() {
+    fn test_produce_instruction_present_when_head_non_empty() -> anyhow::Result<()> {
         let body = vec![("?s".to_string(), "?p".to_string(), "?o".to_string())];
         let head = vec![("?s".to_string(), "rdf:type".to_string(), "ex:C".to_string())];
         let rule = RuleCompiler::compile("r", body, head);
@@ -800,5 +823,6 @@ mod tests {
             .iter()
             .any(|i| matches!(i, Instruction::Produce { .. }));
         assert!(has_produce);
+        Ok(())
     }
 }

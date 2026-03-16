@@ -37,7 +37,7 @@ sysinfo = { workspace = true }    # System information
 tempfile.workspace = true    # Temporary file handling
 
 # Enhanced CLI features
-indicatif = "0.18"  # Progress bars
+indicatif.workspace = true  # Progress bars
 colored = "3.1"     # Colored output
 prettytable-rs = "0.10"  # Table formatting
 rustyline = "17.0"  # Interactive mode
@@ -61,14 +61,14 @@ flate2.workspace = true
 hostname = "0.4"    # System hostname for test reports
 md5.workspace = true
 hex.workspace = true         # Hex encoding for checksums
-rust_xlsxwriter = { version = "0.94", optional = true }  # Excel XLSX file generation (feature-gated for Pure Rust policy)
+rust_xlsxwriter = { workspace = true, optional = true }  # Excel XLSX file generation (feature-gated for Pure Rust policy)
 inferno = "0.12"    # Flame graph generation for profiling
 printpdf = "0.9"    # PDF generation for reports
-handlebars = "6.4"  # Template engine for custom output formats
+handlebars.workspace = true  # Template engine for custom output formats
 
 [dev-dependencies]
 criterion.workspace = true
-tokio-test = "0.4"
+tokio-test.workspace = true
 
 [features]
 default = []

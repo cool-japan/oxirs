@@ -1375,7 +1375,7 @@ mod tests {
         let result = engine.optimize_shape(&shape).await;
         assert!(result.is_ok());
 
-        let optimized = result.unwrap();
+        let optimized = result.expect("should succeed");
         assert!(optimized.improvement_percentage >= 0.0);
         assert!(!optimized.applied_optimizations.is_empty());
     }
@@ -1395,7 +1395,7 @@ mod tests {
         let config = engine.enable_parallel_validation(&shape).await;
         assert!(config.is_ok());
 
-        let parallel_config = config.unwrap();
+        let parallel_config = config.expect("should succeed");
         assert!(parallel_config.enabled);
         assert!(parallel_config.max_parallel_constraints > 0);
         assert!(!parallel_config.constraint_groups.is_empty());
@@ -1418,7 +1418,7 @@ mod tests {
         let config = engine.configure_caching(&shape).await;
         assert!(config.is_ok());
 
-        let cache_config = config.unwrap();
+        let cache_config = config.expect("should succeed");
         assert!(cache_config.enabled);
         assert!(!cache_config.cacheable_constraints.is_empty());
         assert!(cache_config.estimated_hit_rate > 0.0);
@@ -1494,7 +1494,7 @@ mod tests {
         let result = aco.optimize_constraint_order(&constraints).await;
         assert!(result.is_ok());
         
-        let optimized_order = result.unwrap();
+        let optimized_order = result.expect("should succeed");
         assert_eq!(optimized_order.len(), constraints.len());
     }
 
@@ -1535,7 +1535,7 @@ mod tests {
         let result = rl.optimize(initial_state, 50).await;
         assert!(result.is_ok());
         
-        let policy = result.unwrap();
+        let policy = result.expect("should succeed");
         assert!(policy.confidence >= 0.0);
         assert!(policy.confidence <= 1.0);
     }
@@ -1560,7 +1560,7 @@ mod tests {
         let result = adaptive.optimize(&problem).await;
         assert!(result.is_ok());
         
-        let optimization_result = result.unwrap();
+        let optimization_result = result.expect("should succeed");
         assert!(optimization_result.performance_improvement >= 0.0);
     }
 }

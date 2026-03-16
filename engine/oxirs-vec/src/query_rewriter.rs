@@ -26,7 +26,7 @@
 //! let rewriter = QueryRewriter::new();
 //!
 //! let query = Vector::new(vec![1.0, 2.0, 3.0]);
-//! let rewritten = rewriter.rewrite(&query, 10).unwrap();
+//! let rewritten = rewriter.rewrite(&query, 10).expect("should succeed");
 //!
 //! println!("Original k: 10, Optimized k: {}", rewritten.optimized_k);
 //! ```
@@ -493,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    fn test_query_rewrite() {
+    fn test_query_rewrite() -> Result<()> {
         let config = QueryRewriterConfig {
             min_confidence: 0.5, // Lower threshold for test
             ..Default::default()
@@ -501,15 +501,16 @@ mod tests {
         let mut rewriter = QueryRewriter::new(config);
 
         let query = Vector::new(vec![1.0, 2.0, 3.0, 4.0]);
-        let result = rewriter.rewrite(&query, 10).unwrap();
+        let result = rewriter.rewrite(&query, 10)?;
 
         assert_eq!(result.original_k, 10);
         // Confidence should be positive (may be low if no rules applied)
         assert!(result.confidence >= 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_normalize_query() {
+    fn test_normalize_query() -> Result<()> {
         let config = QueryRewriterConfig {
             min_confidence: 0.5, // Lower threshold to allow normalization
             ..Default::default()
@@ -518,7 +519,7 @@ mod tests {
 
         // Create a query with non-unit norm
         let query = Vector::new(vec![3.0, 4.0]); // norm = 5.0
-        let result = rewriter.rewrite(&query, 10).unwrap();
+        let result = rewriter.rewrite(&query, 10)?;
 
         // Check if normalized
         let normalized_values = result.rewritten_vector.as_f32();
@@ -539,10 +540,11 @@ mod tests {
                 norm
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn test_k_tuning_sparse_query() {
+    fn test_k_tuning_sparse_query() -> Result<()> {
         let config = QueryRewriterConfig {
             enable_parameter_tuning: true,
             ..Default::default()
@@ -551,14 +553,15 @@ mod tests {
 
         // Create a sparse query (many zeros)
         let query = Vector::new(vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
-        let result = rewriter.rewrite(&query, 10).unwrap();
+        let result = rewriter.rewrite(&query, 10)?;
 
         // Should expand k for sparse queries
         assert!(result.optimized_k >= result.original_k);
+        Ok(())
     }
 
     #[test]
-    fn test_caching() {
+    fn test_caching() -> Result<()> {
         let config = QueryRewriterConfig {
             enable_caching: true,
             ..Default::default()
@@ -568,20 +571,21 @@ mod tests {
         let query = Vector::new(vec![1.0, 2.0, 3.0]);
 
         // First call
-        let _result1 = rewriter.rewrite(&query, 10).unwrap();
+        let _result1 = rewriter.rewrite(&query, 10)?;
         assert_eq!(rewriter.cache_size(), 1);
 
         // Second call (should hit cache)
-        let _result2 = rewriter.rewrite(&query, 10).unwrap();
+        let _result2 = rewriter.rewrite(&query, 10)?;
         assert_eq!(rewriter.cache_size(), 1);
 
         // Different k (should miss cache)
-        let _result3 = rewriter.rewrite(&query, 20).unwrap();
+        let _result3 = rewriter.rewrite(&query, 20)?;
         assert_eq!(rewriter.cache_size(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_rule_learning() {
+    fn test_rule_learning() -> Result<()> {
         let config = QueryRewriterConfig {
             enable_learning: true,
             ..Default::default()
@@ -589,12 +593,13 @@ mod tests {
         let mut rewriter = QueryRewriter::new(config);
 
         let query = Vector::new(vec![1.0, 2.0, 3.0]);
-        rewriter.rewrite(&query, 10).unwrap();
+        rewriter.rewrite(&query, 10)?;
 
         // Record success
         rewriter.record_rule_success(RewriteRule::NormalizeQuery, 0.15);
 
         let stats = rewriter.rule_statistics();
         assert!(stats.contains_key(&RewriteRule::NormalizeQuery));
+        Ok(())
     }
 }

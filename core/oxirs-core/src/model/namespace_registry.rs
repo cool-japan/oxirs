@@ -10,12 +10,12 @@
 //! use oxirs_core::model::namespace_registry::{NamespaceRegistry, CurieError};
 //!
 //! let mut reg = NamespaceRegistry::well_known();
-//! reg.register("ex", "http://example.org/").unwrap();
+//! reg.register("ex", "http://example.org/").expect("namespace registration should succeed");
 //!
-//! let expanded = reg.expand("ex:Person").unwrap();
+//! let expanded = reg.expand("ex:Person").expect("IRI expansion should succeed");
 //! assert_eq!(expanded, "http://example.org/Person");
 //!
-//! let compressed = reg.compress("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+//! let compressed = reg.compress("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("IRI compression should succeed");
 //! assert_eq!(compressed, "rdf:type");
 //! ```
 
@@ -431,7 +431,8 @@ mod tests {
     #[test]
     fn test_register_duplicate_prefix_fails() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         let err = reg.register("ex", "http://other.org/").unwrap_err();
         assert!(matches!(err, CurieError::DuplicatePrefix(_)));
     }
@@ -453,7 +454,8 @@ mod tests {
     #[test]
     fn test_overwrite_existing_prefix() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         assert!(reg.overwrite("ex", "http://new.example.org/").is_ok());
         assert_eq!(reg.get_iri("ex"), Some("http://new.example.org/"));
         // Old IRI should no longer be in reverse map
@@ -463,7 +465,8 @@ mod tests {
     #[test]
     fn test_remove_existing_prefix() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         assert!(reg.remove("ex"));
         assert!(!reg.contains_prefix("ex"));
         assert_eq!(reg.len(), 0);
@@ -480,7 +483,8 @@ mod tests {
     #[test]
     fn test_expand_simple_curie() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         assert_eq!(
             reg.expand("ex:Person"),
             Some("http://example.org/Person".to_string())
@@ -499,7 +503,8 @@ mod tests {
     #[test]
     fn test_expand_empty_local_name() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         assert_eq!(reg.expand("ex:"), Some("http://example.org/".to_string()));
     }
 
@@ -574,8 +579,10 @@ mod tests {
     #[test]
     fn test_compress_longest_match() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("short", "http://example.org/").unwrap();
-        reg.register("long", "http://example.org/sub/").unwrap();
+        reg.register("short", "http://example.org/")
+            .expect("namespace registration should succeed");
+        reg.register("long", "http://example.org/sub/")
+            .expect("namespace registration should succeed");
         // "long" should win because it is a longer match
         assert_eq!(
             reg.compress("http://example.org/sub/Thing"),
@@ -586,10 +593,13 @@ mod tests {
     #[test]
     fn test_compress_and_expand_roundtrip() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         let original = "http://example.org/MyClass";
-        let curie = reg.compress(original).unwrap();
-        let expanded = reg.expand(&curie).unwrap();
+        let curie = reg
+            .compress(original)
+            .expect("IRI compression should succeed");
+        let expanded = reg.expand(&curie).expect("IRI expansion should succeed");
         assert_eq!(expanded, original);
     }
 
@@ -598,8 +608,10 @@ mod tests {
     #[test]
     fn test_iter_prefixes() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("a", "http://a.org/").unwrap();
-        reg.register("b", "http://b.org/").unwrap();
+        reg.register("a", "http://a.org/")
+            .expect("namespace registration should succeed");
+        reg.register("b", "http://b.org/")
+            .expect("namespace registration should succeed");
         let pairs: Vec<_> = reg.iter_prefixes().collect();
         assert_eq!(pairs.len(), 2);
         assert_eq!(pairs[0], ("a", "http://a.org/"));
@@ -610,7 +622,7 @@ mod tests {
     fn test_prefixes_method() {
         let mut reg = NamespaceRegistry::new();
         reg.register("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
-            .unwrap();
+            .expect("operation should succeed");
         let p = reg.prefixes();
         assert_eq!(p, vec!["rdf"]);
     }
@@ -618,7 +630,8 @@ mod tests {
     #[test]
     fn test_iris_method() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         let iris = reg.iris();
         assert_eq!(iris, vec!["http://example.org/"]);
     }
@@ -628,11 +641,14 @@ mod tests {
     #[test]
     fn test_merge_no_overwrite() {
         let mut reg1 = NamespaceRegistry::new();
-        reg1.register("ex", "http://example.org/").unwrap();
+        reg1.register("ex", "http://example.org/")
+            .expect("registration should succeed");
 
         let mut reg2 = NamespaceRegistry::new();
-        reg2.register("ex", "http://other.org/").unwrap();
-        reg2.register("foo", "http://foo.org/").unwrap();
+        reg2.register("ex", "http://other.org/")
+            .expect("registration should succeed");
+        reg2.register("foo", "http://foo.org/")
+            .expect("registration should succeed");
 
         reg1.merge(&reg2);
 
@@ -646,10 +662,12 @@ mod tests {
     #[test]
     fn test_merge_overwrite() {
         let mut reg1 = NamespaceRegistry::new();
-        reg1.register("ex", "http://example.org/").unwrap();
+        reg1.register("ex", "http://example.org/")
+            .expect("registration should succeed");
 
         let mut reg2 = NamespaceRegistry::new();
-        reg2.register("ex", "http://new.org/").unwrap();
+        reg2.register("ex", "http://new.org/")
+            .expect("registration should succeed");
 
         reg1.merge_overwrite(&reg2);
         assert_eq!(reg1.get_iri("ex"), Some("http://new.org/"));
@@ -660,7 +678,8 @@ mod tests {
     #[test]
     fn test_display_format() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         let output = format!("{reg}");
         assert!(output.contains("@prefix ex: <http://example.org/> ."));
     }
@@ -670,10 +689,12 @@ mod tests {
     #[test]
     fn test_serde_roundtrip() {
         let mut reg = NamespaceRegistry::well_known();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
 
-        let json = serde_json::to_string(&reg).unwrap();
-        let restored: NamespaceRegistry = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&reg).expect("construction should succeed");
+        let restored: NamespaceRegistry =
+            serde_json::from_str(&json).expect("construction should succeed");
 
         assert_eq!(restored.len(), reg.len());
         assert_eq!(restored.get_iri("ex"), Some("http://example.org/"));
@@ -688,7 +709,8 @@ mod tests {
     #[test]
     fn test_contains_prefix_true() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         assert!(reg.contains_prefix("ex"));
         assert!(!reg.contains_prefix("other"));
     }
@@ -696,7 +718,8 @@ mod tests {
     #[test]
     fn test_contains_iri_true() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         assert!(reg.contains_iri("http://example.org/"));
         assert!(!reg.contains_iri("http://other.org/"));
     }
@@ -704,7 +727,8 @@ mod tests {
     #[test]
     fn test_get_prefix_by_iri() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://example.org/").unwrap();
+        reg.register("ex", "http://example.org/")
+            .expect("namespace registration should succeed");
         assert_eq!(reg.get_prefix("http://example.org/"), Some("ex"));
     }
 
@@ -755,7 +779,7 @@ mod tests {
         let mut reg = NamespaceRegistry::new();
         for i in 0..10 {
             reg.register(&format!("p{i}"), &format!("http://p{i}.org/"))
-                .unwrap();
+                .expect("operation should succeed");
         }
         assert_eq!(reg.len(), 10);
         assert!(!reg.is_empty());
@@ -764,7 +788,8 @@ mod tests {
     #[test]
     fn test_remove_then_register_same_prefix() {
         let mut reg = NamespaceRegistry::new();
-        reg.register("ex", "http://old.org/").unwrap();
+        reg.register("ex", "http://old.org/")
+            .expect("namespace registration should succeed");
         reg.remove("ex");
         assert!(reg.register("ex", "http://new.org/").is_ok());
         assert_eq!(reg.get_iri("ex"), Some("http://new.org/"));

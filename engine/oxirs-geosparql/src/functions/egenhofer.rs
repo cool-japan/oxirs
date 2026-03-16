@@ -30,10 +30,10 @@ use geo::Intersects;
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::egenhofer::eh_equals;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
-/// assert!(eh_equals(&poly1, &poly2).unwrap());
+/// assert!(eh_equals(&poly1, &poly2).expect("should succeed"));
 /// ```
 pub fn eh_equals(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     // Egenhofer equals is the same as Simple Features equals
@@ -50,10 +50,10 @@ pub fn eh_equals(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::egenhofer::eh_disjoint;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((5 5, 7 5, 7 7, 5 7, 5 5))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((5 5, 7 5, 7 7, 5 7, 5 5))").expect("should succeed");
 ///
-/// assert!(eh_disjoint(&poly1, &poly2).unwrap());
+/// assert!(eh_disjoint(&poly1, &poly2).expect("should succeed"));
 /// ```
 pub fn eh_disjoint(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     // Egenhofer disjoint is the same as Simple Features disjoint
@@ -75,10 +75,10 @@ pub fn eh_disjoint(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::egenhofer::eh_meet;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((2 0, 4 0, 4 2, 2 2, 2 0))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((2 0, 4 0, 4 2, 2 2, 2 0))").expect("should succeed");
 ///
-/// assert!(eh_meet(&poly1, &poly2).unwrap());
+/// assert!(eh_meet(&poly1, &poly2).expect("should succeed"));
 /// ```
 #[cfg(feature = "geos-backend")]
 pub fn eh_meet(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
@@ -126,10 +126,10 @@ pub fn eh_meet(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::egenhofer::eh_overlap;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((2 2, 5 2, 5 5, 2 5, 2 2))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((2 2, 5 2, 5 5, 2 5, 2 2))").expect("should succeed");
 ///
-/// assert!(eh_overlap(&poly1, &poly2).unwrap());
+/// assert!(eh_overlap(&poly1, &poly2).expect("should succeed"));
 /// ```
 pub fn eh_overlap(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     use geo::Contains;
@@ -160,10 +160,10 @@ pub fn eh_overlap(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::egenhofer::eh_covers;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").expect("should succeed");
 ///
-/// assert!(eh_covers(&poly1, &poly2).unwrap());
+/// assert!(eh_covers(&poly1, &poly2).expect("should succeed"));
 /// ```
 pub fn eh_covers(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     // Covers is the same as contains in Simple Features
@@ -180,10 +180,10 @@ pub fn eh_covers(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::egenhofer::eh_covered_by;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
-/// assert!(eh_covered_by(&poly1, &poly2).unwrap());
+/// assert!(eh_covered_by(&poly1, &poly2).expect("should succeed"));
 /// ```
 pub fn eh_covered_by(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     // CoveredBy is the inverse of contains
@@ -206,10 +206,10 @@ pub fn eh_covered_by(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::egenhofer::eh_inside;
 ///
-/// let point = Geometry::from_wkt("POINT(2 2)").unwrap();
-/// let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+/// let point = Geometry::from_wkt("POINT(2 2)").expect("should succeed");
+/// let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
-/// assert!(eh_inside(&point, &poly).unwrap());
+/// assert!(eh_inside(&point, &poly).expect("should succeed"));
 /// ```
 #[cfg(feature = "geos-backend")]
 pub fn eh_inside(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
@@ -252,10 +252,10 @@ pub fn eh_inside(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::egenhofer::eh_contains;
 ///
-/// let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-/// let point = Geometry::from_wkt("POINT(2 2)").unwrap();
+/// let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+/// let point = Geometry::from_wkt("POINT(2 2)").expect("should succeed");
 ///
-/// assert!(eh_contains(&poly, &point).unwrap());
+/// assert!(eh_contains(&poly, &point).expect("should succeed"));
 /// ```
 #[cfg(feature = "geos-backend")]
 pub fn eh_contains(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
@@ -301,7 +301,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(eh_equals(&poly1, &poly2).unwrap());
+        assert!(eh_equals(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -328,7 +328,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(eh_disjoint(&poly1, &poly2).unwrap());
+        assert!(eh_disjoint(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -355,7 +355,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(eh_meet(&poly1, &poly2).unwrap());
+        assert!(eh_meet(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -382,7 +382,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(eh_overlap(&poly1, &poly2).unwrap());
+        assert!(eh_overlap(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -409,7 +409,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(eh_covers(&poly1, &poly2).unwrap());
+        assert!(eh_covers(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -436,7 +436,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(eh_covered_by(&poly1, &poly2).unwrap());
+        assert!(eh_covered_by(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -454,7 +454,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(eh_inside(&point, &poly).unwrap());
+        assert!(eh_inside(&point, &poly).expect("should succeed"));
     }
 
     #[test]
@@ -472,7 +472,7 @@ mod tests {
 
         let point = Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0)));
 
-        assert!(eh_contains(&poly, &point).unwrap());
+        assert!(eh_contains(&poly, &point).expect("should succeed"));
     }
 }
 

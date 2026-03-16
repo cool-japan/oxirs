@@ -460,7 +460,9 @@ mod tests {
             "displayName",
         )]));
         let src = make_source(&[("name", "Alice")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("displayName").map(|s| s.as_str()), Some("Alice"));
     }
 
@@ -475,7 +477,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert!(!result.contains_key("opt"));
     }
 
@@ -515,7 +519,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("legacyField", "42")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("newField").map(|s| s.as_str()), Some("42"));
         assert!(!result.contains_key("legacyField"));
     }
@@ -531,7 +537,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -548,7 +556,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("version").map(|s| s.as_str()), Some("2.3.0"));
     }
 
@@ -563,7 +573,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("kind", "variable")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("type").map(|s| s.as_str()), Some("fixed"));
     }
 
@@ -580,7 +592,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("first", "John"), ("last", "Doe")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("fullName").map(|s| s.as_str()), Some("JohnDoe"));
     }
 
@@ -595,7 +609,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("a", "hello")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("combined").map(|s| s.as_str()), Some("hello"));
     }
 
@@ -610,7 +626,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("ns", "ex"), ("colon", ":"), ("local", "thing")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("id").map(|s| s.as_str()), Some("ex:thing"));
     }
 
@@ -630,7 +648,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("path", "a/b/c")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("head").map(|s| s.as_str()), Some("a"));
     }
 
@@ -648,7 +668,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("csv", "x,y,z")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("last_col").map(|s| s.as_str()), Some("z"));
     }
 
@@ -684,7 +706,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -701,7 +725,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("colour").map(|s| s.as_str()), Some("red"));
     }
 
@@ -716,7 +742,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("color", "blue")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("colour").map(|s| s.as_str()), Some("blue"));
     }
 
@@ -742,7 +770,9 @@ mod tests {
             ),
         ]));
         let tgt = make_source(&[("target_prop", "v1"), ("tgt2", "v2")]);
-        let result = mapper.map_reverse("test_spec", &tgt).unwrap();
+        let result = mapper
+            .map_reverse("test_spec", &tgt)
+            .expect("should succeed");
         // Forward mapping is excluded from reverse
         assert!(!result.contains_key("source_prop"));
         // Reverse mapping applied
@@ -760,7 +790,9 @@ mod tests {
             false,
         )]));
         let tgt = make_source(&[("bar", "hello")]);
-        let result = mapper.map_reverse("test_spec", &tgt).unwrap();
+        let result = mapper
+            .map_reverse("test_spec", &tgt)
+            .expect("should succeed");
         assert_eq!(result.get("foo").map(|s| s.as_str()), Some("hello"));
     }
 
@@ -775,7 +807,9 @@ mod tests {
             false,
         )]));
         let tgt = make_source(&[("const_field", "fixed")]);
-        let result = mapper.map_reverse("test_spec", &tgt).unwrap();
+        let result = mapper
+            .map_reverse("test_spec", &tgt)
+            .expect("should succeed");
         // Constants are not invertible
         assert!(!result.contains_key("src"));
     }
@@ -791,7 +825,9 @@ mod tests {
             false,
         )]));
         let tgt = make_source(&[]);
-        let result = mapper.map_reverse("test_spec", &tgt).unwrap();
+        let result = mapper
+            .map_reverse("test_spec", &tgt)
+            .expect("should succeed");
         assert_eq!(result.get("src").map(|s| s.as_str()), Some("fallback"));
     }
 
@@ -808,8 +844,12 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("age", "30")]);
-        let fwd = mapper.map_forward("test_spec", &src).unwrap();
-        let rev = mapper.map_reverse("test_spec", &fwd).unwrap();
+        let fwd = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
+        let rev = mapper
+            .map_reverse("test_spec", &fwd)
+            .expect("should succeed");
         assert_eq!(rev.get("age"), src.get("age"));
     }
 
@@ -824,7 +864,9 @@ mod tests {
             PropertyMapping::direct("c", "z"),
         ]));
         let src = make_source(&[("a", "1"), ("b", "2"), ("c", "3")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.len(), 3);
         assert_eq!(result.get("x").map(|s| s.as_str()), Some("1"));
         assert_eq!(result.get("y").map(|s| s.as_str()), Some("2"));
@@ -964,7 +1006,9 @@ mod tests {
     fn test_forward_empty_source_map() {
         let mut mapper = PropertyMapper::new();
         mapper.add_spec(make_spec(vec![PropertyMapping::direct("x", "y")]));
-        let result = mapper.map_forward("test_spec", &HashMap::new()).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &HashMap::new())
+            .expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -973,7 +1017,7 @@ mod tests {
         let mut mapper = PropertyMapper::new();
         mapper.add_spec(MappingSpec::new("empty", "s", "t", vec![]));
         let src = make_source(&[("a", "1")]);
-        let result = mapper.map_forward("empty", &src).unwrap();
+        let result = mapper.map_forward("empty", &src).expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -1013,7 +1057,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("sole", "hello")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("out").map(|s| s.as_str()), Some("hello"));
     }
 
@@ -1031,7 +1077,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("words", "hello world")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert_eq!(result.get("second").map(|s| s.as_str()), Some("world"));
     }
 
@@ -1077,7 +1125,9 @@ mod tests {
             false,
         )]));
         let src = make_source(&[("a", "1")]);
-        let result = mapper.map_forward("test_spec", &src).unwrap();
+        let result = mapper
+            .map_forward("test_spec", &src)
+            .expect("should succeed");
         assert!(result.is_empty());
     }
 }

@@ -728,7 +728,7 @@ mod tests {
         shape_def.insert("type", "NodeShape");
 
         // In a real test, we'd create a PyDict from this HashMap
-        // let shape = validator.create_shape(&shape_def, None).unwrap();
+        // let shape = validator.create_shape(&shape_def, None).expect("should succeed");
         // assert_eq!(shape.id(), "ex:PersonShape");
     }
 

@@ -43,7 +43,7 @@
 //! ];
 //!
 //! let index = KdTree::bulk_load(points);
-//! let (nearest, dist) = index.nearest(1.5, 2.5).unwrap();
+//! let (nearest, dist) = index.nearest(1.5, 2.5).expect("should succeed");
 //! ```
 
 use crate::error::{GeoSparqlError, Result};
@@ -428,7 +428,7 @@ mod tests {
         ];
 
         let index = KdTree::bulk_load(points);
-        let (geom, dist) = index.nearest(1.0, 1.0).unwrap();
+        let (geom, dist) = index.nearest(1.0, 1.0).expect("nearest should succeed");
 
         match geom.geom {
             GeoGeometry::Point(p) => {

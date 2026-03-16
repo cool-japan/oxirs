@@ -373,6 +373,7 @@ impl BillingEngine {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
@@ -426,61 +427,55 @@ mod tests {
     }
 
     #[test]
-    fn test_billing_engine() {
+    fn test_billing_engine() -> Result<()> {
         let engine = BillingEngine::new(BillingPeriod::Daily);
 
         // Set pricing
         let pricing = PricingModel::PerRequest {
             cost_per_request: 0.01,
         };
-        engine.set_pricing("tenant1", pricing).unwrap();
+        engine.set_pricing("tenant1", pricing)?;
 
         // Record usage
-        let cost = engine
-            .record_usage("tenant1", TenantOperation::VectorSearch, 100)
-            .unwrap();
+        let cost = engine.record_usage("tenant1", TenantOperation::VectorSearch, 100)?;
         assert_eq!(cost, 1.0);
 
         // Get metrics
-        let metrics = engine.get_metrics("tenant1").unwrap();
+        let metrics = engine.get_metrics("tenant1")?;
         assert_eq!(metrics.total_cost, 1.0);
         assert_eq!(metrics.total_requests, 100);
 
         // Record more usage
-        engine
-            .record_usage("tenant1", TenantOperation::VectorInsert, 50)
-            .unwrap();
+        engine.record_usage("tenant1", TenantOperation::VectorInsert, 50)?;
 
-        let metrics = engine.get_metrics("tenant1").unwrap();
+        let metrics = engine.get_metrics("tenant1")?;
         assert_eq!(metrics.total_cost, 1.5);
         assert_eq!(metrics.total_requests, 150);
+        Ok(())
     }
 
     #[test]
-    fn test_usage_history() {
+    fn test_usage_history() -> Result<()> {
         let engine = BillingEngine::new(BillingPeriod::Daily);
 
         let pricing = PricingModel::PerRequest {
             cost_per_request: 0.01,
         };
-        engine.set_pricing("tenant1", pricing).unwrap();
+        engine.set_pricing("tenant1", pricing)?;
 
         // Record some usage
-        engine
-            .record_usage("tenant1", TenantOperation::VectorSearch, 100)
-            .unwrap();
-        engine
-            .record_usage("tenant1", TenantOperation::VectorInsert, 50)
-            .unwrap();
+        engine.record_usage("tenant1", TenantOperation::VectorSearch, 100)?;
+        engine.record_usage("tenant1", TenantOperation::VectorInsert, 50)?;
 
         // Get history
         let start = Utc::now() - Duration::hours(1);
         let end = Utc::now() + Duration::hours(1);
-        let history = engine.get_usage_history("tenant1", start, end).unwrap();
+        let history = engine.get_usage_history("tenant1", start, end)?;
 
         assert_eq!(history.len(), 2);
         assert_eq!(history[0].count, 100);
         assert_eq!(history[1].count, 50);
+        Ok(())
     }
 
     #[test]

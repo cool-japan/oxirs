@@ -690,11 +690,12 @@ mod tests {
             distinct: false,
         };
 
-        let (result, vars) = apply_aggregates(results, &[agg]).unwrap();
+        let (result, vars) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
         assert_eq!(result.len(), 1);
         assert_eq!(vars, vec!["count"]);
 
-        if let Term::Literal(lit) = result[0].get("count").unwrap() {
+        if let Term::Literal(lit) = result[0].get("count").expect("binding should exist") {
             assert_eq!(lit.value(), "3");
         } else {
             panic!("Expected literal");
@@ -716,10 +717,11 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
 
-        if let Term::Literal(lit) = result[0].get("sum").unwrap() {
-            let sum: f64 = lit.value().parse().unwrap();
+        if let Term::Literal(lit) = result[0].get("sum").expect("binding should exist") {
+            let sum: f64 = lit.value().parse().expect("parse should succeed");
             assert!((sum - 60.0).abs() < 0.0001);
         } else {
             panic!("Expected literal");
@@ -741,10 +743,11 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
 
-        if let Term::Literal(lit) = result[0].get("avg").unwrap() {
-            let avg: f64 = lit.value().parse().unwrap();
+        if let Term::Literal(lit) = result[0].get("avg").expect("binding should exist") {
+            let avg: f64 = lit.value().parse().expect("parse should succeed");
             assert!((avg - 20.0).abs() < 0.0001);
         } else {
             panic!("Expected literal");
@@ -767,9 +770,10 @@ mod tests {
             distinct: true, // DISTINCT
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
 
-        if let Term::Literal(lit) = result[0].get("count").unwrap() {
+        if let Term::Literal(lit) = result[0].get("count").expect("binding should exist") {
             assert_eq!(lit.value(), "3"); // Only 3 distinct values
         } else {
             panic!("Expected literal");
@@ -796,9 +800,10 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
 
-        if let Term::Literal(lit) = result[0].get("concat").unwrap() {
+        if let Term::Literal(lit) = result[0].get("concat").expect("binding should exist") {
             assert_eq!(lit.value(), "apple, banana, cherry");
         } else {
             panic!("Expected literal");
@@ -820,7 +825,8 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
 
         // SAMPLE should return at least one value
         assert!(result[0].get("sample").is_some());
@@ -854,7 +860,8 @@ mod tests {
             variables: vec!["category".to_string()],
         };
 
-        let (result, vars) = apply_aggregates_with_grouping(results, &[agg], &group_by).unwrap();
+        let (result, vars) = apply_aggregates_with_grouping(results, &[agg], &group_by)
+            .expect("aggregate operation should succeed");
 
         // Should have 2 groups: A and B
         assert_eq!(result.len(), 2);
@@ -862,9 +869,9 @@ mod tests {
 
         // Verify sums per category
         for binding in &result {
-            if let Term::Literal(cat) = binding.get("category").unwrap() {
-                if let Term::Literal(total) = binding.get("total").unwrap() {
-                    let total_val: f64 = total.value().parse().unwrap();
+            if let Term::Literal(cat) = binding.get("category").expect("binding should exist") {
+                if let Term::Literal(total) = binding.get("total").expect("binding should exist") {
+                    let total_val: f64 = total.value().parse().expect("parse should succeed");
                     if cat.value() == "A" {
                         assert!((total_val - 30.0).abs() < 0.0001); // 10 + 20
                     } else if cat.value() == "B" {
@@ -904,7 +911,8 @@ mod tests {
             },
         ];
 
-        let (result, vars) = apply_aggregates(results, &aggregates).unwrap();
+        let (result, vars) =
+            apply_aggregates(results, &aggregates).expect("aggregate operation should succeed");
         assert_eq!(result.len(), 1);
         assert_eq!(vars, vec!["count", "sum", "avg"]);
 
@@ -932,9 +940,10 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
-        if let Term::Literal(lit) = result[0].get("median").unwrap() {
-            let median: f64 = lit.value().parse().unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
+        if let Term::Literal(lit) = result[0].get("median").expect("binding should exist") {
+            let median: f64 = lit.value().parse().expect("parse should succeed");
             assert!((median - 5.0).abs() < 0.001);
         }
 
@@ -953,9 +962,10 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
-        if let Term::Literal(lit) = result[0].get("median").unwrap() {
-            let median: f64 = lit.value().parse().unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
+        if let Term::Literal(lit) = result[0].get("median").expect("binding should exist") {
+            let median: f64 = lit.value().parse().expect("parse should succeed");
             assert!((median - 5.0).abs() < 0.001); // (4 + 6) / 2 = 5
         }
     }
@@ -977,9 +987,10 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
-        if let Term::Literal(lit) = result[0].get("variance").unwrap() {
-            let variance: f64 = lit.value().parse().unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
+        if let Term::Literal(lit) = result[0].get("variance").expect("binding should exist") {
+            let variance: f64 = lit.value().parse().expect("parse should succeed");
             // Sample variance of [2,4,6,8] = 6.666...
             assert!((variance - 6.666666666666667).abs() < 0.001);
         }
@@ -1002,9 +1013,10 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
-        if let Term::Literal(lit) = result[0].get("stddev").unwrap() {
-            let stddev: f64 = lit.value().parse().unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
+        if let Term::Literal(lit) = result[0].get("stddev").expect("binding should exist") {
+            let stddev: f64 = lit.value().parse().expect("parse should succeed");
             // Std dev of [2,4,6,8] = sqrt(6.666...) = 2.582...
             assert!((stddev - 2.581988897471611).abs() < 0.001);
         }
@@ -1033,9 +1045,10 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results.clone(), &[agg]).unwrap();
-        if let Term::Literal(lit) = result[0].get("p50").unwrap() {
-            let p50: f64 = lit.value().parse().unwrap();
+        let (result, _) =
+            apply_aggregates(results.clone(), &[agg]).expect("aggregate operation should succeed");
+        if let Term::Literal(lit) = result[0].get("p50").expect("binding should exist") {
+            let p50: f64 = lit.value().parse().expect("parse should succeed");
             assert!((p50 - 5.5).abs() < 0.001);
         }
 
@@ -1047,9 +1060,10 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results.clone(), &[agg]).unwrap();
-        if let Term::Literal(lit) = result[0].get("p95").unwrap() {
-            let p95: f64 = lit.value().parse().unwrap();
+        let (result, _) =
+            apply_aggregates(results.clone(), &[agg]).expect("aggregate operation should succeed");
+        if let Term::Literal(lit) = result[0].get("p95").expect("binding should exist") {
+            let p95: f64 = lit.value().parse().expect("parse should succeed");
             assert!((p95 - 9.55).abs() < 0.01);
         }
 
@@ -1061,9 +1075,10 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
-        if let Term::Literal(lit) = result[0].get("p25").unwrap() {
-            let p25: f64 = lit.value().parse().unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
+        if let Term::Literal(lit) = result[0].get("p25").expect("binding should exist") {
+            let p25: f64 = lit.value().parse().expect("parse should succeed");
             assert!((p25 - 3.25).abs() < 0.01);
         }
     }
@@ -1104,16 +1119,18 @@ mod tests {
             variables: vec!["category".to_string()],
         };
 
-        let (result, _) = apply_aggregates_with_grouping(results, &[agg], &group_by).unwrap();
+        let (result, _) = apply_aggregates_with_grouping(results, &[agg], &group_by)
+            .expect("aggregate operation should succeed");
 
         // Should have 2 groups: A and B
         assert_eq!(result.len(), 2);
 
         // Verify medians per category
         for binding in &result {
-            if let Term::Literal(cat) = binding.get("category").unwrap() {
-                if let Term::Literal(median) = binding.get("median").unwrap() {
-                    let median_val: f64 = median.value().parse().unwrap();
+            if let Term::Literal(cat) = binding.get("category").expect("binding should exist") {
+                if let Term::Literal(median) = binding.get("median").expect("binding should exist")
+                {
+                    let median_val: f64 = median.value().parse().expect("parse should succeed");
                     if cat.value() == "A" {
                         // Median of [10, 20, 30] = 20
                         assert!((median_val - 20.0).abs() < 0.001);
@@ -1138,10 +1155,11 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
         // Should return 0.0 for empty dataset
-        if let Term::Literal(lit) = result[0].get("median").unwrap() {
-            let median: f64 = lit.value().parse().unwrap();
+        if let Term::Literal(lit) = result[0].get("median").expect("binding should exist") {
+            let median: f64 = lit.value().parse().expect("parse should succeed");
             assert_eq!(median, 0.0);
         }
 
@@ -1155,10 +1173,11 @@ mod tests {
             distinct: false,
         };
 
-        let (result, _) = apply_aggregates(results, &[agg]).unwrap();
+        let (result, _) =
+            apply_aggregates(results, &[agg]).expect("aggregate operation should succeed");
         // Should return 0.0 for single value
-        if let Term::Literal(lit) = result[0].get("variance").unwrap() {
-            let variance: f64 = lit.value().parse().unwrap();
+        if let Term::Literal(lit) = result[0].get("variance").expect("binding should exist") {
+            let variance: f64 = lit.value().parse().expect("parse should succeed");
             assert_eq!(variance, 0.0);
         }
     }

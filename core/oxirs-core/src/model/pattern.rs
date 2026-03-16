@@ -242,8 +242,8 @@ mod tests {
 
     #[test]
     fn test_pattern_matching() {
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("o");
 
         let triple = Triple::new(subject.clone(), predicate.clone(), object.clone());
@@ -262,14 +262,20 @@ mod tests {
 
         // Test variable match
         let pattern = TriplePattern::new(
-            Some(SubjectPattern::Variable(Variable::new("s").unwrap())),
-            Some(PredicatePattern::Variable(Variable::new("p").unwrap())),
-            Some(ObjectPattern::Variable(Variable::new("o").unwrap())),
+            Some(SubjectPattern::Variable(
+                Variable::new("s").expect("valid variable name"),
+            )),
+            Some(PredicatePattern::Variable(
+                Variable::new("p").expect("valid variable name"),
+            )),
+            Some(ObjectPattern::Variable(
+                Variable::new("o").expect("valid variable name"),
+            )),
         );
         assert!(pattern.matches(&triple));
 
         // Test non-match
-        let different_subject = NamedNode::new("http://example.org/different").unwrap();
+        let different_subject = NamedNode::new("http://example.org/different").expect("valid IRI");
         let pattern = TriplePattern::new(
             Some(SubjectPattern::NamedNode(different_subject)),
             None,

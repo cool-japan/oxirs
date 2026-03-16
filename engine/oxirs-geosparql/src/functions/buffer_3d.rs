@@ -527,8 +527,8 @@ mod tests {
     #[test]
     #[cfg(feature = "geos-backend")]
     fn test_buffer_3d_point() {
-        let geom = Geometry::from_wkt("POINT Z (1 2 3)").unwrap();
-        let buffered = buffer_3d(&geom, 10.0).unwrap();
+        let geom = Geometry::from_wkt("POINT Z (1 2 3)").expect("should succeed");
+        let buffered = buffer_3d(&geom, 10.0).expect("should succeed");
 
         assert!(buffered.is_3d());
         assert!(buffered.coord3d.has_z());
@@ -537,16 +537,16 @@ mod tests {
     #[test]
     #[cfg(feature = "geos-backend")]
     fn test_buffer_3d_with_params() {
-        let geom = Geometry::from_wkt("POINT Z (1 2 3)").unwrap();
+        let geom = Geometry::from_wkt("POINT Z (1 2 3)").expect("should succeed");
         let params = BufferParams3D::anisotropic(10.0, 5.0);
-        let buffered = buffer_3d_with_params(&geom, &params).unwrap();
+        let buffered = buffer_3d_with_params(&geom, &params).expect("should succeed");
 
         assert!(buffered.is_3d());
     }
 
     #[test]
     fn test_buffer_3d_requires_3d_geometry() {
-        let geom = Geometry::from_wkt("POINT (1 2)").unwrap();
+        let geom = Geometry::from_wkt("POINT (1 2)").expect("should succeed");
         let result = buffer_3d(&geom, 10.0);
 
         assert!(result.is_err());
@@ -558,8 +558,9 @@ mod tests {
 
     #[test]
     fn test_get_z_range() {
-        let geom = Geometry::from_wkt("LINESTRING Z (0 0 1, 1 1 5, 2 2 3)").unwrap();
-        let (z_min, z_max) = get_z_range(&geom).unwrap();
+        let geom =
+            Geometry::from_wkt("LINESTRING Z (0 0 1, 1 1 5, 2 2 3)").expect("should succeed");
+        let (z_min, z_max) = get_z_range(&geom).expect("should succeed");
 
         assert_relative_eq!(z_min, 1.0);
         assert_relative_eq!(z_max, 5.0);
@@ -567,29 +568,32 @@ mod tests {
 
     #[test]
     fn test_count_coords_point() {
-        let geom = Geometry::from_wkt("POINT Z (1 2 3)").unwrap();
-        let count = count_coords(&geom).unwrap();
+        let geom = Geometry::from_wkt("POINT Z (1 2 3)").expect("should succeed");
+        let count = count_coords(&geom).expect("should succeed");
         assert_eq!(count, 1);
     }
 
     #[test]
     fn test_count_coords_linestring() {
-        let geom = Geometry::from_wkt("LINESTRING Z (0 0 1, 1 1 2, 2 2 3)").unwrap();
-        let count = count_coords(&geom).unwrap();
+        let geom =
+            Geometry::from_wkt("LINESTRING Z (0 0 1, 1 1 2, 2 2 3)").expect("should succeed");
+        let count = count_coords(&geom).expect("should succeed");
         assert_eq!(count, 3);
     }
 
     #[test]
     fn test_count_coords_polygon() {
-        let geom = Geometry::from_wkt("POLYGON Z ((0 0 1, 1 0 2, 1 1 3, 0 1 4, 0 0 1))").unwrap();
-        let count = count_coords(&geom).unwrap();
+        let geom = Geometry::from_wkt("POLYGON Z ((0 0 1, 1 0 2, 1 1 3, 0 1 4, 0 0 1))")
+            .expect("should succeed");
+        let count = count_coords(&geom).expect("should succeed");
         assert_eq!(count, 5);
     }
 
     #[test]
     fn test_extract_all_coords() {
-        let geom = Geometry::from_wkt("LINESTRING Z (0 0 1, 1 1 2, 2 2 3)").unwrap();
-        let coords = extract_all_coords(&geom).unwrap();
+        let geom =
+            Geometry::from_wkt("LINESTRING Z (0 0 1, 1 1 2, 2 2 3)").expect("should succeed");
+        let coords = extract_all_coords(&geom).expect("should succeed");
 
         assert_eq!(coords.len(), 3);
         assert_relative_eq!(coords[0].x, 0.0);
@@ -615,8 +619,9 @@ mod tests {
 
     #[test]
     fn test_create_z_coords_average() {
-        let geom = Geometry::from_wkt("LINESTRING Z (0 0 1, 1 1 2, 2 2 3)").unwrap();
-        let z_values = create_z_coords_average(&geom, 1.0, 5.0).unwrap();
+        let geom =
+            Geometry::from_wkt("LINESTRING Z (0 0 1, 1 1 2, 2 2 3)").expect("should succeed");
+        let z_values = create_z_coords_average(&geom, 1.0, 5.0).expect("should succeed");
 
         assert_eq!(z_values.len(), 3);
         for &z in &z_values {
@@ -627,17 +632,18 @@ mod tests {
     #[test]
     fn test_z_interpolation_strategies() {
         // Use a linestring with 3 points where the middle point is closer to centroid
-        let geom = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 0 5, 2 0 10)").unwrap();
+        let geom =
+            Geometry::from_wkt("LINESTRING Z (0 0 0, 1 0 5, 2 0 10)").expect("should succeed");
 
         // Average strategy - all values should be the same
-        let z_avg = create_z_coords_average(&geom, 0.0, 10.0).unwrap();
+        let z_avg = create_z_coords_average(&geom, 0.0, 10.0).expect("should succeed");
         assert_eq!(z_avg.len(), 3);
         assert_relative_eq!(z_avg[0], 5.0);
         assert_relative_eq!(z_avg[1], 5.0);
         assert_relative_eq!(z_avg[2], 5.0);
 
         // Linear strategy - should vary based on position
-        let z_linear = create_z_coords_linear(&geom, 0.0, 10.0).unwrap();
+        let z_linear = create_z_coords_linear(&geom, 0.0, 10.0).expect("should succeed");
         assert_eq!(z_linear.len(), 3);
         // All points should be within expected range
         for &z in &z_linear {
@@ -645,7 +651,7 @@ mod tests {
         }
 
         // Smooth strategy - should vary based on distance from centroid
-        let z_smooth = create_z_coords_smooth(&geom, 0.0, 10.0).unwrap();
+        let z_smooth = create_z_coords_smooth(&geom, 0.0, 10.0).expect("should succeed");
         assert_eq!(z_smooth.len(), 3);
         // All points should be within expected range
         for &z in &z_smooth {

@@ -448,11 +448,11 @@ mod tests {
 
     fn create_test_pattern() -> AlgebraTriplePattern {
         AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("s").unwrap()),
+            subject: TermPattern::Variable(Variable::new("s").expect("valid variable name")),
             predicate: TermPattern::NamedNode(
-                NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap(),
+                NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI"),
             ),
-            object: TermPattern::Variable(Variable::new("o").unwrap()),
+            object: TermPattern::Variable(Variable::new("o").expect("valid variable name")),
         }
     }
 
@@ -480,12 +480,12 @@ mod tests {
     #[test]
     fn test_histogram_estimation() {
         let collector = AdvancedStatisticsCollector::new();
-        let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
+        let foaf_name = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI");
 
         let pattern = AlgebraTriplePattern {
-            subject: TermPattern::Variable(Variable::new("s").unwrap()),
+            subject: TermPattern::Variable(Variable::new("s").expect("valid variable name")),
             predicate: TermPattern::NamedNode(foaf_name.clone()),
-            object: TermPattern::Variable(Variable::new("o").unwrap()),
+            object: TermPattern::Variable(Variable::new("o").expect("valid variable name")),
         };
 
         // Record multiple observations
@@ -496,7 +496,7 @@ mod tests {
         // Estimate should be based on histogram
         let estimate = collector.estimate_cardinality(&pattern);
         assert!(estimate.is_some());
-        let est = estimate.unwrap();
+        let est = estimate.expect("estimate should be available");
         // Should be around median (500-600)
         assert!((400..=700).contains(&est));
     }

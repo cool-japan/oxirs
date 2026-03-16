@@ -322,10 +322,10 @@ mod tests {
         let monitor = SystemMonitor::new();
 
         // Update metrics to ensure system info is refreshed
-        monitor.update_metrics().await.unwrap();
+        monitor.update_metrics().await.expect("should succeed");
 
         // Should be able to get metrics
-        let metrics = monitor.get_metrics().await.unwrap();
+        let metrics = monitor.get_metrics().await.expect("should succeed");
 
         // Basic validation
         assert!(metrics.cpu_cores > 0);
@@ -338,7 +338,7 @@ mod tests {
     async fn test_memory_monitoring() {
         let monitor = SystemMonitor::new();
 
-        let memory_usage = monitor.get_memory_usage_mb().await.unwrap();
+        let memory_usage = monitor.get_memory_usage_mb().await.expect("should succeed");
 
         // Should have some memory usage (process should be using at least some memory)
         assert!(memory_usage >= 0.0);
@@ -349,9 +349,12 @@ mod tests {
         let monitor = SystemMonitor::new();
 
         // Update metrics to get CPU readings
-        monitor.update_metrics().await.unwrap();
+        monitor.update_metrics().await.expect("should succeed");
 
-        let cpu_usage = monitor.get_cpu_usage_percent().await.unwrap();
+        let cpu_usage = monitor
+            .get_cpu_usage_percent()
+            .await
+            .expect("should succeed");
 
         // CPU usage should be between 0 and 100
         assert!(cpu_usage >= 0.0);

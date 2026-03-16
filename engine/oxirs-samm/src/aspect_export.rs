@@ -496,21 +496,21 @@ mod tests {
     #[test]
     fn test_export_json_contains_name() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
         assert!(json.contains("\"TestAspect\""));
     }
 
     #[test]
     fn test_export_json_contains_version() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
         assert!(json.contains("\"1.0.0\""));
     }
 
     #[test]
     fn test_export_json_contains_properties() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
         assert!(json.contains("\"propA\""));
         assert!(json.contains("\"propB\""));
     }
@@ -518,28 +518,28 @@ mod tests {
     #[test]
     fn test_export_json_contains_operations() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
         assert!(json.contains("\"getStatus\""));
     }
 
     #[test]
     fn test_export_json_optional_flag() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
         assert!(json.contains("true") || json.contains("false"));
     }
 
     #[test]
     fn test_export_json_empty_aspect() {
         let a = ExportedAspect::new("Empty", "0.0.1", vec![], vec![]);
-        let json = AspectExporter::export_json(&a).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
         assert!(json.contains("\"Empty\""));
     }
 
     #[test]
     fn test_export_json_special_chars() {
         let a = ExportedAspect::new("With\"Quote", "1.0.0", vec![], vec![]);
-        let json = AspectExporter::export_json(&a).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
         assert!(json.contains("\\\"Quote"));
     }
 
@@ -548,32 +548,32 @@ mod tests {
     #[test]
     fn test_parse_json_name() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
-        let parsed = AspectExporter::parse_json(&json).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
+        let parsed = AspectExporter::parse_json(&json).expect("should succeed");
         assert_eq!(parsed.name, "TestAspect");
     }
 
     #[test]
     fn test_parse_json_version() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
-        let parsed = AspectExporter::parse_json(&json).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
+        let parsed = AspectExporter::parse_json(&json).expect("should succeed");
         assert_eq!(parsed.version, "1.0.0");
     }
 
     #[test]
     fn test_parse_json_properties_count() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
-        let parsed = AspectExporter::parse_json(&json).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
+        let parsed = AspectExporter::parse_json(&json).expect("should succeed");
         assert_eq!(parsed.properties.len(), 2);
     }
 
     #[test]
     fn test_parse_json_property_names() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
-        let parsed = AspectExporter::parse_json(&json).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
+        let parsed = AspectExporter::parse_json(&json).expect("should succeed");
         assert_eq!(parsed.properties[0].name, "propA");
         assert_eq!(parsed.properties[1].name, "propB");
     }
@@ -581,8 +581,8 @@ mod tests {
     #[test]
     fn test_parse_json_property_optional() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
-        let parsed = AspectExporter::parse_json(&json).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
+        let parsed = AspectExporter::parse_json(&json).expect("should succeed");
         assert!(!parsed.properties[0].optional);
         assert!(parsed.properties[1].optional);
     }
@@ -598,14 +598,14 @@ mod tests {
     #[test]
     fn test_roundtrip_json() {
         let a = sample_aspect();
-        let ok = AspectExporter::roundtrip(&a, ExportFormat::Json).unwrap();
+        let ok = AspectExporter::roundtrip(&a, ExportFormat::Json).expect("should succeed");
         assert!(ok);
     }
 
     #[test]
     fn test_roundtrip_json_empty() {
         let a = ExportedAspect::new("Empty", "1.0.0", vec![], vec![]);
-        let ok = AspectExporter::roundtrip(&a, ExportFormat::Json).unwrap();
+        let ok = AspectExporter::roundtrip(&a, ExportFormat::Json).expect("should succeed");
         assert!(ok);
     }
 
@@ -614,35 +614,35 @@ mod tests {
     #[test]
     fn test_export_yaml_contains_name() {
         let a = sample_aspect();
-        let yaml = AspectExporter::export_yaml(&a).unwrap();
+        let yaml = AspectExporter::export_yaml(&a).expect("should succeed");
         assert!(yaml.contains("TestAspect"));
     }
 
     #[test]
     fn test_export_yaml_contains_version() {
         let a = sample_aspect();
-        let yaml = AspectExporter::export_yaml(&a).unwrap();
+        let yaml = AspectExporter::export_yaml(&a).expect("should succeed");
         assert!(yaml.contains("1.0.0"));
     }
 
     #[test]
     fn test_export_yaml_properties_section() {
         let a = sample_aspect();
-        let yaml = AspectExporter::export_yaml(&a).unwrap();
+        let yaml = AspectExporter::export_yaml(&a).expect("should succeed");
         assert!(yaml.contains("properties:"));
     }
 
     #[test]
     fn test_export_yaml_operations_section() {
         let a = sample_aspect();
-        let yaml = AspectExporter::export_yaml(&a).unwrap();
+        let yaml = AspectExporter::export_yaml(&a).expect("should succeed");
         assert!(yaml.contains("operations:"));
     }
 
     #[test]
     fn test_roundtrip_yaml_no_error() {
         let a = sample_aspect();
-        let ok = AspectExporter::roundtrip(&a, ExportFormat::Yaml).unwrap();
+        let ok = AspectExporter::roundtrip(&a, ExportFormat::Yaml).expect("should succeed");
         assert!(ok);
     }
 
@@ -687,7 +687,7 @@ mod tests {
     #[test]
     fn test_roundtrip_text_no_error() {
         let a = sample_aspect();
-        let ok = AspectExporter::roundtrip(&a, ExportFormat::Text).unwrap();
+        let ok = AspectExporter::roundtrip(&a, ExportFormat::Text).expect("should succeed");
         assert!(ok);
     }
 
@@ -696,21 +696,21 @@ mod tests {
     #[test]
     fn test_export_dispatch_json() {
         let a = sample_aspect();
-        let s = AspectExporter::export(&a, ExportFormat::Json).unwrap();
+        let s = AspectExporter::export(&a, ExportFormat::Json).expect("should succeed");
         assert!(s.contains('{'));
     }
 
     #[test]
     fn test_export_dispatch_yaml() {
         let a = sample_aspect();
-        let s = AspectExporter::export(&a, ExportFormat::Yaml).unwrap();
+        let s = AspectExporter::export(&a, ExportFormat::Yaml).expect("should succeed");
         assert!(s.contains("name:"));
     }
 
     #[test]
     fn test_export_dispatch_text() {
         let a = sample_aspect();
-        let s = AspectExporter::export(&a, ExportFormat::Text).unwrap();
+        let s = AspectExporter::export(&a, ExportFormat::Text).expect("should succeed");
         assert!(s.contains("Aspect:"));
     }
 
@@ -762,14 +762,14 @@ mod tests {
     #[test]
     fn test_export_json_has_version() {
         let a = sample_aspect();
-        let json = AspectExporter::export_json(&a).unwrap();
+        let json = AspectExporter::export_json(&a).expect("should succeed");
         assert!(json.contains("1.0.0"));
     }
 
     #[test]
     fn test_export_yaml_has_version() {
         let a = sample_aspect();
-        let yaml = AspectExporter::export_yaml(&a).unwrap();
+        let yaml = AspectExporter::export_yaml(&a).expect("should succeed");
         assert!(yaml.contains("1.0.0"));
     }
 

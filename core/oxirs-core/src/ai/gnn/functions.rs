@@ -118,17 +118,17 @@ mod tests {
     fn test_rdf_graph_creation() {
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/person1").unwrap(),
-                NamedNode::new("http://example.org/name").unwrap(),
+                NamedNode::new("http://example.org/person1").expect("valid IRI"),
+                NamedNode::new("http://example.org/name").expect("valid IRI"),
                 Literal::new("Alice"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/person1").unwrap(),
-                NamedNode::new("http://example.org/age").unwrap(),
+                NamedNode::new("http://example.org/person1").expect("valid IRI"),
+                NamedNode::new("http://example.org/age").expect("valid IRI"),
                 Literal::new("30"),
             ),
         ];
-        let graph = RdfGraph::from_triples(&triples).unwrap();
+        let graph = RdfGraph::from_triples(&triples).expect("valid RDF triples");
         assert_eq!(graph.num_nodes, 3);
         assert_eq!(graph.num_edges, 2);
     }
@@ -148,18 +148,22 @@ mod tests {
         };
         let gcn = GraphConvolutionalNetwork::new(config);
         let triples = vec![Triple::new(
-            NamedNode::new("http://example.org/a").unwrap(),
-            NamedNode::new("http://example.org/rel").unwrap(),
-            NamedNode::new("http://example.org/b").unwrap(),
+            NamedNode::new("http://example.org/a").expect("valid IRI"),
+            NamedNode::new("http://example.org/rel").expect("valid IRI"),
+            NamedNode::new("http://example.org/b").expect("valid IRI"),
         )];
-        let graph = RdfGraph::from_triples(&triples).unwrap();
+        let graph = RdfGraph::from_triples(&triples).expect("valid RDF triples");
         let features = Array2::ones((graph.num_nodes, 10));
-        let output = gcn.forward(&graph, &features).await.unwrap();
+        let output = gcn
+            .forward(&graph, &features)
+            .await
+            .expect("forward pass should succeed");
         assert_eq!(output.shape(), &[graph.num_nodes, 5]);
     }
     #[test]
     fn test_activation_functions() {
-        let x = Array2::from_shape_vec((2, 2), vec![-1.0, 0.0, 1.0, 2.0]).unwrap();
+        let x =
+            Array2::from_shape_vec((2, 2), vec![-1.0, 0.0, 1.0, 2.0]).expect("valid array shape");
         let relu = apply_activation(&x, &ActivationFunction::ReLU);
         assert_eq!(relu[[0, 0]], 0.0);
         assert_eq!(relu[[1, 1]], 2.0);
@@ -195,19 +199,22 @@ mod tests {
         let graphsage = GraphSageNetwork::new(config);
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/a").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/b").unwrap(),
+                NamedNode::new("http://example.org/a").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/b").expect("valid IRI"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/b").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/c").unwrap(),
+                NamedNode::new("http://example.org/b").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/c").expect("valid IRI"),
             ),
         ];
-        let graph = RdfGraph::from_triples(&triples).unwrap();
+        let graph = RdfGraph::from_triples(&triples).expect("valid RDF triples");
         let features = Array2::ones((graph.num_nodes, 10));
-        let output = graphsage.forward(&graph, &features).await.unwrap();
+        let output = graphsage
+            .forward(&graph, &features)
+            .await
+            .expect("forward pass should succeed");
         assert_eq!(output.shape()[0], graph.num_nodes);
         assert_eq!(output.shape()[1], 5);
     }
@@ -220,7 +227,7 @@ mod tests {
         let neighbors = vec![neighbor1, neighbor2];
         let result = layer
             .aggregate_and_combine(&node_features, &neighbors)
-            .unwrap();
+            .expect("operation should succeed");
         assert_eq!(result.len(), 5);
     }
     #[test]
@@ -230,7 +237,9 @@ mod tests {
             Array1::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0]),
             Array1::from_vec(vec![2.0, 3.0, 4.0, 5.0, 6.0]),
         ];
-        let aggregated = layer.aggregate(&features).unwrap();
+        let aggregated = layer
+            .aggregate(&features)
+            .expect("aggregation should succeed");
         assert_eq!(aggregated.len(), 5);
         assert!((aggregated[0] - 1.5).abs() < 1e-5);
         assert!((aggregated[4] - 5.5).abs() < 1e-5);
@@ -242,7 +251,9 @@ mod tests {
             Array1::from_vec(vec![1.0, 5.0, 3.0, 2.0, 4.0]),
             Array1::from_vec(vec![2.0, 3.0, 4.0, 5.0, 1.0]),
         ];
-        let aggregated = layer.aggregate(&features).unwrap();
+        let aggregated = layer
+            .aggregate(&features)
+            .expect("aggregation should succeed");
         assert_eq!(aggregated.len(), 5);
         assert_eq!(aggregated[0], 2.0);
         assert_eq!(aggregated[1], 5.0);
@@ -261,23 +272,23 @@ mod tests {
         let graphsage = GraphSageNetwork::new(config);
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/a").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/b").unwrap(),
+                NamedNode::new("http://example.org/a").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/b").expect("valid IRI"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/b").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/c").unwrap(),
+                NamedNode::new("http://example.org/b").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/c").expect("valid IRI"),
             ),
         ];
-        let graph = RdfGraph::from_triples(&triples).unwrap();
+        let graph = RdfGraph::from_triples(&triples).expect("valid RDF triples");
         let source_nodes = vec![0, 1];
         let target_nodes = vec![1, 2];
         let predictions = graphsage
             .predict_links(&graph, &source_nodes, &target_nodes)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert_eq!(predictions.len(), 2);
         assert!(predictions[0] >= 0.0 && predictions[0] <= 1.0);
         assert!(predictions[1] >= 0.0 && predictions[1] <= 1.0);
@@ -288,7 +299,7 @@ mod tests {
             architecture: GnnArchitecture::GraphSage,
             ..Default::default()
         };
-        let gnn = create_gnn(config).unwrap();
+        let gnn = create_gnn(config).expect("GNN creation should succeed");
         assert!(gnn.get_parameters().is_ok());
     }
     #[test]
@@ -319,19 +330,22 @@ mod tests {
         let gat = GraphAttentionNetwork::new(config);
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/a").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/b").unwrap(),
+                NamedNode::new("http://example.org/a").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/b").expect("valid IRI"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/b").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/c").unwrap(),
+                NamedNode::new("http://example.org/b").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/c").expect("valid IRI"),
             ),
         ];
-        let graph = RdfGraph::from_triples(&triples).unwrap();
+        let graph = RdfGraph::from_triples(&triples).expect("valid RDF triples");
         let features = Array2::ones((graph.num_nodes, 10));
-        let output = gat.forward(&graph, &features).await.unwrap();
+        let output = gat
+            .forward(&graph, &features)
+            .await
+            .expect("forward pass should succeed");
         assert_eq!(output.shape()[0], graph.num_nodes);
         assert_eq!(output.shape()[1], 8);
     }
@@ -349,8 +363,10 @@ mod tests {
         let layer = GraphAttentionLayer::new(5, 4, 2);
         let features = Array2::ones((3, 5));
         let adj = Array2::from_shape_vec((3, 3), vec![1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0])
-            .unwrap();
-        let output = layer.forward(&features, &adj).unwrap();
+            .expect("operation should succeed");
+        let output = layer
+            .forward(&features, &adj)
+            .expect("forward pass should succeed");
         assert_eq!(output.shape(), &[3, 4]);
     }
     #[tokio::test]
@@ -366,23 +382,23 @@ mod tests {
         let gat = GraphAttentionNetwork::new(config);
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/a").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/b").unwrap(),
+                NamedNode::new("http://example.org/a").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/b").expect("valid IRI"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/b").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/c").unwrap(),
+                NamedNode::new("http://example.org/b").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/c").expect("valid IRI"),
             ),
         ];
-        let graph = RdfGraph::from_triples(&triples).unwrap();
+        let graph = RdfGraph::from_triples(&triples).expect("valid RDF triples");
         let source_nodes = vec![0, 1];
         let target_nodes = vec![1, 2];
         let predictions = gat
             .predict_links(&graph, &source_nodes, &target_nodes)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert_eq!(predictions.len(), 2);
         assert!(predictions[0] >= 0.0 && predictions[0] <= 1.0);
         assert!(predictions[1] >= 0.0 && predictions[1] <= 1.0);
@@ -393,7 +409,7 @@ mod tests {
             architecture: GnnArchitecture::GraphAttentionNetwork,
             ..Default::default()
         };
-        let gnn = create_gnn(config).unwrap();
+        let gnn = create_gnn(config).expect("GNN creation should succeed");
         assert!(gnn.get_parameters().is_ok());
     }
     #[tokio::test]
@@ -409,19 +425,22 @@ mod tests {
         let gat = GraphAttentionNetwork::new(config);
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/a").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/b").unwrap(),
+                NamedNode::new("http://example.org/a").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/b").expect("valid IRI"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/a").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/c").unwrap(),
+                NamedNode::new("http://example.org/a").expect("valid IRI"),
+                NamedNode::new("http://example.org/rel").expect("valid IRI"),
+                NamedNode::new("http://example.org/c").expect("valid IRI"),
             ),
         ];
-        let graph = RdfGraph::from_triples(&triples).unwrap();
+        let graph = RdfGraph::from_triples(&triples).expect("valid RDF triples");
         let features = Array2::ones((graph.num_nodes, 5));
-        let output = gat.forward(&graph, &features).await.unwrap();
+        let output = gat
+            .forward(&graph, &features)
+            .await
+            .expect("forward pass should succeed");
         assert_eq!(output.shape()[0], graph.num_nodes);
         for val in output.iter() {
             assert!(val.is_finite());

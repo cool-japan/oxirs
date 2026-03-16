@@ -881,6 +881,7 @@ pub struct AutoMLStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn test_automl_config_creation() {
@@ -905,9 +906,9 @@ mod tests {
     }
 
     #[test]
-    fn test_trial_generation() {
-        let optimizer = AutoMLOptimizer::with_default_config().unwrap();
-        let trials = optimizer.generate_optimization_trials().unwrap();
+    fn test_trial_generation() -> Result<()> {
+        let optimizer = AutoMLOptimizer::with_default_config()?;
+        let trials = optimizer.generate_optimization_trials()?;
         assert!(!trials.is_empty());
 
         // Check trial uniqueness
@@ -915,11 +916,12 @@ mod tests {
         for trial in &trials {
             assert!(trial_ids.insert(trial.trial_id.clone()));
         }
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_optimization_with_sample_data() {
-        let _optimizer = AutoMLOptimizer::with_default_config().unwrap();
+    async fn test_optimization_with_sample_data() -> Result<()> {
+        let _optimizer = AutoMLOptimizer::with_default_config()?;
 
         let training_data = vec![
             (
@@ -962,25 +964,26 @@ mod tests {
             ..Default::default()
         };
 
-        let optimizer = AutoMLOptimizer::new(config).unwrap();
+        let optimizer = AutoMLOptimizer::new(config)?;
         let results = optimizer
             .optimize_embeddings(&training_data, &validation_data, &test_queries)
             .await;
 
         // Test should complete without errors even if no trials complete
         assert!(results.is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_pareto_frontier_computation() {
-        let optimizer = AutoMLOptimizer::with_default_config().unwrap();
+    fn test_pareto_frontier_computation() -> Result<()> {
+        let optimizer = AutoMLOptimizer::with_default_config()?;
 
         let trial1 = OptimizationTrial {
             trial_id: "trial1".to_string(),
             embedding_strategy: EmbeddingStrategy::TfIdf,
             vector_dimension: 128,
             similarity_metric: SimilarityMetric::Cosine,
-            index_config: optimizer.generate_index_config().unwrap(),
+            index_config: optimizer.generate_index_config()?,
             hyperparameters: HashMap::new(),
             timestamp: 0,
         };
@@ -990,7 +993,7 @@ mod tests {
             embedding_strategy: EmbeddingStrategy::SentenceTransformer,
             vector_dimension: 256,
             similarity_metric: SimilarityMetric::Euclidean,
-            index_config: optimizer.generate_index_config().unwrap(),
+            index_config: optimizer.generate_index_config()?,
             hyperparameters: HashMap::new(),
             timestamp: 0,
         };
@@ -1028,11 +1031,12 @@ mod tests {
 
         let frontier = optimizer.compute_pareto_frontier(&results);
         assert_eq!(frontier.len(), 2); // Both trials should be on frontier
+        Ok(())
     }
 
     #[test]
-    fn test_recall_precision_computation() {
-        let optimizer = AutoMLOptimizer::with_default_config().unwrap();
+    fn test_recall_precision_computation() -> Result<()> {
+        let optimizer = AutoMLOptimizer::with_default_config()?;
 
         let retrieved = vec!["doc1".to_string(), "doc2".to_string(), "doc3".to_string()];
         let relevant = vec!["doc1".to_string(), "doc3".to_string(), "doc4".to_string()];
@@ -1042,15 +1046,17 @@ mod tests {
 
         assert_eq!(recall, 2.0 / 3.0); // 2 out of 3 relevant docs retrieved
         assert_eq!(precision, 2.0 / 3.0); // 2 out of 3 retrieved docs are relevant
+        Ok(())
     }
 
     #[test]
-    fn test_optimization_statistics() {
-        let optimizer = AutoMLOptimizer::with_default_config().unwrap();
+    fn test_optimization_statistics() -> Result<()> {
+        let optimizer = AutoMLOptimizer::with_default_config()?;
         let stats = optimizer.get_optimization_statistics();
 
         assert_eq!(stats.total_trials, 0);
         assert_eq!(stats.successful_trials, 0);
         assert!(stats.search_space_size > 0);
+        Ok(())
     }
 }

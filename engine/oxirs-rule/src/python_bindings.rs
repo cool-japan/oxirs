@@ -1029,17 +1029,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rule_engine_creation() {
-        let engine = PyRuleEngine::new(None, None).unwrap();
+    fn test_rule_engine_creation() -> anyhow::Result<()> {
+        let engine = PyRuleEngine::new(None, None)?;
         let stats = engine.get_performance_stats();
         assert_eq!(stats.total_inferences(), 100); // From placeholder data
+        Ok(())
     }
 
     #[test]
-    fn test_rule_parsing() {
+    fn test_rule_parsing() -> anyhow::Result<()> {
         let rule_text = "conclusion(X) :- premise(X).";
-        let rule = parse_datalog_rule(rule_text, None).unwrap();
+        let rule = parse_datalog_rule(rule_text, None)?;
         assert_eq!(rule.id(), "rule_1");
+        Ok(())
     }
 
     #[test]

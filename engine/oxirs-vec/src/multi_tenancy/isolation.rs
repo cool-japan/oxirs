@@ -356,6 +356,7 @@ impl NamespaceManager {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
@@ -414,60 +415,59 @@ mod tests {
     }
 
     #[test]
-    fn test_namespace_manager() {
+    fn test_namespace_manager() -> Result<()> {
         let strategy = IsolationStrategy::new(IsolationLevel::Namespace);
         let manager = NamespaceManager::new(strategy);
 
         // Register tenant
-        let prefix = manager.register_tenant("tenant1").unwrap();
+        let prefix = manager.register_tenant("tenant1")?;
         assert!(prefix.contains("tenant_tenant1"));
 
         // Get prefix
-        let retrieved_prefix = manager.get_prefix("tenant1").unwrap();
+        let retrieved_prefix = manager.get_prefix("tenant1")?;
         assert_eq!(prefix, retrieved_prefix);
 
         // Qualify key
-        let qualified = manager.qualify_key("tenant1", "vector123").unwrap();
+        let qualified = manager.qualify_key("tenant1", "vector123")?;
         assert!(qualified.starts_with(&prefix));
         assert!(qualified.contains("vector123"));
 
         // Validate access
-        assert!(manager.validate_access("tenant1", &qualified).unwrap());
-        assert!(!manager
-            .validate_access("tenant1", "other_tenant:key")
-            .unwrap());
+        let __val = manager.validate_access("tenant1", &qualified)?;
+        assert!(__val);
+        assert!(!manager.validate_access("tenant1", "other_tenant:key")?);
 
         // Extract tenant ID
-        let extracted = manager.extract_tenant_id(&qualified).unwrap();
+        let extracted = manager.extract_tenant_id(&qualified)?;
         assert_eq!(extracted, "tenant1");
 
         // Unregister tenant
-        manager.unregister_tenant("tenant1").unwrap();
+        manager.unregister_tenant("tenant1")?;
         assert!(manager.get_prefix("tenant1").is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_sub_namespaces() {
+    fn test_sub_namespaces() -> Result<()> {
         let strategy = IsolationStrategy::new(IsolationLevel::Namespace);
         let manager = NamespaceManager::new(strategy);
 
-        manager.register_tenant("tenant1").unwrap();
+        manager.register_tenant("tenant1")?;
 
         // Create sub-namespace
-        let sub = manager.create_sub_namespace("tenant1", "vectors").unwrap();
+        let sub = manager.create_sub_namespace("tenant1", "vectors")?;
         assert!(sub.contains("tenant_tenant1"));
         assert!(sub.contains("vectors"));
 
         // Create another sub-namespace
-        let sub2 = manager
-            .create_sub_namespace("tenant1", "embeddings")
-            .unwrap();
+        let sub2 = manager.create_sub_namespace("tenant1", "embeddings")?;
         assert!(sub2.contains("embeddings"));
         assert_ne!(sub, sub2);
+        Ok(())
     }
 
     #[test]
-    fn test_namespace_manager_errors() {
+    fn test_namespace_manager_errors() -> Result<()> {
         let strategy = IsolationStrategy::new(IsolationLevel::Namespace);
         let manager = NamespaceManager::new(strategy);
 
@@ -478,26 +478,28 @@ mod tests {
         assert!(manager.qualify_key("nonexistent", "key").is_err());
 
         // Registering same tenant twice should fail
-        manager.register_tenant("tenant1").unwrap();
+        manager.register_tenant("tenant1")?;
         assert!(manager.register_tenant("tenant1").is_err());
 
         // Unregistering non-existent tenant should fail
         assert!(manager.unregister_tenant("nonexistent").is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_list_namespaces() {
+    fn test_list_namespaces() -> Result<()> {
         let strategy = IsolationStrategy::new(IsolationLevel::Namespace);
         let manager = NamespaceManager::new(strategy);
 
-        assert_eq!(manager.list_namespaces().unwrap().len(), 0);
+        assert_eq!(manager.list_namespaces().expect("test value").len(), 0);
 
-        manager.register_tenant("tenant1").unwrap();
-        manager.register_tenant("tenant2").unwrap();
+        manager.register_tenant("tenant1")?;
+        manager.register_tenant("tenant2")?;
 
-        let namespaces = manager.list_namespaces().unwrap();
+        let namespaces = manager.list_namespaces()?;
         assert_eq!(namespaces.len(), 2);
         assert!(namespaces.contains(&"tenant1".to_string()));
         assert!(namespaces.contains(&"tenant2".to_string()));
+        Ok(())
     }
 }

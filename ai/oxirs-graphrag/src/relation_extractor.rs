@@ -356,7 +356,7 @@ mod tests {
         let mentions = ex.extract_entities(text);
         let alice = mentions.iter().find(|m| m.span.text.to_lowercase() == "alice");
         assert!(alice.is_some());
-        let alice = alice.unwrap();
+        let alice = alice.expect("should succeed");
         assert_eq!(&text[alice.span.start..alice.span.end].to_lowercase(), "alice");
     }
 
@@ -368,17 +368,17 @@ mod tests {
         let acme_mention = mentions.iter().find(|m| m.span.text.to_lowercase() == "acme");
         assert!(alice_mention.is_some());
         assert!(acme_mention.is_some());
-        assert_eq!(alice_mention.unwrap().entity_type, "Person");
-        assert_eq!(acme_mention.unwrap().entity_type, "Organization");
+        assert_eq!(alice_mention.expect("should succeed").entity_type, "Person");
+        assert_eq!(acme_mention.expect("should succeed").entity_type, "Organization");
     }
 
     #[test]
     fn test_extract_entities_linked_iri_set() {
         let ex = make_person_extractor();
         let mentions = ex.extract_entities("Alice is here.");
-        let alice = mentions.iter().find(|m| m.span.text.to_lowercase() == "alice").unwrap();
+        let alice = mentions.iter().find(|m| m.span.text.to_lowercase() == "alice").expect("should succeed");
         assert!(alice.linked_iri.is_some());
-        assert!(alice.linked_iri.as_ref().unwrap().contains("alice"));
+        assert!(alice.linked_iri.as_ref().expect("should succeed").contains("alice"));
     }
 
     #[test]

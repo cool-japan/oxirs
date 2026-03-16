@@ -200,11 +200,11 @@ mod tests {
         let training_data: Vec<Vec<f64>> = (0..20)
             .map(|i| vec![i as f64 * 0.1, i as f64 * 0.1])
             .collect();
-        detector.train(&training_data).unwrap();
+        detector.train(&training_data).expect("should succeed");
 
         // Test with novel point
         let test_data = vec![vec![100.0, 100.0]];
-        let result = detector.detect(&test_data).unwrap();
+        let result = detector.detect(&test_data).expect("should succeed");
 
         assert!(!result.novel_patterns.is_empty());
     }
@@ -215,11 +215,11 @@ mod tests {
 
         // Train on normal range
         let training: Vec<Vec<f64>> = (0..50).map(|i| vec![i as f64]).collect();
-        detector.train(&training).unwrap();
+        detector.train(&training).expect("should succeed");
 
         // Test with novel value
         let test_data = Array1::from_vec(vec![1000.0]);
-        let result = detector.detect_1d(&test_data).unwrap();
+        let result = detector.detect_1d(&test_data).expect("should succeed");
 
         assert!(!result.novel_patterns.is_empty());
     }

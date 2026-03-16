@@ -1226,20 +1226,20 @@ mod tests {
     #[tokio::test]
     async fn test_entity_extraction() {
         let config = KnowledgeExtractionConfig::default();
-        let mut engine = KnowledgeExtractionEngine::new(config).unwrap();
+        let mut engine = KnowledgeExtractionEngine::new(config).expect("should succeed");
 
         let text = "Dr. John Smith works at Microsoft Corp.";
         let result = engine.extract_knowledge(text).await;
 
         assert!(result.is_ok());
-        let knowledge = result.unwrap();
+        let knowledge = result.expect("should succeed");
         assert!(!knowledge.extracted_entities.is_empty());
     }
 
     #[test]
     fn test_canonicalize_entity() {
         let config = KnowledgeExtractionConfig::default();
-        let engine = KnowledgeExtractionEngine::new(config).unwrap();
+        let engine = KnowledgeExtractionEngine::new(config).expect("should succeed");
 
         assert_eq!(engine.canonicalize_entity("  John Smith  "), "john smith");
     }

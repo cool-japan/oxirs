@@ -371,6 +371,7 @@ impl Default for DiskAnnIndex {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use std::env;
 
@@ -382,131 +383,141 @@ mod tests {
     }
 
     #[test]
-    fn test_index_create() {
+    fn test_index_create() -> Result<()> {
         let dir = temp_dir();
         let config = DiskAnnConfig::default_config(3);
-        let index = DiskAnnIndex::new(config, &dir).unwrap();
+        let index = DiskAnnIndex::new(config, &dir)?;
 
-        assert_eq!(index.num_vectors().unwrap(), 0);
+        let __val = index.num_vectors()?;
+        assert_eq!(__val, 0);
         assert!(!index.is_built());
 
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_index_add_and_build() {
+    fn test_index_add_and_build() -> Result<()> {
         let dir = temp_dir();
         let config = DiskAnnConfig::default_config(3);
-        let mut index = DiskAnnIndex::new(config, &dir).unwrap();
+        let mut index = DiskAnnIndex::new(config, &dir)?;
 
-        index.add("v1".to_string(), vec![1.0, 0.0, 0.0]).unwrap();
-        index.add("v2".to_string(), vec![0.0, 1.0, 0.0]).unwrap();
-        index.add("v3".to_string(), vec![0.0, 0.0, 1.0]).unwrap();
+        index.add("v1".to_string(), vec![1.0, 0.0, 0.0])?;
+        index.add("v2".to_string(), vec![0.0, 1.0, 0.0])?;
+        index.add("v3".to_string(), vec![0.0, 0.0, 1.0])?;
 
-        let stats = index.build().unwrap();
+        let stats = index.build()?;
 
         assert_eq!(stats.num_vectors, 3);
         assert!(index.is_built());
-        assert_eq!(index.num_vectors().unwrap(), 3);
+        let __val = index.num_vectors()?;
+        assert_eq!(__val, 3);
 
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_index_search() {
+    fn test_index_search() -> Result<()> {
         let dir = temp_dir();
         let config = DiskAnnConfig::default_config(3);
-        let mut index = DiskAnnIndex::new(config, &dir).unwrap();
+        let mut index = DiskAnnIndex::new(config, &dir)?;
 
-        index.add("v1".to_string(), vec![1.0, 0.0, 0.0]).unwrap();
-        index.add("v2".to_string(), vec![0.0, 1.0, 0.0]).unwrap();
-        index.add("v3".to_string(), vec![0.0, 0.0, 1.0]).unwrap();
+        index.add("v1".to_string(), vec![1.0, 0.0, 0.0])?;
+        index.add("v2".to_string(), vec![0.0, 1.0, 0.0])?;
+        index.add("v3".to_string(), vec![0.0, 0.0, 1.0])?;
 
-        index.build().unwrap();
+        index.build()?;
 
         let query = vec![1.0, 0.1, 0.0];
-        let results = index.search(&query, 2).unwrap();
+        let results = index.search(&query, 2)?;
 
         assert!(!results.neighbors.is_empty());
         assert!(results.neighbors.len() <= 2);
 
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_index_dimension_mismatch() {
+    fn test_index_dimension_mismatch() -> Result<()> {
         let dir = temp_dir();
         std::fs::remove_dir_all(&dir).ok(); // Clean up if exists
         let config = DiskAnnConfig::default_config(3);
-        let mut index = DiskAnnIndex::new(config, &dir).unwrap();
+        let mut index = DiskAnnIndex::new(config, &dir)?;
 
         let result = index.add("v1".to_string(), vec![1.0, 2.0]); // Wrong dimension
         assert!(result.is_err());
 
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_search_before_build() {
+    fn test_search_before_build() -> Result<()> {
         let dir = temp_dir();
         let config = DiskAnnConfig::default_config(3);
-        let index = DiskAnnIndex::new(config, &dir).unwrap();
+        let index = DiskAnnIndex::new(config, &dir)?;
 
         let query = vec![1.0, 0.0, 0.0];
         let result = index.search(&query, 1);
 
         assert!(result.is_err());
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_add_after_build() {
+    fn test_add_after_build() -> Result<()> {
         let dir = temp_dir();
         let config = DiskAnnConfig::default_config(3);
-        let mut index = DiskAnnIndex::new(config, &dir).unwrap();
+        let mut index = DiskAnnIndex::new(config, &dir)?;
 
-        index.add("v1".to_string(), vec![1.0, 0.0, 0.0]).unwrap();
-        index.build().unwrap();
+        index.add("v1".to_string(), vec![1.0, 0.0, 0.0])?;
+        index.build()?;
 
         let result = index.add("v2".to_string(), vec![0.0, 1.0, 0.0]);
         assert!(result.is_err());
 
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_index_metadata() {
+    fn test_index_metadata() -> Result<()> {
         let dir = temp_dir();
         let config = DiskAnnConfig::default_config(3);
-        let mut index = DiskAnnIndex::new(config.clone(), &dir).unwrap();
+        let mut index = DiskAnnIndex::new(config.clone(), &dir)?;
 
-        index.add("v1".to_string(), vec![1.0, 0.0, 0.0]).unwrap();
-        index.build().unwrap();
+        index.add("v1".to_string(), vec![1.0, 0.0, 0.0])?;
+        index.build()?;
 
-        let metadata = index.metadata().unwrap();
+        let metadata = index.metadata()?;
         assert_eq!(metadata.num_vectors, 1);
         assert_eq!(metadata.dimension, 3);
 
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_index_clear() {
+    fn test_index_clear() -> Result<()> {
         let dir = temp_dir();
         std::fs::remove_dir_all(&dir).ok(); // Clean up if exists
         let config = DiskAnnConfig::default_config(3);
-        let mut index = DiskAnnIndex::new(config, &dir).unwrap();
+        let mut index = DiskAnnIndex::new(config, &dir)?;
 
-        index.add("v1".to_string(), vec![1.0, 0.0, 0.0]).unwrap();
-        index.build().unwrap();
+        index.add("v1".to_string(), vec![1.0, 0.0, 0.0])?;
+        index.build()?;
 
         assert!(index.is_built());
 
-        index.clear().unwrap();
+        index.clear()?;
 
         assert!(!index.is_built());
 
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 
     #[test]
@@ -519,14 +530,15 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_build() {
+    fn test_empty_build() -> Result<()> {
         let dir = temp_dir();
         let config = DiskAnnConfig::default_config(3);
-        let mut index = DiskAnnIndex::new(config, &dir).unwrap();
+        let mut index = DiskAnnIndex::new(config, &dir)?;
 
         let result = index.build();
         assert!(result.is_err());
 
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 }

@@ -29,7 +29,7 @@
 //! let paths = finder.bfs_paths("Alice", "ACME", 3);
 //! assert!(!paths.is_empty());
 //! assert_eq!(paths[0].nodes[0], "Alice");
-//! assert_eq!(*paths[0].nodes.last().unwrap(), "ACME");
+//! assert_eq!(*paths[0].nodes.last().expect("should succeed"), "ACME");
 //! ```
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -546,14 +546,18 @@ mod tests {
     #[test]
     fn test_shortest_path_direct() {
         let finder = default_finder();
-        let path = finder.shortest_path("Alice", "Bob").unwrap();
+        let path = finder
+            .shortest_path("Alice", "Bob")
+            .expect("should succeed");
         assert_eq!(path.hop_count, 1);
     }
 
     #[test]
     fn test_shortest_path_two_hops() {
         let finder = default_finder();
-        let path = finder.shortest_path("Alice", "ACME").unwrap();
+        let path = finder
+            .shortest_path("Alice", "ACME")
+            .expect("should succeed");
         assert_eq!(path.hop_count, 2);
     }
 
@@ -763,7 +767,9 @@ mod tests {
         let paths = finder.bfs_paths("Alice", "Berlin", 4);
         if !paths.is_empty() {
             let stats = finder.stats(&paths);
-            assert!(stats.min_hops.unwrap() <= stats.max_hops.unwrap());
+            assert!(
+                stats.min_hops.expect("should succeed") <= stats.max_hops.expect("should succeed")
+            );
         }
     }
 

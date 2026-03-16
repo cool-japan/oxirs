@@ -832,7 +832,7 @@ mod tests {
         let r = SubgraphExtractor::extract(&g, "A", &cfg);
         let edge = r.edges.iter().find(|e| e.from == "A" && e.to == "B");
         assert!(edge.is_some());
-        assert!((edge.unwrap().weight - 2.5).abs() < 1e-10);
+        assert!((edge.expect("should succeed").weight - 2.5).abs() < 1e-10);
     }
 
     #[test]

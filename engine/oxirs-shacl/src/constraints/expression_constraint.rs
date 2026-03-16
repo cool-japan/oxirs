@@ -1544,7 +1544,7 @@ mod extended_expression_tests {
         assert!(result
             .message
             .as_deref()
-            .unwrap()
+            .expect("should succeed")
             .contains("Expression constraint failed"));
     }
 }

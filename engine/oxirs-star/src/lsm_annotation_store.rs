@@ -480,11 +480,14 @@ impl LsmAnnotationStore {
 
         // Insert into memtable
         {
-            let mut memtable = self.memtable.write().expect("lock poisoned");
+            let mut memtable = self.memtable.write().unwrap_or_else(|e| e.into_inner());
             memtable.insert(key, annotation);
 
             // Update statistics
-            self.stats.write().expect("lock poisoned").total_writes += 1;
+            self.stats
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .total_writes += 1;
 
             // Check if memtable needs flushing
             if memtable.size_bytes() >= self.config.memtable_size_threshold {
@@ -506,34 +509,49 @@ impl LsmAnnotationStore {
         let span = span!(Level::DEBUG, "lsm_get");
         let _enter = span.enter();
 
-        self.stats.write().expect("lock poisoned").total_reads += 1;
+        self.stats
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .total_reads += 1;
 
         // Check memtable first
         {
-            let memtable = self.memtable.read().expect("lock poisoned");
+            let memtable = self.memtable.read().unwrap_or_else(|e| e.into_inner());
             if let Some(annotation) = memtable.get(key) {
-                self.stats.write().expect("lock poisoned").memtable_hits += 1;
+                self.stats
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .memtable_hits += 1;
                 return Ok(Some(annotation.clone()));
             }
         }
 
         // Check immutable memtables
         {
-            let immutable = self.immutable_memtables.read().expect("lock poisoned");
+            let immutable = self
+                .immutable_memtables
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
             for mem in immutable.iter().rev() {
                 if let Some(annotation) = mem.get(key) {
-                    self.stats.write().expect("lock poisoned").memtable_hits += 1;
+                    self.stats
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .memtable_hits += 1;
                     return Ok(Some(annotation.clone()));
                 }
             }
         }
 
         // Check SSTables level by level
-        let sstables = self.sstables.read().expect("lock poisoned");
+        let sstables = self.sstables.read().unwrap_or_else(|e| e.into_inner());
         for level_tables in sstables.iter() {
             for sstable in level_tables.iter().rev() {
                 if let Some(annotation) = sstable.get(key)? {
-                    self.stats.write().expect("lock poisoned").sstable_hits += 1;
+                    self.stats
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .sstable_hits += 1;
                     return Ok(Some(annotation));
                 }
             }
@@ -549,7 +567,7 @@ impl LsmAnnotationStore {
 
         // Swap memtable with new one
         let old_memtable = {
-            let mut memtable = self.memtable.write().expect("lock poisoned");
+            let mut memtable = self.memtable.write().unwrap_or_else(|e| e.into_inner());
 
             std::mem::replace(&mut *memtable, MemTable::new())
         };
@@ -562,7 +580,10 @@ impl LsmAnnotationStore {
 
         // Get next SSTable ID
         let sstable_id = {
-            let mut id = self.next_sstable_id.write().expect("lock poisoned");
+            let mut id = self
+                .next_sstable_id
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             let current = *id;
             *id += 1;
             current
@@ -580,13 +601,13 @@ impl LsmAnnotationStore {
 
         // Add to L0
         {
-            let mut sstables = self.sstables.write().expect("lock poisoned");
+            let mut sstables = self.sstables.write().unwrap_or_else(|e| e.into_inner());
             sstables[0].push(sstable.clone());
         }
 
         // Update statistics
         {
-            let mut stats = self.stats.write().expect("lock poisoned");
+            let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.flush_count += 1;
             stats.bytes_written += sstable.file_size;
         }
@@ -604,7 +625,7 @@ impl LsmAnnotationStore {
 
     /// Check if compaction is needed and trigger it
     fn maybe_compact(&mut self) -> StarResult<()> {
-        let sstables = self.sstables.read().expect("lock poisoned");
+        let sstables = self.sstables.read().unwrap_or_else(|e| e.into_inner());
 
         // Check each level
         for level in 0..self.config.max_levels - 1 {
@@ -631,7 +652,7 @@ impl LsmAnnotationStore {
 
         // Get SSTables to compact
         let tables_to_compact: Vec<SSTable> = {
-            let sstables = self.sstables.read().expect("lock poisoned");
+            let sstables = self.sstables.read().unwrap_or_else(|e| e.into_inner());
             sstables[level]
                 .iter()
                 .take(self.config.compaction_batch_size)
@@ -670,7 +691,10 @@ impl LsmAnnotationStore {
         }
 
         let sstable_id = {
-            let mut id = self.next_sstable_id.write().expect("lock poisoned");
+            let mut id = self
+                .next_sstable_id
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             let current = *id;
             *id += 1;
             current
@@ -687,7 +711,7 @@ impl LsmAnnotationStore {
 
         // Update SSTable list
         {
-            let mut sstables = self.sstables.write().expect("lock poisoned");
+            let mut sstables = self.sstables.write().unwrap_or_else(|e| e.into_inner());
 
             // Remove compacted SSTables
             let compact_ids: Vec<u64> = tables_to_compact.iter().map(|t| t.id).collect();
@@ -706,7 +730,7 @@ impl LsmAnnotationStore {
 
         // Update statistics
         {
-            let mut stats = self.stats.write().expect("lock poisoned");
+            let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.compaction_count += 1;
         }
 
@@ -722,19 +746,22 @@ impl LsmAnnotationStore {
 
     /// Get statistics
     pub fn statistics(&self) -> LsmStatistics {
-        self.stats.read().expect("lock poisoned").clone()
+        self.stats.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Get current memtable size
     pub fn memtable_size(&self) -> usize {
-        self.memtable.read().expect("lock poisoned").size_bytes()
+        self.memtable
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .size_bytes()
     }
 
     /// Get number of SSTables per level
     pub fn sstable_counts(&self) -> Vec<usize> {
         self.sstables
             .read()
-            .expect("lock poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .iter()
             .map(|level| level.len())
             .collect()

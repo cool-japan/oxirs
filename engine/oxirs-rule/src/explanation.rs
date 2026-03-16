@@ -47,7 +47,7 @@
 //! let fact_id = explainer.record_assertion(fact.clone());
 //!
 //! let facts = vec![fact];
-//! let results = engine.forward_chain(&facts).unwrap();
+//! let results = engine.forward_chain(&facts).expect("should succeed");
 //!
 //! // Record the derived fact
 //! let target = RuleAtom::Triple {
@@ -63,7 +63,7 @@
 //!     DerivationMethod::ForwardChaining
 //! );
 //!
-//! let explanation = explainer.explain_why(&target).unwrap();
+//! let explanation = explainer.explain_why(&target).expect("should succeed");
 //! println!("Explanation: {}", explanation);
 //! ```
 
@@ -662,7 +662,7 @@ mod tests {
     use crate::Term;
 
     #[test]
-    fn test_record_assertion() {
+    fn test_record_assertion() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         let fact = RuleAtom::Triple {
@@ -674,8 +674,9 @@ mod tests {
         let id = engine.record_assertion(fact.clone());
         assert_eq!(id, 0);
 
-        let step = engine.derivations.get(&id).unwrap();
+        let step = engine.derivations.get(&id).ok_or("expected Some value")?;
         assert_eq!(step.method, DerivationMethod::Asserted);
+        Ok(())
     }
 
     #[test]
@@ -713,7 +714,7 @@ mod tests {
     }
 
     #[test]
-    fn test_explain_why() {
+    fn test_explain_why() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         let fact = RuleAtom::Triple {
@@ -724,13 +725,14 @@ mod tests {
 
         engine.record_assertion(fact.clone());
 
-        let explanation = engine.explain_why(&fact).unwrap();
+        let explanation = engine.explain_why(&fact)?;
         assert_eq!(explanation.steps.len(), 1);
         assert_eq!(explanation.steps[0].method, DerivationMethod::Asserted);
+        Ok(())
     }
 
     #[test]
-    fn test_justification() {
+    fn test_justification() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         let premise = RuleAtom::Triple {
@@ -760,9 +762,10 @@ mod tests {
             DerivationMethod::ForwardChaining,
         );
 
-        let explanation = engine.explain_why(&derived).unwrap();
+        let explanation = engine.explain_why(&derived)?;
         assert!(!explanation.justification.axioms.is_empty());
         assert!(!explanation.justification.rules.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -781,7 +784,7 @@ mod tests {
     }
 
     #[test]
-    fn test_confidence_asserted_fact() {
+    fn test_confidence_asserted_fact() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         let fact = RuleAtom::Triple {
@@ -791,14 +794,15 @@ mod tests {
         };
 
         engine.record_assertion(fact.clone());
-        let explanation = engine.explain_why(&fact).unwrap();
+        let explanation = engine.explain_why(&fact)?;
 
         // Asserted facts should have confidence of 1.0
         assert_eq!(explanation.confidence, 1.0);
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_single_derivation() {
+    fn test_confidence_single_derivation() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         let premise = RuleAtom::Triple {
@@ -828,7 +832,7 @@ mod tests {
             DerivationMethod::ForwardChaining,
         );
 
-        let explanation = engine.explain_why(&derived).unwrap();
+        let explanation = engine.explain_why(&derived)?;
 
         // Single derivation should have high confidence (>0.8)
         assert!(
@@ -842,10 +846,11 @@ mod tests {
             "Expected confidence < 1.0, got {}",
             explanation.confidence
         );
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_chain_depth() {
+    fn test_confidence_chain_depth() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         // Create a chain: fact1 -> fact2 -> fact3
@@ -889,7 +894,7 @@ mod tests {
             DerivationMethod::ForwardChaining,
         );
 
-        let explanation = engine.explain_why(&fact3).unwrap();
+        let explanation = engine.explain_why(&fact3)?;
 
         // Longer chain should have lower confidence (depth-2 chain)
         // Adjusted threshold based on actual calculation (0.95^2 depth penalty + other factors)
@@ -898,10 +903,11 @@ mod tests {
             "Expected confidence < 0.905 for depth-2 chain, got {}",
             explanation.confidence
         );
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_different_methods() {
+    fn test_confidence_different_methods() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         let premise = RuleAtom::Triple {
@@ -946,8 +952,8 @@ mod tests {
             DerivationMethod::Swrl,
         );
 
-        let rdfs_explanation = engine.explain_why(&rdfs_derived).unwrap();
-        let swrl_explanation = engine.explain_why(&swrl_derived).unwrap();
+        let rdfs_explanation = engine.explain_why(&rdfs_derived)?;
+        let swrl_explanation = engine.explain_why(&swrl_derived)?;
 
         // RDFS should have higher confidence than SWRL
         assert!(
@@ -956,10 +962,11 @@ mod tests {
             rdfs_explanation.confidence,
             swrl_explanation.confidence
         );
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_rule_complexity() {
+    fn test_confidence_rule_complexity() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         // Simple rule (1 premise)
@@ -1023,8 +1030,8 @@ mod tests {
             DerivationMethod::ForwardChaining,
         );
 
-        let simple_explanation = engine.explain_why(&simple_derived).unwrap();
-        let complex_explanation = engine.explain_why(&complex_derived).unwrap();
+        let simple_explanation = engine.explain_why(&simple_derived)?;
+        let complex_explanation = engine.explain_why(&complex_derived)?;
 
         // Note: Complex rule has higher axiom ratio (6/7 vs 1/2) which can outweigh
         // the complexity penalty. This test verifies that the complexity penalty exists
@@ -1044,10 +1051,11 @@ mod tests {
             "Simple confidence ({}) should be > 0.9",
             simple_explanation.confidence
         );
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_axiom_ratio() {
+    fn test_confidence_axiom_ratio() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         // High axiom ratio (2 axioms, 1 derived)
@@ -1085,7 +1093,7 @@ mod tests {
             DerivationMethod::ForwardChaining,
         );
 
-        let explanation = engine.explain_why(&derived).unwrap();
+        let explanation = engine.explain_why(&derived)?;
 
         // High axiom ratio should give good confidence
         assert!(
@@ -1093,10 +1101,11 @@ mod tests {
             "Expected confidence > 0.85 with high axiom ratio, got {}",
             explanation.confidence
         );
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_bounds() {
+    fn test_confidence_bounds() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ExplanationEngine::new();
 
         let fact = RuleAtom::Triple {
@@ -1106,7 +1115,7 @@ mod tests {
         };
 
         engine.record_assertion(fact.clone());
-        let explanation = engine.explain_why(&fact).unwrap();
+        let explanation = engine.explain_why(&fact)?;
 
         // Confidence should always be in [0.0, 1.0]
         assert!(
@@ -1119,5 +1128,6 @@ mod tests {
             "Confidence {} is above 1.0",
             explanation.confidence
         );
+        Ok(())
     }
 }

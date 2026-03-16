@@ -689,7 +689,7 @@ mod tests {
     #[test]
     fn test_rl_agent_creation() {
         let config = RlConfig::default();
-        let agent = RlValidationAgent::new(config).unwrap();
+        let agent = RlValidationAgent::new(config).expect("should succeed");
 
         assert_eq!(agent.config.state_dim, 64);
         assert_eq!(agent.config.action_dim, 10);
@@ -700,7 +700,7 @@ mod tests {
         let network = QNetwork::new(10, vec![20, 20], 5);
         let state = Array1::zeros(10);
 
-        let output = network.forward(&state).unwrap();
+        let output = network.forward(&state).expect("should succeed");
         assert_eq!(output.len(), 5);
     }
 
@@ -723,7 +723,7 @@ mod tests {
     #[test]
     fn test_action_selection() {
         let config = RlConfig::default();
-        let mut agent = RlValidationAgent::new(config).unwrap();
+        let mut agent = RlValidationAgent::new(config).expect("should succeed");
 
         let state = ValidationState {
             validation_stats: ValidationStats::default(),
@@ -735,7 +735,7 @@ mod tests {
             timestamp: Utc::now(),
         };
 
-        let action = agent.select_action(&state).unwrap();
+        let action = agent.select_action(&state).expect("should succeed");
         // Action should be one of the valid variants (any of the 10 types)
         // Just verify it's a valid enum variant by pattern matching
         match action {
@@ -755,7 +755,7 @@ mod tests {
     #[test]
     fn test_reward_computation() {
         let config = RlConfig::default();
-        let agent = RlValidationAgent::new(config).unwrap();
+        let agent = RlValidationAgent::new(config).expect("should succeed");
 
         let prev_state = ValidationState {
             validation_stats: ValidationStats {

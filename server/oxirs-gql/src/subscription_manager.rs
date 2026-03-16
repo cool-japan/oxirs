@@ -363,8 +363,8 @@ mod tests {
             empty_vars(),
             EventFilter::new(),
         )
-        .unwrap();
-        let sub = m.get("s1").unwrap();
+        .expect("should succeed");
+        let sub = m.get("s1").expect("should succeed");
         assert_eq!(sub.id, "s1");
         assert_eq!(sub.status, SubscriptionStatus::Active);
         assert_eq!(sub.event_count, 0);
@@ -374,7 +374,7 @@ mod tests {
     fn test_subscribe_duplicate_error() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         let r = m.subscribe("s1", "op", empty_vars(), EventFilter::new());
         assert_eq!(r, Err(SubError::AlreadyExists("s1".to_string())));
     }
@@ -391,8 +391,8 @@ mod tests {
     fn test_unsubscribe() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
-        m.unsubscribe("s1").unwrap();
+            .expect("should succeed");
+        m.unsubscribe("s1").expect("should succeed");
         assert!(m.get("s1").is_none());
     }
 
@@ -409,11 +409,17 @@ mod tests {
     fn test_pause_and_resume() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
-        m.pause("s1").unwrap();
-        assert_eq!(m.get("s1").unwrap().status, SubscriptionStatus::Paused);
-        m.resume("s1").unwrap();
-        assert_eq!(m.get("s1").unwrap().status, SubscriptionStatus::Active);
+            .expect("should succeed");
+        m.pause("s1").expect("should succeed");
+        assert_eq!(
+            m.get("s1").expect("should succeed").status,
+            SubscriptionStatus::Paused
+        );
+        m.resume("s1").expect("should succeed");
+        assert_eq!(
+            m.get("s1").expect("should succeed").status,
+            SubscriptionStatus::Active
+        );
     }
 
     #[test]
@@ -434,9 +440,12 @@ mod tests {
     fn test_complete() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
-        m.complete("s1").unwrap();
-        assert_eq!(m.get("s1").unwrap().status, SubscriptionStatus::Completed);
+            .expect("should succeed");
+        m.complete("s1").expect("should succeed");
+        assert_eq!(
+            m.get("s1").expect("should succeed").status,
+            SubscriptionStatus::Completed
+        );
     }
 
     #[test]
@@ -451,7 +460,7 @@ mod tests {
     fn test_publish_delivers_to_active() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         let events = m.publish_event("{\"data\":1}", "op", &empty_vars());
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].subscription_id, "s1");
@@ -463,8 +472,8 @@ mod tests {
     fn test_publish_does_not_deliver_to_paused() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
-        m.pause("s1").unwrap();
+            .expect("should succeed");
+        m.pause("s1").expect("should succeed");
         let events = m.publish_event("payload", "op", &empty_vars());
         assert!(events.is_empty());
     }
@@ -473,8 +482,8 @@ mod tests {
     fn test_publish_does_not_deliver_to_completed() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
-        m.complete("s1").unwrap();
+            .expect("should succeed");
+        m.complete("s1").expect("should succeed");
         let events = m.publish_event("payload", "op", &empty_vars());
         assert!(events.is_empty());
     }
@@ -483,17 +492,17 @@ mod tests {
     fn test_publish_increments_event_count() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         m.publish_event("e1", "op", &empty_vars());
         m.publish_event("e2", "op", &empty_vars());
-        assert_eq!(m.get("s1").unwrap().event_count, 2);
+        assert_eq!(m.get("s1").expect("should succeed").event_count, 2);
     }
 
     #[test]
     fn test_publish_sequence_increments() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         let e1 = m.publish_event("e1", "op", &empty_vars());
         let e2 = m.publish_event("e2", "op", &empty_vars());
         assert_eq!(e1[0].sequence, 1);
@@ -504,9 +513,9 @@ mod tests {
     fn test_publish_multiple_subscribers() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         m.subscribe("s2", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         let events = m.publish_event("payload", "op", &empty_vars());
         assert_eq!(events.len(), 2);
     }
@@ -522,7 +531,7 @@ mod tests {
             empty_vars(),
             EventFilter::with_operation("targetOp"),
         )
-        .unwrap();
+        .expect("should succeed");
         // Non-matching op
         let e1 = m.publish_event("p", "otherOp", &empty_vars());
         assert!(e1.is_empty());
@@ -535,7 +544,8 @@ mod tests {
     fn test_filter_by_variable() {
         let mut m = mgr();
         let filter = EventFilter::new().require_variable("userId", "42");
-        m.subscribe("s1", "op", empty_vars(), filter).unwrap();
+        m.subscribe("s1", "op", empty_vars(), filter)
+            .expect("should succeed");
         // No variables
         let e1 = m.publish_event("p", "op", &empty_vars());
         assert!(e1.is_empty());
@@ -559,13 +569,13 @@ mod tests {
     fn test_active_subscriptions() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         m.subscribe("s2", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         m.subscribe("s3", "op", empty_vars(), EventFilter::new())
-            .unwrap();
-        m.pause("s2").unwrap();
-        m.complete("s3").unwrap();
+            .expect("should succeed");
+        m.pause("s2").expect("should succeed");
+        m.complete("s3").expect("should succeed");
         let active = m.active_subscriptions();
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].id, "s1");
@@ -577,10 +587,10 @@ mod tests {
     fn test_cleanup_completed() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         m.subscribe("s2", "op", empty_vars(), EventFilter::new())
-            .unwrap();
-        m.complete("s1").unwrap();
+            .expect("should succeed");
+        m.complete("s1").expect("should succeed");
         m.cleanup_completed();
         assert!(m.get("s1").is_none());
         assert!(m.get("s2").is_some());
@@ -600,16 +610,16 @@ mod tests {
     fn test_stats_mixed() {
         let mut m = mgr();
         m.subscribe("s1", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         m.subscribe("s2", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         m.subscribe("s3", "op", empty_vars(), EventFilter::new())
-            .unwrap();
+            .expect("should succeed");
         m.subscribe("s4", "op", empty_vars(), EventFilter::new())
-            .unwrap();
-        m.pause("s2").unwrap();
-        m.complete("s3").unwrap();
-        m.set_error("s4", "boom").unwrap();
+            .expect("should succeed");
+        m.pause("s2").expect("should succeed");
+        m.complete("s3").expect("should succeed");
+        m.set_error("s4", "boom").expect("should succeed");
         let s = m.stats();
         assert_eq!(s.total, 4);
         assert_eq!(s.active, 1);

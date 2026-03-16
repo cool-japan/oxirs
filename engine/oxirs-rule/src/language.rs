@@ -48,11 +48,11 @@
 //! "#;
 //!
 //! let mut parser = RuleLanguageParser::new();
-//! let rules = parser.parse(source).unwrap();
+//! let rules = parser.parse(source).expect("should succeed");
 //!
 //! // Serialize back to text
 //! let serializer = RuleLanguageSerializer::new();
-//! let output = serializer.serialize(&rules).unwrap();
+//! let output = serializer.serialize(&rules).expect("should succeed");
 //! ```
 
 use crate::{Rule, RuleAtom, Term};
@@ -835,36 +835,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_lexer_basic() {
+    fn test_lexer_basic() -> Result<(), Box<dyn std::error::Error>> {
         let mut lexer = Lexer::new("rule if then");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = lexer.tokenize()?;
 
         assert_eq!(tokens[0], Token::Rule);
         assert_eq!(tokens[1], Token::If);
         assert_eq!(tokens[2], Token::Then);
+        Ok(())
     }
 
     #[test]
-    fn test_lexer_variable() {
+    fn test_lexer_variable() -> Result<(), Box<dyn std::error::Error>> {
         let mut lexer = Lexer::new("?x ?person");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = lexer.tokenize()?;
 
         assert_eq!(tokens[0], Token::Variable("x".to_string()));
         assert_eq!(tokens[1], Token::Variable("person".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_lexer_operators() {
+    fn test_lexer_operators() -> Result<(), Box<dyn std::error::Error>> {
         let mut lexer = Lexer::new("> < !=");
-        let tokens = lexer.tokenize().unwrap();
+        let tokens = lexer.tokenize()?;
 
         assert_eq!(tokens[0], Token::GreaterThan);
         assert_eq!(tokens[1], Token::LessThan);
         assert_eq!(tokens[2], Token::NotEqual);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_simple_rule() {
+    fn test_parse_simple_rule() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 rule "test" {
   if {
@@ -877,16 +880,17 @@ rule "test" {
 "#;
 
         let mut parser = RuleLanguageParser::new();
-        let rules = parser.parse(source).unwrap();
+        let rules = parser.parse(source)?;
 
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].name, "test");
         assert_eq!(rules[0].body.len(), 1);
         assert_eq!(rules[0].head.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_comparison() {
+    fn test_parse_comparison() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 rule "age_check" {
   if {
@@ -900,7 +904,7 @@ rule "age_check" {
 "#;
 
         let mut parser = RuleLanguageParser::new();
-        let rules = parser.parse(source).unwrap();
+        let rules = parser.parse(source)?;
 
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].body.len(), 2);
@@ -909,10 +913,11 @@ rule "age_check" {
             RuleAtom::GreaterThan { .. } => {}
             _ => panic!("Expected GreaterThan atom"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_serialize_rule() {
+    fn test_serialize_rule() -> Result<(), Box<dyn std::error::Error>> {
         let rule = Rule {
             name: "test".to_string(),
             body: vec![RuleAtom::Triple {
@@ -928,15 +933,16 @@ rule "age_check" {
         };
 
         let serializer = RuleLanguageSerializer::new();
-        let output = serializer.serialize(&[rule]).unwrap();
+        let output = serializer.serialize(&[rule])?;
 
         assert!(output.contains("rule \"test\""));
         assert!(output.contains("if {"));
         assert!(output.contains("then {"));
+        Ok(())
     }
 
     #[test]
-    fn test_roundtrip() {
+    fn test_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 rule "roundtrip" {
   if {
@@ -949,15 +955,16 @@ rule "roundtrip" {
 "#;
 
         let mut parser = RuleLanguageParser::new();
-        let rules = parser.parse(source).unwrap();
+        let rules = parser.parse(source)?;
 
         let serializer = RuleLanguageSerializer::new();
-        let output = serializer.serialize(&rules).unwrap();
+        let output = serializer.serialize(&rules)?;
 
         // Parse the serialized output
-        let rules2 = parser.parse(&output).unwrap();
+        let rules2 = parser.parse(&output)?;
 
         assert_eq!(rules.len(), rules2.len());
         assert_eq!(rules[0].name, rules2[0].name);
+        Ok(())
     }
 }

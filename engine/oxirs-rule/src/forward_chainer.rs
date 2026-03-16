@@ -324,21 +324,23 @@ mod tests {
     }
 
     #[test]
-    fn test_match_pattern_variable_binds() {
+    fn test_match_pattern_variable_binds() -> Result<(), Box<dyn std::error::Error>> {
         let fact = Fact::new("Alice", "rdf:type", "Person");
         let pattern = pat(Some("?x"), Some("rdf:type"), Some("Person"));
         let result = ForwardChainer::match_pattern(&pattern, &fact, &Binding::new());
         assert!(result.is_some());
-        let bindings = result.unwrap();
+        let bindings = result.ok_or("expected Some value")?;
         assert_eq!(bindings.get("x"), Some(&"Alice".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_match_pattern_variable_conflict() {
+    fn test_match_pattern_variable_conflict() -> Result<(), Box<dyn std::error::Error>> {
         let fact = Fact::new("Alice", "knows", "Bob");
         let pattern = pat(Some("?x"), Some("knows"), Some("?x")); // x must be same in s and o
         let result = ForwardChainer::match_pattern(&pattern, &fact, &Binding::new());
         assert!(result.is_none()); // Alice != Bob
+        Ok(())
     }
 
     #[test]
@@ -350,13 +352,14 @@ mod tests {
     }
 
     #[test]
-    fn test_match_pattern_existing_binding_consistent() {
+    fn test_match_pattern_existing_binding_consistent() -> Result<(), Box<dyn std::error::Error>> {
         let fact = Fact::new("Alice", "knows", "Bob");
         let mut existing = Binding::new();
         existing.insert("x".to_string(), "Alice".to_string());
         let pattern = pat(Some("?x"), Some("knows"), Some("?y"));
         let result = ForwardChainer::match_pattern(&pattern, &fact, &existing);
         assert!(result.is_some());
+        Ok(())
     }
 
     // ------ match_body ------
@@ -368,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn test_match_body_single_pattern() {
+    fn test_match_body_single_pattern() -> Result<(), Box<dyn std::error::Error>> {
         let facts = vec![
             Fact::new("Alice", "rdf:type", "Person"),
             Fact::new("Bob", "rdf:type", "Person"),
@@ -376,10 +379,11 @@ mod tests {
         let patterns = vec![pat(Some("?x"), Some("rdf:type"), Some("Person"))];
         let results = ForwardChainer::match_body(&patterns, &facts, &Binding::new());
         assert_eq!(results.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_match_body_two_patterns_join() {
+    fn test_match_body_two_patterns_join() -> Result<(), Box<dyn std::error::Error>> {
         let facts = vec![
             Fact::new("Alice", "rdf:type", "Person"),
             Fact::new("Person", "rdfs:subClassOf", "Agent"),
@@ -393,12 +397,13 @@ mod tests {
         let b = &results[0];
         assert_eq!(b.get("x"), Some(&"Alice".to_string()));
         assert_eq!(b.get("super"), Some(&"Agent".to_string()));
+        Ok(())
     }
 
     // ------ apply_head ------
 
     #[test]
-    fn test_apply_head_basic() {
+    fn test_apply_head_basic() -> Result<(), Box<dyn std::error::Error>> {
         let mut bindings = Binding::new();
         bindings.insert("x".to_string(), "Alice".to_string());
         bindings.insert("super".to_string(), "Agent".to_string());
@@ -406,17 +411,19 @@ mod tests {
         let head = RuleHead::new("?x", "rdf:type", "?super");
         let result = ForwardChainer::apply_head(&head, &bindings);
         assert!(result.is_some());
-        let fact = result.unwrap();
+        let fact = result.ok_or("expected Some value")?;
         assert_eq!(fact.subject, "Alice");
         assert_eq!(fact.object, "Agent");
+        Ok(())
     }
 
     #[test]
-    fn test_apply_head_unbound_variable() {
+    fn test_apply_head_unbound_variable() -> Result<(), Box<dyn std::error::Error>> {
         let bindings = Binding::new();
         let head = RuleHead::new("?x", "rdf:type", "Person");
         let result = ForwardChainer::apply_head(&head, &bindings);
         assert!(result.is_none());
+        Ok(())
     }
 
     #[test]
@@ -430,7 +437,7 @@ mod tests {
     // ------ step / run ------
 
     #[test]
-    fn test_step_derives_new_fact() {
+    fn test_step_derives_new_fact() -> Result<(), Box<dyn std::error::Error>> {
         let mut fc = ForwardChainer::new();
         fc.add_fact(Fact::new("Alice", "rdf:type", "Person"));
         fc.add_rule(Rule::new(
@@ -444,10 +451,11 @@ mod tests {
         assert!(fc
             .fact_set
             .contains(&Fact::new("Alice", "rdf:type", "Agent")));
+        Ok(())
     }
 
     #[test]
-    fn test_step_no_new_facts_on_second_call() {
+    fn test_step_no_new_facts_on_second_call() -> Result<(), Box<dyn std::error::Error>> {
         let mut fc = ForwardChainer::new();
         fc.add_fact(Fact::new("Alice", "rdf:type", "Person"));
         fc.add_rule(Rule::new(
@@ -458,10 +466,11 @@ mod tests {
         fc.step();
         let n = fc.step();
         assert_eq!(n, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_run_fixpoint() {
+    fn test_run_fixpoint() -> Result<(), Box<dyn std::error::Error>> {
         let mut fc = ForwardChainer::new();
         fc.add_fact(Fact::new("Alice", "rdf:type", "Person"));
         fc.add_rule(Rule::new(
@@ -471,10 +480,11 @@ mod tests {
         ));
         let total = fc.run(100);
         assert_eq!(total, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_transitive_closure() {
+    fn test_transitive_closure() -> Result<(), Box<dyn std::error::Error>> {
         // rdfs:subClassOf* closure
         let mut fc = ForwardChainer::new();
         fc.add_fact(Fact::new("Person", "rdfs:subClassOf", "Agent"));
@@ -495,10 +505,11 @@ mod tests {
         assert!(fc
             .fact_set
             .contains(&Fact::new("Employee", "rdfs:subClassOf", "Agent")));
+        Ok(())
     }
 
     #[test]
-    fn test_rdfs_domain_entailment() {
+    fn test_rdfs_domain_entailment() -> Result<(), Box<dyn std::error::Error>> {
         // RDFS: if P has domain D and X P Y then X rdf:type D
         let mut fc = ForwardChainer::new();
         fc.add_fact(Fact::new("knows", "rdfs:domain", "Person"));
@@ -518,10 +529,11 @@ mod tests {
         assert!(fc
             .fact_set
             .contains(&Fact::new("Alice", "rdf:type", "Person")));
+        Ok(())
     }
 
     #[test]
-    fn test_rdfs_range_entailment() {
+    fn test_rdfs_range_entailment() -> Result<(), Box<dyn std::error::Error>> {
         // RDFS: if P has range R and X P Y then Y rdf:type R
         let mut fc = ForwardChainer::new();
         fc.add_fact(Fact::new("knows", "rdfs:range", "Person"));
@@ -541,10 +553,11 @@ mod tests {
         assert!(fc
             .fact_set
             .contains(&Fact::new("Bob", "rdf:type", "Person")));
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_rules() {
+    fn test_multiple_rules() -> Result<(), Box<dyn std::error::Error>> {
         let mut fc = ForwardChainer::new();
         fc.add_fact(Fact::new("Alice", "rdf:type", "Employee"));
         fc.add_fact(Fact::new("Employee", "rdfs:subClassOf", "Person"));
@@ -564,10 +577,11 @@ mod tests {
         assert!(fc
             .fact_set
             .contains(&Fact::new("Alice", "rdf:type", "Person")));
+        Ok(())
     }
 
     #[test]
-    fn test_max_iterations_limit() {
+    fn test_max_iterations_limit() -> Result<(), Box<dyn std::error::Error>> {
         let mut fc = ForwardChainer::new();
         fc.add_fact(Fact::new("a", "type", "A"));
         // Rule produces one new fact
@@ -580,10 +594,11 @@ mod tests {
         let total = fc.run(0);
         assert_eq!(total, 0);
         assert_eq!(fc.fact_count(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_no_infinite_loop_cycle() {
+    fn test_no_infinite_loop_cycle() -> Result<(), Box<dyn std::error::Error>> {
         // Symmetric rule: if A knows B then B knows A
         // Should terminate because symmetric facts are added only once
         let mut fc = ForwardChainer::new();
@@ -598,6 +613,7 @@ mod tests {
         let total = fc.run(1000);
         // Only one new fact: Bob knows Alice
         assert_eq!(total, 1);
+        Ok(())
     }
 
     #[test]

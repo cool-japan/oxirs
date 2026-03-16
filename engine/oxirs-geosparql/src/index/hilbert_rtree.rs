@@ -441,7 +441,7 @@ mod tests {
         let index = HilbertRTree::new();
         let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
 
-        let id = index.insert(geom).unwrap();
+        let id = index.insert(geom).expect("insert should succeed");
         assert_eq!(index.len(), 1);
         assert!(id > 0);
     }
@@ -469,13 +469,13 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(1.0, 1.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(5.0, 5.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(10.0, 10.0))))
-            .unwrap();
+            .expect("should succeed");
 
         let results = index.query_bbox(0.0, 0.0, 6.0, 6.0);
         assert_eq!(results.len(), 2);
@@ -487,12 +487,12 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(5.0, 5.0))))
-            .unwrap();
+            .expect("should succeed");
 
-        let (geom, _dist) = index.nearest(1.0, 1.0).unwrap();
+        let (geom, _dist) = index.nearest(1.0, 1.0).expect("nearest should succeed");
 
         match geom.geom {
             GeoGeometry::Point(p) => {
@@ -509,10 +509,10 @@ mod tests {
 
         let id = index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0))))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(index.len(), 1);
 
-        let removed = index.remove(id).unwrap();
+        let removed = index.remove(id).expect("remove should succeed");
         assert!(removed);
         assert_eq!(index.len(), 0);
     }

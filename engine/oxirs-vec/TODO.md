@@ -1,6 +1,6 @@
 # OxiRS Vec - TODO
 
-*Version: 0.2.1 | Last Updated: 2026-03-05*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -28,7 +28,7 @@ OxiRS Vec provides comprehensive vector search infrastructure for semantic simil
 - **Write-Ahead Logging** - Crash recovery with WAL support
 - **Persistence** - Zstd compression, incremental checkpointing
 - **Monitoring** - Performance metrics, alerting, health monitoring
-- **683 tests passing** with zero warnings
+- **1598 tests passing** with zero warnings
 
 ### Key Capabilities
 
@@ -60,9 +60,9 @@ Production-ready guides available in `/docs`:
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ HNSW, IVF, PQ, SQ, LSH, NSG, DiskANN, learned indexes
 - ✅ 20+ distance metrics, GPU acceleration, hybrid search, multi-modal
-- ✅ 683 tests passing
+- ✅ 1598 tests passing
 
-### v0.2.1 - Current Release (March 5, 2026)
+### v0.2.2 - Current Release (March 16, 2026)
 - ✅ GPU-based index building
 - ✅ Multi-GPU load balancing
 - ✅ Enhanced CUDA kernel optimization
@@ -86,4 +86,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Vec v0.2.1 - Vector search infrastructure*
+*OxiRS Vec v0.2.2 - Vector search infrastructure*

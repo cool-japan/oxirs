@@ -587,7 +587,9 @@ mod tests {
         };
 
         let analyzer = InterpretabilityAnalyzer::new(config);
-        let analysis = analyzer.similarity_analysis("e1", &embeddings).unwrap();
+        let analysis = analyzer
+            .similarity_analysis("e1", &embeddings)
+            .expect("should succeed");
 
         assert_eq!(analysis.entity, "e1");
         assert_eq!(analysis.similar_entities.len(), 2);
@@ -610,7 +612,9 @@ mod tests {
         };
 
         let analyzer = InterpretabilityAnalyzer::new(config);
-        let importance = analyzer.feature_importance("e4", &embeddings).unwrap();
+        let importance = analyzer
+            .feature_importance("e4", &embeddings)
+            .expect("should succeed");
 
         assert_eq!(importance.entity, "e4");
         assert!(!importance.important_features.is_empty());
@@ -629,7 +633,7 @@ mod tests {
 
         let cf = analyzer
             .counterfactual_explanation("e1", "e2", &embeddings)
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(cf.original, "e1");
         assert_eq!(cf.target, "e2");
@@ -653,7 +657,7 @@ mod tests {
         let analyzer = InterpretabilityAnalyzer::new(config);
         let nn = analyzer
             .nearest_neighbors_analysis("e1", &embeddings)
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(nn.entity, "e1");
         assert_eq!(nn.neighbors.len(), 2);
@@ -670,7 +674,9 @@ mod tests {
         let config = InterpretabilityConfig::default();
         let analyzer = InterpretabilityAnalyzer::new(config);
 
-        let report = analyzer.generate_report("e1", &embeddings).unwrap();
+        let report = analyzer
+            .generate_report("e1", &embeddings)
+            .expect("should succeed");
 
         assert!(report.contains("Interpretability Report"));
         assert!(report.contains("Similarity Analysis"));

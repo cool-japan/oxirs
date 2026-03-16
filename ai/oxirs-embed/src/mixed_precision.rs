@@ -413,7 +413,9 @@ mod tests {
         let trainer = MixedPrecisionTrainer::new(config);
 
         let scaled_grads = array![1024.0, 2048.0, 512.0];
-        let unscaled = trainer.unscale_gradients(&scaled_grads).unwrap();
+        let unscaled = trainer
+            .unscale_gradients(&scaled_grads)
+            .expect("should succeed");
 
         // Should be divided by scale (1024.0)
         assert!((unscaled[0] - 1.0).abs() < 1e-5);
@@ -434,7 +436,7 @@ mod tests {
 
         // Large gradients that exceed threshold
         let grads = array![10.0, 10.0, 10.0];
-        let clipped = trainer.unscale_gradients(&grads).unwrap();
+        let clipped = trainer.unscale_gradients(&grads).expect("should succeed");
 
         let norm = clipped.dot(&clipped).sqrt();
         assert!(norm <= config.grad_clip_threshold + 1e-5);
@@ -480,7 +482,9 @@ mod tests {
         let grads = array![0.1, 0.2, 0.3];
         let lr = 0.1;
 
-        trainer.update_parameters(&mut params, &grads, lr).unwrap();
+        trainer
+            .update_parameters(&mut params, &grads, lr)
+            .expect("should succeed");
 
         // params should be updated: params -= lr * grads
         assert!((params[0] - 0.99).abs() < 1e-5);

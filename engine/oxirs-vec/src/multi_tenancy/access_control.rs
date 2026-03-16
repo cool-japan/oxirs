@@ -283,6 +283,7 @@ impl Default for AccessControl {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
@@ -358,29 +359,23 @@ mod tests {
     }
 
     #[test]
-    fn test_access_control_manager() {
+    fn test_access_control_manager() -> Result<()> {
         let ac = AccessControl::new();
 
         // Create default policy
-        ac.create_default_policy("tenant1").unwrap();
+        ac.create_default_policy("tenant1")?;
 
         // Get policy and modify
-        let mut policy = ac.get_policy("tenant1").unwrap();
+        let mut policy = ac.get_policy("tenant1")?;
         policy.assign_role("user1", "readonly");
         policy.assign_role("user2", "admin");
-        ac.set_policy(policy).unwrap();
+        ac.set_policy(policy)?;
 
         // Check permissions
-        assert!(ac
-            .check_permission("tenant1", "user1", Permission::Read)
-            .unwrap());
-        assert!(!ac
-            .check_permission("tenant1", "user1", Permission::Write)
-            .unwrap());
+        assert!(ac.check_permission("tenant1", "user1", Permission::Read)?);
+        assert!(!ac.check_permission("tenant1", "user1", Permission::Write)?);
 
-        assert!(ac
-            .check_permission("tenant1", "user2", Permission::Admin)
-            .unwrap());
+        assert!(ac.check_permission("tenant1", "user2", Permission::Admin)?);
 
         // Authorize operations
         assert!(ac
@@ -392,15 +387,16 @@ mod tests {
         assert!(ac
             .authorize("tenant1", "user2", Permission::Write, None)
             .is_ok());
+        Ok(())
     }
 
     #[test]
-    fn test_authorize_with_ip() {
+    fn test_authorize_with_ip() -> Result<()> {
         let ac = AccessControl::new();
         let mut policy = AccessPolicy::new("tenant1");
         policy.assign_role("user1", "readonly");
         policy.ip_whitelist.push("192.168.1.1".to_string());
-        ac.set_policy(policy).unwrap();
+        ac.set_policy(policy)?;
 
         // Should succeed with allowed IP
         assert!(ac
@@ -411,6 +407,7 @@ mod tests {
         assert!(ac
             .authorize("tenant1", "user1", Permission::Read, Some("10.0.0.1"))
             .is_err());
+        Ok(())
     }
 
     #[test]

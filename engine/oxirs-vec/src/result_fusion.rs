@@ -999,9 +999,10 @@ pub struct FusionQualityMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
-    fn test_combsum_fusion() {
+    fn test_combsum_fusion() -> Result<()> {
         let fusion_engine = ResultFusionEngine::new();
 
         let source1 = SourceResults {
@@ -1066,7 +1067,7 @@ mod tests {
             weight: None,
         };
 
-        let result = fusion_engine.fuse_results(vec![source1, source2]).unwrap();
+        let result = fusion_engine.fuse_results(vec![source1, source2])?;
 
         assert_eq!(result.results.len(), 3); // doc1, doc2, doc3
         assert_eq!(result.fusion_stats.source_count, 2);
@@ -1075,10 +1076,11 @@ mod tests {
         // doc1 should have highest score (fusion of 0.9 and 0.8)
         assert_eq!(result.results[0].resource, "doc1");
         assert!(result.results[0].score > result.results[1].score);
+        Ok(())
     }
 
     #[test]
-    fn test_rrf_fusion() {
+    fn test_rrf_fusion() -> Result<()> {
         let config = FusionConfig {
             fusion_algorithm: FusionAlgorithm::RRF,
             ..Default::default()
@@ -1096,14 +1098,15 @@ mod tests {
             vec![("doc2".to_string(), 0.8), ("doc3".to_string(), 0.6)],
         );
 
-        let result = fusion_engine.fuse_results(vec![source1, source2]).unwrap();
+        let result = fusion_engine.fuse_results(vec![source1, source2])?;
 
         assert!(!result.results.is_empty());
         assert_eq!(result.fusion_stats.unique_resources, 3);
+        Ok(())
     }
 
     #[test]
-    fn test_score_normalization() {
+    fn test_score_normalization() -> Result<()> {
         let config = FusionConfig {
             normalization_strategy: ScoreNormalizationStrategy::MinMax,
             ..Default::default()
@@ -1119,12 +1122,13 @@ mod tests {
             ],
         );
 
-        let result = fusion_engine.fuse_results(vec![source]).unwrap();
+        let result = fusion_engine.fuse_results(vec![source])?;
 
         // After min-max normalization, scores should be in [0, 1]
         for res in &result.results {
             assert!(res.score >= 0.0 && res.score <= 1.0);
         }
+        Ok(())
     }
 
     #[test]

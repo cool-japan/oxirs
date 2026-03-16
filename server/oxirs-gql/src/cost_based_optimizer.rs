@@ -938,7 +938,7 @@ mod tests {
         let plan = optimizer.optimize(query).await;
 
         assert!(plan.is_ok());
-        let plan = plan.unwrap();
+        let plan = plan.expect("should succeed");
         assert!(!plan.operations.is_empty());
         assert!(plan.total_cost > 0.0);
     }
@@ -949,7 +949,10 @@ mod tests {
         let optimizer = CostBasedOptimizer::new(config);
 
         let query = "{ test }";
-        let plans = optimizer.generate_alternative_plans(query).await.unwrap();
+        let plans = optimizer
+            .generate_alternative_plans(query)
+            .await
+            .expect("should succeed");
 
         assert_eq!(plans.len(), 5);
         assert!(plans.iter().any(|p| p.strategy == PlanStrategy::Sequential));
@@ -974,7 +977,10 @@ mod tests {
         plan3.total_cost = 75.0;
 
         let plans = vec![plan1, plan2.clone(), plan3];
-        let best = optimizer.select_best_plan(plans).await.unwrap();
+        let best = optimizer
+            .select_best_plan(plans)
+            .await
+            .expect("should succeed");
 
         assert_eq!(best.plan_id, plan2.plan_id);
         assert_eq!(best.total_cost, 50.0);
@@ -986,12 +992,15 @@ mod tests {
         let optimizer = CostBasedOptimizer::new(config);
 
         let query = "{ test }";
-        optimizer.record_execution(query, 100, 50).await.unwrap();
+        optimizer
+            .record_execution(query, 100, 50)
+            .await
+            .expect("should succeed");
 
         let stats = optimizer.get_statistics(query).await;
         assert!(stats.is_some());
 
-        let stats = stats.unwrap();
+        let stats = stats.expect("should succeed");
         assert_eq!(stats.execution_count, 1);
         assert_eq!(stats.avg_execution_time_ms, 100.0);
     }
@@ -1002,7 +1011,10 @@ mod tests {
         let optimizer = CostBasedOptimizer::new(config);
 
         let query = "{ test }";
-        optimizer.record_execution(query, 100, 50).await.unwrap();
+        optimizer
+            .record_execution(query, 100, 50)
+            .await
+            .expect("should succeed");
 
         assert_eq!(optimizer.statistics_count().await, 0);
     }
@@ -1015,11 +1027,11 @@ mod tests {
         optimizer
             .record_execution("{ test1 }", 100, 50)
             .await
-            .unwrap();
+            .expect("should succeed");
         optimizer
             .record_execution("{ test2 }", 200, 100)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(optimizer.statistics_count().await, 2);
 
@@ -1047,7 +1059,7 @@ mod tests {
         let optimizer = CostBasedOptimizer::new(config);
 
         let query = "{ users { id } }";
-        let plan = optimizer.optimize(query).await.unwrap();
+        let plan = optimizer.optimize(query).await.expect("should succeed");
 
         assert!(!plan.index_recommendations.is_empty());
         assert!(plan.index_recommendations[0].expected_improvement > 0.0);

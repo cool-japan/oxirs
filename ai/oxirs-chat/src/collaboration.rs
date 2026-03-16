@@ -544,11 +544,14 @@ mod tests {
         let session_id = manager
             .create_shared_session("user1".to_string(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert!(!session_id.is_empty());
 
-        let session = manager.get_session(&session_id).await.unwrap();
+        let session = manager
+            .get_session(&session_id)
+            .await
+            .expect("should succeed");
         assert_eq!(session.owner_id, "user1");
         assert_eq!(session.participants.len(), 1);
     }
@@ -567,14 +570,17 @@ mod tests {
                 }),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         manager
             .join_session(&session_id, "user2".to_string(), Some("User 2".to_string()))
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let participants = manager.get_participants(&session_id).await.unwrap();
+        let participants = manager
+            .get_participants(&session_id)
+            .await
+            .expect("should succeed");
         assert_eq!(participants.len(), 2);
     }
 
@@ -586,7 +592,7 @@ mod tests {
         let session_id = manager
             .create_shared_session("user1".to_string(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let position = CursorPosition {
             line: 10,
@@ -598,10 +604,13 @@ mod tests {
         manager
             .update_cursor(&session_id, "user1", position)
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let session = manager.get_session(&session_id).await.unwrap();
-        let participant = session.participants.get("user1").unwrap();
+        let session = manager
+            .get_session(&session_id)
+            .await
+            .expect("should succeed");
+        let participant = session.participants.get("user1").expect("should succeed");
         assert!(participant.cursor_position.is_some());
     }
 
@@ -613,7 +622,7 @@ mod tests {
         let _session1 = manager
             .create_shared_session("user1".to_string(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let stats = manager.get_stats().await;
         assert_eq!(stats.active_sessions, 1);

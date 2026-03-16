@@ -53,7 +53,7 @@ const MAX_DATA_BYTES: usize = 252;
 ///
 /// let frame = AsciiFrame::new(0x01, 0x03, vec![0x00, 0x00, 0x00, 0x0A]);
 /// let encoded = encode_ascii(&frame);
-/// let decoded = decode_ascii(&encoded).unwrap();
+/// let decoded = decode_ascii(&encoded).expect("should succeed");
 /// assert_eq!(decoded.device_addr, 0x01);
 /// assert_eq!(decoded.function_code, 0x03);
 /// ```
@@ -245,7 +245,7 @@ fn hex_nibble(c: u8) -> Result<u8, ()> {
 /// let frame = AsciiFrame::new(0x01, 0x03, vec![0x00, 0x00, 0x00, 0x0A]);
 /// let bytes = encode_ascii(&frame);
 /// assert_eq!(bytes[0], b':');
-/// assert_eq!(*bytes.last().unwrap(), b'\n');
+/// assert_eq!(*bytes.last().expect("should succeed"), b'\n');
 /// ```
 pub fn encode_ascii(frame: &AsciiFrame) -> Vec<u8> {
     // Pre-allocate: 1 (colon) + 2 (addr) + 2 (func) + 2*data.len() + 2 (lrc) + 2 (CRLF)
@@ -315,7 +315,7 @@ fn push_hex_byte(buf: &mut Vec<u8>, byte: u8) {
 ///
 /// let frame = AsciiFrame::new(0x01, 0x03, vec![0x00, 0x00, 0x00, 0x0A]);
 /// let encoded = encode_ascii(&frame);
-/// let decoded = decode_ascii(&encoded).unwrap();
+/// let decoded = decode_ascii(&encoded).expect("should succeed");
 /// assert_eq!(decoded, frame);
 /// ```
 pub fn decode_ascii(bytes: &[u8]) -> ModbusResult<AsciiFrame> {
@@ -896,7 +896,7 @@ mod tests {
 
         let result = codec.feed(&encoded).expect("codec feed should succeed");
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), frame);
+        assert_eq!(result.expect("should succeed"), frame);
     }
 
     #[test]
@@ -913,7 +913,7 @@ mod tests {
             }
         }
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), frame);
+        assert_eq!(result.expect("should succeed"), frame);
     }
 
     #[test]

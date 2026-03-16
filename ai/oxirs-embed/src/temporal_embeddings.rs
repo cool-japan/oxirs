@@ -593,9 +593,9 @@ mod tests {
     #[tokio::test]
     async fn test_temporal_triple_validity() {
         let triple = Triple::new(
-            NamedNode::new("http://example.org/alice").unwrap(),
-            NamedNode::new("http://example.org/worksFor").unwrap(),
-            NamedNode::new("http://example.org/company").unwrap(),
+            NamedNode::new("http://example.org/alice").expect("should succeed"),
+            NamedNode::new("http://example.org/worksFor").expect("should succeed"),
+            NamedNode::new("http://example.org/company").expect("should succeed"),
         );
 
         let start = Utc::now();
@@ -616,14 +616,17 @@ mod tests {
         let mut model = TemporalEmbeddingModel::new(config);
 
         let triple = Triple::new(
-            NamedNode::new("http://example.org/alice").unwrap(),
-            NamedNode::new("http://example.org/knows").unwrap(),
-            NamedNode::new("http://example.org/bob").unwrap(),
+            NamedNode::new("http://example.org/alice").expect("should succeed"),
+            NamedNode::new("http://example.org/knows").expect("should succeed"),
+            NamedNode::new("http://example.org/bob").expect("should succeed"),
         );
 
         let temporal_triple = TemporalTriple::new(triple, TemporalScope::Instant(Utc::now()));
 
-        model.add_temporal_triple(temporal_triple).await.unwrap();
+        model
+            .add_temporal_triple(temporal_triple)
+            .await
+            .expect("should succeed");
 
         let stats = model.get_temporal_stats().await;
         assert_eq!(stats.num_temporal_triples, 1);
@@ -637,9 +640,10 @@ mod tests {
         // Add some temporal triples
         for i in 0..5 {
             let triple = Triple::new(
-                NamedNode::new(&format!("http://example.org/entity_{}", i)).unwrap(),
-                NamedNode::new("http://example.org/relation").unwrap(),
-                NamedNode::new("http://example.org/target").unwrap(),
+                NamedNode::new(&format!("http://example.org/entity_{}", i))
+                    .expect("should succeed"),
+                NamedNode::new("http://example.org/relation").expect("should succeed"),
+                NamedNode::new("http://example.org/target").expect("should succeed"),
             );
 
             let temporal_triple = TemporalTriple::new(
@@ -647,10 +651,13 @@ mod tests {
                 TemporalScope::Instant(Utc::now() + Duration::days(i)),
             );
 
-            model.add_temporal_triple(temporal_triple).await.unwrap();
+            model
+                .add_temporal_triple(temporal_triple)
+                .await
+                .expect("should succeed");
         }
 
-        let stats = model.train_temporal(10).await.unwrap();
+        let stats = model.train_temporal(10).await.expect("should succeed");
         assert_eq!(stats.epochs_completed, 10);
         assert!(stats.final_loss >= 0.0);
     }
@@ -662,20 +669,23 @@ mod tests {
 
         // Add temporal data
         let triple = Triple::new(
-            NamedNode::new("http://example.org/entity").unwrap(),
-            NamedNode::new("http://example.org/relation").unwrap(),
-            NamedNode::new("http://example.org/target").unwrap(),
+            NamedNode::new("http://example.org/entity").expect("should succeed"),
+            NamedNode::new("http://example.org/relation").expect("should succeed"),
+            NamedNode::new("http://example.org/target").expect("should succeed"),
         );
 
         let temporal_triple = TemporalTriple::new(triple, TemporalScope::Instant(Utc::now()));
 
-        model.add_temporal_triple(temporal_triple).await.unwrap();
-        model.train_temporal(5).await.unwrap();
+        model
+            .add_temporal_triple(temporal_triple)
+            .await
+            .expect("should succeed");
+        model.train_temporal(5).await.expect("should succeed");
 
         let forecast = model
             .forecast("http://example.org/entity", 10)
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(forecast.predictions.len(), 10);
         assert_eq!(forecast.timestamps.len(), 10);
     }
@@ -691,9 +701,9 @@ mod tests {
         // Add temporal triples and train
         for i in 0..3 {
             let triple = Triple::new(
-                NamedNode::new("http://example.org/entity").unwrap(),
-                NamedNode::new("http://example.org/relation").unwrap(),
-                NamedNode::new("http://example.org/target").unwrap(),
+                NamedNode::new("http://example.org/entity").expect("should succeed"),
+                NamedNode::new("http://example.org/relation").expect("should succeed"),
+                NamedNode::new("http://example.org/target").expect("should succeed"),
             );
 
             let temporal_triple = TemporalTriple::new(
@@ -701,11 +711,14 @@ mod tests {
                 TemporalScope::Instant(Utc::now() + Duration::days(i)),
             );
 
-            model.add_temporal_triple(temporal_triple).await.unwrap();
+            model
+                .add_temporal_triple(temporal_triple)
+                .await
+                .expect("should succeed");
         }
 
-        model.train_temporal(5).await.unwrap();
-        let _events = model.detect_events(0.3).await.unwrap();
+        model.train_temporal(5).await.expect("should succeed");
+        let _events = model.detect_events(0.3).await.expect("should succeed");
 
         // Events may or may not be detected depending on random initialization
         // Just verify the function executes without error (verified by unwrap)

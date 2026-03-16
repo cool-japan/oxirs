@@ -428,8 +428,8 @@ mod tests {
         let p2 = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
         let p3 = Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0)));
 
-        assert!(sf_equals(&p1, &p2).unwrap());
-        assert!(!sf_equals(&p1, &p3).unwrap());
+        assert!(sf_equals(&p1, &p2).expect("should succeed"));
+        assert!(!sf_equals(&p1, &p3).expect("should succeed"));
     }
 
     #[test]
@@ -437,7 +437,7 @@ mod tests {
         let p1 = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
         let p2 = Geometry::new(GeoGeometry::Point(Point::new(10.0, 10.0)));
 
-        assert!(sf_disjoint(&p1, &p2).unwrap());
+        assert!(sf_disjoint(&p1, &p2).expect("should succeed"));
     }
 
     #[test]
@@ -456,8 +456,8 @@ mod tests {
         let point_inside = Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0)));
         let point_outside = Geometry::new(GeoGeometry::Point(Point::new(10.0, 10.0)));
 
-        assert!(sf_intersects(&poly, &point_inside).unwrap());
-        assert!(!sf_intersects(&poly, &point_outside).unwrap());
+        assert!(sf_intersects(&poly, &point_inside).expect("should succeed"));
+        assert!(!sf_intersects(&poly, &point_outside).expect("should succeed"));
     }
 
     #[test]
@@ -476,8 +476,8 @@ mod tests {
         let point_inside = Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0)));
         let point_outside = Geometry::new(GeoGeometry::Point(Point::new(10.0, 10.0)));
 
-        assert!(sf_within(&point_inside, &poly).unwrap());
-        assert!(!sf_within(&point_outside, &poly).unwrap());
+        assert!(sf_within(&point_inside, &poly).expect("should succeed"));
+        assert!(!sf_within(&point_outside, &poly).expect("should succeed"));
     }
 
     #[test]
@@ -496,8 +496,8 @@ mod tests {
         let point_inside = Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0)));
         let point_outside = Geometry::new(GeoGeometry::Point(Point::new(10.0, 10.0)));
 
-        assert!(sf_contains(&poly, &point_inside).unwrap());
-        assert!(!sf_contains(&poly, &point_outside).unwrap());
+        assert!(sf_contains(&poly, &point_inside).expect("should succeed"));
+        assert!(!sf_contains(&poly, &point_outside).expect("should succeed"));
     }
 
     #[test]
@@ -510,7 +510,7 @@ mod tests {
         // Point at the endpoint (boundary) of the line
         let point_at_endpoint = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
 
-        assert!(sf_touches(&point_at_endpoint, &line).unwrap());
+        assert!(sf_touches(&point_at_endpoint, &line).expect("should succeed"));
     }
 
     #[test]
@@ -524,7 +524,7 @@ mod tests {
         let point_on_interior = Geometry::new(GeoGeometry::Point(Point::new(2.0, 0.0)));
 
         // This should NOT be touches because it intersects the interior
-        assert!(!sf_touches(&point_on_interior, &line).unwrap());
+        assert!(!sf_touches(&point_on_interior, &line).expect("should succeed"));
     }
 
     #[test]
@@ -542,7 +542,7 @@ mod tests {
         )));
         let point_on_boundary = Geometry::new(GeoGeometry::Point(Point::new(4.0, 2.0)));
 
-        assert!(sf_touches(&point_on_boundary, &poly).unwrap());
+        assert!(sf_touches(&point_on_boundary, &poly).expect("should succeed"));
     }
 
     #[test]
@@ -570,7 +570,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(sf_touches(&poly1, &poly2).unwrap());
+        assert!(sf_touches(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -599,7 +599,7 @@ mod tests {
         )));
 
         // These overlap, so they don't just touch
-        assert!(!sf_touches(&poly1, &poly2).unwrap());
+        assert!(!sf_touches(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -628,7 +628,7 @@ mod tests {
         )));
 
         // These are disjoint, so they don't touch
-        assert!(!sf_touches(&poly1, &poly2).unwrap());
+        assert!(!sf_touches(&poly1, &poly2).expect("should succeed"));
     }
 
     // ========================================================================
@@ -637,141 +637,143 @@ mod tests {
 
     #[test]
     fn test_sf_intersects_3d_points_same_location() {
-        let p1 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(1 2 3)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").expect("should succeed");
 
-        assert!(sf_intersects_3d(&p1, &p2).unwrap());
+        assert!(sf_intersects_3d(&p1, &p2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_intersects_3d_points_different_z() {
-        let p1 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(1 2 10)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(1 2 3)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(1 2 10)").expect("should succeed");
 
         // Same XY but different Z - should not intersect
-        assert!(!sf_intersects_3d(&p1, &p2).unwrap());
+        assert!(!sf_intersects_3d(&p1, &p2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_intersects_3d_linestrings_crossing_z() {
         // Two linestrings that cross in XY but at different Z levels
-        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 0)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z(0 10 5, 10 0 5)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 0)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z(0 10 5, 10 0 5)").expect("should succeed");
 
         // They cross in XY but at different Z levels (0 vs 5)
         // Z ranges: [0,0] and [5,5] - disjoint
-        assert!(!sf_intersects_3d(&ls1, &ls2).unwrap());
+        assert!(!sf_intersects_3d(&ls1, &ls2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_intersects_3d_linestrings_overlapping_z() {
-        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 10)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z(0 10 5, 10 0 5)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 10)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z(0 10 5, 10 0 5)").expect("should succeed");
 
         // Z ranges: [0,10] and [5,5] - overlap at z=5
-        assert!(sf_intersects_3d(&ls1, &ls2).unwrap());
+        assert!(sf_intersects_3d(&ls1, &ls2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_disjoint_3d_points() {
-        let p1 = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(10 10 10)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(0 0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(10 10 10)").expect("should succeed");
 
-        assert!(sf_disjoint_3d(&p1, &p2).unwrap());
+        assert!(sf_disjoint_3d(&p1, &p2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_disjoint_3d_vertical_separation() {
         // Polygons overlapping in XY but at different Z levels
-        let poly1 =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").unwrap();
-        let poly2 =
-            Geometry::from_wkt("POLYGON Z((2 2 20, 8 2 20, 8 8 20, 2 8 20, 2 2 20))").unwrap();
+        let poly1 = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))")
+            .expect("should succeed");
+        let poly2 = Geometry::from_wkt("POLYGON Z((2 2 20, 8 2 20, 8 8 20, 2 8 20, 2 2 20))")
+            .expect("should succeed");
 
         // Overlap in XY but Z ranges [0,0] and [20,20] are disjoint
-        assert!(sf_disjoint_3d(&poly1, &poly2).unwrap());
+        assert!(sf_disjoint_3d(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_within_3d_point_in_cube() {
         // Point inside a cube (represented as polygon with Z range)
-        let point = Geometry::from_wkt("POINT Z(5 5 5)").unwrap();
-        let cube =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 10, 10 10 10, 0 10 0, 0 0 0))").unwrap();
+        let point = Geometry::from_wkt("POINT Z(5 5 5)").expect("should succeed");
+        let cube = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 10, 10 10 10, 0 10 0, 0 0 0))")
+            .expect("should succeed");
 
         // Point at (5,5,5) should be within the cube XY=[0,10], Z=[0,10]
-        assert!(sf_within_3d(&point, &cube).unwrap());
+        assert!(sf_within_3d(&point, &cube).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_within_3d_point_outside_z_range() {
-        let point = Geometry::from_wkt("POINT Z(5 5 15)").unwrap();
-        let cube =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 10, 10 10 10, 0 10 0, 0 0 0))").unwrap();
+        let point = Geometry::from_wkt("POINT Z(5 5 15)").expect("should succeed");
+        let cube = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 10, 10 10 10, 0 10 0, 0 0 0))")
+            .expect("should succeed");
 
         // Point at z=15 is outside the cube's Z range [0,10]
-        assert!(!sf_within_3d(&point, &cube).unwrap());
+        assert!(!sf_within_3d(&point, &cube).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_contains_3d_cube_contains_point() {
-        let cube =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 10, 10 10 10, 0 10 0, 0 0 0))").unwrap();
-        let point = Geometry::from_wkt("POINT Z(5 5 5)").unwrap();
+        let cube = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 10, 10 10 10, 0 10 0, 0 0 0))")
+            .expect("should succeed");
+        let point = Geometry::from_wkt("POINT Z(5 5 5)").expect("should succeed");
 
-        assert!(sf_contains_3d(&cube, &point).unwrap());
+        assert!(sf_contains_3d(&cube, &point).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_touches_3d_adjacent_polygons_same_z() {
         // Two polygons sharing an edge at the same Z level
-        let poly1 = Geometry::from_wkt("POLYGON Z((0 0 5, 5 0 5, 5 5 5, 0 5 5, 0 0 5))").unwrap();
-        let poly2 = Geometry::from_wkt("POLYGON Z((5 0 5, 10 0 5, 10 5 5, 5 5 5, 5 0 5))").unwrap();
+        let poly1 = Geometry::from_wkt("POLYGON Z((0 0 5, 5 0 5, 5 5 5, 0 5 5, 0 0 5))")
+            .expect("should succeed");
+        let poly2 = Geometry::from_wkt("POLYGON Z((5 0 5, 10 0 5, 10 5 5, 5 5 5, 5 0 5))")
+            .expect("should succeed");
 
         // They share an edge in XY and have the same Z
-        assert!(sf_touches_3d(&poly1, &poly2).unwrap());
+        assert!(sf_touches_3d(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_touches_3d_stacked_polygons() {
         // Two polygons stacked vertically (same XY, touching Z ranges)
-        let poly1 =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").unwrap();
-        let poly2 =
-            Geometry::from_wkt("POLYGON Z((0 0 10, 10 0 10, 10 10 10, 0 10 10, 0 0 10))").unwrap();
+        let poly1 = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))")
+            .expect("should succeed");
+        let poly2 = Geometry::from_wkt("POLYGON Z((0 0 10, 10 0 10, 10 10 10, 0 10 10, 0 0 10))")
+            .expect("should succeed");
 
         // Z ranges don't touch: [0,0] and [10,10] - gap between them
         // For this simple implementation, they don't touch
-        assert!(!sf_touches_3d(&poly1, &poly2).unwrap());
+        assert!(!sf_touches_3d(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_overlaps_3d_partial_overlap() {
         // Two polygons with partial overlap in 3D
-        let poly1 =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 5, 10 10 5, 0 10 0, 0 0 0))").unwrap();
-        let poly2 =
-            Geometry::from_wkt("POLYGON Z((5 5 3, 15 5 8, 15 15 8, 5 15 3, 5 5 3))").unwrap();
+        let poly1 = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 5, 10 10 5, 0 10 0, 0 0 0))")
+            .expect("should succeed");
+        let poly2 = Geometry::from_wkt("POLYGON Z((5 5 3, 15 5 8, 15 15 8, 5 15 3, 5 5 3))")
+            .expect("should succeed");
 
         // They overlap in XY and Z ranges overlap [0,5] and [3,8]
-        assert!(sf_overlaps_3d(&poly1, &poly2).unwrap());
+        assert!(sf_overlaps_3d(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_overlaps_3d_no_overlap_different_z() {
-        let poly1 =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").unwrap();
-        let poly2 =
-            Geometry::from_wkt("POLYGON Z((2 2 20, 8 2 20, 8 8 20, 2 8 20, 2 2 20))").unwrap();
+        let poly1 = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))")
+            .expect("should succeed");
+        let poly2 = Geometry::from_wkt("POLYGON Z((2 2 20, 8 2 20, 8 8 20, 2 8 20, 2 2 20))")
+            .expect("should succeed");
 
         // Overlap in XY but Z ranges [0,0] and [20,20] don't overlap
-        assert!(!sf_overlaps_3d(&poly1, &poly2).unwrap());
+        assert!(!sf_overlaps_3d(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_3d_requires_z_coordinates() {
-        let p1 = Geometry::from_wkt("POINT(1 2)").unwrap(); // 2D
-        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap(); // 3D
+        let p1 = Geometry::from_wkt("POINT(1 2)").expect("should succeed"); // 2D
+        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").expect("should succeed"); // 3D
 
         // Should return error for mixing 2D and 3D
         assert!(sf_intersects_3d(&p1, &p2).is_err());

@@ -643,7 +643,14 @@ mod tests {
         };
         assert_eq!(def.parameters[0].param_type, "integer");
         assert_eq!(def.parameters[1].param_type, "string");
-        assert_eq!(def.parameters[1].enum_values.as_ref().unwrap().len(), 3);
+        assert_eq!(
+            def.parameters[1]
+                .enum_values
+                .as_ref()
+                .expect("should succeed")
+                .len(),
+            3
+        );
     }
 
     // --- ToolError display ---

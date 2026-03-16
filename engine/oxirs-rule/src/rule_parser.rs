@@ -621,11 +621,12 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenize_variable() {
+    fn test_tokenize_variable() -> Result<(), Box<dyn std::error::Error>> {
         let tokens = N3Parser::tokenize("?x ?y");
         assert_eq!(tokens.len(), 2);
         assert!(tokens[0].contains("Variable"));
         assert!(tokens[1].contains("Variable"));
+        Ok(())
     }
 
     #[test]
@@ -658,16 +659,17 @@ mod tests {
     // ---- parse_triple ----
 
     #[test]
-    fn test_parse_triple_simple() {
-        let (triple, _rest) = N3Parser::parse_triple("<http://s> <http://p> <http://o> .").unwrap();
+    fn test_parse_triple_simple() -> Result<(), Box<dyn std::error::Error>> {
+        let (triple, _rest) = N3Parser::parse_triple("<http://s> <http://p> <http://o> .")?;
         assert_eq!(triple.subject, N3Term::Iri("http://s".to_string()));
         assert_eq!(triple.predicate, N3Term::Iri("http://p".to_string()));
         assert_eq!(triple.object, N3Term::Iri("http://o".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_triple_with_literal() {
-        let (triple, _rest) = N3Parser::parse_triple("<http://s> <http://p> \"hello\" .").unwrap();
+    fn test_parse_triple_with_literal() -> Result<(), Box<dyn std::error::Error>> {
+        let (triple, _rest) = N3Parser::parse_triple("<http://s> <http://p> \"hello\" .")?;
         assert_eq!(
             triple.object,
             N3Term::Literal {
@@ -676,83 +678,93 @@ mod tests {
                 lang: None,
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_triple_with_variable() {
-        let (triple, _rest) = N3Parser::parse_triple("<http://s> <http://p> ?x .").unwrap();
+    fn test_parse_triple_with_variable() -> Result<(), Box<dyn std::error::Error>> {
+        let (triple, _rest) = N3Parser::parse_triple("<http://s> <http://p> ?x .")?;
         assert_eq!(triple.object, N3Term::Variable("x".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_triple_with_blank_node() {
-        let (triple, _rest) = N3Parser::parse_triple("_:b1 <http://p> <http://o> .").unwrap();
+    fn test_parse_triple_with_blank_node() -> Result<(), Box<dyn std::error::Error>> {
+        let (triple, _rest) = N3Parser::parse_triple("_:b1 <http://p> <http://o> .")?;
         assert_eq!(triple.subject, N3Term::BlankNode("b1".to_string()));
+        Ok(())
     }
 
     // ---- parse_prefix_decl ----
 
     #[test]
-    fn test_parse_prefix_decl() {
+    fn test_parse_prefix_decl() -> Result<(), Box<dyn std::error::Error>> {
         let (prefix, iri, _rest) =
-            N3Parser::parse_prefix_decl("@prefix ex: <http://example.org/> .").unwrap();
+            N3Parser::parse_prefix_decl("@prefix ex: <http://example.org/> .")?;
         assert_eq!(prefix, "ex");
         assert_eq!(iri, "http://example.org/");
+        Ok(())
     }
 
     #[test]
-    fn test_parse_prefix_keyword() {
+    fn test_parse_prefix_keyword() -> Result<(), Box<dyn std::error::Error>> {
         // SPARQL-style PREFIX
         let (prefix, iri, _rest) =
-            N3Parser::parse_prefix_decl("PREFIX ex: <http://example.org/> .").unwrap();
+            N3Parser::parse_prefix_decl("PREFIX ex: <http://example.org/> .")?;
         assert_eq!(iri, "http://example.org/");
         // prefix should be "ex" (may include trailing colon depending on tokenizer)
         assert!(prefix == "ex" || prefix == "ex:");
+        Ok(())
     }
 
     // ---- parse (complete document) ----
 
     #[test]
-    fn test_parse_empty_document() {
-        let doc = N3Parser::parse("").unwrap();
+    fn test_parse_empty_document() -> Result<(), Box<dyn std::error::Error>> {
+        let doc = N3Parser::parse("")?;
         assert!(doc.prefixes.is_empty());
         assert!(doc.rules.is_empty());
         assert!(doc.triples.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_parse_prefix_only() {
-        let doc = N3Parser::parse("@prefix ex: <http://example.org/> .").unwrap();
+    fn test_parse_prefix_only() -> Result<(), Box<dyn std::error::Error>> {
+        let doc = N3Parser::parse("@prefix ex: <http://example.org/> .")?;
         assert_eq!(doc.prefixes.len(), 1);
         assert_eq!(doc.prefixes[0].0, "ex");
         assert_eq!(doc.prefixes[0].1, "http://example.org/");
+        Ok(())
     }
 
     #[test]
-    fn test_parse_multiple_prefixes() {
+    fn test_parse_multiple_prefixes() -> Result<(), Box<dyn std::error::Error>> {
         let input = "@prefix ex: <http://example.org/> .\n@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.prefixes.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_simple_triple() {
-        let doc = N3Parser::parse("<http://s> <http://p> <http://o> .").unwrap();
+    fn test_parse_simple_triple() -> Result<(), Box<dyn std::error::Error>> {
+        let doc = N3Parser::parse("<http://s> <http://p> <http://o> .")?;
         assert_eq!(doc.triples.len(), 1);
         assert_eq!(doc.triples[0].subject, N3Term::Iri("http://s".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_multiple_triples() {
+    fn test_parse_multiple_triples() -> Result<(), Box<dyn std::error::Error>> {
         let input = "<http://s1> <http://p> <http://o1> .\n<http://s2> <http://p> <http://o2> .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.triples.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_prefixed_names() {
+    fn test_parse_prefixed_names() -> Result<(), Box<dyn std::error::Error>> {
         let input = "ex:Alice ex:knows ex:Bob .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.triples.len(), 1);
         assert_eq!(
             doc.triples[0].subject,
@@ -761,22 +773,24 @@ mod tests {
                 local: "Alice".to_string()
             }
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_variables_in_triple() {
+    fn test_parse_variables_in_triple() -> Result<(), Box<dyn std::error::Error>> {
         let input = "?s ?p ?o .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.triples.len(), 1);
         assert_eq!(doc.triples[0].subject, N3Term::Variable("s".to_string()));
         assert_eq!(doc.triples[0].predicate, N3Term::Variable("p".to_string()));
         assert_eq!(doc.triples[0].object, N3Term::Variable("o".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_simple_rule() {
+    fn test_parse_simple_rule() -> Result<(), Box<dyn std::error::Error>> {
         let input = "{ ?s <http://p> ?o } => { ?s <http://q> ?o } .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.rules.len(), 1);
         let rule = &doc.rules[0];
         assert_eq!(rule.antecedent.len(), 1);
@@ -789,46 +803,50 @@ mod tests {
             rule.consequent[0].predicate,
             N3Term::Iri("http://q".to_string())
         );
+        Ok(())
     }
 
     #[test]
-    fn test_parse_rule_with_multiple_body_triples() {
+    fn test_parse_rule_with_multiple_body_triples() -> Result<(), Box<dyn std::error::Error>> {
         let input = "{ ?s <http://a> ?o . ?o <http://b> ?x } => { ?s <http://c> ?x } .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.rules.len(), 1);
         let rule = &doc.rules[0];
         // At least 1 antecedent triple
         assert!(!rule.antecedent.is_empty());
         assert!(!rule.consequent.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_parse_multiple_rules() {
+    fn test_parse_multiple_rules() -> Result<(), Box<dyn std::error::Error>> {
         let input = concat!(
             "{ ?s <http://a> ?o } => { ?s <http://b> ?o } .\n",
             "{ ?x <http://c> ?y } => { ?x <http://d> ?y } ."
         );
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.rules.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_rules_and_triples_mixed() {
+    fn test_parse_rules_and_triples_mixed() -> Result<(), Box<dyn std::error::Error>> {
         let input = concat!(
             "@prefix ex: <http://example.org/> .\n",
             "ex:Alice ex:knows ex:Bob .\n",
             "{ ?s ex:knows ?o } => { ?s ex:met ?o } ."
         );
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.prefixes.len(), 1);
         assert_eq!(doc.triples.len(), 1);
         assert_eq!(doc.rules.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_literal_with_datatype() {
+    fn test_parse_literal_with_datatype() -> Result<(), Box<dyn std::error::Error>> {
         let input = "<http://s> <http://p> \"42\"^^<http://www.w3.org/2001/XMLSchema#integer> .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.triples.len(), 1);
         match &doc.triples[0].object {
             N3Term::Literal {
@@ -838,16 +856,20 @@ mod tests {
             } => {
                 assert_eq!(value, "42");
                 assert!(datatype.is_some());
-                assert!(datatype.as_ref().unwrap().contains("integer"));
+                assert!(datatype
+                    .as_ref()
+                    .ok_or("expected Some value")?
+                    .contains("integer"));
             }
             _ => panic!("Expected literal"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parse_literal_with_lang() {
+    fn test_parse_literal_with_lang() -> Result<(), Box<dyn std::error::Error>> {
         let input = "<http://s> <http://p> \"hello\"@en .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.triples.len(), 1);
         match &doc.triples[0].object {
             N3Term::Literal {
@@ -860,29 +882,33 @@ mod tests {
             }
             _ => panic!("Expected literal"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parse_blank_nodes() {
+    fn test_parse_blank_nodes() -> Result<(), Box<dyn std::error::Error>> {
         let input = "_:b0 <http://p> _:b1 .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.triples.len(), 1);
         assert_eq!(doc.triples[0].subject, N3Term::BlankNode("b0".to_string()));
         assert_eq!(doc.triples[0].object, N3Term::BlankNode("b1".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_error_unexpected_eof() {
+    fn test_parse_error_unexpected_eof() -> Result<(), Box<dyn std::error::Error>> {
         let result = N3Parser::parse("<http://s> <http://p>");
-        assert!(result.is_err() || result.unwrap().triples.is_empty());
+        assert!(result.is_err() || result?.triples.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_parse_formula_in_document() {
+    fn test_parse_formula_in_document() -> Result<(), Box<dyn std::error::Error>> {
         let input =
             "{ <http://s> <http://p> <http://o> } => { <http://s> <http://q> <http://o> } .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert!(!doc.rules.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -925,9 +951,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_prefixed_name_both_sides() {
+    fn test_parse_prefixed_name_both_sides() -> Result<(), Box<dyn std::error::Error>> {
         let input = "ex:Alice ex:knows rdf:Resource .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         if !doc.triples.is_empty() {
             if let N3Term::PrefixedName { prefix, local } = &doc.triples[0].subject {
                 assert_eq!(prefix, "ex");
@@ -935,13 +961,15 @@ mod tests {
             }
             // tolerate other forms
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parse_comment_ignored() {
+    fn test_parse_comment_ignored() -> Result<(), Box<dyn std::error::Error>> {
         let input = "# This is a comment\n<http://s> <http://p> <http://o> .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert_eq!(doc.triples.len(), 1);
+        Ok(())
     }
 
     #[test]
@@ -956,11 +984,12 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_triple_remaining() {
+    fn test_parse_triple_remaining() -> Result<(), Box<dyn std::error::Error>> {
         let input = "<http://s> <http://p> <http://o> . extra content";
-        let (triple, rest) = N3Parser::parse_triple(input).unwrap();
+        let (triple, rest) = N3Parser::parse_triple(input)?;
         assert_eq!(triple.subject, N3Term::Iri("http://s".to_string()));
         assert!(!rest.is_empty() || rest.is_empty()); // either way is fine
+        Ok(())
     }
 
     #[test]
@@ -971,16 +1000,18 @@ mod tests {
     }
 
     #[test]
-    fn test_n3_document_clone() {
-        let doc = N3Parser::parse("<http://s> <http://p> <http://o> .").unwrap();
+    fn test_n3_document_clone() -> Result<(), Box<dyn std::error::Error>> {
+        let doc = N3Parser::parse("<http://s> <http://p> <http://o> .")?;
         let doc2 = doc.clone();
         assert_eq!(doc.triples.len(), doc2.triples.len());
+        Ok(())
     }
 
     #[test]
-    fn test_rule_label_none() {
+    fn test_rule_label_none() -> Result<(), Box<dyn std::error::Error>> {
         let input = "{ ?s <http://p> ?o } => { ?s <http://q> ?o } .";
-        let doc = N3Parser::parse(input).unwrap();
+        let doc = N3Parser::parse(input)?;
         assert!(doc.rules[0].label.is_none());
+        Ok(())
     }
 }

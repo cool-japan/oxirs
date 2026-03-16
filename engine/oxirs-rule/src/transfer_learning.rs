@@ -45,7 +45,7 @@
 //!     &source_rules,
 //!     &mapping,
 //!     TransferStrategy::DirectMapping
-//! ).unwrap();
+//! ).expect("should succeed");
 //!
 //! println!("Transferred {} rules", target_rules.len());
 //! # Ok::<(), anyhow::Error>(())
@@ -1040,7 +1040,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_direct_mapping() {
+    fn test_direct_mapping() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = TransferLearner::new();
         let mut mapping = DomainMapping::new();
 
@@ -1061,16 +1061,16 @@ mod tests {
             }],
         }];
 
-        let target_rules = learner
-            .transfer_rules(&source_rules, &mapping, TransferStrategy::DirectMapping)
-            .unwrap();
+        let target_rules =
+            learner.transfer_rules(&source_rules, &mapping, TransferStrategy::DirectMapping)?;
 
         assert_eq!(target_rules.len(), 1);
         assert!(target_rules[0].name.contains("transferred"));
+        Ok(())
     }
 
     #[test]
-    fn test_similarity_based_transfer() {
+    fn test_similarity_based_transfer() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = TransferLearner::new();
         learner.set_min_confidence(0.3);
 
@@ -1091,9 +1091,8 @@ mod tests {
             }],
         }];
 
-        let target_rules = learner
-            .transfer_rules(&source_rules, &mapping, TransferStrategy::SimilarityBased)
-            .unwrap();
+        let target_rules =
+            learner.transfer_rules(&source_rules, &mapping, TransferStrategy::SimilarityBased)?;
 
         // With confidence 0.9 and min 0.3, rules should be transferred
         // Confidence is based on mapped terms: A->B with 0.9 confidence
@@ -1103,10 +1102,11 @@ mod tests {
             0.9,
             0.3
         );
+        Ok(())
     }
 
     #[test]
-    fn test_generalize_specialize() {
+    fn test_generalize_specialize() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = TransferLearner::new();
         let mut mapping = DomainMapping::new();
 
@@ -1126,19 +1126,18 @@ mod tests {
             }],
         }];
 
-        let target_rules = learner
-            .transfer_rules(
-                &source_rules,
-                &mapping,
-                TransferStrategy::GeneralizeSpecialize,
-            )
-            .unwrap();
+        let target_rules = learner.transfer_rules(
+            &source_rules,
+            &mapping,
+            TransferStrategy::GeneralizeSpecialize,
+        )?;
 
         assert!(!target_rules.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_ensemble_transfer() {
+    fn test_ensemble_transfer() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = TransferLearner::new();
         let mut mapping = DomainMapping::new();
 
@@ -1158,12 +1157,12 @@ mod tests {
             }],
         }];
 
-        let target_rules = learner
-            .transfer_rules(&source_rules, &mapping, TransferStrategy::Ensemble)
-            .unwrap();
+        let target_rules =
+            learner.transfer_rules(&source_rules, &mapping, TransferStrategy::Ensemble)?;
 
         // Ensemble should produce multiple variants
         assert!(!target_rules.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -1182,7 +1181,7 @@ mod tests {
     }
 
     #[test]
-    fn test_confidence_threshold() {
+    fn test_confidence_threshold() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = TransferLearner::new();
         learner.set_min_confidence(0.9);
 
@@ -1203,16 +1202,16 @@ mod tests {
             }],
         }];
 
-        let target_rules = learner
-            .transfer_rules(&source_rules, &mapping, TransferStrategy::SimilarityBased)
-            .unwrap();
+        let target_rules =
+            learner.transfer_rules(&source_rules, &mapping, TransferStrategy::SimilarityBased)?;
 
         // Should filter out low-confidence transfers
         assert_eq!(target_rules.len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_transfer_history() {
+    fn test_transfer_history() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = TransferLearner::new();
         let mut mapping = DomainMapping::new();
 
@@ -1224,9 +1223,7 @@ mod tests {
             head: vec![],
         }];
 
-        learner
-            .transfer_rules(&source_rules, &mapping, TransferStrategy::DirectMapping)
-            .unwrap();
+        learner.transfer_rules(&source_rules, &mapping, TransferStrategy::DirectMapping)?;
 
         let history = learner.get_transfer_history();
         assert_eq!(history.len(), 1);
@@ -1234,10 +1231,11 @@ mod tests {
 
         learner.clear_history();
         assert_eq!(learner.get_transfer_history().len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_feature_based_transfer() {
+    fn test_feature_based_transfer() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = TransferLearner::new();
         let mut mapping = DomainMapping::new();
 
@@ -1263,12 +1261,12 @@ mod tests {
             object: Term::Constant("value1".to_string()),
         }];
 
-        let target_rules = learner
-            .transfer_feature_based(&source_rules, &target_examples, &mapping)
-            .unwrap();
+        let target_rules =
+            learner.transfer_feature_based(&source_rules, &target_examples, &mapping)?;
 
         assert!(!target_rules.is_empty());
         assert!(target_rules[0].name.contains("feature_based"));
+        Ok(())
     }
 
     #[test]

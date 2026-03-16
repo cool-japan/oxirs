@@ -1217,21 +1217,22 @@ mod tests {
     }
 
     #[test]
-    fn test_synthetic_dataset_generation() {
+    fn test_synthetic_dataset_generation() -> Result<()> {
         let config = BenchmarkConfig::default();
         let mut suite = BenchmarkSuite::new(config);
 
-        suite.generate_synthetic_datasets().unwrap();
+        suite.generate_synthetic_datasets()?;
         assert!(!suite.datasets.is_empty());
 
         for dataset in &suite.datasets {
             assert!(!dataset.train_vectors.is_empty());
             assert!(!dataset.query_vectors.is_empty());
         }
+        Ok(())
     }
 
     #[test]
-    fn test_performance_metrics_calculation() {
+    fn test_performance_metrics_calculation() -> Result<()> {
         let config = BenchmarkConfig::default();
         let suite = BenchmarkSuite::new(config);
 
@@ -1243,25 +1244,27 @@ mod tests {
             Duration::from_millis(8),
         ];
 
-        let metrics = suite.calculate_performance_metrics(&query_times).unwrap();
+        let metrics = suite.calculate_performance_metrics(&query_times)?;
 
         assert!(metrics.avg_query_time.as_millis() > 0);
         assert!(metrics.queries_per_second > 0.0);
         assert!(metrics.min_query_time <= metrics.median_query_time);
         assert!(metrics.median_query_time <= metrics.max_query_time);
+        Ok(())
     }
 
     #[test]
-    fn test_quick_benchmarks() {
+    fn test_quick_benchmarks() -> Result<()> {
         let results = BenchmarkRunner::run_quick_benchmarks();
         assert!(results.is_ok());
-        let results = results.unwrap();
+        let results = results?;
         assert!(!results.is_empty());
 
         for result in results {
             assert!(result.performance.avg_query_time.as_nanos() > 0);
             assert!(result.performance.queries_per_second > 0.0);
         }
+        Ok(())
     }
 
     #[test]

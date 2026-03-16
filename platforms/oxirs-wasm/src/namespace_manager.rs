@@ -16,7 +16,7 @@
 //! use oxirs_wasm::namespace_manager::NamespaceManager;
 //!
 //! let mut mgr = NamespaceManager::with_standard_prefixes();
-//! mgr.add_prefix("ex", "http://example.org/").unwrap();
+//! mgr.add_prefix("ex", "http://example.org/").expect("should succeed");
 //!
 //! assert_eq!(
 //!     mgr.expand("ex:Thing"),
@@ -219,8 +219,10 @@ mod tests {
     #[test]
     fn test_add_prefix_update_existing() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("ex", "http://old.org/").unwrap();
-        mgr.add_prefix("ex", "http://new.org/").unwrap();
+        mgr.add_prefix("ex", "http://old.org/")
+            .expect("should succeed");
+        mgr.add_prefix("ex", "http://new.org/")
+            .expect("should succeed");
         assert_eq!(mgr.resolve_prefix("ex"), Some("http://new.org/"));
         assert_eq!(mgr.prefix_count(), 1, "update must not increase count");
     }
@@ -228,8 +230,10 @@ mod tests {
     #[test]
     fn test_add_multiple_prefixes() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("a", "http://a.org/").unwrap();
-        mgr.add_prefix("b", "http://b.org/").unwrap();
+        mgr.add_prefix("a", "http://a.org/")
+            .expect("should succeed");
+        mgr.add_prefix("b", "http://b.org/")
+            .expect("should succeed");
         assert_eq!(mgr.prefix_count(), 2);
     }
 
@@ -238,7 +242,8 @@ mod tests {
     #[test]
     fn test_remove_prefix_existing() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("ex", "http://example.org/").unwrap();
+        mgr.add_prefix("ex", "http://example.org/")
+            .expect("should succeed");
         assert!(mgr.remove_prefix("ex"));
         assert!(mgr.resolve_prefix("ex").is_none());
     }
@@ -252,7 +257,8 @@ mod tests {
     #[test]
     fn test_remove_prefix_decrements_count() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("ex", "http://example.org/").unwrap();
+        mgr.add_prefix("ex", "http://example.org/")
+            .expect("should succeed");
         mgr.remove_prefix("ex");
         assert_eq!(mgr.prefix_count(), 0);
     }
@@ -262,7 +268,7 @@ mod tests {
     #[test]
     fn test_resolve_prefix_known() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("foaf", NS_FOAF).unwrap();
+        mgr.add_prefix("foaf", NS_FOAF).expect("should succeed");
         assert_eq!(mgr.resolve_prefix("foaf"), Some(NS_FOAF));
     }
 
@@ -277,7 +283,8 @@ mod tests {
     #[test]
     fn test_expand_valid_curie() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("ex", "http://example.org/").unwrap();
+        mgr.add_prefix("ex", "http://example.org/")
+            .expect("should succeed");
         assert_eq!(
             mgr.expand("ex:Person"),
             Some("http://example.org/Person".to_string())
@@ -287,7 +294,8 @@ mod tests {
     #[test]
     fn test_expand_empty_local_name() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("ex", "http://example.org/").unwrap();
+        mgr.add_prefix("ex", "http://example.org/")
+            .expect("should succeed");
         assert_eq!(mgr.expand("ex:"), Some("http://example.org/".to_string()));
     }
 
@@ -314,7 +322,8 @@ mod tests {
     #[test]
     fn test_compact_known_iri() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("ex", "http://example.org/").unwrap();
+        mgr.add_prefix("ex", "http://example.org/")
+            .expect("should succeed");
         assert_eq!(
             mgr.compact("http://example.org/Thing"),
             Some("ex:Thing".to_string())
@@ -330,8 +339,10 @@ mod tests {
     #[test]
     fn test_compact_longest_prefix_wins() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("base", "http://example.org/").unwrap();
-        mgr.add_prefix("sub", "http://example.org/sub/").unwrap();
+        mgr.add_prefix("base", "http://example.org/")
+            .expect("should succeed");
+        mgr.add_prefix("sub", "http://example.org/sub/")
+            .expect("should succeed");
         // Should use "sub" (longer match) not "base"
         let result = mgr.compact("http://example.org/sub/Thing");
         assert_eq!(result, Some("sub:Thing".to_string()));
@@ -401,8 +412,10 @@ mod tests {
     #[test]
     fn test_all_prefixes_returns_all() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("a", "http://a.org/").unwrap();
-        mgr.add_prefix("b", "http://b.org/").unwrap();
+        mgr.add_prefix("a", "http://a.org/")
+            .expect("should succeed");
+        mgr.add_prefix("b", "http://b.org/")
+            .expect("should succeed");
         let all = mgr.all_prefixes();
         assert_eq!(all.len(), 2);
         let prefixes: Vec<_> = all.iter().map(|b| b.prefix.as_str()).collect();
@@ -413,7 +426,8 @@ mod tests {
     #[test]
     fn test_all_prefixes_correct_namespaces() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("ex", "http://example.org/").unwrap();
+        mgr.add_prefix("ex", "http://example.org/")
+            .expect("should succeed");
         let all = mgr.all_prefixes();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].namespace, "http://example.org/");
@@ -429,8 +443,10 @@ mod tests {
     #[test]
     fn test_prefix_count_after_add() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("p1", "http://p1.org/").unwrap();
-        mgr.add_prefix("p2", "http://p2.org/").unwrap();
+        mgr.add_prefix("p1", "http://p1.org/")
+            .expect("should succeed");
+        mgr.add_prefix("p2", "http://p2.org/")
+            .expect("should succeed");
         assert_eq!(mgr.prefix_count(), 2);
     }
 
@@ -439,7 +455,8 @@ mod tests {
     #[test]
     fn test_to_turtle_prefixes_contains_at_prefix() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("ex", "http://example.org/").unwrap();
+        mgr.add_prefix("ex", "http://example.org/")
+            .expect("should succeed");
         let turtle = mgr.to_turtle_prefixes();
         assert!(turtle.contains("@prefix"));
     }
@@ -447,7 +464,8 @@ mod tests {
     #[test]
     fn test_to_turtle_prefixes_format() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("ex", "http://example.org/").unwrap();
+        mgr.add_prefix("ex", "http://example.org/")
+            .expect("should succeed");
         let turtle = mgr.to_turtle_prefixes();
         assert!(turtle.contains("@prefix ex: <http://example.org/> ."));
     }
@@ -461,9 +479,12 @@ mod tests {
     #[test]
     fn test_to_turtle_prefixes_sorted_alphabetically() {
         let mut mgr = NamespaceManager::new();
-        mgr.add_prefix("z", "http://z.org/").unwrap();
-        mgr.add_prefix("a", "http://a.org/").unwrap();
-        mgr.add_prefix("m", "http://m.org/").unwrap();
+        mgr.add_prefix("z", "http://z.org/")
+            .expect("should succeed");
+        mgr.add_prefix("a", "http://a.org/")
+            .expect("should succeed");
+        mgr.add_prefix("m", "http://m.org/")
+            .expect("should succeed");
         let turtle = mgr.to_turtle_prefixes();
         let lines: Vec<&str> = turtle.lines().collect();
         assert_eq!(lines.len(), 3);

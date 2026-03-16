@@ -20,7 +20,7 @@
 //!     fuzzy_distance: 2,
 //! };
 //!
-//! let mut searcher = TantivySearcher::new(config).unwrap();
+//! let mut searcher = TantivySearcher::new(config).expect("should succeed");
 //! ```
 
 #[cfg(feature = "tantivy-search")]

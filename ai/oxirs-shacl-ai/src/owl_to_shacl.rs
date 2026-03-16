@@ -669,7 +669,7 @@ mod tests {
             restrictions: vec![],
         };
 
-        let result = transfer.transfer_class(&owl_class).unwrap();
+        let result = transfer.transfer_class(&owl_class).expect("should succeed");
         assert_eq!(result.source_owl_class, "http://example.org/Person");
         assert!(result.confidence > 0.0);
         assert_eq!(transfer.stats.total_classes, 1);
@@ -701,7 +701,7 @@ mod tests {
             ],
         };
 
-        let result = transfer.transfer_class(&owl_class).unwrap();
+        let result = transfer.transfer_class(&owl_class).expect("should succeed");
         assert!(!result.notes.is_empty());
         assert!(result.confidence >= 0.8);
     }
@@ -736,7 +736,9 @@ mod tests {
             inverse_of: None,
         };
 
-        let _result = transfer.transfer_property(&owl_property).unwrap();
+        let _result = transfer
+            .transfer_property(&owl_property)
+            .expect("should succeed");
         assert_eq!(transfer.stats.total_properties, 1);
     }
 
@@ -764,7 +766,9 @@ mod tests {
             },
         ];
 
-        let results = transfer.transfer_classes_batch(&owl_classes).unwrap();
+        let results = transfer
+            .transfer_classes_batch(&owl_classes)
+            .expect("should succeed");
         assert_eq!(results.len(), 2);
         assert_eq!(transfer.stats.total_classes, 2);
     }

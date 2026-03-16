@@ -667,10 +667,10 @@ mod tests {
     #[test]
     fn test_complexity_analyzer() {
         let query = "{ hello world }";
-        let document = parse_document(query).unwrap();
+        let document = parse_document(query).expect("should succeed");
 
         let analyzer = ComplexityAnalyzer::new(OptimizationConfig::default());
-        let complexity = analyzer.analyze(&document).unwrap();
+        let complexity = analyzer.analyze(&document).expect("should succeed");
 
         assert!(complexity.depth >= 1);
         assert!(complexity.field_count >= 2);
@@ -682,12 +682,17 @@ mod tests {
         let optimizer = QueryOptimizer::new(config);
 
         let query = "{ hello version }";
-        let document = parse_document(query).unwrap();
+        let document = parse_document(query).expect("should succeed");
 
-        let complexity = optimizer.analyze_complexity(&document).unwrap();
+        let complexity = optimizer
+            .analyze_complexity(&document)
+            .expect("should succeed");
         assert!(complexity.is_valid(&optimizer.config));
 
-        let plan = optimizer.get_query_plan(&document).await.unwrap();
+        let plan = optimizer
+            .get_query_plan(&document)
+            .await
+            .expect("should succeed");
         assert!(!plan.sparql_query.is_empty());
     }
 

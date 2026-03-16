@@ -46,7 +46,7 @@ mod tests {
     fn test_pattern_support_confidence() {
         let pattern = Pattern::ClassUsage {
             id: "test_class_usage_person".to_string(),
-            class: NamedNode::new("http://example.org/Person").unwrap(),
+            class: NamedNode::new("http://example.org/Person").expect("should succeed"),
             instance_count: 100,
             support: 0.8,
             confidence: 0.95,
@@ -66,7 +66,7 @@ mod tests {
 
         let patterns = vec![Pattern::ClassUsage {
             id: "test_cache_test_class".to_string(),
-            class: NamedNode::new("http://example.org/Test").unwrap(),
+            class: NamedNode::new("http://example.org/Test").expect("should succeed"),
             instance_count: 10,
             support: 0.5,
             confidence: 0.8,
@@ -77,14 +77,14 @@ mod tests {
 
         let cached = cache.get("test_key");
         assert!(cached.is_some());
-        assert_eq!(cached.unwrap().patterns.len(), 1);
+        assert_eq!(cached.expect("should succeed").patterns.len(), 1);
     }
 
     #[test]
     fn test_cached_pattern_result_expiry() {
         let patterns = vec![Pattern::ClassUsage {
             id: "test_cached_pattern_test_class".to_string(),
-            class: NamedNode::new("http://example.org/Test").unwrap(),
+            class: NamedNode::new("http://example.org/Test").expect("should succeed"),
             instance_count: 10,
             support: 0.5,
             confidence: 0.8,

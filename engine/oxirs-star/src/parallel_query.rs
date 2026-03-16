@@ -292,7 +292,7 @@ impl ParallelQueryExecutor {
         });
 
         let final_results = Arc::try_unwrap(results).unwrap_or_else(|arc| {
-            let mutex = arc.lock().expect("lock should not be poisoned");
+            let mutex = arc.lock().unwrap_or_else(|e| e.into_inner());
             Mutex::new(mutex.clone())
         });
 

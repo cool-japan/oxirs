@@ -415,11 +415,14 @@ mod tests {
 
     #[test]
     fn test_pattern_based_suggestions() {
-        let store = Arc::new(ConcreteStore::new().unwrap());
-        let engine = SuggestionEngine::new(SuggestionConfig::default(), store).unwrap();
+        let store = Arc::new(ConcreteStore::new().expect("should succeed"));
+        let engine =
+            SuggestionEngine::new(SuggestionConfig::default(), store).expect("should succeed");
 
         let context = SuggestionContext::default();
-        let suggestions = engine.suggest("show me all", &context).unwrap();
+        let suggestions = engine
+            .suggest("show me all", &context)
+            .expect("should succeed");
 
         assert!(!suggestions.is_empty());
         assert!(suggestions.iter().any(|s| s.text.contains("Show me all")));
@@ -427,28 +430,30 @@ mod tests {
 
     #[test]
     fn test_history_suggestions() {
-        let store = Arc::new(ConcreteStore::new().unwrap());
-        let mut engine = SuggestionEngine::new(SuggestionConfig::default(), store).unwrap();
+        let store = Arc::new(ConcreteStore::new().expect("should succeed"));
+        let mut engine =
+            SuggestionEngine::new(SuggestionConfig::default(), store).expect("should succeed");
 
         engine.add_to_history("What movies were released in 2023?".to_string());
 
         let context = SuggestionContext::default();
-        let suggestions = engine.suggest("What", &context).unwrap();
+        let suggestions = engine.suggest("What", &context).expect("should succeed");
 
         assert!(suggestions.iter().any(|s| s.text.contains("movies")));
     }
 
     #[test]
     fn test_followup_suggestions() {
-        let store = Arc::new(ConcreteStore::new().unwrap());
-        let engine = SuggestionEngine::new(SuggestionConfig::default(), store).unwrap();
+        let store = Arc::new(ConcreteStore::new().expect("should succeed"));
+        let engine =
+            SuggestionEngine::new(SuggestionConfig::default(), store).expect("should succeed");
 
         let context = SuggestionContext {
             last_query: "Show me all movies".to_string(),
             ..Default::default()
         };
 
-        let suggestions = engine.suggest("", &context).unwrap();
+        let suggestions = engine.suggest("", &context).expect("should succeed");
 
         assert!(suggestions
             .iter()

@@ -1344,7 +1344,7 @@ mod tests {
         let measurement = consciousness.quantum_consciousness_measurement();
         assert!(measurement.is_ok());
 
-        let measurement = measurement.unwrap();
+        let measurement = measurement.expect("measurement should succeed");
         assert!(measurement.probability >= 0.0 && measurement.probability <= 1.0);
         assert!(measurement.fidelity >= 0.0 && measurement.fidelity <= 1.0);
         assert_eq!(consciousness.emotional_state, measurement.measured_state);
@@ -1385,7 +1385,7 @@ mod tests {
         let insights = consciousness.get_consciousness_insights(&patterns);
         assert!(insights.is_ok());
 
-        let insights = insights.unwrap();
+        let insights = insights.expect("insights should be available");
         assert!(insights.quantum_advantage >= 1.0);
         assert!(insights.consciousness_level >= 0.0 && insights.consciousness_level <= 1.0);
         assert!(insights.integration_level >= 0.0 && insights.integration_level <= 1.0);
@@ -1467,7 +1467,7 @@ mod tests {
 
         let messages = meta_consciousness.receive_messages("emotional");
         assert!(messages.is_ok());
-        let messages = messages.unwrap();
+        let messages = messages.expect("messages should be available");
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].source, "quantum");
         assert_eq!(messages[0].message_type, MessageType::QuantumMeasurement);
@@ -1556,7 +1556,7 @@ mod tests {
         let result = consciousness.optimize_query_with_consciousness(&plan);
         assert!(result.is_ok());
 
-        let optimized = result.unwrap();
+        let optimized = result.expect("should have value");
         assert!(optimized.expected_improvement >= 1.0);
         assert!(optimized.consciousness_metadata.consciousness_level >= 0.0);
         assert!(optimized.consciousness_metadata.integration_level >= 0.0);

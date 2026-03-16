@@ -1163,6 +1163,7 @@ impl FaissPerformanceComparison {
 mod tests {
     use super::*;
     use crate::Vector;
+    use anyhow::Result;
 
     #[test]
     fn test_native_faiss_index_creation() {
@@ -1174,27 +1175,29 @@ mod tests {
     }
 
     #[test]
-    fn test_memory_pool_allocation() {
+    fn test_memory_pool_allocation() -> Result<()> {
         let mut pool = MemoryPool::new(1024);
 
-        let block1 = pool.allocate(256).unwrap();
-        let block2 = pool.allocate(512).unwrap();
+        let block1 = pool.allocate(256)?;
+        let block2 = pool.allocate(512)?;
 
         assert_ne!(block1, block2);
         assert_eq!(pool.used_size, 768);
+        Ok(())
     }
 
     #[test]
-    fn test_performance_comparison_framework() {
+    fn test_performance_comparison_framework() -> Result<()> {
         let native_config = NativeFaissConfig::default();
         let faiss_config = FaissConfig::default();
-        let faiss_index = NativeFaissIndex::new(native_config, faiss_config).unwrap();
+        let faiss_index = NativeFaissIndex::new(native_config, faiss_config)?;
 
         // Create mock oxirs index
         let oxirs_index: Box<dyn VectorIndex> = Box::new(MockVectorIndex::new());
 
         let comparison = FaissPerformanceComparison::new(faiss_index, oxirs_index);
         assert_eq!(comparison.benchmark_datasets.len(), 0);
+        Ok(())
     }
 
     // Mock vector index for testing

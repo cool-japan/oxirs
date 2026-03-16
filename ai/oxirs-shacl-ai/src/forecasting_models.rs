@@ -1662,7 +1662,7 @@ mod tests {
 
         let result = model.calculate_linear_trend(&data_points);
         assert!(result.is_ok());
-        let (slope, _intercept) = result.unwrap();
+        let (slope, _intercept) = result.expect("should succeed");
         assert!(slope > 0.0); // Should have positive slope
     }
 

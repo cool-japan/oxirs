@@ -571,7 +571,10 @@ mod tests {
         let problem = "How to optimize SPARQL query performance?";
         let context = "Database has 1 million triples";
 
-        let tree = engine.solve(problem, context).await.unwrap();
+        let tree = engine
+            .solve(problem, context)
+            .await
+            .expect("should succeed");
 
         assert!(!tree.nodes.is_empty());
         assert!(tree.nodes_explored > 0);
@@ -582,7 +585,9 @@ mod tests {
         let config = TreeOfThoughtsConfig::default();
         let engine = TreeOfThoughtsEngine::new(config);
 
-        let tree = engine.initialize_tree("Test problem").unwrap();
+        let tree = engine
+            .initialize_tree("Test problem")
+            .expect("should succeed");
 
         assert_eq!(tree.nodes.len(), 1);
         assert!(tree.nodes.contains_key(&tree.root_id));
@@ -607,7 +612,10 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        let branches = engine.generate_branches(&node, "context").await.unwrap();
+        let branches = engine
+            .generate_branches(&node, "context")
+            .await
+            .expect("should succeed");
 
         assert!(!branches.is_empty());
         assert!(branches.len() <= max_branches);

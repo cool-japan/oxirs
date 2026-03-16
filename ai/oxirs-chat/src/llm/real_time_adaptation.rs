@@ -734,7 +734,10 @@ mod tests {
         };
 
         let adaptation = RealTimeAdaptation::new(config);
-        let metrics = adaptation.get_adaptation_metrics().await.unwrap();
+        let metrics = adaptation
+            .get_adaptation_metrics()
+            .await
+            .expect("should succeed");
         assert_eq!(metrics.accuracy_improvement, 0.0);
     }
 
@@ -854,8 +857,14 @@ mod tests {
             timestamp: SystemTime::now(),
         };
 
-        adaptation.process_interaction(interaction).await.unwrap();
-        let performance = adaptation.get_performance_state().await.unwrap();
+        adaptation
+            .process_interaction(interaction)
+            .await
+            .expect("should succeed");
+        let performance = adaptation
+            .get_performance_state()
+            .await
+            .expect("should succeed");
         assert!(performance.accuracy > 0.0);
     }
 }

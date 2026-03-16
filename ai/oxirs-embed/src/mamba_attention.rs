@@ -1048,9 +1048,9 @@ mod tests {
     #[test]
     fn test_layer_norm() {
         let norm = LayerNorm::new(4);
-        let input =
-            Array2::from_shape_vec((2, 4), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).unwrap();
-        let output = norm.forward(&input).unwrap();
+        let input = Array2::from_shape_vec((2, 4), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+            .expect("should succeed");
+        let output = norm.forward(&input).expect("should succeed");
         assert_eq!(output.dim(), (2, 4));
     }
 
@@ -1062,12 +1062,12 @@ mod tests {
 
         // Add a triple
         let triple = crate::Triple::new(
-            crate::NamedNode::new("http://example.org/alice").unwrap(),
-            crate::NamedNode::new("http://example.org/knows").unwrap(),
-            crate::NamedNode::new("http://example.org/bob").unwrap(),
+            crate::NamedNode::new("http://example.org/alice").expect("should succeed"),
+            crate::NamedNode::new("http://example.org/knows").expect("should succeed"),
+            crate::NamedNode::new("http://example.org/bob").expect("should succeed"),
         );
 
-        model.add_triple(triple).unwrap();
+        model.add_triple(triple).expect("should succeed");
         assert_eq!(model.get_entities().len(), 2);
         assert_eq!(model.get_relations().len(), 1);
     }
@@ -1091,10 +1091,10 @@ mod tests {
         let config = MambaConfig::default();
         let block = MambaBlock::new(config.clone());
 
-        let input = Array2::from_shape_vec((1, 3), vec![-1.0, 0.0, 1.0]).unwrap();
+        let input = Array2::from_shape_vec((1, 3), vec![-1.0, 0.0, 1.0]).expect("should succeed");
 
         // Test SiLU activation
-        let output = block.apply_activation(&input).unwrap();
+        let output = block.apply_activation(&input).expect("should succeed");
         assert!(output[[0, 0]] < 0.0); // SiLU(-1) < 0
         assert_eq!(output[[0, 1]], 0.0); // SiLU(0) = 0
         assert!(output[[0, 2]] > 0.0); // SiLU(1) > 0

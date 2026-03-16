@@ -235,8 +235,8 @@ mod tests {
     #[test]
     fn test_config_serialization() {
         let config = GraphRAGConfig::default();
-        let json = serde_json::to_string(&config).unwrap();
-        let parsed: GraphRAGConfig = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&config).expect("should succeed");
+        let parsed: GraphRAGConfig = serde_json::from_str(&json).expect("should succeed");
         assert_eq!(parsed.top_k, config.top_k);
     }
 }

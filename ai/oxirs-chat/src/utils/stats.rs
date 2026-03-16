@@ -132,13 +132,13 @@ mod tests {
     fn test_cosine_similarity() {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![4.0, 5.0, 6.0];
-        let sim = cosine_similarity(&a, &b).unwrap();
+        let sim = cosine_similarity(&a, &b).expect("should succeed");
         assert!(sim > 0.9 && sim < 1.0);
 
         // Orthogonal vectors
         let c = vec![1.0, 0.0];
         let d = vec![0.0, 1.0];
-        let sim2 = cosine_similarity(&c, &d).unwrap();
+        let sim2 = cosine_similarity(&c, &d).expect("should succeed");
         assert!((sim2 - 0.0).abs() < 1e-10);
     }
 
@@ -168,7 +168,7 @@ mod tests {
     fn test_euclidean_distance() {
         let a = vec![0.0, 0.0];
         let b = vec![3.0, 4.0];
-        let dist = euclidean_distance(&a, &b).unwrap();
+        let dist = euclidean_distance(&a, &b).expect("should succeed");
         assert_eq!(dist, 5.0);
     }
 }

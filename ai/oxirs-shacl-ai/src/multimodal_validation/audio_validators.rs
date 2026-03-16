@@ -577,9 +577,19 @@ mod tests {
         ];
         let content = create_test_audio_content(&mp3_data);
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
-        assert_eq!(result.details.get("detected_format").unwrap(), "mp3");
+        assert_eq!(
+            result
+                .details
+                .get("detected_format")
+                .expect("should succeed"),
+            "mp3"
+        );
     }
 
     #[tokio::test]
@@ -591,9 +601,19 @@ mod tests {
         wav_data.extend_from_slice(&[0x57, 0x41, 0x56, 0x45]); // WAVE
         let content = create_test_audio_content(&wav_data);
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
-        assert_eq!(result.details.get("detected_format").unwrap(), "wav");
+        assert_eq!(
+            result
+                .details
+                .get("detected_format")
+                .expect("should succeed"),
+            "wav"
+        );
     }
 
     #[tokio::test]
@@ -601,7 +621,11 @@ mod tests {
         let validator = SpeechRecognitionValidator::new();
         let content = create_test_audio_content(&[0x49, 0x44, 0x33]); // Minimal MP3
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("transcription"));
         assert!(result.details.contains_key("confidence"));
@@ -612,7 +636,11 @@ mod tests {
         let validator = MusicAnalysisValidator::new();
         let content = create_test_audio_content(&[0x49, 0x44, 0x33]); // Minimal MP3
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("tempo_bpm"));
         assert!(result.details.contains_key("key_signature"));
@@ -623,7 +651,11 @@ mod tests {
         let validator = AudioQualityValidator::new();
         let content = create_test_audio_content(&[0x49, 0x44, 0x33]); // Minimal MP3
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("sample_rate"));
         assert!(result.details.contains_key("bitrate"));

@@ -362,7 +362,7 @@ impl StarStorageBackend {
     pub fn insert_quoted_triple(&mut self, triple: &StarTriple) -> StarResult<bool> {
         match self {
             Self::Memory { store, .. } => {
-                let store_guard = store.write().expect("rwlock should not be poisoned");
+                let store_guard = store.write().unwrap_or_else(|e| e.into_inner());
                 let initial_len = store_guard.len();
                 store_guard.insert(triple)?;
                 let final_len = store_guard.len();
@@ -370,7 +370,7 @@ impl StarStorageBackend {
             }
 
             Self::Persistent { store, config, .. } => {
-                let store_guard = store.write().expect("rwlock should not be poisoned");
+                let store_guard = store.write().unwrap_or_else(|e| e.into_inner());
                 let initial_len = store_guard.len();
                 store_guard.insert(triple)?;
                 let final_len = store_guard.len();
@@ -390,10 +390,10 @@ impl StarStorageBackend {
                 profiler,
                 config: _,
             } => {
-                let mut profiler_guard = profiler.write().expect("rwlock should not be poisoned");
+                let mut profiler_guard = profiler.write().unwrap_or_else(|e| e.into_inner());
                 profiler_guard.start();
 
-                let store_guard = store.write().expect("rwlock should not be poisoned");
+                let store_guard = store.write().unwrap_or_else(|e| e.into_inner());
                 let initial_len = store_guard.len();
                 store_guard.insert(triple)?;
                 let final_len = store_guard.len();
@@ -403,7 +403,7 @@ impl StarStorageBackend {
             }
 
             Self::MemoryMapped { store, .. } => {
-                let store_guard = store.write().expect("rwlock should not be poisoned");
+                let store_guard = store.write().unwrap_or_else(|e| e.into_inner());
                 let initial_len = store_guard.len();
                 store_guard.insert(triple)?;
                 let final_len = store_guard.len();
@@ -424,7 +424,7 @@ impl StarStorageBackend {
             | Self::Persistent { store, .. }
             | Self::UltraPerformance { store, .. }
             | Self::MemoryMapped { store, .. } => {
-                let store_guard = store.read().expect("rwlock should not be poisoned");
+                let store_guard = store.read().unwrap_or_else(|e| e.into_inner());
                 StarStore::query(&store_guard, subject, predicate, object)
             }
         }
@@ -445,7 +445,7 @@ impl StarStorageBackend {
 
                 // Save quoted triples
                 let quoted_triples_path = config.path.join("quoted_triples.bin");
-                let store_guard = store.read().expect("rwlock should not be poisoned");
+                let store_guard = store.read().unwrap_or_else(|e| e.into_inner());
 
                 // Convert to serializable representation
                 let serializable = SerializableStarStore::from_store(&store_guard)?;
@@ -496,7 +496,7 @@ impl StarStorageBackend {
                 debug!("Syncing memory-mapped storage");
 
                 // Serialize and write to memory-mapped file
-                let store_guard = store.read().expect("rwlock should not be poisoned");
+                let store_guard = store.read().unwrap_or_else(|e| e.into_inner());
                 let serializable = SerializableStarStore::from_store(&store_guard)?;
                 drop(store_guard);
 
@@ -597,7 +597,7 @@ impl StarStorageBackend {
                 let loaded_store = serializable.into_store()?;
 
                 // Replace current store
-                let mut store_guard = store.write().expect("rwlock should not be poisoned");
+                let mut store_guard = store.write().unwrap_or_else(|e| e.into_inner());
                 *store_guard = loaded_store;
 
                 debug!("Loaded {} quoted triples from disk", store_guard.len());
@@ -639,7 +639,7 @@ impl StarStorageBackend {
                 // Reconstruct store
                 let loaded_store = serializable.into_store()?;
 
-                let mut store_guard = store.write().expect("rwlock should not be poisoned");
+                let mut store_guard = store.write().unwrap_or_else(|e| e.into_inner());
                 *store_guard = loaded_store;
 
                 debug!(
@@ -664,7 +664,7 @@ impl StarStorageBackend {
             | Self::Persistent { store, .. }
             | Self::UltraPerformance { store, .. }
             | Self::MemoryMapped { store, .. } => {
-                let store_guard = store.read().expect("rwlock should not be poisoned");
+                let store_guard = store.read().unwrap_or_else(|e| e.into_inner());
                 let star_stats = store_guard.statistics();
 
                 StorageStatistics {
@@ -693,7 +693,7 @@ impl StarStorageBackend {
             | Self::Persistent { store, .. }
             | Self::UltraPerformance { store, .. }
             | Self::MemoryMapped { store, .. } => {
-                let store_guard = store.read().expect("rwlock should not be poisoned");
+                let store_guard = store.read().unwrap_or_else(|e| e.into_inner());
                 let stats = store_guard.statistics();
                 // Estimate ~500 bytes per quoted triple (conservative)
                 stats.quoted_triples_count * 500

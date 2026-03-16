@@ -575,7 +575,7 @@ mod tests {
         ];
 
         assert!(batcher.can_batch(&queries));
-        let batched = batcher.batch_queries(queries).unwrap();
+        let batched = batcher.batch_queries(queries).expect("should succeed");
         assert!(batched.contains("query0"));
         assert!(batched.contains("query1"));
     }
@@ -607,7 +607,7 @@ mod tests {
             subgraphs: HashSet::new(),
         };
 
-        let optimized = optimizer.optimize(plan).unwrap();
+        let optimized = optimizer.optimize(plan).expect("should succeed");
         assert!(!optimized.optimizations_applied.is_empty());
     }
 

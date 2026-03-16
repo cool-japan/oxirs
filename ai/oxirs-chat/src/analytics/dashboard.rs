@@ -511,7 +511,7 @@ mod tests {
         let config = DashboardConfig::default();
         let dashboard = AnalyticsDashboard::new(config);
 
-        let snapshot = dashboard.get_snapshot().await.unwrap();
+        let snapshot = dashboard.get_snapshot().await.expect("should succeed");
         assert_eq!(snapshot.metrics.total_messages, 0);
     }
 
@@ -531,9 +531,9 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        dashboard.record_conversation_event(event).await.unwrap();
+        dashboard.record_conversation_event(event).await.expect("should succeed");
 
-        let snapshot = dashboard.get_snapshot().await.unwrap();
+        let snapshot = dashboard.get_snapshot().await.expect("should succeed");
         assert_eq!(snapshot.metrics.total_messages, 1);
     }
 
@@ -542,13 +542,13 @@ mod tests {
         let config = DashboardConfig::default();
         let dashboard = AnalyticsDashboard::new(config);
 
-        let conversation_insights = dashboard.get_conversation_insights().await.unwrap();
+        let conversation_insights = dashboard.get_conversation_insights().await.expect("should succeed");
         assert!(conversation_insights.avg_query_complexity > 0.0);
 
-        let user_insights = dashboard.get_user_insights().await.unwrap();
+        let user_insights = dashboard.get_user_insights().await.expect("should succeed");
         assert!(user_insights.retention_rate > 0.0);
 
-        let system_insights = dashboard.get_system_insights().await.unwrap();
+        let system_insights = dashboard.get_system_insights().await.expect("should succeed");
         assert!(system_insights.resource_utilization > 0.0);
     }
 }

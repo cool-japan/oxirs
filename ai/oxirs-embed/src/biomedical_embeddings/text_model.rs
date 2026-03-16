@@ -718,7 +718,7 @@ mod tests {
         let model = SpecializedTextEmbedding::new(config);
 
         let text = "Patient takes 100 mg/kg b.i.d. for treatment";
-        let processed = model.preprocess_text(text).unwrap();
+        let processed = model.preprocess_text(text).expect("should succeed");
 
         // Should expand medical abbreviations
         assert!(processed.contains("milligrams per kilogram"));
@@ -732,7 +732,7 @@ mod tests {
         let model = SpecializedTextEmbedding::new(config);
 
         let text = "Patient takes 100 mg/kg b.i.d. for treatment";
-        let processed = model.preprocess_text(text).unwrap();
+        let processed = model.preprocess_text(text).expect("should succeed");
 
         // Should be unchanged when preprocessing is disabled
         assert_eq!(processed, text);
@@ -744,12 +744,12 @@ mod tests {
         let mut model = SpecializedTextEmbedding::new(config);
 
         let text = "The protein folding study shows significant results with p < 0.001";
-        let embedding = model.encode_text(text).await.unwrap();
+        let embedding = model.encode_text(text).await.expect("should succeed");
 
         assert_eq!(embedding.len(), 768);
 
         // Test caching - second call should return cached result
-        let embedding2 = model.encode_text(text).await.unwrap();
+        let embedding2 = model.encode_text(text).await.expect("should succeed");
         assert_eq!(embedding.to_vec(), embedding2.to_vec());
         assert_eq!(model.text_embeddings.len(), 1);
     }
@@ -761,7 +761,10 @@ mod tests {
         let mut model = SpecializedTextEmbedding::new(config);
 
         let scientific_text = "The study by Smith et al. shows figure 1 demonstrates the results";
-        let embedding = model.encode_text(scientific_text).await.unwrap();
+        let embedding = model
+            .encode_text(scientific_text)
+            .await
+            .expect("should succeed");
 
         // Should detect scientific features (citations, figures)
         // Values are amplified by 1.2 due to domain pretraining
@@ -773,7 +776,7 @@ mod tests {
         let mut model = SpecializedTextEmbedding::new(config);
 
         let code_text = "function calculateSum() { return a + b; }";
-        let embedding = model.encode_text(code_text).await.unwrap();
+        let embedding = model.encode_text(code_text).await.expect("should succeed");
 
         // Should detect code features (amplified by domain pretraining)
         assert_eq!(embedding[0], 1.2); // function detected, amplified
@@ -785,7 +788,10 @@ mod tests {
 
         let biomedical_text =
             "The protein expression correlates with cancer disease progression, dose 100mg";
-        let embedding = model.encode_text(biomedical_text).await.unwrap();
+        let embedding = model
+            .encode_text(biomedical_text)
+            .await
+            .expect("should succeed");
 
         // Should detect biomedical features (amplified by domain pretraining)
         assert_eq!(embedding[0], 1.2); // protein detected, amplified
@@ -804,7 +810,10 @@ mod tests {
             "Drug interaction with target proteins".to_string(),
         ];
 
-        let stats = model.fine_tune(training_texts).await.unwrap();
+        let stats = model
+            .fine_tune(training_texts)
+            .await
+            .expect("should succeed");
 
         assert!(model.is_trained);
         assert_eq!(stats.epochs_completed, 5); // BioBERT config has 5 epochs

@@ -433,13 +433,14 @@ impl COOMatrix {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
-    fn test_sparse_vector_creation() {
+    fn test_sparse_vector_creation() -> Result<()> {
         let indices = vec![0, 3, 7];
         let values = vec![1.0, 2.0, 3.0];
-        let sparse = SparseVector::new(indices, values, 10).unwrap();
+        let sparse = SparseVector::new(indices, values, 10)?;
 
         assert_eq!(sparse.get(0), 1.0);
         assert_eq!(sparse.get(3), 2.0);
@@ -447,6 +448,7 @@ mod tests {
         assert_eq!(sparse.get(5), 0.0);
         assert_eq!(sparse.nnz(), 3);
         assert_eq!(sparse.dimensions, 10);
+        Ok(())
     }
 
     #[test]
@@ -463,16 +465,16 @@ mod tests {
     }
 
     #[test]
-    fn test_sparse_operations() {
-        let sparse1 = SparseVector::new(vec![0, 2, 4], vec![1.0, 2.0, 3.0], 5).unwrap();
-        let sparse2 = SparseVector::new(vec![1, 2, 3], vec![4.0, 5.0, 6.0], 5).unwrap();
+    fn test_sparse_operations() -> Result<()> {
+        let sparse1 = SparseVector::new(vec![0, 2, 4], vec![1.0, 2.0, 3.0], 5)?;
+        let sparse2 = SparseVector::new(vec![1, 2, 3], vec![4.0, 5.0, 6.0], 5)?;
 
         // Dot product
-        let dot = sparse1.dot(&sparse2).unwrap();
+        let dot = sparse1.dot(&sparse2)?;
         assert_eq!(dot, 10.0); // Only index 2 overlaps: 2.0 * 5.0 = 10.0
 
         // Addition
-        let sum = sparse1.add(&sparse2).unwrap();
+        let sum = sparse1.add(&sparse2)?;
         assert_eq!(sum.get(0), 1.0);
         assert_eq!(sum.get(1), 4.0);
         assert_eq!(sum.get(2), 7.0);
@@ -484,40 +486,43 @@ mod tests {
         assert_eq!(scaled.get(0), 2.0);
         assert_eq!(scaled.get(2), 4.0);
         assert_eq!(scaled.get(4), 6.0);
+        Ok(())
     }
 
     #[test]
-    fn test_csr_matrix() {
+    fn test_csr_matrix() -> Result<()> {
         let vectors = vec![
-            SparseVector::new(vec![0, 2], vec![1.0, 2.0], 4).unwrap(),
-            SparseVector::new(vec![1, 3], vec![3.0, 4.0], 4).unwrap(),
-            SparseVector::new(vec![0, 1, 2], vec![5.0, 6.0, 7.0], 4).unwrap(),
+            SparseVector::new(vec![0, 2], vec![1.0, 2.0], 4)?,
+            SparseVector::new(vec![1, 3], vec![3.0, 4.0], 4)?,
+            SparseVector::new(vec![0, 1, 2], vec![5.0, 6.0, 7.0], 4)?,
         ];
 
-        let csr = CSRMatrix::from_sparse_vectors(&vectors).unwrap();
+        let csr = CSRMatrix::from_sparse_vectors(&vectors)?;
 
         assert_eq!(csr.shape, (3, 4));
         assert_eq!(csr.values.len(), 7);
         assert_eq!(csr.row_ptrs, vec![0, 2, 4, 7]);
 
         // Test row extraction
-        let row1 = csr.get_row(1).unwrap();
+        let row1 = csr.get_row(1).expect("row 1 should exist");
         assert_eq!(row1.get(1), 3.0);
         assert_eq!(row1.get(3), 4.0);
+        Ok(())
     }
 
     #[test]
-    fn test_coo_to_csr() {
+    fn test_coo_to_csr() -> Result<()> {
         let mut coo = COOMatrix::new(3, 3);
-        coo.add_value(0, 0, 1.0).unwrap();
-        coo.add_value(0, 2, 2.0).unwrap();
-        coo.add_value(1, 1, 3.0).unwrap();
-        coo.add_value(2, 0, 4.0).unwrap();
-        coo.add_value(2, 2, 5.0).unwrap();
+        coo.add_value(0, 0, 1.0)?;
+        coo.add_value(0, 2, 2.0)?;
+        coo.add_value(1, 1, 3.0)?;
+        coo.add_value(2, 0, 4.0)?;
+        coo.add_value(2, 2, 5.0)?;
 
         let csr = coo.to_csr();
         assert_eq!(csr.values, vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         assert_eq!(csr.col_indices, vec![0, 2, 1, 0, 2]);
         assert_eq!(csr.row_ptrs, vec![0, 2, 3, 5]);
+        Ok(())
     }
 }

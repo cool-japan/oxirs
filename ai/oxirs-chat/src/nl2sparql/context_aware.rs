@@ -545,7 +545,7 @@ mod tests {
 
         let resolved = generator
             .resolve_anaphora("Tell me more about it", &context)
-            .unwrap();
+            .expect("should succeed");
         assert!(resolved.contains("Inception"));
     }
 
@@ -559,7 +559,11 @@ mod tests {
 
         assert_eq!(context.tracked_entities.len(), 2);
         assert_eq!(
-            context.tracked_entities.get("Movie").unwrap().mention_count,
+            context
+                .tracked_entities
+                .get("Movie")
+                .expect("should succeed")
+                .mention_count,
             1
         );
     }
@@ -571,7 +575,7 @@ mod tests {
 
         let sparql = generator
             .generate_count_query("How many Movies are there?", &context)
-            .unwrap();
+            .expect("should succeed");
 
         println!("Generated SPARQL: {}", sparql);
         assert!(sparql.contains("COUNT"));

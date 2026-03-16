@@ -551,7 +551,9 @@ mod tests {
             ("http://c".to_string(), 0.80),
             ("http://b".to_string(), 0.60),
         ];
-        let results = retriever.retrieve("battery safety", &dense).unwrap();
+        let results = retriever
+            .retrieve("battery safety", &dense)
+            .expect("should succeed");
         assert!(!results.is_empty());
         // http://a appears in both lists, should be near top
         let top = &results[0];
@@ -572,7 +574,9 @@ mod tests {
             ("http://a".to_string(), 0.9),
             ("http://b".to_string(), 0.85),
         ];
-        let results = retriever.retrieve("battery cell", &dense).unwrap();
+        let results = retriever
+            .retrieve("battery cell", &dense)
+            .expect("should succeed");
         assert!(!results.is_empty());
         // Fused source for http://a (in both)
         assert!(results
@@ -590,7 +594,9 @@ mod tests {
         };
         let retriever = HybridRetriever::build(&corpus, config);
         let dense: Vec<(String, f32)> = vec![("http://d".to_string(), 0.99)];
-        let results = retriever.retrieve("charging", &dense).unwrap();
+        let results = retriever
+            .retrieve("charging", &dense)
+            .expect("should succeed");
         assert!(!results.is_empty());
     }
 
@@ -604,7 +610,9 @@ mod tests {
         };
         let retriever = HybridRetriever::build(&corpus, config);
         let dense: Vec<(String, f32)> = vec![("http://e".to_string(), 0.8)];
-        let results = retriever.retrieve("lithium cathode", &dense).unwrap();
+        let results = retriever
+            .retrieve("lithium cathode", &dense)
+            .expect("should succeed");
         assert!(!results.is_empty());
     }
 
@@ -622,7 +630,9 @@ mod tests {
             ("http://c".to_string(), 0.7),
             ("http://d".to_string(), 0.6),
         ];
-        let results = retriever.retrieve("battery", &dense).unwrap();
+        let results = retriever
+            .retrieve("battery", &dense)
+            .expect("should succeed");
         assert!(results.len() <= 2);
     }
 
@@ -631,7 +641,9 @@ mod tests {
         let corpus = make_corpus();
         let config = HybridRetrievalConfig::default();
         let retriever = HybridRetriever::build(&corpus, config);
-        let results = retriever.retrieve_bm25_only("thermal management").unwrap();
+        let results = retriever
+            .retrieve_bm25_only("thermal management")
+            .expect("should succeed");
         assert!(!results.is_empty());
         for e in &results {
             assert_eq!(e.source, ScoreSource::Keyword);
@@ -643,7 +655,9 @@ mod tests {
         let corpus = make_corpus();
         let config = HybridRetrievalConfig::default();
         let retriever = HybridRetriever::build(&corpus, config);
-        let score = retriever.score_document("battery", "http://a").unwrap();
+        let score = retriever
+            .score_document("battery", "http://a")
+            .expect("should succeed");
         assert!(score >= 0.0);
     }
 
@@ -680,7 +694,7 @@ mod tests {
             ..Default::default()
         };
         let retriever = HybridRetriever::build(&corpus, config);
-        let results = retriever.retrieve("battery", &[]).unwrap();
+        let results = retriever.retrieve("battery", &[]).expect("should succeed");
         assert!(results.is_empty());
     }
 
@@ -696,7 +710,9 @@ mod tests {
         let corpus = make_corpus();
         let config = HybridRetrievalConfig::default();
         let retriever = HybridRetriever::build(&corpus, config);
-        let results = retriever.retrieve("battery cell", &[]).unwrap();
+        let results = retriever
+            .retrieve("battery cell", &[])
+            .expect("should succeed");
         // BM25 should still produce results
         assert!(!results.is_empty());
     }
@@ -718,12 +734,12 @@ mod tests {
             .iter()
             .find(|(id, _)| id == "http://a")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         let b_score = blended
             .iter()
             .find(|(id, _)| id == "http://b")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         // Both should be positive
         assert!(a_score > 0.0);
         assert!(b_score > 0.0);
@@ -830,7 +846,7 @@ mod additional_tests {
             .find(|(id, _)| id == "http://a")
             .map(|(_, s)| *s);
         assert!(a_score.is_some(), "http://a should appear in results");
-        assert!(a_score.unwrap() > 0.0);
+        assert!(a_score.expect("should succeed") > 0.0);
     }
 
     #[test]
@@ -906,12 +922,12 @@ mod additional_tests {
             .iter()
             .find(|(id, _)| id == "a")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         let b = normed
             .iter()
             .find(|(id, _)| id == "b")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         assert!((a - 1.0).abs() < 1e-9);
         assert!((b - 0.5).abs() < 1e-9);
     }
@@ -931,12 +947,12 @@ mod additional_tests {
             .iter()
             .find(|(id, _)| id == "http://first")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         let second = blended
             .iter()
             .find(|(id, _)| id == "http://second")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         assert!(
             first > second,
             "Rank-0 item should score higher: {first} vs {second}"
@@ -953,7 +969,7 @@ mod additional_tests {
             .iter()
             .find(|(id, _)| id == "http://a")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         let expected = 1.0 / (60.0 + 1.0);
         assert!(
             (score - expected).abs() < 1e-9,
@@ -972,12 +988,12 @@ mod additional_tests {
             .iter()
             .find(|(id, _)| id == "http://a")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         let b_score = blended
             .iter()
             .find(|(id, _)| id == "http://b")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         assert!((a_score - 0.8).abs() < 1e-9);
         assert!((b_score - 0.0).abs() < 1e-9); // only in bm25, alpha=1 → 0 weight on bm25
     }
@@ -991,12 +1007,12 @@ mod additional_tests {
             .iter()
             .find(|(id, _)| id == "http://a")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         let b_score = blended
             .iter()
             .find(|(id, _)| id == "http://b")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         assert!((a_score - 0.0).abs() < 1e-9);
         assert!((b_score - 0.9).abs() < 1e-9);
     }
@@ -1012,7 +1028,7 @@ mod additional_tests {
             .iter()
             .find(|(id, _)| id == "http://a")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         assert!((score - 0.9).abs() < 1e-9);
     }
 
@@ -1027,7 +1043,7 @@ mod additional_tests {
             .iter()
             .find(|(id, _)| id == "http://a")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         let expected = (0.4 * 0.9f64).sqrt();
         assert!((score - expected).abs() < 1e-9);
     }
@@ -1041,7 +1057,7 @@ mod additional_tests {
             .iter()
             .find(|(id, _)| id == "http://only_dense")
             .map(|(_, s)| *s)
-            .unwrap();
+            .expect("should succeed");
         // b=0, d=0.6 → (0.6 + 0) * 0.5 = 0.3
         assert!((score - 0.3).abs() < 1e-9);
     }
@@ -1058,11 +1074,13 @@ mod additional_tests {
         };
         let retriever = HybridRetriever::build(&corpus, config);
         let dense = vec![("http://a".to_string(), 0.9f32)];
-        let results = retriever.retrieve("battery safety", &dense).unwrap();
+        let results = retriever
+            .retrieve("battery safety", &dense)
+            .expect("should succeed");
         // http://a is in both dense and BM25 results
         let a_entity = results.iter().find(|e| e.uri == "http://a");
         assert!(a_entity.is_some());
-        assert_eq!(a_entity.unwrap().source, ScoreSource::Fused);
+        assert_eq!(a_entity.expect("should succeed").source, ScoreSource::Fused);
     }
 
     #[test]
@@ -1077,7 +1095,7 @@ mod additional_tests {
         };
         let retriever = HybridRetriever::build(&corpus, config);
         // Empty dense list → all results are from BM25
-        let results = retriever.retrieve("battery", &[]).unwrap();
+        let results = retriever.retrieve("battery", &[]).expect("should succeed");
         for e in &results {
             assert_eq!(e.source, ScoreSource::Keyword);
         }

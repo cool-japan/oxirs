@@ -40,18 +40,18 @@ pub use crate::model::GraphName as GraphNameKey;
 /// use oxirs_core::model::{GraphName, NamedNode, Literal, Triple};
 ///
 /// let mut mgr = NamedGraphManager::new();
-/// let graph_iri = NamedNode::new("http://example.org/graph1").unwrap();
+/// let graph_iri = NamedNode::new("http://example.org/graph1").expect("valid IRI");
 /// let key = GraphName::NamedNode(graph_iri.clone());
 ///
 /// // Create a named graph (auto-created on first insert)
 /// mgr.add_named_graph(key.clone());
 ///
 /// // Insert a triple into that graph
-/// let subj = NamedNode::new("http://example.org/s").unwrap();
-/// let pred = NamedNode::new("http://example.org/p").unwrap();
+/// let subj = NamedNode::new("http://example.org/s").expect("valid IRI");
+/// let pred = NamedNode::new("http://example.org/p").expect("valid IRI");
 /// let obj  = Literal::new("hello");
 /// let triple = Triple::new(subj, pred, obj);
-/// mgr.insert_triple(&key, triple).unwrap();
+/// mgr.insert_triple(&key, triple).expect("operation should succeed");
 ///
 /// assert_eq!(mgr.triple_count_in(&key), 1);
 /// ```
@@ -697,7 +697,8 @@ mod tests {
     fn test_remove_default_graph_clears_contents() {
         let mut mgr = NamedGraphManager::new();
         let t = triple("http://example.org/s", "http://example.org/p", "hello");
-        mgr.insert_triple(&GraphName::DefaultGraph, t).unwrap();
+        mgr.insert_triple(&GraphName::DefaultGraph, t)
+            .expect("operation should succeed");
         assert_eq!(mgr.default_graph().len(), 1);
         let removed = mgr.remove_named_graph(&GraphName::DefaultGraph);
         assert!(removed.is_some());
@@ -711,7 +712,9 @@ mod tests {
         let mut mgr = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        assert!(mgr.insert_triple(&key, t).unwrap());
+        assert!(mgr
+            .insert_triple(&key, t)
+            .expect("operation should succeed"));
     }
 
     #[test]
@@ -719,8 +722,11 @@ mod tests {
         let mut mgr = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&key, t.clone()).unwrap();
-        assert!(!mgr.insert_triple(&key, t).unwrap());
+        mgr.insert_triple(&key, t.clone())
+            .expect("triple insert should succeed");
+        assert!(!mgr
+            .insert_triple(&key, t)
+            .expect("operation should succeed"));
     }
 
     #[test]
@@ -729,7 +735,8 @@ mod tests {
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
         assert!(!mgr.contains_named_graph(&key));
-        mgr.insert_triple(&key, t).unwrap();
+        mgr.insert_triple(&key, t)
+            .expect("operation should succeed");
         assert!(mgr.contains_named_graph(&key));
     }
 
@@ -738,7 +745,8 @@ mod tests {
         let mut mgr = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&key, t.clone()).unwrap();
+        mgr.insert_triple(&key, t.clone())
+            .expect("triple insert should succeed");
         assert!(mgr.contains_triple(&key, &t));
     }
 
@@ -748,7 +756,8 @@ mod tests {
         let key1 = graph_key("http://example.org/g1");
         let key2 = graph_key("http://example.org/g2");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&key1, t.clone()).unwrap();
+        mgr.insert_triple(&key1, t.clone())
+            .expect("triple insert should succeed");
         assert!(!mgr.contains_triple(&key2, &t));
     }
 
@@ -758,7 +767,8 @@ mod tests {
         let key = graph_key("http://example.org/g1");
         for i in 0..7 {
             let t = triple(&format!("http://s.org/s{i}"), "http://p.org/p", "o");
-            mgr.insert_triple(&key, t).unwrap();
+            mgr.insert_triple(&key, t)
+                .expect("operation should succeed");
         }
         assert_eq!(mgr.triple_count_in(&key), 7);
     }
@@ -770,7 +780,8 @@ mod tests {
             let key = graph_key(&format!("http://example.org/g{g}"));
             for i in 0..4 {
                 let t = triple(&format!("http://s.org/s{i}"), "http://p.org/p", "o");
-                mgr.insert_triple(&key, t).unwrap();
+                mgr.insert_triple(&key, t)
+                    .expect("operation should succeed");
             }
         }
         assert_eq!(mgr.triple_count(), 12);
@@ -783,8 +794,11 @@ mod tests {
         let mut mgr = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&key, t.clone()).unwrap();
-        assert!(mgr.remove_triple(&key, &t).unwrap());
+        mgr.insert_triple(&key, t.clone())
+            .expect("triple insert should succeed");
+        assert!(mgr
+            .remove_triple(&key, &t)
+            .expect("operation should succeed"));
     }
 
     #[test]
@@ -793,7 +807,9 @@ mod tests {
         let key = graph_key("http://example.org/g1");
         mgr.add_named_graph(key.clone());
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        assert!(!mgr.remove_triple(&key, &t).unwrap());
+        assert!(!mgr
+            .remove_triple(&key, &t)
+            .expect("operation should succeed"));
     }
 
     #[test]
@@ -809,8 +825,10 @@ mod tests {
         let mut mgr = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&key, t.clone()).unwrap();
-        mgr.remove_triple(&key, &t).unwrap();
+        mgr.insert_triple(&key, t.clone())
+            .expect("triple insert should succeed");
+        mgr.remove_triple(&key, &t)
+            .expect("operation should succeed");
         assert_eq!(mgr.triple_count_in(&key), 0);
     }
 
@@ -822,8 +840,10 @@ mod tests {
         let key = graph_key("http://example.org/g1");
         let t1 = triple("http://s.org/s1", "http://p.org/p", "o1");
         let t2 = triple("http://s.org/s2", "http://p.org/p", "o2");
-        mgr.insert_triple(&key, t1.clone()).unwrap();
-        mgr.insert_triple(&key, t2.clone()).unwrap();
+        mgr.insert_triple(&key, t1.clone())
+            .expect("triple insert should succeed");
+        mgr.insert_triple(&key, t2.clone())
+            .expect("triple insert should succeed");
         let triples = mgr.triples_in_graph(&key);
         assert_eq!(triples.len(), 2);
         assert!(triples.contains(&t1));
@@ -845,8 +865,9 @@ mod tests {
         let mut mgr = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&key, t).unwrap();
-        let cleared = mgr.clear_graph(&key).unwrap();
+        mgr.insert_triple(&key, t)
+            .expect("operation should succeed");
+        let cleared = mgr.clear_graph(&key).expect("operation should succeed");
         assert_eq!(cleared, 1);
         assert_eq!(mgr.triple_count_in(&key), 0);
     }
@@ -856,7 +877,7 @@ mod tests {
         let mut mgr = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         mgr.add_named_graph(key.clone());
-        mgr.clear_graph(&key).unwrap();
+        mgr.clear_graph(&key).expect("operation should succeed");
         assert!(mgr.contains_named_graph(&key));
     }
 
@@ -888,7 +909,8 @@ mod tests {
     fn test_drop_default_graph_clears_triples() {
         let mut mgr = NamedGraphManager::new();
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&GraphName::DefaultGraph, t).unwrap();
+        mgr.insert_triple(&GraphName::DefaultGraph, t)
+            .expect("operation should succeed");
         let result = mgr.drop_graph(&GraphName::DefaultGraph);
         assert!(result);
         assert_eq!(mgr.default_graph().len(), 0);
@@ -903,8 +925,10 @@ mod tests {
         let k2 = graph_key("http://example.org/g2");
         let t1 = triple("http://s.org/s1", "http://p.org/p", "o1");
         let t2 = triple("http://s.org/s2", "http://p.org/p", "o2");
-        mgr.insert_triple(&k1, t1.clone()).unwrap();
-        mgr.insert_triple(&k2, t2.clone()).unwrap();
+        mgr.insert_triple(&k1, t1.clone())
+            .expect("triple insert should succeed");
+        mgr.insert_triple(&k2, t2.clone())
+            .expect("triple insert should succeed");
         let union = mgr.union_graph();
         assert!(union.contains(&t1));
         assert!(union.contains(&t2));
@@ -916,7 +940,7 @@ mod tests {
         let mut mgr = NamedGraphManager::new();
         let t = triple("http://s.org/s", "http://p.org/p", "o");
         mgr.insert_triple(&GraphName::DefaultGraph, t.clone())
-            .unwrap();
+            .expect("operation should succeed");
         let union = mgr.union_graph();
         assert!(union.contains(&t));
     }
@@ -927,8 +951,10 @@ mod tests {
         let k1 = graph_key("http://example.org/g1");
         let k2 = graph_key("http://example.org/g2");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&k1, t.clone()).unwrap();
-        mgr.insert_triple(&k2, t.clone()).unwrap();
+        mgr.insert_triple(&k1, t.clone())
+            .expect("triple insert should succeed");
+        mgr.insert_triple(&k2, t.clone())
+            .expect("triple insert should succeed");
         let union = mgr.union_graph();
         assert_eq!(union.len(), 1);
     }
@@ -939,9 +965,10 @@ mod tests {
         let k1 = graph_key("http://example.org/g1");
         let t_named = triple("http://s.org/named", "http://p.org/p", "o");
         let t_default = triple("http://s.org/default", "http://p.org/p", "o");
-        mgr.insert_triple(&k1, t_named.clone()).unwrap();
+        mgr.insert_triple(&k1, t_named.clone())
+            .expect("triple insert should succeed");
         mgr.insert_triple(&GraphName::DefaultGraph, t_default.clone())
-            .unwrap();
+            .expect("operation should succeed");
         let union = mgr.union_of_named_graphs();
         assert!(union.contains(&t_named));
         assert!(!union.contains(&t_default));
@@ -1001,8 +1028,10 @@ mod tests {
         let src = graph_key("http://example.org/src");
         let dst = graph_key("http://example.org/dst");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&src, t.clone()).unwrap();
-        mgr.copy_graph(&src, &dst).unwrap();
+        mgr.insert_triple(&src, t.clone())
+            .expect("triple insert should succeed");
+        mgr.copy_graph(&src, &dst)
+            .expect("operation should succeed");
         assert!(mgr.contains_triple(&dst, &t));
         assert!(mgr.contains_triple(&src, &t)); // source not cleared
     }
@@ -1021,8 +1050,10 @@ mod tests {
         let src = graph_key("http://example.org/src");
         let dst = graph_key("http://example.org/dst");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        mgr.insert_triple(&src, t.clone()).unwrap();
-        mgr.move_graph(&src, &dst).unwrap();
+        mgr.insert_triple(&src, t.clone())
+            .expect("triple insert should succeed");
+        mgr.move_graph(&src, &dst)
+            .expect("operation should succeed");
         assert_eq!(mgr.triple_count_in(&src), 0);
         assert!(mgr.contains_triple(&dst, &t));
     }
@@ -1047,7 +1078,7 @@ mod tests {
             Literal::new("o"),
             graph_node,
         );
-        mgr.insert_quad(quad).unwrap();
+        mgr.insert_quad(quad).expect("operation should succeed");
         assert_eq!(mgr.triple_count(), 1);
     }
 
@@ -1059,7 +1090,7 @@ mod tests {
             iri("http://p.org/p"),
             Literal::new("o"),
         );
-        mgr.insert_quad(quad).unwrap();
+        mgr.insert_quad(quad).expect("operation should succeed");
         assert_eq!(mgr.default_graph().len(), 1);
     }
 
@@ -1071,14 +1102,14 @@ mod tests {
         let k1 = graph_key("http://example.org/g1");
         let k2 = graph_key("http://example.org/g2");
         mgr.insert_triple(&k1, triple("http://s.org/s1", "http://p.org/p", "o"))
-            .unwrap();
+            .expect("operation should succeed");
         mgr.insert_triple(&k2, triple("http://s.org/s2", "http://p.org/p", "o"))
-            .unwrap();
+            .expect("operation should succeed");
         mgr.insert_triple(
             &GraphName::DefaultGraph,
             triple("http://s.org/s3", "http://p.org/p", "o"),
         )
-        .unwrap();
+        .expect("operation should succeed");
         let count = mgr.iter_quads().count();
         assert_eq!(count, 3);
     }
@@ -1112,7 +1143,7 @@ mod tests {
                 &key,
                 triple(&format!("http://s.org/s{i}"), "http://p.org/p", "o"),
             )
-            .unwrap();
+            .expect("operation should succeed");
         }
         assert_eq!(mgr.statistics().total_triple_count, 6);
     }
@@ -1127,10 +1158,10 @@ mod tests {
                 &big,
                 triple(&format!("http://s.org/s{i}"), "http://p.org/p", "o"),
             )
-            .unwrap();
+            .expect("operation should succeed");
         }
         mgr.insert_triple(&small, triple("http://s.org/s", "http://p.org/p", "o"))
-            .unwrap();
+            .expect("operation should succeed");
         let stats = mgr.statistics();
         assert_eq!(stats.largest_named_graph, Some(big));
     }
@@ -1151,14 +1182,14 @@ mod tests {
                 &k1,
                 triple(&format!("http://s.org/s{i}"), "http://p.org/p", "o"),
             )
-            .unwrap();
+            .expect("operation should succeed");
         }
         for i in 0..2 {
             mgr.insert_triple(
                 &k2,
                 triple(&format!("http://s.org/s{i}"), "http://p.org/p", "x"),
             )
-            .unwrap();
+            .expect("operation should succeed");
         }
         // avg = (4 + 2) / 2 = 3.0
         assert!((mgr.statistics().average_named_graph_size() - 3.0).abs() < 1e-10);
@@ -1195,7 +1226,9 @@ mod tests {
         let mut store: Box<dyn GraphStore> = Box::new(NamedGraphManager::new());
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        assert!(store.add_triple(&key, t).unwrap());
+        assert!(store
+            .add_triple(&key, t)
+            .expect("store operation should succeed"));
     }
 
     #[test]
@@ -1203,8 +1236,9 @@ mod tests {
         let mut store = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        GraphStore::add_triple(&mut store, &key, t.clone()).unwrap();
-        assert!(GraphStore::contains_triple(&store, &key, &t).unwrap());
+        GraphStore::add_triple(&mut store, &key, t.clone()).expect("add triple should succeed");
+        assert!(GraphStore::contains_triple(&store, &key, &t)
+            .expect("GraphStore operation should succeed"));
     }
 
     #[test]
@@ -1212,8 +1246,9 @@ mod tests {
         let mut store = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        GraphStore::add_triple(&mut store, &key, t.clone()).unwrap();
-        assert!(GraphStore::remove_triple(&mut store, &key, &t).unwrap());
+        GraphStore::add_triple(&mut store, &key, t.clone()).expect("add triple should succeed");
+        assert!(GraphStore::remove_triple(&mut store, &key, &t)
+            .expect("GraphStore operation should succeed"));
     }
 
     #[test]
@@ -1221,8 +1256,9 @@ mod tests {
         let mut store = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        GraphStore::add_triple(&mut store, &key, t.clone()).unwrap();
-        let triples = GraphStore::triples_in_graph(&store, &key).unwrap();
+        GraphStore::add_triple(&mut store, &key, t.clone()).expect("add triple should succeed");
+        let triples = GraphStore::triples_in_graph(&store, &key)
+            .expect("GraphStore operation should succeed");
         assert_eq!(triples.len(), 1);
         assert!(triples.contains(&t));
     }
@@ -1232,8 +1268,9 @@ mod tests {
         let mut store = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         let t = triple("http://s.org/s", "http://p.org/p", "o");
-        GraphStore::add_triple(&mut store, &key, t).unwrap();
-        let cleared = GraphStore::clear_graph(&mut store, &key).unwrap();
+        GraphStore::add_triple(&mut store, &key, t).expect("GraphStore operation should succeed");
+        let cleared =
+            GraphStore::clear_graph(&mut store, &key).expect("GraphStore operation should succeed");
         assert_eq!(cleared, 1);
     }
 
@@ -1242,7 +1279,9 @@ mod tests {
         let mut store = NamedGraphManager::new();
         let key = graph_key("http://example.org/g1");
         store.add_named_graph(key.clone());
-        assert!(GraphStore::drop_graph(&mut store, &key).unwrap());
+        assert!(
+            GraphStore::drop_graph(&mut store, &key).expect("GraphStore operation should succeed")
+        );
     }
 
     // ── Helper functions ──────────────────────────────────────────────────────
@@ -1251,7 +1290,10 @@ mod tests {
     fn test_graph_name_from_iri_valid() {
         let key = graph_name_from_iri("http://example.org/g1");
         assert!(key.is_ok());
-        assert!(matches!(key.unwrap(), GraphName::NamedNode(_)));
+        assert!(matches!(
+            key.expect("key should be valid"),
+            GraphName::NamedNode(_)
+        ));
     }
 
     #[test]

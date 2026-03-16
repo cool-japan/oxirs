@@ -38,7 +38,7 @@ rayon.workspace = true  # Parallel processing for SIMD-accelerated operations
 
 # Byzantine fault tolerance dependencies
 sha2.workspace = true
-hex = "0.4"
+hex.workspace = true
 ed25519-dalek.workspace = true
 rand = "0.9"  # Required by ed25519-dalek for key generation
 # Note: For other random functionality, use scirs2_core::random
@@ -49,18 +49,18 @@ chrono.workspace = true
 parking_lot.workspace = true
 
 # TLS and encryption dependencies
-rustls = { version = "0.23", features = ["ring"] }
-tokio-rustls = "0.26"
-rustls-pemfile = "2.2"
-rcgen = "0.14"
-webpki-roots = "1.0"
-ring = "0.17"
-aes-gcm = "0.10"
+rustls.workspace = true
+tokio-rustls.workspace = true
+rustls-pemfile.workspace = true
+rcgen.workspace = true
+webpki-roots.workspace = true
+ring.workspace = true
+aes-gcm.workspace = true
 x25519-dalek = "2.0"
-base64 = "0.22"
+base64.workspace = true
 
 # Compression and serialization dependencies
-flate2 = "1.1"
+flate2.workspace = true
 oxiarc-zstd.workspace = true
 oxiarc-lz4.workspace = true
 xz2 = "0.1"  # LZMA compression for high-ratio compression
@@ -72,24 +72,24 @@ ciborium.workspace = true
 
 # Storage dependencies
 lmdb = "0.8"
-memmap2 = "0.9"
+memmap2.workspace = true
 
 # OpenTelemetry for distributed tracing
 opentelemetry.workspace = true
 opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
 opentelemetry-semantic-conventions.workspace = true
-tracing-opentelemetry = "0.32"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 
 # Alerting and monitoring dependencies
 lettre = { version = "0.11", features = ["tokio1-native-tls"] }
 slack-hook2 = "0.10"
 
 # Web dashboard dependencies
-axum = { version = "0.8", features = ["macros"] }
-tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
+axum = { workspace = true, features = ["macros"] }
+tower.workspace = true
+tower-http = { workspace = true, features = ["cors", "compression-gzip"] }
 
 [dev-dependencies]
 criterion.workspace = true

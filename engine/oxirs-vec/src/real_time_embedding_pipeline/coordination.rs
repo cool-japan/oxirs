@@ -324,9 +324,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_coordinator_start_stop() {
+    async fn test_coordinator_start_stop() -> Result<()> {
         let config = PipelineConfig::default();
-        let coordinator = UpdateCoordinator::new(&config).unwrap();
+        let coordinator = UpdateCoordinator::new(&config)?;
 
         assert!(!coordinator.is_running());
 
@@ -336,14 +336,15 @@ mod tests {
 
         let stop_result = coordinator.stop().await;
         assert!(stop_result.is_ok());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_update_submission() {
+    async fn test_update_submission() -> Result<()> {
         let config = PipelineConfig::default();
-        let coordinator = UpdateCoordinator::new(&config).unwrap();
+        let coordinator = UpdateCoordinator::new(&config)?;
 
-        coordinator.start().await.unwrap();
+        coordinator.start().await?;
 
         let operation = UpdateOperation::Insert {
             id: "test_id".to_string(),
@@ -353,6 +354,7 @@ mod tests {
         let result = coordinator.submit_update(operation).await;
         assert!(result.is_ok());
 
-        coordinator.stop().await.unwrap();
+        coordinator.stop().await?;
+        Ok(())
     }
 }

@@ -363,8 +363,8 @@ mod tests {
 
         let r1 = timeout(Duration::from_millis(100), rx1.recv()).await;
         let r2 = timeout(Duration::from_millis(100), rx2.recv()).await;
-        assert!(r1.is_ok() && r1.unwrap().is_some());
-        assert!(r2.is_ok() && r2.unwrap().is_some());
+        assert!(r1.is_ok() && r1.expect("should succeed").is_some());
+        assert!(r2.is_ok() && r2.expect("should succeed").is_some());
     }
 
     #[tokio::test]

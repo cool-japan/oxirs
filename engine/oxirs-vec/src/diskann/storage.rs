@@ -500,6 +500,7 @@ impl StorageBackend for MemoryMappedStorage {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use crate::diskann::config::PruningStrategy;
     use std::env;
@@ -516,134 +517,137 @@ mod tests {
     }
 
     #[test]
-    fn test_disk_storage_vector_write_read() {
+    fn test_disk_storage_vector_write_read() -> Result<()> {
         let dir = temp_dir();
-        let mut storage = DiskStorage::new(&dir, 3).unwrap();
+        let mut storage = DiskStorage::new(&dir, 3)?;
 
         let vector = vec![1.0, 2.0, 3.0];
-        storage.write_vector(&"vec1".to_string(), &vector).unwrap();
+        storage.write_vector(&"vec1".to_string(), &vector)?;
 
-        let read_vector = storage.read_vector(&"vec1".to_string()).unwrap();
+        let read_vector = storage.read_vector(&"vec1".to_string())?;
         assert_eq!(read_vector, vector);
 
-        storage.clear().unwrap();
+        storage.clear()?;
+        Ok(())
     }
 
     #[test]
-    fn test_disk_storage_dimension_mismatch() {
+    fn test_disk_storage_dimension_mismatch() -> Result<()> {
         let dir = temp_dir();
-        let mut storage = DiskStorage::new(&dir, 3).unwrap();
+        let mut storage = DiskStorage::new(&dir, 3)?;
 
         let vector = vec![1.0, 2.0]; // Wrong dimension
         let result = storage.write_vector(&"vec1".to_string(), &vector);
 
         assert!(result.is_err());
-        storage.clear().unwrap();
+        storage.clear()?;
+        Ok(())
     }
 
     #[test]
-    fn test_disk_storage_graph() {
+    fn test_disk_storage_graph() -> Result<()> {
         let dir = temp_dir();
         std::fs::remove_dir_all(&dir).ok(); // Clean up if exists
-        let mut storage = DiskStorage::new(&dir, 3).unwrap();
+        let mut storage = DiskStorage::new(&dir, 3)?;
 
         let mut graph = VamanaGraph::new(3, PruningStrategy::Alpha, 1.2);
-        graph.add_node("v1".to_string()).unwrap();
-        graph.add_node("v2".to_string()).unwrap();
+        graph.add_node("v1".to_string())?;
+        graph.add_node("v2".to_string())?;
 
-        storage.write_graph(&graph).unwrap();
-        let read_graph = storage.read_graph().unwrap();
+        storage.write_graph(&graph)?;
+        let read_graph = storage.read_graph()?;
 
         assert_eq!(read_graph.num_nodes(), 2);
-        storage.clear().unwrap();
+        storage.clear()?;
         std::fs::remove_dir_all(&dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_disk_storage_metadata() {
+    fn test_disk_storage_metadata() -> Result<()> {
         let dir = temp_dir();
         std::fs::remove_dir_all(&dir).ok(); // Clean up if exists
-        let mut storage = DiskStorage::new(&dir, 128).unwrap();
+        let mut storage = DiskStorage::new(&dir, 128)?;
 
         let config = DiskAnnConfig::default_config(128);
         let metadata = StorageMetadata::new(config);
 
-        storage.write_metadata(&metadata).unwrap();
-        let read_metadata = storage.read_metadata().unwrap();
+        storage.write_metadata(&metadata)?;
+        let read_metadata = storage.read_metadata()?;
 
         assert_eq!(read_metadata.config.dimension, 128);
-        storage.clear().unwrap();
+        storage.clear()?;
         std::fs::remove_dir_all(&dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_disk_storage_size() {
+    fn test_disk_storage_size() -> Result<()> {
         let dir = temp_dir();
-        let mut storage = DiskStorage::new(&dir, 3).unwrap();
+        let mut storage = DiskStorage::new(&dir, 3)?;
 
-        let initial_size = storage.size().unwrap();
+        let initial_size = storage.size()?;
         assert_eq!(initial_size, 0);
 
         let vector = vec![1.0, 2.0, 3.0];
-        storage.write_vector(&"vec1".to_string(), &vector).unwrap();
+        storage.write_vector(&"vec1".to_string(), &vector)?;
 
-        let after_write = storage.size().unwrap();
+        let after_write = storage.size()?;
         assert!(after_write > initial_size);
 
-        storage.clear().unwrap();
+        storage.clear()?;
+        Ok(())
     }
 
     #[test]
-    fn test_disk_storage_cache() {
+    fn test_disk_storage_cache() -> Result<()> {
         let dir = temp_dir();
         std::fs::remove_dir_all(&dir).ok(); // Clean up if exists
-        let mut storage = DiskStorage::new(&dir, 3).unwrap().with_cache_limit(2);
+        let mut storage = DiskStorage::new(&dir, 3)?.with_cache_limit(2);
 
-        storage
-            .write_vector(&"v1".to_string(), &[1.0, 2.0, 3.0])
-            .unwrap();
-        storage
-            .write_vector(&"v2".to_string(), &[4.0, 5.0, 6.0])
-            .unwrap();
-        storage
-            .write_vector(&"v3".to_string(), &[7.0, 8.0, 9.0])
-            .unwrap();
+        storage.write_vector(&"v1".to_string(), &[1.0, 2.0, 3.0])?;
+        storage.write_vector(&"v2".to_string(), &[4.0, 5.0, 6.0])?;
+        storage.write_vector(&"v3".to_string(), &[7.0, 8.0, 9.0])?;
 
         // Cache should have at most 2 entries
         assert!(storage.vector_cache.len() <= 2);
 
-        storage.clear().unwrap();
+        storage.clear()?;
         std::fs::remove_dir_all(&dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_vector_not_found() {
+    fn test_vector_not_found() -> Result<()> {
         let dir = temp_dir();
-        let storage = DiskStorage::new(&dir, 3).unwrap();
+        let storage = DiskStorage::new(&dir, 3)?;
 
         let result = storage.read_vector(&"nonexistent".to_string());
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_storage_clear() {
+    fn test_storage_clear() -> Result<()> {
         let dir = temp_dir();
         std::fs::remove_dir_all(&dir).ok(); // Clean up if exists
-        let mut storage = DiskStorage::new(&dir, 3).unwrap();
+        let mut storage = DiskStorage::new(&dir, 3)?;
 
-        storage
-            .write_vector(&"v1".to_string(), &[1.0, 2.0, 3.0])
-            .unwrap();
+        storage.write_vector(&"v1".to_string(), &[1.0, 2.0, 3.0])?;
 
         // Verify file was created
-        let vector_file = storage.vector_file.as_ref().unwrap().clone();
+        let vector_file = storage
+            .vector_file
+            .as_ref()
+            .ok_or("vector_file is None")?
+            .clone();
         assert!(
             vector_file.exists(),
             "Vector file should exist after write: {:?}",
             vector_file
         );
 
-        storage.clear().unwrap();
+        storage.clear()?;
         assert!(
             !vector_file.exists(),
             "Vector file should not exist after clear: {:?}",
@@ -652,5 +656,6 @@ mod tests {
 
         // Cleanup
         std::fs::remove_dir_all(&dir).ok();
+        Ok(())
     }
 }

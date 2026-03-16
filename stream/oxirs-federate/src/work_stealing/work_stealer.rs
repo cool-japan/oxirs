@@ -437,9 +437,15 @@ mod tests {
         ws.submit(simple_plan("fail", false));
         let results = ws.run_sync();
         assert_eq!(results.len(), 2);
-        let ok_res = results.iter().find(|r| r.plan_id.0 == "ok").unwrap();
+        let ok_res = results
+            .iter()
+            .find(|r| r.plan_id.0 == "ok")
+            .expect("should succeed");
         assert!(ok_res.success);
-        let fail_res = results.iter().find(|r| r.plan_id.0 == "fail").unwrap();
+        let fail_res = results
+            .iter()
+            .find(|r| r.plan_id.0 == "fail")
+            .expect("should succeed");
         assert!(!fail_res.success);
         assert!(fail_res.error.is_some());
     }

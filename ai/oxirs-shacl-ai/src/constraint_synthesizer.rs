@@ -579,7 +579,7 @@ mod tests {
     fn test_infer_range_integers() {
         let s = synth(0.5, 1);
         let vals = &["3", "1", "5", "2"];
-        let (min, max) = s.infer_range(vals).unwrap();
+        let (min, max) = s.infer_range(vals).expect("should succeed");
         assert!((min - 1.0).abs() < 1e-9);
         assert!((max - 5.0).abs() < 1e-9);
     }
@@ -588,7 +588,7 @@ mod tests {
     fn test_infer_range_floats() {
         let s = synth(0.5, 1);
         let vals = &["-1.5", "0.0", "2.5"];
-        let (min, max) = s.infer_range(vals).unwrap();
+        let (min, max) = s.infer_range(vals).expect("should succeed");
         assert!((min - (-1.5)).abs() < 1e-9);
         assert!((max - 2.5).abs() < 1e-9);
     }
@@ -609,7 +609,7 @@ mod tests {
     #[test]
     fn test_infer_range_single_value() {
         let s = synth(0.5, 1);
-        let (min, max) = s.infer_range(&["42"]).unwrap();
+        let (min, max) = s.infer_range(&["42"]).expect("should succeed");
         assert!((min - 42.0).abs() < 1e-9);
         assert!((max - 42.0).abs() < 1e-9);
     }
@@ -664,7 +664,7 @@ mod tests {
         let vals = &["low", "medium", "high", "low", "medium", "high"];
         let vocab = s.is_closed_vocabulary(vals);
         assert!(vocab.is_some());
-        let v = vocab.unwrap();
+        let v = vocab.expect("should succeed");
         assert!(v.contains(&"low".to_string()));
         assert!(v.contains(&"medium".to_string()));
         assert!(v.contains(&"high".to_string()));

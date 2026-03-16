@@ -101,7 +101,10 @@ impl Downsampler {
             if target == 1 {
                 return vec![data[0]];
             }
-            return vec![data[0], *data.last().unwrap()];
+            if let Some(last) = data.last() {
+                return vec![data[0], *last];
+            }
+            return vec![data[0]];
         }
 
         let n = data.len();
@@ -171,7 +174,9 @@ impl Downsampler {
         }
 
         // Always include last point
-        result.push(*data.last().unwrap());
+        if let Some(last) = data.last() {
+            result.push(*last);
+        }
 
         result
     }
@@ -378,7 +383,7 @@ mod tests {
         let data = linear_data(100);
         let result = Downsampler::lttb(&data, 10);
         assert_eq!(result[0].timestamp, 0);
-        assert_eq!(result.last().unwrap().timestamp, 99);
+        assert_eq!(result.last().expect("should succeed").timestamp, 99);
     }
 
     #[test]

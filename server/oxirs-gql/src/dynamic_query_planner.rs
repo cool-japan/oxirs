@@ -747,7 +747,7 @@ mod tests {
         let plan = planner
             .create_plan("SELECT * WHERE { ?s ?p ?o }", 10.0)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(plan.strategy, ExecutionStrategy::Sequential);
     }
@@ -765,7 +765,7 @@ mod tests {
         let plan = planner
             .create_plan("SELECT ?s WHERE { ?s ?p ?o } LIMIT 10", 5.0)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Simple query should NOT use parallel or degraded
         assert!(
@@ -793,7 +793,10 @@ mod tests {
 
         let complex_query =
             "SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?s ?p2 ?o2 . ?s ?p3 ?o3 } LIMIT 1000";
-        let plan = planner.create_plan(complex_query, 75.0).await.unwrap();
+        let plan = planner
+            .create_plan(complex_query, 75.0)
+            .await
+            .expect("should succeed");
 
         // Complex query should use optimized or parallel
         assert!(matches!(
@@ -823,11 +826,16 @@ mod tests {
             },
         };
 
-        planner.record_execution(result).await.unwrap();
+        planner
+            .record_execution(result)
+            .await
+            .expect("should succeed");
 
         // Check strategy stats were updated
         let stats = planner.get_strategy_stats().await;
-        let parallel_stats = stats.get(&ExecutionStrategy::Parallel).unwrap();
+        let parallel_stats = stats
+            .get(&ExecutionStrategy::Parallel)
+            .expect("should succeed");
 
         assert_eq!(parallel_stats.total_executions, 1);
         assert_eq!(parallel_stats.successful_executions, 1);

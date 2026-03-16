@@ -548,8 +548,16 @@ mod tests {
         let data = [10u8, 20, 0, 0, 0, 0, 0, 0];
         let result = dec.decode(0x55, &data);
         assert_eq!(result.signals.len(), 2);
-        let a = result.signals.iter().find(|s| s.name == "a").unwrap();
-        let b = result.signals.iter().find(|s| s.name == "b").unwrap();
+        let a = result
+            .signals
+            .iter()
+            .find(|s| s.name == "a")
+            .expect("should succeed");
+        let b = result
+            .signals
+            .iter()
+            .find(|s| s.name == "b")
+            .expect("should succeed");
         assert!((a.physical_value - 10.0).abs() < 1e-9);
         assert!((b.physical_value - 20.0).abs() < 1e-9);
     }

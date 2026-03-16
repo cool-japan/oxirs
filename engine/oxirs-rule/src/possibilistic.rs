@@ -26,16 +26,16 @@
 //! kb.add_formula(
 //!     "Cloudy -> Rain".to_string(),
 //!     0.8
-//! ).unwrap();
+//! ).expect("should succeed");
 //!
 //! // "It is cloudy" with certainty 0.9
 //! kb.add_formula(
 //!     "Cloudy".to_string(),
 //!     0.9
-//! ).unwrap();
+//! ).expect("should succeed");
 //!
 //! // Query: What's the necessity of Rain?
-//! let necessity = kb.query_necessity("Rain").unwrap();
+//! let necessity = kb.query_necessity("Rain").expect("should succeed");
 //! println!("Necessity(Rain) = {}", necessity);
 //!
 //! // Necessity(Rain) ≥ min(0.8, 0.9) = 0.8 by possibilistic modus ponens
@@ -435,12 +435,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_possibilistic_formula() {
-        let formula = PossibilisticFormula::new("Rain".to_string(), 0.8).unwrap();
+    fn test_possibilistic_formula() -> Result<(), Box<dyn std::error::Error>> {
+        let formula = PossibilisticFormula::new("Rain".to_string(), 0.8)?;
         assert_eq!(formula.formula, "Rain");
         assert!((formula.certainty - 0.8).abs() < 1e-10);
         assert!(formula.is_fact());
         assert!(!formula.is_implication());
+        Ok(())
     }
 
     #[test]
@@ -453,44 +454,47 @@ mod tests {
     }
 
     #[test]
-    fn test_implication_parsing() {
-        let formula = PossibilisticFormula::new("Cloudy -> Rain".to_string(), 0.8).unwrap();
+    fn test_implication_parsing() -> Result<(), Box<dyn std::error::Error>> {
+        let formula = PossibilisticFormula::new("Cloudy -> Rain".to_string(), 0.8)?;
         assert!(formula.is_implication());
 
-        let (ant, cons) = formula.parse_implication().unwrap();
+        let (ant, cons) = formula.parse_implication().ok_or("expected Some value")?;
         assert_eq!(ant, "Cloudy");
         assert_eq!(cons, "Rain");
+        Ok(())
     }
 
     #[test]
-    fn test_knowledge_base_basic() {
+    fn test_knowledge_base_basic() -> Result<(), Box<dyn std::error::Error>> {
         let mut kb = PossibilisticKnowledgeBase::new();
 
-        kb.add_formula("Sunny".to_string(), 0.9).unwrap();
-        kb.add_formula("Hot".to_string(), 0.7).unwrap();
+        kb.add_formula("Sunny".to_string(), 0.9)?;
+        kb.add_formula("Hot".to_string(), 0.7)?;
 
         assert_eq!(kb.get_formulas().len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_possibilistic_modus_ponens() {
+    fn test_possibilistic_modus_ponens() -> Result<(), Box<dyn std::error::Error>> {
         let mut kb = PossibilisticKnowledgeBase::new();
 
         // Add rule: Cloudy -> Rain with certainty 0.8
-        kb.add_formula("Cloudy -> Rain".to_string(), 0.8).unwrap();
+        kb.add_formula("Cloudy -> Rain".to_string(), 0.8)?;
 
         // Add fact: Cloudy with certainty 0.9
-        kb.add_formula("Cloudy".to_string(), 0.9).unwrap();
+        kb.add_formula("Cloudy".to_string(), 0.9)?;
 
         // Query: Necessity of Rain
-        let necessity = kb.query_necessity("Rain").unwrap();
+        let necessity = kb.query_necessity("Rain")?;
 
         // Should be min(0.8, 0.9) = 0.8
         assert!((necessity - 0.8).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_possibilistic_chain() {
+    fn test_possibilistic_chain() -> Result<(), Box<dyn std::error::Error>> {
         let mut kb = PossibilisticKnowledgeBase::new();
 
         // Rule chain:
@@ -498,135 +502,146 @@ mod tests {
         // A -> B with certainty 0.9
         // B -> C with certainty 0.8
 
-        kb.add_formula("A".to_string(), 1.0).unwrap();
-        kb.add_formula("A -> B".to_string(), 0.9).unwrap();
-        kb.add_formula("B -> C".to_string(), 0.8).unwrap();
+        kb.add_formula("A".to_string(), 1.0)?;
+        kb.add_formula("A -> B".to_string(), 0.9)?;
+        kb.add_formula("B -> C".to_string(), 0.8)?;
 
         // Perform forward chaining
-        let _ = kb.forward_chain().unwrap();
+        let _ = kb.forward_chain()?;
 
         // Check necessity of C
-        let necessity_c = kb.query_necessity("C").unwrap();
+        let necessity_c = kb.query_necessity("C")?;
 
         // Should be min(1.0, 0.9, 0.8) = 0.8
         assert!((necessity_c - 0.8).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_possibilistic_resolution() {
+    fn test_possibilistic_resolution() -> Result<(), Box<dyn std::error::Error>> {
         let kb = PossibilisticKnowledgeBase::new();
 
-        let f1 = PossibilisticFormula::new("Cloudy".to_string(), 0.9).unwrap();
-        let f2 = PossibilisticFormula::new("Cloudy -> Rain".to_string(), 0.8).unwrap();
+        let f1 = PossibilisticFormula::new("Cloudy".to_string(), 0.9)?;
+        let f2 = PossibilisticFormula::new("Cloudy -> Rain".to_string(), 0.8)?;
 
-        let resolved = kb.resolve(&f1, &f2).unwrap();
+        let resolved = kb.resolve(&f1, &f2).ok_or("expected Some value")?;
 
         assert_eq!(resolved.formula, "Rain");
         assert!((resolved.certainty - 0.8).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_possibilistic_forward_chaining() {
+    fn test_possibilistic_forward_chaining() -> Result<(), Box<dyn std::error::Error>> {
         let mut kb = PossibilisticKnowledgeBase::new();
 
-        kb.add_formula("Cloudy".to_string(), 0.9).unwrap();
-        kb.add_formula("Cloudy -> Rain".to_string(), 0.8).unwrap();
-        kb.add_formula("Rain -> WetGround".to_string(), 0.7)
-            .unwrap();
+        kb.add_formula("Cloudy".to_string(), 0.9)?;
+        kb.add_formula("Cloudy -> Rain".to_string(), 0.8)?;
+        kb.add_formula("Rain -> WetGround".to_string(), 0.7)?;
 
-        let derived = kb.forward_chain().unwrap();
+        let derived = kb.forward_chain()?;
 
         // Should derive Rain and WetGround
         assert!(derived.iter().any(|f| f.formula == "Rain"));
         assert!(derived.iter().any(|f| f.formula == "WetGround"));
 
         // Check certainties
-        let rain = derived.iter().find(|f| f.formula == "Rain").unwrap();
+        let rain = derived
+            .iter()
+            .find(|f| f.formula == "Rain")
+            .ok_or("expected Some value")?;
         assert!((rain.certainty - 0.8).abs() < 1e-10);
 
-        let wet = derived.iter().find(|f| f.formula == "WetGround").unwrap();
+        let wet = derived
+            .iter()
+            .find(|f| f.formula == "WetGround")
+            .ok_or("expected Some value")?;
         assert!((wet.certainty - 0.7).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_possibilistic_reasoner() {
+    fn test_possibilistic_reasoner() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = PossibilisticReasoner::new();
 
-        reasoner.add_fact("Cloudy".to_string(), 0.9).unwrap();
-        reasoner
-            .add_rule("Cloudy".to_string(), "Rain".to_string(), 0.8)
-            .unwrap();
+        reasoner.add_fact("Cloudy".to_string(), 0.9)?;
+        reasoner.add_rule("Cloudy".to_string(), "Rain".to_string(), 0.8)?;
 
         // Perform inference
-        reasoner.infer().unwrap();
+        reasoner.infer()?;
 
         // Query
-        let (necessity, possibility) = reasoner.query("Rain").unwrap();
+        let (necessity, possibility) = reasoner.query("Rain")?;
 
         assert!((necessity - 0.8).abs() < 1e-10);
         assert!(possibility >= necessity);
+        Ok(())
     }
 
     #[test]
-    fn test_inconsistency_detection() {
+    fn test_inconsistency_detection() -> Result<(), Box<dyn std::error::Error>> {
         let mut kb = PossibilisticKnowledgeBase::new();
 
-        kb.add_formula("Sunny".to_string(), 0.9).unwrap();
-        kb.add_formula("NotSunny".to_string(), 0.7).unwrap();
+        kb.add_formula("Sunny".to_string(), 0.9)?;
+        kb.add_formula("NotSunny".to_string(), 0.7)?;
 
         // Not directly contradictory in our simplified system
         assert!(kb.is_consistent());
 
         // Add explicit contradiction
-        kb.add_formula("false".to_string(), 0.5).unwrap();
+        kb.add_formula("false".to_string(), 0.5)?;
 
         assert!(!kb.is_consistent());
         assert!((kb.inconsistency_degree() - 0.5).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_possibility_necessity_duality() {
+    fn test_possibility_necessity_duality() -> Result<(), Box<dyn std::error::Error>> {
         let mut kb = PossibilisticKnowledgeBase::new();
 
-        kb.add_formula("Sunny".to_string(), 0.8).unwrap();
+        kb.add_formula("Sunny".to_string(), 0.8)?;
 
-        let necessity = kb.query_necessity("Sunny").unwrap();
-        let possibility = kb.query_possibility("Sunny").unwrap();
+        let necessity = kb.query_necessity("Sunny")?;
+        let possibility = kb.query_possibility("Sunny")?;
 
         // For a fact, necessity ≤ possibility
         assert!(necessity <= possibility + 1e-10);
 
         // For a fact with certainty α, necessity = α
         assert!((necessity - 0.8).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_reasoner_caching() {
+    fn test_reasoner_caching() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = PossibilisticReasoner::new();
 
-        reasoner.add_fact("A".to_string(), 0.9).unwrap();
+        reasoner.add_fact("A".to_string(), 0.9)?;
 
         // First query (cache miss)
-        let (n1, p1) = reasoner.query("A").unwrap();
+        let (n1, p1) = reasoner.query("A")?;
 
         // Second query (cache hit)
-        let (n2, p2) = reasoner.query("A").unwrap();
+        let (n2, p2) = reasoner.query("A")?;
 
         assert_eq!(n1, n2);
         assert_eq!(p1, p2);
+        Ok(())
     }
 
     #[test]
-    fn test_get_most_certain() {
+    fn test_get_most_certain() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = PossibilisticReasoner::new();
 
-        reasoner.add_fact("A".to_string(), 0.7).unwrap();
-        reasoner.add_fact("B".to_string(), 0.9).unwrap();
-        reasoner.add_fact("C".to_string(), 0.6).unwrap();
+        reasoner.add_fact("A".to_string(), 0.7)?;
+        reasoner.add_fact("B".to_string(), 0.9)?;
+        reasoner.add_fact("C".to_string(), 0.6)?;
 
-        let (most_certain, certainty) = reasoner.get_most_certain().unwrap();
+        let (most_certain, certainty) = reasoner.get_most_certain().ok_or("expected Some value")?;
 
         assert_eq!(most_certain, "B");
         assert!((certainty - 0.9).abs() < 1e-10);
+        Ok(())
     }
 }

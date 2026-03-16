@@ -24,15 +24,15 @@
 //!
 //! // Add evidence: mass of 0.6 to hypothesis A, 0.3 to B, 0.1 to uncertainty
 //! let mut evidence1 = MassFunction::new();
-//! evidence1.assign_mass(vec!["A".to_string()], 0.6).unwrap();
-//! evidence1.assign_mass(vec!["B".to_string()], 0.3).unwrap();
-//! evidence1.assign_mass(vec!["A".to_string(), "B".to_string(), "C".to_string()], 0.1).unwrap();
+//! evidence1.assign_mass(vec!["A".to_string()], 0.6).expect("should succeed");
+//! evidence1.assign_mass(vec!["B".to_string()], 0.3).expect("should succeed");
+//! evidence1.assign_mass(vec!["A".to_string(), "B".to_string(), "C".to_string()], 0.1).expect("should succeed");
 //!
-//! ds.add_evidence(evidence1).unwrap();
+//! ds.add_evidence(evidence1).expect("should succeed");
 //!
 //! // Compute belief and plausibility
-//! let belief_a = ds.belief(&vec!["A".to_string()]).unwrap();
-//! let plausibility_a = ds.plausibility(&vec!["A".to_string()]).unwrap();
+//! let belief_a = ds.belief(&vec!["A".to_string()]).expect("should succeed");
+//! let plausibility_a = ds.plausibility(&vec!["A".to_string()]).expect("should succeed");
 //!
 //! println!("Belief(A) = {}, Plausibility(A) = {}", belief_a, plausibility_a);
 //! # Ok::<(), anyhow::Error>(())
@@ -416,170 +416,157 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_mass_function_basic() {
+    fn test_mass_function_basic() -> Result<(), Box<dyn std::error::Error>> {
         let mut mf = MassFunction::new();
-        mf.assign_mass(vec!["A".to_string()], 0.6).unwrap();
-        mf.assign_mass(vec!["B".to_string()], 0.4).unwrap();
+        mf.assign_mass(vec!["A".to_string()], 0.6)?;
+        mf.assign_mass(vec!["B".to_string()], 0.4)?;
 
         assert!((mf.get_mass(&["A".to_string()]) - 0.6).abs() < 1e-10);
         assert!((mf.total_mass() - 1.0).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_mass_function_normalization() {
+    fn test_mass_function_normalization() -> Result<(), Box<dyn std::error::Error>> {
         let mut mf = MassFunction::new();
-        mf.assign_mass(vec!["A".to_string()], 0.3).unwrap();
-        mf.assign_mass(vec!["B".to_string()], 0.2).unwrap();
+        mf.assign_mass(vec!["A".to_string()], 0.3)?;
+        mf.assign_mass(vec!["B".to_string()], 0.2)?;
 
-        mf.normalize().unwrap();
+        mf.normalize()?;
         assert!((mf.total_mass() - 1.0).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_ds_system_belief() {
+    fn test_ds_system_belief() -> Result<(), Box<dyn std::error::Error>> {
         let frame = vec!["A".to_string(), "B".to_string(), "C".to_string()];
         let mut ds = DempsterShaferSystem::new(frame);
 
         let mut evidence = MassFunction::new();
-        evidence.assign_mass(vec!["A".to_string()], 0.6).unwrap();
-        evidence
-            .assign_mass(vec!["A".to_string(), "B".to_string()], 0.3)
-            .unwrap();
-        evidence
-            .assign_mass(vec!["A".to_string(), "B".to_string(), "C".to_string()], 0.1)
-            .unwrap();
+        evidence.assign_mass(vec!["A".to_string()], 0.6)?;
+        evidence.assign_mass(vec!["A".to_string(), "B".to_string()], 0.3)?;
+        evidence.assign_mass(vec!["A".to_string(), "B".to_string(), "C".to_string()], 0.1)?;
 
-        ds.add_evidence(evidence).unwrap();
+        ds.add_evidence(evidence)?;
 
         // Bel(A) = m({A}) = 0.6
-        let belief_a = ds.belief(&["A".to_string()]).unwrap();
+        let belief_a = ds.belief(&["A".to_string()])?;
         assert!((belief_a - 0.6).abs() < 1e-10);
 
         // Bel({A,B}) = m({A}) + m({A,B}) = 0.6 + 0.3 = 0.9
-        let belief_ab = ds.belief(&["A".to_string(), "B".to_string()]).unwrap();
+        let belief_ab = ds.belief(&["A".to_string(), "B".to_string()])?;
         assert!((belief_ab - 0.9).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_ds_system_plausibility() {
+    fn test_ds_system_plausibility() -> Result<(), Box<dyn std::error::Error>> {
         let frame = vec!["A".to_string(), "B".to_string(), "C".to_string()];
         let mut ds = DempsterShaferSystem::new(frame);
 
         let mut evidence = MassFunction::new();
-        evidence.assign_mass(vec!["A".to_string()], 0.6).unwrap();
-        evidence.assign_mass(vec!["B".to_string()], 0.3).unwrap();
-        evidence.assign_mass(vec!["C".to_string()], 0.1).unwrap();
+        evidence.assign_mass(vec!["A".to_string()], 0.6)?;
+        evidence.assign_mass(vec!["B".to_string()], 0.3)?;
+        evidence.assign_mass(vec!["C".to_string()], 0.1)?;
 
-        ds.add_evidence(evidence).unwrap();
+        ds.add_evidence(evidence)?;
 
         // Pl(A) = m({A}) = 0.6 (only {A} intersects with {A})
-        let pl_a = ds.plausibility(&["A".to_string()]).unwrap();
+        let pl_a = ds.plausibility(&["A".to_string()])?;
         assert!((pl_a - 0.6).abs() < 1e-10);
 
         // Pl({A,B}) = m({A}) + m({B}) = 0.9 ({A}, {B} intersect with {A,B})
-        let pl_ab = ds
-            .plausibility(&["A".to_string(), "B".to_string()])
-            .unwrap();
+        let pl_ab = ds.plausibility(&["A".to_string(), "B".to_string()])?;
         assert!((pl_ab - 0.9).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_dempster_combination() {
+    fn test_dempster_combination() -> Result<(), Box<dyn std::error::Error>> {
         let frame = vec!["A".to_string(), "B".to_string()];
         let mut ds = DempsterShaferSystem::new(frame);
 
         // First evidence: 70% A, 20% B, 10% {A,B}
         let mut ev1 = MassFunction::new();
-        ev1.assign_mass(vec!["A".to_string()], 0.7).unwrap();
-        ev1.assign_mass(vec!["B".to_string()], 0.2).unwrap();
-        ev1.assign_mass(vec!["A".to_string(), "B".to_string()], 0.1)
-            .unwrap();
+        ev1.assign_mass(vec!["A".to_string()], 0.7)?;
+        ev1.assign_mass(vec!["B".to_string()], 0.2)?;
+        ev1.assign_mass(vec!["A".to_string(), "B".to_string()], 0.1)?;
 
         // Second evidence: 60% A, 30% B, 10% {A,B}
         let mut ev2 = MassFunction::new();
-        ev2.assign_mass(vec!["A".to_string()], 0.6).unwrap();
-        ev2.assign_mass(vec!["B".to_string()], 0.3).unwrap();
-        ev2.assign_mass(vec!["A".to_string(), "B".to_string()], 0.1)
-            .unwrap();
+        ev2.assign_mass(vec!["A".to_string()], 0.6)?;
+        ev2.assign_mass(vec!["B".to_string()], 0.3)?;
+        ev2.assign_mass(vec!["A".to_string(), "B".to_string()], 0.1)?;
 
-        ds.add_evidence(ev1).unwrap();
-        ds.add_evidence(ev2).unwrap();
+        ds.add_evidence(ev1)?;
+        ds.add_evidence(ev2)?;
 
         // After combination, belief in A should increase
-        let belief_a = ds.belief(&["A".to_string()]).unwrap();
+        let belief_a = ds.belief(&["A".to_string()])?;
         assert!(belief_a > 0.7); // Should be stronger than individual evidence
+        Ok(())
     }
 
     #[test]
-    fn test_pignistic_probability() {
+    fn test_pignistic_probability() -> Result<(), Box<dyn std::error::Error>> {
         let frame = vec!["A".to_string(), "B".to_string(), "C".to_string()];
         let mut ds = DempsterShaferSystem::new(frame);
 
         let mut evidence = MassFunction::new();
-        evidence.assign_mass(vec!["A".to_string()], 0.6).unwrap();
-        evidence
-            .assign_mass(vec!["A".to_string(), "B".to_string()], 0.4)
-            .unwrap();
+        evidence.assign_mass(vec!["A".to_string()], 0.6)?;
+        evidence.assign_mass(vec!["A".to_string(), "B".to_string()], 0.4)?;
 
-        ds.add_evidence(evidence).unwrap();
+        ds.add_evidence(evidence)?;
 
         // BetP(A) = 0.6 + 0.4/2 = 0.8
-        let prob_a = ds.pignistic_probability("A").unwrap();
+        let prob_a = ds.pignistic_probability("A")?;
         assert!((prob_a - 0.8).abs() < 1e-10);
 
         // BetP(B) = 0.4/2 = 0.2
-        let prob_b = ds.pignistic_probability("B").unwrap();
+        let prob_b = ds.pignistic_probability("B")?;
         assert!((prob_b - 0.2).abs() < 1e-10);
+        Ok(())
     }
 
     #[test]
-    fn test_ds_reasoner() {
+    fn test_ds_reasoner() -> Result<(), Box<dyn std::error::Error>> {
         let hypotheses = vec!["Rain".to_string(), "NoRain".to_string()];
         let mut reasoner = DempsterShaferReasoner::new(hypotheses);
 
         // Weather forecast: 70% rain
         let mut forecast = MassFunction::new();
-        forecast.assign_mass(vec!["Rain".to_string()], 0.7).unwrap();
-        forecast
-            .assign_mass(vec!["NoRain".to_string()], 0.3)
-            .unwrap();
+        forecast.assign_mass(vec!["Rain".to_string()], 0.7)?;
+        forecast.assign_mass(vec!["NoRain".to_string()], 0.3)?;
 
-        reasoner
-            .add_named_evidence("forecast".to_string(), forecast)
-            .unwrap();
+        reasoner.add_named_evidence("forecast".to_string(), forecast)?;
 
         // Ground sensor: 80% rain
         let mut sensor = MassFunction::new();
-        sensor.assign_mass(vec!["Rain".to_string()], 0.8).unwrap();
-        sensor.assign_mass(vec!["NoRain".to_string()], 0.2).unwrap();
+        sensor.assign_mass(vec!["Rain".to_string()], 0.8)?;
+        sensor.assign_mass(vec!["NoRain".to_string()], 0.2)?;
 
-        reasoner
-            .add_named_evidence("sensor".to_string(), sensor)
-            .unwrap();
+        reasoner.add_named_evidence("sensor".to_string(), sensor)?;
 
         // Combined belief in rain should be high
-        let (most_plausible, prob) = reasoner.get_most_plausible().unwrap();
+        let (most_plausible, prob) = reasoner.get_most_plausible()?;
         assert_eq!(most_plausible, "Rain");
         assert!(prob > 0.8);
+        Ok(())
     }
 
     #[test]
-    fn test_uncertainty_intervals() {
+    fn test_uncertainty_intervals() -> Result<(), Box<dyn std::error::Error>> {
         let frame = vec!["A".to_string(), "B".to_string(), "C".to_string()];
         let mut ds = DempsterShaferSystem::new(frame);
 
         let mut evidence = MassFunction::new();
-        evidence.assign_mass(vec!["A".to_string()], 0.4).unwrap();
-        evidence
-            .assign_mass(vec!["A".to_string(), "B".to_string()], 0.3)
-            .unwrap();
-        evidence
-            .assign_mass(vec!["A".to_string(), "B".to_string(), "C".to_string()], 0.3)
-            .unwrap();
+        evidence.assign_mass(vec!["A".to_string()], 0.4)?;
+        evidence.assign_mass(vec!["A".to_string(), "B".to_string()], 0.3)?;
+        evidence.assign_mass(vec!["A".to_string(), "B".to_string(), "C".to_string()], 0.3)?;
 
-        ds.add_evidence(evidence).unwrap();
+        ds.add_evidence(evidence)?;
 
-        let (bel, pl) = ds.uncertainty_interval(&["A".to_string()]).unwrap();
+        let (bel, pl) = ds.uncertainty_interval(&["A".to_string()])?;
 
         // Bel(A) = m({A}) = 0.4
         assert!((bel - 0.4).abs() < 1e-10);
@@ -589,5 +576,6 @@ mod tests {
 
         // Uncertainty = Pl - Bel
         assert!((pl - bel - 0.6).abs() < 1e-10);
+        Ok(())
     }
 }

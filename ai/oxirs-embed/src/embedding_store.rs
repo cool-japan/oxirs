@@ -273,32 +273,34 @@ mod tests {
     #[test]
     fn test_insert_first_sets_dim() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v3(1.0, 0.0, 0.0)).unwrap();
+        store
+            .insert("a", v3(1.0, 0.0, 0.0))
+            .expect("should succeed");
         assert_eq!(store.dim(), Some(3));
     }
 
     #[test]
     fn test_insert_returns_id() {
         let mut store = EmbeddingStore::new();
-        let id = store.insert("a", v2(1.0, 0.0)).unwrap();
+        let id = store.insert("a", v2(1.0, 0.0)).expect("should succeed");
         assert_eq!(id, 0);
-        let id2 = store.insert("b", v2(0.0, 1.0)).unwrap();
+        let id2 = store.insert("b", v2(0.0, 1.0)).expect("should succeed");
         assert_eq!(id2, 1);
     }
 
     #[test]
     fn test_insert_increments_len() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
         assert_eq!(store.len(), 1);
-        store.insert("b", v2(0.0, 1.0)).unwrap();
+        store.insert("b", v2(0.0, 1.0)).expect("should succeed");
         assert_eq!(store.len(), 2);
     }
 
     #[test]
     fn test_insert_dim_mismatch_error() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
         let result = store.insert("b", v3(0.0, 1.0, 0.0));
         assert!(matches!(
             result,
@@ -312,8 +314,8 @@ mod tests {
     #[test]
     fn test_insert_update_existing_label() {
         let mut store = EmbeddingStore::new();
-        let id1 = store.insert("a", v2(1.0, 0.0)).unwrap();
-        let id2 = store.insert("a", v2(0.5, 0.5)).unwrap();
+        let id1 = store.insert("a", v2(1.0, 0.0)).expect("should succeed");
+        let id2 = store.insert("a", v2(0.5, 0.5)).expect("should succeed");
         // Same id, same len
         assert_eq!(id1, id2);
         assert_eq!(store.len(), 1);
@@ -328,7 +330,9 @@ mod tests {
         let mut store = EmbeddingStore::new();
         let mut meta = HashMap::new();
         meta.insert("lang".to_string(), "en".to_string());
-        store.insert_with_meta("doc1", v2(1.0, 0.0), meta).unwrap();
+        store
+            .insert_with_meta("doc1", v2(1.0, 0.0), meta)
+            .expect("should succeed");
         let e = store.get_by_label("doc1").expect("exists");
         assert_eq!(e.metadata["lang"], "en");
     }
@@ -338,7 +342,7 @@ mod tests {
     #[test]
     fn test_get_by_label_existing() {
         let mut store = EmbeddingStore::new();
-        store.insert("hello", v2(1.0, 0.0)).unwrap();
+        store.insert("hello", v2(1.0, 0.0)).expect("should succeed");
         assert!(store.get_by_label("hello").is_some());
     }
 
@@ -351,7 +355,7 @@ mod tests {
     #[test]
     fn test_get_by_label_returns_correct_vector() {
         let mut store = EmbeddingStore::new();
-        store.insert("x", v2(3.0, 4.0)).unwrap();
+        store.insert("x", v2(3.0, 4.0)).expect("should succeed");
         let e = store.get_by_label("x").expect("exists");
         assert!((e.vector[0] - 3.0).abs() < 1e-9);
         assert!((e.vector[1] - 4.0).abs() < 1e-9);
@@ -362,7 +366,7 @@ mod tests {
     #[test]
     fn test_get_by_id_existing() {
         let mut store = EmbeddingStore::new();
-        let id = store.insert("a", v2(1.0, 0.0)).unwrap();
+        let id = store.insert("a", v2(1.0, 0.0)).expect("should succeed");
         assert!(store.get_by_id(id).is_some());
     }
 
@@ -375,7 +379,7 @@ mod tests {
     #[test]
     fn test_get_by_id_matches_label() {
         let mut store = EmbeddingStore::new();
-        let id = store.insert("mykey", v2(1.0, 2.0)).unwrap();
+        let id = store.insert("mykey", v2(1.0, 2.0)).expect("should succeed");
         let e = store.get_by_id(id).expect("exists");
         assert_eq!(e.label, "mykey");
     }
@@ -436,7 +440,7 @@ mod tests {
     #[test]
     fn test_nearest_dim_mismatch_error() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
         assert!(matches!(
             store.nearest(&[1.0, 0.0, 0.0], 3),
             Err(StoreError::DimensionMismatch { .. })
@@ -447,20 +451,22 @@ mod tests {
     fn test_nearest_returns_k_results() {
         let mut store = EmbeddingStore::new();
         for i in 0..5 {
-            store.insert(format!("e{i}"), vec![i as f64, 0.0]).unwrap();
+            store
+                .insert(format!("e{i}"), vec![i as f64, 0.0])
+                .expect("should succeed");
         }
-        let results = store.nearest(&[1.0, 0.0], 3).unwrap();
+        let results = store.nearest(&[1.0, 0.0], 3).expect("should succeed");
         assert_eq!(results.len(), 3);
     }
 
     #[test]
     fn test_nearest_sorted_descending() {
         let mut store = EmbeddingStore::new();
-        store.insert("up", v2(0.0, 1.0)).unwrap();
-        store.insert("right", v2(1.0, 0.0)).unwrap();
-        store.insert("diag", v2(1.0, 1.0)).unwrap();
+        store.insert("up", v2(0.0, 1.0)).expect("should succeed");
+        store.insert("right", v2(1.0, 0.0)).expect("should succeed");
+        store.insert("diag", v2(1.0, 1.0)).expect("should succeed");
         let query = v2(1.0, 0.0);
-        let results = store.nearest(&query, 3).unwrap();
+        let results = store.nearest(&query, 3).expect("should succeed");
         let sims: Vec<f64> = results.iter().map(|(_, s)| *s).collect();
         for pair in sims.windows(2) {
             assert!(pair[0] >= pair[1]);
@@ -470,10 +476,10 @@ mod tests {
     #[test]
     fn test_nearest_top1_is_most_similar() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
-        store.insert("b", v2(0.0, 1.0)).unwrap();
-        store.insert("c", v2(-1.0, 0.0)).unwrap();
-        let results = store.nearest(&[1.0, 0.0], 1).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
+        store.insert("b", v2(0.0, 1.0)).expect("should succeed");
+        store.insert("c", v2(-1.0, 0.0)).expect("should succeed");
+        let results = store.nearest(&[1.0, 0.0], 1).expect("should succeed");
         assert_eq!(results[0].0.label, "a");
     }
 
@@ -488,8 +494,8 @@ mod tests {
     #[test]
     fn test_labels_returns_all() {
         let mut store = EmbeddingStore::new();
-        store.insert("alpha", v2(1.0, 0.0)).unwrap();
-        store.insert("beta", v2(0.0, 1.0)).unwrap();
+        store.insert("alpha", v2(1.0, 0.0)).expect("should succeed");
+        store.insert("beta", v2(0.0, 1.0)).expect("should succeed");
         let labels = store.labels();
         assert_eq!(labels.len(), 2);
         assert!(labels.contains(&"alpha"));
@@ -501,7 +507,7 @@ mod tests {
     #[test]
     fn test_remove_existing_returns_true() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
         assert!(store.remove("a"));
         assert!(store.is_empty());
     }
@@ -515,8 +521,8 @@ mod tests {
     #[test]
     fn test_remove_decrements_len() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
-        store.insert("b", v2(0.0, 1.0)).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
+        store.insert("b", v2(0.0, 1.0)).expect("should succeed");
         store.remove("a");
         assert_eq!(store.len(), 1);
     }
@@ -524,8 +530,8 @@ mod tests {
     #[test]
     fn test_remove_remaining_entry_still_accessible() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
-        store.insert("b", v2(0.0, 1.0)).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
+        store.insert("b", v2(0.0, 1.0)).expect("should succeed");
         store.remove("a");
         assert!(store.get_by_label("b").is_some());
     }
@@ -533,7 +539,7 @@ mod tests {
     #[test]
     fn test_remove_all_resets_dim() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
         store.remove("a");
         assert!(store.dim().is_none());
     }
@@ -541,10 +547,12 @@ mod tests {
     #[test]
     fn test_remove_allows_reinsertion_with_different_dim() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
         store.remove("a");
         // After removing the only entry, dim is reset, so new dimension is allowed
-        store.insert("a", v3(1.0, 0.0, 0.0)).unwrap();
+        store
+            .insert("a", v3(1.0, 0.0, 0.0))
+            .expect("should succeed");
         assert_eq!(store.dim(), Some(3));
     }
 
@@ -584,9 +592,9 @@ mod tests {
     #[test]
     fn test_nearest_k_larger_than_store() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
-        store.insert("b", v2(0.0, 1.0)).unwrap();
-        let results = store.nearest(&[1.0, 1.0], 10).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
+        store.insert("b", v2(0.0, 1.0)).expect("should succeed");
+        let results = store.nearest(&[1.0, 1.0], 10).expect("should succeed");
         // Cannot return more than what's in the store
         assert_eq!(results.len(), 2);
     }
@@ -594,7 +602,7 @@ mod tests {
     #[test]
     fn test_id_is_stable_for_inserted_entry() {
         let mut store = EmbeddingStore::new();
-        let id = store.insert("vec", v2(1.0, 1.0)).unwrap();
+        let id = store.insert("vec", v2(1.0, 1.0)).expect("should succeed");
         let e = store.get_by_label("vec").expect("exists");
         assert_eq!(e.id, id);
     }
@@ -602,7 +610,9 @@ mod tests {
     #[test]
     fn test_entry_label_matches() {
         let mut store = EmbeddingStore::new();
-        store.insert("myLabel", v2(0.5, 0.5)).unwrap();
+        store
+            .insert("myLabel", v2(0.5, 0.5))
+            .expect("should succeed");
         let e = store.get_by_label("myLabel").expect("exists");
         assert_eq!(e.label, "myLabel");
     }
@@ -612,7 +622,7 @@ mod tests {
     #[test]
     fn test_insert_empty_vector_sets_dim_zero() {
         let mut store = EmbeddingStore::new();
-        store.insert("empty", vec![]).unwrap();
+        store.insert("empty", vec![]).expect("should succeed");
         assert_eq!(store.dim(), Some(0));
     }
 
@@ -628,30 +638,32 @@ mod tests {
     #[test]
     fn test_nearest_returns_fewer_when_store_smaller_than_k() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
-        let results = store.nearest(&[1.0, 0.0], 100).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
+        let results = store.nearest(&[1.0, 0.0], 100).expect("should succeed");
         assert_eq!(results.len(), 1);
     }
 
     #[test]
     fn test_remove_all_entries_allows_new_dim() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v2(1.0, 0.0)).unwrap();
-        store.insert("b", v2(0.0, 1.0)).unwrap();
+        store.insert("a", v2(1.0, 0.0)).expect("should succeed");
+        store.insert("b", v2(0.0, 1.0)).expect("should succeed");
         store.remove("a");
         store.remove("b");
         assert_eq!(store.dim(), None);
         // Should accept a 3-d vector now
-        store.insert("c", v3(1.0, 0.0, 0.0)).unwrap();
+        store
+            .insert("c", v3(1.0, 0.0, 0.0))
+            .expect("should succeed");
         assert_eq!(store.dim(), Some(3));
     }
 
     #[test]
     fn test_get_by_id_after_remove_middle() {
         let mut store = EmbeddingStore::new();
-        let id_a = store.insert("a", v2(1.0, 0.0)).unwrap();
-        store.insert("b", v2(0.0, 1.0)).unwrap();
-        let id_c = store.insert("c", v2(0.5, 0.5)).unwrap();
+        let id_a = store.insert("a", v2(1.0, 0.0)).expect("should succeed");
+        store.insert("b", v2(0.0, 1.0)).expect("should succeed");
+        let id_c = store.insert("c", v2(0.5, 0.5)).expect("should succeed");
         store.remove("b");
         // a and c should still be accessible by id
         assert!(store.get_by_id(id_a).is_some());
@@ -663,7 +675,7 @@ mod tests {
         let mut store = EmbeddingStore::new();
         store
             .insert_with_meta("doc", v2(1.0, 0.0), HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         let e = store.get_by_label("doc").expect("exists");
         assert!(e.metadata.is_empty());
     }
@@ -671,10 +683,16 @@ mod tests {
     #[test]
     fn test_nearest_similarity_range() {
         let mut store = EmbeddingStore::new();
-        store.insert("a", v3(1.0, 0.0, 0.0)).unwrap();
-        store.insert("b", v3(0.0, 1.0, 0.0)).unwrap();
-        store.insert("c", v3(0.0, 0.0, 1.0)).unwrap();
-        let results = store.nearest(&[1.0, 0.0, 0.0], 3).unwrap();
+        store
+            .insert("a", v3(1.0, 0.0, 0.0))
+            .expect("should succeed");
+        store
+            .insert("b", v3(0.0, 1.0, 0.0))
+            .expect("should succeed");
+        store
+            .insert("c", v3(0.0, 0.0, 1.0))
+            .expect("should succeed");
+        let results = store.nearest(&[1.0, 0.0, 0.0], 3).expect("should succeed");
         for (_, sim) in &results {
             assert!(*sim >= -1.0 && *sim <= 1.0);
         }

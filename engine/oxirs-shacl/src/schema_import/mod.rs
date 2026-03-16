@@ -467,12 +467,12 @@ mod tests {
             "properties": { "name": { "type": "string" } },
             "required": ["name"]
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("name"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.min_count, Some(1));
     }
 
@@ -482,12 +482,12 @@ mod tests {
             "title": "Person",
             "properties": { "nickname": { "type": "string" } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("nickname"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.min_count, Some(0));
     }
 
@@ -502,22 +502,22 @@ mod tests {
             },
             "required": ["id", "name"]
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let id_prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("id"))
-            .unwrap();
+            .expect("should succeed");
         let name_prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("name"))
-            .unwrap();
+            .expect("should succeed");
         let salary_prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("salary"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(id_prop.min_count, Some(1));
         assert_eq!(name_prop.min_count, Some(1));
         assert_eq!(salary_prop.min_count, Some(0));
@@ -531,12 +531,12 @@ mod tests {
             "title": "T",
             "properties": { "pw": { "type": "string", "minLength": 8 } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("pw"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.min_length, Some(8));
     }
 
@@ -546,12 +546,12 @@ mod tests {
             "title": "T",
             "properties": { "bio": { "type": "string", "maxLength": 500 } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("bio"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.max_length, Some(500));
     }
 
@@ -561,12 +561,12 @@ mod tests {
             "title": "T",
             "properties": { "username": { "type": "string", "minLength": 3, "maxLength": 30 } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("username"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.min_length, Some(3));
         assert_eq!(prop.max_length, Some(30));
     }
@@ -577,12 +577,12 @@ mod tests {
             "title": "T",
             "properties": { "email": { "type": "string", "pattern": "^[^@]+@[^@]+$" } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("email"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.pattern.as_deref(), Some("^[^@]+@[^@]+$"));
     }
 
@@ -592,12 +592,12 @@ mod tests {
             "title": "T",
             "properties": { "url": { "type": "string", "pattern": "^https?://" } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("url"))
-            .unwrap();
+            .expect("should succeed");
         assert!(prop.pattern.is_some());
     }
 
@@ -609,12 +609,12 @@ mod tests {
             "title": "T",
             "properties": { "age": { "type": "integer", "minimum": 0 } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("age"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.min_inclusive, Some(0.0));
     }
 
@@ -624,12 +624,12 @@ mod tests {
             "title": "T",
             "properties": { "age": { "type": "integer", "maximum": 150 } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("age"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.max_inclusive, Some(150.0));
     }
 
@@ -639,12 +639,12 @@ mod tests {
             "title": "T",
             "properties": { "score": { "type": "number", "minimum": 0.0, "maximum": 100.0 } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("score"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.min_inclusive, Some(0.0));
         assert_eq!(prop.max_inclusive, Some(100.0));
     }
@@ -655,12 +655,12 @@ mod tests {
             "title": "T",
             "properties": { "count": { "type": "integer" } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("count"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.datatype.as_deref(), Some("xsd:integer"));
     }
 
@@ -670,12 +670,12 @@ mod tests {
             "title": "T",
             "properties": { "active": { "type": "boolean" } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("active"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.datatype.as_deref(), Some("xsd:boolean"));
     }
 
@@ -690,7 +690,7 @@ mod tests {
                 { "title": "B", "properties": {} }
             ]
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         assert!(shape
             .logical
             .iter()
@@ -706,7 +706,7 @@ mod tests {
                 { "title": "B", "properties": {} }
             ]
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         if let Some(ShaclLogical::And(shapes)) = shape
             .logical
             .iter()
@@ -727,7 +727,7 @@ mod tests {
                 { "title": "Y", "properties": {} }
             ]
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         assert!(shape
             .logical
             .iter()
@@ -744,7 +744,7 @@ mod tests {
                 { "title": "Z", "properties": {} }
             ]
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         if let Some(ShaclLogical::Xone(shapes)) = shape
             .logical
             .iter()
@@ -765,7 +765,7 @@ mod tests {
                 { "title": "Q", "properties": {} }
             ]
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         assert!(shape
             .logical
             .iter()
@@ -780,14 +780,18 @@ mod tests {
                 "customer": { "$ref": "#/definitions/Customer" }
             }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("customer"))
-            .unwrap();
+            .expect("should succeed");
         assert!(prop.node.is_some(), "should have sh:node for $ref");
-        assert!(prop.node.as_deref().unwrap().contains("Customer"));
+        assert!(prop
+            .node
+            .as_deref()
+            .expect("should succeed")
+            .contains("Customer"));
     }
 
     #[test]
@@ -798,13 +802,17 @@ mod tests {
                 "item": { "$ref": "#/$defs/Item" }
             }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("item"))
-            .unwrap();
-        assert!(prop.node.as_deref().unwrap().contains("Item"));
+            .expect("should succeed");
+        assert!(prop
+            .node
+            .as_deref()
+            .expect("should succeed")
+            .contains("Item"));
     }
 
     // ── Turtle serialization ─────────────────────────────────────────────────
@@ -813,7 +821,7 @@ mod tests {
     fn test_to_turtle_contains_prefix_declarations() {
         let schema = json!({ "title": "T", "properties": {} });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("@prefix sh:"));
         assert!(turtle.contains("@prefix xsd:"));
@@ -823,7 +831,7 @@ mod tests {
     fn test_to_turtle_contains_node_shape() {
         let schema = json!({ "title": "Person", "properties": {} });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:NodeShape"));
     }
@@ -832,7 +840,7 @@ mod tests {
     fn test_to_turtle_contains_target_class() {
         let schema = json!({ "title": "Employee", "properties": {} });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:targetClass"));
         assert!(turtle.contains("Employee"));
@@ -845,7 +853,7 @@ mod tests {
             "properties": { "name": { "type": "string" } }
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:path"));
         assert!(turtle.contains("name"));
@@ -858,7 +866,7 @@ mod tests {
             "properties": { "age": { "type": "integer" } }
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:datatype"));
         assert!(turtle.contains("xsd:integer"));
@@ -872,7 +880,7 @@ mod tests {
             "required": ["name"]
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:minCount 1"));
     }
@@ -884,7 +892,7 @@ mod tests {
             "properties": { "code": { "type": "string", "pattern": "^[A-Z]+$" } }
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:pattern"));
         assert!(turtle.contains("^[A-Z]+$"));
@@ -897,7 +905,7 @@ mod tests {
             "properties": { "score": { "type": "number", "minimum": 0 } }
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:minInclusive"));
     }
@@ -909,7 +917,7 @@ mod tests {
             "properties": { "rating": { "type": "number", "maximum": 5 } }
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:maxInclusive"));
     }
@@ -924,7 +932,7 @@ mod tests {
             ]
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:and"));
     }
@@ -939,7 +947,7 @@ mod tests {
             ]
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:xone"));
     }
@@ -952,7 +960,7 @@ mod tests {
             "not": { "title": "Excluded", "properties": {} }
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:not"));
     }
@@ -964,7 +972,7 @@ mod tests {
             "properties": { "pw": { "type": "string", "minLength": 8 } }
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:minLength 8"));
     }
@@ -976,7 +984,7 @@ mod tests {
             "properties": { "bio": { "type": "string", "maxLength": 200 } }
         });
         let conv = converter();
-        let shape = conv.convert(&schema).unwrap();
+        let shape = conv.convert(&schema).expect("should succeed");
         let turtle = conv.to_turtle(&shape);
         assert!(turtle.contains("sh:maxLength 200"));
     }
@@ -986,14 +994,18 @@ mod tests {
     #[test]
     fn test_convert_properties_empty() {
         let props = json!({});
-        let constraints = converter().convert_properties(&props, &[]).unwrap();
+        let constraints = converter()
+            .convert_properties(&props, &[])
+            .expect("should succeed");
         assert!(constraints.is_empty());
     }
 
     #[test]
     fn test_convert_properties_two_props() {
         let props = json!({ "a": { "type": "string" }, "b": { "type": "integer" } });
-        let constraints = converter().convert_properties(&props, &[]).unwrap();
+        let constraints = converter()
+            .convert_properties(&props, &[])
+            .expect("should succeed");
         assert_eq!(constraints.len(), 2);
     }
 
@@ -1002,7 +1014,7 @@ mod tests {
         let prop_schema = json!({});
         let c = converter()
             .convert_property("foo", &prop_schema, &[])
-            .unwrap();
+            .expect("should succeed");
         assert!(c.datatype.is_none());
     }
 
@@ -1014,12 +1026,12 @@ mod tests {
             "title": "T",
             "properties": { "label": { "type": "string" } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("label"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.node_kind, Some(NodeKind::Literal));
     }
 
@@ -1029,12 +1041,12 @@ mod tests {
             "title": "T",
             "properties": { "link": { "type": "object" } }
         });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         let prop = shape
             .properties
             .iter()
             .find(|p| p.path.contains("link"))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(prop.node_kind, Some(NodeKind::Iri));
     }
 
@@ -1050,23 +1062,27 @@ mod tests {
     #[test]
     fn test_shape_iri_contains_title() {
         let schema = json!({ "title": "Product", "properties": {} });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         assert!(shape.iri.contains("Product"));
     }
 
     #[test]
     fn test_shape_iri_contains_shape_suffix() {
         let schema = json!({ "title": "Product", "properties": {} });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         assert!(shape.iri.contains("Shape"));
     }
 
     #[test]
     fn test_shape_target_class_set() {
         let schema = json!({ "title": "Vehicle", "properties": {} });
-        let shape = converter().convert(&schema).unwrap();
+        let shape = converter().convert(&schema).expect("should succeed");
         assert!(shape.target_class.is_some());
-        assert!(shape.target_class.as_deref().unwrap().contains("Vehicle"));
+        assert!(shape
+            .target_class
+            .as_deref()
+            .expect("should succeed")
+            .contains("Vehicle"));
     }
 
     // ── Error handling ───────────────────────────────────────────────────────

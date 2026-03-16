@@ -1121,7 +1121,7 @@ mod tests {
     async fn test_embedding_optimization() {
         let optimizer = RevolutionaryEmbeddingOptimizerFactory::create_balanced()
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let mut embeddings = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
         let entities = vec!["entity1".to_string(), "entity2".to_string()];
@@ -1131,7 +1131,7 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        let optimization_result = result.unwrap();
+        let optimization_result = result.expect("should succeed");
         assert!(optimization_result.performance_improvement >= 1.0);
     }
 
@@ -1139,7 +1139,7 @@ mod tests {
     async fn test_quantum_focused_optimizer() {
         let optimizer = RevolutionaryEmbeddingOptimizerFactory::create_quantum_focused()
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let query = array![1.0, 0.0, 0.0];
         let candidates = array![[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
@@ -1149,7 +1149,7 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        let similarity_result = result.unwrap();
+        let similarity_result = result.expect("should succeed");
         assert_eq!(similarity_result.similarities.len(), 3);
         assert!(matches!(
             similarity_result.computation_method,
@@ -1160,7 +1160,7 @@ mod tests {
     #[tokio::test]
     async fn test_performance_prediction() {
         let targets = PerformanceTargets::default();
-        let predictor = EmbeddingPerformancePredictor::new(targets).await.unwrap();
+        let predictor = EmbeddingPerformancePredictor::new(targets).await.expect("should succeed");
 
         let shape = [1000, 128];
         let entity_count = 5000;
@@ -1168,7 +1168,7 @@ mod tests {
         let prediction = predictor.predict_performance(&shape, entity_count).await;
         assert!(prediction.is_ok());
 
-        let pred = prediction.unwrap();
+        let pred = prediction.expect("should succeed");
         assert!(pred.predicted_time_us > 0);
         assert!(pred.confidence > 0.0 && pred.confidence <= 1.0);
     }

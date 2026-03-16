@@ -1,6 +1,6 @@
 # OxiRS Engine Directory - TODO
 
-*Version: 0.2.1 | Last Updated: 2026-03-05*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -10,14 +10,14 @@ The OxiRS Engine directory contains query processing, validation, and reasoning 
 
 | Module | Status | Tests | Description |
 |--------|--------|-------|-------------|
-| **oxirs-arq** | Production Ready | 687 tests | SPARQL 1.1/1.2 query engine with adaptive optimization |
-| **oxirs-rule** | Production Ready | 244 tests | Rule-based reasoning with RDFS/OWL support |
-| **oxirs-shacl** | Production Ready | 498 tests | W3C SHACL validation engine |
-| **oxirs-star** | Production Ready | 317 tests | RDF-star/SPARQL-star support |
-| **oxirs-vec** | Production Ready | 683 tests | Vector search with SPARQL integration |
-| **oxirs-ttl** | Production Ready | 672 tests | Streaming Turtle/TriG parser and serializer |
-| **oxirs-samm** | Production Ready | 398 tests | SAMM/AAS support with code generators |
-| **oxirs-geosparql** | Production Ready | 250+ tests | OGC GeoSPARQL 1.0/1.1 implementation |
+| **oxirs-arq** | Production Ready | 2628 tests | SPARQL 1.1/1.2 query engine with adaptive optimization |
+| **oxirs-rule** | Production Ready | 2114 tests | Rule-based reasoning with RDFS/OWL support |
+| **oxirs-shacl** | Production Ready | 1915 tests | W3C SHACL validation engine |
+| **oxirs-star** | Production Ready | 1507 tests | RDF-star/SPARQL-star support |
+| **oxirs-vec** | Production Ready | 1587 tests | Vector search with SPARQL integration |
+| **oxirs-ttl** | Production Ready | 1350 tests | Streaming Turtle/TriG parser and serializer |
+| **oxirs-samm** | Production Ready | 1326 tests | SAMM/AAS support with code generators |
+| **oxirs-geosparql** | Production Ready | 1756 tests | OGC GeoSPARQL 1.0/1.1 implementation |
 
 ### Features
 
@@ -36,7 +36,7 @@ The OxiRS Engine directory contains query processing, validation, and reasoning 
 - ✅ Production-ready engine modules
 - ✅ SPARQL 1.1/1.2, SHACL, RDF-star, vector search, TTL, SAMM, GeoSPARQL
 
-### v0.2.1 - Current Release (March 5, 2026)
+### v0.2.2 - Current Release (March 16, 2026)
 - ✅ Advanced query optimization techniques
 - ✅ Enhanced reasoning strategies
 - ✅ Performance improvements for large datasets
@@ -58,4 +58,4 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Engine v0.2.1 - Query, validation, and reasoning infrastructure*
+*OxiRS Engine v0.2.2 - Query, validation, and reasoning infrastructure*

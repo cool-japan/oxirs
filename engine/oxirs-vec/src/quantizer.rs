@@ -372,6 +372,7 @@ fn nearest_centroid_idx(centroids: &[Vec<f32>], v: &[f32]) -> usize {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     fn make_config(n_subspaces: usize, n_clusters: usize) -> QuantizerConfig {
@@ -397,11 +398,12 @@ mod tests {
     }
 
     #[test]
-    fn test_is_trained_after_train() {
+    fn test_is_trained_after_train() -> Result<()> {
         let mut q = Quantizer::new(make_config(4, 8));
         let data = make_data(32, 8);
-        q.train(&data).unwrap();
+        q.train(&data)?;
         assert!(q.is_trained());
+        Ok(())
     }
 
     // --- train errors ---
@@ -447,46 +449,50 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_dimension_mismatch() {
+    fn test_encode_dimension_mismatch() -> Result<()> {
         let mut q = Quantizer::new(make_config(2, 4));
         let data = make_data(16, 8);
-        q.train(&data).unwrap();
+        q.train(&data)?;
         let v = vec![0.0f32; 4]; // wrong dim
         assert!(matches!(
             q.encode(&v),
             Err(QuantizerError::DimensionMismatch)
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_encode_codes_length() {
+    fn test_encode_codes_length() -> Result<()> {
         let mut q = Quantizer::new(make_config(4, 8));
         let data = make_data(32, 8);
-        q.train(&data).unwrap();
+        q.train(&data)?;
         let v = vec![1.0f32; 8];
-        let qv = q.encode(&v).unwrap();
+        let qv = q.encode(&v)?;
         assert_eq!(qv.codes.len(), 4); // one code per sub-space
+        Ok(())
     }
 
     #[test]
-    fn test_encode_original_dim_stored() {
+    fn test_encode_original_dim_stored() -> Result<()> {
         let mut q = Quantizer::new(make_config(2, 4));
         let data = make_data(16, 8);
-        q.train(&data).unwrap();
+        q.train(&data)?;
         let v = vec![0.0f32; 8];
-        let qv = q.encode(&v).unwrap();
+        let qv = q.encode(&v)?;
         assert_eq!(qv.original_dim, 8);
+        Ok(())
     }
 
     #[test]
-    fn test_decode_produces_correct_dim() {
+    fn test_decode_produces_correct_dim() -> Result<()> {
         let mut q = Quantizer::new(make_config(4, 8));
         let data = make_data(32, 8);
-        q.train(&data).unwrap();
+        q.train(&data)?;
         let v = vec![0.5f32; 8];
-        let qv = q.encode(&v).unwrap();
-        let rv = q.decode(&qv).unwrap();
+        let qv = q.encode(&v)?;
+        let rv = q.decode(&qv)?;
         assert_eq!(rv.vector.len(), 8);
+        Ok(())
     }
 
     #[test]
@@ -500,7 +506,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_decode_approximates_original() {
+    fn test_encode_decode_approximates_original() -> Result<()> {
         // A simple test: training on clustered data should reconstruct well
         let mut q = Quantizer::new(make_config(2, 4));
         // 3 clusters in 2D sub-spaces, each sub-space has 4 coords
@@ -511,35 +517,38 @@ mod tests {
                 data.push(v);
             }
         }
-        q.train(&data).unwrap();
+        q.train(&data)?;
         let test = data[0].clone();
-        let qv = q.encode(&test).unwrap();
-        let rv = q.decode(&qv).unwrap();
+        let qv = q.encode(&test)?;
+        let rv = q.decode(&qv)?;
         // Reconstruction should be within 2.0 of original for each dim
         for (&orig, &rec) in test.iter().zip(rv.vector.iter()) {
             assert!((orig - rec).abs() < 5.0, "orig={orig}, rec={rec}");
         }
+        Ok(())
     }
 
     // --- encode_batch ---
 
     #[test]
-    fn test_encode_batch_empty() {
+    fn test_encode_batch_empty() -> Result<()> {
         let mut q = Quantizer::new(make_config(2, 4));
         let data = make_data(16, 8);
-        q.train(&data).unwrap();
-        let result = q.encode_batch(&[]).unwrap();
+        q.train(&data)?;
+        let result = q.encode_batch(&[])?;
         assert!(result.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_encode_batch_multiple() {
+    fn test_encode_batch_multiple() -> Result<()> {
         let mut q = Quantizer::new(make_config(2, 4));
         let data = make_data(16, 8);
-        q.train(&data).unwrap();
+        q.train(&data)?;
         let batch = data.clone();
-        let result = q.encode_batch(&batch).unwrap();
+        let result = q.encode_batch(&batch)?;
         assert_eq!(result.len(), data.len());
+        Ok(())
     }
 
     // --- compression_ratio ---
@@ -569,11 +578,12 @@ mod tests {
     }
 
     #[test]
-    fn test_codebook_count_after_training_matches_n_subspaces() {
+    fn test_codebook_count_after_training_matches_n_subspaces() -> Result<()> {
         let mut q = Quantizer::new(make_config(4, 8));
         let data = make_data(32, 8);
-        q.train(&data).unwrap();
+        q.train(&data)?;
         assert_eq!(q.codebook_count(), 4);
+        Ok(())
     }
 
     // --- Codebook ---
@@ -602,11 +612,12 @@ mod tests {
     }
 
     #[test]
-    fn test_centroid_valid_code() {
+    fn test_centroid_valid_code() -> Result<()> {
         let mut cb = Codebook::new(2);
         cb.centroids = vec![vec![1.0, 2.0]];
-        let c = cb.centroid(0).unwrap();
+        let c = cb.centroid(0).expect("centroid at index 0 should exist");
         assert_eq!(c[0], 1.0);
+        Ok(())
     }
 
     #[test]

@@ -361,7 +361,7 @@ mod tests {
     fn test_build_empty() {
         let m = MutationBuilder::new("NoOp").build();
         assert!(m.is_ok());
-        assert_eq!(m.unwrap().name, "NoOp");
+        assert_eq!(m.expect("should succeed").name, "NoOp");
     }
 
     #[test]
@@ -369,7 +369,7 @@ mod tests {
         let m = MutationBuilder::new("M")
             .field("createUser")
             .build()
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(m.fields.len(), 1);
         assert_eq!(m.fields[0].name, "createUser");
     }
@@ -380,7 +380,7 @@ mod tests {
             .field("createUser")
             .field("updateUser")
             .build()
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(m.fields.len(), 2);
     }
 
@@ -390,7 +390,7 @@ mod tests {
             .field("createUser")
             .alias("newUser")
             .build()
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(m.fields[0].alias, Some("newUser".to_string()));
     }
 
@@ -401,7 +401,7 @@ mod tests {
             .arg("name", ArgValue::String("Alice".to_string()))
             .arg("age", ArgValue::Int(30))
             .build()
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(m.fields[0].args.len(), 2);
     }
 
@@ -412,7 +412,7 @@ mod tests {
             .select("id")
             .select("name")
             .build()
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(m.fields[0].selection, vec!["id", "name"]);
     }
 
@@ -473,7 +473,7 @@ mod tests {
         let m = MutationBuilder::new("CreateUser")
             .field("createUser")
             .build()
-            .unwrap();
+            .expect("should succeed");
         let s = MutationBuilder::to_graphql_string(&m);
         assert!(s.contains("mutation CreateUser"));
     }
@@ -483,7 +483,7 @@ mod tests {
         let m = MutationBuilder::new("M")
             .field("createUser")
             .build()
-            .unwrap();
+            .expect("should succeed");
         let s = MutationBuilder::to_graphql_string(&m);
         assert!(s.contains("createUser"));
     }
@@ -494,7 +494,7 @@ mod tests {
             .field("createUser")
             .arg("name", ArgValue::String("Alice".to_string()))
             .build()
-            .unwrap();
+            .expect("should succeed");
         let s = MutationBuilder::to_graphql_string(&m);
         assert!(s.contains("name:"));
         assert!(s.contains("Alice"));
@@ -507,7 +507,7 @@ mod tests {
             .select("id")
             .select("email")
             .build()
-            .unwrap();
+            .expect("should succeed");
         let s = MutationBuilder::to_graphql_string(&m);
         assert!(s.contains("id"));
         assert!(s.contains("email"));
@@ -519,7 +519,7 @@ mod tests {
             .field("createUser")
             .alias("newUser")
             .build()
-            .unwrap();
+            .expect("should succeed");
         let s = MutationBuilder::to_graphql_string(&m);
         assert!(s.contains("newUser: createUser"));
     }
@@ -530,7 +530,7 @@ mod tests {
         let m = MutationBuilder::new("M")
             .variable("userId", ArgValue::Int(1))
             .build()
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(m.variables.get("userId"), Some(&ArgValue::Int(1)));
     }
 
@@ -570,7 +570,7 @@ mod tests {
             .arg("to", ArgValue::String("a@b.com".to_string()))
             .select("success")
             .build()
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(m.fields.len(), 2);
         let s = MutationBuilder::to_graphql_string(&m);
@@ -580,7 +580,7 @@ mod tests {
 
     #[test]
     fn test_no_fields_is_valid() {
-        let m = MutationBuilder::new("Noop").build().unwrap();
+        let m = MutationBuilder::new("Noop").build().expect("should succeed");
         assert_eq!(m.fields.len(), 0);
         let s = MutationBuilder::to_graphql_string(&m);
         assert!(s.starts_with("mutation Noop"));

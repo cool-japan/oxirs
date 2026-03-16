@@ -664,7 +664,7 @@ mod tests {
         monitor.record_operation("query", Duration::from_millis(20), true);
         monitor.record_operation("query", Duration::from_millis(25), false);
 
-        let stats = monitor.stats("query").unwrap();
+        let stats = monitor.stats("query").expect("operation should succeed");
         assert_eq!(stats.count, 4);
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.error_rate(), 25.0);

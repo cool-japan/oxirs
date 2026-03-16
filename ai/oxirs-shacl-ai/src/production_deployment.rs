@@ -1391,8 +1391,9 @@ mod tests {
             max_surge: "25%".to_string(),
         };
 
-        let serialized = serde_json::to_string(&strategy).unwrap();
-        let deserialized: DeploymentStrategy = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&strategy).expect("should succeed");
+        let deserialized: DeploymentStrategy =
+            serde_json::from_str(&serialized).expect("should succeed");
 
         assert_eq!(strategy, deserialized);
     }

@@ -1,8 +1,8 @@
 # OxiRS GeoSPARQL Enhancement Summary
 
 **Date:** 2026-01-06
-**Session:** v0.2.1 Development - Documentation & Infrastructure
-**Branch:** 0.2.1
+**Session:** v0.2.2 Development - Documentation & Infrastructure
+**Branch:** 0.2.2
 
 ---
 
@@ -421,7 +421,7 @@ The crate is now ready for broader adoption with:
 
 ---
 
-**Status:** oxirs-geosparql v0.2.1 development complete
-**Next Milestone:** v0.2.1 (Additional testing and integration examples)
+**Status:** oxirs-geosparql v0.2.2 development complete
+**Next Milestone:** v0.2.2 (Additional testing and integration examples)
 
 *Generated: January 6, 2026*

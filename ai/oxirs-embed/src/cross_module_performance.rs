@@ -1493,7 +1493,7 @@ mod tests {
         coordinator
             .register_module("test_module".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let metrics = ModuleMetrics {
             cpu_usage: 75.0,
@@ -1537,7 +1537,10 @@ mod tests {
             },
         );
 
-        let anomalies = detector.detect(&performance_data).await.unwrap();
+        let anomalies = detector
+            .detect(&performance_data)
+            .await
+            .expect("should succeed");
         assert!(!anomalies.is_empty());
         assert_eq!(
             anomalies[0].anomaly_type,
@@ -1608,7 +1611,7 @@ mod tests {
         let monitor = ModulePerformanceMonitor::new("test_module".to_string());
         assert_eq!(monitor.module_name, "test_module");
 
-        let metrics = monitor.get_current_metrics().await.unwrap();
+        let metrics = monitor.get_current_metrics().await.expect("should succeed");
         assert_eq!(metrics.cpu_usage, 0.0);
     }
 

@@ -844,7 +844,10 @@ mod tests {
         // Clone the Arc so we can access the data after parsing
         let _sink_data = Arc::clone(&sink.triples);
 
-        let stats = parser.stream_parse(reader, sink).await.unwrap();
+        let stats = parser
+            .stream_parse(reader, sink)
+            .await
+            .expect("async operation should succeed");
 
         assert!(stats.total_bytes_processed > 0);
         // Note: We're not actually parsing triples correctly in the test data yet

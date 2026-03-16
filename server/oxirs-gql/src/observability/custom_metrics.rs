@@ -583,7 +583,7 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         let mut tags = HashMap::new();
         tags.insert("endpoint".to_string(), "/api/v1".to_string());
@@ -606,7 +606,7 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         assert!(registry
             .set_gauge("active_connections", 42.0, HashMap::new())
@@ -636,7 +636,7 @@ mod tests {
                 unit: Some("seconds".to_string()),
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         assert!(registry
             .observe_histogram("request_duration", 0.3, HashMap::new())
@@ -658,17 +658,17 @@ mod tests {
                 unit: Some("dollars".to_string()),
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         registry
             .increment_counter("sales", 100.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         registry
             .increment_counter("sales", 200.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         registry
             .increment_counter("sales", 150.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
 
         let sum = registry.compute_aggregation("sales", AggregationStrategy::Sum, None);
         assert_eq!(sum, Some(450.0));
@@ -686,17 +686,17 @@ mod tests {
                 unit: Some("ms".to_string()),
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         registry
             .set_gauge("response_time", 100.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         registry
             .set_gauge("response_time", 200.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         registry
             .set_gauge("response_time", 150.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
 
         let avg = registry.compute_aggregation("response_time", AggregationStrategy::Average, None);
         assert_eq!(avg, Some(150.0));
@@ -714,21 +714,21 @@ mod tests {
                 unit: Some("ms".to_string()),
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         for i in 1..=100 {
             registry
                 .set_gauge("latency", i as f64, HashMap::new())
-                .unwrap();
+                .expect("should succeed");
         }
 
         let p50 = registry.compute_aggregation("latency", AggregationStrategy::P50, None);
         assert!(p50.is_some());
-        assert!((p50.unwrap() - 50.0).abs() < 2.0); // Allow small error
+        assert!((p50.expect("should succeed") - 50.0).abs() < 2.0); // Allow small error
 
         let p95 = registry.compute_aggregation("latency", AggregationStrategy::P95, None);
         assert!(p95.is_some());
-        assert!((p95.unwrap() - 95.0).abs() < 2.0);
+        assert!((p95.expect("should succeed") - 95.0).abs() < 2.0);
     }
 
     #[test]
@@ -743,15 +743,19 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         let mut tags1 = HashMap::new();
         tags1.insert("endpoint".to_string(), "/api/v1".to_string());
-        registry.increment_counter("requests", 10.0, tags1).unwrap();
+        registry
+            .increment_counter("requests", 10.0, tags1)
+            .expect("should succeed");
 
         let mut tags2 = HashMap::new();
         tags2.insert("endpoint".to_string(), "/api/v2".to_string());
-        registry.increment_counter("requests", 20.0, tags2).unwrap();
+        registry
+            .increment_counter("requests", 20.0, tags2)
+            .expect("should succeed");
 
         let mut filter_tags = HashMap::new();
         filter_tags.insert("endpoint".to_string(), "/api/v1".to_string());
@@ -779,17 +783,17 @@ mod tests {
                 unit: Some("celsius".to_string()),
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         registry
             .set_gauge("temperature", 10.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         registry
             .set_gauge("temperature", 25.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         registry
             .set_gauge("temperature", 40.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
 
         let filter = MetricFilter {
             tags: HashMap::new(),
@@ -818,7 +822,7 @@ mod tests {
                 unit: Some("dollars".to_string()),
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         registry
             .register_metric(MetricMetadata {
@@ -828,7 +832,7 @@ mod tests {
                 unit: Some("dollars".to_string()),
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         let computed = ComputedMetric {
             name: "total_sales".to_string(),
@@ -853,7 +857,7 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         registry
             .register_metric(MetricMetadata {
@@ -863,14 +867,14 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         registry
             .increment_counter("metric_a", 100.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         registry
             .increment_counter("metric_b", 200.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
 
         let computed = ComputedMetric {
             name: "total".to_string(),
@@ -880,7 +884,9 @@ mod tests {
             filter: None,
         };
 
-        registry.register_computed_metric(computed).unwrap();
+        registry
+            .register_computed_metric(computed)
+            .expect("should succeed");
 
         let total = registry.evaluate_computed_metric("total");
         assert_eq!(total, Some(300.0));
@@ -898,13 +904,13 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         let mut tags = HashMap::new();
         tags.insert("method".to_string(), "GET".to_string());
         registry
             .increment_counter("http_requests_total", 42.0, tags)
-            .unwrap();
+            .expect("should succeed");
 
         let output = registry.export_prometheus();
         assert!(output.contains("# HELP http_requests_total Total HTTP requests"));
@@ -924,11 +930,11 @@ mod tests {
                 unit: Some("bytes".to_string()),
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         registry
             .set_gauge("memory_usage_bytes", 1024.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
 
         let output = registry.export_prometheus();
         assert!(output.contains("# TYPE memory_usage_bytes gauge"));
@@ -962,7 +968,7 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         // Try to record a gauge value for a counter metric
         let result = registry.record("counter_metric", MetricValue::Gauge(42.0), HashMap::new());
@@ -982,18 +988,18 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(registry.total_data_points(), 0);
 
         registry
             .increment_counter("test", 1.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(registry.total_data_points(), 1);
 
         registry
             .increment_counter("test", 1.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(registry.total_data_points(), 2);
     }
 
@@ -1009,11 +1015,16 @@ mod tests {
             tags: HashMap::new(),
         };
 
-        registry.register_metric(metadata.clone()).unwrap();
+        registry
+            .register_metric(metadata.clone())
+            .expect("should succeed");
 
         let retrieved = registry.get_metadata("test_metric");
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().description, "Test metric description");
+        assert_eq!(
+            retrieved.expect("should succeed").description,
+            "Test metric description"
+        );
     }
 
     #[test]
@@ -1028,11 +1039,11 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
         registry
             .increment_counter("test", 1.0, HashMap::new())
-            .unwrap();
+            .expect("should succeed");
 
         registry.cleanup_old_data();
 
@@ -1065,11 +1076,17 @@ mod tests {
                 unit: None,
                 tags: HashMap::new(),
             })
-            .unwrap();
+            .expect("should succeed");
 
-        registry.set_gauge("values", 10.0, HashMap::new()).unwrap();
-        registry.set_gauge("values", 50.0, HashMap::new()).unwrap();
-        registry.set_gauge("values", 30.0, HashMap::new()).unwrap();
+        registry
+            .set_gauge("values", 10.0, HashMap::new())
+            .expect("should succeed");
+        registry
+            .set_gauge("values", 50.0, HashMap::new())
+            .expect("should succeed");
+        registry
+            .set_gauge("values", 30.0, HashMap::new())
+            .expect("should succeed");
 
         let min = registry.compute_aggregation("values", AggregationStrategy::Min, None);
         assert_eq!(min, Some(10.0));

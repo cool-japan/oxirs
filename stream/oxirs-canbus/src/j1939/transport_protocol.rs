@@ -57,7 +57,7 @@
 //! let dt2 = TpDataTransfer { sequence_number: 2, data: [0xBB; 7] };
 //! let result = reassembler.handle_dt(0x00, 0xFF, dt2).expect("DT should be ok");
 //! assert!(result.is_some());
-//! let (pgn, payload) = result.unwrap();
+//! let (pgn, payload) = result.expect("should succeed");
 //! assert_eq!(pgn, 61444);
 //! assert_eq!(payload.len(), 9);
 //! ```

@@ -463,7 +463,7 @@ mod tests {
         let mut reg = ConstraintRegistry::new();
         assert_eq!(reg.count(), 0);
         reg.register(len_constraint("urn:test:1", Some(1), Some(10)))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(reg.count(), 1);
     }
 
@@ -471,7 +471,7 @@ mod tests {
     fn test_register_duplicate_urn_error() {
         let mut reg = ConstraintRegistry::new();
         reg.register(len_constraint("urn:test:1", None, None))
-            .unwrap();
+            .expect("should succeed");
         let result = reg.register(len_constraint("urn:test:1", None, None));
         assert!(matches!(result, Err(RegistryError::DuplicateUrn(_))));
     }
@@ -480,9 +480,9 @@ mod tests {
     fn test_register_multiple_different_urns() {
         let mut reg = ConstraintRegistry::new();
         reg.register(len_constraint("urn:test:a", None, None))
-            .unwrap();
+            .expect("should succeed");
         reg.register(len_constraint("urn:test:b", None, None))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(reg.count(), 2);
     }
 
@@ -492,8 +492,8 @@ mod tests {
     fn test_get_existing() {
         let mut reg = ConstraintRegistry::new();
         reg.register(len_constraint("urn:test:1", Some(2), Some(5)))
-            .unwrap();
-        let c = reg.get("urn:test:1").unwrap();
+            .expect("should succeed");
+        let c = reg.get("urn:test:1").expect("should succeed");
         assert_eq!(c.urn, "urn:test:1");
     }
 
@@ -508,9 +508,12 @@ mod tests {
     #[test]
     fn test_list_by_kind_length() {
         let mut reg = ConstraintRegistry::new();
-        reg.register(len_constraint("urn:1", None, None)).unwrap();
-        reg.register(len_constraint("urn:2", None, None)).unwrap();
-        reg.register(range_constraint("urn:3", None, None)).unwrap();
+        reg.register(len_constraint("urn:1", None, None))
+            .expect("should succeed");
+        reg.register(len_constraint("urn:2", None, None))
+            .expect("should succeed");
+        reg.register(range_constraint("urn:3", None, None))
+            .expect("should succeed");
         let list = reg.list_by_kind("LengthConstraint");
         assert_eq!(list.len(), 2);
     }
@@ -519,7 +522,7 @@ mod tests {
     fn test_list_by_kind_range() {
         let mut reg = ConstraintRegistry::new();
         reg.register(range_constraint("urn:1", Some(0.0), Some(100.0)))
-            .unwrap();
+            .expect("should succeed");
         let list = reg.list_by_kind("RangeConstraint");
         assert_eq!(list.len(), 1);
     }
@@ -533,7 +536,8 @@ mod tests {
     #[test]
     fn test_list_by_kind_unknown() {
         let mut reg = ConstraintRegistry::new();
-        reg.register(len_constraint("urn:1", None, None)).unwrap();
+        reg.register(len_constraint("urn:1", None, None))
+            .expect("should succeed");
         assert!(reg.list_by_kind("NonexistentKind").is_empty());
     }
 
@@ -543,10 +547,10 @@ mod tests {
     fn test_validate_length_within_bounds() {
         let mut reg = ConstraintRegistry::new();
         reg.register(len_constraint("urn:len", Some(2), Some(5)))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:len", &ConstraintValue::Text("abc".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
     }
 
@@ -554,10 +558,10 @@ mod tests {
     fn test_validate_length_too_short() {
         let mut reg = ConstraintRegistry::new();
         reg.register(len_constraint("urn:len", Some(5), Some(10)))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:len", &ConstraintValue::Text("ab".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(!ok);
     }
 
@@ -565,10 +569,10 @@ mod tests {
     fn test_validate_length_too_long() {
         let mut reg = ConstraintRegistry::new();
         reg.register(len_constraint("urn:len", Some(1), Some(3)))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:len", &ConstraintValue::Text("toolong".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(!ok);
     }
 
@@ -576,20 +580,21 @@ mod tests {
     fn test_validate_length_exact_min() {
         let mut reg = ConstraintRegistry::new();
         reg.register(len_constraint("urn:len", Some(3), Some(3)))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:len", &ConstraintValue::Text("abc".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
     }
 
     #[test]
     fn test_validate_length_no_bounds() {
         let mut reg = ConstraintRegistry::new();
-        reg.register(len_constraint("urn:len", None, None)).unwrap();
+        reg.register(len_constraint("urn:len", None, None))
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:len", &ConstraintValue::Text("anything".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
     }
 
@@ -599,10 +604,10 @@ mod tests {
     fn test_validate_range_within() {
         let mut reg = ConstraintRegistry::new();
         reg.register(range_constraint("urn:range", Some(0.0), Some(100.0)))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:range", &ConstraintValue::Integer(50))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
     }
 
@@ -610,10 +615,10 @@ mod tests {
     fn test_validate_range_below() {
         let mut reg = ConstraintRegistry::new();
         reg.register(range_constraint("urn:range", Some(10.0), Some(100.0)))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:range", &ConstraintValue::Integer(5))
-            .unwrap();
+            .expect("should succeed");
         assert!(!ok);
     }
 
@@ -621,10 +626,10 @@ mod tests {
     fn test_validate_range_above() {
         let mut reg = ConstraintRegistry::new();
         reg.register(range_constraint("urn:range", Some(0.0), Some(50.0)))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:range", &ConstraintValue::Integer(100))
-            .unwrap();
+            .expect("should succeed");
         assert!(!ok);
     }
 
@@ -632,10 +637,10 @@ mod tests {
     fn test_validate_range_at_boundary() {
         let mut reg = ConstraintRegistry::new();
         reg.register(range_constraint("urn:range", Some(0.0), Some(100.0)))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:range", &ConstraintValue::Float(100.0))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
     }
 
@@ -653,15 +658,15 @@ mod tests {
                 upper_bound_definition: BoundType::Open,
             },
         })
-        .unwrap();
+        .expect("should succeed");
         // 0.0 should be excluded (open lower bound)
         let ok = reg
             .validate_value("urn:range:open", &ConstraintValue::Float(0.0))
-            .unwrap();
+            .expect("should succeed");
         assert!(!ok);
         let ok2 = reg
             .validate_value("urn:range:open", &ConstraintValue::Float(5.0))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok2);
     }
 
@@ -677,10 +682,10 @@ mod tests {
                 ConstraintValue::Text("B".to_string()),
             ],
         ))
-        .unwrap();
+        .expect("should succeed");
         let ok = reg
             .validate_value("urn:enum", &ConstraintValue::Text("A".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
     }
 
@@ -691,10 +696,10 @@ mod tests {
             "urn:enum",
             vec![ConstraintValue::Text("A".to_string())],
         ))
-        .unwrap();
+        .expect("should succeed");
         let ok = reg
             .validate_value("urn:enum", &ConstraintValue::Text("C".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(!ok);
     }
 
@@ -709,14 +714,14 @@ mod tests {
                 ConstraintValue::Integer(3),
             ],
         ))
-        .unwrap();
+        .expect("should succeed");
         let ok = reg
             .validate_value("urn:enum:int", &ConstraintValue::Integer(2))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
         let not_ok = reg
             .validate_value("urn:enum:int", &ConstraintValue::Integer(5))
-            .unwrap();
+            .expect("should succeed");
         assert!(!not_ok);
     }
 
@@ -726,14 +731,14 @@ mod tests {
     fn test_validate_regex_exact_match() {
         let mut reg = ConstraintRegistry::new();
         reg.register(regex_constraint("urn:regex", "hello"))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value("urn:regex", &ConstraintValue::Text("hello".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
         let not_ok = reg
             .validate_value("urn:regex", &ConstraintValue::Text("world".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(!not_ok);
     }
 
@@ -741,20 +746,20 @@ mod tests {
     fn test_validate_regex_prefix_wildcard() {
         let mut reg = ConstraintRegistry::new();
         reg.register(regex_constraint("urn:regex:pre", "hello*"))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value(
                 "urn:regex:pre",
                 &ConstraintValue::Text("helloworld".to_string()),
             )
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
         let not_ok = reg
             .validate_value(
                 "urn:regex:pre",
                 &ConstraintValue::Text("worldhello".to_string()),
             )
-            .unwrap();
+            .expect("should succeed");
         assert!(!not_ok);
     }
 
@@ -762,13 +767,13 @@ mod tests {
     fn test_validate_regex_wildcard_all() {
         let mut reg = ConstraintRegistry::new();
         reg.register(regex_constraint("urn:regex:all", "*"))
-            .unwrap();
+            .expect("should succeed");
         let ok = reg
             .validate_value(
                 "urn:regex:all",
                 &ConstraintValue::Text("anything".to_string()),
             )
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
     }
 
@@ -777,7 +782,8 @@ mod tests {
     #[test]
     fn test_remove_existing() {
         let mut reg = ConstraintRegistry::new();
-        reg.register(len_constraint("urn:1", None, None)).unwrap();
+        reg.register(len_constraint("urn:1", None, None))
+            .expect("should succeed");
         let removed = reg.remove("urn:1");
         assert!(removed.is_some());
         assert_eq!(reg.count(), 0);
@@ -795,8 +801,10 @@ mod tests {
     #[test]
     fn test_all_iterator() {
         let mut reg = ConstraintRegistry::new();
-        reg.register(len_constraint("urn:1", None, None)).unwrap();
-        reg.register(range_constraint("urn:2", None, None)).unwrap();
+        reg.register(len_constraint("urn:1", None, None))
+            .expect("should succeed");
+        reg.register(range_constraint("urn:2", None, None))
+            .expect("should succeed");
         let all: Vec<_> = reg.all().collect();
         assert_eq!(all.len(), 2);
     }
@@ -868,14 +876,14 @@ mod tests {
                 language_codes: vec!["en".to_string(), "de".to_string()],
             },
         })
-        .unwrap();
+        .expect("should succeed");
         let ok = reg
             .validate_value("urn:lang", &ConstraintValue::Text("EN".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok); // case-insensitive
         let not_ok = reg
             .validate_value("urn:lang", &ConstraintValue::Text("fr".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(!not_ok);
     }
 
@@ -893,14 +901,14 @@ mod tests {
                 integer: 5,
             },
         })
-        .unwrap();
+        .expect("should succeed");
         let ok = reg
             .validate_value("urn:fp", &ConstraintValue::Text("12345.67".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(ok);
         let not_ok = reg
             .validate_value("urn:fp", &ConstraintValue::Text("12345.678".to_string()))
-            .unwrap();
+            .expect("should succeed");
         assert!(!not_ok);
     }
 

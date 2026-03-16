@@ -902,6 +902,8 @@ mod tests {
     #[test]
     fn test_checkpoint_system() {
         let checkpoint = CheckpointSystem::new();
-        assert!(checkpoint.check_dna_integrity().unwrap());
+        assert!(checkpoint
+            .check_dna_integrity()
+            .expect("operation should succeed"));
     }
 }

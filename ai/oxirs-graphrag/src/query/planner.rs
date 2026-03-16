@@ -256,8 +256,10 @@ mod tests {
         let planner = QueryPlanner::new(config);
         let parser = QueryParser::new();
 
-        let parsed = parser.parse("What are battery safety issues?").unwrap();
-        let plan = planner.plan(&parsed).unwrap();
+        let parsed = parser
+            .parse("What are battery safety issues?")
+            .expect("should succeed");
+        let plan = planner.plan(&parsed).expect("should succeed");
 
         assert!(!plan.stages.is_empty());
         assert!(plan.stages.iter().any(|s| s.stage_type == StageType::Embed));

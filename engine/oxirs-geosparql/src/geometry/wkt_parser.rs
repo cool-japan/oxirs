@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn test_parse_point() {
-        let geom = parse_wkt("POINT(1.0 2.0)").unwrap();
+        let geom = parse_wkt("POINT(1.0 2.0)").expect("should succeed");
         assert_eq!(geom.geometry_type(), "Point");
 
         match &geom.geom {
@@ -470,7 +470,7 @@ mod tests {
 
     #[test]
     fn test_parse_linestring() {
-        let geom = parse_wkt("LINESTRING(0 0, 1 1, 2 2)").unwrap();
+        let geom = parse_wkt("LINESTRING(0 0, 1 1, 2 2)").expect("should succeed");
         assert_eq!(geom.geometry_type(), "LineString");
 
         match &geom.geom {
@@ -485,7 +485,7 @@ mod tests {
 
     #[test]
     fn test_parse_polygon() {
-        let geom = parse_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+        let geom = parse_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
         assert_eq!(geom.geometry_type(), "Polygon");
 
         match &geom.geom {
@@ -498,8 +498,8 @@ mod tests {
 
     #[test]
     fn test_parse_with_crs() {
-        let geom =
-            parse_wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(1.0 2.0)").unwrap();
+        let geom = parse_wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(1.0 2.0)")
+            .expect("should succeed");
         assert_eq!(geom.crs.uri, "http://www.opengis.net/def/crs/EPSG/0/4326");
     }
 
@@ -523,9 +523,9 @@ mod tests {
     #[test]
     fn test_roundtrip() {
         let original_wkt = "POINT(1.5 2.5)";
-        let geom = parse_wkt(original_wkt).unwrap();
+        let geom = parse_wkt(original_wkt).expect("should succeed");
         let new_wkt = geom.to_wkt();
-        let geom2 = parse_wkt(&new_wkt).unwrap();
+        let geom2 = parse_wkt(&new_wkt).expect("should succeed");
 
         match (&geom.geom, &geom2.geom) {
             (GeoGeometry::Point(p1), GeoGeometry::Point(p2)) => {
@@ -540,7 +540,7 @@ mod tests {
 
     #[test]
     fn test_parse_point_z() {
-        let geom = parse_wkt("POINT Z(1.0 2.0 3.0)").unwrap();
+        let geom = parse_wkt("POINT Z(1.0 2.0 3.0)").expect("should succeed");
         assert_eq!(geom.geometry_type(), "Point");
         assert!(geom.is_3d());
         assert!(!geom.is_measured());
@@ -553,7 +553,7 @@ mod tests {
 
     #[test]
     fn test_parse_point_m() {
-        let geom = parse_wkt("POINT M(1.0 2.0 100.0)").unwrap();
+        let geom = parse_wkt("POINT M(1.0 2.0 100.0)").expect("should succeed");
         assert_eq!(geom.geometry_type(), "Point");
         assert!(!geom.is_3d());
         assert!(geom.is_measured());
@@ -566,7 +566,7 @@ mod tests {
 
     #[test]
     fn test_parse_point_zm() {
-        let geom = parse_wkt("POINT ZM(1.0 2.0 3.0 100.0)").unwrap();
+        let geom = parse_wkt("POINT ZM(1.0 2.0 3.0 100.0)").expect("should succeed");
         assert_eq!(geom.geometry_type(), "Point");
         assert!(geom.is_3d());
         assert!(geom.is_measured());
@@ -579,7 +579,7 @@ mod tests {
 
     #[test]
     fn test_parse_linestring_z() {
-        let geom = parse_wkt("LINESTRING Z(0 0 10, 1 1 20, 2 2 30)").unwrap();
+        let geom = parse_wkt("LINESTRING Z(0 0 10, 1 1 20, 2 2 30)").expect("should succeed");
         assert_eq!(geom.geometry_type(), "LineString");
         assert!(geom.is_3d());
 
@@ -592,7 +592,8 @@ mod tests {
 
     #[test]
     fn test_parse_polygon_z() {
-        let geom = parse_wkt("POLYGON Z((0 0 10, 4 0 20, 4 4 30, 0 4 40, 0 0 10))").unwrap();
+        let geom = parse_wkt("POLYGON Z((0 0 10, 4 0 20, 4 4 30, 0 4 40, 0 0 10))")
+            .expect("should succeed");
         assert_eq!(geom.geometry_type(), "Polygon");
         assert!(geom.is_3d());
 
@@ -605,7 +606,7 @@ mod tests {
 
     #[test]
     fn test_serialize_point_z() {
-        let geom = parse_wkt("POINT Z(1.0 2.0 3.0)").unwrap();
+        let geom = parse_wkt("POINT Z(1.0 2.0 3.0)").expect("should succeed");
         let wkt = geom.to_wkt();
 
         // Should include Z modifier and Z coordinate
@@ -615,7 +616,7 @@ mod tests {
 
     #[test]
     fn test_serialize_point_m() {
-        let geom = parse_wkt("POINT M(1.0 2.0 100.0)").unwrap();
+        let geom = parse_wkt("POINT M(1.0 2.0 100.0)").expect("should succeed");
         let wkt = geom.to_wkt();
 
         // Should include M modifier and M coordinate
@@ -625,7 +626,7 @@ mod tests {
 
     #[test]
     fn test_serialize_point_zm() {
-        let geom = parse_wkt("POINT ZM(1.0 2.0 3.0 100.0)").unwrap();
+        let geom = parse_wkt("POINT ZM(1.0 2.0 3.0 100.0)").expect("should succeed");
         let wkt = geom.to_wkt();
 
         // Should include ZM modifier and both coordinates
@@ -636,9 +637,9 @@ mod tests {
     #[test]
     fn test_roundtrip_3d_point_z() {
         let original_wkt = "POINT Z(1.5 2.5 3.5)";
-        let geom = parse_wkt(original_wkt).unwrap();
+        let geom = parse_wkt(original_wkt).expect("should succeed");
         let new_wkt = geom.to_wkt();
-        let geom2 = parse_wkt(&new_wkt).unwrap();
+        let geom2 = parse_wkt(&new_wkt).expect("should succeed");
 
         assert_eq!(geom.coord3d.dim, geom2.coord3d.dim);
         assert_eq!(geom.coord3d.z_at(0), geom2.coord3d.z_at(0));
@@ -647,9 +648,9 @@ mod tests {
     #[test]
     fn test_roundtrip_3d_linestring_z() {
         let original_wkt = "LINESTRING Z(0 0 10, 1 1 20, 2 2 30)";
-        let geom = parse_wkt(original_wkt).unwrap();
+        let geom = parse_wkt(original_wkt).expect("should succeed");
         let new_wkt = geom.to_wkt();
-        let geom2 = parse_wkt(&new_wkt).unwrap();
+        let geom2 = parse_wkt(&new_wkt).expect("should succeed");
 
         assert_eq!(geom.coord3d.dim, geom2.coord3d.dim);
         assert_eq!(geom.coord3d.z_at(0), geom2.coord3d.z_at(0));
@@ -659,7 +660,7 @@ mod tests {
 
     #[test]
     fn test_2d_geometry_remains_2d() {
-        let geom = parse_wkt("POINT(1.0 2.0)").unwrap();
+        let geom = parse_wkt("POINT(1.0 2.0)").expect("should succeed");
         assert_eq!(geom.coord3d.dim, CoordDim::XY);
         assert!(!geom.is_3d());
         assert!(!geom.is_measured());

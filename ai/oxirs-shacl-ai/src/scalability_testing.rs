@@ -879,7 +879,9 @@ mod tests {
         let workload = create_test_workload();
         let config = ScalabilityTestConfig::default();
 
-        let results = tester.run_load_test(&workload, &config).unwrap();
+        let results = tester
+            .run_load_test(&workload, &config)
+            .expect("should succeed");
         assert_eq!(results.total_requests, 3);
         assert!(results.avg_latency_ms > 0.0);
         assert!(results.throughput_ops > 0.0);
@@ -891,7 +893,9 @@ mod tests {
         let workload = create_test_workload();
         let config = ScalabilityTestConfig::default();
 
-        let results = tester.run_stress_test(&workload, &config).unwrap();
+        let results = tester
+            .run_stress_test(&workload, &config)
+            .expect("should succeed");
         assert!(results.breaking_point_users > 0);
         assert!(results.peak_throughput > 0.0);
     }
@@ -902,7 +906,9 @@ mod tests {
         let workload = create_test_workload();
         let config = ScalabilityTestConfig::default();
 
-        let results = tester.run_spike_test(&workload, &config).unwrap();
+        let results = tester
+            .run_spike_test(&workload, &config)
+            .expect("should succeed");
         assert!(results.spike_magnitude > 0);
         assert!(results.max_latency_during_spike_ms > 0.0);
     }
@@ -948,10 +954,10 @@ mod tests {
     #[test]
     fn test_comprehensive_test_suite() {
         let config = ScalabilityTestConfig::default();
-        let mut framework = ScalabilityTestingFramework::new(config).unwrap();
+        let mut framework = ScalabilityTestingFramework::new(config).expect("should succeed");
         let workload = create_test_workload();
 
-        let report = framework.run_all_tests(&workload).unwrap();
+        let report = framework.run_all_tests(&workload).expect("should succeed");
         assert!(report.scalability_score >= 0.0);
         assert!(report.scalability_score <= 100.0);
     }

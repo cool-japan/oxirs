@@ -1449,9 +1449,13 @@ mod tests {
         store
             .insert("test1".to_string(), vector.clone(), metadata.clone())
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
-        let retrieved = store.get("test1").await.unwrap().unwrap();
+        let retrieved = store
+            .get("test1")
+            .await
+            .expect("async operation should succeed")
+            .expect("operation should succeed");
         assert_eq!(retrieved.vector, vector);
         assert_eq!(retrieved.metadata, metadata);
     }
@@ -1468,15 +1472,15 @@ mod tests {
         store
             .insert("vec1".to_string(), vec![1.0, 0.0, 0.0], None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         store
             .insert("vec2".to_string(), vec![0.9, 0.1, 0.0], None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         store
             .insert("vec3".to_string(), vec![0.0, 1.0, 0.0], None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         let query = VectorQuery {
             vector: vec![1.0, 0.0, 0.0],
@@ -1487,7 +1491,10 @@ mod tests {
             min_similarity: None,
         };
 
-        let results = store.search(&query).await.unwrap();
+        let results = store
+            .search(&query)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].0, "vec1"); // Should be most similar
     }
@@ -1497,10 +1504,12 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![2.0, 4.0, 6.0];
 
-        let cosine = compute_similarity(&a, &b, SimilarityMetric::Cosine).unwrap();
+        let cosine = compute_similarity(&a, &b, SimilarityMetric::Cosine)
+            .expect("similarity computation should succeed");
         assert!((cosine - 1.0).abs() < 1e-6); // Should be 1.0 (parallel vectors)
 
-        let dot_product = compute_similarity(&a, &b, SimilarityMetric::DotProduct).unwrap();
+        let dot_product = compute_similarity(&a, &b, SimilarityMetric::DotProduct)
+            .expect("similarity computation should succeed");
         assert_eq!(dot_product, 28.0); // 1*2 + 2*4 + 3*6 = 28
     }
 
@@ -1516,15 +1525,21 @@ mod tests {
         store
             .insert("vec1".to_string(), vec![1.0, 0.0, 0.0], None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         store
             .insert("vec2".to_string(), vec![0.0, 1.0, 0.0], None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
-        store.build_index().await.unwrap();
+        store
+            .build_index()
+            .await
+            .expect("async operation should succeed");
 
-        let stats = store.get_statistics().await.unwrap();
+        let stats = store
+            .get_statistics()
+            .await
+            .expect("async operation should succeed");
         assert_eq!(stats.total_vectors, 2);
     }
 
@@ -1547,13 +1562,19 @@ mod tests {
             store
                 .insert(format!("vec{i}"), vec![angle.cos(), angle.sin(), 0.0], None)
                 .await
-                .unwrap();
+                .expect("operation should succeed");
         }
 
         // Build HNSW index
-        store.build_index().await.unwrap();
+        store
+            .build_index()
+            .await
+            .expect("async operation should succeed");
 
-        let stats = store.get_statistics().await.unwrap();
+        let stats = store
+            .get_statistics()
+            .await
+            .expect("async operation should succeed");
         assert_eq!(stats.total_vectors, 10);
         assert!(stats.index_type.contains("HNSW"));
     }
@@ -1577,11 +1598,14 @@ mod tests {
             store
                 .insert(format!("vec{i}"), vec![angle.cos(), angle.sin(), 0.0], None)
                 .await
-                .unwrap();
+                .expect("operation should succeed");
         }
 
         // Build HNSW index
-        store.build_index().await.unwrap();
+        store
+            .build_index()
+            .await
+            .expect("async operation should succeed");
 
         // Query for nearest neighbors to vec0 (1.0, 0.0, 0.0)
         let query = VectorQuery {
@@ -1593,7 +1617,10 @@ mod tests {
             min_similarity: None,
         };
 
-        let results = store.search(&query).await.unwrap();
+        let results = store
+            .search(&query)
+            .await
+            .expect("async operation should succeed");
 
         // Should find at least some results
         assert!(!results.is_empty());
@@ -1621,11 +1648,17 @@ mod tests {
             let vec: Vec<f32> = (0..10)
                 .map(|j| ((i * 7 + j * 13) % 100) as f32 / 100.0)
                 .collect();
-            store.insert(format!("vec{i}"), vec, None).await.unwrap();
+            store
+                .insert(format!("vec{i}"), vec, None)
+                .await
+                .expect("async operation should succeed");
         }
 
         // Build HNSW index
-        store.build_index().await.unwrap();
+        store
+            .build_index()
+            .await
+            .expect("async operation should succeed");
 
         // Query
         let query_vec = vec![0.5f32; 10];
@@ -1638,7 +1671,10 @@ mod tests {
             min_similarity: None,
         };
 
-        let results = store.search(&query).await.unwrap();
+        let results = store
+            .search(&query)
+            .await
+            .expect("async operation should succeed");
 
         // Should return k results (or all if less than k)
         assert!(!results.is_empty());
@@ -1657,7 +1693,8 @@ mod tests {
             vec![&[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0], &[0.707, 0.707, 0.0]];
 
         let similarities =
-            compute_similarities_batch(&query, &candidates, SimilarityMetric::Cosine).unwrap();
+            compute_similarities_batch(&query, &candidates, SimilarityMetric::Cosine)
+                .expect("batch similarity computation should succeed");
 
         assert_eq!(similarities.len(), 3);
         // First should be 1.0 (identical)

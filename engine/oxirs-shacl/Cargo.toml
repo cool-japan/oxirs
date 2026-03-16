@@ -34,9 +34,9 @@ indexmap = { workspace = true, features = ["serde"] }
 petgraph.workspace = true
 rayon = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt", "sync", "time"], optional = true }
-futures = { version = "0.3", optional = true }
-futures-util = { version = "0.3", optional = true }
-tokio-stream = { version = "0.1", optional = true }
+futures = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+tokio-stream = { workspace = true, optional = true }
 once_cell.workspace = true
 dashmap.workspace = true
 chrono.workspace = true
@@ -46,16 +46,16 @@ num_cpus.workspace = true
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 serde_yaml.workspace = true
 semver = { version = "1.0", features = ["serde"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 wasmi = "1.0"  # Lightweight WASM interpreter for custom validators
 tower-lsp = { version = "0.20", optional = true }  # LSP server implementation (includes lsp-types)
-tower = { version = "0.5", optional = true }  # Service abstraction for LSP
+tower = { workspace = true, optional = true }  # Service abstraction for LSP
 
 [dev-dependencies]
 criterion.workspace = true
-proptest = "1.7"
-tokio-test = "0.4"
-tracing-subscriber = "0.3"
+proptest.workspace = true
+tokio-test.workspace = true
+tracing-subscriber.workspace = true
 
 [[bin]]
 name = "w3c_test_runner"

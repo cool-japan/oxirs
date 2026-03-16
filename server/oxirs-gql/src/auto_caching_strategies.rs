@@ -760,22 +760,32 @@ mod tests {
     #[test]
     fn test_manager_creation() {
         let manager = AutoCachingManager::new();
-        assert_eq!(manager.get_strategy().unwrap(), CachingStrategy::Adaptive);
+        assert_eq!(
+            manager.get_strategy().expect("should succeed"),
+            CachingStrategy::Adaptive
+        );
     }
 
     #[test]
     fn test_set_strategy() {
         let mut manager = AutoCachingManager::new();
-        manager.set_strategy(CachingStrategy::LRU).unwrap();
-        assert_eq!(manager.get_strategy().unwrap(), CachingStrategy::LRU);
+        manager
+            .set_strategy(CachingStrategy::LRU)
+            .expect("should succeed");
+        assert_eq!(
+            manager.get_strategy().expect("should succeed"),
+            CachingStrategy::LRU
+        );
     }
 
     #[test]
     fn test_record_query() {
         let mut manager = AutoCachingManager::new();
-        manager.record_query("query { user }", 100.0, 1024).unwrap();
+        manager
+            .record_query("query { user }", 100.0, 1024)
+            .expect("should succeed");
 
-        let stats = manager.get_statistics().unwrap();
+        let stats = manager.get_statistics().expect("should succeed");
         assert_eq!(stats.total_queries, 1);
         assert_eq!(stats.unique_queries, 1);
     }
@@ -785,9 +795,13 @@ mod tests {
         let mut manager = AutoCachingManager::new();
 
         // Record only once (below min_access_count)
-        manager.record_query("query { user }", 100.0, 1024).unwrap();
+        manager
+            .record_query("query { user }", 100.0, 1024)
+            .expect("should succeed");
 
-        let decision = manager.get_cache_decision("query { user }").unwrap();
+        let decision = manager
+            .get_cache_decision("query { user }")
+            .expect("should succeed");
         assert!(!decision.should_cache);
         assert!(decision.reason.contains("Insufficient access count"));
     }
@@ -799,10 +813,12 @@ mod tests {
 
         // Record multiple times with fast execution
         for _ in 0..5 {
-            manager.record_query(query, 10.0, 1024).unwrap(); // 10ms < min_execution_time_ms (50ms)
+            manager
+                .record_query(query, 10.0, 1024)
+                .expect("should succeed"); // 10ms < min_execution_time_ms (50ms)
         }
 
-        let decision = manager.get_cache_decision(query).unwrap();
+        let decision = manager.get_cache_decision(query).expect("should succeed");
         assert!(!decision.should_cache);
         assert!(decision.reason.contains("Execution too fast"));
     }
@@ -814,10 +830,12 @@ mod tests {
 
         // Record with large result size
         for _ in 0..5 {
-            manager.record_query(query, 200.0, 20_000_000).unwrap(); // 20MB > max (10MB)
+            manager
+                .record_query(query, 200.0, 20_000_000)
+                .expect("should succeed"); // 20MB > max (10MB)
         }
 
-        let decision = manager.get_cache_decision(query).unwrap();
+        let decision = manager.get_cache_decision(query).expect("should succeed");
         assert!(!decision.should_cache);
         assert!(decision.reason.contains("Result too large"));
     }
@@ -829,11 +847,13 @@ mod tests {
 
         // Record multiple times with good characteristics
         for _ in 0..10 {
-            manager.record_query(query, 150.0, 5000).unwrap();
+            manager
+                .record_query(query, 150.0, 5000)
+                .expect("should succeed");
             thread::sleep(Duration::from_millis(10)); // Small delay for frequency calculation
         }
 
-        let decision = manager.get_cache_decision(query).unwrap();
+        let decision = manager.get_cache_decision(query).expect("should succeed");
         // May or may not cache depending on timing, but should have valid decision
         assert!(decision.ttl_seconds > 0);
     }
@@ -850,7 +870,9 @@ mod tests {
 
         // High frequency accesses
         for _ in 0..10 {
-            manager.record_query(query, 100.0, 1024).unwrap();
+            manager
+                .record_query(query, 100.0, 1024)
+                .expect("should succeed");
         }
 
         let ttl1 = manager.get_optimal_ttl(query);
@@ -858,7 +880,9 @@ mod tests {
         // Low frequency will get longer TTL in theory, but we need separate query
         let query2 = "query { settings }";
         for _ in 0..3 {
-            manager.record_query(query2, 100.0, 1024).unwrap();
+            manager
+                .record_query(query2, 100.0, 1024)
+                .expect("should succeed");
             thread::sleep(Duration::from_millis(200));
         }
 
@@ -873,13 +897,17 @@ mod tests {
     fn test_statistics() {
         let mut manager = AutoCachingManager::new();
 
-        manager.record_query("query { user }", 100.0, 1024).unwrap();
-        manager.record_query("query { user }", 100.0, 1024).unwrap();
+        manager
+            .record_query("query { user }", 100.0, 1024)
+            .expect("should succeed");
+        manager
+            .record_query("query { user }", 100.0, 1024)
+            .expect("should succeed");
         manager
             .record_query("query { posts }", 150.0, 2048)
-            .unwrap();
+            .expect("should succeed");
 
-        let stats = manager.get_statistics().unwrap();
+        let stats = manager.get_statistics().expect("should succeed");
         assert_eq!(stats.total_queries, 3);
         assert_eq!(stats.unique_queries, 2);
     }
@@ -888,14 +916,16 @@ mod tests {
     fn test_clear() {
         let mut manager = AutoCachingManager::new();
 
-        manager.record_query("query { user }", 100.0, 1024).unwrap();
+        manager
+            .record_query("query { user }", 100.0, 1024)
+            .expect("should succeed");
 
-        let stats1 = manager.get_statistics().unwrap();
+        let stats1 = manager.get_statistics().expect("should succeed");
         assert_eq!(stats1.total_queries, 1);
 
-        manager.clear().unwrap();
+        manager.clear().expect("should succeed");
 
-        let stats2 = manager.get_statistics().unwrap();
+        let stats2 = manager.get_statistics().expect("should succeed");
         assert_eq!(stats2.total_queries, 0);
         assert_eq!(stats2.unique_queries, 0);
     }
@@ -913,11 +943,13 @@ mod tests {
 
         for strategy in strategies {
             let mut manager = AutoCachingManager::new();
-            manager.set_strategy(strategy).unwrap();
+            manager.set_strategy(strategy).expect("should succeed");
 
             let query = "query { user }";
             for _ in 0..5 {
-                manager.record_query(query, 100.0, 1024).unwrap();
+                manager
+                    .record_query(query, 100.0, 1024)
+                    .expect("should succeed");
             }
 
             let decision = manager.get_cache_decision(query);

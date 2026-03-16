@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn test_read_single_default_zero() {
         let b = bank();
-        let r = b.read(100, 1, 50).unwrap();
+        let r = b.read(100, 1, 50).expect("should succeed");
         assert_eq!(r.values, &[0]);
         assert_eq!(r.timestamp_ms, 50);
     }
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn test_read_multiple_defaults() {
         let b = bank();
-        let r = b.read(100, 5, 0).unwrap();
+        let r = b.read(100, 5, 0).expect("should succeed");
         assert_eq!(r.values.len(), 5);
         assert!(r.values.iter().all(|&v| v == 0));
     }
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn test_read_last_register() {
         let b = bank(); // 100..119
-        let r = b.read(119, 1, 0).unwrap();
+        let r = b.read(119, 1, 0).expect("should succeed");
         assert_eq!(r.values, &[0]);
     }
 
@@ -296,9 +296,9 @@ mod tests {
     #[test]
     fn test_read_correct_values_after_write() {
         let mut b = bank();
-        b.write_single(102, 0xABCD, 10).unwrap();
-        b.write_single(103, 0x1234, 10).unwrap();
-        let r = b.read(102, 2, 20).unwrap();
+        b.write_single(102, 0xABCD, 10).expect("should succeed");
+        b.write_single(103, 0x1234, 10).expect("should succeed");
+        let r = b.read(102, 2, 20).expect("should succeed");
         assert_eq!(r.values, &[0xABCD, 0x1234]);
     }
 
@@ -307,15 +307,15 @@ mod tests {
     #[test]
     fn test_write_single_basic() {
         let mut b = bank();
-        b.write_single(105, 42, 99).unwrap();
-        assert_eq!(b.get_raw(105).unwrap(), 42);
+        b.write_single(105, 42, 99).expect("should succeed");
+        assert_eq!(b.get_raw(105).expect("should succeed"), 42);
     }
 
     #[test]
     fn test_write_single_updates_timestamp() {
         let mut b = bank();
-        b.write_single(100, 1, 1234).unwrap();
-        assert_eq!(b.last_written_at(100).unwrap(), 1234);
+        b.write_single(100, 1, 1234).expect("should succeed");
+        assert_eq!(b.last_written_at(100).expect("should succeed"), 1234);
     }
 
     #[test]
@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn test_write_single_write_protected() {
         let mut b = bank();
-        b.set_write_protected(110, true).unwrap();
+        b.set_write_protected(110, true).expect("should succeed");
         let e = b.write_single(110, 99, 0).unwrap_err();
         assert!(matches!(e, RegisterError::WriteProtected(110)));
     }
@@ -338,24 +338,28 @@ mod tests {
     #[test]
     fn test_write_multiple_basic() {
         let mut b = bank();
-        let r = b.write_multiple(100, &[1, 2, 3], 10).unwrap();
+        let r = b
+            .write_multiple(100, &[1, 2, 3], 10)
+            .expect("should succeed");
         assert_eq!(r.written_count, 3);
         assert_eq!(r.skipped_protected, 0);
-        assert_eq!(b.get_raw(100).unwrap(), 1);
-        assert_eq!(b.get_raw(101).unwrap(), 2);
-        assert_eq!(b.get_raw(102).unwrap(), 3);
+        assert_eq!(b.get_raw(100).expect("should succeed"), 1);
+        assert_eq!(b.get_raw(101).expect("should succeed"), 2);
+        assert_eq!(b.get_raw(102).expect("should succeed"), 3);
     }
 
     #[test]
     fn test_write_multiple_skips_protected() {
         let mut b = bank();
-        b.set_write_protected(101, true).unwrap();
-        let r = b.write_multiple(100, &[10, 20, 30], 0).unwrap();
+        b.set_write_protected(101, true).expect("should succeed");
+        let r = b
+            .write_multiple(100, &[10, 20, 30], 0)
+            .expect("should succeed");
         assert_eq!(r.written_count, 2);
         assert_eq!(r.skipped_protected, 1);
-        assert_eq!(b.get_raw(100).unwrap(), 10);
-        assert_eq!(b.get_raw(101).unwrap(), 0); // protected: unchanged
-        assert_eq!(b.get_raw(102).unwrap(), 30);
+        assert_eq!(b.get_raw(100).expect("should succeed"), 10);
+        assert_eq!(b.get_raw(101).expect("should succeed"), 0); // protected: unchanged
+        assert_eq!(b.get_raw(102).expect("should succeed"), 30);
     }
 
     #[test]
@@ -385,7 +389,7 @@ mod tests {
     #[test]
     fn test_set_write_protected_prevents_write() {
         let mut b = bank();
-        b.set_write_protected(115, true).unwrap();
+        b.set_write_protected(115, true).expect("should succeed");
         assert!(matches!(
             b.write_single(115, 1, 0),
             Err(RegisterError::WriteProtected(115))
@@ -395,10 +399,10 @@ mod tests {
     #[test]
     fn test_set_write_protected_false_allows_write() {
         let mut b = bank();
-        b.set_write_protected(115, true).unwrap();
-        b.set_write_protected(115, false).unwrap();
-        b.write_single(115, 77, 0).unwrap();
-        assert_eq!(b.get_raw(115).unwrap(), 77);
+        b.set_write_protected(115, true).expect("should succeed");
+        b.set_write_protected(115, false).expect("should succeed");
+        b.write_single(115, 77, 0).expect("should succeed");
+        assert_eq!(b.get_raw(115).expect("should succeed"), 77);
     }
 
     #[test]
@@ -413,7 +417,7 @@ mod tests {
     #[test]
     fn test_get_raw_initial_zero() {
         let b = bank();
-        assert_eq!(b.get_raw(100).unwrap(), 0);
+        assert_eq!(b.get_raw(100).expect("should succeed"), 0);
     }
 
     #[test]
@@ -431,23 +435,27 @@ mod tests {
     fn test_clear_resets_all_registers() {
         let mut b = bank();
         for i in 0..10 {
-            b.write_single(100 + i as u16, (i + 1) as u16, 100).unwrap();
+            b.write_single(100 + i as u16, (i + 1) as u16, 100)
+                .expect("should succeed");
         }
         b.clear();
         for i in 0..20 {
-            assert_eq!(b.get_raw(100 + i as u16).unwrap(), 0);
-            assert_eq!(b.last_written_at(100 + i as u16).unwrap(), 0);
+            assert_eq!(b.get_raw(100 + i as u16).expect("should succeed"), 0);
+            assert_eq!(
+                b.last_written_at(100 + i as u16).expect("should succeed"),
+                0
+            );
         }
     }
 
     #[test]
     fn test_clear_removes_write_protection() {
         let mut b = bank();
-        b.set_write_protected(105, true).unwrap();
+        b.set_write_protected(105, true).expect("should succeed");
         b.clear();
         // After clear, the register should be writable again
-        b.write_single(105, 1, 0).unwrap();
-        assert_eq!(b.get_raw(105).unwrap(), 1);
+        b.write_single(105, 1, 0).expect("should succeed");
+        assert_eq!(b.get_raw(105).expect("should succeed"), 1);
     }
 
     // ── last_written_at ──────────────────────────────────────────────────────
@@ -455,14 +463,14 @@ mod tests {
     #[test]
     fn test_last_written_at_initial_zero() {
         let b = bank();
-        assert_eq!(b.last_written_at(100).unwrap(), 0);
+        assert_eq!(b.last_written_at(100).expect("should succeed"), 0);
     }
 
     #[test]
     fn test_last_written_at_after_write() {
         let mut b = bank();
-        b.write_single(108, 5, 9876).unwrap();
-        assert_eq!(b.last_written_at(108).unwrap(), 9876);
+        b.write_single(108, 5, 9876).expect("should succeed");
+        assert_eq!(b.last_written_at(108).expect("should succeed"), 9876);
     }
 
     #[test]
@@ -491,8 +499,8 @@ mod tests {
     #[test]
     fn test_boundary_address_at_start() {
         let mut b = HoldingRegisterBank::new(0, 5);
-        b.write_single(0, 0xFFFF, 1).unwrap();
-        assert_eq!(b.get_raw(0).unwrap(), 0xFFFF);
+        b.write_single(0, 0xFFFF, 1).expect("should succeed");
+        assert_eq!(b.get_raw(0).expect("should succeed"), 0xFFFF);
     }
 
     #[test]
@@ -526,7 +534,7 @@ mod tests {
     fn test_multi_register_read_boundary() {
         let b = HoldingRegisterBank::new(100, 20); // 100..119
                                                    // Read exactly to the last register: start=110, count=10 → indices 110..119 inclusive
-        let r = b.read(110, 10, 0).unwrap();
+        let r = b.read(110, 10, 0).expect("should succeed");
         assert_eq!(r.values.len(), 10);
     }
 
@@ -535,29 +543,31 @@ mod tests {
     #[test]
     fn test_write_single_multiple_addresses() {
         let mut b = bank();
-        b.write_single(100, 0xAAAA, 1).unwrap();
-        b.write_single(110, 0xBBBB, 2).unwrap();
-        b.write_single(119, 0xCCCC, 3).unwrap();
-        assert_eq!(b.get_raw(100).unwrap(), 0xAAAA);
-        assert_eq!(b.get_raw(110).unwrap(), 0xBBBB);
-        assert_eq!(b.get_raw(119).unwrap(), 0xCCCC);
+        b.write_single(100, 0xAAAA, 1).expect("should succeed");
+        b.write_single(110, 0xBBBB, 2).expect("should succeed");
+        b.write_single(119, 0xCCCC, 3).expect("should succeed");
+        assert_eq!(b.get_raw(100).expect("should succeed"), 0xAAAA);
+        assert_eq!(b.get_raw(110).expect("should succeed"), 0xBBBB);
+        assert_eq!(b.get_raw(119).expect("should succeed"), 0xCCCC);
     }
 
     #[test]
     fn test_read_timestamp_is_current_time() {
         let b = bank();
         let ts = 9876543;
-        let r = b.read(100, 1, ts).unwrap();
+        let r = b.read(100, 1, ts).expect("should succeed");
         assert_eq!(r.timestamp_ms, ts);
     }
 
     #[test]
     fn test_write_multiple_all_protected() {
         let mut b = bank();
-        b.set_write_protected(100, true).unwrap();
-        b.set_write_protected(101, true).unwrap();
-        b.set_write_protected(102, true).unwrap();
-        let r = b.write_multiple(100, &[1, 2, 3], 0).unwrap();
+        b.set_write_protected(100, true).expect("should succeed");
+        b.set_write_protected(101, true).expect("should succeed");
+        b.set_write_protected(102, true).expect("should succeed");
+        let r = b
+            .write_multiple(100, &[1, 2, 3], 0)
+            .expect("should succeed");
         assert_eq!(r.written_count, 0);
         assert_eq!(r.skipped_protected, 3);
     }
@@ -573,8 +583,8 @@ mod tests {
     #[test]
     fn test_read_max_value() {
         let mut b = bank();
-        b.write_single(100, u16::MAX, 0).unwrap();
-        let r = b.read(100, 1, 0).unwrap();
+        b.write_single(100, u16::MAX, 0).expect("should succeed");
+        let r = b.read(100, 1, 0).expect("should succeed");
         assert_eq!(r.values[0], u16::MAX);
     }
 
@@ -582,17 +592,18 @@ mod tests {
     fn test_write_multiple_updates_timestamps() {
         let mut b = bank();
         let ts = 5555;
-        b.write_multiple(100, &[1, 2, 3], ts).unwrap();
-        assert_eq!(b.last_written_at(100).unwrap(), ts);
-        assert_eq!(b.last_written_at(101).unwrap(), ts);
-        assert_eq!(b.last_written_at(102).unwrap(), ts);
+        b.write_multiple(100, &[1, 2, 3], ts)
+            .expect("should succeed");
+        assert_eq!(b.last_written_at(100).expect("should succeed"), ts);
+        assert_eq!(b.last_written_at(101).expect("should succeed"), ts);
+        assert_eq!(b.last_written_at(102).expect("should succeed"), ts);
     }
 
     #[test]
     fn test_single_register_bank() {
         let mut b = HoldingRegisterBank::new(0, 1);
-        b.write_single(0, 42, 1).unwrap();
-        assert_eq!(b.get_raw(0).unwrap(), 42);
+        b.write_single(0, 42, 1).expect("should succeed");
+        assert_eq!(b.get_raw(0).expect("should succeed"), 42);
         // Reading address 1 should be out of range
         assert!(matches!(
             b.read(1, 1, 0),
@@ -603,9 +614,9 @@ mod tests {
     #[test]
     fn test_set_and_clear_protection_multiple_times() {
         let mut b = bank();
-        b.set_write_protected(105, true).unwrap();
-        b.set_write_protected(105, false).unwrap();
-        b.set_write_protected(105, true).unwrap();
+        b.set_write_protected(105, true).expect("should succeed");
+        b.set_write_protected(105, false).expect("should succeed");
+        b.set_write_protected(105, true).expect("should succeed");
         assert!(matches!(
             b.write_single(105, 1, 0),
             Err(RegisterError::WriteProtected(105))
@@ -615,8 +626,10 @@ mod tests {
     #[test]
     fn test_write_result_fields() {
         let mut b = bank();
-        b.set_write_protected(101, true).unwrap();
-        let r = b.write_multiple(100, &[10, 20, 30], 0).unwrap();
+        b.set_write_protected(101, true).expect("should succeed");
+        let r = b
+            .write_multiple(100, &[10, 20, 30], 0)
+            .expect("should succeed");
         assert_eq!(r.written_count, 2);
         assert_eq!(r.skipped_protected, 1);
     }
@@ -624,8 +637,8 @@ mod tests {
     #[test]
     fn test_read_result_fields() {
         let mut b = bank();
-        b.write_single(100, 7, 10).unwrap();
-        let r = b.read(100, 1, 999).unwrap();
+        b.write_single(100, 7, 10).expect("should succeed");
+        let r = b.read(100, 1, 999).expect("should succeed");
         assert_eq!(r.values, vec![7]);
         assert_eq!(r.timestamp_ms, 999);
     }
@@ -634,10 +647,10 @@ mod tests {
     fn test_large_bank_sequential_write_read() {
         let mut b = HoldingRegisterBank::new(0, 100);
         for i in 0..100u16 {
-            b.write_single(i, i * 2, i as u64).unwrap();
+            b.write_single(i, i * 2, i as u64).expect("should succeed");
         }
         for i in 0..100u16 {
-            assert_eq!(b.get_raw(i).unwrap(), i * 2);
+            assert_eq!(b.get_raw(i).expect("should succeed"), i * 2);
         }
     }
 }

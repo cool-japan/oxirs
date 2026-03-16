@@ -566,7 +566,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_model_registry_lifecycle() {
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = tempdir().expect("should succeed");
         let registry = ModelRegistry::new(temp_dir.path().to_path_buf());
 
         // Register model
@@ -578,7 +578,7 @@ mod tests {
                 "Test model".to_string(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Register version
         let config = ModelConfig::default();
@@ -595,32 +595,38 @@ mod tests {
                 metrics,
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Deploy version
         let deployment_id = registry
             .deploy_version(version_id, ResourceAllocation::default())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Wait for deployment
         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
         // Check deployment status
-        let deployment = registry.get_deployment(deployment_id).await.unwrap();
+        let deployment = registry
+            .get_deployment(deployment_id)
+            .await
+            .expect("should succeed");
         assert_eq!(deployment.status, DeploymentStatus::Deployed);
         assert!(deployment.endpoint.is_some());
 
         // Promote to production
-        registry.promote_to_production(version_id).await.unwrap();
+        registry
+            .promote_to_production(version_id)
+            .await
+            .expect("should succeed");
 
-        let model = registry.get_model(model_id).await.unwrap();
+        let model = registry.get_model(model_id).await.expect("should succeed");
         assert_eq!(model.production_version, Some(version_id));
     }
 
     #[tokio::test]
     async fn test_ab_testing() {
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = tempdir().expect("should succeed");
         let registry = ModelRegistry::new(temp_dir.path().to_path_buf());
 
         // Register model and two versions
@@ -632,7 +638,7 @@ mod tests {
                 "AB test model".to_string(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let version_a = registry
             .register_version(
@@ -644,7 +650,7 @@ mod tests {
                 HashMap::new(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let version_b = registry
             .register_version(
@@ -656,7 +662,7 @@ mod tests {
                 HashMap::new(),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Create A/B test
         let test_id = registry
@@ -669,7 +675,7 @@ mod tests {
                 Some(24), // 24 hour test
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Check active tests
         let active_tests = registry.get_active_ab_tests().await;
@@ -677,7 +683,7 @@ mod tests {
         assert_eq!(active_tests[0].test_id, test_id);
 
         // End test
-        registry.end_ab_test(test_id).await.unwrap();
+        registry.end_ab_test(test_id).await.expect("should succeed");
 
         let active_tests = registry.get_active_ab_tests().await;
         assert_eq!(active_tests.len(), 0);

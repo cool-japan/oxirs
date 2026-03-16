@@ -286,7 +286,7 @@ mod tests {
     fn test_add_rule_duplicate_error() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("r1", 100, ThresholdCondition::Above(50.0), 0))
-            .unwrap();
+            .expect("should succeed");
         let res = mon.add_rule(rule("r1", 100, ThresholdCondition::Below(10.0), 0));
         assert_eq!(res, Err(MonitorError::DuplicateRuleId("r1".to_string())));
     }
@@ -297,7 +297,7 @@ mod tests {
     fn test_remove_rule_success() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("r1", 100, ThresholdCondition::Above(50.0), 0))
-            .unwrap();
+            .expect("should succeed");
         assert!(mon.remove_rule("r1").is_ok());
         assert!(mon.rules.is_empty());
     }
@@ -429,7 +429,7 @@ mod tests {
     fn test_update_value_triggers_alert() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("r1", 100, ThresholdCondition::Above(50.0), 0))
-            .unwrap();
+            .expect("should succeed");
         let events = mon.update_value(100, 75.0, 1000);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].rule_id, "r1");
@@ -440,7 +440,7 @@ mod tests {
     fn test_update_value_no_alert_below_threshold() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("r1", 100, ThresholdCondition::Above(50.0), 0))
-            .unwrap();
+            .expect("should succeed");
         let events = mon.update_value(100, 30.0, 1000);
         assert!(events.is_empty());
     }
@@ -449,7 +449,7 @@ mod tests {
     fn test_update_value_cooldown_suppresses() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("r1", 100, ThresholdCondition::Above(10.0), 5000))
-            .unwrap();
+            .expect("should succeed");
         let ev1 = mon.update_value(100, 20.0, 1000);
         assert_eq!(ev1.len(), 1);
         let ev2 = mon.update_value(100, 25.0, 2000); // 1000 ms elapsed < 5000 ms cooldown
@@ -460,7 +460,7 @@ mod tests {
     fn test_update_value_cooldown_expires() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("r1", 100, ThresholdCondition::Above(10.0), 1000))
-            .unwrap();
+            .expect("should succeed");
         mon.update_value(100, 20.0, 0);
         let events = mon.update_value(100, 30.0, 2000); // 2000 ms > 1000 ms cooldown
         assert_eq!(events.len(), 1);
@@ -470,7 +470,7 @@ mod tests {
     fn test_update_value_different_address_no_alert() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("r1", 100, ThresholdCondition::Above(10.0), 0))
-            .unwrap();
+            .expect("should succeed");
         let events = mon.update_value(200, 50.0, 1000); // address 200, rule watches 100
         assert!(events.is_empty());
     }
@@ -479,9 +479,9 @@ mod tests {
     fn test_update_value_multiple_rules_same_address() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("above", 100, ThresholdCondition::Above(10.0), 0))
-            .unwrap();
+            .expect("should succeed");
         mon.add_rule(rule("below", 100, ThresholdCondition::Below(100.0), 0))
-            .unwrap();
+            .expect("should succeed");
         let events = mon.update_value(100, 50.0, 1000);
         assert_eq!(events.len(), 2);
     }
@@ -490,7 +490,7 @@ mod tests {
     fn test_update_value_changed_condition() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("changed", 100, ThresholdCondition::Changed, 0))
-            .unwrap();
+            .expect("should succeed");
         // First update — no prev value, so no alert
         let ev1 = mon.update_value(100, 1.0, 1000);
         assert!(ev1.is_empty());
@@ -511,9 +511,9 @@ mod tests {
     fn test_active_rules_returns_all() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("r1", 100, ThresholdCondition::Above(1.0), 0))
-            .unwrap();
+            .expect("should succeed");
         mon.add_rule(rule("r2", 200, ThresholdCondition::Below(0.0), 0))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(mon.active_rules().len(), 2);
     }
 
@@ -546,7 +546,7 @@ mod tests {
     fn test_clear_history_resets_cooldowns() {
         let mut mon = RegisterMonitor::new();
         mon.add_rule(rule("r1", 100, ThresholdCondition::Above(10.0), 99999))
-            .unwrap();
+            .expect("should succeed");
         mon.update_value(100, 50.0, 0); // alert at t=0
         mon.clear_history(); // reset cooldown state
         let events = mon.update_value(100, 60.0, 1); // should fire again
@@ -567,7 +567,7 @@ mod tests {
             condition: ThresholdCondition::Equal(1.0),
             cooldown_ms: 0,
         })
-        .unwrap();
+        .expect("should succeed");
         let events = mon.update_value(5, 1.0, 100);
         assert_eq!(events.len(), 1);
     }

@@ -38,13 +38,13 @@ scirs2-stats = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 async-trait.workspace = true
 rayon.workspace = true
-async-stream = "0.3"
+async-stream.workspace = true
 futures.workspace = true
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-quick-xml = { version = "0.39", features = ["serialize"] }
+quick-xml = { workspace = true, features = ["serialize"] }
 oxiarc-archive.workspace = true
 base64.workspace = true
 
@@ -52,7 +52,7 @@ base64.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+tracing-subscriber = { workspace = true, features = ["json", "env-filter"] }
 
 # Utilities
 url.workspace = true
@@ -70,14 +70,14 @@ chrono = { workspace = true, features = ["serde"] }
 tera = "1.20"
 
 # Image processing (optional, for AASX custom thumbnails)
-image = { version = "0.25", optional = true }
+image = { workspace = true, optional = true }
 
 # Graphviz rendering (optional, for SVG/PNG diagram generation)
 graphviz-rust = { version = "0.9", optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
-tokio-test = "0.4"
+tokio-test.workspace = true
 criterion = { workspace = true, features = ["async_tokio"] }
 proptest.workspace = true
 

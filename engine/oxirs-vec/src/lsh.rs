@@ -679,9 +679,10 @@ pub struct LshStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
-    fn test_random_projection_lsh() {
+    fn test_random_projection_lsh() -> Result<()> {
         let config = LshConfig {
             num_tables: 5,
             num_hash_functions: 4,
@@ -699,25 +700,24 @@ mod tests {
         let v3 = Vector::new(vec![0.0, 0.0, 1.0]);
         let v_similar = Vector::new(vec![0.9, 0.1, 0.0]); // Similar to v1
 
-        index.insert("v1".to_string(), v1.clone()).unwrap();
-        index.insert("v2".to_string(), v2.clone()).unwrap();
-        index.insert("v3".to_string(), v3.clone()).unwrap();
-        index
-            .insert("v_similar".to_string(), v_similar.clone())
-            .unwrap();
+        index.insert("v1".to_string(), v1.clone())?;
+        index.insert("v2".to_string(), v2.clone())?;
+        index.insert("v3".to_string(), v3.clone())?;
+        index.insert("v_similar".to_string(), v_similar.clone())?;
 
         // Search for similar vectors
-        let results = index.search_knn(&v1, 2).unwrap();
+        let results = index.search_knn(&v1, 2)?;
 
         assert!(results.len() <= 2);
         // v1 and v_similar should be the closest
         assert!(results
             .iter()
             .any(|(uri, _)| uri == "v1" || uri == "v_similar"));
+        Ok(())
     }
 
     #[test]
-    fn test_minhash_lsh() {
+    fn test_minhash_lsh() -> Result<()> {
         let config = LshConfig {
             num_tables: 3,
             num_hash_functions: 64,
@@ -745,14 +745,12 @@ mod tests {
         v3[60] = 1.0;
         v3[70] = 1.0; // No overlap with v1
 
-        index
-            .insert("v1".to_string(), Vector::new(v1.clone()))
-            .unwrap();
-        index.insert("v2".to_string(), Vector::new(v2)).unwrap();
-        index.insert("v3".to_string(), Vector::new(v3)).unwrap();
+        index.insert("v1".to_string(), Vector::new(v1.clone()))?;
+        index.insert("v2".to_string(), Vector::new(v2))?;
+        index.insert("v3".to_string(), Vector::new(v3))?;
 
         // Search for similar vectors
-        let results = index.search_knn(&Vector::new(v1), 2).unwrap();
+        let results = index.search_knn(&Vector::new(v1), 2)?;
 
         // v1 should be first, v2 should be second (due to overlap)
         assert!(!results.is_empty());
@@ -760,10 +758,11 @@ mod tests {
         if results.len() > 1 {
             assert_eq!(results[1].0, "v2");
         }
+        Ok(())
     }
 
     #[test]
-    fn test_multi_probe_lsh() {
+    fn test_multi_probe_lsh() -> Result<()> {
         let config = LshConfig {
             num_tables: 3,
             num_hash_functions: 4,
@@ -779,17 +778,18 @@ mod tests {
         for i in 0..50 {
             let angle = i as f32 * std::f32::consts::PI / 25.0;
             let vec = Vector::new(vec![angle.cos(), angle.sin(), 0.0]);
-            index.insert(format!("v{i}"), vec).unwrap();
+            index.insert(format!("v{i}"), vec)?;
         }
 
         // Search with multi-probe should find more candidates
         let query = Vector::new(vec![1.0, 0.0, 0.0]);
-        let results = index.search_knn(&query, 5).unwrap();
+        let results = index.search_knn(&query, 5)?;
 
         assert_eq!(results.len(), 5);
         // Results should be ordered by distance
         for i in 1..results.len() {
             assert!(results[i - 1].1 <= results[i].1);
         }
+        Ok(())
     }
 }

@@ -360,7 +360,7 @@ mod tests {
         let mut h = default_history();
         h.push(user_msg("first", 1));
         h.push(assistant_msg("last", 1));
-        assert_eq!(h.latest().unwrap().content, "last");
+        assert_eq!(h.latest().expect("should succeed").content, "last");
     }
 
     #[test]
@@ -469,7 +469,7 @@ mod tests {
         h.push(user_msg("msg", 10));
         h.summarize("Summary text".into());
         assert!(h.summary().is_some());
-        assert_eq!(h.summary().unwrap().content, "Summary text");
+        assert_eq!(h.summary().expect("should succeed").content, "Summary text");
     }
 
     // ── clear ─────────────────────────────────────────────────────────────────
@@ -534,7 +534,10 @@ mod tests {
         h.push(user_msg("first user", 1));
         h.push(assistant_msg("response", 1));
         h.push(user_msg("second user", 1));
-        assert_eq!(h.last_user_message().unwrap().content, "second user");
+        assert_eq!(
+            h.last_user_message().expect("should succeed").content,
+            "second user"
+        );
     }
 
     #[test]
@@ -550,7 +553,10 @@ mod tests {
         h.push(assistant_msg("first reply", 1));
         h.push(user_msg("follow-up", 1));
         h.push(assistant_msg("second reply", 1));
-        assert_eq!(h.last_assistant_message().unwrap().content, "second reply");
+        assert_eq!(
+            h.last_assistant_message().expect("should succeed").content,
+            "second reply"
+        );
     }
 
     #[test]
@@ -693,7 +699,7 @@ mod tests {
         let mut h = default_history();
         h.push(Message::with_tokens(MessageRole::Tool, "result", 0, 3));
         assert_eq!(h.message_count(), 1);
-        assert_eq!(h.latest().unwrap().role, MessageRole::Tool);
+        assert_eq!(h.latest().expect("should succeed").role, MessageRole::Tool);
     }
 
     #[test]
@@ -719,7 +725,10 @@ mod tests {
         h.push(assistant_msg("first", 1));
         h.push(user_msg("second", 1));
         // last assistant is still "first"
-        assert_eq!(h.last_assistant_message().unwrap().content, "first");
+        assert_eq!(
+            h.last_assistant_message().expect("should succeed").content,
+            "first"
+        );
     }
 
     #[test]

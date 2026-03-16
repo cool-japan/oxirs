@@ -28,7 +28,7 @@
 //! });
 //!
 //! // Register the module
-//! manager.register_module(module).unwrap();
+//! manager.register_module(module).expect("should succeed");
 //!
 //! // Create a template
 //! let template = RuleTemplate::new(
@@ -690,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn test_template_instantiation() {
+    fn test_template_instantiation() -> Result<(), Box<dyn std::error::Error>> {
         let mut template = RuleTemplate::new(
             "property_domain".to_string(),
             vec!["property".to_string(), "class".to_string()],
@@ -718,17 +718,16 @@ mod tests {
             Term::Constant("foaf:Person".to_string()),
         );
 
-        let rule = template
-            .instantiate("test_rule".to_string(), &args)
-            .unwrap();
+        let rule = template.instantiate("test_rule".to_string(), &args)?;
 
         assert_eq!(rule.name, "test_rule");
         assert_eq!(rule.body.len(), 1);
         assert_eq!(rule.head.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_inheritance() {
+    fn test_inheritance() -> Result<(), Box<dyn std::error::Error>> {
         let base_rule = Rule {
             name: "base".to_string(),
             body: vec![RuleAtom::Triple {
@@ -750,26 +749,28 @@ mod tests {
             object: Term::Variable("age".to_string()),
         }]);
 
-        let derived = inheritance.derive(&base_rule).unwrap();
+        let derived = inheritance.derive(&base_rule)?;
 
         assert_eq!(derived.name, "derived");
         assert_eq!(derived.body.len(), 2); // Base + additional
         assert_eq!(derived.head.len(), 1); // Same as base
+        Ok(())
     }
 
     #[test]
-    fn test_composition_manager() {
+    fn test_composition_manager() -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = CompositionManager::new();
 
         let module = RuleModule::new("test".to_string());
-        manager.register_module(module).unwrap();
+        manager.register_module(module)?;
 
         assert_eq!(manager.modules.len(), 1);
         assert!(manager.get_module("test").is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_dependency_cycles() {
+    fn test_dependency_cycles() -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = CompositionManager::new();
 
         let mut module_a = RuleModule::new("A".to_string());
@@ -778,15 +779,16 @@ mod tests {
         let mut module_b = RuleModule::new("B".to_string());
         module_b.add_dependency("A".to_string());
 
-        manager.register_module(module_a).unwrap();
-        manager.register_module(module_b).unwrap();
+        manager.register_module(module_a)?;
+        manager.register_module(module_b)?;
 
         // Should detect cycle
         assert!(manager.check_dependency_cycles().is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_load_order() {
+    fn test_load_order() -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = CompositionManager::new();
 
         let mut module_a = RuleModule::new("A".to_string());
@@ -794,14 +796,21 @@ mod tests {
 
         let module_b = RuleModule::new("B".to_string());
 
-        manager.register_module(module_b).unwrap();
-        manager.register_module(module_a).unwrap();
+        manager.register_module(module_b)?;
+        manager.register_module(module_a)?;
 
-        let order = manager.get_load_order().unwrap();
+        let order = manager.get_load_order()?;
 
         // B should come before A
-        let b_index = order.iter().position(|m| m == "B").unwrap();
-        let a_index = order.iter().position(|m| m == "A").unwrap();
+        let b_index = order
+            .iter()
+            .position(|m| m == "B")
+            .ok_or("expected Some value")?;
+        let a_index = order
+            .iter()
+            .position(|m| m == "A")
+            .ok_or("expected Some value")?;
         assert!(b_index < a_index);
+        Ok(())
     }
 }

@@ -505,7 +505,7 @@ mod tests {
         generator.record_query_at("Query2", 150, now);
         generator.record_query_at("Query3", 500, now);
 
-        let heatmap = generator.generate_time_heatmap().unwrap();
+        let heatmap = generator.generate_time_heatmap().expect("should succeed");
 
         assert!(!heatmap.cells.is_empty());
         assert_eq!(heatmap.start_time, now);
@@ -559,7 +559,7 @@ mod tests {
         assert!(stats.contains_key(&95));
         assert!(stats.contains_key(&99));
 
-        let p50 = stats.get(&50).unwrap();
+        let p50 = stats.get(&50).expect("should succeed");
         assert!(*p50 >= 400 && *p50 <= 600);
     }
 
@@ -636,7 +636,7 @@ mod tests {
             end_time: SystemTime::UNIX_EPOCH,
         };
 
-        let json = heatmap.to_json().unwrap();
+        let json = heatmap.to_json().expect("should succeed");
 
         assert!(json.contains("cells"));
         assert!(json.contains("time_bucket_size"));

@@ -543,11 +543,11 @@ mod tests {
         manager
             .register_query(hash.clone(), query.to_string(), None, None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let result = manager.get_query(&hash).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), query);
+        assert_eq!(result.expect("should succeed"), query);
     }
 
     #[tokio::test]
@@ -566,12 +566,12 @@ mod tests {
         manager
             .store_query(hash.clone(), query.to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Second request - query found (APQ hit)
         let result = manager.get_query(&hash).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), query);
+        assert_eq!(result.expect("should succeed"), query);
     }
 
     #[tokio::test]
@@ -601,13 +601,13 @@ mod tests {
         manager
             .register_query(hash.clone(), query.to_string(), None, None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Block the query
         manager
             .deny_query(hash.clone(), "Malicious query".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Should fail - query is blocked
         let result = manager.get_query(&hash).await;
@@ -627,7 +627,7 @@ mod tests {
         manager
             .register_query(hash.clone(), query.to_string(), None, None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Access query multiple times
         for _ in 0..5 {
@@ -656,7 +656,7 @@ mod tests {
             manager
                 .register_query(hash, query, None, None)
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
         let stats = manager.get_statistics().await;
@@ -679,7 +679,7 @@ mod tests {
                 Some("v1".to_string()),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let result = manager.get_query(&hash).await;
         assert!(result.is_ok());
@@ -724,8 +724,8 @@ mod tests {
     async fn test_store_and_retrieve() {
         let store = PersistedQueryStore::new();
         let query = "{ user { id name } }";
-        let hash = store.store(query).await.unwrap();
-        let retrieved = store.get(&hash).await.unwrap();
+        let hash = store.store(query).await.expect("should succeed");
+        let retrieved = store.get(&hash).await.expect("should succeed");
         assert_eq!(retrieved, query);
     }
 
@@ -734,7 +734,7 @@ mod tests {
         let store = PersistedQueryStore::new();
         let query = "{ products { sku } }";
         let expected_hash = PersistedQueryStore::hash(query);
-        let returned_hash = store.store(query).await.unwrap();
+        let returned_hash = store.store(query).await.expect("should succeed");
         assert_eq!(returned_hash, expected_hash);
     }
 
@@ -754,8 +754,11 @@ mod tests {
         let store = PersistedQueryStore::new();
         let query = "{ reviews { rating } }";
         let hash = PersistedQueryStore::hash(query);
-        store.store_with_hash(&hash, query).await.unwrap();
-        assert_eq!(store.get(&hash).await.unwrap(), query);
+        store
+            .store_with_hash(&hash, query)
+            .await
+            .expect("should succeed");
+        assert_eq!(store.get(&hash).await.expect("should succeed"), query);
     }
 
     #[tokio::test]
@@ -770,12 +773,12 @@ mod tests {
     async fn test_handle_apq_first_leg_hit() {
         let store = PersistedQueryStore::new();
         let query = "{ status }";
-        let hash = store.store(query).await.unwrap();
+        let hash = store.store(query).await.expect("should succeed");
         let ext = ApqPersistedQuery {
             version: 1,
             sha256_hash: hash,
         };
-        let result = store.handle_apq(&ext, None).await.unwrap();
+        let result = store.handle_apq(&ext, None).await.expect("should succeed");
         assert_eq!(result, query);
     }
 
@@ -799,14 +802,17 @@ mod tests {
             version: 1,
             sha256_hash: hash.clone(),
         };
-        let result = store.handle_apq(&ext, Some(query)).await.unwrap();
+        let result = store
+            .handle_apq(&ext, Some(query))
+            .await
+            .expect("should succeed");
         assert_eq!(result, query);
         // Subsequent first-leg call should now hit.
         let ext2 = ApqPersistedQuery {
             version: 1,
             sha256_hash: hash,
         };
-        let hit = store.handle_apq(&ext2, None).await.unwrap();
+        let hit = store.handle_apq(&ext2, None).await.expect("should succeed");
         assert_eq!(hit, query);
     }
 
@@ -814,7 +820,7 @@ mod tests {
     async fn test_remove_query() {
         let store = PersistedQueryStore::new();
         let query = "{ remove_me }";
-        let hash = store.store(query).await.unwrap();
+        let hash = store.store(query).await.expect("should succeed");
         assert!(store.remove(&hash).await);
         assert!(!store.remove(&hash).await); // already gone
         assert!(store.is_empty().await);
@@ -824,7 +830,7 @@ mod tests {
     async fn test_stats_hit_miss_counts() {
         let store = PersistedQueryStore::new();
         let query = "{ stat_test }";
-        let hash = store.store(query).await.unwrap();
+        let hash = store.store(query).await.expect("should succeed");
         let _ = store.get(&hash).await; // hit
         let _ = store.get(&hash).await; // hit
         let _ = store.get("missing").await; // miss
@@ -837,7 +843,7 @@ mod tests {
     async fn test_stats_reset() {
         let store = PersistedQueryStore::new();
         let query = "{ reset_test }";
-        let hash = store.store(query).await.unwrap();
+        let hash = store.store(query).await.expect("should succeed");
         let _ = store.get(&hash).await;
         store.reset_stats().await;
         let (hits, misses) = store.stats().await;
@@ -850,7 +856,7 @@ mod tests {
         let store = PersistedQueryStore::new();
         for i in 0..5 {
             let query = format!("{{ q{i} }}");
-            store.store(&query).await.unwrap();
+            store.store(&query).await.expect("should succeed");
         }
         assert_eq!(store.len().await, 5);
         store.clear().await;
@@ -862,7 +868,7 @@ mod tests {
         let store = PersistedQueryStore::new();
         let queries = ["{ a }", "{ b }", "{ c }"];
         for q in &queries {
-            store.store(q).await.unwrap();
+            store.store(q).await.expect("should succeed");
         }
         assert_eq!(store.len().await, 3);
     }
@@ -872,8 +878,8 @@ mod tests {
         // Storing the same query twice should be fine.
         let store = PersistedQueryStore::new();
         let query = "{ idempotent }";
-        let h1 = store.store(query).await.unwrap();
-        let h2 = store.store(query).await.unwrap();
+        let h1 = store.store(query).await.expect("should succeed");
+        let h2 = store.store(query).await.expect("should succeed");
         assert_eq!(h1, h2);
         assert_eq!(store.len().await, 1);
     }
@@ -882,14 +888,18 @@ mod tests {
     async fn test_store_round_trip_with_temp_file() {
         let store = PersistedQueryStore::new();
         let query = "{ temp_file_test }";
-        let hash = store.store(query).await.unwrap();
+        let hash = store.store(query).await.expect("should succeed");
 
         // Write hash to a temp file and read it back (exercises temp_dir usage).
         let temp_dir = std::env::temp_dir();
         let path = temp_dir.join(format!("{hash}.hash"));
-        tokio::fs::write(&path, hash.as_bytes()).await.unwrap();
-        let read_back = tokio::fs::read_to_string(&path).await.unwrap();
-        let retrieved = store.get(&read_back).await.unwrap();
+        tokio::fs::write(&path, hash.as_bytes())
+            .await
+            .expect("should succeed");
+        let read_back = tokio::fs::read_to_string(&path)
+            .await
+            .expect("should succeed");
+        let retrieved = store.get(&read_back).await.expect("should succeed");
         assert_eq!(retrieved, query);
         let _ = tokio::fs::remove_file(&path).await;
     }

@@ -960,42 +960,46 @@ mod tests {
     }
 
     #[test]
-    fn test_publish_upsert() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_publish_upsert() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
         let seq = manager.publish_upsert("v1".to_string(), vec![1.0, 2.0], HashMap::new());
         assert_eq!(seq, 1);
         assert_eq!(manager.log_length(), 1);
         assert_eq!(manager.current_seq(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_publish_delete() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_publish_delete() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
         manager.publish_upsert("v1".to_string(), vec![1.0], HashMap::new());
         let seq = manager.publish_delete("v1".to_string());
         assert_eq!(seq, 2);
         assert_eq!(manager.log_length(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_publish_heartbeat() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_publish_heartbeat() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
         let seq = manager.publish_heartbeat();
         assert_eq!(seq, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_add_and_remove_replica() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_add_and_remove_replica() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
         manager.add_replica("dc-eu".to_string(), "eu-west-1".to_string());
         assert_eq!(manager.replica_count(), 1);
         manager.remove_replica("dc-eu");
         assert_eq!(manager.replica_count(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_get_entries_for_replica() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_get_entries_for_replica() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
         manager.add_replica("dc-eu".to_string(), "eu-west-1".to_string());
 
         for i in 0..5 {
@@ -1007,14 +1011,15 @@ mod tests {
 
         let partial = manager.get_entries_for_replica("dc-eu", 3);
         assert_eq!(partial.len(), 2); // entries 4 and 5
+        Ok(())
     }
 
     #[test]
-    fn test_replica_receive_and_apply() {
-        let primary = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_replica_receive_and_apply() -> Result<()> {
+        let primary = PrimaryDcManager::new(make_primary_config())?;
         primary.add_replica("dc-eu".to_string(), "eu-west-1".to_string());
 
-        let replica = ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1")).unwrap();
+        let replica = ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1"))?;
 
         // Publish entries on primary
         primary.publish_upsert("v1".to_string(), vec![1.0, 0.0], HashMap::new());
@@ -1033,13 +1038,14 @@ mod tests {
         // Verify vectors are accessible
         let v1 = replica.get_vector("v1");
         assert!(v1.is_some());
-        assert_eq!(v1.unwrap().0, vec![1.0, 0.0]);
+        assert_eq!(v1.expect("test value").0, vec![1.0, 0.0]);
+        Ok(())
     }
 
     #[test]
-    fn test_replica_apply_delete() {
-        let primary = PrimaryDcManager::new(make_primary_config()).unwrap();
-        let replica = ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1")).unwrap();
+    fn test_replica_apply_delete() -> Result<()> {
+        let primary = PrimaryDcManager::new(make_primary_config())?;
+        let replica = ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1"))?;
         primary.add_replica("dc-eu".to_string(), "eu-west-1".to_string());
 
         primary.publish_upsert("v1".to_string(), vec![1.0], HashMap::new());
@@ -1051,13 +1057,16 @@ mod tests {
 
         assert_eq!(replica.vector_count(), 0);
         assert!(replica.get_vector("v1").is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_coordinator_replicate_once() {
-        let primary = Arc::new(PrimaryDcManager::new(make_primary_config()).unwrap());
-        let replica =
-            Arc::new(ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1")).unwrap());
+    fn test_coordinator_replicate_once() -> Result<()> {
+        let primary = Arc::new(PrimaryDcManager::new(make_primary_config())?);
+        let replica = Arc::new(ReplicaDcManager::new(make_replica_config(
+            "dc-eu",
+            "eu-west-1",
+        ))?);
 
         let mut coordinator = CrossDcCoordinator::new(Arc::clone(&primary));
         coordinator.add_replica_node("dc-eu".to_string(), Arc::clone(&replica));
@@ -1067,17 +1076,19 @@ mod tests {
             primary.publish_upsert(format!("v{}", i), vec![i as f32], HashMap::new());
         }
 
-        let applied = coordinator.replicate_once().unwrap();
+        let applied = coordinator.replicate_once()?;
         assert_eq!(applied.get("dc-eu"), Some(&10));
         assert_eq!(replica.vector_count(), 10);
+        Ok(())
     }
 
     #[test]
-    fn test_coordinator_incremental_replication() {
-        let primary = Arc::new(PrimaryDcManager::new(make_primary_config()).unwrap());
-        let replica = Arc::new(
-            ReplicaDcManager::new(make_replica_config("dc-ap", "ap-southeast-1")).unwrap(),
-        );
+    fn test_coordinator_incremental_replication() -> Result<()> {
+        let primary = Arc::new(PrimaryDcManager::new(make_primary_config())?);
+        let replica = Arc::new(ReplicaDcManager::new(make_replica_config(
+            "dc-ap",
+            "ap-southeast-1",
+        ))?);
 
         let mut coordinator = CrossDcCoordinator::new(Arc::clone(&primary));
         coordinator.add_replica_node("dc-ap".to_string(), Arc::clone(&replica));
@@ -1086,41 +1097,47 @@ mod tests {
         for i in 0..5 {
             primary.publish_upsert(format!("v{}", i), vec![i as f32], HashMap::new());
         }
-        coordinator.replicate_once().unwrap();
+        coordinator.replicate_once()?;
         assert_eq!(replica.vector_count(), 5);
 
         // Second batch
         for i in 5..10 {
             primary.publish_upsert(format!("v{}", i), vec![i as f32], HashMap::new());
         }
-        coordinator.replicate_once().unwrap();
+        coordinator.replicate_once()?;
         assert_eq!(replica.vector_count(), 10);
+        Ok(())
     }
 
     #[test]
-    fn test_replication_health_healthy() {
-        let primary = Arc::new(PrimaryDcManager::new(make_primary_config()).unwrap());
-        let replica =
-            Arc::new(ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1")).unwrap());
+    fn test_replication_health_healthy() -> Result<()> {
+        let primary = Arc::new(PrimaryDcManager::new(make_primary_config())?);
+        let replica = Arc::new(ReplicaDcManager::new(make_replica_config(
+            "dc-eu",
+            "eu-west-1",
+        ))?);
 
         let mut coordinator = CrossDcCoordinator::new(Arc::clone(&primary));
         coordinator.add_replica_node("dc-eu".to_string(), Arc::clone(&replica));
 
         // Sync up
         primary.publish_upsert("v1".to_string(), vec![1.0], HashMap::new());
-        coordinator.replicate_once().unwrap();
+        coordinator.replicate_once()?;
 
         let health = coordinator.replication_health();
         assert_eq!(health.total_replicas, 1);
         // After sync, should be healthy
         assert!(health.is_healthy || health.max_lag_entries <= 1);
+        Ok(())
     }
 
     #[test]
-    fn test_snapshot_operation() {
-        let _primary = Arc::new(PrimaryDcManager::new(make_primary_config()).unwrap());
-        let replica =
-            Arc::new(ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1")).unwrap());
+    fn test_snapshot_operation() -> Result<()> {
+        let _primary = Arc::new(PrimaryDcManager::new(make_primary_config())?);
+        let replica = Arc::new(ReplicaDcManager::new(make_replica_config(
+            "dc-eu",
+            "eu-west-1",
+        ))?);
 
         // Simulate a snapshot entry
         let snapshot_entries = vec![
@@ -1145,30 +1162,34 @@ mod tests {
         replica.apply_pending();
 
         assert_eq!(replica.vector_count(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_heartbeat_replication() {
-        let primary = Arc::new(PrimaryDcManager::new(make_primary_config()).unwrap());
-        let replica =
-            Arc::new(ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1")).unwrap());
+    fn test_heartbeat_replication() -> Result<()> {
+        let primary = Arc::new(PrimaryDcManager::new(make_primary_config())?);
+        let replica = Arc::new(ReplicaDcManager::new(make_replica_config(
+            "dc-eu",
+            "eu-west-1",
+        ))?);
 
         let mut coordinator = CrossDcCoordinator::new(Arc::clone(&primary));
         coordinator.add_replica_node("dc-eu".to_string(), Arc::clone(&replica));
 
         primary.publish_heartbeat();
-        coordinator.replicate_once().unwrap();
+        coordinator.replicate_once()?;
 
         // After receiving heartbeat, primary_heartbeat_recent should be true
         // (apply_pending processes heartbeats)
         let stats = replica.get_stats();
         // Just verify stats are accessible (total_entries is unsigned, always >= 0)
         let _ = stats.total_entries;
+        Ok(())
     }
 
     #[test]
-    fn test_acknowledge_replica() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_acknowledge_replica() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
         manager.add_replica("dc-eu".to_string(), "eu-west-1".to_string());
 
         for _ in 0..5 {
@@ -1183,18 +1204,20 @@ mod tests {
         let (_, status_val, acked, _) = &status[0];
         assert_eq!(*acked, 5);
         assert_eq!(*status_val, ReplicaStatus::Healthy);
+        Ok(())
     }
 
     #[test]
-    fn test_acknowledge_unknown_replica_fails() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_acknowledge_unknown_replica_fails() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
         let result = manager.acknowledge_replica("unknown-dc", 1, 0, 0);
         assert!(result.is_err(), "Should fail for unknown replica");
+        Ok(())
     }
 
     #[test]
-    fn test_record_replica_failure() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_record_replica_failure() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
         manager.add_replica("dc-eu".to_string(), "eu-west-1".to_string());
 
         for _ in 0..6 {
@@ -1204,12 +1227,13 @@ mod tests {
         let status = manager.get_replica_status();
         let (_, s, _, _) = &status[0];
         assert_eq!(*s, ReplicaStatus::Disconnected);
+        Ok(())
     }
 
     #[test]
-    fn test_replica_search_similar() {
-        let primary = PrimaryDcManager::new(make_primary_config()).unwrap();
-        let replica = ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1")).unwrap();
+    fn test_replica_search_similar() -> Result<()> {
+        let primary = PrimaryDcManager::new(make_primary_config())?;
+        let replica = ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1"))?;
         primary.add_replica("dc-eu".to_string(), "eu-west-1".to_string());
 
         primary.publish_upsert("v1".to_string(), vec![1.0, 0.0, 0.0], HashMap::new());
@@ -1222,6 +1246,7 @@ mod tests {
         let results = replica.search_similar(&[1.0, 0.0, 0.0], 2);
         assert!(!results.is_empty());
         assert_eq!(results[0].0, "v1");
+        Ok(())
     }
 
     #[test]
@@ -1233,12 +1258,12 @@ mod tests {
     }
 
     #[test]
-    fn test_conflict_resolution_last_write_wins() {
+    fn test_conflict_resolution_last_write_wins() -> Result<()> {
         let mut config = make_replica_config("dc-eu", "eu-west-1");
         config.conflict_resolution = ConflictResolutionStrategy::LastWriteWins;
         config.conflict_detection = true;
 
-        let replica = ReplicaDcManager::new(config).unwrap();
+        let replica = ReplicaDcManager::new(config)?;
 
         // Manually insert a "local" entry with higher seq
         {
@@ -1268,16 +1293,21 @@ mod tests {
         // With LastWriteWins, incoming_seq=1 < local_seq=100, so local wins
         let v1 = replica.get_vector("v1");
         assert!(v1.is_some());
-        assert_eq!(v1.unwrap().0, vec![2.0], "Local version should be retained");
+        assert_eq!(
+            v1.expect("test value").0,
+            vec![2.0],
+            "Local version should be retained"
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_conflict_resolution_primary_wins() {
+    fn test_conflict_resolution_primary_wins() -> Result<()> {
         let mut config = make_replica_config("dc-eu", "eu-west-1");
         config.conflict_resolution = ConflictResolutionStrategy::PrimaryWins;
         config.conflict_detection = true;
 
-        let replica = ReplicaDcManager::new(config).unwrap();
+        let replica = ReplicaDcManager::new(config)?;
 
         // Insert local entry
         {
@@ -1304,12 +1334,17 @@ mod tests {
         // With PrimaryWins, primary always wins
         let v1 = replica.get_vector("v1");
         assert!(v1.is_some());
-        assert_eq!(v1.unwrap().0, vec![1.0], "Primary version should win");
+        assert_eq!(
+            v1.expect("test value").0,
+            vec![1.0],
+            "Primary version should win"
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_pending_buffer_tracking() {
-        let replica = ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1")).unwrap();
+    fn test_pending_buffer_tracking() -> Result<()> {
+        let replica = ReplicaDcManager::new(make_replica_config("dc-eu", "eu-west-1"))?;
 
         assert_eq!(replica.pending_count(), 0);
 
@@ -1332,11 +1367,12 @@ mod tests {
 
         replica.receive_entries(vec![entry, entry2]);
         assert_eq!(replica.pending_count(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_max_lag_entries_calculation() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_max_lag_entries_calculation() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
         manager.add_replica("dc-eu".to_string(), "eu-west-1".to_string());
 
         for _ in 0..20 {
@@ -1345,11 +1381,12 @@ mod tests {
 
         let lag = manager.max_replica_lag_entries();
         assert_eq!(lag, 20, "Lag should be 20 entries");
+        Ok(())
     }
 
     #[test]
-    fn test_replication_stats() {
-        let manager = PrimaryDcManager::new(make_primary_config()).unwrap();
+    fn test_replication_stats() -> Result<()> {
+        let manager = PrimaryDcManager::new(make_primary_config())?;
 
         for i in 0..5 {
             manager.publish_upsert(format!("v{}", i), vec![i as f32], HashMap::new());
@@ -1358,5 +1395,6 @@ mod tests {
         let stats = manager.get_stats();
         assert_eq!(stats.total_entries, 5);
         assert!(stats.total_bytes > 0);
+        Ok(())
     }
 }

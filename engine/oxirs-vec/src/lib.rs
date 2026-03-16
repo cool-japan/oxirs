@@ -1,9 +1,9 @@
 //! # OxiRS Vector Search
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-vec/badge.svg)](https://docs.rs/oxirs-vec)
 //!
-//! **Status**: Production Release (v0.1.0) - **Production-Ready with Complete Documentation**
+//! **Status**: Production Release (v0.2.2) - **Production-Ready with Complete Documentation**
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing and 100 KB of documentation.
 //!
 //! Vector index abstractions for semantic similarity and AI-augmented SPARQL querying.
@@ -30,7 +30,7 @@
 //! // Create vector store with sentence transformer embeddings
 //! let mut store = VectorStore::with_embedding_strategy(
 //!     EmbeddingStrategy::SentenceTransformer
-//! ).unwrap();
+//! ).expect("should succeed");
 //!
 //! // Index some content
 //! store
@@ -38,18 +38,18 @@
 //!         "http://example.org/doc1".to_string(),
 //!         "This is a document about AI",
 //!     )
-//!     .unwrap();
+//!     .expect("should succeed");
 //! store
 //!     .index_resource(
 //!         "http://example.org/doc2".to_string(),
 //!         "Machine learning tutorial",
 //!     )
-//!     .unwrap();
+//!     .expect("should succeed");
 //!
 //! // Search for similar content
 //! let results = store
 //!     .similarity_search("artificial intelligence", 5)
-//!     .unwrap();
+//!     .expect("should succeed");
 //!
 //! println!("Found {} matching resources", results.len());
 //! ```
@@ -1725,70 +1725,70 @@ mod tests {
     }
 
     #[test]
-    fn test_vector_operations() {
+    fn test_vector_operations() -> Result<()> {
         let v1 = Vector::new(vec![1.0, 2.0, 3.0]);
         let v2 = Vector::new(vec![4.0, 5.0, 6.0]);
 
         // Test addition
-        let sum = v1.add(&v2).unwrap();
+        let sum = v1.add(&v2)?;
         assert_eq!(sum.as_f32(), vec![5.0, 7.0, 9.0]);
 
         // Test subtraction
-        let diff = v2.subtract(&v1).unwrap();
+        let diff = v2.subtract(&v1)?;
         assert_eq!(diff.as_f32(), vec![3.0, 3.0, 3.0]);
 
         // Test scaling
         let scaled = v1.scale(2.0);
         assert_eq!(scaled.as_f32(), vec![2.0, 4.0, 6.0]);
+        Ok(())
     }
 
     #[test]
-    fn test_cosine_similarity() {
+    fn test_cosine_similarity() -> Result<()> {
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
         let v2 = Vector::new(vec![1.0, 0.0, 0.0]);
         let v3 = Vector::new(vec![0.0, 1.0, 0.0]);
 
         // Identical vectors should have similarity 1.0
-        assert!((v1.cosine_similarity(&v2).unwrap() - 1.0).abs() < 0.001);
+        assert!((v1.cosine_similarity(&v2).expect("test value") - 1.0).abs() < 0.001);
 
         // Orthogonal vectors should have similarity 0.0
-        assert!((v1.cosine_similarity(&v3).unwrap()).abs() < 0.001);
+        assert!((v1.cosine_similarity(&v3).expect("test value")).abs() < 0.001);
+        Ok(())
     }
 
     #[test]
-    fn test_vector_store() {
+    fn test_vector_store() -> Result<()> {
         let mut store = VectorStore::new();
 
         // Test indexing
-        store
-            .index_resource("doc1".to_string(), "This is a test")
-            .unwrap();
-        store
-            .index_resource("doc2".to_string(), "Another test document")
-            .unwrap();
+        store.index_resource("doc1".to_string(), "This is a test")?;
+        store.index_resource("doc2".to_string(), "Another test document")?;
 
         // Test searching
-        let results = store.similarity_search("test", 5).unwrap();
+        let results = store.similarity_search("test", 5)?;
         assert_eq!(results.len(), 2);
 
         // Results should be sorted by similarity (descending)
         assert!(results[0].1 >= results[1].1);
+        Ok(())
     }
 
     #[test]
-    fn test_similarity_metrics() {
+    fn test_similarity_metrics() -> Result<()> {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![4.0, 5.0, 6.0];
 
         // Test different similarity metrics
-        let cosine_sim = SimilarityMetric::Cosine.similarity(&a, &b).unwrap();
-        let euclidean_sim = SimilarityMetric::Euclidean.similarity(&a, &b).unwrap();
-        let manhattan_sim = SimilarityMetric::Manhattan.similarity(&a, &b).unwrap();
+        let cosine_sim = SimilarityMetric::Cosine.similarity(&a, &b)?;
+        let euclidean_sim = SimilarityMetric::Euclidean.similarity(&a, &b)?;
+        let manhattan_sim = SimilarityMetric::Manhattan.similarity(&a, &b)?;
 
         // All similarities should be between 0 and 1
         assert!((0.0..=1.0).contains(&cosine_sim));
         assert!((0.0..=1.0).contains(&euclidean_sim));
         assert!((0.0..=1.0).contains(&manhattan_sim));
+        Ok(())
     }
 
     #[test]
@@ -1819,60 +1819,61 @@ mod tests {
     }
 
     #[test]
-    fn test_memory_vector_index() {
+    fn test_memory_vector_index() -> Result<()> {
         let mut index = MemoryVectorIndex::new();
 
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
         let v2 = Vector::new(vec![0.0, 1.0, 0.0]);
 
-        index.insert("v1".to_string(), v1.clone()).unwrap();
-        index.insert("v2".to_string(), v2.clone()).unwrap();
+        index.insert("v1".to_string(), v1.clone())?;
+        index.insert("v2".to_string(), v2.clone())?;
 
         // Test KNN search
-        let results = index.search_knn(&v1, 1).unwrap();
+        let results = index.search_knn(&v1, 1)?;
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "v1");
 
         // Test threshold search
-        let results = index.search_threshold(&v1, 0.5).unwrap();
+        let results = index.search_threshold(&v1, 0.5)?;
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_hnsw_index() {
+    fn test_hnsw_index() -> Result<()> {
         use crate::hnsw::{HnswConfig, HnswIndex};
 
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
         let v2 = Vector::new(vec![0.0, 1.0, 0.0]);
         let v3 = Vector::new(vec![0.0, 0.0, 1.0]);
 
-        index.insert("v1".to_string(), v1.clone()).unwrap();
-        index.insert("v2".to_string(), v2.clone()).unwrap();
-        index.insert("v3".to_string(), v3.clone()).unwrap();
+        index.insert("v1".to_string(), v1.clone())?;
+        index.insert("v2".to_string(), v2.clone())?;
+        index.insert("v3".to_string(), v3.clone())?;
 
         // Test KNN search
-        let results = index.search_knn(&v1, 2).unwrap();
+        let results = index.search_knn(&v1, 2)?;
         assert!(results.len() <= 2);
 
         // The first result should be v1 itself (highest similarity)
         if !results.is_empty() {
             assert_eq!(results[0].0, "v1");
         }
+        Ok(())
     }
 
     #[test]
-    fn test_sparql_vector_service() {
+    fn test_sparql_vector_service() -> Result<()> {
         use crate::embeddings::EmbeddingStrategy;
         use crate::sparql_integration::{
             SparqlVectorService, VectorServiceArg, VectorServiceConfig, VectorServiceResult,
         };
 
         let config = VectorServiceConfig::default();
-        let mut service =
-            SparqlVectorService::new(config, EmbeddingStrategy::SentenceTransformer).unwrap();
+        let mut service = SparqlVectorService::new(config, EmbeddingStrategy::SentenceTransformer)?;
 
         // Test vector similarity function
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
@@ -1880,9 +1881,7 @@ mod tests {
 
         let args = vec![VectorServiceArg::Vector(v1), VectorServiceArg::Vector(v2)];
 
-        let result = service
-            .execute_function("vector_similarity", &args)
-            .unwrap();
+        let result = service.execute_function("vector_similarity", &args)?;
 
         match result {
             VectorServiceResult::Number(similarity) => {
@@ -1893,7 +1892,7 @@ mod tests {
 
         // Test text embedding function
         let text_args = vec![VectorServiceArg::String("test text".to_string())];
-        let embed_result = service.execute_function("embed_text", &text_args).unwrap();
+        let embed_result = service.execute_function("embed_text", &text_args)?;
 
         match embed_result {
             VectorServiceResult::Vector(vector) => {
@@ -1901,5 +1900,6 @@ mod tests {
             }
             _ => panic!("Expected a vector result"),
         }
+        Ok(())
     }
 }

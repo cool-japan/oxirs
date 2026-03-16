@@ -780,10 +780,10 @@ mod tests {
         // Record some changes
         manager
             .record_entity_added("entity1".to_string(), None)
-            .unwrap();
+            .expect("should succeed");
         manager
             .record_entity_added("entity2".to_string(), None)
-            .unwrap();
+            .expect("should succeed");
 
         assert!(manager.should_compute_delta());
 
@@ -797,7 +797,9 @@ mod tests {
         let config = DeltaConfig::default();
         let manager = DeltaManager::new(config);
 
-        let batch_id = manager.record_bulk_import(1000, 5000).unwrap();
+        let batch_id = manager
+            .record_bulk_import(1000, 5000)
+            .expect("should succeed");
 
         let stats = manager.get_change_statistics();
         assert_eq!(stats.bulk_imports, 1);
@@ -825,25 +827,28 @@ mod tests {
 
         // Add a triple to have entities
         let triple = Triple::new(
-            NamedNode::new("http://example.org/alice").unwrap(),
-            NamedNode::new("http://example.org/knows").unwrap(),
-            NamedNode::new("http://example.org/bob").unwrap(),
+            NamedNode::new("http://example.org/alice").expect("should succeed"),
+            NamedNode::new("http://example.org/knows").expect("should succeed"),
+            NamedNode::new("http://example.org/bob").expect("should succeed"),
         );
-        model.add_triple(triple.clone()).unwrap();
+        model.add_triple(triple.clone()).expect("should succeed");
 
         // Train the model briefly
-        model.train(Some(1)).await.unwrap();
+        model.train(Some(1)).await.expect("should succeed");
 
         // Set baseline
-        manager.set_baseline_from_model(&model).await.unwrap();
+        manager
+            .set_baseline_from_model(&model)
+            .await
+            .expect("should succeed");
 
         // Record changes
         manager
             .record_entity_added("http://example.org/alice".to_string(), None)
-            .unwrap();
+            .expect("should succeed");
 
         // Compute delta
-        let delta_result = manager.compute_delta(&model).await.unwrap();
+        let delta_result = manager.compute_delta(&model).await.expect("should succeed");
 
         assert_eq!(delta_result.changes_processed, 1);
         assert!(!delta_result.entities_affected.is_empty());
@@ -858,17 +863,19 @@ mod tests {
         // Record various types of changes
         manager
             .record_entity_added("entity1".to_string(), None)
-            .unwrap();
+            .expect("should succeed");
         manager
             .record_entity_removed("entity2".to_string())
-            .unwrap();
+            .expect("should succeed");
 
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
-            NamedNode::new("http://example.org/o").unwrap(),
+            NamedNode::new("http://example.org/s").expect("should succeed"),
+            NamedNode::new("http://example.org/p").expect("should succeed"),
+            NamedNode::new("http://example.org/o").expect("should succeed"),
         );
-        manager.record_triple_added(triple, None).unwrap();
+        manager
+            .record_triple_added(triple, None)
+            .expect("should succeed");
 
         let stats = manager.get_change_statistics();
 

@@ -325,7 +325,7 @@ mod tests {
             ("http://a".to_string(), 3.0),
         ];
 
-        let results = fuser.fuse(&vector, &keyword, 10).unwrap();
+        let results = fuser.fuse(&vector, &keyword, 10).expect("should succeed");
 
         assert!(!results.is_empty());
         // 'b' should be top since it's in both lists
@@ -341,7 +341,7 @@ mod tests {
         let vector = vec![("http://a".to_string(), 1.0)];
         let keyword = vec![("http://a".to_string(), 1.0)];
 
-        let results = fuser.fuse(&vector, &keyword, 10).unwrap();
+        let results = fuser.fuse(&vector, &keyword, 10).expect("should succeed");
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].source, ScoreSource::Fused);

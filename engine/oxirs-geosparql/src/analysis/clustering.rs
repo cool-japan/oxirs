@@ -154,7 +154,7 @@ pub struct ClusterStats {
 /// ];
 ///
 /// let params = DbscanParams { eps: 0.5, min_pts: 2 };
-/// let result = dbscan_clustering(&points, params).unwrap();
+/// let result = dbscan_clustering(&points, params).expect("should succeed");
 ///
 /// // Should find at least 1 cluster (may find 1 or 2 depending on implementation)
 /// assert!(result.n_clusters >= 1);
@@ -261,7 +261,7 @@ pub fn dbscan_clustering(points: &[Point<f64>], params: DbscanParams) -> Result<
 /// ];
 ///
 /// let params = KmeansParams { k: 2, ..Default::default() };
-/// let result = kmeans_clustering(&points, params).unwrap();
+/// let result = kmeans_clustering(&points, params).expect("should succeed");
 ///
 /// assert_eq!(result.n_clusters, 2);
 /// assert!(result.centers.is_some());
@@ -538,7 +538,7 @@ mod tests {
             min_pts: 2,
         };
 
-        let result = dbscan_clustering(&points, params).unwrap();
+        let result = dbscan_clustering(&points, params).expect("should succeed");
 
         assert_eq!(result.n_clusters, 2);
         assert_eq!(result.n_noise, 0);
@@ -558,7 +558,7 @@ mod tests {
             min_pts: 2,
         };
 
-        let result = dbscan_clustering(&points, params).unwrap();
+        let result = dbscan_clustering(&points, params).expect("should succeed");
 
         assert_eq!(result.n_clusters, 1);
         assert_eq!(result.n_noise, 1);
@@ -582,11 +582,11 @@ mod tests {
             n_init: 3,
         };
 
-        let result = kmeans_clustering(&points, params).unwrap();
+        let result = kmeans_clustering(&points, params).expect("should succeed");
 
         assert_eq!(result.n_clusters, 2);
         assert!(result.centers.is_some());
-        assert_eq!(result.centers.as_ref().unwrap().len(), 2);
+        assert_eq!(result.centers.as_ref().expect("should succeed").len(), 2);
     }
 
     #[test]
@@ -602,13 +602,13 @@ mod tests {
             ..Default::default()
         };
 
-        let result = kmeans_clustering(&points, params).unwrap();
+        let result = kmeans_clustering(&points, params).expect("should succeed");
 
         // All points should be in the same cluster
         assert!(result.labels.iter().all(|&l| l == 0));
 
         // Center should be near (1, 1)
-        let center = result.centers.unwrap()[0];
+        let center = result.centers.expect("should succeed")[0];
         assert_relative_eq!(center.x(), 1.0, epsilon = 0.1);
         assert_relative_eq!(center.y(), 1.0, epsilon = 0.1);
     }
@@ -627,7 +627,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = kmeans_clustering(&points, params).unwrap();
+        let result = kmeans_clustering(&points, params).expect("should succeed");
         let stats = result.cluster_statistics(&points);
 
         assert_eq!(stats.len(), 2);

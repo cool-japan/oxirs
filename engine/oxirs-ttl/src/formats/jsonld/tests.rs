@@ -156,19 +156,19 @@ fn test_context_parse_empty_object() {
 #[test]
 fn test_context_parse_base() {
     let ctx = JsonLdContext::parse(&json!({ "@base": "http://example.org/" })).expect("parse");
-    assert_eq!(ctx.base_iri.unwrap(), "http://example.org/");
+    assert_eq!(ctx.base_iri.expect("should succeed"), "http://example.org/");
 }
 
 #[test]
 fn test_context_parse_vocab() {
     let ctx = JsonLdContext::parse(&json!({ "@vocab": "http://schema.org/" })).expect("parse");
-    assert_eq!(ctx.vocab.unwrap(), "http://schema.org/");
+    assert_eq!(ctx.vocab.expect("should succeed"), "http://schema.org/");
 }
 
 #[test]
 fn test_context_parse_language() {
     let ctx = JsonLdContext::parse(&json!({ "@language": "en" })).expect("parse");
-    assert_eq!(ctx.default_language.unwrap(), "en");
+    assert_eq!(ctx.default_language.expect("should succeed"), "en");
 }
 
 #[test]
@@ -177,7 +177,10 @@ fn test_context_parse_prefix_mapping() {
         "ex": "http://example.org/"
     }))
     .expect("parse");
-    assert_eq!(ctx.prefixes.get("ex").unwrap(), "http://example.org/");
+    assert_eq!(
+        ctx.prefixes.get("ex").expect("should succeed"),
+        "http://example.org/"
+    );
 }
 
 #[test]

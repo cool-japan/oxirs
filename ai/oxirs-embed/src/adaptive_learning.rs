@@ -834,7 +834,8 @@ mod tests {
             },
         ];
 
-        let quality = AdaptiveLearningSystem::calculate_current_quality(&samples).unwrap();
+        let quality =
+            AdaptiveLearningSystem::calculate_current_quality(&samples).expect("should succeed");
         assert!(quality > 0.0 && quality <= 1.0);
     }
 }

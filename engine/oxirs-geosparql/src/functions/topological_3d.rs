@@ -16,12 +16,12 @@
 //! use oxirs_geosparql::functions::topological_3d;
 //!
 //! // Two points at different elevations
-//! let p1 = Geometry::from_wkt("POINT Z (1.0 2.0 10.0)").unwrap();
-//! let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 20.0)").unwrap();
+//! let p1 = Geometry::from_wkt("POINT Z (1.0 2.0 10.0)").expect("should succeed");
+//! let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 20.0)").expect("should succeed");
 //!
 //! // They are at the same XY location but different Z
 //! // So they are disjoint in 3D space
-//! let disjoint = topological_3d::sf_disjoint_3d(&p1, &p2).unwrap();
+//! let disjoint = topological_3d::sf_disjoint_3d(&p1, &p2).expect("should succeed");
 //! assert!(disjoint);
 //! ```
 
@@ -96,10 +96,10 @@ pub fn sf_equals_3d(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::functions::topological_3d;
 ///
 /// // Two points at the same XY but different Z
-/// let p1 = Geometry::from_wkt("POINT Z (1.0 2.0 0.0)").unwrap();
-/// let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 10.0)").unwrap();
+/// let p1 = Geometry::from_wkt("POINT Z (1.0 2.0 0.0)").expect("should succeed");
+/// let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 10.0)").expect("should succeed");
 ///
-/// let disjoint = topological_3d::sf_disjoint_3d(&p1, &p2).unwrap();
+/// let disjoint = topological_3d::sf_disjoint_3d(&p1, &p2).expect("should succeed");
 /// assert!(disjoint);
 /// ```
 pub fn sf_disjoint_3d(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
@@ -657,110 +657,110 @@ mod tests {
 
     #[test]
     fn test_sf_equals_3d() {
-        let p1 = Geometry::from_wkt("POINT Z (1.0 2.0 3.0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 3.0)").unwrap();
-        let p3 = Geometry::from_wkt("POINT Z (1.0 2.0 4.0)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z (1.0 2.0 3.0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 3.0)").expect("should succeed");
+        let p3 = Geometry::from_wkt("POINT Z (1.0 2.0 4.0)").expect("should succeed");
 
-        assert!(sf_equals_3d(&p1, &p2).unwrap());
-        assert!(!sf_equals_3d(&p1, &p3).unwrap());
+        assert!(sf_equals_3d(&p1, &p2).expect("should succeed"));
+        assert!(!sf_equals_3d(&p1, &p3).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_disjoint_3d() {
         // Same XY, different Z
-        let p1 = Geometry::from_wkt("POINT Z (1.0 2.0 0.0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 10.0)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z (1.0 2.0 0.0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 10.0)").expect("should succeed");
 
-        assert!(sf_disjoint_3d(&p1, &p2).unwrap());
+        assert!(sf_disjoint_3d(&p1, &p2).expect("should succeed"));
 
         // Same XYZ
-        let p3 = Geometry::from_wkt("POINT Z (1.0 2.0 10.0)").unwrap();
-        assert!(!sf_disjoint_3d(&p2, &p3).unwrap());
+        let p3 = Geometry::from_wkt("POINT Z (1.0 2.0 10.0)").expect("should succeed");
+        assert!(!sf_disjoint_3d(&p2, &p3).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_intersects_3d() {
         // Two linestrings that cross in XY and have overlapping Z
-        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 2 2 10)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z (0 2 5, 2 0 5)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 2 2 10)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z (0 2 5, 2 0 5)").expect("should succeed");
 
-        assert!(sf_intersects_3d(&ls1, &ls2).unwrap());
+        assert!(sf_intersects_3d(&ls1, &ls2).expect("should succeed"));
 
         // Two linestrings that cross in XY but have non-overlapping Z
-        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 0, 2 2 2)").unwrap();
-        let ls4 = Geometry::from_wkt("LINESTRING Z (0 2 10, 2 0 10)").unwrap();
+        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 0, 2 2 2)").expect("should succeed");
+        let ls4 = Geometry::from_wkt("LINESTRING Z (0 2 10, 2 0 10)").expect("should succeed");
 
-        assert!(!sf_intersects_3d(&ls3, &ls4).unwrap());
+        assert!(!sf_intersects_3d(&ls3, &ls4).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_within_3d() {
         // Point inside polygon in XY and Z
-        let point = Geometry::from_wkt("POINT Z (1 1 5)").unwrap();
-        let polygon =
-            Geometry::from_wkt("POLYGON Z ((0 0 0, 4 0 0, 4 4 10, 0 4 10, 0 0 0))").unwrap();
+        let point = Geometry::from_wkt("POINT Z (1 1 5)").expect("should succeed");
+        let polygon = Geometry::from_wkt("POLYGON Z ((0 0 0, 4 0 0, 4 4 10, 0 4 10, 0 0 0))")
+            .expect("should succeed");
 
-        assert!(sf_within_3d(&point, &polygon).unwrap());
+        assert!(sf_within_3d(&point, &polygon).expect("should succeed"));
 
         // Point inside polygon in XY but outside Z range
-        let point2 = Geometry::from_wkt("POINT Z (1 1 15)").unwrap();
-        assert!(!sf_within_3d(&point2, &polygon).unwrap());
+        let point2 = Geometry::from_wkt("POINT Z (1 1 15)").expect("should succeed");
+        assert!(!sf_within_3d(&point2, &polygon).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_contains_3d() {
-        let polygon =
-            Geometry::from_wkt("POLYGON Z ((0 0 0, 4 0 0, 4 4 10, 0 4 10, 0 0 0))").unwrap();
-        let point = Geometry::from_wkt("POINT Z (1 1 5)").unwrap();
+        let polygon = Geometry::from_wkt("POLYGON Z ((0 0 0, 4 0 0, 4 4 10, 0 4 10, 0 0 0))")
+            .expect("should succeed");
+        let point = Geometry::from_wkt("POINT Z (1 1 5)").expect("should succeed");
 
-        assert!(sf_contains_3d(&polygon, &point).unwrap());
+        assert!(sf_contains_3d(&polygon, &point).expect("should succeed"));
 
-        let point2 = Geometry::from_wkt("POINT Z (5 5 5)").unwrap();
-        assert!(!sf_contains_3d(&polygon, &point2).unwrap());
+        let point2 = Geometry::from_wkt("POINT Z (5 5 5)").expect("should succeed");
+        assert!(!sf_contains_3d(&polygon, &point2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_overlaps_3d() {
-        let poly1 =
-            Geometry::from_wkt("POLYGON Z ((0 0 0, 2 0 0, 2 2 10, 0 2 10, 0 0 0))").unwrap();
-        let poly2 =
-            Geometry::from_wkt("POLYGON Z ((1 1 5, 3 1 5, 3 3 15, 1 3 15, 1 1 5))").unwrap();
+        let poly1 = Geometry::from_wkt("POLYGON Z ((0 0 0, 2 0 0, 2 2 10, 0 2 10, 0 0 0))")
+            .expect("should succeed");
+        let poly2 = Geometry::from_wkt("POLYGON Z ((1 1 5, 3 1 5, 3 3 15, 1 3 15, 1 1 5))")
+            .expect("should succeed");
 
-        assert!(sf_overlaps_3d(&poly1, &poly2).unwrap());
+        assert!(sf_overlaps_3d(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_touches_3d() {
         // Two linestrings that share an endpoint with matching Z
-        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 5)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z (1 1 5, 2 2 10)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 5)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z (1 1 5, 2 2 10)").expect("should succeed");
 
         // Note: Current implementation approximates touching for non-linestring types
         // For linestrings specifically sharing exact endpoints, this should work
-        let touches = sf_touches_3d(&ls1, &ls2).unwrap();
+        let touches = sf_touches_3d(&ls1, &ls2).expect("should succeed");
         // The current implementation checks if geometries intersect but are not within each other
         // This is a simplified check - full DE-9IM implementation would be more precise
-        assert!(touches || sf_intersects_3d(&ls1, &ls2).unwrap());
+        assert!(touches || sf_intersects_3d(&ls1, &ls2).expect("should succeed"));
 
         // Two linestrings that share an endpoint in XY but different Z
-        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 5)").unwrap();
-        let ls4 = Geometry::from_wkt("LINESTRING Z (1 1 10, 2 2 15)").unwrap();
+        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 5)").expect("should succeed");
+        let ls4 = Geometry::from_wkt("LINESTRING Z (1 1 10, 2 2 15)").expect("should succeed");
 
-        assert!(!sf_touches_3d(&ls3, &ls4).unwrap());
+        assert!(!sf_touches_3d(&ls3, &ls4).expect("should succeed"));
     }
 
     #[test]
     fn test_sf_crosses_3d() {
         // Two linestrings that cross in XY and have overlapping Z
-        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 2 2 10)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z (0 2 5, 2 0 5)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 2 2 10)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z (0 2 5, 2 0 5)").expect("should succeed");
 
-        assert!(sf_crosses_3d(&ls1, &ls2).unwrap());
+        assert!(sf_crosses_3d(&ls1, &ls2).expect("should succeed"));
     }
 
     #[test]
     fn test_z_range() {
-        let ls = Geometry::from_wkt("LINESTRING Z (0 0 5, 1 1 10, 2 2 3)").unwrap();
+        let ls = Geometry::from_wkt("LINESTRING Z (0 0 5, 1 1 10, 2 2 3)").expect("should succeed");
         let (min_z, max_z) = z_range(&ls);
 
         assert!((min_z - 3.0).abs() < 1e-10);
@@ -769,21 +769,21 @@ mod tests {
 
     #[test]
     fn test_z_ranges_overlap() {
-        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 10)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z (0 1 5, 1 0 15)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 10)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z (0 1 5, 1 0 15)").expect("should succeed");
 
         assert!(z_ranges_overlap(&ls1, &ls2));
 
-        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 5)").unwrap();
-        let ls4 = Geometry::from_wkt("LINESTRING Z (0 1 10, 1 0 20)").unwrap();
+        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 5)").expect("should succeed");
+        let ls4 = Geometry::from_wkt("LINESTRING Z (0 1 10, 1 0 20)").expect("should succeed");
 
         assert!(!z_ranges_overlap(&ls3, &ls4));
     }
 
     #[test]
     fn test_invalid_2d_geometry() {
-        let p1 = Geometry::from_wkt("POINT (1.0 2.0)").unwrap(); // 2D
-        let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 3.0)").unwrap(); // 3D
+        let p1 = Geometry::from_wkt("POINT (1.0 2.0)").expect("should succeed"); // 2D
+        let p2 = Geometry::from_wkt("POINT Z (1.0 2.0 3.0)").expect("should succeed"); // 3D
 
         assert!(sf_equals_3d(&p1, &p2).is_err());
         assert!(sf_disjoint_3d(&p1, &p2).is_err());
@@ -794,77 +794,80 @@ mod tests {
 
     #[test]
     fn test_above() {
-        let p1 = Geometry::from_wkt("POINT Z (0 0 10)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z (0 0 5)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z (0 0 10)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z (0 0 5)").expect("should succeed");
 
-        assert!(above(&p1, &p2).unwrap());
-        assert!(!above(&p2, &p1).unwrap());
+        assert!(above(&p1, &p2).expect("should succeed"));
+        assert!(!above(&p2, &p1).expect("should succeed"));
     }
 
     #[test]
     fn test_below() {
-        let p1 = Geometry::from_wkt("POINT Z (0 0 5)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z (0 0 10)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z (0 0 5)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z (0 0 10)").expect("should succeed");
 
-        assert!(below(&p1, &p2).unwrap());
-        assert!(!below(&p2, &p1).unwrap());
+        assert!(below(&p1, &p2).expect("should succeed"));
+        assert!(!below(&p2, &p1).expect("should succeed"));
     }
 
     #[test]
     fn test_coplanar() {
-        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 5, 1 1 5, 2 2 5)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z (0 1 5, 1 0 5)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 5, 1 1 5, 2 2 5)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z (0 1 5, 1 0 5)").expect("should succeed");
 
-        assert!(coplanar(&ls1, &ls2).unwrap());
+        assert!(coplanar(&ls1, &ls2).expect("should succeed"));
 
-        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 10, 1 1 10)").unwrap();
-        assert!(!coplanar(&ls1, &ls3).unwrap());
+        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 10, 1 1 10)").expect("should succeed");
+        assert!(!coplanar(&ls1, &ls3).expect("should succeed"));
     }
 
     #[test]
     fn test_volume_intersects() {
-        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 2 2 10)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z (0 2 5, 2 0 5)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z (0 0 0, 2 2 10)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z (0 2 5, 2 0 5)").expect("should succeed");
 
-        assert!(volume_intersects(&ls1, &ls2).unwrap());
+        assert!(volume_intersects(&ls1, &ls2).expect("should succeed"));
 
-        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 1)").unwrap();
-        let ls4 = Geometry::from_wkt("LINESTRING Z (10 10 10, 11 11 11)").unwrap();
-        assert!(!volume_intersects(&ls3, &ls4).unwrap());
+        let ls3 = Geometry::from_wkt("LINESTRING Z (0 0 0, 1 1 1)").expect("should succeed");
+        let ls4 = Geometry::from_wkt("LINESTRING Z (10 10 10, 11 11 11)").expect("should succeed");
+        assert!(!volume_intersects(&ls3, &ls4).expect("should succeed"));
     }
 
     #[test]
     fn test_distance_3d() {
-        let p1 = Geometry::from_wkt("POINT Z (0 0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z (3 4 0)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z (0 0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z (3 4 0)").expect("should succeed");
 
-        let dist = distance_3d(&p1, &p2).unwrap();
+        let dist = distance_3d(&p1, &p2).expect("should succeed");
         assert!((dist - 5.0).abs() < 1e-6);
 
-        let p3 = Geometry::from_wkt("POINT Z (0 0 12)").unwrap();
-        let dist2 = distance_3d(&p2, &p3).unwrap();
+        let p3 = Geometry::from_wkt("POINT Z (0 0 12)").expect("should succeed");
+        let dist2 = distance_3d(&p2, &p3).expect("should succeed");
         assert!((dist2 - 13.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_volume() {
-        let poly = Geometry::from_wkt("POLYGON Z ((0 0 0, 2 0 0, 2 2 5, 0 2 5, 0 0 0))").unwrap();
-        let vol = volume(&poly).unwrap();
+        let poly = Geometry::from_wkt("POLYGON Z ((0 0 0, 2 0 0, 2 2 5, 0 2 5, 0 0 0))")
+            .expect("should succeed");
+        let vol = volume(&poly).expect("should succeed");
         assert!(vol > 0.0);
         assert!((vol - 20.0).abs() < 1e-6); // 2 * 2 * 5 = 20
     }
 
     #[test]
     fn test_surface_area() {
-        let poly = Geometry::from_wkt("POLYGON Z ((0 0 0, 1 0 0, 1 1 0, 0 1 0, 0 0 0))").unwrap();
-        let area = surface_area(&poly).unwrap();
+        let poly = Geometry::from_wkt("POLYGON Z ((0 0 0, 1 0 0, 1 1 0, 0 1 0, 0 0 0))")
+            .expect("should succeed");
+        let area = surface_area(&poly).expect("should succeed");
         assert!(area > 0.0);
     }
 
     #[test]
     fn test_centroid_3d() {
-        let poly = Geometry::from_wkt("POLYGON Z ((0 0 0, 2 0 10, 2 2 10, 0 2 0, 0 0 0))").unwrap();
-        let (x, y, z) = centroid_3d(&poly).unwrap();
+        let poly = Geometry::from_wkt("POLYGON Z ((0 0 0, 2 0 10, 2 2 10, 0 2 0, 0 0 0))")
+            .expect("should succeed");
+        let (x, y, z) = centroid_3d(&poly).expect("should succeed");
         assert!((x - 1.0).abs() < 1e-6);
         assert!((y - 1.0).abs() < 1e-6);
         assert!((0.0..=10.0).contains(&z));
@@ -872,13 +875,13 @@ mod tests {
 
     #[test]
     fn test_strictly_above() {
-        let p1 = Geometry::from_wkt("POINT Z (0 0 10)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z (0 0 5)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z (0 0 10)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z (0 0 5)").expect("should succeed");
 
-        assert!(strictly_above(&p1, &p2).unwrap());
+        assert!(strictly_above(&p1, &p2).expect("should succeed"));
 
         // Points at same Z should not be strictly above
-        let p3 = Geometry::from_wkt("POINT Z (0 0 10)").unwrap();
-        assert!(!strictly_above(&p1, &p3).unwrap());
+        let p3 = Geometry::from_wkt("POINT Z (0 0 10)").expect("should succeed");
+        assert!(!strictly_above(&p1, &p3).expect("should succeed"));
     }
 }

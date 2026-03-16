@@ -511,7 +511,7 @@ mod tests {
 
     #[test]
     fn test_instance_metadata_creation() {
-        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("should succeed");
         let metadata = InstanceMetadata::new("instance-1".to_string(), addr)
             .with_capability("graphql")
             .with_capability("federation")
@@ -549,12 +549,15 @@ mod tests {
         manager
             .bind_session("session-1".to_string(), "instance-1".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let instance = manager.get_instance("session-1").await;
         assert_eq!(instance, Some("instance-1".to_string()));
 
-        manager.unbind_session("session-1").await.unwrap();
+        manager
+            .unbind_session("session-1")
+            .await
+            .expect("should succeed");
         assert_eq!(manager.get_instance("session-1").await, None);
     }
 
@@ -580,16 +583,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_state_coordinator() {
-        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("should succeed");
         let instance = InstanceMetadata::new("instance-1".to_string(), addr);
         let coordinator = StateCoordinator::new(instance);
 
         assert_eq!(coordinator.peer_count().await, 0);
 
         // Register a peer
-        let peer_addr: SocketAddr = "127.0.0.1:8081".parse().unwrap();
+        let peer_addr: SocketAddr = "127.0.0.1:8081".parse().expect("should succeed");
         let peer = InstanceMetadata::new("instance-2".to_string(), peer_addr);
-        coordinator.register_peer(peer).await.unwrap();
+        coordinator
+            .register_peer(peer)
+            .await
+            .expect("should succeed");
 
         assert_eq!(coordinator.peer_count().await, 1);
 
@@ -597,7 +603,7 @@ mod tests {
         coordinator
             .update_peer_health("instance-2", HealthStatus::Degraded)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let peers = coordinator.get_all_peers().await;
         assert_eq!(peers.len(), 1);
@@ -611,7 +617,7 @@ mod tests {
         coordinator
             .update_peer_health("instance-2", HealthStatus::Healthy)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let healthy = coordinator.get_healthy_peers().await;
         assert_eq!(healthy.len(), 1);
@@ -625,8 +631,14 @@ mod tests {
         assert!(!coordinator.is_shutting_down().await);
 
         // Start connections
-        coordinator.connection_started().await.unwrap();
-        coordinator.connection_started().await.unwrap();
+        coordinator
+            .connection_started()
+            .await
+            .expect("should succeed");
+        coordinator
+            .connection_started()
+            .await
+            .expect("should succeed");
         assert_eq!(coordinator.active_connections().await, 2);
 
         // End one connection
@@ -634,7 +646,10 @@ mod tests {
         assert_eq!(coordinator.active_connections().await, 1);
 
         // Initiate shutdown
-        coordinator.initiate_shutdown().await.unwrap();
+        coordinator
+            .initiate_shutdown()
+            .await
+            .expect("should succeed");
         assert!(coordinator.is_shutting_down().await);
 
         // New connections should fail
@@ -645,7 +660,7 @@ mod tests {
         assert_eq!(coordinator.active_connections().await, 0);
 
         // Drain should complete immediately
-        coordinator.wait_for_drain().await.unwrap();
+        coordinator.wait_for_drain().await.expect("should succeed");
     }
 
     #[tokio::test]
@@ -659,7 +674,7 @@ mod tests {
             shutdown_timeout: Duration::from_secs(30),
         };
 
-        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("should succeed");
         let instance = InstanceMetadata::new("test-instance".to_string(), addr);
         let manager = HorizontalScalingManager::new(config, instance);
 
@@ -674,18 +689,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_stale_peer_removal() {
-        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("should succeed");
         let instance = InstanceMetadata::new("instance-1".to_string(), addr);
         let coordinator = StateCoordinator::new(instance);
 
         // Register peers
-        let peer1_addr: SocketAddr = "127.0.0.1:8081".parse().unwrap();
+        let peer1_addr: SocketAddr = "127.0.0.1:8081".parse().expect("should succeed");
         let peer1 = InstanceMetadata::new("instance-2".to_string(), peer1_addr);
-        coordinator.register_peer(peer1).await.unwrap();
+        coordinator
+            .register_peer(peer1)
+            .await
+            .expect("should succeed");
 
-        let peer2_addr: SocketAddr = "127.0.0.1:8082".parse().unwrap();
+        let peer2_addr: SocketAddr = "127.0.0.1:8082".parse().expect("should succeed");
         let peer2 = InstanceMetadata::new("instance-3".to_string(), peer2_addr);
-        coordinator.register_peer(peer2).await.unwrap();
+        coordinator
+            .register_peer(peer2)
+            .await
+            .expect("should succeed");
 
         assert_eq!(coordinator.peer_count().await, 2);
 
@@ -693,7 +714,7 @@ mod tests {
         let removed = coordinator
             .remove_stale_peers(Duration::from_secs(3600))
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(removed, 0);
         assert_eq!(coordinator.peer_count().await, 2);
 
@@ -702,7 +723,7 @@ mod tests {
         let removed = coordinator
             .remove_stale_peers(Duration::from_millis(1))
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(removed, 2);
         assert_eq!(coordinator.peer_count().await, 0);
     }

@@ -21,12 +21,12 @@ use std::collections::HashMap;
 /// let mut parser = ZeroCopyIriParser::new();
 ///
 /// // Simple IRI - no allocation (borrowed)
-/// let iri = parser.parse_iri_ref(b"<http://example.org/>").unwrap();
+/// let iri = parser.parse_iri_ref(b"<http://example.org/>").expect("should succeed");
 /// // Verify it's borrowed
 /// assert!(matches!(iri, std::borrow::Cow::Borrowed(_)));
 ///
 /// // IRI with escape - allocates (owned)
-/// let iri2 = parser.parse_iri_ref(b"<http://example.org/sp%20ace>").unwrap();
+/// let iri2 = parser.parse_iri_ref(b"<http://example.org/sp%20ace>").expect("should succeed");
 /// assert!(matches!(iri2, std::borrow::Cow::Owned(_)));
 /// ```
 #[derive(Debug, Clone)]

@@ -568,7 +568,7 @@ mod tests {
             unit: "V".to_string(),
         };
         // raw 2300 → 230.0 V
-        assert!((m.decode_value(&[2300], 0).unwrap() - 230.0).abs() < 1e-9);
+        assert!((m.decode_value(&[2300], 0).expect("should succeed") - 230.0).abs() < 1e-9);
     }
 
     #[test]
@@ -583,7 +583,7 @@ mod tests {
         let values = vec![0u16; 11]; // 11 registers starting at address 0
         let mut vals = values.clone();
         vals[10] = 5000; // address 10 offset = 10
-        assert!((m.decode_value(&vals, 0).unwrap() - 50.0).abs() < 1e-9);
+        assert!((m.decode_value(&vals, 0).expect("should succeed") - 50.0).abs() < 1e-9);
     }
 
     #[test]
@@ -613,8 +613,8 @@ mod tests {
         }];
         let result = mapper.map_holding_registers(&[1500], &mappings);
         let speed = &result["speed"];
-        assert!((speed["value"].as_f64().unwrap() - 1500.0).abs() < 1e-9);
-        assert_eq!(speed["unit"].as_str().unwrap(), "RPM");
+        assert!((speed["value"].as_f64().expect("should succeed") - 1500.0).abs() < 1e-9);
+        assert_eq!(speed["unit"].as_str().expect("should succeed"), "RPM");
     }
 
     #[test]
@@ -629,7 +629,9 @@ mod tests {
         }];
         let result = mapper.map_input_registers(&[1000], &mappings);
         assert_eq!(
-            result["pressure"]["registerType"].as_str().unwrap(),
+            result["pressure"]["registerType"]
+                .as_str()
+                .expect("should succeed"),
             "InputRegister"
         );
     }
@@ -664,12 +666,22 @@ mod tests {
             }],
         );
         let samm_json = mapper.to_samm_json(&device, &props);
-        assert_eq!(samm_json["@type"].as_str().unwrap(), "samm:Aspect");
         assert_eq!(
-            samm_json["device"]["manufacturer"].as_str().unwrap(),
+            samm_json["@type"].as_str().expect("should succeed"),
+            "samm:Aspect"
+        );
+        assert_eq!(
+            samm_json["device"]["manufacturer"]
+                .as_str()
+                .expect("should succeed"),
             "TestCorp"
         );
-        assert_eq!(samm_json["device"]["unitId"].as_u64().unwrap(), 5);
+        assert_eq!(
+            samm_json["device"]["unitId"]
+                .as_u64()
+                .expect("should succeed"),
+            5
+        );
     }
 
     #[test]
@@ -708,7 +720,7 @@ mod tests {
             .iter()
             .find(|t| t.predicate == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
         assert!(type_triple.is_some());
-        if let TripleObject::Iri(iri) = &type_triple.unwrap().object {
+        if let TripleObject::Iri(iri) = &type_triple.expect("should succeed").object {
             assert!(iri.contains("saref.etsi.org"), "got {iri}");
         } else {
             panic!("Expected IRI object");
@@ -723,7 +735,7 @@ mod tests {
         let triples = mapper.to_rdf_triples(&device, &readings);
         let has_value = triples.iter().find(|t| t.predicate.contains("hasValue"));
         assert!(has_value.is_some(), "hasValue triple missing");
-        if let TripleObject::Literal { value, .. } = &has_value.unwrap().object {
+        if let TripleObject::Literal { value, .. } = &has_value.expect("should succeed").object {
             assert!(value.contains("42.5"), "got {value}");
         } else {
             panic!("Expected literal");
@@ -740,7 +752,7 @@ mod tests {
             .iter()
             .find(|t| t.predicate.contains("isMeasuredIn"));
         assert!(unit_triple.is_some());
-        if let TripleObject::Iri(iri) = &unit_triple.unwrap().object {
+        if let TripleObject::Iri(iri) = &unit_triple.expect("should succeed").object {
             assert!(iri.contains("qudt.org"), "got {iri}");
             assert!(iri.contains("CEL"), "got {iri}");
         } else {

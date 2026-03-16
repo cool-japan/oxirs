@@ -369,22 +369,24 @@ mod tests {
     // ── match_conditions ──────────────────────────────────────────────────────
 
     #[test]
-    fn test_match_single_condition_one_fact() {
+    fn test_match_single_condition_one_fact() -> anyhow::Result<()> {
         let e = make_executor();
         let facts = vec![Fact::new(":Alice", "knows", ":Bob")];
         let conditions = vec![RuleCondition::new("?x", "knows", ":Bob")];
         let results = e.match_conditions(&facts, &conditions);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].get("x").map(|s| s.as_str()), Some(":Alice"));
+        Ok(())
     }
 
     #[test]
-    fn test_match_conditions_no_facts() {
+    fn test_match_conditions_no_facts() -> anyhow::Result<()> {
         let e = make_executor();
         let facts: Vec<Fact> = vec![];
         let conditions = vec![RuleCondition::new("?x", "knows", "?y")];
         let results = e.match_conditions(&facts, &conditions);
         assert!(results.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -398,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn test_match_conditions_multiple_facts() {
+    fn test_match_conditions_multiple_facts() -> anyhow::Result<()> {
         let e = make_executor();
         let facts = vec![
             Fact::new(":Alice", "knows", ":Bob"),
@@ -407,10 +409,11 @@ mod tests {
         let conditions = vec![RuleCondition::new("?x", "knows", "?y")];
         let results = e.match_conditions(&facts, &conditions);
         assert_eq!(results.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_match_conditions_join_filters() {
+    fn test_match_conditions_join_filters() -> anyhow::Result<()> {
         let e = make_executor();
         let facts = vec![
             Fact::new(":Alice", "knows", ":Bob"),
@@ -424,6 +427,7 @@ mod tests {
         ];
         let results = e.match_conditions(&facts, &conditions);
         assert_eq!(results.len(), 2); // Alice→Bob→Carol and Bob→Carol→Dave
+        Ok(())
     }
 
     // ── apply_head ────────────────────────────────────────────────────────────
@@ -440,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_head_variable_substitution() {
+    fn test_apply_head_variable_substitution() -> anyhow::Result<()> {
         let e = make_executor();
         let head = RuleHead::new("?x", "type", "?u");
         let bindings: HashMap<String, String> = [
@@ -451,16 +455,18 @@ mod tests {
         let fact = e.apply_head(&head, &bindings);
         assert_eq!(fact.subject, ":Alice");
         assert_eq!(fact.object, ":Person");
+        Ok(())
     }
 
     #[test]
-    fn test_apply_head_unbound_variable_kept() {
+    fn test_apply_head_unbound_variable_kept() -> anyhow::Result<()> {
         let e = make_executor();
         let head = RuleHead::new("?x", "type", "?unbound");
         let bindings: HashMap<String, String> = [("x".into(), ":Alice".into())].into();
         let fact = e.apply_head(&head, &bindings);
         assert_eq!(fact.subject, ":Alice");
         assert_eq!(fact.object, "?unbound"); // kept as-is
+        Ok(())
     }
 
     // ── execute (simple) ───────────────────────────────────────────────────────
@@ -475,7 +481,7 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_simple_rule_fires() {
+    fn test_execute_simple_rule_fires() -> anyhow::Result<()> {
         let mut e = make_executor();
         // knows(?x, ?y) → knows_transitively(?x, ?y)
         e.add_rule(SimpleRule::new(
@@ -487,6 +493,7 @@ mod tests {
         let result = e.execute(&facts);
         assert_eq!(result.new_facts.len(), 1);
         assert_eq!(result.new_facts[0].predicate, "knows_transitively");
+        Ok(())
     }
 
     #[test]
@@ -505,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_transitive_closure() {
+    fn test_execute_transitive_closure() -> anyhow::Result<()> {
         let mut e = make_executor();
         // knows(?x, ?y) ∧ knows(?y, ?z) → knows(?x, ?z)
         e.add_rule(SimpleRule::new(
@@ -523,10 +530,11 @@ mod tests {
         let result = e.execute(&facts);
         let derived = Fact::new(":A", "knows", ":C");
         assert!(result.new_facts.contains(&derived));
+        Ok(())
     }
 
     #[test]
-    fn test_execute_chain_three_hops() {
+    fn test_execute_chain_three_hops() -> anyhow::Result<()> {
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
             "transitivity",
@@ -548,6 +556,7 @@ mod tests {
         assert!(result.new_facts.contains(&fact_ac));
         assert!(result.new_facts.contains(&fact_bd));
         assert!(result.new_facts.contains(&fact_ad));
+        Ok(())
     }
 
     #[test]
@@ -564,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_empty_fact_set() {
+    fn test_execute_empty_fact_set() -> anyhow::Result<()> {
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
             "transitivity",
@@ -576,10 +585,11 @@ mod tests {
         ));
         let result = e.execute(&[]);
         assert!(result.new_facts.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_execute_no_new_facts_fixpoint_stats() {
+    fn test_execute_no_new_facts_fixpoint_stats() -> anyhow::Result<()> {
         let mut e = make_executor();
         // Rule that could fire but won't produce anything new if base fact exists
         e.add_rule(SimpleRule::new(
@@ -592,10 +602,11 @@ mod tests {
         assert!(result.new_facts.is_empty());
         // rules_fired should be 0 since no genuinely new facts were added
         assert_eq!(result.rules_fired, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_execute_multiple_rules_chain() {
+    fn test_execute_multiple_rules_chain() -> anyhow::Result<()> {
         let mut e = make_executor();
         // Rule 1: knows(?x,?y) → acquaintance(?x,?y)
         e.add_rule(SimpleRule::new(
@@ -615,10 +626,11 @@ mod tests {
         let bwd = Fact::new(":Bob", "acquaintance", ":Alice");
         assert!(result.new_facts.contains(&fwd));
         assert!(result.new_facts.contains(&bwd));
+        Ok(())
     }
 
     #[test]
-    fn test_execute_multiple_bindings_produce_multiple_facts() {
+    fn test_execute_multiple_bindings_produce_multiple_facts() -> anyhow::Result<()> {
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
             "copy",
@@ -632,12 +644,13 @@ mod tests {
         ];
         let result = e.execute(&facts);
         assert_eq!(result.new_facts.len(), 3);
+        Ok(())
     }
 
     // ── execute_one_step ──────────────────────────────────────────────────────
 
     #[test]
-    fn test_execute_one_step_basic() {
+    fn test_execute_one_step_basic() -> anyhow::Result<()> {
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
             "copy",
@@ -647,6 +660,7 @@ mod tests {
         let facts = vec![Fact::new(":Alice", "knows", ":Bob")];
         let derived = e.execute_one_step(&facts);
         assert!(derived.contains(&Fact::new(":Alice", "met", ":Bob")));
+        Ok(())
     }
 
     #[test]
@@ -658,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_rules_fired_counter() {
+    fn test_execute_rules_fired_counter() -> anyhow::Result<()> {
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
             "copy",
@@ -671,10 +685,11 @@ mod tests {
         ];
         let result = e.execute(&facts);
         assert_eq!(result.rules_fired, 2);
+        Ok(())
     }
 
     #[test]
-    fn test_execute_iterations_greater_than_one_for_chain() {
+    fn test_execute_iterations_greater_than_one_for_chain() -> anyhow::Result<()> {
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
             "transitivity",
@@ -694,12 +709,13 @@ mod tests {
             result.iterations >= 2,
             "expected at least 2 iterations for 3-hop chain"
         );
+        Ok(())
     }
 
     // ── additional edge cases and scenarios ────────────────────────────────────
 
     #[test]
-    fn test_add_multiple_rules_independent() {
+    fn test_add_multiple_rules_independent() -> anyhow::Result<()> {
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
             "r1",
@@ -712,6 +728,7 @@ mod tests {
             RuleHead::new("?x", "c", "?y"),
         ));
         assert_eq!(e.rule_count(), 2);
+        Ok(())
     }
 
     #[test]
@@ -729,7 +746,7 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_self_loop_no_infinite_loop() {
+    fn test_execute_self_loop_no_infinite_loop() -> anyhow::Result<()> {
         // Rule: (?x knows ?y) → (?x knows ?y) — should terminate because fixpoint is immediate.
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
@@ -743,6 +760,7 @@ mod tests {
             result.new_facts.is_empty(),
             "reflexive rule produces no new facts"
         );
+        Ok(())
     }
 
     #[test]
@@ -768,7 +786,7 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_head_mixed_const_and_var() {
+    fn test_apply_head_mixed_const_and_var() -> anyhow::Result<()> {
         let e = make_executor();
         let head = RuleHead::new("?x", "rdf:type", ":Person");
         let bindings: HashMap<String, String> = [("x".into(), ":Alice".into())].into();
@@ -776,10 +794,11 @@ mod tests {
         assert_eq!(fact.subject, ":Alice");
         assert_eq!(fact.predicate, "rdf:type");
         assert_eq!(fact.object, ":Person");
+        Ok(())
     }
 
     #[test]
-    fn test_execute_symmetric_rule() {
+    fn test_execute_symmetric_rule() -> anyhow::Result<()> {
         let mut e = make_executor();
         // knows(?x, ?y) → knows(?y, ?x)
         e.add_rule(SimpleRule::new(
@@ -792,10 +811,11 @@ mod tests {
         assert!(result
             .new_facts
             .contains(&Fact::new(":Bob", "knows", ":Alice")));
+        Ok(())
     }
 
     #[test]
-    fn test_execute_multi_hop_class_hierarchy() {
+    fn test_execute_multi_hop_class_hierarchy() -> anyhow::Result<()> {
         let mut e = make_executor();
         // subClassOf(?a, ?b) ∧ subClassOf(?b, ?c) → subClassOf(?a, ?c)
         e.add_rule(SimpleRule::new(
@@ -821,10 +841,11 @@ mod tests {
         assert!(result
             .new_facts
             .contains(&Fact::new(":Manager", "subClassOf", ":Agent")));
+        Ok(())
     }
 
     #[test]
-    fn test_execute_new_facts_excludes_input() {
+    fn test_execute_new_facts_excludes_input() -> anyhow::Result<()> {
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
             "copy",
@@ -835,6 +856,7 @@ mod tests {
         let result = e.execute(std::slice::from_ref(&input_fact));
         // Original fact must NOT appear in new_facts
         assert!(!result.new_facts.contains(&input_fact));
+        Ok(())
     }
 
     #[test]
@@ -847,7 +869,7 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_one_step_returns_duplicates_ok() {
+    fn test_execute_one_step_returns_duplicates_ok() -> anyhow::Result<()> {
         // execute_one_step may return duplicate facts (deduplication is done in execute).
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
@@ -864,10 +886,11 @@ mod tests {
         let derived = e.execute_one_step(&facts);
         // Both rules produce the same fact → 2 entries (duplicates allowed in one-step output)
         assert_eq!(derived.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_execute_deduplicates_across_rules() {
+    fn test_execute_deduplicates_across_rules() -> anyhow::Result<()> {
         // execute() deduplicates: two rules producing the same fact count as rules_fired=1.
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
@@ -884,6 +907,7 @@ mod tests {
         let result = e.execute(&facts);
         // Deduplicated: only 1 genuinely new fact
         assert_eq!(result.new_facts.len(), 1);
+        Ok(())
     }
 
     #[test]
@@ -896,7 +920,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rule_with_three_conditions() {
+    fn test_rule_with_three_conditions() -> anyhow::Result<()> {
         let mut e = make_executor();
         // (?x p ?y) ∧ (?y p ?z) ∧ (?z p ?w) → (?x skip3 ?w)
         e.add_rule(SimpleRule::new(
@@ -915,10 +939,11 @@ mod tests {
         ];
         let result = e.execute(&facts);
         assert!(result.new_facts.contains(&Fact::new(":A", "skip3", ":D")));
+        Ok(())
     }
 
     #[test]
-    fn test_match_conditions_variable_reuse_across_conditions() {
+    fn test_match_conditions_variable_reuse_across_conditions() -> anyhow::Result<()> {
         // Ensure that a variable bound in condition 1 constrains condition 2.
         let e = make_executor();
         let facts = vec![
@@ -935,10 +960,11 @@ mod tests {
         // :X has type :A and :B; :Y has type :A.
         // Solutions where s=:X and t in {:A,:B}, plus s=:Y and t=:A.
         assert_eq!(results.len(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_simple_rule_new_constructor() {
+    fn test_simple_rule_new_constructor() -> anyhow::Result<()> {
         let rule = SimpleRule::new(
             "test-rule",
             vec![RuleCondition::new("?x", "p", "?y")],
@@ -946,22 +972,25 @@ mod tests {
         );
         assert_eq!(rule.id, "test-rule");
         assert_eq!(rule.conditions.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_rule_condition_new_constructor() {
+    fn test_rule_condition_new_constructor() -> anyhow::Result<()> {
         let cond = RuleCondition::new("?subject", "predicate", "object");
         assert_eq!(cond.subject, "?subject");
         assert_eq!(cond.predicate, "predicate");
         assert_eq!(cond.object, "object");
+        Ok(())
     }
 
     #[test]
-    fn test_rule_head_new_constructor() {
+    fn test_rule_head_new_constructor() -> anyhow::Result<()> {
         let head = RuleHead::new("subject", "predicate", "?object");
         assert_eq!(head.subject, "subject");
         assert_eq!(head.predicate, "predicate");
         assert_eq!(head.object, "?object");
+        Ok(())
     }
 
     #[test]
@@ -973,7 +1002,7 @@ mod tests {
     }
 
     #[test]
-    fn test_execute_two_independent_rules_same_input() {
+    fn test_execute_two_independent_rules_same_input() -> anyhow::Result<()> {
         let mut e = make_executor();
         e.add_rule(SimpleRule::new(
             "rule-a",
@@ -994,5 +1023,6 @@ mod tests {
             .new_facts
             .contains(&Fact::new(":Bob", "known_by", ":Alice")));
         assert_eq!(result.new_facts.len(), 2);
+        Ok(())
     }
 }

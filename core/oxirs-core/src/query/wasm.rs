@@ -839,7 +839,9 @@ mod tests {
     fn test_module_builder() {
         let mut builder = WasmModuleBuilder::new(WasmTarget::Wasm1_0);
 
-        builder.add_memory(1, Some(16)).unwrap();
+        builder
+            .add_memory(1, Some(16))
+            .expect("add memory should succeed");
         builder
             .add_import(
                 "host",
@@ -849,15 +851,15 @@ mod tests {
                     returns: vec![],
                 },
             )
-            .unwrap();
+            .expect("operation should succeed");
 
         builder
             .add_function("test", vec![], vec![WasmType::I32], |fb| {
                 fb.i32_const(42);
             })
-            .unwrap();
+            .expect("operation should succeed");
 
-        let wasm = builder.build().unwrap();
+        let wasm = builder.build().expect("operation should succeed");
         assert!(!wasm.is_empty());
     }
 

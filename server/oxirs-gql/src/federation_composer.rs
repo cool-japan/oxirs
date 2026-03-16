@@ -435,7 +435,7 @@ mod tests {
         let mut registry = SubgraphRegistry::new();
 
         let subgraph = Subgraph::new("users", "http://users.example.com/graphql", "schema");
-        registry.register(subgraph).unwrap();
+        registry.register(subgraph).expect("should succeed");
 
         assert_eq!(registry.count(), 1);
         assert!(registry.get("users").is_some());
@@ -449,7 +449,7 @@ mod tests {
         let subgraph1 = Subgraph::new("users", "http://users1.example.com/graphql", "schema");
         let subgraph2 = Subgraph::new("users", "http://users2.example.com/graphql", "schema");
 
-        registry.register(subgraph1).unwrap();
+        registry.register(subgraph1).expect("should succeed");
         let result = registry.register(subgraph2);
 
         assert!(result.is_err());
@@ -461,11 +461,11 @@ mod tests {
         let mut registry = SubgraphRegistry::new();
 
         let subgraph = Subgraph::new("users", "http://users.example.com/graphql", "schema");
-        registry.register(subgraph).unwrap();
+        registry.register(subgraph).expect("should succeed");
 
         assert_eq!(registry.count(), 1);
 
-        let removed = registry.unregister("users").unwrap();
+        let removed = registry.unregister("users").expect("should succeed");
         assert_eq!(removed.name, "users");
         assert_eq!(registry.count(), 0);
     }
@@ -491,10 +491,10 @@ type User @key(fields: "id") {
 }
 "#;
 
-        registry.register(Subgraph::new("users", "http://users.example.com/graphql", sdl)).unwrap();
+        registry.register(Subgraph::new("users", "http://users.example.com/graphql", sdl)).expect("should succeed");
 
         let composer = SchemaComposer::new(registry);
-        let supergraph = composer.compose().unwrap();
+        let supergraph = composer.compose().expect("should succeed");
 
         assert_eq!(supergraph.subgraphs.len(), 1);
         assert!(supergraph.entities.contains_key("User"));
@@ -509,11 +509,11 @@ type User @key(fields: "id") {
         let users_sdl = r#"type User @key(fields: "id") { id: ID! }"#;
         let products_sdl = r#"type Product @key(fields: "sku") { sku: String! }"#;
 
-        registry.register(Subgraph::new("users", "http://users.example.com/graphql", users_sdl)).unwrap();
-        registry.register(Subgraph::new("products", "http://products.example.com/graphql", products_sdl)).unwrap();
+        registry.register(Subgraph::new("users", "http://users.example.com/graphql", users_sdl)).expect("should succeed");
+        registry.register(Subgraph::new("products", "http://products.example.com/graphql", products_sdl)).expect("should succeed");
 
         let composer = SchemaComposer::new(registry);
-        let supergraph = composer.compose().unwrap();
+        let supergraph = composer.compose().expect("should succeed");
 
         assert_eq!(supergraph.subgraphs.len(), 2);
         assert!(supergraph.entities.contains_key("User"));

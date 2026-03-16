@@ -567,9 +567,9 @@ mod tests {
 
     fn create_test_triple(s: &str, p: &str, o: &str) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(s).unwrap()),
-            Predicate::NamedNode(NamedNode::new(p).unwrap()),
-            Object::NamedNode(NamedNode::new(o).unwrap()),
+            Subject::NamedNode(NamedNode::new(s).expect("valid IRI")),
+            Predicate::NamedNode(NamedNode::new(p).expect("valid IRI")),
+            Object::NamedNode(NamedNode::new(o).expect("valid IRI")),
         )
     }
 
@@ -578,8 +578,12 @@ mod tests {
         let graph = ConcurrentGraph::new();
         let triple = create_test_triple("http://s", "http://p", "http://o");
 
-        assert!(graph.insert(triple.clone()).unwrap());
-        assert!(!graph.insert(triple.clone()).unwrap());
+        assert!(graph
+            .insert(triple.clone())
+            .expect("graph insert should succeed"));
+        assert!(!graph
+            .insert(triple.clone())
+            .expect("graph insert should succeed"));
         assert_eq!(graph.len(), 1);
         assert!(graph.contains(&triple));
     }
@@ -589,9 +593,15 @@ mod tests {
         let graph = ConcurrentGraph::new();
         let triple = create_test_triple("http://s", "http://p", "http://o");
 
-        assert!(graph.insert(triple.clone()).unwrap());
-        assert!(graph.remove(&triple).unwrap());
-        assert!(!graph.remove(&triple).unwrap());
+        assert!(graph
+            .insert(triple.clone())
+            .expect("graph insert should succeed"));
+        assert!(graph
+            .remove(&triple)
+            .expect("graph operation should succeed"));
+        assert!(!graph
+            .remove(&triple)
+            .expect("graph operation should succeed"));
         assert_eq!(graph.len(), 0);
         assert!(!graph.contains(&triple));
     }
@@ -606,23 +616,31 @@ mod tests {
         let t3 = create_test_triple("http://s1", "http://p2", "http://o1");
         let t4 = create_test_triple("http://s2", "http://p1", "http://o1");
 
-        graph.insert(t1.clone()).unwrap();
-        graph.insert(t2.clone()).unwrap();
-        graph.insert(t3.clone()).unwrap();
-        graph.insert(t4.clone()).unwrap();
+        graph
+            .insert(t1.clone())
+            .expect("graph insert should succeed");
+        graph
+            .insert(t2.clone())
+            .expect("graph insert should succeed");
+        graph
+            .insert(t3.clone())
+            .expect("graph insert should succeed");
+        graph
+            .insert(t4.clone())
+            .expect("graph insert should succeed");
 
         // Test subject pattern
-        let s1 = Subject::NamedNode(NamedNode::new("http://s1").unwrap());
+        let s1 = Subject::NamedNode(NamedNode::new("http://s1").expect("valid IRI"));
         let matches = graph.match_pattern(Some(&s1), None, None);
         assert_eq!(matches.len(), 3);
 
         // Test subject-predicate pattern
-        let p1 = Predicate::NamedNode(NamedNode::new("http://p1").unwrap());
+        let p1 = Predicate::NamedNode(NamedNode::new("http://p1").expect("valid IRI"));
         let matches = graph.match_pattern(Some(&s1), Some(&p1), None);
         assert_eq!(matches.len(), 2);
 
         // Test object pattern
-        let o1 = Object::NamedNode(NamedNode::new("http://o1").unwrap());
+        let o1 = Object::NamedNode(NamedNode::new("http://o1").expect("valid IRI"));
         let matches = graph.match_pattern(None, None, Some(&o1));
         assert_eq!(matches.len(), 3);
     }
@@ -645,14 +663,16 @@ mod tests {
                             &format!("http://p{j}"),
                             &format!("http://o{}", i * ops_per_thread + j),
                         );
-                        graph.insert(triple).unwrap();
+                        graph
+                            .insert(triple)
+                            .expect("graph operation should succeed");
                     }
                 })
             })
             .collect();
 
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().expect("thread should not panic");
         }
 
         assert_eq!(graph.len(), num_threads * ops_per_thread);
@@ -666,11 +686,15 @@ mod tests {
             .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
             .collect();
 
-        let inserted = graph.insert_batch(triples.clone()).unwrap();
+        let inserted = graph
+            .insert_batch(triples.clone())
+            .expect("batch insert should succeed");
         assert_eq!(inserted, 10);
         assert_eq!(graph.len(), 10);
 
-        let removed = graph.remove_batch(&triples[0..5]).unwrap();
+        let removed = graph
+            .remove_batch(&triples[0..5])
+            .expect("graph operation should succeed");
         assert_eq!(removed, 5);
         assert_eq!(graph.len(), 5);
     }
@@ -681,11 +705,13 @@ mod tests {
 
         for i in 0..10 {
             let triple = create_test_triple(&format!("http://s{i}"), "http://p", "http://o");
-            graph.insert(triple).unwrap();
+            graph
+                .insert(triple)
+                .expect("graph operation should succeed");
         }
 
         assert_eq!(graph.len(), 10);
-        graph.clear().unwrap();
+        graph.clear().expect("graph operation should succeed");
         assert_eq!(graph.len(), 0);
         assert!(graph.is_empty());
     }
@@ -699,7 +725,9 @@ mod tests {
             .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
             .collect();
 
-        let inserted = graph.insert_batch(triples).unwrap();
+        let inserted = graph
+            .insert_batch(triples)
+            .expect("graph operation should succeed");
         assert_eq!(inserted, 200);
         assert_eq!(graph.len(), 200);
     }
@@ -713,11 +741,15 @@ mod tests {
             .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
             .collect();
 
-        graph.insert_batch(triples.clone()).unwrap();
+        graph
+            .insert_batch(triples.clone())
+            .expect("batch insert should succeed");
         assert_eq!(graph.len(), 200);
 
         // Remove in batch
-        let removed = graph.remove_batch(&triples).unwrap();
+        let removed = graph
+            .remove_batch(&triples)
+            .expect("graph operation should succeed");
         assert_eq!(removed, 200);
         assert_eq!(graph.len(), 0);
     }
@@ -731,14 +763,18 @@ mod tests {
             .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
             .collect();
 
-        graph.insert_batch(triples).unwrap();
+        graph
+            .insert_batch(triples)
+            .expect("graph operation should succeed");
         assert_eq!(graph.len(), 50);
 
         // Rebuild indices
-        graph.rebuild_indices().unwrap();
+        graph
+            .rebuild_indices()
+            .expect("graph operation should succeed");
 
         // Verify queries still work
-        let s = Subject::NamedNode(NamedNode::new("http://s0").unwrap());
+        let s = Subject::NamedNode(NamedNode::new("http://s0").expect("valid IRI"));
         let matches = graph.match_pattern(Some(&s), None, None);
         assert_eq!(matches.len(), 1);
     }
@@ -752,7 +788,9 @@ mod tests {
             .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
             .collect();
 
-        let inserted = graph.insert_batch(triples).unwrap();
+        let inserted = graph
+            .insert_batch(triples)
+            .expect("graph operation should succeed");
         assert_eq!(inserted, 50);
         assert_eq!(graph.len(), 50);
     }

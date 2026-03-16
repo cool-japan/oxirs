@@ -1034,14 +1034,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_ivf_basic() {
+    fn test_ivf_basic() -> Result<()> {
         let config = IvfConfig {
             n_clusters: 4,
             n_probes: 2,
             ..Default::default()
         };
 
-        let mut index = IvfIndex::new(config).unwrap();
+        let mut index = IvfIndex::new(config)?;
 
         // Create training vectors
         let training_vectors = vec![
@@ -1056,34 +1056,35 @@ mod tests {
         ];
 
         // Train the index
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
         assert!(index.is_trained);
 
         // Insert vectors
         for (i, vec) in training_vectors.iter().enumerate() {
-            index.insert(format!("vec{i}"), vec.clone()).unwrap();
+            index.insert(format!("vec{i}"), vec.clone())?;
         }
 
         // Search for nearest neighbors
         let query = Vector::new(vec![0.9, 0.1]);
-        let results = index.search_knn(&query, 3).unwrap();
+        let results = index.search_knn(&query, 3)?;
 
         assert!(!results.is_empty());
         assert!(results.len() <= 3);
 
         // The first result should be vec0 (closest to [1.0, 0.0])
         assert_eq!(results[0].0, "vec0");
+        Ok(())
     }
 
     #[test]
-    fn test_ivf_threshold_search() {
+    fn test_ivf_threshold_search() -> Result<()> {
         let config = IvfConfig {
             n_clusters: 2,
             n_probes: 2,
             ..Default::default()
         };
 
-        let mut index = IvfIndex::new(config).unwrap();
+        let mut index = IvfIndex::new(config)?;
 
         // Create and train with vectors
         let training_vectors = vec![
@@ -1093,42 +1094,35 @@ mod tests {
             Vector::new(vec![0.5, 0.5, 0.0]),
         ];
 
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
 
         // Insert vectors
-        index
-            .insert("v1".to_string(), training_vectors[0].clone())
-            .unwrap();
-        index
-            .insert("v2".to_string(), training_vectors[1].clone())
-            .unwrap();
-        index
-            .insert("v3".to_string(), training_vectors[2].clone())
-            .unwrap();
-        index
-            .insert("v4".to_string(), training_vectors[3].clone())
-            .unwrap();
+        index.insert("v1".to_string(), training_vectors[0].clone())?;
+        index.insert("v2".to_string(), training_vectors[1].clone())?;
+        index.insert("v3".to_string(), training_vectors[2].clone())?;
+        index.insert("v4".to_string(), training_vectors[3].clone())?;
 
         // Search with threshold
         let query = Vector::new(vec![0.9, 0.1, 0.0]);
-        let results = index.search_threshold(&query, 0.5).unwrap();
+        let results = index.search_threshold(&query, 0.5)?;
 
         assert!(!results.is_empty());
         // Should find vectors with similarity >= 0.5
         for (_, similarity) in &results {
             assert!(*similarity >= 0.5);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_ivf_stats() {
+    fn test_ivf_stats() -> Result<()> {
         let config = IvfConfig {
             n_clusters: 3,
             n_probes: 1,
             ..Default::default()
         };
 
-        let mut index = IvfIndex::new(config).unwrap();
+        let mut index = IvfIndex::new(config)?;
 
         // Train with simple vectors
         let training_vectors = vec![
@@ -1137,25 +1131,22 @@ mod tests {
             Vector::new(vec![-1.0, -1.0]),
         ];
 
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
 
         // Insert some vectors
-        index
-            .insert("a".to_string(), Vector::new(vec![1.1, 0.1]))
-            .unwrap();
-        index
-            .insert("b".to_string(), Vector::new(vec![0.1, 1.1]))
-            .unwrap();
+        index.insert("a".to_string(), Vector::new(vec![1.1, 0.1]))?;
+        index.insert("b".to_string(), Vector::new(vec![0.1, 1.1]))?;
 
         let stats = index.stats();
         assert_eq!(stats.n_vectors, 2);
         assert_eq!(stats.n_clusters, 3);
         assert!(stats.is_trained);
         assert_eq!(stats.dimensions, Some(2));
+        Ok(())
     }
 
     #[test]
-    fn test_ivf_multi_level_quantization() {
+    fn test_ivf_multi_level_quantization() -> Result<()> {
         use crate::pq::PQConfig;
 
         // Create PQ configs for different levels
@@ -1171,8 +1162,7 @@ mod tests {
         };
 
         let mut index =
-            IvfIndex::new_with_multi_level_quantization(4, 2, 2, vec![pq_config_1, pq_config_2])
-                .unwrap();
+            IvfIndex::new_with_multi_level_quantization(4, 2, 2, vec![pq_config_1, pq_config_2])?;
 
         // Create training vectors
         let training_vectors = vec![
@@ -1185,17 +1175,17 @@ mod tests {
         ];
 
         // Train the index
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
         assert!(index.is_trained);
 
         // Insert vectors
         for (i, vec) in training_vectors.iter().enumerate() {
-            index.insert(format!("vec{i}"), vec.clone()).unwrap();
+            index.insert(format!("vec{i}"), vec.clone())?;
         }
 
         // Search for nearest neighbors
         let query = Vector::new(vec![0.9, 0.1, 0.0, 0.0]);
-        let results = index.search_knn(&query, 3).unwrap();
+        let results = index.search_knn(&query, 3)?;
 
         assert!(!results.is_empty());
         assert!(results.len() <= 3);
@@ -1209,10 +1199,11 @@ mod tests {
         if let Some(compression_stats) = &stats.compression_stats {
             assert!(compression_stats.multi_level_vectors > 0);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_ivf_multi_codebook_quantization() {
+    fn test_ivf_multi_codebook_quantization() -> Result<()> {
         use crate::pq::PQConfig;
 
         // Create PQ configs for different codebooks
@@ -1227,9 +1218,12 @@ mod tests {
             ..Default::default()
         };
 
-        let mut index =
-            IvfIndex::new_with_multi_codebook_quantization(4, 2, 2, vec![pq_config_1, pq_config_2])
-                .unwrap();
+        let mut index = IvfIndex::new_with_multi_codebook_quantization(
+            4,
+            2,
+            2,
+            vec![pq_config_1, pq_config_2],
+        )?;
 
         // Create training vectors
         let training_vectors = vec![
@@ -1241,17 +1235,17 @@ mod tests {
         ];
 
         // Train the index
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
         assert!(index.is_trained);
 
         // Insert vectors
         for (i, vec) in training_vectors.iter().enumerate() {
-            index.insert(format!("vec{i}"), vec.clone()).unwrap();
+            index.insert(format!("vec{i}"), vec.clone())?;
         }
 
         // Search for nearest neighbors
         let query = Vector::new(vec![0.9, 0.1, 0.0, 0.0]);
-        let results = index.search_knn(&query, 2).unwrap();
+        let results = index.search_knn(&query, 2)?;
 
         assert!(!results.is_empty());
         assert!(results.len() <= 2);
@@ -1265,6 +1259,7 @@ mod tests {
         if let Some(compression_stats) = &stats.compression_stats {
             assert!(compression_stats.multi_codebook_vectors > 0);
         }
+        Ok(())
     }
 
     #[test]

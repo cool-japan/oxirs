@@ -1206,7 +1206,7 @@ mod tests {
         let result = attention.forward(&input, None);
 
         assert!(result.is_ok());
-        let (output, attention_weights) = result.unwrap();
+        let (output, attention_weights) = result.expect("should succeed");
         assert_eq!(output.shape(), [10, config.model_dim]);
         assert_eq!(attention_weights.shape(), [config.num_heads, 10, 10]); // heads x seq_len x seq_len attention
     }
@@ -1217,14 +1217,16 @@ mod tests {
         let mut embedder = PatternEmbedder::new(config);
 
         let pattern = AlgebraTriplePattern::new(
-            AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
-            AlgebraTermPattern::Variable(Variable::new("o").unwrap()),
+            AlgebraTermPattern::Variable(Variable::new("s").expect("should succeed")),
+            AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/p").expect("should succeed"),
+            ),
+            AlgebraTermPattern::Variable(Variable::new("o").expect("should succeed")),
         );
 
         let embedding = embedder.embed_pattern(&pattern);
         assert!(embedding.is_ok());
-        assert_eq!(embedding.unwrap().len(), 512);
+        assert_eq!(embedding.expect("should succeed").len(), 512);
     }
 
     #[test]
@@ -1237,7 +1239,7 @@ mod tests {
 
         let cost = predictor.predict_cost(&pattern_emb, &context_embs);
         assert!(cost.is_ok());
-        assert!(cost.unwrap() > 0.0);
+        assert!(cost.expect("should succeed") > 0.0);
     }
 
     #[test]
@@ -1249,7 +1251,7 @@ mod tests {
         let encoded = encoder.encode(&embeddings);
 
         assert!(encoded.is_ok());
-        assert_eq!(encoded.unwrap().shape(), [10, 512]);
+        assert_eq!(encoded.expect("should succeed").shape(), [10, 512]);
     }
 
     #[test]
@@ -1258,9 +1260,11 @@ mod tests {
         let mut memory = PatternMemoryBank::new(config);
 
         let pattern = AlgebraTriplePattern::new(
-            AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
-            AlgebraTermPattern::Variable(Variable::new("o").unwrap()),
+            AlgebraTermPattern::Variable(Variable::new("s").expect("should succeed")),
+            AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/p").expect("should succeed"),
+            ),
+            AlgebraTermPattern::Variable(Variable::new("o").expect("should succeed")),
         );
 
         let embedding = Array1::zeros(512);
@@ -1273,18 +1277,21 @@ mod tests {
     #[test]
     fn test_neural_transformer_integration() {
         let config = NeuralTransformerConfig::default();
-        let mut integration = NeuralTransformerPatternIntegration::new(config).unwrap();
+        let mut integration =
+            NeuralTransformerPatternIntegration::new(config).expect("should succeed");
 
         let patterns = vec![AlgebraTriplePattern::new(
-            AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
-            AlgebraTermPattern::Variable(Variable::new("o").unwrap()),
+            AlgebraTermPattern::Variable(Variable::new("s").expect("should succeed")),
+            AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/p").expect("should succeed"),
+            ),
+            AlgebraTermPattern::Variable(Variable::new("o").expect("should succeed")),
         )];
 
         let result = integration.optimize_patterns_with_attention(&patterns);
         assert!(result.is_ok());
 
-        let plan = result.unwrap();
+        let plan = result.expect("should succeed");
         assert_eq!(plan.patterns.len(), 1);
         assert!(plan.total_cost > 0.0);
     }

@@ -412,16 +412,22 @@ mod tests {
         let collector = MetricsCollector::new(Duration::from_secs(60), 100);
 
         // Record some metrics
-        collector.record("cpu_usage", 50.0).unwrap();
-        collector.record("cpu_usage", 60.0).unwrap();
-        collector.record("cpu_usage", 70.0).unwrap();
+        collector.record("cpu_usage", 50.0).expect("should succeed");
+        collector.record("cpu_usage", 60.0).expect("should succeed");
+        collector.record("cpu_usage", 70.0).expect("should succeed");
 
         // Check average
-        let avg = collector.get_average("cpu_usage").unwrap().unwrap();
+        let avg = collector
+            .get_average("cpu_usage")
+            .expect("should succeed")
+            .expect("should succeed");
         assert!((avg - 60.0).abs() < f64::EPSILON);
 
         // Check trend (should be positive)
-        let trend = collector.get_trend("cpu_usage").unwrap().unwrap();
+        let trend = collector
+            .get_trend("cpu_usage")
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(trend > 0.0);
     }
 
@@ -458,14 +464,16 @@ mod tests {
         let mut monitor = RealTimeMonitor::new();
 
         // Start monitoring
-        let _alert_rx = monitor.start().await.unwrap();
+        let _alert_rx = monitor.start().await.expect("should succeed");
         assert!(monitor.is_running);
 
         // Record some metrics
-        monitor.record_metric("test_metric", 100.0).unwrap();
+        monitor
+            .record_metric("test_metric", 100.0)
+            .expect("should succeed");
 
         // Stop monitoring
-        monitor.stop().await.unwrap();
+        monitor.stop().await.expect("should succeed");
         assert!(!monitor.is_running);
     }
 }

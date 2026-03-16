@@ -433,7 +433,7 @@ mod tests {
         let encoded = token.encode();
         let decoded = ResumeToken::decode(&encoded);
         assert!(decoded.is_some());
-        let decoded = decoded.unwrap();
+        let decoded = decoded.expect("should succeed");
         assert_eq!(decoded.last_sequence, 42);
         assert_eq!(decoded.subscription_id, "sub-1");
     }
@@ -441,14 +441,14 @@ mod tests {
     #[test]
     fn test_resume_token_encode_decode_with_zero_sequence() {
         let token = ResumeToken::new("my-subscription", 0);
-        let decoded = ResumeToken::decode(&token.encode()).unwrap();
+        let decoded = ResumeToken::decode(&token.encode()).expect("should succeed");
         assert_eq!(decoded.last_sequence, 0);
     }
 
     #[test]
     fn test_resume_token_encode_decode_large_sequence() {
         let token = ResumeToken::new("test", u64::MAX);
-        let decoded = ResumeToken::decode(&token.encode()).unwrap();
+        let decoded = ResumeToken::decode(&token.encode()).expect("should succeed");
         assert_eq!(decoded.last_sequence, u64::MAX);
     }
 
@@ -634,7 +634,7 @@ mod tests {
 
         let token = mux.resume_token_for("sub-r");
         assert!(token.is_some());
-        let token = token.unwrap();
+        let token = token.expect("should succeed");
         assert_eq!(token.subscription_id, "sub-r");
         assert!(token.last_sequence > 0);
     }

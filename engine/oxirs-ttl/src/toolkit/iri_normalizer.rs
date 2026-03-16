@@ -20,19 +20,19 @@
 //! use oxirs_ttl::toolkit::iri_normalizer::{normalize_iri, NormalizedIri};
 //!
 //! // Case normalization
-//! let iri = normalize_iri("HTTP://EXAMPLE.ORG/Path").unwrap();
+//! let iri = normalize_iri("HTTP://EXAMPLE.ORG/Path").expect("should succeed");
 //! assert_eq!(iri.as_str(), "http://example.org/Path");
 //!
 //! // Percent-encoding normalization
-//! let iri = normalize_iri("http://example.org/%7Euser").unwrap();
+//! let iri = normalize_iri("http://example.org/%7Euser").expect("should succeed");
 //! assert_eq!(iri.as_str(), "http://example.org/~user");
 //!
 //! // Default port removal
-//! let iri = normalize_iri("http://example.org:80/path").unwrap();
+//! let iri = normalize_iri("http://example.org:80/path").expect("should succeed");
 //! assert_eq!(iri.as_str(), "http://example.org/path");
 //!
 //! // Path normalization
-//! let iri = normalize_iri("http://example.org/a/./b/../c").unwrap();
+//! let iri = normalize_iri("http://example.org/a/./b/../c").expect("should succeed");
 //! assert_eq!(iri.as_str(), "http://example.org/a/c");
 //! ```
 
@@ -131,7 +131,7 @@ pub type NormalizationResult<T> = Result<T, NormalizationError>;
 /// ```
 /// use oxirs_ttl::toolkit::iri_normalizer::normalize_iri;
 ///
-/// let iri = normalize_iri("HTTP://EXAMPLE.ORG:80/A/./B/../C").unwrap();
+/// let iri = normalize_iri("HTTP://EXAMPLE.ORG:80/A/./B/../C").expect("should succeed");
 /// assert_eq!(iri.as_str(), "http://example.org/A/C");
 /// ```
 pub fn normalize_iri(iri: &str) -> NormalizationResult<NormalizedIri> {
@@ -531,17 +531,17 @@ fn is_valid_scheme(scheme: &str) -> bool {
 /// assert!(iris_equivalent(
 ///     "HTTP://EXAMPLE.ORG/path",
 ///     "http://example.org/path"
-/// ).unwrap());
+/// ).expect("should succeed"));
 ///
 /// assert!(iris_equivalent(
 ///     "http://example.org:80/path",
 ///     "http://example.org/path"
-/// ).unwrap());
+/// ).expect("should succeed"));
 ///
 /// assert!(!iris_equivalent(
 ///     "http://example.org/path1",
 ///     "http://example.org/path2"
-/// ).unwrap());
+/// ).expect("should succeed"));
 /// ```
 pub fn iris_equivalent(iri1: &str, iri2: &str) -> NormalizationResult<bool> {
     let normalized1 = normalize_iri(iri1)?;

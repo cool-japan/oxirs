@@ -404,7 +404,9 @@ mod tests {
         profiler.record_operation(OperationType::Training, Duration::from_millis(150), false);
         profiler.record_operation(OperationType::Training, Duration::from_millis(120), true);
 
-        let stats = profiler.get_stats(OperationType::Training).unwrap();
+        let stats = profiler
+            .get_stats(OperationType::Training)
+            .expect("should succeed");
         assert_eq!(stats.total_count, 3);
         assert_eq!(stats.error_count, 1);
         assert!((stats.success_rate() - 66.67).abs() < 0.1);
@@ -419,7 +421,9 @@ mod tests {
             thread::sleep(Duration::from_millis(50));
         }
 
-        let stats = profiler.get_stats(OperationType::Inference).unwrap();
+        let stats = profiler
+            .get_stats(OperationType::Inference)
+            .expect("should succeed");
         assert_eq!(stats.total_count, 1);
         assert!(stats.total_duration >= Duration::from_millis(50));
     }
@@ -478,7 +482,7 @@ mod tests {
 
         let stats = profiler
             .calculate_percentiles(OperationType::Inference)
-            .unwrap();
+            .expect("should succeed");
         assert!(stats.percentile_95 >= Duration::from_millis(90));
         assert!(stats.percentile_99 >= Duration::from_millis(95));
     }
@@ -499,7 +503,7 @@ mod tests {
 
         profiler.record_operation(OperationType::Training, Duration::from_millis(100), false);
 
-        let json = profiler.export_json().unwrap();
+        let json = profiler.export_json().expect("should succeed");
         assert!(json.contains("total_operations"));
         assert!(json.contains("Training"));
     }

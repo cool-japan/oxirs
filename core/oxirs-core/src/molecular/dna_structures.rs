@@ -260,13 +260,14 @@ mod tests {
         let mut dna = DnaDataStructure::new();
 
         let triple = Triple::new(
-            NamedNode::new("http://example.org/subject").unwrap(),
-            NamedNode::new("http://example.org/predicate").unwrap(),
-            NamedNode::new("http://example.org/object").unwrap(),
+            NamedNode::new("http://example.org/subject").expect("valid IRI"),
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
+            NamedNode::new("http://example.org/object").expect("valid IRI"),
         );
 
-        dna.encode_triple(&triple).unwrap();
-        let decoded = dna.decode_triples().unwrap();
+        dna.encode_triple(&triple)
+            .expect("operation should succeed");
+        let decoded = dna.decode_triples().expect("operation should succeed");
 
         assert_eq!(decoded.len(), 1);
         assert_eq!(decoded[0], triple);
@@ -286,12 +287,13 @@ mod tests {
         let mut dna = DnaDataStructure::new();
 
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
-            NamedNode::new("http://example.org/o").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            NamedNode::new("http://example.org/o").expect("valid IRI"),
         );
 
-        dna.encode_triple(&triple).unwrap();
+        dna.encode_triple(&triple)
+            .expect("operation should succeed");
         assert!(dna.validate_integrity());
     }
 }

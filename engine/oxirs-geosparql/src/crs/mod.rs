@@ -166,7 +166,7 @@ impl CrsTransformer {
     /// use oxirs_geosparql::crs::CrsTransformer;
     ///
     /// // London (roughly)
-    /// let (x, y) = CrsTransformer::wgs84_to_web_mercator(-0.1276, 51.5074).unwrap();
+    /// let (x, y) = CrsTransformer::wgs84_to_web_mercator(-0.1276, 51.5074).expect("should succeed");
     /// assert!((x - (-14210.0)).abs() < 500.0);
     /// assert!((y - 6711790.0).abs() < 500.0);
     /// ```
@@ -202,7 +202,7 @@ impl CrsTransformer {
     /// ```
     /// use oxirs_geosparql::crs::CrsTransformer;
     ///
-    /// let (lon, lat) = CrsTransformer::web_mercator_to_wgs84(0.0, 0.0).unwrap();
+    /// let (lon, lat) = CrsTransformer::web_mercator_to_wgs84(0.0, 0.0).expect("should succeed");
     /// assert!((lon - 0.0).abs() < 1e-10);
     /// assert!((lat - 0.0).abs() < 1e-10);
     /// ```
@@ -237,7 +237,7 @@ impl CrsTransformer {
     /// use oxirs_geosparql::crs::CrsTransformer;
     ///
     /// // New York City (approximately)
-    /// let (e, n, zone, hemi) = CrsTransformer::wgs84_to_utm(-74.006, 40.7128).unwrap();
+    /// let (e, n, zone, hemi) = CrsTransformer::wgs84_to_utm(-74.006, 40.7128).expect("should succeed");
     /// assert_eq!(zone, 18);
     /// assert_eq!(hemi, 'N');
     /// assert!((e - 583_960.0).abs() < 1_000.0, "easting ~ 584000 m");
@@ -365,7 +365,7 @@ impl CrsTransformer {
 /// use oxirs_geosparql::crs::{GeometryWithCrs, CrsKind};
 /// use oxirs_geosparql::geometry::Geometry;
 ///
-/// let point = Geometry::from_wkt("POINT(0 0)").unwrap();
+/// let point = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
 /// let gwc = GeometryWithCrs::new(point, CrsKind::Wgs84);
 ///
 /// assert_eq!(gwc.crs, CrsKind::Wgs84);
@@ -511,7 +511,7 @@ mod tests {
 
     #[test]
     fn test_wgs84_to_web_mercator_origin() {
-        let (x, y) = CrsTransformer::wgs84_to_web_mercator(0.0, 0.0).unwrap();
+        let (x, y) = CrsTransformer::wgs84_to_web_mercator(0.0, 0.0).expect("should succeed");
         assert!(x.abs() < 1e-6, "expected x≈0, got {x}");
         assert!(y.abs() < 1e-6, "expected y≈0, got {y}");
     }
@@ -525,7 +525,7 @@ mod tests {
 
     #[test]
     fn test_web_mercator_to_wgs84_origin() {
-        let (lon, lat) = CrsTransformer::web_mercator_to_wgs84(0.0, 0.0).unwrap();
+        let (lon, lat) = CrsTransformer::web_mercator_to_wgs84(0.0, 0.0).expect("should succeed");
         assert!(lon.abs() < 1e-10, "expected lon≈0, got {lon}");
         assert!(lat.abs() < 1e-10, "expected lat≈0, got {lat}");
     }
@@ -540,8 +540,8 @@ mod tests {
         ];
 
         for (lat, lon) in test_cases {
-            let (x, y) = CrsTransformer::wgs84_to_web_mercator(lon, lat).unwrap();
-            let (lon2, lat2) = CrsTransformer::web_mercator_to_wgs84(x, y).unwrap();
+            let (x, y) = CrsTransformer::wgs84_to_web_mercator(lon, lat).expect("should succeed");
+            let (lon2, lat2) = CrsTransformer::web_mercator_to_wgs84(x, y).expect("should succeed");
             assert!(
                 (lon2 - lon).abs() < 1e-8,
                 "lon roundtrip failed for ({lon}, {lat}): got {lon2}"
@@ -556,14 +556,15 @@ mod tests {
     #[test]
     fn test_web_mercator_x_scale() {
         // At lon=1°, x = a * π/180 ≈ 111_319.49 m
-        let (x, _) = CrsTransformer::wgs84_to_web_mercator(1.0, 0.0).unwrap();
+        let (x, _) = CrsTransformer::wgs84_to_web_mercator(1.0, 0.0).expect("should succeed");
         let expected = A_WGS84 * (1.0_f64).to_radians();
         assert!((x - expected).abs() < 1e-3, "expected {expected}, got {x}");
     }
 
     #[test]
     fn test_wgs84_to_web_mercator_london() {
-        let (x, y) = CrsTransformer::wgs84_to_web_mercator(-0.1276, 51.5074).unwrap();
+        let (x, y) =
+            CrsTransformer::wgs84_to_web_mercator(-0.1276, 51.5074).expect("should succeed");
         // London Web Mercator: roughly (-14_211, 6_711_790)
         assert!((x - (-14_211.0)).abs() < 500.0, "x={x}");
         assert!((y - 6_711_790.0).abs() < 500.0, "y={y}");
@@ -573,7 +574,8 @@ mod tests {
 
     #[test]
     fn test_wgs84_to_utm_new_york() {
-        let (e, n, zone, hemi) = CrsTransformer::wgs84_to_utm(-74.006, 40.7128).unwrap();
+        let (e, n, zone, hemi) =
+            CrsTransformer::wgs84_to_utm(-74.006, 40.7128).expect("should succeed");
         assert_eq!(zone, 18, "NYC should be zone 18");
         assert_eq!(hemi, 'N', "NYC is northern hemisphere");
         assert!((e - 583_960.0).abs() < 2_000.0, "easting={e}");
@@ -582,14 +584,16 @@ mod tests {
 
     #[test]
     fn test_wgs84_to_utm_london() {
-        let (_, _, zone, hemi) = CrsTransformer::wgs84_to_utm(-0.1276, 51.5074).unwrap();
+        let (_, _, zone, hemi) =
+            CrsTransformer::wgs84_to_utm(-0.1276, 51.5074).expect("should succeed");
         assert_eq!(zone, 30, "London should be zone 30");
         assert_eq!(hemi, 'N');
     }
 
     #[test]
     fn test_wgs84_to_utm_sydney() {
-        let (_, _, zone, hemi) = CrsTransformer::wgs84_to_utm(151.2093, -33.8688).unwrap();
+        let (_, _, zone, hemi) =
+            CrsTransformer::wgs84_to_utm(151.2093, -33.8688).expect("should succeed");
         assert_eq!(zone, 56, "Sydney should be zone 56");
         assert_eq!(hemi, 'S', "Sydney is southern hemisphere");
     }
@@ -604,8 +608,10 @@ mod tests {
         ];
 
         for (lon, lat) in test_cases {
-            let (e, n, zone, hemi) = CrsTransformer::wgs84_to_utm(lon, lat).unwrap();
-            let (lon2, lat2) = CrsTransformer::utm_to_wgs84(e, n, zone, hemi).unwrap();
+            let (e, n, zone, hemi) =
+                CrsTransformer::wgs84_to_utm(lon, lat).expect("should succeed");
+            let (lon2, lat2) =
+                CrsTransformer::utm_to_wgs84(e, n, zone, hemi).expect("should succeed");
             assert!(
                 (lon2 - lon).abs() < 0.001,
                 "lon roundtrip ({lon}, {lat}): got {lon2}"
@@ -621,15 +627,15 @@ mod tests {
 
     #[test]
     fn test_transform_identity_wgs84() {
-        let (x, y) =
-            CrsTransformer::transform(10.0, 20.0, &CrsKind::Wgs84, &CrsKind::Wgs84).unwrap();
+        let (x, y) = CrsTransformer::transform(10.0, 20.0, &CrsKind::Wgs84, &CrsKind::Wgs84)
+            .expect("should succeed");
         assert_eq!((x, y), (10.0, 20.0));
     }
 
     #[test]
     fn test_transform_wgs84_to_web_mercator() {
-        let (x, y) =
-            CrsTransformer::transform(0.0, 0.0, &CrsKind::Wgs84, &CrsKind::WebMercator).unwrap();
+        let (x, y) = CrsTransformer::transform(0.0, 0.0, &CrsKind::Wgs84, &CrsKind::WebMercator)
+            .expect("should succeed");
         assert!(x.abs() < 1e-6);
         assert!(y.abs() < 1e-6);
     }
@@ -637,7 +643,8 @@ mod tests {
     #[test]
     fn test_transform_web_mercator_to_wgs84() {
         let (lon, lat) =
-            CrsTransformer::transform(0.0, 0.0, &CrsKind::WebMercator, &CrsKind::Wgs84).unwrap();
+            CrsTransformer::transform(0.0, 0.0, &CrsKind::WebMercator, &CrsKind::Wgs84)
+                .expect("should succeed");
         assert!(lon.abs() < 1e-10);
         assert!(lat.abs() < 1e-10);
     }
@@ -648,7 +655,8 @@ mod tests {
             zone: 18,
             hemisphere: 'N',
         };
-        let (e, n) = CrsTransformer::transform(-74.006, 40.7128, &CrsKind::Wgs84, &utm18n).unwrap();
+        let (e, n) = CrsTransformer::transform(-74.006, 40.7128, &CrsKind::Wgs84, &utm18n)
+            .expect("should succeed");
         assert!((e - 583_960.0).abs() < 2_000.0, "easting={e}");
         assert!((n - 4_507_523.0).abs() < 2_000.0, "northing={n}");
     }
@@ -660,7 +668,8 @@ mod tests {
             hemisphere: 'N',
         };
         let (lon, lat) =
-            CrsTransformer::transform(583_960.0, 4_507_523.0, &utm18n, &CrsKind::Wgs84).unwrap();
+            CrsTransformer::transform(583_960.0, 4_507_523.0, &utm18n, &CrsKind::Wgs84)
+                .expect("should succeed");
         assert!((lon - (-74.006)).abs() < 0.01, "lon={lon}");
         assert!((lat - 40.7128).abs() < 0.01, "lat={lat}");
     }
@@ -676,7 +685,7 @@ mod tests {
 
     #[test]
     fn test_geometry_with_crs_new() {
-        let point = Geometry::from_wkt("POINT(10 20)").unwrap();
+        let point = Geometry::from_wkt("POINT(10 20)").expect("should succeed");
         let gwc = GeometryWithCrs::new(point, CrsKind::Wgs84);
         assert_eq!(gwc.crs, CrsKind::Wgs84);
         assert_eq!(gwc.geometry_type(), "Point");
@@ -684,14 +693,14 @@ mod tests {
 
     #[test]
     fn test_geometry_with_crs_epsg_code() {
-        let geom = Geometry::from_wkt("POINT(0 0)").unwrap();
+        let geom = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
         let gwc = GeometryWithCrs::new(geom, CrsKind::WebMercator);
         assert_eq!(gwc.epsg_code(), Some(3857));
     }
 
     #[test]
     fn test_geometry_with_crs_updates_embedded_crs() {
-        let geom = Geometry::from_wkt("POINT(0 0)").unwrap();
+        let geom = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
         let gwc = GeometryWithCrs::new(geom, CrsKind::WebMercator);
         // The embedded CRS URI should contain the EPSG:3857 code
         assert!(
@@ -703,14 +712,15 @@ mod tests {
 
     #[test]
     fn test_geometry_with_crs_is_empty() {
-        let geom = Geometry::from_wkt("POINT(5 5)").unwrap();
+        let geom = Geometry::from_wkt("POINT(5 5)").expect("should succeed");
         let gwc = GeometryWithCrs::new(geom, CrsKind::Wgs84);
         assert!(!gwc.is_empty());
     }
 
     #[test]
     fn test_geometry_with_crs_polygon() {
-        let poly = Geometry::from_wkt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap();
+        let poly =
+            Geometry::from_wkt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed");
         let gwc = GeometryWithCrs::new(
             poly,
             CrsKind::Utm {

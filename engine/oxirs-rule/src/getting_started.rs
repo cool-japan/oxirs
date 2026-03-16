@@ -51,7 +51,7 @@ use crate::{Rule, RuleAtom, RuleEngine, Term};
 /// ];
 ///
 /// // Run forward chaining to derive new facts
-/// let derived_facts = engine.forward_chain(&facts).unwrap();
+/// let derived_facts = engine.forward_chain(&facts).expect("should succeed");
 /// println!("Derived facts: {:?}", derived_facts);
 /// ```
 pub struct GettingStartedGuide;
@@ -663,10 +663,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_basic_example() {
+    fn test_basic_example() -> Result<(), Box<dyn std::error::Error>> {
         let result = GettingStartedGuide::basic_example();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
         assert!(!facts.is_empty());
 
         // Should derive that socrates and plato are mortal
@@ -684,20 +684,22 @@ mod tests {
             .collect();
 
         assert!(mortal_facts.len() >= 2);
+        Ok(())
     }
 
     #[test]
-    fn test_backward_chaining_example() {
+    fn test_backward_chaining_example() -> Result<(), Box<dyn std::error::Error>> {
         let result = GettingStartedGuide::backward_chaining_example();
         assert!(result.is_ok());
-        assert!(result.unwrap()); // Should prove that Aristotle is a teacher
+        assert!(result?); // Should prove that Aristotle is a teacher
+        Ok(())
     }
 
     #[test]
-    fn test_family_relationships() {
+    fn test_family_relationships() -> Result<(), Box<dyn std::error::Error>> {
         let result = GettingStartedGuide::family_relationships_example();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
 
         // Should derive grandparent and child relationships
         let grandparent_facts: Vec<_> = facts
@@ -711,30 +713,33 @@ mod tests {
             .collect();
 
         assert!(!grandparent_facts.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_rule_validation() {
+    fn test_rule_validation() -> Result<(), Box<dyn std::error::Error>> {
         let result = RuleAuthoringBestPractices::validate_rule_example();
         assert!(result.is_ok());
-        assert!(result.unwrap()); // Well-structured rule should validate
+        assert!(result?); // Well-structured rule should validate
+        Ok(())
     }
 
     #[test]
-    fn test_ontology_reasoning() {
+    fn test_ontology_reasoning() -> Result<(), Box<dyn std::error::Error>> {
         let result = GettingStartedGuide::ontology_reasoning_example();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
 
         // Should derive class and property inheritance
         assert!(!facts.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_rdf_integration() {
+    fn test_rdf_integration() -> Result<(), Box<dyn std::error::Error>> {
         let result = IntegrationExamples::rdf_integration_example();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
 
         // Should derive that fido is an Animal (via subclass inference)
         let animal_facts: Vec<_> = facts
@@ -751,5 +756,6 @@ mod tests {
             .collect();
 
         assert!(!animal_facts.is_empty());
+        Ok(())
     }
 }

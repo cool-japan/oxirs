@@ -330,16 +330,24 @@ mod tests {
         let analyzer = DimensionalAnalyzer::new();
 
         // Same units should be consistent
-        assert!(analyzer.check_consistency("m", "m").unwrap());
-        assert!(analyzer.check_consistency("kg", "kg").unwrap());
+        assert!(analyzer
+            .check_consistency("m", "m")
+            .expect("should succeed"));
+        assert!(analyzer
+            .check_consistency("kg", "kg")
+            .expect("should succeed"));
 
         // Different units with same dimensions
         // Note: m and km have different prefixes but same dimensions
         // This would require prefix handling (future work)
 
         // Different dimensions should not be consistent
-        assert!(!analyzer.check_consistency("m", "kg").unwrap());
-        assert!(!analyzer.check_consistency("J", "Pa").unwrap());
+        assert!(!analyzer
+            .check_consistency("m", "kg")
+            .expect("should succeed"));
+        assert!(!analyzer
+            .check_consistency("J", "Pa")
+            .expect("should succeed"));
     }
 
     #[test]
@@ -347,19 +355,19 @@ mod tests {
         let analyzer = DimensionalAnalyzer::new();
 
         // Force (N) = mass * length / time^2
-        let newton = analyzer.get_dimensions("N").unwrap();
+        let newton = analyzer.get_dimensions("N").expect("should succeed");
         assert_eq!(newton.mass, 1);
         assert_eq!(newton.length, 1);
         assert_eq!(newton.time, -2);
 
         // Energy (J) = mass * length^2 / time^2
-        let joule = analyzer.get_dimensions("J").unwrap();
+        let joule = analyzer.get_dimensions("J").expect("should succeed");
         assert_eq!(joule.mass, 1);
         assert_eq!(joule.length, 2);
         assert_eq!(joule.time, -2);
 
         // Power (W) = energy / time
-        let watt = analyzer.get_dimensions("W").unwrap();
+        let watt = analyzer.get_dimensions("W").expect("should succeed");
         assert_eq!(watt.mass, 1);
         assert_eq!(watt.length, 2);
         assert_eq!(watt.time, -3);
@@ -369,9 +377,11 @@ mod tests {
     fn test_dimensionless() {
         let analyzer = DimensionalAnalyzer::new();
 
-        assert!(analyzer.is_dimensionless("dimensionless").unwrap());
-        assert!(analyzer.is_dimensionless("1").unwrap());
-        assert!(!analyzer.is_dimensionless("m").unwrap());
+        assert!(analyzer
+            .is_dimensionless("dimensionless")
+            .expect("should succeed"));
+        assert!(analyzer.is_dimensionless("1").expect("should succeed"));
+        assert!(!analyzer.is_dimensionless("m").expect("should succeed"));
     }
 
     #[test]
@@ -387,8 +397,12 @@ mod tests {
         assert!(checker.validate_unit("invalid_unit").is_err());
 
         // Compatibility
-        assert!(checker.check_compatibility("m", "m").unwrap());
-        assert!(!checker.check_compatibility("m", "kg").unwrap());
+        assert!(checker
+            .check_compatibility("m", "m")
+            .expect("should succeed"));
+        assert!(!checker
+            .check_compatibility("m", "kg")
+            .expect("should succeed"));
     }
 
     #[test]
@@ -396,14 +410,14 @@ mod tests {
         let analyzer = DimensionalAnalyzer::new();
 
         // Thermal conductivity: W/(m·K) = kg·m/s³·K
-        let k = analyzer.get_dimensions("W/(m*K)").unwrap();
+        let k = analyzer.get_dimensions("W/(m*K)").expect("should succeed");
         assert_eq!(k.length, 1);
         assert_eq!(k.mass, 1);
         assert_eq!(k.time, -3);
         assert_eq!(k.temperature, -1);
 
         // Specific heat: J/(kg·K) = m²/(s²·K)
-        let cp = analyzer.get_dimensions("J/(kg*K)").unwrap();
+        let cp = analyzer.get_dimensions("J/(kg*K)").expect("should succeed");
         assert_eq!(cp.length, 2);
         assert_eq!(cp.mass, 0);
         assert_eq!(cp.time, -2);

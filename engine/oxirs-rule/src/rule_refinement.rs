@@ -39,7 +39,7 @@
 //! refiner.add_rule(rule);
 //!
 //! // Analyze and refine rules
-//! let refined_rules = refiner.refine_rules().unwrap();
+//! let refined_rules = refiner.refine_rules().expect("should succeed");
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
@@ -539,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn test_record_application() {
+    fn test_record_application() -> Result<(), Box<dyn std::error::Error>> {
         let mut refiner = RuleRefiner::new();
         let rule = create_test_rule("test");
 
@@ -548,11 +548,12 @@ mod tests {
         refiner.record_application("test", false);
 
         let stats = refiner.get_statistics();
-        assert_eq!(stats.get("test").unwrap().0, 2); // 2 applications
+        assert_eq!(stats.get("test").ok_or("expected Some value")?.0, 2); // 2 applications
+        Ok(())
     }
 
     #[test]
-    fn test_rule_refinement() {
+    fn test_rule_refinement() -> Result<(), Box<dyn std::error::Error>> {
         let mut refiner = RuleRefiner::new();
 
         // Add some rules
@@ -576,10 +577,11 @@ mod tests {
         refiner.add_training_data(data);
 
         // Refine
-        let refined = refiner.refine_rules().unwrap();
+        let refined = refiner.refine_rules()?;
 
         // Should keep at least some rules
         assert!(!refined.is_empty());
+        Ok(())
     }
 
     #[test]

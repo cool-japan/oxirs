@@ -380,7 +380,8 @@ mod tests {
     #[test]
     fn test_put_and_get() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k1".into(), entry_value(1), secs(60)).unwrap();
+        c.put("k1".into(), entry_value(1), secs(60))
+            .expect("should succeed");
         let e = c.get("k1").expect("should be present");
         assert_eq!(e.value, entry_value(1));
     }
@@ -388,10 +389,12 @@ mod tests {
     #[test]
     fn test_put_overwrites_existing_key() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k1".into(), vec![1; 4], secs(60)).unwrap();
-        c.put("k1".into(), vec![2; 4], secs(60)).unwrap();
+        c.put("k1".into(), vec![1; 4], secs(60))
+            .expect("should succeed");
+        c.put("k1".into(), vec![2; 4], secs(60))
+            .expect("should succeed");
         assert_eq!(c.entry_count(), 1);
-        assert_eq!(c.get("k1").unwrap().value, vec![2; 4]);
+        assert_eq!(c.get("k1").expect("should succeed").value, vec![2; 4]);
     }
 
     #[test]
@@ -405,7 +408,8 @@ mod tests {
     #[test]
     fn test_cache_hit_increments_stats() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k1".into(), entry_value(1), secs(60)).unwrap();
+        c.put("k1".into(), entry_value(1), secs(60))
+            .expect("should succeed");
         c.get("k1");
         c.get("k1");
         assert_eq!(c.stats().hits, 2);
@@ -430,7 +434,8 @@ mod tests {
     #[test]
     fn test_hit_rate_all_hits() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k".into(), entry_value(1), secs(60)).unwrap();
+        c.put("k".into(), entry_value(1), secs(60))
+            .expect("should succeed");
         c.get("k");
         c.get("k");
         assert!((c.stats().hit_rate() - 1.0).abs() < 1e-10);
@@ -439,7 +444,8 @@ mod tests {
     #[test]
     fn test_hit_rate_mixed() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k".into(), entry_value(1), secs(60)).unwrap();
+        c.put("k".into(), entry_value(1), secs(60))
+            .expect("should succeed");
         c.get("k"); // hit
         c.get("absent"); // miss
         let rate = c.stats().hit_rate();
@@ -504,7 +510,7 @@ mod tests {
 
         // Also insert a live entry.
         c.put("live".into(), vec![1; 8], Duration::from_secs(3600))
-            .unwrap();
+            .expect("should succeed");
 
         let removed = c.evict_expired();
         assert_eq!(removed, 1);
@@ -539,16 +545,20 @@ mod tests {
     #[test]
     fn test_lru_eviction_when_max_entries_exceeded() {
         let mut c = CacheCoordinator::new(EvictionPolicy::Lru, 3, 1 << 20);
-        c.put("a".into(), vec![1], secs(60)).unwrap();
-        c.put("b".into(), vec![2], secs(60)).unwrap();
-        c.put("c".into(), vec![3], secs(60)).unwrap();
+        c.put("a".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("b".into(), vec![2], secs(60))
+            .expect("should succeed");
+        c.put("c".into(), vec![3], secs(60))
+            .expect("should succeed");
 
         // Access 'a' to make it recently used; 'b' becomes LRU.
         c.get("a");
         c.get("c");
 
         // This put should evict 'b'.
-        c.put("d".into(), vec![4], secs(60)).unwrap();
+        c.put("d".into(), vec![4], secs(60))
+            .expect("should succeed");
 
         assert!(c.get("b").is_none(), "b should have been evicted");
         assert!(c.get("a").is_some());
@@ -559,9 +569,12 @@ mod tests {
     #[test]
     fn test_lru_eviction_increments_eviction_count() {
         let mut c = CacheCoordinator::new(EvictionPolicy::Lru, 2, 1 << 20);
-        c.put("a".into(), vec![1], secs(60)).unwrap();
-        c.put("b".into(), vec![2], secs(60)).unwrap();
-        c.put("c".into(), vec![3], secs(60)).unwrap(); // evicts 'a'
+        c.put("a".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("b".into(), vec![2], secs(60))
+            .expect("should succeed");
+        c.put("c".into(), vec![3], secs(60))
+            .expect("should succeed"); // evicts 'a'
         assert_eq!(c.stats().evictions, 1);
     }
 
@@ -570,10 +583,14 @@ mod tests {
     #[test]
     fn test_fifo_eviction_removes_oldest_insert() {
         let mut c = CacheCoordinator::new(EvictionPolicy::Fifo, 3, 1 << 20);
-        c.put("first".into(), vec![1], secs(60)).unwrap();
-        c.put("second".into(), vec![2], secs(60)).unwrap();
-        c.put("third".into(), vec![3], secs(60)).unwrap();
-        c.put("fourth".into(), vec![4], secs(60)).unwrap(); // evicts 'first'
+        c.put("first".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("second".into(), vec![2], secs(60))
+            .expect("should succeed");
+        c.put("third".into(), vec![3], secs(60))
+            .expect("should succeed");
+        c.put("fourth".into(), vec![4], secs(60))
+            .expect("should succeed"); // evicts 'first'
         assert!(c.get("first").is_none());
         assert!(c.get("second").is_some());
         assert!(c.get("fourth").is_some());
@@ -584,15 +601,19 @@ mod tests {
     #[test]
     fn test_lfu_eviction_removes_least_frequently_used() {
         let mut c = CacheCoordinator::new(EvictionPolicy::Lfu, 3, 1 << 20);
-        c.put("a".into(), vec![1], secs(60)).unwrap();
-        c.put("b".into(), vec![2], secs(60)).unwrap();
-        c.put("c".into(), vec![3], secs(60)).unwrap();
+        c.put("a".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("b".into(), vec![2], secs(60))
+            .expect("should succeed");
+        c.put("c".into(), vec![3], secs(60))
+            .expect("should succeed");
         // Access 'a' and 'c' multiple times; 'b' has frequency 0.
         c.get("a");
         c.get("a");
         c.get("c");
         // Next put evicts 'b' (lowest frequency).
-        c.put("d".into(), vec![4], secs(60)).unwrap();
+        c.put("d".into(), vec![4], secs(60))
+            .expect("should succeed");
         assert!(
             c.get("b").is_none(),
             "b should have been evicted (lowest freq)"
@@ -606,7 +627,8 @@ mod tests {
     #[test]
     fn test_invalidate_present_key() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k".into(), vec![1], secs(60)).unwrap();
+        c.put("k".into(), vec![1], secs(60))
+            .expect("should succeed");
         assert!(c.invalidate("k"));
         assert!(c.get("k").is_none());
     }
@@ -620,8 +642,10 @@ mod tests {
     #[test]
     fn test_invalidate_decreases_entry_count() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("x".into(), vec![1], secs(60)).unwrap();
-        c.put("y".into(), vec![2], secs(60)).unwrap();
+        c.put("x".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("y".into(), vec![2], secs(60))
+            .expect("should succeed");
         c.invalidate("x");
         assert_eq!(c.entry_count(), 1);
     }
@@ -631,9 +655,12 @@ mod tests {
     #[test]
     fn test_invalidate_prefix_removes_matching_keys() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("ep1:q1".into(), vec![1], secs(60)).unwrap();
-        c.put("ep1:q2".into(), vec![2], secs(60)).unwrap();
-        c.put("ep2:q1".into(), vec![3], secs(60)).unwrap();
+        c.put("ep1:q1".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("ep1:q2".into(), vec![2], secs(60))
+            .expect("should succeed");
+        c.put("ep2:q1".into(), vec![3], secs(60))
+            .expect("should succeed");
         let count = c.invalidate_prefix("ep1:");
         assert_eq!(count, 2);
         assert!(c.get("ep1:q1").is_none());
@@ -644,7 +671,8 @@ mod tests {
     #[test]
     fn test_invalidate_prefix_no_match_returns_zero() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k".into(), vec![1], secs(60)).unwrap();
+        c.put("k".into(), vec![1], secs(60))
+            .expect("should succeed");
         assert_eq!(c.invalidate_prefix("nomatch:"), 0);
     }
 
@@ -653,14 +681,16 @@ mod tests {
     #[test]
     fn test_size_tracking_on_insert() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k".into(), vec![0u8; 100], secs(60)).unwrap();
+        c.put("k".into(), vec![0u8; 100], secs(60))
+            .expect("should succeed");
         assert_eq!(c.total_size_bytes(), 100);
     }
 
     #[test]
     fn test_size_decreases_on_invalidate() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k".into(), vec![0u8; 100], secs(60)).unwrap();
+        c.put("k".into(), vec![0u8; 100], secs(60))
+            .expect("should succeed");
         c.invalidate("k");
         assert_eq!(c.total_size_bytes(), 0);
     }
@@ -675,8 +705,10 @@ mod tests {
     #[test]
     fn test_size_bytes_tracks_multiple_entries() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("a".into(), vec![0u8; 30], secs(60)).unwrap();
-        c.put("b".into(), vec![0u8; 70], secs(60)).unwrap();
+        c.put("a".into(), vec![0u8; 30], secs(60))
+            .expect("should succeed");
+        c.put("b".into(), vec![0u8; 70], secs(60))
+            .expect("should succeed");
         assert_eq!(c.total_size_bytes(), 100);
     }
 
@@ -685,8 +717,10 @@ mod tests {
     #[test]
     fn test_clear_removes_all_entries() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("a".into(), vec![1], secs(60)).unwrap();
-        c.put("b".into(), vec![2], secs(60)).unwrap();
+        c.put("a".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("b".into(), vec![2], secs(60))
+            .expect("should succeed");
         c.clear();
         assert_eq!(c.entry_count(), 0);
         assert_eq!(c.total_size_bytes(), 0);
@@ -695,7 +729,8 @@ mod tests {
     #[test]
     fn test_clear_resets_stats() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("a".into(), vec![1], secs(60)).unwrap();
+        c.put("a".into(), vec![1], secs(60))
+            .expect("should succeed");
         c.get("a");
         c.clear();
         let s = c.stats();
@@ -740,12 +775,13 @@ mod tests {
     #[test]
     fn test_hit_count_increments_on_each_get() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("k".into(), vec![1], secs(60)).unwrap();
+        c.put("k".into(), vec![1], secs(60))
+            .expect("should succeed");
         c.get("k");
         c.get("k");
         c.get("k");
         // Re-fetch via get to observe the latest hit_count.
-        let entry = c.entries.get("k").unwrap();
+        let entry = c.entries.get("k").expect("should succeed");
         assert_eq!(entry.hit_count, 3);
     }
 
@@ -755,16 +791,19 @@ mod tests {
     fn test_entry_count_tracks_insertions() {
         let mut c = make_cache(EvictionPolicy::Lru);
         assert_eq!(c.entry_count(), 0);
-        c.put("a".into(), vec![1], secs(60)).unwrap();
+        c.put("a".into(), vec![1], secs(60))
+            .expect("should succeed");
         assert_eq!(c.entry_count(), 1);
-        c.put("b".into(), vec![2], secs(60)).unwrap();
+        c.put("b".into(), vec![2], secs(60))
+            .expect("should succeed");
         assert_eq!(c.entry_count(), 2);
     }
 
     #[test]
     fn test_entry_count_decreases_on_invalidate() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("a".into(), vec![1], secs(60)).unwrap();
+        c.put("a".into(), vec![1], secs(60))
+            .expect("should succeed");
         c.invalidate("a");
         assert_eq!(c.entry_count(), 0);
     }
@@ -805,7 +844,8 @@ mod tests {
             c.stats.total_size_bytes += 1;
         }
         c.stats.entry_count = 5;
-        c.put("live".into(), vec![99], secs(3600)).unwrap();
+        c.put("live".into(), vec![99], secs(3600))
+            .expect("should succeed");
         let removed = c.evict_expired();
         assert_eq!(removed, 5);
         assert_eq!(c.entry_count(), 1);
@@ -834,15 +874,19 @@ mod tests {
     #[test]
     fn test_lru_evicts_least_recently_used_not_least_inserted() {
         let mut c = CacheCoordinator::new(EvictionPolicy::Lru, 3, 1 << 20);
-        c.put("a".into(), vec![1], secs(60)).unwrap();
-        c.put("b".into(), vec![2], secs(60)).unwrap();
-        c.put("c".into(), vec![3], secs(60)).unwrap();
+        c.put("a".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("b".into(), vec![2], secs(60))
+            .expect("should succeed");
+        c.put("c".into(), vec![3], secs(60))
+            .expect("should succeed");
 
         // Touch 'a' so 'b' becomes LRU.
         c.get("c");
         c.get("a");
 
-        c.put("d".into(), vec![4], secs(60)).unwrap();
+        c.put("d".into(), vec![4], secs(60))
+            .expect("should succeed");
         assert!(c.get("b").is_none(), "b should be evicted (LRU)");
     }
 
@@ -871,8 +915,10 @@ mod tests {
     #[test]
     fn test_invalidate_full_key_as_prefix() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("abc".into(), vec![1], secs(60)).unwrap();
-        c.put("abcd".into(), vec![2], secs(60)).unwrap();
+        c.put("abc".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("abcd".into(), vec![2], secs(60))
+            .expect("should succeed");
         let count = c.invalidate_prefix("abc");
         assert_eq!(count, 2);
     }
@@ -880,9 +926,12 @@ mod tests {
     #[test]
     fn test_invalidate_prefix_empty_prefix_removes_all() {
         let mut c = make_cache(EvictionPolicy::Lru);
-        c.put("a".into(), vec![1], secs(60)).unwrap();
-        c.put("b".into(), vec![2], secs(60)).unwrap();
-        c.put("c".into(), vec![3], secs(60)).unwrap();
+        c.put("a".into(), vec![1], secs(60))
+            .expect("should succeed");
+        c.put("b".into(), vec![2], secs(60))
+            .expect("should succeed");
+        c.put("c".into(), vec![3], secs(60))
+            .expect("should succeed");
         let count = c.invalidate_prefix("");
         assert_eq!(count, 3);
         assert_eq!(c.entry_count(), 0);
@@ -895,8 +944,10 @@ mod tests {
         // max_size_bytes = 100; each entry is 60 bytes.
         // After inserting 'a' (60 B), inserting 'b' (60 B) would exceed 100 B → evict 'a'.
         let mut c = CacheCoordinator::new(EvictionPolicy::Lru, 100, 100);
-        c.put("a".into(), vec![0u8; 60], secs(60)).unwrap();
-        c.put("b".into(), vec![0u8; 60], secs(60)).unwrap();
+        c.put("a".into(), vec![0u8; 60], secs(60))
+            .expect("should succeed");
+        c.put("b".into(), vec![0u8; 60], secs(60))
+            .expect("should succeed");
         assert!(c.get("a").is_none(), "a should have been evicted");
         assert!(c.get("b").is_some());
     }

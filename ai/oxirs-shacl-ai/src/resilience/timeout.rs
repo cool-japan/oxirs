@@ -144,7 +144,7 @@ mod tests {
         .await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
     }
 
     #[tokio::test]
@@ -208,15 +208,15 @@ mod tests {
     fn test_stream_timeout() {
         let stream_timeout = StreamTimeout::new(Duration::from_millis(100));
 
-        assert!(!stream_timeout.is_expired().unwrap());
+        assert!(!stream_timeout.is_expired().expect("should succeed"));
 
         // Wait for timeout
         std::thread::sleep(Duration::from_millis(150));
-        assert!(stream_timeout.is_expired().unwrap());
+        assert!(stream_timeout.is_expired().expect("should succeed"));
 
         // Update activity
-        stream_timeout.update().unwrap();
-        assert!(!stream_timeout.is_expired().unwrap());
+        stream_timeout.update().expect("should succeed");
+        assert!(!stream_timeout.is_expired().expect("should succeed"));
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(50));
 
-        let idle = stream_timeout.idle_time().unwrap();
+        let idle = stream_timeout.idle_time().expect("should succeed");
         assert!(idle >= Duration::from_millis(50));
         assert!(idle < Duration::from_millis(100));
     }

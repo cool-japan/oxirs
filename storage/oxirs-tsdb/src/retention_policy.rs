@@ -269,14 +269,14 @@ mod tests {
     #[test]
     fn test_add_policy_ok() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("raw")).unwrap();
+        m.add_policy(make_policy("raw")).expect("should succeed");
         assert_eq!(m.policy_count(), 1);
     }
 
     #[test]
     fn test_add_policy_duplicate_error() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("raw")).unwrap();
+        m.add_policy(make_policy("raw")).expect("should succeed");
         let err = m.add_policy(make_policy("raw")).unwrap_err();
         assert_eq!(err, RetentionError::PolicyAlreadyExists("raw".to_string()));
     }
@@ -285,8 +285,8 @@ mod tests {
     #[test]
     fn test_remove_policy_ok() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("raw")).unwrap();
-        m.remove_policy("raw").unwrap();
+        m.add_policy(make_policy("raw")).expect("should succeed");
+        m.remove_policy("raw").expect("should succeed");
         assert_eq!(m.policy_count(), 0);
     }
 
@@ -300,9 +300,9 @@ mod tests {
     #[test]
     fn test_remove_clears_default() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("raw")).unwrap();
-        m.set_default("raw").unwrap();
-        m.remove_policy("raw").unwrap();
+        m.add_policy(make_policy("raw")).expect("should succeed");
+        m.set_default("raw").expect("should succeed");
+        m.remove_policy("raw").expect("should succeed");
         assert!(m.default_policy_name().is_none());
     }
 
@@ -310,8 +310,8 @@ mod tests {
     #[test]
     fn test_set_default_ok() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("raw")).unwrap();
-        m.set_default("raw").unwrap();
+        m.add_policy(make_policy("raw")).expect("should succeed");
+        m.set_default("raw").expect("should succeed");
         assert_eq!(m.default_policy_name(), Some("raw"));
     }
 
@@ -326,25 +326,31 @@ mod tests {
     #[test]
     fn test_effective_policy_exact_match() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("sensor.temp")).unwrap();
-        let p = m.effective_policy("sensor.temp").unwrap();
+        m.add_policy(make_policy("sensor.temp"))
+            .expect("should succeed");
+        let p = m.effective_policy("sensor.temp").expect("should succeed");
         assert_eq!(p.name, "sensor.temp");
     }
 
     #[test]
     fn test_effective_policy_prefix_match() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("sensor")).unwrap();
-        let p = m.effective_policy("sensor.temperature").unwrap();
+        m.add_policy(make_policy("sensor")).expect("should succeed");
+        let p = m
+            .effective_policy("sensor.temperature")
+            .expect("should succeed");
         assert_eq!(p.name, "sensor");
     }
 
     #[test]
     fn test_effective_policy_falls_back_to_default() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("default")).unwrap();
-        m.set_default("default").unwrap();
-        let p = m.effective_policy("unknown.series").unwrap();
+        m.add_policy(make_policy("default"))
+            .expect("should succeed");
+        m.set_default("default").expect("should succeed");
+        let p = m
+            .effective_policy("unknown.series")
+            .expect("should succeed");
         assert_eq!(p.name, "default");
     }
 
@@ -359,7 +365,7 @@ mod tests {
     fn test_should_retain_within_window() {
         let mut m = RetentionManager::new();
         m.add_policy(RetentionPolicy::new("hourly", RetentionDuration::Hours(1)))
-            .unwrap();
+            .expect("should succeed");
         let now = 3_600_000u64 * 2; // 2 hours in ms
         let ts = now - 1_800_000; // 30 min ago
         assert!(m.should_retain("hourly", ts, now));
@@ -369,7 +375,7 @@ mod tests {
     fn test_should_retain_outside_window() {
         let mut m = RetentionManager::new();
         m.add_policy(RetentionPolicy::new("hourly", RetentionDuration::Hours(1)))
-            .unwrap();
+            .expect("should succeed");
         let now = 3_600_000u64 * 2;
         let ts = now - 3_600_001; // just over 1 hour ago
         assert!(!m.should_retain("hourly", ts, now));
@@ -379,7 +385,7 @@ mod tests {
     fn test_should_retain_forever() {
         let mut m = RetentionManager::new();
         m.add_policy(RetentionPolicy::new("forever", RetentionDuration::Forever))
-            .unwrap();
+            .expect("should succeed");
         assert!(m.should_retain("forever", 0, u64::MAX));
     }
 
@@ -394,7 +400,7 @@ mod tests {
     fn test_apply_retention_removes_old() {
         let mut m = RetentionManager::new();
         m.add_policy(RetentionPolicy::new("hourly", RetentionDuration::Hours(1)))
-            .unwrap();
+            .expect("should succeed");
         let now_ms = 7_200_000u64; // 2 hours
         let mut data = vec![
             ts_ms_to_point(now_ms - 500_000),   // 8.3 min ago — keep
@@ -409,7 +415,7 @@ mod tests {
     fn test_apply_retention_keeps_all_in_window() {
         let mut m = RetentionManager::new();
         m.add_policy(RetentionPolicy::new("daily", RetentionDuration::Days(1)))
-            .unwrap();
+            .expect("should succeed");
         let now_ms = 86_400_000u64 * 2;
         let mut data: Vec<DataPoint> = (0..5)
             .map(|i| ts_ms_to_point(now_ms - i * 10_000))
@@ -423,7 +429,7 @@ mod tests {
     fn test_apply_retention_returns_count() {
         let mut m = RetentionManager::new();
         m.add_policy(RetentionPolicy::new("short", RetentionDuration::Hours(1)))
-            .unwrap();
+            .expect("should succeed");
         let now_ms = 7_200_000u64;
         let mut data = vec![ts_ms_to_point(0), ts_ms_to_point(1), ts_ms_to_point(2)];
         let removed = m.apply_retention(&mut data, "short", now_ms);
@@ -435,9 +441,9 @@ mod tests {
     #[test]
     fn test_list_policies_sorted() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("zeta")).unwrap();
-        m.add_policy(make_policy("alpha")).unwrap();
-        m.add_policy(make_policy("mu")).unwrap();
+        m.add_policy(make_policy("zeta")).expect("should succeed");
+        m.add_policy(make_policy("alpha")).expect("should succeed");
+        m.add_policy(make_policy("mu")).expect("should succeed");
         let list = m.list_policies();
         assert_eq!(list[0].name, "alpha");
         assert_eq!(list[1].name, "mu");
@@ -481,9 +487,9 @@ mod tests {
     #[test]
     fn test_policy_count_after_operations() {
         let mut m = RetentionManager::new();
-        m.add_policy(make_policy("a")).unwrap();
-        m.add_policy(make_policy("b")).unwrap();
-        m.remove_policy("a").unwrap();
+        m.add_policy(make_policy("a")).expect("should succeed");
+        m.add_policy(make_policy("b")).expect("should succeed");
+        m.remove_policy("a").expect("should succeed");
         assert_eq!(m.policy_count(), 1);
     }
 
@@ -492,7 +498,7 @@ mod tests {
         let mut m = RetentionManager::new();
         // 1 day = 86_400_000 ms
         m.add_policy(RetentionPolicy::new("daily", RetentionDuration::Days(1)))
-            .unwrap();
+            .expect("should succeed");
         let now_ms = 86_400_000u64 * 2;
         let cutoff = now_ms - 86_400_000;
         // Exactly at cutoff should be retained (>=)

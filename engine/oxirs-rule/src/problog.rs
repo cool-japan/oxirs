@@ -980,7 +980,7 @@ mod tests {
         let tree = engine.explain(&create_triple("john", "parent", "mary"))?;
 
         assert!(tree.is_some());
-        let tree = tree.unwrap();
+        let tree = tree.ok_or_else(|| anyhow::anyhow!("expected Some value"))?;
         assert_eq!(tree.probability, 0.9);
         assert!(tree.premises.is_empty()); // Leaf node
 

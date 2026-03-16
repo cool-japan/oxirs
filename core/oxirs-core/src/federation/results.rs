@@ -185,7 +185,7 @@ mod tests {
             }
         }"#;
 
-        let bindings = SparqlResultsParser::parse(json).unwrap();
+        let bindings = SparqlResultsParser::parse(json).expect("construction should succeed");
         assert_eq!(bindings.len(), 2);
 
         if let Some(Term::Literal(lit)) = bindings[0].get("name") {
@@ -206,7 +206,7 @@ mod tests {
             }
         }"#;
 
-        let bindings = SparqlResultsParser::parse(json).unwrap();
+        let bindings = SparqlResultsParser::parse(json).expect("construction should succeed");
         assert_eq!(bindings.len(), 1);
 
         if let Some(Term::NamedNode(node)) = bindings[0].get("person") {
@@ -227,7 +227,7 @@ mod tests {
             }
         }"#;
 
-        let bindings = SparqlResultsParser::parse(json).unwrap();
+        let bindings = SparqlResultsParser::parse(json).expect("construction should succeed");
         assert_eq!(bindings.len(), 1);
 
         if let Some(Term::Literal(lit)) = bindings[0].get("label") {
@@ -255,7 +255,7 @@ mod tests {
             }
         }"#;
 
-        let bindings = SparqlResultsParser::parse(json).unwrap();
+        let bindings = SparqlResultsParser::parse(json).expect("construction should succeed");
         assert_eq!(bindings.len(), 1);
 
         if let Some(Term::Literal(lit)) = bindings[0].get("age") {
@@ -276,7 +276,7 @@ mod tests {
             "results": { "bindings": [] }
         }"#;
 
-        let bindings = SparqlResultsParser::parse(json).unwrap();
+        let bindings = SparqlResultsParser::parse(json).expect("construction should succeed");
         assert_eq!(bindings.len(), 0);
         assert!(SparqlResultsParser::is_empty_result(json));
     }
@@ -295,7 +295,8 @@ mod tests {
             }
         }"#;
 
-        let (variables, bindings) = SparqlResultsParser::parse_with_variables(json).unwrap();
+        let (variables, bindings) =
+            SparqlResultsParser::parse_with_variables(json).expect("construction should succeed");
         assert_eq!(variables.len(), 2);
         assert_eq!(variables[0].name(), "name");
         assert_eq!(variables[1].name(), "age");
@@ -315,7 +316,7 @@ mod tests {
             }
         }"#;
 
-        let count = SparqlResultsParser::count_results(json).unwrap();
+        let count = SparqlResultsParser::count_results(json).expect("construction should succeed");
         assert_eq!(count, 3);
     }
 }

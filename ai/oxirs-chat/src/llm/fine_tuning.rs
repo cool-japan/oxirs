@@ -488,7 +488,10 @@ mod tests {
         };
 
         let engine = FineTuningEngine::new(config);
-        let stats = engine.get_training_statistics().await.unwrap();
+        let stats = engine
+            .get_training_statistics()
+            .await
+            .expect("should succeed");
         assert_eq!(stats.total_jobs, 0);
     }
 

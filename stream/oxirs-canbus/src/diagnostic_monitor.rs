@@ -455,48 +455,48 @@ mod tests {
     #[test]
     fn test_decode_pid_rpm() {
         // (256*0 + 200) / 4 = 50 RPM
-        let v = DiagnosticMonitor::decode_pid_value(0x0C, &[0, 200]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x0C, &[0, 200]).expect("should succeed");
         assert!((v - 50.0).abs() < 0.01);
     }
 
     #[test]
     fn test_decode_pid_rpm_high() {
         // (256*30 + 0) / 4 = 1920 RPM
-        let v = DiagnosticMonitor::decode_pid_value(0x0C, &[30, 0]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x0C, &[30, 0]).expect("should succeed");
         assert!((v - 1920.0).abs() < 0.01);
     }
 
     #[test]
     fn test_decode_pid_speed() {
-        let v = DiagnosticMonitor::decode_pid_value(0x0D, &[120]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x0D, &[120]).expect("should succeed");
         assert!((v - 120.0).abs() < 0.01);
     }
 
     #[test]
     fn test_decode_pid_coolant() {
         // A = 100 → 100 - 40 = 60 °C
-        let v = DiagnosticMonitor::decode_pid_value(0x05, &[100]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x05, &[100]).expect("should succeed");
         assert!((v - 60.0).abs() < 0.01);
     }
 
     #[test]
     fn test_decode_pid_coolant_min() {
         // A = 0 → 0 - 40 = -40 °C
-        let v = DiagnosticMonitor::decode_pid_value(0x05, &[0]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x05, &[0]).expect("should succeed");
         assert!((v - (-40.0)).abs() < 0.01);
     }
 
     #[test]
     fn test_decode_pid_throttle() {
         // A = 255 → 100%
-        let v = DiagnosticMonitor::decode_pid_value(0x11, &[255]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x11, &[255]).expect("should succeed");
         assert!((v - 100.0).abs() < 0.1);
     }
 
     #[test]
     fn test_decode_pid_throttle_half() {
         // A = 127 → ~49.8%
-        let v = DiagnosticMonitor::decode_pid_value(0x11, &[127]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x11, &[127]).expect("should succeed");
         assert!(v > 49.0 && v < 51.0);
     }
 
@@ -614,7 +614,7 @@ mod tests {
     #[test]
     fn test_throttle_frame_decode() {
         let f = throttle_frame(128, 0);
-        let v = DiagnosticMonitor::decode_pid_value(f.pid, &f.data).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(f.pid, &f.data).expect("should succeed");
         assert!(v > 40.0 && v < 60.0);
     }
 
@@ -656,14 +656,14 @@ mod tests {
     #[test]
     fn test_decode_pid_rpm_zero() {
         // A=0, B=0 → (0+0)/4 = 0
-        let v = DiagnosticMonitor::decode_pid_value(0x0C, &[0, 0]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x0C, &[0, 0]).expect("should succeed");
         assert!((v - 0.0).abs() < 0.01);
     }
 
     #[test]
     fn test_decode_pid_coolant_max() {
         // A=255 → 255-40 = 215 °C
-        let v = DiagnosticMonitor::decode_pid_value(0x05, &[255]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x05, &[255]).expect("should succeed");
         assert!((v - 215.0).abs() < 0.01);
     }
 
@@ -739,7 +739,7 @@ mod tests {
 
     #[test]
     fn test_decode_pid_throttle_zero() {
-        let v = DiagnosticMonitor::decode_pid_value(0x11, &[0]).unwrap();
+        let v = DiagnosticMonitor::decode_pid_value(0x11, &[0]).expect("should succeed");
         assert!(v.abs() < 0.01);
     }
 

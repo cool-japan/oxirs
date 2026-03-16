@@ -322,64 +322,67 @@ impl CrossEncoder {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
-    fn test_local_backend_basic() {
+    fn test_local_backend_basic() -> Result<()> {
         let backend = LocalBackend::new(
             "cross-encoder/ms-marco-MiniLM-L-6-v2".to_string(),
             512,
             "cpu".to_string(),
         );
 
-        let score = backend
-            .score("machine learning", "deep learning tutorial")
-            .unwrap();
+        let score = backend.score("machine learning", "deep learning tutorial")?;
         assert!((0.0..=1.0).contains(&score));
+        Ok(())
     }
 
     #[test]
-    fn test_local_backend_exact_match() {
+    fn test_local_backend_exact_match() -> Result<()> {
         let backend = LocalBackend::new("test-model".to_string(), 512, "cpu".to_string());
 
-        let score = backend
-            .score("rust programming", "This is about rust programming")
-            .unwrap();
+        let score = backend.score("rust programming", "This is about rust programming")?;
         assert!(score > 0.9);
+        Ok(())
     }
 
     #[test]
-    fn test_local_backend_no_match() {
+    fn test_local_backend_no_match() -> Result<()> {
         let backend = LocalBackend::new("test-model".to_string(), 512, "cpu".to_string());
 
-        let score = backend.score("python", "javascript tutorial").unwrap();
+        let score = backend.score("python", "javascript tutorial")?;
         assert!(score < 0.6);
+        Ok(())
     }
 
     #[test]
-    fn test_mock_backend() {
+    fn test_mock_backend() -> Result<()> {
         let backend = MockBackend::new();
         backend.set_score("test", "document", 0.85);
 
-        let score = backend.score("test", "document").unwrap();
+        let score = backend.score("test", "document")?;
         assert!((score - 0.85).abs() < 0.01);
+        Ok(())
     }
 
     #[test]
-    fn test_cross_encoder_creation() {
-        let encoder = CrossEncoder::new("ms-marco-MiniLM", "local").unwrap();
+    fn test_cross_encoder_creation() -> Result<()> {
+        let encoder = CrossEncoder::new("ms-marco-MiniLM", "local")?;
         assert_eq!(encoder.model_name(), "ms-marco-MiniLM");
+        Ok(())
     }
 
     #[test]
-    fn test_cross_encoder_scoring() {
+    fn test_cross_encoder_scoring() -> Result<()> {
         let encoder = CrossEncoder::with_mock_backend();
-        let score = encoder.score("query", "relevant document").unwrap();
+        let score = encoder.score("query", "relevant document")?;
         assert!((0.0..=1.0).contains(&score));
+        Ok(())
     }
 
     #[test]
-    fn test_batch_scoring() {
+    fn test_batch_scoring() -> Result<()> {
         let encoder = CrossEncoder::with_mock_backend();
         let pairs = vec![
             ("query1".to_string(), "doc1".to_string()),
@@ -387,23 +390,25 @@ mod tests {
             ("query3".to_string(), "doc3".to_string()),
         ];
 
-        let scores = encoder.batch_score(&pairs).unwrap();
+        let scores = encoder.batch_score(&pairs)?;
         assert_eq!(scores.len(), 3);
 
         for score in scores {
             assert!((0.0..=1.0).contains(&score));
         }
+        Ok(())
     }
 
     #[test]
-    fn test_empty_input() {
+    fn test_empty_input() -> Result<()> {
         let backend = LocalBackend::new("test-model".to_string(), 512, "cpu".to_string());
 
-        let score = backend.score("", "document").unwrap();
+        let score = backend.score("", "document")?;
         assert_eq!(score, 0.0);
 
-        let score = backend.score("query", "").unwrap();
+        let score = backend.score("query", "")?;
         assert_eq!(score, 0.0);
+        Ok(())
     }
 
     #[test]

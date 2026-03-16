@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn test_create_mmap_store() {
         let path = temp_path("create");
-        let store = MmapTripleStore::create(&path, 1000).unwrap();
+        let store = MmapTripleStore::create(&path, 1000).expect("construction should succeed");
 
         assert_eq!(store.capacity(), 1000);
         assert_eq!(store.len(), 0);
@@ -508,13 +508,13 @@ mod tests {
 
         // Create store
         {
-            let store = MmapTripleStore::create(&path, 500).unwrap();
+            let store = MmapTripleStore::create(&path, 500).expect("construction should succeed");
             assert_eq!(store.capacity(), 500);
         }
 
         // Open existing
         {
-            let store = MmapTripleStore::open(&path, false).unwrap();
+            let store = MmapTripleStore::open(&path, false).expect("construction should succeed");
             assert_eq!(store.capacity(), 500);
             assert_eq!(store.len(), 0);
         }
@@ -527,8 +527,8 @@ mod tests {
     fn test_readonly_view() {
         let path = temp_path("readonly");
 
-        let store = MmapTripleStore::create(&path, 100).unwrap();
-        let view = store.as_readonly().unwrap();
+        let store = MmapTripleStore::create(&path, 100).expect("construction should succeed");
+        let view = store.as_readonly().expect("store operation should succeed");
 
         assert_eq!(view.capacity(), 100);
         assert_eq!(view.len(), 0);
@@ -544,11 +544,11 @@ mod tests {
 
         // Create and close
         {
-            let _ = MmapTripleStore::create(&path, 50).unwrap();
+            let _ = MmapTripleStore::create(&path, 50).expect("construction should succeed");
         }
 
         // Open as read-only
-        let store = MmapTripleStore::open(&path, true).unwrap();
+        let store = MmapTripleStore::open(&path, true).expect("construction should succeed");
         assert_eq!(store.capacity(), 50);
         assert!(store.read_only);
 
@@ -559,14 +559,14 @@ mod tests {
     #[test]
     fn test_capacity_limit() {
         let path = temp_path("capacity");
-        let mut store = MmapTripleStore::create(&path, 0).unwrap();
+        let mut store = MmapTripleStore::create(&path, 0).expect("construction should succeed");
 
         // Attempting to insert when at capacity should fail
         let s = crate::model::Subject::NamedNode(
-            crate::model::NamedNode::new("http://example.org/s").unwrap(),
+            crate::model::NamedNode::new("http://example.org/s").expect("valid IRI"),
         );
         let p = crate::model::Predicate::NamedNode(
-            crate::model::NamedNode::new("http://example.org/p").unwrap(),
+            crate::model::NamedNode::new("http://example.org/p").expect("valid IRI"),
         );
         let o = crate::model::Object::Literal(crate::model::Literal::new("test"));
         let triple = Triple::new(s, p, o);

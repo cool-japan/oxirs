@@ -1541,7 +1541,7 @@ mod tests {
     }
 
     #[test]
-    fn test_memory_cache() {
+    fn test_memory_cache() -> Result<()> {
         let config = CacheConfig {
             max_memory_entries: 2,
             max_memory_bytes: 1024,
@@ -1559,30 +1559,25 @@ mod tests {
         let vector3 = Vector::new(vec![7.0, 8.0, 9.0]);
 
         // Insert vectors
-        cache
-            .insert(key1.clone(), CacheEntry::new(vector1.clone()))
-            .unwrap();
-        cache
-            .insert(key2.clone(), CacheEntry::new(vector2.clone()))
-            .unwrap();
+        cache.insert(key1.clone(), CacheEntry::new(vector1.clone()))?;
+        cache.insert(key2.clone(), CacheEntry::new(vector2.clone()))?;
 
         // Check retrieval
         assert!(cache.get(&key1).is_some());
         assert!(cache.get(&key2).is_some());
 
         // Insert third vector (should evict one)
-        cache
-            .insert(key3.clone(), CacheEntry::new(vector3.clone()))
-            .unwrap();
+        cache.insert(key3.clone(), CacheEntry::new(vector3.clone()))?;
 
         // One of the first two should be evicted
         let remaining = cache.entries.len();
         assert_eq!(remaining, 2);
+        Ok(())
     }
 
     #[test]
-    fn test_persistent_cache() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_persistent_cache() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = CacheConfig {
             persistent_cache_dir: Some(temp_dir.path().to_path_buf()),
@@ -1590,25 +1585,26 @@ mod tests {
             ..Default::default()
         };
 
-        let cache = PersistentCache::new(config).unwrap();
+        let cache = PersistentCache::new(config)?;
 
         let key = CacheKey::new("test", "persistent_key");
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
         let entry = CacheEntry::new(vector.clone());
 
         // Store and retrieve
-        cache.store(&key, &entry).unwrap();
-        let retrieved = cache.load(&key).unwrap();
+        cache.store(&key, &entry)?;
+        let retrieved = cache.load(&key)?;
 
         // Should succeed now with proper serialization
         assert!(retrieved.is_some());
-        let retrieved_entry = retrieved.unwrap();
+        let retrieved_entry = retrieved.expect("retrieved entry was None");
         assert_eq!(retrieved_entry.data.as_f32(), vector.as_f32());
+        Ok(())
     }
 
     #[test]
-    fn test_multi_level_cache() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_multi_level_cache() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = CacheConfig {
             max_memory_entries: 2,
@@ -1617,14 +1613,14 @@ mod tests {
             ..Default::default()
         };
 
-        let cache = MultiLevelCache::new(config).unwrap();
+        let cache = MultiLevelCache::new(config)?;
 
         let key = CacheKey::new("test", "multi_level");
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
 
         // Insert and retrieve
-        cache.insert(key.clone(), vector.clone()).unwrap();
-        let retrieved = cache.get(&key).unwrap();
+        cache.insert(key.clone(), vector.clone())?;
+        let retrieved = cache.get(&key).expect("get returned None");
 
         assert_eq!(retrieved.as_f32(), vector.as_f32());
 
@@ -1632,10 +1628,11 @@ mod tests {
         let stats = cache.get_stats();
         assert_eq!(stats.total_requests, 1);
         assert_eq!(stats.memory_hits, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_cache_expiration() {
+    fn test_cache_expiration() -> Result<()> {
         let config = CacheConfig {
             max_memory_entries: 10,
             ttl: Some(Duration::from_millis(10)),
@@ -1648,7 +1645,7 @@ mod tests {
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
         let entry = CacheEntry::new(vector).with_ttl(Duration::from_millis(10));
 
-        cache.insert(key.clone(), entry).unwrap();
+        cache.insert(key.clone(), entry)?;
 
         // Should be available immediately
         assert!(cache.get(&key).is_some());
@@ -1658,10 +1655,11 @@ mod tests {
 
         // Should be expired and removed
         assert!(cache.get(&key).is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_arc_eviction_policy() {
+    fn test_arc_eviction_policy() -> Result<()> {
         let config = CacheConfig {
             max_memory_entries: 3,
             eviction_policy: EvictionPolicy::ARC,
@@ -1678,15 +1676,9 @@ mod tests {
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
 
         // Insert three items
-        cache
-            .insert(key1.clone(), CacheEntry::new(vector.clone()))
-            .unwrap();
-        cache
-            .insert(key2.clone(), CacheEntry::new(vector.clone()))
-            .unwrap();
-        cache
-            .insert(key3.clone(), CacheEntry::new(vector.clone()))
-            .unwrap();
+        cache.insert(key1.clone(), CacheEntry::new(vector.clone()))?;
+        cache.insert(key2.clone(), CacheEntry::new(vector.clone()))?;
+        cache.insert(key3.clone(), CacheEntry::new(vector.clone()))?;
 
         // Access key1 multiple times to make it frequent
         cache.get(&key1);
@@ -1694,20 +1686,19 @@ mod tests {
         cache.get(&key1);
 
         // Insert key4 - should evict the least valuable item
-        cache
-            .insert(key4.clone(), CacheEntry::new(vector.clone()))
-            .unwrap();
+        cache.insert(key4.clone(), CacheEntry::new(vector.clone()))?;
 
         // key1 should still be there (frequent access)
         assert!(cache.get(&key1).is_some());
 
         // Check that we have exactly 3 items
         assert_eq!(cache.entries.len(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_cache_warmer() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_cache_warmer() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = CacheConfig {
             max_memory_entries: 10,
@@ -1716,7 +1707,7 @@ mod tests {
             ..Default::default()
         };
 
-        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let cache = Arc::new(MultiLevelCache::new(config)?);
         let warmer = CacheWarmer::new(Arc::clone(&cache));
 
         // Prepare test data
@@ -1727,19 +1718,20 @@ mod tests {
         ];
 
         // Warm cache with data
-        let loaded_count = warmer.warm_with_data(test_data.clone()).unwrap();
+        let loaded_count = warmer.warm_with_data(test_data.clone())?;
         assert_eq!(loaded_count, 3);
 
         // Verify data is in cache
         for (key, expected_vector) in test_data {
-            let cached_vector = cache.get(&key).unwrap();
+            let cached_vector = cache.get(&key).expect("cached vector was None");
             assert_eq!(cached_vector.as_f32(), expected_vector.as_f32());
         }
+        Ok(())
     }
 
     #[test]
-    fn test_cache_warmer_with_generator() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_cache_warmer_with_generator() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = CacheConfig {
             max_memory_entries: 10,
@@ -1748,32 +1740,31 @@ mod tests {
             ..Default::default()
         };
 
-        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let cache = Arc::new(MultiLevelCache::new(config)?);
         let warmer = CacheWarmer::new(Arc::clone(&cache));
 
         // Use generator to warm cache
-        let loaded_count = warmer
-            .warm_with_generator(5, |i| {
-                Some((
-                    CacheKey::new("generated", format!("item_{i}")),
-                    Vector::new(vec![i as f32, (i * 2) as f32]),
-                ))
-            })
-            .unwrap();
+        let loaded_count = warmer.warm_with_generator(5, |i| {
+            Some((
+                CacheKey::new("generated", format!("item_{i}")),
+                Vector::new(vec![i as f32, (i * 2) as f32]),
+            ))
+        })?;
 
         assert_eq!(loaded_count, 5);
 
         // Verify generated data is in cache
         for i in 0..5 {
             let key = CacheKey::new("generated", format!("item_{i}"));
-            let cached_vector = cache.get(&key).unwrap();
+            let cached_vector = cache.get(&key).expect("cached vector was None");
             assert_eq!(cached_vector.as_f32(), vec![i as f32, (i * 2) as f32]);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_cache_analyzer() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_cache_analyzer() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = CacheConfig {
             max_memory_entries: 10,
@@ -1782,7 +1773,7 @@ mod tests {
             ..Default::default()
         };
 
-        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let cache = Arc::new(MultiLevelCache::new(config)?);
         let invalidator = Arc::new(CacheInvalidator::new(Arc::clone(&cache)));
         let analyzer = CacheAnalyzer::new(Arc::clone(&cache), Arc::clone(&invalidator));
 
@@ -1791,8 +1782,8 @@ mod tests {
         let key2 = CacheKey::new("test", "analyze2");
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
 
-        cache.insert(key1.clone(), vector.clone()).unwrap();
-        cache.insert(key2.clone(), vector.clone()).unwrap();
+        cache.insert(key1.clone(), vector.clone())?;
+        cache.insert(key2.clone(), vector.clone())?;
 
         // Access the cache to generate some stats
         cache.get(&key1);
@@ -1811,11 +1802,12 @@ mod tests {
         let recommendations = analyzer.get_optimization_recommendations();
         // In this test case, we might get recommendations about hit ratio
         assert!(!recommendations.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_background_cache_worker() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_background_cache_worker() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = CacheConfig {
             max_memory_entries: 10,
@@ -1826,32 +1818,33 @@ mod tests {
             ..Default::default()
         };
 
-        let cache = Arc::new(MultiLevelCache::new(config.clone()).unwrap());
+        let cache = Arc::new(MultiLevelCache::new(config.clone())?);
         let invalidator = Arc::new(CacheInvalidator::new(Arc::clone(&cache)));
         let mut worker =
             BackgroundCacheWorker::new(Arc::clone(&cache), Arc::clone(&invalidator), config);
 
         // Start the worker
-        worker.start().unwrap();
+        worker.start()?;
 
         // Add some test data
         let key = CacheKey::new("test", "background");
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
-        cache.insert(key.clone(), vector.clone()).unwrap();
+        cache.insert(key.clone(), vector.clone())?;
 
         // Let the worker run for a short time
         std::thread::sleep(Duration::from_millis(150));
 
         // Stop the worker
-        worker.stop().unwrap();
+        worker.stop()?;
 
         // Verify data is still accessible
         assert!(cache.get(&key).is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_cache_invalidation_by_tag() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_cache_invalidation_by_tag() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = CacheConfig {
             max_memory_entries: 10,
@@ -1860,7 +1853,7 @@ mod tests {
             ..Default::default()
         };
 
-        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let cache = Arc::new(MultiLevelCache::new(config)?);
         let invalidator = Arc::new(CacheInvalidator::new(Arc::clone(&cache)));
 
         // Create entries with tags
@@ -1870,9 +1863,9 @@ mod tests {
 
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
 
-        cache.insert(key1.clone(), vector.clone()).unwrap();
-        cache.insert(key2.clone(), vector.clone()).unwrap();
-        cache.insert(key3.clone(), vector.clone()).unwrap();
+        cache.insert(key1.clone(), vector.clone())?;
+        cache.insert(key2.clone(), vector.clone())?;
+        cache.insert(key3.clone(), vector.clone())?;
 
         // Register entries with tags
         let mut tags1 = HashMap::new();
@@ -1888,9 +1881,7 @@ mod tests {
         invalidator.register_entry(&key3, &tags3);
 
         // Invalidate by tag
-        let invalidated_count = invalidator
-            .invalidate_by_tag("category", "embeddings")
-            .unwrap();
+        let invalidated_count = invalidator.invalidate_by_tag("category", "embeddings")?;
         assert_eq!(invalidated_count, 2);
 
         // Check that tagged entries are removed
@@ -1899,11 +1890,12 @@ mod tests {
 
         // Check that untagged entry remains
         assert!(cache.get(&key3).is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_cache_invalidation_by_namespace() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_cache_invalidation_by_namespace() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = CacheConfig {
             max_memory_entries: 10,
@@ -1912,7 +1904,7 @@ mod tests {
             ..Default::default()
         };
 
-        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let cache = Arc::new(MultiLevelCache::new(config)?);
         let invalidator = Arc::new(CacheInvalidator::new(Arc::clone(&cache)));
 
         // Create entries in different namespaces
@@ -1922,9 +1914,9 @@ mod tests {
 
         let vector = Vector::new(vec![1.0, 2.0, 3.0]);
 
-        cache.insert(key1.clone(), vector.clone()).unwrap();
-        cache.insert(key2.clone(), vector.clone()).unwrap();
-        cache.insert(key3.clone(), vector.clone()).unwrap();
+        cache.insert(key1.clone(), vector.clone())?;
+        cache.insert(key2.clone(), vector.clone())?;
+        cache.insert(key3.clone(), vector.clone())?;
 
         // Register entries for tracking
         invalidator.register_entry(&key1, &HashMap::new());
@@ -1932,7 +1924,7 @@ mod tests {
         invalidator.register_entry(&key3, &HashMap::new());
 
         // Invalidate by namespace
-        let invalidated_count = invalidator.invalidate_namespace("embeddings").unwrap();
+        let invalidated_count = invalidator.invalidate_namespace("embeddings")?;
         assert_eq!(invalidated_count, 2);
 
         // Check that namespace entries are removed
@@ -1941,5 +1933,6 @@ mod tests {
 
         // Check that other namespace entry remains
         assert!(cache.get(&key3).is_some());
+        Ok(())
     }
 }

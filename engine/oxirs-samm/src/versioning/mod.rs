@@ -12,8 +12,8 @@
 //! ```rust
 //! use oxirs_samm::versioning::{AspectVersion, AspectMigrationRegistry, MigrationStep};
 //!
-//! let v1 = AspectVersion::parse("1.0.0").unwrap();
-//! let v2 = AspectVersion::parse("2.0.0").unwrap();
+//! let v1 = AspectVersion::parse("1.0.0").expect("should succeed");
+//! let v2 = AspectVersion::parse("2.0.0").expect("should succeed");
 //!
 //! assert!(v2.is_breaking_change(&v1));
 //! assert!(v1.is_breaking_change(&v2));
@@ -69,7 +69,7 @@ impl AspectVersion {
     ///
     /// ```rust
     /// use oxirs_samm::versioning::AspectVersion;
-    /// let v = AspectVersion::parse("1.2.3").unwrap();
+    /// let v = AspectVersion::parse("1.2.3").expect("should succeed");
     /// assert_eq!(v.major, 1);
     /// assert_eq!(v.minor, 2);
     /// assert_eq!(v.patch, 3);

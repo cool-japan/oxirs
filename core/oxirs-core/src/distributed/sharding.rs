@@ -706,14 +706,14 @@ mod tests {
         let manager = ShardManager::new(config, ShardingStrategy::Hash);
 
         let triple1 = Triple::new(
-            NamedNode::new("http://example.org/s1").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s1").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             Literal::new("value1"),
         );
 
         let triple2 = Triple::new(
-            NamedNode::new("http://example.org/s2").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s2").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             Literal::new("value2"),
         );
 
@@ -731,17 +731,17 @@ mod tests {
         let config = ShardingConfig::default();
         let manager = ShardManager::new(config, ShardingStrategy::Subject);
 
-        let subject = NamedNode::new("http://example.org/entity1").unwrap();
+        let subject = NamedNode::new("http://example.org/entity1").expect("valid IRI");
 
         let triple1 = Triple::new(
             subject.clone(),
-            NamedNode::new("http://example.org/p1").unwrap(),
+            NamedNode::new("http://example.org/p1").expect("valid IRI"),
             Literal::new("value1"),
         );
 
         let triple2 = Triple::new(
             subject.clone(),
-            NamedNode::new("http://example.org/p2").unwrap(),
+            NamedNode::new("http://example.org/p2").expect("valid IRI"),
             Literal::new("value2"),
         );
 
@@ -758,17 +758,17 @@ mod tests {
         let strategy = SemanticStrategy::default();
         let manager = ShardManager::new(config, ShardingStrategy::Semantic(strategy));
 
-        let person = NamedNode::new("http://example.org/person1").unwrap();
+        let person = NamedNode::new("http://example.org/person1").expect("valid IRI");
 
         let triple1 = Triple::new(
             person.clone(),
-            NamedNode::new("http://example.org/name").unwrap(),
+            NamedNode::new("http://example.org/name").expect("valid IRI"),
             Literal::new("John"),
         );
 
         let triple2 = Triple::new(
             person.clone(),
-            NamedNode::new("http://example.org/email").unwrap(),
+            NamedNode::new("http://example.org/email").expect("valid IRI"),
             Literal::new("john@example.org"),
         );
 
@@ -806,7 +806,7 @@ mod tests {
         let router = ShardRouter::new(manager);
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-        let shards = router.route_query(query).unwrap();
+        let shards = router.route_query(query).expect("operation should succeed");
 
         // Full scan should query all shards
         assert_eq!(shards.len(), 16);

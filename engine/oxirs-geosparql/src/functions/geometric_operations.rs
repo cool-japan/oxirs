@@ -383,10 +383,10 @@ fn extract_all_coordinates(
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::geometric_operations::distance_3d;
 ///
-/// let p1 = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
-/// let p2 = Geometry::from_wkt("POINT Z(3 4 12)").unwrap();
+/// let p1 = Geometry::from_wkt("POINT Z(0 0 0)").expect("should succeed");
+/// let p2 = Geometry::from_wkt("POINT Z(3 4 12)").expect("should succeed");
 ///
-/// let dist = distance_3d(&p1, &p2).unwrap();
+/// let dist = distance_3d(&p1, &p2).expect("should succeed");
 /// assert!((dist - 13.0).abs() < 0.001); // 3-4-12 right triangle -> distance = 13
 /// ```
 pub fn distance_3d(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
@@ -1007,7 +1007,7 @@ mod tests {
         let p1 = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
         let p2 = Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0)));
 
-        let dist = distance(&p1, &p2).unwrap();
+        let dist = distance(&p1, &p2).expect("should succeed");
         assert!((dist - 5.0).abs() < 1e-10);
     }
 
@@ -1021,7 +1021,7 @@ mod tests {
 
         let hull = convex_hull(&mp);
         assert!(hull.is_ok());
-        assert_eq!(hull.unwrap().geometry_type(), "Polygon");
+        assert_eq!(hull.expect("should succeed").geometry_type(), "Polygon");
     }
 
     #[test]
@@ -1062,9 +1062,9 @@ mod tests {
             vec![],
         )));
 
-        let result = intersection(&poly1, &poly2).unwrap();
+        let result = intersection(&poly1, &poly2).expect("should succeed");
         assert!(result.is_some());
-        let intersection = result.unwrap();
+        let intersection = result.expect("should succeed");
         assert_eq!(intersection.geometry_type(), "MultiPolygon");
     }
 
@@ -1095,7 +1095,7 @@ mod tests {
             vec![],
         )));
 
-        let result = intersection(&poly1, &poly2).unwrap();
+        let result = intersection(&poly1, &poly2).expect("should succeed");
         assert!(result.is_none());
     }
 
@@ -1127,7 +1127,7 @@ mod tests {
 
         let result = union(&poly1, &poly2);
         assert!(result.is_ok());
-        let union_geom = result.unwrap();
+        let union_geom = result.expect("should succeed");
         assert_eq!(union_geom.geometry_type(), "MultiPolygon");
     }
 
@@ -1159,7 +1159,7 @@ mod tests {
 
         let result = difference(&poly1, &poly2);
         assert!(result.is_ok());
-        let diff_geom = result.unwrap();
+        let diff_geom = result.expect("should succeed");
         assert_eq!(diff_geom.geometry_type(), "MultiPolygon");
     }
 
@@ -1191,7 +1191,7 @@ mod tests {
 
         let result = sym_difference(&poly1, &poly2);
         assert!(result.is_ok());
-        let xor_geom = result.unwrap();
+        let xor_geom = result.expect("should succeed");
         assert_eq!(xor_geom.geometry_type(), "MultiPolygon");
     }
 
@@ -1238,7 +1238,7 @@ mod tests {
     fn test_buffer_positive() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
 
-        let buffered = buffer(&point, 1.0).unwrap();
+        let buffered = buffer(&point, 1.0).expect("should succeed");
         assert_eq!(buffered.geometry_type(), "Polygon");
 
         // Buffered point should create a circular polygon
@@ -1269,7 +1269,7 @@ mod tests {
         )));
 
         // Negative buffer should shrink the polygon
-        let shrunk = buffer(&poly, -1.0).unwrap();
+        let shrunk = buffer(&poly, -1.0).expect("should succeed");
         assert!(matches!(shrunk.geometry_type(), "Polygon" | "MultiPolygon"));
     }
 
@@ -1285,7 +1285,7 @@ mod tests {
             mitre_limit: 2.0,
         };
 
-        let buffered = buffer_with_params(&point, 1.0, &params).unwrap();
+        let buffered = buffer_with_params(&point, 1.0, &params).expect("should succeed");
         assert_eq!(buffered.geometry_type(), "Polygon");
     }
 
@@ -1299,7 +1299,7 @@ mod tests {
             Coord { x: 5.0, y: 5.0 },
         ])));
 
-        let bound = boundary(&ls).unwrap();
+        let bound = boundary(&ls).expect("should succeed");
         assert_eq!(bound.geometry_type(), "MultiPoint");
     }
 
@@ -1320,7 +1320,7 @@ mod tests {
             vec![],
         )));
 
-        let bound = boundary(&poly).unwrap();
+        let bound = boundary(&poly).expect("should succeed");
         assert!(matches!(
             bound.geometry_type(),
             "LineString" | "MultiLineString"
@@ -1367,11 +1367,11 @@ mod tests {
         )));
 
         // Positive buffer (expansion)
-        let expanded = buffer_rust(&poly, 1.0).unwrap();
+        let expanded = buffer_rust(&poly, 1.0).expect("should succeed");
         assert_eq!(expanded.geometry_type(), "MultiPolygon");
 
         // Negative buffer (erosion)
-        let shrunk = buffer_rust(&poly, -1.0).unwrap();
+        let shrunk = buffer_rust(&poly, -1.0).expect("should succeed");
         assert_eq!(shrunk.geometry_type(), "MultiPolygon");
     }
 
@@ -1406,7 +1406,7 @@ mod tests {
             poly1, poly2,
         ])));
 
-        let buffered = buffer_rust(&mpoly, 1.0).unwrap();
+        let buffered = buffer_rust(&mpoly, 1.0).expect("should succeed");
         assert_eq!(buffered.geometry_type(), "MultiPolygon");
     }
 
@@ -1434,7 +1434,7 @@ mod tests {
 
         let poly = Geometry::new(GeoGeometry::Polygon(Polygon::new(exterior, vec![interior])));
 
-        let buffered = buffer_rust(&poly, 1.0).unwrap();
+        let buffered = buffer_rust(&poly, 1.0).expect("should succeed");
         assert_eq!(buffered.geometry_type(), "MultiPolygon");
     }
 
@@ -1468,7 +1468,7 @@ mod tests {
         )));
 
         // Without geos-backend, Polygon should use rust-buffer
-        let buffered = buffer(&poly, 1.0).unwrap();
+        let buffered = buffer(&poly, 1.0).expect("should succeed");
         assert_eq!(buffered.geometry_type(), "MultiPolygon");
     }
 
@@ -1487,20 +1487,20 @@ mod tests {
     #[test]
     fn test_distance_3d_point_to_point() {
         // Classic 3-4-5 right triangle in 3D: 3-4-12 -> distance = 13
-        let p1 = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(3 4 12)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(0 0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(3 4 12)").expect("should succeed");
 
-        let dist = distance_3d(&p1, &p2).unwrap();
+        let dist = distance_3d(&p1, &p2).expect("should succeed");
         assert!((dist - 13.0).abs() < 0.001, "Expected ~13.0, got {}", dist);
     }
 
     #[test]
     fn test_distance_3d_pythagorean_triple() {
         // Another Pythagorean triple: 5-12-13 in 3D
-        let p1 = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(5 12 13)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(0 0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(5 12 13)").expect("should succeed");
 
-        let dist = distance_3d(&p1, &p2).unwrap();
+        let dist = distance_3d(&p1, &p2).expect("should succeed");
         // √(5² + 12² + 13²) = √(25 + 144 + 169) = √338 ≈ 18.385
         assert!(
             (dist - 18.385).abs() < 0.01,
@@ -1512,42 +1512,42 @@ mod tests {
     #[test]
     fn test_distance_3d_same_xy_different_z() {
         // Points with same X,Y but different Z
-        let p1 = Geometry::from_wkt("POINT Z(1 2 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(1 2 10)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(1 2 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(1 2 10)").expect("should succeed");
 
-        let dist = distance_3d(&p1, &p2).unwrap();
+        let dist = distance_3d(&p1, &p2).expect("should succeed");
         assert!((dist - 10.0).abs() < 0.001, "Expected 10.0, got {}", dist);
     }
 
     #[test]
     fn test_distance_3d_negative_coordinates() {
         // Test with negative coordinates
-        let p1 = Geometry::from_wkt("POINT Z(-1 -2 -3)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(-1 -2 -3)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").expect("should succeed");
 
         // Distance = √((2)² + (4)² + (6)²) = √(4 + 16 + 36) = √56 ≈ 7.483
-        let dist = distance_3d(&p1, &p2).unwrap();
+        let dist = distance_3d(&p1, &p2).expect("should succeed");
         assert!((dist - 7.483).abs() < 0.01, "Expected ~7.483, got {}", dist);
     }
 
     #[test]
     fn test_distance_3d_zero_distance() {
         // Same point should have zero distance
-        let p1 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(1 2 3)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").expect("should succeed");
 
-        let dist = distance_3d(&p1, &p2).unwrap();
+        let dist = distance_3d(&p1, &p2).expect("should succeed");
         assert!(dist.abs() < 0.001, "Expected 0.0, got {}", dist);
     }
 
     #[test]
     fn test_distance_3d_fallback_to_2d() {
         // If one geometry is 2D, should fall back to 2D distance
-        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap(); // 2D
-        let p2 = Geometry::from_wkt("POINT Z(3 4 100)").unwrap(); // 3D with Z=100
+        let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed"); // 2D
+        let p2 = Geometry::from_wkt("POINT Z(3 4 100)").expect("should succeed"); // 3D with Z=100
 
-        let dist_3d = distance_3d(&p1, &p2).unwrap();
-        let dist_2d = distance(&p1, &p2).unwrap();
+        let dist_3d = distance_3d(&p1, &p2).expect("should succeed");
+        let dist_2d = distance(&p1, &p2).expect("should succeed");
 
         // Should be same as 2D distance (Z ignored)
         assert!((dist_3d - dist_2d).abs() < 0.001);
@@ -1557,11 +1557,11 @@ mod tests {
     #[test]
     fn test_distance_3d_both_2d_uses_2d() {
         // Both 2D should use standard 2D distance
-        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT(3 4)").unwrap();
+        let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT(3 4)").expect("should succeed");
 
-        let dist_3d = distance_3d(&p1, &p2).unwrap();
-        let dist_2d = distance(&p1, &p2).unwrap();
+        let dist_3d = distance_3d(&p1, &p2).expect("should succeed");
+        let dist_2d = distance(&p1, &p2).expect("should succeed");
 
         assert!((dist_3d - dist_2d).abs() < 0.001);
         assert!((dist_3d - 5.0).abs() < 0.001);
@@ -1570,11 +1570,11 @@ mod tests {
     #[test]
     fn test_distance_3d_fractional_coordinates() {
         // Test with fractional coordinates
-        let p1 = Geometry::from_wkt("POINT Z(1.5 2.5 3.5)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(4.5 6.5 7.5)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(1.5 2.5 3.5)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(4.5 6.5 7.5)").expect("should succeed");
 
         // Δx=3, Δy=4, Δz=4 -> √(9 + 16 + 16) = √41 ≈ 6.403
-        let dist = distance_3d(&p1, &p2).unwrap();
+        let dist = distance_3d(&p1, &p2).expect("should succeed");
         assert!((dist - 6.403).abs() < 0.01, "Expected ~6.403, got {}", dist);
     }
 
@@ -1582,9 +1582,9 @@ mod tests {
     fn test_distance_3d_crs_compatibility() {
         // Different CRS should fail
         let p1 = Geometry::from_wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT Z(0 0 0)")
-            .unwrap();
+            .expect("should succeed");
         let p2 = Geometry::from_wkt("<http://www.opengis.net/def/crs/EPSG/0/3857> POINT Z(1 1 1)")
-            .unwrap();
+            .expect("should succeed");
 
         let result = distance_3d(&p1, &p2);
         assert!(result.is_err());
@@ -1593,24 +1593,24 @@ mod tests {
     #[test]
     fn test_distance_3d_with_m_coordinate() {
         // POINT ZM should work (M coordinate ignored in distance calculation)
-        let p1 = Geometry::from_wkt("POINT ZM(0 0 0 100)").unwrap();
-        let p2 = Geometry::from_wkt("POINT ZM(3 4 12 200)").unwrap();
+        let p1 = Geometry::from_wkt("POINT ZM(0 0 0 100)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT ZM(3 4 12 200)").expect("should succeed");
 
-        let dist = distance_3d(&p1, &p2).unwrap();
+        let dist = distance_3d(&p1, &p2).expect("should succeed");
         assert!((dist - 13.0).abs() < 0.001); // M coordinate should be ignored
     }
 
     #[test]
     fn test_distance_2d_vs_3d_comparison() {
         // Same 2D projection but different Z should give different distances
-        let p1_3d = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
-        let p2_3d = Geometry::from_wkt("POINT Z(3 4 12)").unwrap();
+        let p1_3d = Geometry::from_wkt("POINT Z(0 0 0)").expect("should succeed");
+        let p2_3d = Geometry::from_wkt("POINT Z(3 4 12)").expect("should succeed");
 
-        let p1_2d = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let p2_2d = Geometry::from_wkt("POINT(3 4)").unwrap();
+        let p1_2d = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+        let p2_2d = Geometry::from_wkt("POINT(3 4)").expect("should succeed");
 
-        let dist_3d = distance_3d(&p1_3d, &p2_3d).unwrap();
-        let dist_2d = distance(&p1_2d, &p2_2d).unwrap();
+        let dist_3d = distance_3d(&p1_3d, &p2_3d).expect("should succeed");
+        let dist_2d = distance(&p1_2d, &p2_2d).expect("should succeed");
 
         // 3D distance should be greater due to Z component
         assert!(dist_3d > dist_2d);
@@ -1621,10 +1621,10 @@ mod tests {
     #[test]
     fn test_distance_3d_point_to_linestring() {
         // Point above a horizontal line segment
-        let point = Geometry::from_wkt("POINT Z(5 5 10)").unwrap();
-        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 0 0)").unwrap();
+        let point = Geometry::from_wkt("POINT Z(5 5 10)").expect("should succeed");
+        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 0 0)").expect("should succeed");
 
-        let dist = distance_3d(&point, &line).unwrap();
+        let dist = distance_3d(&point, &line).expect("should succeed");
 
         // Closest point on line is (5, 0, 0), distance = √(0² + 5² + 10²) = √125 ≈ 11.18
         assert!((dist - 11.180).abs() < 0.01);
@@ -1633,10 +1633,10 @@ mod tests {
     #[test]
     fn test_distance_3d_linestring_to_linestring() {
         // Two parallel vertical lines at different heights
-        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 0 0 10)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z(3 4 0, 3 4 10)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 0 0 10)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z(3 4 0, 3 4 10)").expect("should succeed");
 
-        let dist = distance_3d(&ls1, &ls2).unwrap();
+        let dist = distance_3d(&ls1, &ls2).expect("should succeed");
 
         // Lines are parallel, distance is constant at √(3² + 4²) = 5
         assert!((dist - 5.0).abs() < 0.01);
@@ -1645,10 +1645,10 @@ mod tests {
     #[test]
     fn test_distance_3d_linestring_to_linestring_skew() {
         // Two skew lines in 3D (don't intersect and aren't parallel)
-        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 0 0)").unwrap();
-        let ls2 = Geometry::from_wkt("LINESTRING Z(0 10 10, 10 10 10)").unwrap();
+        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 0 0)").expect("should succeed");
+        let ls2 = Geometry::from_wkt("LINESTRING Z(0 10 10, 10 10 10)").expect("should succeed");
 
-        let dist = distance_3d(&ls1, &ls2).unwrap();
+        let dist = distance_3d(&ls1, &ls2).expect("should succeed");
 
         // These are parallel horizontal lines
         // Line 1 at Y=0, Z=0
@@ -1660,11 +1660,11 @@ mod tests {
     #[test]
     fn test_distance_3d_point_to_polygon() {
         // Point above a square polygon
-        let point = Geometry::from_wkt("POINT Z(5 5 10)").unwrap();
-        let poly =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").unwrap();
+        let point = Geometry::from_wkt("POINT Z(5 5 10)").expect("should succeed");
+        let poly = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))")
+            .expect("should succeed");
 
-        let dist = distance_3d(&point, &poly).unwrap();
+        let dist = distance_3d(&point, &poly).expect("should succeed");
 
         // Point is directly above center of polygon at height 10
         // But distance is to the boundary, not the interior
@@ -1675,10 +1675,11 @@ mod tests {
     #[test]
     fn test_distance_3d_multipoint() {
         // MultiPoint to Point distance
-        let mp = Geometry::from_wkt("MULTIPOINT Z((0 0 0), (10 0 0), (0 10 0))").unwrap();
-        let p = Geometry::from_wkt("POINT Z(0 0 5)").unwrap();
+        let mp = Geometry::from_wkt("MULTIPOINT Z((0 0 0), (10 0 0), (0 10 0))")
+            .expect("should succeed");
+        let p = Geometry::from_wkt("POINT Z(0 0 5)").expect("should succeed");
 
-        let dist = distance_3d(&mp, &p).unwrap();
+        let dist = distance_3d(&mp, &p).expect("should succeed");
 
         // Closest point in MultiPoint is (0, 0, 0), distance = 5
         assert!((dist - 5.0).abs() < 0.01);
@@ -1687,9 +1688,9 @@ mod tests {
     #[test]
     fn test_distance_3d_same_geometry() {
         // LineString to itself should have zero distance
-        let ls = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 10)").unwrap();
+        let ls = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 10)").expect("should succeed");
 
-        let dist = distance_3d(&ls, &ls).unwrap();
+        let dist = distance_3d(&ls, &ls).expect("should succeed");
 
         assert!(dist.abs() < 0.001);
     }
@@ -1697,10 +1698,10 @@ mod tests {
     #[test]
     fn test_distance_3d_point_on_linestring() {
         // Point that lies exactly on a line segment
-        let point = Geometry::from_wkt("POINT Z(5 0 5)").unwrap();
-        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 0 10)").unwrap();
+        let point = Geometry::from_wkt("POINT Z(5 0 5)").expect("should succeed");
+        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 0 10)").expect("should succeed");
 
-        let dist = distance_3d(&point, &line).unwrap();
+        let dist = distance_3d(&point, &line).expect("should succeed");
 
         // Point (5, 0, 5) is exactly on the line from (0, 0, 0) to (10, 0, 10)
         assert!(dist < 0.01); // Should be very close to zero
@@ -1709,10 +1710,10 @@ mod tests {
     #[test]
     fn test_distance_3d_vertical_separation() {
         // Two geometries with same X,Y but different Z
-        let p1 = Geometry::from_wkt("POINT Z(1 2 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT Z(1 2 100)").unwrap();
+        let p1 = Geometry::from_wkt("POINT Z(1 2 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT Z(1 2 100)").expect("should succeed");
 
-        let dist = distance_3d(&p1, &p2).unwrap();
+        let dist = distance_3d(&p1, &p2).expect("should succeed");
 
         assert!((dist - 100.0).abs() < 0.001);
     }
@@ -1720,10 +1721,10 @@ mod tests {
     #[test]
     fn test_distance_3d_diagonal_linestring() {
         // Point to a diagonal line in 3D space
-        let point = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
-        let line = Geometry::from_wkt("LINESTRING Z(10 10 10, 20 20 20)").unwrap();
+        let point = Geometry::from_wkt("POINT Z(0 0 0)").expect("should succeed");
+        let line = Geometry::from_wkt("LINESTRING Z(10 10 10, 20 20 20)").expect("should succeed");
 
-        let dist = distance_3d(&point, &line).unwrap();
+        let dist = distance_3d(&point, &line).expect("should succeed");
 
         // Closest point on line segment is (10, 10, 10)
         // Distance = √(10² + 10² + 10²) = √300 ≈ 17.32
@@ -1739,8 +1740,8 @@ mod tests {
     fn test_buffer_3d_point() {
         use geo::{Area, Euclidean};
 
-        let point = Geometry::from_wkt("POINT Z(0 0 5)").unwrap();
-        let buffered = buffer_3d(&point, 1.0).unwrap();
+        let point = Geometry::from_wkt("POINT Z(0 0 5)").expect("should succeed");
+        let buffered = buffer_3d(&point, 1.0).expect("should succeed");
 
         // Should be 3D
         assert!(buffered.is_3d());
@@ -1758,8 +1759,8 @@ mod tests {
     #[test]
     #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
     fn test_buffer_3d_linestring() {
-        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 0 10)").unwrap();
-        let buffered = buffer_3d(&line, 2.0).unwrap();
+        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 0 10)").expect("should succeed");
+        let buffered = buffer_3d(&line, 2.0).expect("should succeed");
 
         // Should be 3D
         assert!(buffered.is_3d());
@@ -1772,9 +1773,9 @@ mod tests {
     #[test]
     #[cfg(feature = "rust-buffer")]
     fn test_buffer_3d_polygon() {
-        let poly =
-            Geometry::from_wkt("POLYGON Z((0 0 5, 10 0 5, 10 10 5, 0 10 5, 0 0 5))").unwrap();
-        let buffered = buffer_3d(&poly, 1.0).unwrap();
+        let poly = Geometry::from_wkt("POLYGON Z((0 0 5, 10 0 5, 10 10 5, 0 10 5, 0 0 5))")
+            .expect("should succeed");
+        let buffered = buffer_3d(&poly, 1.0).expect("should succeed");
 
         // Should be 3D
         assert!(buffered.is_3d());
@@ -1790,14 +1791,14 @@ mod tests {
     #[cfg(feature = "rust-buffer")]
     fn test_buffer_3d_z_range_extension() {
         // Test that Z coordinates are extended by the buffer distance
-        let poly =
-            Geometry::from_wkt("POLYGON Z((0 0 10, 5 0 10, 5 5 10, 0 5 10, 0 0 10))").unwrap();
+        let poly = Geometry::from_wkt("POLYGON Z((0 0 10, 5 0 10, 5 5 10, 0 5 10, 0 0 10))")
+            .expect("should succeed");
 
         // Original Z range: [10, 10]
         let original_z_min = 10.0;
         let buffer_distance = 2.0;
 
-        let buffered = buffer_3d(&poly, buffer_distance).unwrap();
+        let buffered = buffer_3d(&poly, buffer_distance).expect("should succeed");
 
         // After buffering with distance=2, Z should be extended
         // New Z range should be approximately [8, 12] but we use average
@@ -1813,8 +1814,8 @@ mod tests {
     #[test]
     #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
     fn test_buffer_3d_varying_z() {
-        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 20)").unwrap();
-        let buffered = buffer_3d(&line, 1.0).unwrap();
+        let line = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 20)").expect("should succeed");
+        let buffered = buffer_3d(&line, 1.0).expect("should succeed");
 
         // Should be 3D
         assert!(buffered.is_3d());
@@ -1830,7 +1831,7 @@ mod tests {
 
     #[test]
     fn test_buffer_3d_requires_z_coordinates() {
-        let point = Geometry::from_wkt("POINT(0 0)").unwrap(); // 2D point
+        let point = Geometry::from_wkt("POINT(0 0)").expect("should succeed"); // 2D point
 
         let result = buffer_3d(&point, 1.0);
 
@@ -1846,10 +1847,10 @@ mod tests {
     #[cfg(any(feature = "geos-backend", feature = "rust-buffer"))]
     fn test_buffer_3d_negative_distance() {
         // Negative buffer (erosion) in 3D
-        let poly =
-            Geometry::from_wkt("POLYGON Z((0 0 10, 20 0 10, 20 20 10, 0 20 10, 0 0 10))").unwrap();
+        let poly = Geometry::from_wkt("POLYGON Z((0 0 10, 20 0 10, 20 20 10, 0 20 10, 0 0 10))")
+            .expect("should succeed");
 
-        let buffered = buffer_3d(&poly, -2.0).unwrap();
+        let buffered = buffer_3d(&poly, -2.0).expect("should succeed");
 
         // Should still be 3D
         assert!(buffered.is_3d());
@@ -1868,9 +1869,9 @@ mod tests {
             "MULTIPOLYGON Z(((0 0 5, 5 0 5, 5 5 5, 0 5 5, 0 0 5)), \
              ((10 10 10, 15 10 10, 15 15 10, 10 15 10, 10 10 10)))",
         )
-        .unwrap();
+        .expect("should succeed");
 
-        let buffered = buffer_3d(&mpoly, 1.0).unwrap();
+        let buffered = buffer_3d(&mpoly, 1.0).expect("should succeed");
 
         // Should be 3D
         assert!(buffered.is_3d());

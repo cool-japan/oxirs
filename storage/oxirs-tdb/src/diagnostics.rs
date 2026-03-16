@@ -1501,7 +1501,7 @@ mod tests {
         std::fs::create_dir_all(&temp_dir).unwrap();
 
         let mut context = create_test_context();
-        context.data_dir = Some(temp_dir.to_str().unwrap().to_string());
+        context.data_dir = Some(temp_dir.to_str().unwrap_or_default().to_string());
 
         let results = check.run(&context).unwrap();
 

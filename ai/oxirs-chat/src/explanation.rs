@@ -970,7 +970,10 @@ mod tests {
         let query = "Show me the bank data";
         let context = vec![];
 
-        let ambiguities = engine.detect_ambiguities(query, &context).await.unwrap();
+        let ambiguities = engine
+            .detect_ambiguities(query, &context)
+            .await
+            .expect("should succeed");
         assert!(!ambiguities.is_empty());
     }
 
@@ -1003,7 +1006,7 @@ mod tests {
         let confidence = calculator
             .calculate_confidence(&sources, &reasoning_trace, &context)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert!(confidence.overall_confidence > 0.0);
         assert!(confidence.overall_confidence <= 1.0);

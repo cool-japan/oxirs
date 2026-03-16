@@ -483,56 +483,62 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cosine_distance() {
+    fn test_cosine_distance() -> Result<()> {
         let a = Vector::new(vec![1.0, 0.0, 0.0]);
         let b = Vector::new(vec![1.0, 0.0, 0.0]);
 
-        let distance = ExtendedDistanceMetric::Cosine.distance(&a, &b).unwrap();
+        let distance = ExtendedDistanceMetric::Cosine.distance(&a, &b)?;
         assert!(distance < 0.01); // Should be close to 0
+        Ok(())
     }
 
     #[test]
-    fn test_euclidean_distance() {
+    fn test_euclidean_distance() -> Result<()> {
         let a = Vector::new(vec![0.0, 0.0]);
         let b = Vector::new(vec![3.0, 4.0]);
 
-        let distance = ExtendedDistanceMetric::Euclidean.distance(&a, &b).unwrap();
+        let distance = ExtendedDistanceMetric::Euclidean.distance(&a, &b)?;
         assert!((distance - 5.0).abs() < 0.01); // Should be 5.0
+        Ok(())
     }
 
     #[test]
-    fn test_hamming_distance() {
+    fn test_hamming_distance() -> Result<()> {
         let a = Vector::new(vec![1.0, 1.0, 0.0, 0.0]);
         let b = Vector::new(vec![1.0, 0.0, 1.0, 0.0]);
 
-        let distance = ExtendedDistanceMetric::Hamming.distance(&a, &b).unwrap();
+        let distance = ExtendedDistanceMetric::Hamming.distance(&a, &b)?;
         assert_eq!(distance, 2.0); // 2 positions differ
+        Ok(())
     }
 
     #[test]
-    fn test_jaccard_distance() {
+    fn test_jaccard_distance() -> Result<()> {
         let a = Vector::new(vec![1.0, 1.0, 0.0, 0.0]);
         let b = Vector::new(vec![1.0, 0.0, 1.0, 0.0]);
 
-        let distance = ExtendedDistanceMetric::Jaccard.distance(&a, &b).unwrap();
+        let distance = ExtendedDistanceMetric::Jaccard.distance(&a, &b)?;
         assert!(distance > 0.0 && distance < 1.0);
+        Ok(())
     }
 
     #[test]
-    fn test_pearson_distance() {
+    fn test_pearson_distance() -> Result<()> {
         let a = Vector::new(vec![1.0, 2.0, 3.0, 4.0]);
         let b = Vector::new(vec![1.0, 2.0, 3.0, 4.0]);
 
-        let distance = ExtendedDistanceMetric::Pearson.distance(&a, &b).unwrap();
+        let distance = ExtendedDistanceMetric::Pearson.distance(&a, &b)?;
         assert!(distance < 0.01); // Perfect correlation
+        Ok(())
     }
 
     #[test]
-    fn test_manhattan_distance() {
+    fn test_manhattan_distance() -> Result<()> {
         let a = Vector::new(vec![1.0, 2.0, 3.0]);
         let b = Vector::new(vec![4.0, 5.0, 6.0]);
 
-        let distance = ExtendedDistanceMetric::Manhattan.distance(&a, &b).unwrap();
+        let distance = ExtendedDistanceMetric::Manhattan.distance(&a, &b)?;
         assert_eq!(distance, 9.0); // |1-4| + |2-5| + |3-6| = 9
+        Ok(())
     }
 }

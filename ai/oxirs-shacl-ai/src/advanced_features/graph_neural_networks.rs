@@ -537,7 +537,7 @@ mod tests {
     #[test]
     fn test_gnn_creation() {
         let config = GraphNeuralNetworkConfig::default();
-        let gnn = GraphNeuralNetwork::new(config).unwrap();
+        let gnn = GraphNeuralNetwork::new(config).expect("should succeed");
         assert_eq!(gnn.layers.len(), 3);
     }
 
@@ -549,12 +549,14 @@ mod tests {
             output_dim: 8,
             ..Default::default()
         };
-        let gnn = GraphNeuralNetwork::new(config).unwrap();
+        let gnn = GraphNeuralNetwork::new(config).expect("should succeed");
 
         let node_features = Array2::ones((10, 16));
         let adjacency_matrix = Array2::eye(10);
 
-        let output = gnn.forward(&node_features, &adjacency_matrix).unwrap();
+        let output = gnn
+            .forward(&node_features, &adjacency_matrix)
+            .expect("should succeed");
         assert_eq!(output.shape(), &[10, 8]);
     }
 

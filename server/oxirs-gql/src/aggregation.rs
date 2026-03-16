@@ -498,7 +498,7 @@ mod tests {
             .with_group_by(GroupBy::new(vec!["category".to_string()]));
 
         let where_clause = "?s rdf:type ?category . ?s ex:id ?id .";
-        let sparql = query.to_sparql_query(where_clause).unwrap();
+        let sparql = query.to_sparql_query(where_clause).expect("should succeed");
 
         assert!(sparql.contains("SELECT"));
         assert!(sparql.contains("WHERE"));
@@ -540,7 +540,7 @@ mod tests {
         );
         let having = HavingCondition::new(agg, ">".to_string(), serde_json::json!(10));
 
-        let clause = having.to_sparql_clause().unwrap();
+        let clause = having.to_sparql_clause().expect("should succeed");
         assert!(clause.contains(">"));
         assert!(clause.contains("10"));
     }

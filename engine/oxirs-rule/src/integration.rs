@@ -1247,13 +1247,13 @@ mod tests {
     use oxirs_core::{Literal, NamedNode, Triple};
 
     #[test]
-    fn test_integration_basic_workflow() {
+    fn test_integration_basic_workflow() -> Result<(), Box<dyn std::error::Error>> {
         let mut integration = RuleIntegration::new();
 
         // Add some test data to the store
-        let subject = NamedNode::new("http://example.org/person").unwrap();
-        let predicate = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
-        let object = NamedNode::new("http://example.org/Human").unwrap();
+        let subject = NamedNode::new("http://example.org/person")?;
+        let predicate = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
+        let object = NamedNode::new("http://example.org/Human")?;
 
         let triple = Triple::new(
             subject.clone(),
@@ -1266,7 +1266,7 @@ mod tests {
             triple.predicate().clone(),
             triple.object().clone(),
         );
-        integration.store.insert_quad(quad).unwrap();
+        integration.store.insert_quad(quad)?;
 
         // Add a rule: Human -> Mortal
         let rule = Rule {
@@ -1290,12 +1290,12 @@ mod tests {
         integration.add_rule(rule);
 
         // Apply rules
-        let derived_count = integration.apply_rules().unwrap();
+        let derived_count = integration.apply_rules()?;
         assert!(derived_count > 0);
 
         // Check that the mortal type was derived
-        let mortal_type = NamedNode::new("http://example.org/Mortal").unwrap();
-        let all_triples = integration.store.triples().unwrap();
+        let mortal_type = NamedNode::new("http://example.org/Mortal")?;
+        let all_triples = integration.store.triples()?;
         let results: Vec<_> = all_triples
             .iter()
             .filter(|triple| {
@@ -1306,15 +1306,16 @@ mod tests {
             .collect();
 
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_conversion_functions() {
+    fn test_conversion_functions() -> Result<(), Box<dyn std::error::Error>> {
         let integration = RuleIntegration::new();
 
         // Test triple to rule atom conversion
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject")?;
+        let predicate = NamedNode::new("http://example.org/predicate")?;
         let object = Literal::new("test");
 
         let triple = Triple::new(subject, predicate, object);
@@ -1334,7 +1335,7 @@ mod tests {
         }
 
         // Test rule atom to triple conversion
-        let converted_triple = integration.rule_atom_to_triple(&rule_atom).unwrap();
+        let converted_triple = integration.rule_atom_to_triple(&rule_atom)?;
         // Check subject and predicate types
         match converted_triple.subject() {
             Subject::NamedNode(node) => assert_eq!(node.as_str(), "http://example.org/subject"),
@@ -1344,6 +1345,7 @@ mod tests {
             Predicate::NamedNode(node) => assert_eq!(node.as_str(), "http://example.org/predicate"),
             _ => panic!("Expected NamedNode predicate"),
         }
+        Ok(())
     }
 
     #[test]
@@ -1360,19 +1362,18 @@ mod tests {
     }
 
     #[test]
-    fn test_query_with_rules() {
+    fn test_query_with_rules() -> Result<(), Box<dyn std::error::Error>> {
         let mut integration = RuleIntegration::new();
 
         // Add RDFS rules
         integration.add_rules(rule_builders::all_rdfs_rules());
 
         // Add some test ontology data
-        let person = NamedNode::new("http://example.org/Person").unwrap();
-        let student = NamedNode::new("http://example.org/Student").unwrap();
-        let subclass_pred =
-            NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").unwrap();
-        let type_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
-        let alice = NamedNode::new("http://example.org/alice").unwrap();
+        let person = NamedNode::new("http://example.org/Person")?;
+        let student = NamedNode::new("http://example.org/Student")?;
+        let subclass_pred = NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf")?;
+        let type_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
+        let alice = NamedNode::new("http://example.org/alice")?;
 
         // Student subClassOf Person
         let subclass_triple = Triple::new(
@@ -1398,17 +1399,15 @@ mod tests {
             alice_type_triple.predicate().clone(),
             alice_type_triple.object().clone(),
         );
-        integration.store.insert_quad(subclass_quad).unwrap();
-        integration.store.insert_quad(alice_type_quad).unwrap();
+        integration.store.insert_quad(subclass_quad)?;
+        integration.store.insert_quad(alice_type_quad)?;
 
         // Query for all types of alice (should include both Student and Person via inference)
-        let results = integration
-            .query_with_rules(
-                Some(&Subject::NamedNode(alice)),
-                Some(&Predicate::NamedNode(type_pred)),
-                None,
-            )
-            .unwrap();
+        let results = integration.query_with_rules(
+            Some(&Subject::NamedNode(alice)),
+            Some(&Predicate::NamedNode(type_pred)),
+            None,
+        )?;
 
         // Should find at least 2 results (Student and Person)
         assert!(results.len() >= 2);
@@ -1422,16 +1421,17 @@ mod tests {
         });
 
         assert!(has_person_type, "Should infer that alice is a Person");
+        Ok(())
     }
 
     #[test]
-    fn test_statistics() {
+    fn test_statistics() -> Result<(), Box<dyn std::error::Error>> {
         let mut integration = RuleIntegration::new();
 
         // Add some data
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s")?,
+            NamedNode::new("http://example.org/p")?,
             Literal::new("o"),
         );
         let quad = Quad::new_default_graph(
@@ -1439,42 +1439,39 @@ mod tests {
             triple.predicate().clone(),
             triple.object().clone(),
         );
-        integration.store.insert_quad(quad).unwrap();
+        integration.store.insert_quad(quad)?;
 
         // Add a rule
         integration.add_rule(rule_builders::rdfs_type_inheritance());
 
-        let stats = integration.get_integration_stats().unwrap();
+        let stats = integration.get_integration_stats()?;
         assert_eq!(stats.store_quad_count, 1);
         assert_eq!(stats.rule_count, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_namespace_management() {
+    fn test_namespace_management() -> Result<(), Box<dyn std::error::Error>> {
         let mut integration = RuleIntegration::new();
 
         // Test namespace prefix addition
-        integration
-            .add_namespace_prefix("ex", "http://example.org/")
-            .unwrap();
+        integration.add_namespace_prefix("ex", "http://example.org/")?;
 
         // Test IRI expansion
-        let expanded = integration.expand_prefixed_iri("rdf:type").unwrap();
+        let expanded = integration.expand_prefixed_iri("rdf:type")?;
         assert_eq!(expanded, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
 
-        let expanded = integration.expand_prefixed_iri("rdfs:Class").unwrap();
+        let expanded = integration.expand_prefixed_iri("rdfs:Class")?;
         assert_eq!(expanded, "http://www.w3.org/2000/01/rdf-schema#Class");
 
-        let expanded = integration.expand_prefixed_iri("owl:Class").unwrap();
+        let expanded = integration.expand_prefixed_iri("owl:Class")?;
         assert_eq!(expanded, "http://www.w3.org/2002/07/owl#Class");
 
-        let expanded = integration.expand_prefixed_iri("ex:Person").unwrap();
+        let expanded = integration.expand_prefixed_iri("ex:Person")?;
         assert_eq!(expanded, "http://example.org/Person");
 
         // Test non-prefixed IRI
-        let unchanged = integration
-            .expand_prefixed_iri("http://example.org/full")
-            .unwrap();
+        let unchanged = integration.expand_prefixed_iri("http://example.org/full")?;
         assert_eq!(unchanged, "http://example.org/full");
 
         // Test IRI compression
@@ -1510,18 +1507,20 @@ mod tests {
         // Try to remove non-existent prefix
         let not_found = integration.remove_namespace_prefix("nonexistent");
         assert_eq!(not_found, None);
+        Ok(())
     }
 
     #[test]
-    fn test_data_validation() {
+    fn test_data_validation() -> Result<(), Box<dyn std::error::Error>> {
         let integration = RuleIntegration::new();
 
         // Test validation on empty store
-        let report = integration.validate_rdf_data().unwrap();
+        let report = integration.validate_rdf_data()?;
         assert_eq!(report.total_triples, 0);
         assert!(!report.warnings.is_empty()); // Should warn about empty store
         assert!(report.errors.is_empty());
 
         println!("Validation report: {report}");
+        Ok(())
     }
 }

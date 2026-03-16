@@ -858,7 +858,7 @@ mod tests {
         let filter = IntelligentFilter::new(config);
         let document = create_test_document();
 
-        let analysis = filter.analyze_subscription_query(&document).unwrap();
+        let analysis = filter.analyze_subscription_query(&document).expect("should succeed");
 
         assert!(analysis.fields.contains("person"));
         assert!(analysis.fields.contains("name"));
@@ -908,7 +908,7 @@ mod tests {
                 client_info,
                 SubscriptionPriority::Normal,
             )
-            .unwrap();
+            .expect("should succeed");
 
         let metrics = manager.get_enhanced_metrics();
         assert_eq!(metrics.total_subscriptions, 1);

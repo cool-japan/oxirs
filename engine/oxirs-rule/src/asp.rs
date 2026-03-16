@@ -32,12 +32,12 @@
 //! let mut solver = AspSolver::new();
 //!
 //! // Add facts
-//! solver.add_fact("node(a)").unwrap();
-//! solver.add_fact("node(b)").unwrap();
-//! solver.add_fact("edge(a, b)").unwrap();
+//! solver.add_fact("node(a)").expect("should succeed");
+//! solver.add_fact("node(b)").expect("should succeed");
+//! solver.add_fact("edge(a, b)").expect("should succeed");
 //!
 //! // Solve and get answer sets
-//! let answer_sets = solver.solve().unwrap();
+//! let answer_sets = solver.solve().expect("should succeed");
 //! assert!(!answer_sets.is_empty());
 //! ```
 
@@ -1134,20 +1134,21 @@ mod tests {
     }
 
     #[test]
-    fn test_solver_add_fact() {
+    fn test_solver_add_fact() -> Result<(), Box<dyn std::error::Error>> {
         let mut solver = AspSolver::new();
-        solver.add_fact("node(a)").unwrap();
-        solver.add_fact("node(b)").unwrap();
+        solver.add_fact("node(a)")?;
+        solver.add_fact("node(b)")?;
 
         assert_eq!(solver.fact_count(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_solver_simple_inference() {
+    fn test_solver_simple_inference() -> Result<(), Box<dyn std::error::Error>> {
         let mut solver = AspSolver::new();
 
         // Add facts
-        solver.add_fact("parent(john, mary)").unwrap();
+        solver.add_fact("parent(john, mary)")?;
 
         // Add rule: ancestor(X, Y) :- parent(X, Y)
         let rule = AspRule::normal(
@@ -1162,18 +1163,19 @@ mod tests {
         );
         solver.add_rule(rule);
 
-        let answer_sets = solver.solve().unwrap();
+        let answer_sets = solver.solve()?;
 
         // Should have at least one answer set
         assert!(!answer_sets.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_integrity_constraint() {
+    fn test_integrity_constraint() -> Result<(), Box<dyn std::error::Error>> {
         let mut solver = AspSolver::new();
 
-        solver.add_fact("node(a)").unwrap();
-        solver.add_fact("node(b)").unwrap();
+        solver.add_fact("node(a)")?;
+        solver.add_fact("node(b)")?;
 
         // Constraint: can't have both a and b colored red
         // :- color(a, red), color(b, red)
@@ -1188,7 +1190,7 @@ mod tests {
             )),
         ]);
 
-        let answer_sets = solver.solve().unwrap();
+        let answer_sets = solver.solve()?;
 
         // All answer sets should satisfy the constraint
         for as_ in &answer_sets {
@@ -1202,14 +1204,15 @@ mod tests {
             ));
             assert!(!(a_red && b_red), "Constraint violated");
         }
+        Ok(())
     }
 
     #[test]
-    fn test_choice_rule() {
+    fn test_choice_rule() -> Result<(), Box<dyn std::error::Error>> {
         let mut solver = AspSolver::new();
 
-        solver.add_fact("option(a)").unwrap();
-        solver.add_fact("option(b)").unwrap();
+        solver.add_fact("option(a)")?;
+        solver.add_fact("option(b)")?;
 
         // Choice rule: exactly one of a or b
         solver.add_choice_rule(
@@ -1222,17 +1225,18 @@ mod tests {
             Vec::new(),
         );
 
-        let answer_sets = solver.solve().unwrap();
+        let answer_sets = solver.solve()?;
 
         // Should have answer sets
         assert!(!answer_sets.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_default_negation() {
+    fn test_default_negation() -> Result<(), Box<dyn std::error::Error>> {
         let mut solver = AspSolver::new();
 
-        solver.add_fact("bird(tweety)").unwrap();
+        solver.add_fact("bird(tweety)")?;
         // Don't add: penguin(tweety)
 
         // Rule: flies(X) :- bird(X), not penguin(X)
@@ -1244,7 +1248,7 @@ mod tests {
             ],
         ));
 
-        let answer_sets = solver.solve().unwrap();
+        let answer_sets = solver.solve()?;
 
         // Tweety should fly since it's a bird and not a penguin
         assert!(!answer_sets.is_empty());
@@ -1252,6 +1256,7 @@ mod tests {
         assert!(
             answer_sets[0].contains(&flies) || answer_sets.iter().any(|as_| as_.contains(&flies))
         );
+        Ok(())
     }
 
     #[test]
@@ -1309,10 +1314,10 @@ mod tests {
     }
 
     #[test]
-    fn test_solver_clear() {
+    fn test_solver_clear() -> Result<(), Box<dyn std::error::Error>> {
         let mut solver = AspSolver::new();
 
-        solver.add_fact("test(a)").unwrap();
+        solver.add_fact("test(a)")?;
         solver.add_rule(AspRule::fact(Atom::nullary("b")));
 
         assert_eq!(solver.fact_count(), 1);
@@ -1322,6 +1327,7 @@ mod tests {
 
         assert_eq!(solver.fact_count(), 0);
         assert_eq!(solver.rule_count(), 0);
+        Ok(())
     }
 
     #[test]

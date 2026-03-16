@@ -1382,7 +1382,7 @@ mod tests_extended {
             Point3D::new(0.0, 1.0, 40.0),
         ]);
         let poly = Polygon3D::new(exterior);
-        let (min_z, max_z) = poly.z_range().unwrap();
+        let (min_z, max_z) = poly.z_range().expect("should succeed");
         assert!((min_z - 10.0).abs() < 1e-10);
         assert!((max_z - 40.0).abs() < 1e-10);
     }

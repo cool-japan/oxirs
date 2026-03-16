@@ -402,86 +402,92 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_compaction_manager_creation() {
+    fn test_compaction_manager_creation() -> Result<()> {
         let config = CompactionConfig::default();
-        let manager = CompactionManager::new(config).unwrap();
+        let manager = CompactionManager::new(config)?;
         assert!(manager.is_enabled());
+        Ok(())
     }
 
     #[test]
-    fn test_fragment_registration() {
+    fn test_fragment_registration() -> Result<()> {
         let config = CompactionConfig::default();
-        let manager = CompactionManager::new(config).unwrap();
+        let manager = CompactionManager::new(config)?;
 
         manager.register_fragment("vec1".to_string(), 0, 1024);
         manager.register_fragment("vec2".to_string(), 1024, 1024);
 
         assert_eq!(manager.calculate_fragmentation(), 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_fragmentation_calculation() {
+    fn test_fragmentation_calculation() -> Result<()> {
         let config = CompactionConfig::default();
-        let manager = CompactionManager::new(config).unwrap();
+        let manager = CompactionManager::new(config)?;
 
         manager.register_fragment("vec1".to_string(), 0, 1024);
         manager.register_fragment("vec2".to_string(), 1024, 1024);
         manager.register_fragment("vec3".to_string(), 2048, 1024);
 
         // Mark one as deleted
-        manager.mark_deleted("vec2").unwrap();
+        manager.mark_deleted("vec2")?;
 
         // Fragmentation should be ~33% (1024 / 3072)
         let frag = manager.calculate_fragmentation();
         assert!((frag - 0.333).abs() < 0.01);
+        Ok(())
     }
 
     #[test]
-    fn test_should_compact_threshold() {
+    fn test_should_compact_threshold() -> Result<()> {
         let config = CompactionConfig {
             strategy: super::super::strategies::CompactionStrategy::ThresholdBased,
             fragmentation_threshold: 0.3,
             ..Default::default()
         };
-        let manager = CompactionManager::new(config).unwrap();
+        let manager = CompactionManager::new(config)?;
 
         manager.register_fragment("vec1".to_string(), 0, 1024);
         manager.register_fragment("vec2".to_string(), 1024, 1024);
 
         assert!(!manager.should_compact());
 
-        manager.mark_deleted("vec1").unwrap();
-        manager.mark_deleted("vec2").unwrap();
+        manager.mark_deleted("vec1")?;
+        manager.mark_deleted("vec2")?;
 
         // Should compact with high fragmentation
         assert!(manager.should_compact());
+        Ok(())
     }
 
     #[test]
-    fn test_compact_empty() {
+    fn test_compact_empty() -> Result<()> {
         let config = CompactionConfig::default();
-        let manager = CompactionManager::new(config).unwrap();
+        let manager = CompactionManager::new(config)?;
 
-        let result = manager.compact_now().unwrap();
+        let result = manager.compact_now()?;
         assert!(result.success);
         assert_eq!(result.vectors_removed, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_compact_with_deletions() {
+    fn test_compact_with_deletions() -> Result<()> {
         let config = CompactionConfig::default();
-        let manager = CompactionManager::new(config).unwrap();
+        let manager = CompactionManager::new(config)?;
 
         manager.register_fragment("vec1".to_string(), 0, 1024);
         manager.register_fragment("vec2".to_string(), 1024, 1024);
         manager.register_fragment("vec3".to_string(), 2048, 1024);
 
-        manager.mark_deleted("vec1").unwrap();
-        manager.mark_deleted("vec3").unwrap();
+        manager.mark_deleted("vec1")?;
+        manager.mark_deleted("vec3")?;
 
-        let result = manager.compact_now().unwrap();
+        let result = manager.compact_now()?;
         assert!(result.success);
         assert_eq!(result.vectors_removed, 2);
         assert_eq!(result.bytes_reclaimed, 2048);
+        Ok(())
     }
 }

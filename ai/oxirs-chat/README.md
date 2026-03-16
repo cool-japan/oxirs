@@ -1,10 +1,10 @@
 # OxiRS Chat
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **AI-powered conversational interface for RDF data with RAG and natural language to SPARQL**
 
-**Status**: v0.2.1 - Released March 10, 2026
+**Status**: v0.2.2 - Released March 16, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -32,10 +32,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-chat = "0.2.1"
+oxirs-chat = "0.2.2"
 
 # Enable specific LLM providers
-oxirs-chat = { version = "0.2.1", features = ["openai", "anthropic", "ollama"] }
+oxirs-chat = { version = "0.2.2", features = ["openai", "anthropic", "ollama"] }
 ```
 
 ## Quick Start
@@ -495,6 +495,6 @@ Implementation Status:
 - ✅ **Context Management**: Sliding window with summarization and topic tracking
 - ✅ **CLI & Fuseki Integration**: Seamless dataset bootstrapping and persistence hand-off
 
-**Test Coverage**: 12/12 tests passing with comprehensive integration tests
+**Test Coverage**: 1,195 tests passing with comprehensive integration tests
 
 APIs follow semantic versioning. See CHANGELOG.md for details.

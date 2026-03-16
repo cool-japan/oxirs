@@ -382,7 +382,7 @@ mod tests {
         for ts in [100_u64, 200, 300, 400, 500] {
             agg.push(simple_frame(0x20, ts));
         }
-        let stats = agg.stats_for(0x20).unwrap();
+        let stats = agg.stats_for(0x20).expect("should succeed");
         assert_eq!(stats.count, 5);
     }
 
@@ -392,7 +392,7 @@ mod tests {
         agg.push(simple_frame(0x30, 1000));
         agg.push(simple_frame(0x30, 2000));
         agg.push(simple_frame(0x30, 3000));
-        let stats = agg.stats_for(0x30).unwrap();
+        let stats = agg.stats_for(0x30).expect("should succeed");
         assert_eq!(stats.first_ms, 1000);
         assert_eq!(stats.last_ms, 3000);
     }
@@ -402,7 +402,7 @@ mod tests {
         let mut agg = FrameAggregator::new(10000);
         agg.push(frame(0x40, vec![0, 1, 2], 100));
         agg.push(frame(0x40, vec![3, 4], 200));
-        let stats = agg.stats_for(0x40).unwrap();
+        let stats = agg.stats_for(0x40).expect("should succeed");
         assert_eq!(stats.data_bytes_total, 5);
     }
 
@@ -413,7 +413,7 @@ mod tests {
         agg.push(simple_frame(0x50, 0));
         agg.push(simple_frame(0x50, 100));
         agg.push(simple_frame(0x50, 200));
-        let stats = agg.stats_for(0x50).unwrap();
+        let stats = agg.stats_for(0x50).expect("should succeed");
         assert!((stats.avg_interval_ms - 100.0).abs() < 1e-6);
     }
 
@@ -451,7 +451,7 @@ mod tests {
         agg.push(simple_frame(0x77, 0));
         agg.push(simple_frame(0x77, 1000)); // evicts frame at ts=0
                                             // Stats should still reflect both pushes
-        let stats = agg.stats_for(0x77).unwrap();
+        let stats = agg.stats_for(0x77).expect("should succeed");
         assert_eq!(stats.count, 2);
         assert_eq!(agg.total_frames(), 1); // only second frame remains
     }
@@ -462,7 +462,7 @@ mod tests {
     fn test_empty_payload_frame() {
         let mut agg = FrameAggregator::new(1000);
         agg.push(frame(0x1, vec![], 100));
-        let stats = agg.stats_for(0x1).unwrap();
+        let stats = agg.stats_for(0x1).expect("should succeed");
         assert_eq!(stats.data_bytes_total, 0);
     }
 

@@ -34,8 +34,9 @@
 //!     }
 //! "#;
 //!
-//! let hints = HintParser::parse(query).unwrap();
+//! let hints = HintParser::parse(query)?;
 //! println!("Parsed hints: {:?}", hints);
+//! # Ok::<(), anyhow::Error>(())
 //! ```
 
 use crate::algebra::Variable;

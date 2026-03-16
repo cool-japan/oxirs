@@ -129,7 +129,11 @@ impl HnswSearchIndex {
             return;
         }
 
-        let entry = self.entry_point.unwrap();
+        // Safety: entry_point is guaranteed Some here due to the is_none() early-return above
+        let entry = match self.entry_point {
+            Some(ep) => ep,
+            None => return,
+        };
 
         // Connect to existing nodes greedily on each level
         for lc in (0..=level).rev() {

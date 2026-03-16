@@ -1868,7 +1868,9 @@ mod tests {
             tags: HashMap::new(),
         };
 
-        collector.add_performance_metric(metric).unwrap();
+        collector
+            .add_performance_metric(metric)
+            .expect("should succeed");
         assert_eq!(collector.performance_metrics.len(), 1);
         assert!(collector.total_metrics_count() > 0);
     }

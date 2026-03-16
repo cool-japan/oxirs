@@ -376,8 +376,8 @@ mod tests {
             lat: 52.52,
             lon: 13.405,
         };
-        let utm = CoordinateTransformer::wgs84_to_utm(original).unwrap();
-        let recovered = CoordinateTransformer::utm_to_wgs84(utm).unwrap();
+        let utm = CoordinateTransformer::wgs84_to_utm(original).expect("should succeed");
+        let recovered = CoordinateTransformer::utm_to_wgs84(utm).expect("should succeed");
         assert!(
             approx_eq(recovered.lat, original.lat, TOL_DEG),
             "lat diff: {}",
@@ -396,8 +396,8 @@ mod tests {
             lat: 51.5074,
             lon: -0.1278,
         };
-        let utm = CoordinateTransformer::wgs84_to_utm(original).unwrap();
-        let recovered = CoordinateTransformer::utm_to_wgs84(utm).unwrap();
+        let utm = CoordinateTransformer::wgs84_to_utm(original).expect("should succeed");
+        let recovered = CoordinateTransformer::utm_to_wgs84(utm).expect("should succeed");
         assert!(approx_eq(recovered.lat, original.lat, TOL_DEG));
         assert!(approx_eq(recovered.lon, original.lon, TOL_DEG));
     }
@@ -408,8 +408,8 @@ mod tests {
             lat: 40.7128,
             lon: -74.006,
         };
-        let utm = CoordinateTransformer::wgs84_to_utm(original).unwrap();
-        let recovered = CoordinateTransformer::utm_to_wgs84(utm).unwrap();
+        let utm = CoordinateTransformer::wgs84_to_utm(original).expect("should succeed");
+        let recovered = CoordinateTransformer::utm_to_wgs84(utm).expect("should succeed");
         assert!(approx_eq(recovered.lat, original.lat, TOL_DEG));
         assert!(approx_eq(recovered.lon, original.lon, TOL_DEG));
     }
@@ -420,8 +420,8 @@ mod tests {
             lat: 35.6762,
             lon: 139.6503,
         };
-        let utm = CoordinateTransformer::wgs84_to_utm(original).unwrap();
-        let recovered = CoordinateTransformer::utm_to_wgs84(utm).unwrap();
+        let utm = CoordinateTransformer::wgs84_to_utm(original).expect("should succeed");
+        let recovered = CoordinateTransformer::utm_to_wgs84(utm).expect("should succeed");
         assert!(approx_eq(recovered.lat, original.lat, TOL_DEG));
         assert!(approx_eq(recovered.lon, original.lon, TOL_DEG));
     }
@@ -432,8 +432,8 @@ mod tests {
             lat: -33.8688,
             lon: 151.2093,
         }; // Sydney
-        let utm = CoordinateTransformer::wgs84_to_utm(original).unwrap();
-        let recovered = CoordinateTransformer::utm_to_wgs84(utm).unwrap();
+        let utm = CoordinateTransformer::wgs84_to_utm(original).expect("should succeed");
+        let recovered = CoordinateTransformer::utm_to_wgs84(utm).expect("should succeed");
         assert!(approx_eq(recovered.lat, original.lat, TOL_DEG));
         assert!(approx_eq(recovered.lon, original.lon, TOL_DEG));
     }
@@ -444,7 +444,7 @@ mod tests {
             lat: 52.52,
             lon: 13.405,
         })
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(utm.zone_number, 33);
     }
 
@@ -454,7 +454,7 @@ mod tests {
             lat: 40.7128,
             lon: -74.006,
         })
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(utm.zone_number, 18);
     }
 
@@ -466,8 +466,8 @@ mod tests {
             lat: 52.52,
             lon: 13.405,
         };
-        let wm = CoordinateTransformer::wgs84_to_web_mercator(original).unwrap();
-        let recovered = CoordinateTransformer::web_mercator_to_wgs84(wm).unwrap();
+        let wm = CoordinateTransformer::wgs84_to_web_mercator(original).expect("should succeed");
+        let recovered = CoordinateTransformer::web_mercator_to_wgs84(wm).expect("should succeed");
         assert!(approx_eq(recovered.lat, original.lat, TOL_DEG));
         assert!(approx_eq(recovered.lon, original.lon, TOL_DEG));
     }
@@ -475,10 +475,10 @@ mod tests {
     #[test]
     fn test_web_mercator_round_trip_origin() {
         let original = LatLon { lat: 0.0, lon: 0.0 };
-        let wm = CoordinateTransformer::wgs84_to_web_mercator(original).unwrap();
+        let wm = CoordinateTransformer::wgs84_to_web_mercator(original).expect("should succeed");
         assert!(approx_eq(wm.x, 0.0, 1.0));
         assert!(approx_eq(wm.y, 0.0, 1.0));
-        let recovered = CoordinateTransformer::web_mercator_to_wgs84(wm).unwrap();
+        let recovered = CoordinateTransformer::web_mercator_to_wgs84(wm).expect("should succeed");
         assert!(approx_eq(recovered.lat, 0.0, TOL_DEG));
         assert!(approx_eq(recovered.lon, 0.0, TOL_DEG));
     }
@@ -489,8 +489,8 @@ mod tests {
             lat: 51.5074,
             lon: -0.1278,
         };
-        let wm = CoordinateTransformer::wgs84_to_web_mercator(original).unwrap();
-        let recovered = CoordinateTransformer::web_mercator_to_wgs84(wm).unwrap();
+        let wm = CoordinateTransformer::wgs84_to_web_mercator(original).expect("should succeed");
+        let recovered = CoordinateTransformer::web_mercator_to_wgs84(wm).expect("should succeed");
         assert!(approx_eq(recovered.lat, original.lat, TOL_DEG));
         assert!(approx_eq(recovered.lon, original.lon, TOL_DEG));
     }
@@ -576,13 +576,13 @@ mod tests {
 
     #[test]
     fn test_utm_zone_letter_equator() {
-        let letter = CoordinateTransformer::utm_zone_letter(0.0).unwrap();
+        let letter = CoordinateTransformer::utm_zone_letter(0.0).expect("should succeed");
         assert!(letter.is_ascii_uppercase());
     }
 
     #[test]
     fn test_utm_zone_letter_berlin() {
-        let letter = CoordinateTransformer::utm_zone_letter(52.52).unwrap();
+        let letter = CoordinateTransformer::utm_zone_letter(52.52).expect("should succeed");
         assert_eq!(letter, 'U');
     }
 
@@ -600,7 +600,7 @@ mod tests {
 
     #[test]
     fn test_utm_zone_letter_negative_lat() {
-        let letter = CoordinateTransformer::utm_zone_letter(-33.8688).unwrap(); // Sydney
+        let letter = CoordinateTransformer::utm_zone_letter(-33.8688).expect("should succeed"); // Sydney
         assert!(letter.is_ascii_uppercase());
         assert!((letter as u8) < b'N'); // Southern hemisphere < N
     }
@@ -642,27 +642,27 @@ mod tests {
 
     #[test]
     fn test_from_dms_north() {
-        let deg = CoordinateTransformer::from_dms("51°30'00.00\"N").unwrap();
+        let deg = CoordinateTransformer::from_dms("51°30'00.00\"N").expect("should succeed");
         assert!(approx_eq(deg, 51.5, 0.01));
     }
 
     #[test]
     fn test_from_dms_south() {
-        let deg = CoordinateTransformer::from_dms("33°52'07.68\"S").unwrap();
+        let deg = CoordinateTransformer::from_dms("33°52'07.68\"S").expect("should succeed");
         assert!(deg < 0.0);
         assert!(approx_eq(deg.abs(), 33.87, 0.01));
     }
 
     #[test]
     fn test_from_dms_east() {
-        let deg = CoordinateTransformer::from_dms("13°24'18.00\"E").unwrap();
+        let deg = CoordinateTransformer::from_dms("13°24'18.00\"E").expect("should succeed");
         assert!(deg > 0.0);
         assert!(approx_eq(deg, 13.405, 0.01));
     }
 
     #[test]
     fn test_from_dms_west() {
-        let deg = CoordinateTransformer::from_dms("74°00'21.60\"W").unwrap();
+        let deg = CoordinateTransformer::from_dms("74°00'21.60\"W").expect("should succeed");
         assert!(deg < 0.0);
     }
 
@@ -670,7 +670,7 @@ mod tests {
     fn test_from_dms_round_trip() {
         let original = 52.52_f64;
         let dms = CoordinateTransformer::to_dms(original, true);
-        let recovered = CoordinateTransformer::from_dms(&dms).unwrap();
+        let recovered = CoordinateTransformer::from_dms(&dms).expect("should succeed");
         assert!(approx_eq(recovered, original, 0.001));
     }
 

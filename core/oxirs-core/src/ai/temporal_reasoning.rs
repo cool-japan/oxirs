@@ -990,7 +990,7 @@ mod tests {
     #[tokio::test]
     async fn test_temporal_query() {
         let config = AiConfig::default();
-        let reasoner = TemporalReasoner::new(&config).unwrap();
+        let reasoner = TemporalReasoner::new(&config).expect("construction should succeed");
 
         let query = TemporalQuery {
             query_type: TemporalQueryType::ValidAt {
@@ -1002,7 +1002,10 @@ mod tests {
             include_inferred: false,
         };
 
-        let result = reasoner.reason(&query).await.unwrap();
+        let result = reasoner
+            .reason(&query)
+            .await
+            .expect("async operation should succeed");
         assert!(!result.query_id.is_empty());
     }
 }

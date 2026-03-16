@@ -989,7 +989,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_modal_content_encoding() {
+    fn test_multi_modal_content_encoding() -> Result<()> {
         let config = CrossModalConfig::default();
         let encoder = create_test_encoder(config);
 
@@ -1009,12 +1009,13 @@ mod tests {
             ModalityData::Numeric(vec![1.0, 2.0, 3.0]),
         );
 
-        let embedding = encoder.encode(&content).unwrap();
+        let embedding = encoder.encode(&content)?;
         assert_eq!(embedding.dimensions, 512);
+        Ok(())
     }
 
     #[test]
-    fn test_fusion_strategies() {
+    fn test_fusion_strategies() -> Result<()> {
         let config = CrossModalConfig::default();
         let fusion_layer =
             FusionLayer::new(FusionStrategy::WeightedAverage, config.modality_weights);
@@ -1023,8 +1024,9 @@ mod tests {
         embeddings.insert(Modality::Text, Vector::new(vec![1.0, 0.0, 0.0]));
         embeddings.insert(Modality::Image, Vector::new(vec![0.0, 1.0, 0.0]));
 
-        let fused = fusion_layer.fuse(&embeddings).unwrap();
+        let fused = fusion_layer.fuse(&embeddings)?;
         assert_eq!(fused.dimensions, 3);
+        Ok(())
     }
 
     fn create_test_encoder(config: CrossModalConfig) -> CrossModalEncoder {

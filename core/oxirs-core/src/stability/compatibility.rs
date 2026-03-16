@@ -278,21 +278,21 @@ mod tests {
         let m = matrix();
         let v1 = m.find_version("1.0.0");
         assert!(v1.is_some());
-        assert!(v1.unwrap().lts);
+        assert!(v1.expect("version should be registered").lts);
     }
 
     #[test]
     fn test_v1_supported_until_set() {
         let m = matrix();
-        let v1 = m.find_version("1.0.0").unwrap();
+        let v1 = m.find_version("1.0.0").expect("operation should succeed");
         assert!(v1.supported_until.is_some());
     }
 
     #[test]
     fn test_v1_supported_until_two_years() {
         let m = matrix();
-        let v1 = m.find_version("1.0.0").unwrap();
-        let eol = v1.supported_until.unwrap();
+        let v1 = m.find_version("1.0.0").expect("operation should succeed");
+        let eol = v1.supported_until.expect("supported_until should be set");
         assert!(
             eol >= "2028-01-01",
             "v1.0.0 LTS should be supported at least until 2028"
@@ -312,21 +312,21 @@ mod tests {
     #[test]
     fn test_v010_is_not_lts() {
         let m = matrix();
-        let v = m.find_version("0.1.0").unwrap();
+        let v = m.find_version("0.1.0").expect("operation should succeed");
         assert!(!v.lts);
     }
 
     #[test]
     fn test_v020_has_breaking_changes() {
         let m = matrix();
-        let v = m.find_version("0.2.0").unwrap();
+        let v = m.find_version("0.2.0").expect("operation should succeed");
         assert!(!v.breaking_changes.is_empty());
     }
 
     #[test]
     fn test_v010_has_no_breaking_changes() {
         let m = matrix();
-        let v = m.find_version("0.1.0").unwrap();
+        let v = m.find_version("0.1.0").expect("operation should succeed");
         assert!(v.breaking_changes.is_empty());
     }
 
@@ -341,7 +341,7 @@ mod tests {
     #[test]
     fn test_latest_is_v100() {
         let m = matrix();
-        let latest = m.latest().unwrap();
+        let latest = m.latest().expect("operation should succeed");
         assert_eq!(latest.version, "1.0.0");
     }
 
@@ -372,14 +372,14 @@ mod tests {
     #[test]
     fn test_version_entry_breaking_change_count() {
         let m = matrix();
-        let v = m.find_version("0.2.0").unwrap();
+        let v = m.find_version("0.2.0").expect("operation should succeed");
         assert_eq!(v.breaking_change_count(), v.breaking_changes.len());
     }
 
     #[test]
     fn test_version_entry_deprecation_count() {
         let m = matrix();
-        let v = m.find_version("0.2.0").unwrap();
+        let v = m.find_version("0.2.0").expect("operation should succeed");
         assert_eq!(v.deprecation_count(), v.deprecated_in.len());
     }
 

@@ -23,7 +23,7 @@
 //! // Batch processor automatically selects optimal strategy
 //! let processor = BatchProcessor::new();
 //! let query = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
-//! let distances = processor.distances(&query, &geometries).unwrap();
+//! let distances = processor.distances(&query, &geometries).expect("should succeed");
 //! ```
 
 use crate::error::Result;
@@ -82,7 +82,7 @@ impl Default for BatchConfig {
 ///     .collect();
 ///
 /// // Automatically uses optimal strategy (parallel for 1000 items)
-/// let distances = processor.distances(&query, &targets).unwrap();
+/// let distances = processor.distances(&query, &targets).expect("should succeed");
 /// assert_eq!(distances.len(), 1000);
 /// ```
 pub struct BatchProcessor {
@@ -120,7 +120,7 @@ impl BatchProcessor {
     ///     Geometry::new(GeoGeometry::Point(Point::new(0.0, 1.0))),
     /// ];
     ///
-    /// let distances = processor.distances(&query, &targets).unwrap();
+    /// let distances = processor.distances(&query, &targets).expect("should succeed");
     /// assert_eq!(distances.len(), 2);
     /// ```
     pub fn distances(&self, query: &Geometry, targets: &[Geometry]) -> Result<Vec<f64>> {
@@ -171,7 +171,7 @@ impl BatchProcessor {
     ///     Geometry::new(GeoGeometry::Point(Point::new(1.0, 0.0))),
     /// ];
     ///
-    /// let matrix = processor.distance_matrix(&geometries).unwrap();
+    /// let matrix = processor.distance_matrix(&geometries).expect("should succeed");
     /// assert_eq!(matrix.len(), 2);
     /// ```
     pub fn distance_matrix(&self, geometries: &[Geometry]) -> Result<Vec<Vec<f64>>> {
@@ -226,7 +226,7 @@ impl BatchProcessor {
     ///     Geometry::new(GeoGeometry::Point(Point::new(2.0, 0.0))),
     /// ];
     ///
-    /// let nearest = processor.nearest_neighbors(&geometries, 1).unwrap();
+    /// let nearest = processor.nearest_neighbors(&geometries, 1).expect("should succeed");
     /// assert_eq!(nearest.len(), 3);
     /// ```
     pub fn nearest_neighbors(
@@ -308,7 +308,7 @@ impl BatchProcessor {
     /// processor.stream_distances(&query, &targets, |chunk_distances| {
     ///     all_distances.extend(chunk_distances);
     ///     Ok(())
-    /// }).unwrap();
+    /// }).expect("should succeed");
     ///
     /// assert_eq!(all_distances.len(), 10000);
     /// ```
@@ -349,7 +349,9 @@ mod tests {
             Geometry::new(GeoGeometry::Point(Point::new(0.0, 1.0))),
         ];
 
-        let distances = processor.distances(&query, &targets).unwrap();
+        let distances = processor
+            .distances(&query, &targets)
+            .expect("should succeed");
 
         assert_eq!(distances.len(), 2);
         assert!((distances[0] - 1.0).abs() < 1e-10);
@@ -364,7 +366,9 @@ mod tests {
             Geometry::new(GeoGeometry::Point(Point::new(1.0, 0.0))),
         ];
 
-        let matrix = processor.distance_matrix(&geometries).unwrap();
+        let matrix = processor
+            .distance_matrix(&geometries)
+            .expect("should succeed");
 
         assert_eq!(matrix.len(), 2);
         assert_eq!(matrix[0].len(), 2);
@@ -379,7 +383,9 @@ mod tests {
             Geometry::new(GeoGeometry::Point(Point::new(2.0, 0.0))),
         ];
 
-        let nearest = processor.nearest_neighbors(&geometries, 1).unwrap();
+        let nearest = processor
+            .nearest_neighbors(&geometries, 1)
+            .expect("should succeed");
 
         assert_eq!(nearest.len(), 3);
         assert_eq!(nearest[0].len(), 1); // Each query has 1 nearest neighbor
@@ -399,7 +405,7 @@ mod tests {
                 all_distances.extend(chunk_distances);
                 Ok(())
             })
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(all_distances.len(), 100);
     }

@@ -450,6 +450,7 @@ impl DeltaSyncVectorStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     fn make_store() -> DeltaSyncVectorStore {
         DeltaSyncVectorStore::new()
@@ -466,30 +467,33 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_increments_seq() {
+    fn test_insert_increments_seq() -> Result<()> {
         let mut store = make_store();
-        let seq = store.insert("k1".to_string(), vec![1.0, 2.0]).unwrap();
+        let seq = store.insert("k1".to_string(), vec![1.0, 2.0])?;
         assert_eq!(seq, 1);
         assert_eq!(store.current_seq(), 1);
         assert_eq!(store.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_insert_duplicate_key_fails() {
+    fn test_insert_duplicate_key_fails() -> Result<()> {
         let mut store = make_store();
-        store.insert("k1".to_string(), vec![1.0]).unwrap();
+        store.insert("k1".to_string(), vec![1.0])?;
         let err = store.insert("k1".to_string(), vec![2.0]);
         assert!(err.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_update_existing_key() {
+    fn test_update_existing_key() -> Result<()> {
         let mut store = make_store();
-        store.insert("k1".to_string(), vec![1.0, 0.0]).unwrap();
-        let seq = store.update("k1".to_string(), vec![2.0, 0.0]).unwrap();
+        store.insert("k1".to_string(), vec![1.0, 0.0])?;
+        let seq = store.update("k1".to_string(), vec![2.0, 0.0])?;
         assert_eq!(seq, 2);
-        let entry = store.get("k1").unwrap();
+        let entry = store.get("k1").expect("k1 not found");
         assert_eq!(entry.vector, vec![2.0, 0.0]);
+        Ok(())
     }
 
     #[test]
@@ -500,13 +504,14 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_existing_key() {
+    fn test_delete_existing_key() -> Result<()> {
         let mut store = make_store();
-        store.insert("k1".to_string(), vec![1.0]).unwrap();
-        let seq = store.delete("k1").unwrap();
+        store.insert("k1".to_string(), vec![1.0])?;
+        let seq = store.delete("k1")?;
         assert_eq!(seq, 2);
         assert!(!store.contains("k1"));
         assert_eq!(store.len(), 0);
+        Ok(())
     }
 
     #[test]
@@ -517,104 +522,116 @@ mod tests {
     }
 
     #[test]
-    fn test_upsert_insert_path() {
+    fn test_upsert_insert_path() -> Result<()> {
         let mut store = make_store();
-        let seq = store.upsert("k".to_string(), vec![1.0]).unwrap();
+        let seq = store.upsert("k".to_string(), vec![1.0])?;
         assert_eq!(seq, 1);
         assert_eq!(store.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_upsert_update_path() {
+    fn test_upsert_update_path() -> Result<()> {
         let mut store = make_store();
-        store.insert("k".to_string(), vec![1.0]).unwrap();
-        store.upsert("k".to_string(), vec![99.0]).unwrap();
-        let entry = store.get("k").unwrap();
+        store.insert("k".to_string(), vec![1.0])?;
+        store.upsert("k".to_string(), vec![99.0])?;
+        let entry = store.get("k").expect("k not found");
         assert_eq!(entry.vector, vec![99.0]);
+        Ok(())
     }
 
     #[test]
-    fn test_contains_after_insert() {
+    fn test_contains_after_insert() -> Result<()> {
         let mut store = make_store();
-        store.insert("x".to_string(), vec![0.0]).unwrap();
+        store.insert("x".to_string(), vec![0.0])?;
         assert!(store.contains("x"));
         assert!(!store.contains("y"));
+        Ok(())
     }
 
     // ── change log ─────────────────────────────────────────────────────────
 
     #[test]
-    fn test_change_log_grows_with_operations() {
+    fn test_change_log_grows_with_operations() -> Result<()> {
         let mut store = make_store();
-        store.insert("k1".to_string(), vec![1.0]).unwrap();
-        store.insert("k2".to_string(), vec![2.0]).unwrap();
-        store.update("k1".to_string(), vec![3.0]).unwrap();
-        store.delete("k2").unwrap();
+        store.insert("k1".to_string(), vec![1.0])?;
+        store.insert("k2".to_string(), vec![2.0])?;
+        store.update("k1".to_string(), vec![3.0])?;
+        store.delete("k2")?;
         let stats = store.stats();
         assert_eq!(stats.log_length, 4);
+        Ok(())
     }
 
     #[test]
-    fn test_change_log_records_correct_kinds() {
+    fn test_change_log_records_correct_kinds() -> Result<()> {
         let mut store = make_store();
-        store.insert("a".to_string(), vec![1.0]).unwrap();
-        store.update("a".to_string(), vec![2.0]).unwrap();
-        store.delete("a").unwrap();
+        store.insert("a".to_string(), vec![1.0])?;
+        store.update("a".to_string(), vec![2.0])?;
+        store.delete("a")?;
         assert_eq!(store.change_log[0].kind, ChangeKind::Insert);
         assert_eq!(store.change_log[1].kind, ChangeKind::Update);
         assert_eq!(store.change_log[2].kind, ChangeKind::Delete);
+        Ok(())
     }
 
     // ── delta export ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_export_delta_full() {
+    fn test_export_delta_full() -> Result<()> {
         let mut store = make_store();
-        store.insert("a".to_string(), vec![1.0]).unwrap();
-        store.insert("b".to_string(), vec![2.0]).unwrap();
+        store.insert("a".to_string(), vec![1.0])?;
+        store.insert("b".to_string(), vec![2.0])?;
         let delta = store.export_delta(0);
         assert_eq!(delta.changes.len(), 2);
         assert_eq!(delta.source_seq, 2);
+        Ok(())
     }
 
     #[test]
-    fn test_export_delta_incremental() {
+    fn test_export_delta_incremental() -> Result<()> {
         let mut store = make_store();
-        store.insert("a".to_string(), vec![1.0]).unwrap();
-        store.insert("b".to_string(), vec![2.0]).unwrap();
+        store.insert("a".to_string(), vec![1.0])?;
+        store.insert("b".to_string(), vec![2.0])?;
         let delta = store.export_delta(1); // Only changes after seq=1
         assert_eq!(delta.changes.len(), 1);
         assert_eq!(delta.changes[0].key, "b");
+        Ok(())
     }
 
     #[test]
-    fn test_export_delta_empty_when_up_to_date() {
+    fn test_export_delta_empty_when_up_to_date() -> Result<()> {
         let mut store = make_store();
-        store.insert("a".to_string(), vec![1.0]).unwrap();
+        store.insert("a".to_string(), vec![1.0])?;
         let delta = store.export_delta(1); // Already have seq=1
         assert!(delta.is_empty());
+        Ok(())
     }
 
     // ── delta merge ────────────────────────────────────────────────────────
 
     #[test]
-    fn test_merge_delta_inserts_new_entries() {
+    fn test_merge_delta_inserts_new_entries() -> Result<()> {
         let mut source = make_store();
-        source.insert("remote_key".to_string(), vec![42.0]).unwrap();
+        source.insert("remote_key".to_string(), vec![42.0])?;
         let delta = source.export_delta(0);
 
         let mut target = make_store();
-        let result = target.merge_delta(&delta).unwrap();
+        let result = target.merge_delta(&delta)?;
 
         assert_eq!(result.inserts_applied, 1);
         assert!(target.contains("remote_key"));
-        assert_eq!(target.get("remote_key").unwrap().vector, vec![42.0]);
+        assert_eq!(
+            target.get("remote_key").expect("test value").vector,
+            vec![42.0]
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_merge_delta_deletes_entries() {
+    fn test_merge_delta_deletes_entries() -> Result<()> {
         let mut target = make_store();
-        target.insert("to_delete".to_string(), vec![1.0]).unwrap();
+        target.insert("to_delete".to_string(), vec![1.0])?;
 
         // Manually create a delta with a delete at seq=99 (higher than target's seq=1)
         let delta = StoreDelta {
@@ -623,17 +640,18 @@ mod tests {
             changes: vec![ChangeRecord::delete(99, "to_delete".to_string())],
         };
 
-        let result = target.merge_delta(&delta).unwrap();
+        let result = target.merge_delta(&delta)?;
         assert_eq!(result.deletes_applied, 1);
         assert!(!target.contains("to_delete"));
+        Ok(())
     }
 
     #[test]
-    fn test_merge_delta_conflict_local_wins() {
+    fn test_merge_delta_conflict_local_wins() -> Result<()> {
         let mut target = make_store();
         // Insert with seq=5 (by inserting 5 items)
         for i in 0..5 {
-            target.insert(format!("k{}", i), vec![i as f32]).unwrap();
+            target.insert(format!("k{}", i), vec![i as f32])?;
         }
 
         // Remote delta tries to update k0 at seq=1 (lower than local seq=1 for k0)
@@ -648,16 +666,17 @@ mod tests {
             )],
         };
 
-        let result = target.merge_delta(&delta).unwrap();
+        let result = target.merge_delta(&delta)?;
         assert_eq!(result.conflicts_skipped, 1);
         // Local value unchanged
-        assert_eq!(target.get("k0").unwrap().vector, vec![0.0]);
+        assert_eq!(target.get("k0").expect("test value").vector, vec![0.0]);
+        Ok(())
     }
 
     #[test]
-    fn test_merge_delta_remote_wins_newer_seq() {
+    fn test_merge_delta_remote_wins_newer_seq() -> Result<()> {
         let mut target = make_store();
-        target.insert("k".to_string(), vec![1.0]).unwrap(); // seq=1
+        target.insert("k".to_string(), vec![1.0])?; // seq=1
 
         // Remote update at seq=100 (newer)
         let delta = StoreDelta {
@@ -671,46 +690,49 @@ mod tests {
             )],
         };
 
-        let result = target.merge_delta(&delta).unwrap();
+        let result = target.merge_delta(&delta)?;
         assert_eq!(result.updates_applied, 1);
-        assert_eq!(target.get("k").unwrap().vector, vec![200.0]);
+        assert_eq!(target.get("k").expect("test value").vector, vec![200.0]);
+        Ok(())
     }
 
     #[test]
-    fn test_merge_empty_delta_noop() {
+    fn test_merge_empty_delta_noop() -> Result<()> {
         let mut store = make_store();
-        store.insert("a".to_string(), vec![1.0]).unwrap();
+        store.insert("a".to_string(), vec![1.0])?;
         let delta = StoreDelta {
             source_seq: 0,
             since_seq: 0,
             changes: Vec::new(),
         };
-        let result = store.merge_delta(&delta).unwrap();
+        let result = store.merge_delta(&delta)?;
         assert_eq!(result.total_applied(), 0);
         assert_eq!(store.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_merge_result_total_applied() {
+    fn test_merge_result_total_applied() -> Result<()> {
         let mut source = make_store();
-        source.insert("a".to_string(), vec![1.0]).unwrap();
-        source.insert("b".to_string(), vec![2.0]).unwrap();
+        source.insert("a".to_string(), vec![1.0])?;
+        source.insert("b".to_string(), vec![2.0])?;
         let delta = source.export_delta(0);
 
         let mut target = make_store();
-        let result = target.merge_delta(&delta).unwrap();
+        let result = target.merge_delta(&delta)?;
         assert_eq!(result.total_applied(), 2);
+        Ok(())
     }
 
     // ── stats ──────────────────────────────────────────────────────────────
 
     #[test]
-    fn test_stats_counters() {
+    fn test_stats_counters() -> Result<()> {
         let mut store = make_store();
-        store.insert("a".to_string(), vec![1.0]).unwrap();
-        store.insert("b".to_string(), vec![2.0]).unwrap();
-        store.update("a".to_string(), vec![10.0]).unwrap();
-        store.delete("b").unwrap();
+        store.insert("a".to_string(), vec![1.0])?;
+        store.insert("b".to_string(), vec![2.0])?;
+        store.update("a".to_string(), vec![10.0])?;
+        store.delete("b")?;
 
         let stats = store.stats();
         assert_eq!(stats.total_inserts, 2);
@@ -718,81 +740,83 @@ mod tests {
         assert_eq!(stats.total_deletes, 1);
         assert_eq!(stats.entry_count, 1);
         assert_eq!(stats.current_seq, 4);
+        Ok(())
     }
 
     #[test]
-    fn test_stats_merge_counter() {
+    fn test_stats_merge_counter() -> Result<()> {
         let mut source = make_store();
-        source.insert("x".to_string(), vec![1.0]).unwrap();
+        source.insert("x".to_string(), vec![1.0])?;
         let delta = source.export_delta(0);
 
         let mut target = make_store();
-        target.merge_delta(&delta).unwrap();
-        target
-            .merge_delta(&StoreDelta {
-                source_seq: 0,
-                since_seq: 0,
-                changes: Vec::new(),
-            })
-            .unwrap();
+        target.merge_delta(&delta)?;
+        target.merge_delta(&StoreDelta {
+            source_seq: 0,
+            since_seq: 0,
+            changes: Vec::new(),
+        })?;
 
         assert_eq!(target.stats().total_merges, 2);
+        Ok(())
     }
 
     // ── log compaction ─────────────────────────────────────────────────────
 
     #[test]
-    fn test_compact_log_reduces_size() {
+    fn test_compact_log_reduces_size() -> Result<()> {
         let mut store = make_store();
-        store.insert("k".to_string(), vec![1.0]).unwrap();
-        store.update("k".to_string(), vec![2.0]).unwrap();
-        store.update("k".to_string(), vec![3.0]).unwrap();
+        store.insert("k".to_string(), vec![1.0])?;
+        store.update("k".to_string(), vec![2.0])?;
+        store.update("k".to_string(), vec![3.0])?;
         assert_eq!(store.stats().log_length, 3);
         store.compact_log();
         // After compaction, only the most recent change per key should remain
         assert_eq!(store.stats().log_length, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_compact_log_preserves_state() {
+    fn test_compact_log_preserves_state() -> Result<()> {
         let mut store = make_store();
         for i in 0..5 {
-            store.insert(format!("k{}", i), vec![i as f32]).unwrap();
+            store.insert(format!("k{}", i), vec![i as f32])?;
         }
-        store.update("k0".to_string(), vec![99.0]).unwrap();
+        store.update("k0".to_string(), vec![99.0])?;
         store.compact_log();
-        assert_eq!(store.get("k0").unwrap().vector, vec![99.0]);
+        assert_eq!(store.get("k0").expect("test value").vector, vec![99.0]);
         assert_eq!(store.len(), 5);
+        Ok(())
     }
 
     // ── keys ───────────────────────────────────────────────────────────────
 
     #[test]
-    fn test_keys_returns_all_live_keys() {
+    fn test_keys_returns_all_live_keys() -> Result<()> {
         let mut store = make_store();
-        store.insert("a".to_string(), vec![1.0]).unwrap();
-        store.insert("b".to_string(), vec![2.0]).unwrap();
-        store.insert("c".to_string(), vec![3.0]).unwrap();
-        store.delete("b").unwrap();
+        store.insert("a".to_string(), vec![1.0])?;
+        store.insert("b".to_string(), vec![2.0])?;
+        store.insert("c".to_string(), vec![3.0])?;
+        store.delete("b")?;
         let mut keys = store.keys();
         keys.sort();
         assert_eq!(keys, vec!["a", "c"]);
+        Ok(())
     }
 
     // ── insert_with_metadata ───────────────────────────────────────────────
 
     #[test]
-    fn test_insert_with_metadata_stored() {
+    fn test_insert_with_metadata_stored() -> Result<()> {
         let mut store = make_store();
         let mut meta = HashMap::new();
         meta.insert("source".to_string(), "test".to_string());
-        store
-            .insert_with_metadata("k".to_string(), vec![1.0], meta.clone())
-            .unwrap();
-        let entry = store.get("k").unwrap();
+        store.insert_with_metadata("k".to_string(), vec![1.0], meta.clone())?;
+        let entry = store.get("k").expect("k not found");
         assert_eq!(
             entry.metadata.get("source").map(String::as_str),
             Some("test")
         );
+        Ok(())
     }
 }

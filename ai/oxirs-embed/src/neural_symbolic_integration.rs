@@ -1579,7 +1579,7 @@ mod tests {
 
         let result = rule.apply(&facts);
         assert!(result.is_some());
-        let (predicate, value) = result.unwrap();
+        let (predicate, value) = result.expect("should succeed");
         assert_eq!(predicate, "B");
         assert_eq!(value, 0.8);
     }
@@ -1599,7 +1599,7 @@ mod tests {
         let config = NeuralSymbolicConfig::default();
         let mut model = NeuralSymbolicModel::new(config);
 
-        let stats = model.train(Some(5)).await.unwrap();
+        let stats = model.train(Some(5)).await.expect("should succeed");
         assert_eq!(stats.epochs_completed, 5);
         assert!(model.is_trained());
     }
@@ -1643,7 +1643,7 @@ mod tests {
         let result = model.integrated_forward(&input);
 
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result.expect("should succeed");
         assert_eq!(output.len(), input.len());
     }
 
@@ -1655,7 +1655,9 @@ mod tests {
         let predictions = Array1::from_vec(vec![0.8, 0.3, 0.9]);
         let targets = Array1::from_vec(vec![1.0, 0.0, 1.0]);
 
-        let loss = model.compute_semantic_loss(&predictions, &targets).unwrap();
+        let loss = model
+            .compute_semantic_loss(&predictions, &targets)
+            .expect("should succeed");
         assert!(loss >= 0.0);
     }
 
@@ -1667,7 +1669,9 @@ mod tests {
         let input = Array1::from_vec(vec![1.0, 0.0, 0.5]);
         let prediction = Array1::from_vec(vec![0.8, 0.9]);
 
-        let explanation = model.explain_prediction(&input, &prediction).unwrap();
+        let explanation = model
+            .explain_prediction(&input, &prediction)
+            .expect("should succeed");
         assert!(explanation.contains("Prediction Explanation"));
     }
 }

@@ -12,7 +12,7 @@
 //! use oxirs_rule::integration_benchmarks::IntegrationBenchmarkSuite;
 //!
 //! let mut suite = IntegrationBenchmarkSuite::new();
-//! let results = suite.run_all_benchmarks().unwrap();
+//! let results = suite.run_all_benchmarks().expect("should succeed");
 //! println!("{:?}", results);
 //! ```
 
@@ -650,38 +650,42 @@ mod tests {
     }
 
     #[test]
-    fn test_sparql_direct_query_benchmark() {
+    fn test_sparql_direct_query_benchmark() -> Result<(), Box<dyn std::error::Error>> {
         let mut suite = IntegrationBenchmarkSuite::new();
-        suite.benchmark_sparql_direct_query(10).unwrap();
+        suite.benchmark_sparql_direct_query(10)?;
 
         assert_eq!(suite.results.len(), 1);
         assert_eq!(suite.results[0].operations, 10);
+        Ok(())
     }
 
     #[test]
-    fn test_shacl_validation_benchmark() {
+    fn test_shacl_validation_benchmark() -> Result<(), Box<dyn std::error::Error>> {
         let mut suite = IntegrationBenchmarkSuite::new();
-        suite.benchmark_shacl_direct_validation(10).unwrap();
+        suite.benchmark_shacl_direct_validation(10)?;
 
         assert_eq!(suite.results.len(), 1);
         assert_eq!(suite.results[0].operations, 10);
+        Ok(())
     }
 
     #[test]
-    fn test_distributed_benchmark() {
+    fn test_distributed_benchmark() -> Result<(), Box<dyn std::error::Error>> {
         let mut suite = IntegrationBenchmarkSuite::new();
-        suite.benchmark_distributed_round_robin(5).unwrap();
+        suite.benchmark_distributed_round_robin(5)?;
 
         assert_eq!(suite.results.len(), 1);
         assert_eq!(suite.results[0].operations, 5);
+        Ok(())
     }
 
     #[test]
-    fn test_module_registration_benchmark() {
+    fn test_module_registration_benchmark() -> Result<(), Box<dyn std::error::Error>> {
         let mut suite = IntegrationBenchmarkSuite::new();
-        suite.benchmark_module_registration(10).unwrap();
+        suite.benchmark_module_registration(10)?;
 
         assert_eq!(suite.results.len(), 1);
         assert_eq!(suite.results[0].operations, 10);
+        Ok(())
     }
 }

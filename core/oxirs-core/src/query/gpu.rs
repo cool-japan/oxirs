@@ -476,18 +476,24 @@ mod tests {
 
     #[test]
     fn test_gpu_detection() {
-        let devices = GpuQueryExecutor::detect_devices().unwrap();
+        let devices = GpuQueryExecutor::detect_devices().expect("construction should succeed");
 
         // Should at least have CPU fallback
         assert!(!devices.is_empty());
-        assert_eq!(devices.last().unwrap().backend, GpuBackend::CpuFallback);
+        assert_eq!(
+            devices
+                .last()
+                .expect("collection should not be empty")
+                .backend,
+            GpuBackend::CpuFallback
+        );
     }
 
     #[test]
     fn test_memory_pool() {
         let pool = GpuMemoryPool::new(1024 * 1024); // 1MB
 
-        let block = pool.allocate(1024).unwrap();
+        let block = pool.allocate(1024).expect("pool operation should succeed");
         assert_eq!(block.size, 1024);
         assert!(block.allocated);
     }

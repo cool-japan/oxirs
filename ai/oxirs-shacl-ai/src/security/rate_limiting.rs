@@ -190,7 +190,7 @@ mod tests {
         let limiter = RateLimiter::new(config);
 
         // First request should be allowed
-        assert!(limiter.check_limit("user1", 100).unwrap());
+        assert!(limiter.check_limit("user1", 100).expect("should succeed"));
     }
 
     #[test]
@@ -204,11 +204,11 @@ mod tests {
         let limiter = RateLimiter::new(config);
 
         // First two requests allowed
-        assert!(limiter.check_limit("user1", 100).unwrap());
-        assert!(limiter.check_limit("user1", 100).unwrap());
+        assert!(limiter.check_limit("user1", 100).expect("should succeed"));
+        assert!(limiter.check_limit("user1", 100).expect("should succeed"));
 
         // Third should be blocked
-        assert!(!limiter.check_limit("user1", 100).unwrap());
+        assert!(!limiter.check_limit("user1", 100).expect("should succeed"));
     }
 
     #[test]
@@ -222,14 +222,14 @@ mod tests {
         let limiter = RateLimiter::new(config);
 
         // First two requests allowed
-        assert!(limiter.check_limit("user1", 100).unwrap());
-        assert!(limiter.check_limit("user1", 100).unwrap());
+        assert!(limiter.check_limit("user1", 100).expect("should succeed"));
+        assert!(limiter.check_limit("user1", 100).expect("should succeed"));
 
         // Third allowed due to burst
-        assert!(limiter.check_limit("user1", 100).unwrap());
+        assert!(limiter.check_limit("user1", 100).expect("should succeed"));
 
         // Fourth blocked (burst exhausted)
-        assert!(!limiter.check_limit("user1", 100).unwrap());
+        assert!(!limiter.check_limit("user1", 100).expect("should succeed"));
     }
 
     #[test]
@@ -243,10 +243,10 @@ mod tests {
         let limiter = RateLimiter::new(config);
 
         // Request with 600 tokens
-        assert!(limiter.check_limit("user1", 600).unwrap());
+        assert!(limiter.check_limit("user1", 600).expect("should succeed"));
 
         // Request with 500 more tokens should be blocked (would exceed 1000)
-        assert!(!limiter.check_limit("user1", 500).unwrap());
+        assert!(!limiter.check_limit("user1", 500).expect("should succeed"));
     }
 
     #[test]
@@ -260,9 +260,11 @@ mod tests {
         let limiter = RateLimiter::new(config);
 
         // Make one request
-        limiter.check_limit("user1", 100).unwrap();
+        limiter.check_limit("user1", 100).expect("should succeed");
 
-        let quota = limiter.get_remaining_quota("user1").unwrap();
+        let quota = limiter
+            .get_remaining_quota("user1")
+            .expect("should succeed");
         assert_eq!(quota.remaining_requests, 9);
         assert_eq!(quota.remaining_tokens, 900);
     }
@@ -272,12 +274,16 @@ mod tests {
         let config = RateLimitConfig::default();
         let limiter = RateLimiter::new(config);
 
-        assert!(limiter.check_limit("user1", 100).unwrap());
-        assert!(limiter.check_limit("user2", 100).unwrap());
+        assert!(limiter.check_limit("user1", 100).expect("should succeed"));
+        assert!(limiter.check_limit("user2", 100).expect("should succeed"));
 
         // Each user has their own limit
-        let quota1 = limiter.get_remaining_quota("user1").unwrap();
-        let quota2 = limiter.get_remaining_quota("user2").unwrap();
+        let quota1 = limiter
+            .get_remaining_quota("user1")
+            .expect("should succeed");
+        let quota2 = limiter
+            .get_remaining_quota("user2")
+            .expect("should succeed");
 
         assert_eq!(quota1.remaining_requests, quota2.remaining_requests);
     }

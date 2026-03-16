@@ -869,7 +869,7 @@ mod tests {
     }
 
     #[test]
-    fn test_combsum_fusion() {
+    fn test_combsum_fusion() -> Result<()> {
         let config = ResultMergingConfig::default();
         let mut merger = AdvancedResultMerger::new(config);
 
@@ -883,17 +883,21 @@ mod tests {
             vec![("doc1".to_string(), 0.7, 1), ("doc3".to_string(), 0.6, 2)],
         );
 
-        let merged = merger.merge_results(vec![source1, source2]).unwrap();
+        let merged = merger.merge_results(vec![source1, source2])?;
 
         assert_eq!(merged.len(), 3); // doc1, doc2, doc3
 
         // doc1 should have the highest score (appears in both sources)
-        let doc1_result = merged.iter().find(|r| r.item_id == "doc1").unwrap();
+        let doc1_result = merged
+            .iter()
+            .find(|r| r.item_id == "doc1")
+            .expect("doc1 not found");
         assert!(doc1_result.final_score > 1.0); // Should be sum of normalized scores
+        Ok(())
     }
 
     #[test]
-    fn test_reciprocal_rank_fusion() {
+    fn test_reciprocal_rank_fusion() -> Result<()> {
         let config = ResultMergingConfig {
             fusion_algorithm: RankFusionAlgorithm::ReciprocalRankFusion,
             ..Default::default()
@@ -911,7 +915,7 @@ mod tests {
             vec![("doc2".to_string(), 0.7, 1), ("doc1".to_string(), 0.6, 2)],
         );
 
-        let merged = merger.merge_results(vec![source1, source2]).unwrap();
+        let merged = merger.merge_results(vec![source1, source2])?;
 
         assert_eq!(merged.len(), 2);
 
@@ -920,10 +924,11 @@ mod tests {
             assert!(result.final_score > 0.0);
             assert_eq!(result.source_contributions.len(), 2);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_intervals() {
+    fn test_confidence_intervals() -> Result<()> {
         let config = ResultMergingConfig {
             confidence_intervals: true,
             ..Default::default()
@@ -935,20 +940,24 @@ mod tests {
 
         let source2 = create_test_source("source2", vec![("doc1".to_string(), 0.7, 1)]);
 
-        let merged = merger.merge_results(vec![source1, source2]).unwrap();
+        let merged = merger.merge_results(vec![source1, source2])?;
 
         assert_eq!(merged.len(), 1);
 
         let result = &merged[0];
         assert!(result.confidence_interval.is_some());
 
-        let ci = result.confidence_interval.as_ref().unwrap();
+        let ci = result
+            .confidence_interval
+            .as_ref()
+            .expect("confidence_interval was None");
         assert!(ci.lower_bound <= ci.upper_bound);
         assert_eq!(ci.confidence_level, 0.95);
+        Ok(())
     }
 
     #[test]
-    fn test_score_normalization() {
+    fn test_score_normalization() -> Result<()> {
         let config = ResultMergingConfig {
             normalization_method: ScoreNormalizationMethod::MinMax,
             ..Default::default()
@@ -965,11 +974,12 @@ mod tests {
             ],
         );
 
-        let normalized = merger.normalize_source(&source).unwrap();
+        let normalized = merger.normalize_source(&source)?;
 
         // After min-max normalization, scores should be in [0, 1]
         for result in &normalized.results {
             assert!(result.score >= 0.0 && result.score <= 1.0);
         }
+        Ok(())
     }
 }

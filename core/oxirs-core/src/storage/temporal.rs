@@ -689,12 +689,14 @@ mod tests {
             ..Default::default()
         };
 
-        let storage = TemporalStorage::new(config).await.unwrap();
+        let storage = TemporalStorage::new(config)
+            .await
+            .expect("async operation should succeed");
 
         // Create temporal triple
         let triple = Triple::new(
-            NamedNode::new("http://example.org/person1").unwrap(),
-            NamedNode::new("http://example.org/age").unwrap(),
+            NamedNode::new("http://example.org/person1").expect("valid IRI"),
+            NamedNode::new("http://example.org/age").expect("valid IRI"),
             crate::model::Object::Literal(Literal::new("25")),
         );
 
@@ -705,24 +707,30 @@ mod tests {
         storage
             .store_temporal(triple.clone(), valid_from, valid_to, None)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Query at a time when triple was valid
         let query_time = Utc::now() - Duration::days(270);
         let pattern = TriplePattern::new(
             Some(crate::model::SubjectPattern::NamedNode(
-                NamedNode::new("http://example.org/person1").unwrap(),
+                NamedNode::new("http://example.org/person1").expect("valid IRI"),
             )),
             None,
             None,
         );
 
-        let results = storage.query_at_time(&pattern, query_time).await.unwrap();
+        let results = storage
+            .query_at_time(&pattern, query_time)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], triple);
 
         // Query at current time (should be empty as triple is no longer valid)
-        let current_results = storage.query_at_time(&pattern, Utc::now()).await.unwrap();
+        let current_results = storage
+            .query_at_time(&pattern, Utc::now())
+            .await
+            .expect("async operation should succeed");
         assert_eq!(current_results.len(), 0);
     }
 
@@ -733,15 +741,17 @@ mod tests {
             ..Default::default()
         };
 
-        let storage = TemporalStorage::new(config).await.unwrap();
+        let storage = TemporalStorage::new(config)
+            .await
+            .expect("async operation should succeed");
 
         let entity = "http://example.org/person1";
 
         // Store multiple versions of age
         for age in 20..=25 {
             let triple = Triple::new(
-                NamedNode::new(entity).unwrap(),
-                NamedNode::new("http://example.org/age").unwrap(),
+                NamedNode::new(entity).expect("valid IRI"),
+                NamedNode::new("http://example.org/age").expect("valid IRI"),
                 crate::model::Object::Literal(Literal::new(age.to_string())),
             );
 
@@ -749,14 +759,17 @@ mod tests {
             storage
                 .store_temporal(triple, valid_from, None, None)
                 .await
-                .unwrap();
+                .expect("operation should succeed");
         }
 
         // Get entity history
-        let history = storage.get_entity_history(entity).await.unwrap();
+        let history = storage
+            .get_entity_history(entity)
+            .await
+            .expect("async operation should succeed");
         assert!(history.is_some());
 
-        let history = history.unwrap();
+        let history = history.expect("history should be available");
         assert_eq!(history.states.len(), 6);
     }
 }

@@ -173,14 +173,16 @@ impl TurtleValidator {
         // Expected formats:
         //   @prefix ex: <http://example.org/> .
         //   PREFIX ex: <http://example.org/>
-        let colon_pos = rest.find(':');
-        if colon_pos.is_none() {
-            return Some(ValidationIssue::Error(format!(
-                "prefix declaration missing colon: {line}"
-            )));
-        }
+        let colon_pos = match rest.find(':') {
+            Some(pos) => pos,
+            None => {
+                return Some(ValidationIssue::Error(format!(
+                    "prefix declaration missing colon: {line}"
+                )));
+            }
+        };
 
-        let prefix_name = &rest[..colon_pos.unwrap()].trim();
+        let prefix_name = &rest[..colon_pos].trim();
         if !prefix_name.is_empty() && !self.validate_prefix_name(prefix_name) {
             return Some(ValidationIssue::Error(format!(
                 "invalid prefix name '{prefix_name}' in: {line}"
@@ -188,7 +190,7 @@ impl TurtleValidator {
         }
 
         // After the colon there should be whitespace then an IRI in angle brackets
-        let after_colon = rest[colon_pos.unwrap() + 1..].trim();
+        let after_colon = rest[colon_pos + 1..].trim();
         if !after_colon.starts_with('<') {
             return Some(ValidationIssue::Error(format!(
                 "prefix IRI must be enclosed in <...>: {line}"

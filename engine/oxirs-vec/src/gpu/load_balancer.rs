@@ -383,6 +383,7 @@ impl WorkloadDistributor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     fn make_device(id: u32, mem_mb: u64) -> SimpleGpuDevice {
         SimpleGpuDevice::new(id, format!("GPU-{}", id), mem_mb, 128)
@@ -440,45 +441,49 @@ mod tests {
     }
 
     #[test]
-    fn test_select_device_prefers_least_loaded() {
+    fn test_select_device_prefers_least_loaded() -> Result<()> {
         let lb = GpuLoadBalancer::new();
         lb.register_device(make_device(0, 8192));
         lb.register_device(make_device(1, 8192));
 
         // Load device 0 heavily
-        lb.record_workload(0, 7000).unwrap();
+        lb.record_workload(0, 7000)?;
 
         // Device 1 should be selected
         let sel = lb.select_device(500);
         assert_eq!(sel, Some(1), "Should prefer the less-loaded device");
+        Ok(())
     }
 
     #[test]
-    fn test_record_and_release_workload() {
+    fn test_record_and_release_workload() -> Result<()> {
         let lb = GpuLoadBalancer::new();
         lb.register_device(make_device(0, 8192));
 
-        lb.record_workload(0, 2048).unwrap();
-        let u1 = lb.utilization(0).unwrap();
+        lb.record_workload(0, 2048)?;
+        let u1 = lb.utilization(0).expect("utilization(0) was None");
         assert!(
             (u1 - 0.25).abs() < 1e-6,
             "Expected 25% utilisation, got {}",
             u1
         );
 
-        lb.release_workload(0, 2048).unwrap();
-        let u2 = lb.utilization(0).unwrap();
+        lb.release_workload(0, 2048)?;
+        let u2 = lb.utilization(0).expect("utilization(0) was None");
         assert!(u2 < 1e-9, "Expected 0% after release, got {}", u2);
+        Ok(())
     }
 
     #[test]
-    fn test_release_clamps_to_zero() {
+    fn test_release_clamps_to_zero() -> Result<()> {
         let lb = GpuLoadBalancer::new();
         lb.register_device(make_device(0, 8192));
-        lb.record_workload(0, 100).unwrap();
+        lb.record_workload(0, 100)?;
         // Release more than recorded — should not underflow
-        lb.release_workload(0, 9999).unwrap();
-        assert_eq!(lb.utilization(0).unwrap(), 0.0);
+        lb.release_workload(0, 9999)?;
+        let __val = lb.utilization(0).expect("utilization(0) was None");
+        assert_eq!(__val, 0.0);
+        Ok(())
     }
 
     #[test]
@@ -500,19 +505,20 @@ mod tests {
     }
 
     #[test]
-    fn test_utilization_snapshot() {
+    fn test_utilization_snapshot() -> Result<()> {
         let lb = GpuLoadBalancer::new();
         lb.register_device(make_device(0, 8192));
         lb.register_device(make_device(1, 4096));
-        lb.record_workload(0, 4096).unwrap();
+        lb.record_workload(0, 4096)?;
         let snap = lb.utilization_snapshot();
         assert_eq!(snap.len(), 2);
         let u0 = snap
             .iter()
             .find(|(id, _)| *id == 0)
             .map(|(_, u)| *u)
-            .unwrap();
+            .expect("device 0 not in snapshot");
         assert!((u0 - 0.5).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
@@ -526,13 +532,15 @@ mod tests {
     }
 
     #[test]
-    fn test_reregister_device_resets_workload() {
+    fn test_reregister_device_resets_workload() -> Result<()> {
         let lb = GpuLoadBalancer::new();
         lb.register_device(make_device(0, 8192));
-        lb.record_workload(0, 4096).unwrap();
+        lb.record_workload(0, 4096)?;
         // Re-register same device — workload should reset
         lb.register_device(make_device(0, 8192));
-        assert_eq!(lb.utilization(0).unwrap(), 0.0);
+        let __val = lb.utilization(0).expect("utilization(0) should be present");
+        assert_eq!(__val, 0.0);
+        Ok(())
     }
 
     // ---- WorkloadChunk ----
@@ -566,30 +574,32 @@ mod tests {
     }
 
     #[test]
-    fn test_distribute_single_device() {
+    fn test_distribute_single_device() -> Result<()> {
         let dist = WorkloadDistributor::new();
         let devices = vec![make_device(0, 8192)];
-        let chunks = dist.distribute(1000, &devices).unwrap();
+        let chunks = dist.distribute(1000, &devices)?;
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].start_idx, 0);
         assert_eq!(chunks[0].end_idx, 1000);
+        Ok(())
     }
 
     #[test]
-    fn test_distribute_covers_all_vectors() {
+    fn test_distribute_covers_all_vectors() -> Result<()> {
         let dist = WorkloadDistributor::new();
         let devices = vec![make_device(0, 4096), make_device(1, 8192)];
-        let chunks = dist.distribute(900, &devices).unwrap();
+        let chunks = dist.distribute(900, &devices)?;
         let covered: usize = chunks.iter().map(|c| c.len()).sum();
         assert_eq!(covered, 900, "All vectors must be covered");
+        Ok(())
     }
 
     #[test]
-    fn test_distribute_proportional_to_memory() {
+    fn test_distribute_proportional_to_memory() -> Result<()> {
         let dist = WorkloadDistributor::new();
         // Device 0: 1 GB, device 1: 3 GB => 25 / 75 split
         let devices = vec![make_device(0, 1024), make_device(1, 3072)];
-        let chunks = dist.distribute(1000, &devices).unwrap();
+        let chunks = dist.distribute(1000, &devices)?;
         assert_eq!(chunks.len(), 2);
         // Device 0 should get ~250 vectors
         let c0 = &chunks[0];
@@ -606,42 +616,46 @@ mod tests {
         );
         assert_eq!(c0.start_idx, 0);
         assert_eq!(c1.end_idx, 1000);
+        Ok(())
     }
 
     #[test]
-    fn test_distribute_skips_zero_memory_device() {
+    fn test_distribute_skips_zero_memory_device() -> Result<()> {
         let dist = WorkloadDistributor::new();
         let devices = vec![make_device(0, 0), make_device(1, 8192)];
-        let chunks = dist.distribute(100, &devices).unwrap();
+        let chunks = dist.distribute(100, &devices)?;
         // Device 0 is skipped; only device 1
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].device_id, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_distribute_even_basic() {
+    fn test_distribute_even_basic() -> Result<()> {
         let dist = WorkloadDistributor::new();
         let devices = vec![
             make_device(0, 4096),
             make_device(1, 4096),
             make_device(2, 4096),
         ];
-        let chunks = dist.distribute_even(9, &devices).unwrap();
+        let chunks = dist.distribute_even(9, &devices)?;
         assert_eq!(chunks.iter().map(|c| c.len()).sum::<usize>(), 9);
         for chunk in &chunks {
             assert_eq!(chunk.len(), 3);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_distribute_even_with_remainder() {
+    fn test_distribute_even_with_remainder() -> Result<()> {
         let dist = WorkloadDistributor::new();
         let devices = vec![make_device(0, 4096), make_device(1, 4096)];
-        let chunks = dist.distribute_even(7, &devices).unwrap();
+        let chunks = dist.distribute_even(7, &devices)?;
         assert_eq!(chunks.iter().map(|c| c.len()).sum::<usize>(), 7);
         // First device gets 4, second gets 3
         assert_eq!(chunks[0].len(), 4);
         assert_eq!(chunks[1].len(), 3);
+        Ok(())
     }
 
     #[test]

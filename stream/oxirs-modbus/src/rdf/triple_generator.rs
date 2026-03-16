@@ -392,7 +392,7 @@ mod tests {
         let timestamp = Utc::now();
         let triples = generator
             .generate_triples(&values, RegisterType::Holding, timestamp)
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(triples.len(), 2);
 
@@ -425,21 +425,21 @@ mod tests {
         values.insert(0u16, vec![100]);
         let triples1 = generator
             .generate_triples(&values, RegisterType::Holding, timestamp)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(triples1.len(), 1); // First reading always generates
 
         // Second reading: 105 (within deadband)
         values.insert(0u16, vec![105]);
         let triples2 = generator
             .generate_triples(&values, RegisterType::Holding, timestamp)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(triples2.len(), 0); // Filtered by deadband
 
         // Third reading: 115 (outside deadband)
         values.insert(0u16, vec![115]);
         let triples3 = generator
             .generate_triples(&values, RegisterType::Holding, timestamp)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(triples3.len(), 1); // Generates new triple
     }
 
@@ -454,7 +454,7 @@ mod tests {
         let timestamp = Utc::now();
         let triples = generator
             .generate_triples(&values, RegisterType::Holding, timestamp)
-            .unwrap();
+            .expect("should succeed");
 
         let prov_triples = triples[0].provenance_triples();
 
@@ -496,7 +496,7 @@ mod tests {
         let values = vec![100, 200, 300];
         let triples = generator
             .generate_from_array(0, &values, RegisterType::Holding, timestamp)
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(triples.len(), 2); // Only mapped registers
     }

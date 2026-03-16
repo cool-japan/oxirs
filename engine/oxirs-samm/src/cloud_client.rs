@@ -13,9 +13,9 @@
 //! use oxirs_samm::cloud_client::{CloudStorageClient, MockCloudStorage, CloudStorageError};
 //!
 //! let store = MockCloudStorage::new();
-//! store.upload("models/test.ttl", b"@prefix ...").unwrap();
-//! assert!(store.exists("models/test.ttl").unwrap());
-//! let data = store.download("models/test.ttl").unwrap();
+//! store.upload("models/test.ttl", b"@prefix ...").expect("should succeed");
+//! assert!(store.exists("models/test.ttl").expect("should succeed"));
+//! let data = store.download("models/test.ttl").expect("should succeed");
 //! assert_eq!(data, b"@prefix ...");
 //! ```
 
@@ -273,7 +273,7 @@ impl CloudStorageClient for MockCloudStorage {
 ///
 /// let inner = MockCloudStorage::new();
 /// let client = RetryableCloudClient::new(inner, 3, 0, true);
-/// client.upload("key", b"data").unwrap();
+/// client.upload("key", b"data").expect("should succeed");
 /// ```
 #[derive(Debug)]
 pub struct RetryableCloudClient<C: CloudStorageClient> {

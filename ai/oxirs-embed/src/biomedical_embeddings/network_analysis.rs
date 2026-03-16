@@ -304,7 +304,7 @@ mod publication_tests {
         let embedding = analyzer
             .generate_author_embeddings("dr_smith", &publications)
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(embedding.values.len(), 768); // SciBERT embedding dimension
         assert!(analyzer.author_embeddings.contains_key("dr_smith"));
     }
@@ -336,11 +336,11 @@ mod publication_tests {
         analyzer
             .generate_author_embeddings("author1", &pub1)
             .await
-            .unwrap();
+            .expect("should succeed");
         analyzer
             .generate_author_embeddings("author2", &pub2)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let similarity = analyzer.predict_collaboration("author1", "author2");
         assert!((0.0..=1.0).contains(&similarity));
@@ -369,7 +369,9 @@ mod publication_tests {
             "AI applications in genomics".to_string(),
         ];
 
-        analyzer.build_topic_model(&publications).unwrap();
+        analyzer
+            .build_topic_model(&publications)
+            .expect("should succeed");
         assert!(!analyzer.topic_model.topic_distributions.is_empty());
         assert!(!analyzer.topic_model.topic_keywords.is_empty());
     }

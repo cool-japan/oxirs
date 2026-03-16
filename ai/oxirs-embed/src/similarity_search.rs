@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn test_nearest_neighbor_returns_closest() {
         let idx = index_123();
-        let nn = idx.nearest_neighbor(&[1.0, 0.0, 0.0], SimilarityMetric::Cosine).unwrap();
+        let nn = idx.nearest_neighbor(&[1.0, 0.0, 0.0], SimilarityMetric::Cosine).expect("should succeed");
         assert_eq!(nn.id, "r1");
     }
 
@@ -639,7 +639,7 @@ mod tests {
         let mut idx = SimilaritySearchIndex::new();
         idx.add(make_record("close", vec![1.0, 0.0], None));
         idx.add(make_record("far", vec![100.0, 0.0], None));
-        let nn = idx.nearest_neighbor(&[0.0, 0.0], SimilarityMetric::L2).unwrap();
+        let nn = idx.nearest_neighbor(&[0.0, 0.0], SimilarityMetric::L2).expect("should succeed");
         assert_eq!(nn.id, "close");
     }
 
@@ -694,7 +694,7 @@ mod tests {
         idx.add(make_record("far", vec![10.0, 10.0], None));
         let nn = idx
             .nearest_neighbor(&[0.0, 0.0], SimilarityMetric::Manhattan)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(nn.id, "near");
     }
 }

@@ -798,7 +798,10 @@ mod tests {
         }
         generator.set_snapshot(snapshot2).await;
 
-        let version = generator.generate_version("1.1.0").await.unwrap();
+        let version = generator
+            .generate_version("1.1.0")
+            .await
+            .expect("should succeed");
 
         assert_eq!(version.version, "1.1.0");
         assert!(!version.changes.is_empty());
@@ -826,7 +829,10 @@ mod tests {
             );
         }
         generator.set_snapshot(snapshot2).await;
-        generator.generate_version("1.1.0").await.unwrap();
+        generator
+            .generate_version("1.1.0")
+            .await
+            .expect("should succeed");
 
         let markdown = generator.generate_markdown().await;
 

@@ -556,17 +556,23 @@ mod tests {
 
         // Test basic escapes
         assert_eq!(
-            unescape_string("hello\\nworld", &position).unwrap(),
+            unescape_string("hello\\nworld", &position).expect("unescape should succeed"),
             "hello\nworld"
         );
         assert_eq!(
-            unescape_string("say \\\"hello\\\"", &position).unwrap(),
+            unescape_string("say \\\"hello\\\"", &position).expect("unescape should succeed"),
             "say \"hello\""
         );
 
         // Test Unicode escapes
-        assert_eq!(unescape_string("\\u0041", &position).unwrap(), "A");
-        assert_eq!(unescape_string("\\U00000041", &position).unwrap(), "A");
+        assert_eq!(
+            unescape_string("\\u0041", &position).expect("unescape should succeed"),
+            "A"
+        );
+        assert_eq!(
+            unescape_string("\\U00000041", &position).expect("unescape should succeed"),
+            "A"
+        );
 
         // Test escape string
         assert_eq!(escape_string("hello\nworld"), "hello\\nworld");

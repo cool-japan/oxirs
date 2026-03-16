@@ -42,7 +42,7 @@ impl ConnectionPool {
         let mut available = self
             .available_connections
             .lock()
-            .expect("connection pool lock should not be poisoned");
+            .unwrap_or_else(|e| e.into_inner());
 
         // Try to get an existing connection
         if let Some(store) = available.pop_front() {
@@ -53,7 +53,7 @@ impl ConnectionPool {
         let mut active_count = self
             .active_connections
             .lock()
-            .expect("active count lock should not be poisoned");
+            .unwrap_or_else(|e| e.into_inner());
         if *active_count < self.max_connections {
             *active_count += 1;
             drop(active_count);
@@ -68,7 +68,7 @@ impl ConnectionPool {
         available = self
             .connection_available
             .wait(available)
-            .expect("condition variable wait should not be poisoned");
+            .unwrap_or_else(|e| e.into_inner());
 
         match available.pop_front() {
             Some(store) => Ok(PooledConnection::new(store, self.clone())),
@@ -104,7 +104,7 @@ impl ConnectionPool {
         let mut available = self
             .available_connections
             .lock()
-            .expect("connection pool lock should not be poisoned");
+            .unwrap_or_else(|e| e.into_inner());
         available.push_back(store);
         self.connection_available.notify_one();
     }
@@ -114,11 +114,11 @@ impl ConnectionPool {
         let available = self
             .available_connections
             .lock()
-            .expect("connection pool lock should not be poisoned");
+            .unwrap_or_else(|e| e.into_inner());
         let active_count = self
             .active_connections
             .lock()
-            .expect("active count lock should not be poisoned");
+            .unwrap_or_else(|e| e.into_inner());
 
         PoolStatistics {
             available_connections: available.len(),

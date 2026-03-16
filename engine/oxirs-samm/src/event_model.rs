@@ -328,7 +328,8 @@ mod tests {
     fn test_register_multiple() {
         let mut m = EventModel::new();
         for i in 0..5 {
-            m.register(make_event(&format!("ev{i}"))).unwrap();
+            m.register(make_event(&format!("ev{i}")))
+                .expect("should succeed");
         }
         assert_eq!(m.count(), 5);
     }
@@ -336,7 +337,7 @@ mod tests {
     #[test]
     fn test_register_duplicate_id_error() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         let result = m.register(make_event("ev1"));
         assert!(result.is_err());
         assert!(matches!(result, Err(EventError::DuplicateId(_))));
@@ -361,7 +362,7 @@ mod tests {
     #[test]
     fn test_get_existing() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         assert!(m.get("ev1").is_some());
     }
 
@@ -374,7 +375,7 @@ mod tests {
     #[test]
     fn test_remove_existing() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         assert!(m.remove("ev1"));
         assert_eq!(m.count(), 0);
     }
@@ -388,8 +389,8 @@ mod tests {
     #[test]
     fn test_count_decrements_after_remove() {
         let mut m = EventModel::new();
-        m.register(make_event("a")).unwrap();
-        m.register(make_event("b")).unwrap();
+        m.register(make_event("a")).expect("should succeed");
+        m.register(make_event("b")).expect("should succeed");
         m.remove("a");
         assert_eq!(m.count(), 1);
     }
@@ -399,7 +400,7 @@ mod tests {
     #[test]
     fn test_validate_valid_instance() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         let inst = make_instance("ev1", &[("temperature", "22.5")]);
         let result = m.validate_instance(&inst);
         assert!(result.valid);
@@ -409,7 +410,7 @@ mod tests {
     #[test]
     fn test_validate_valid_with_optional() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         let inst = make_instance("ev1", &[("temperature", "22.5"), ("humidity", "60.0")]);
         let result = m.validate_instance(&inst);
         assert!(result.valid);
@@ -418,7 +419,7 @@ mod tests {
     #[test]
     fn test_validate_missing_required_fails() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         // Missing "temperature" which is required
         let inst = make_instance("ev1", &[("humidity", "60.0")]);
         let result = m.validate_instance(&inst);
@@ -439,7 +440,7 @@ mod tests {
     #[test]
     fn test_validate_extra_keys_allowed() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         // "extra_key" is not defined but should not cause failure
         let inst = make_instance("ev1", &[("temperature", "10.0"), ("extra_key", "value")]);
         let result = m.validate_instance(&inst);
@@ -452,7 +453,7 @@ mod tests {
         let event = EventDefinition::new("ev1", "Event")
             .with_property(EventProperty::new("a", "string"))
             .with_property(EventProperty::new("b", "string"));
-        m.register(event).unwrap();
+        m.register(event).expect("should succeed");
         let inst = make_instance("ev1", &[]);
         let result = m.validate_instance(&inst);
         assert!(!result.valid);
@@ -464,8 +465,8 @@ mod tests {
     #[test]
     fn test_events_with_property_found() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap(); // has temperature
-        m.register(make_event("ev2")).unwrap(); // has temperature
+        m.register(make_event("ev1")).expect("should succeed"); // has temperature
+        m.register(make_event("ev2")).expect("should succeed"); // has temperature
         let found = m.events_with_property("temperature");
         assert_eq!(found.len(), 2);
     }
@@ -473,7 +474,7 @@ mod tests {
     #[test]
     fn test_events_with_property_not_found() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         let found = m.events_with_property("voltage");
         assert!(found.is_empty());
     }
@@ -481,10 +482,10 @@ mod tests {
     #[test]
     fn test_events_with_property_subset() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap(); // has temperature, humidity
+        m.register(make_event("ev1")).expect("should succeed"); // has temperature, humidity
         let ev2 = EventDefinition::new("ev2", "Pressure event")
             .with_property(EventProperty::new("pressure", "xsd:float"));
-        m.register(ev2).unwrap();
+        m.register(ev2).expect("should succeed");
         let found = m.events_with_property("pressure");
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].id, "ev2");
@@ -495,7 +496,7 @@ mod tests {
     #[test]
     fn test_required_properties() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         let req = m.required_properties("ev1");
         assert_eq!(req.len(), 1);
         assert_eq!(req[0].name, "temperature");
@@ -504,7 +505,7 @@ mod tests {
     #[test]
     fn test_optional_properties() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         let opt = m.optional_properties("ev1");
         assert_eq!(opt.len(), 1);
         assert_eq!(opt[0].name, "humidity");
@@ -529,21 +530,21 @@ mod tests {
     #[test]
     fn test_schema_compatible_all_required_present() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         assert!(m.schema_compatible("ev1", &["temperature"]));
     }
 
     #[test]
     fn test_schema_compatible_with_optional_too() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         assert!(m.schema_compatible("ev1", &["temperature", "humidity"]));
     }
 
     #[test]
     fn test_schema_compatible_missing_required() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         assert!(!m.schema_compatible("ev1", &["humidity"]));
     }
 
@@ -633,7 +634,8 @@ mod tests {
     fn test_count_after_multiple_removes() {
         let mut m = EventModel::new();
         for i in 0..3 {
-            m.register(make_event(&format!("ev{i}"))).unwrap();
+            m.register(make_event(&format!("ev{i}")))
+                .expect("should succeed");
         }
         m.remove("ev0");
         m.remove("ev1");
@@ -646,7 +648,7 @@ mod tests {
         // Register an event with only optional properties
         let ev = EventDefinition::new("ev1", "All optional")
             .with_property(EventProperty::optional("x", "string"));
-        m.register(ev).unwrap();
+        m.register(ev).expect("should succeed");
         // Empty payload is compatible since no required props
         assert!(m.schema_compatible("ev1", &[]));
     }
@@ -669,7 +671,7 @@ mod tests {
     #[test]
     fn test_register_re_register_after_remove() {
         let mut m = EventModel::new();
-        m.register(make_event("ev1")).unwrap();
+        m.register(make_event("ev1")).expect("should succeed");
         m.remove("ev1");
         // Should succeed since it was removed
         assert!(m.register(make_event("ev1")).is_ok());

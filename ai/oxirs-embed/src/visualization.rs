@@ -632,7 +632,7 @@ mod tests {
         };
 
         let mut visualizer = EmbeddingVisualizer::new(config);
-        let result = visualizer.visualize(&embeddings).unwrap();
+        let result = visualizer.visualize(&embeddings).expect("should succeed");
 
         assert_eq!(result.coordinates.len(), 4);
         assert_eq!(result.dimensions, 2);
@@ -654,7 +654,7 @@ mod tests {
         };
 
         let mut visualizer = EmbeddingVisualizer::new(config);
-        let result = visualizer.visualize(&embeddings).unwrap();
+        let result = visualizer.visualize(&embeddings).expect("should succeed");
 
         assert_eq!(result.coordinates.len(), 10);
         assert_eq!(result.dimensions, 3);
@@ -676,7 +676,7 @@ mod tests {
 
         let config = VisualizationConfig::default();
         let visualizer = EmbeddingVisualizer::new(config);
-        let csv = visualizer.export_csv(&result).unwrap();
+        let csv = visualizer.export_csv(&result).expect("should succeed");
 
         assert!(csv.contains("entity,dim1,dim2"));
         assert!(csv.contains("e1,1,2"));

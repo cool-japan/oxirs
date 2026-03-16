@@ -674,30 +674,30 @@ mod tests {
         // Add some triples
         model
             .add_triple(Triple::new(
-                NamedNode::new("alice").unwrap(),
-                NamedNode::new("knows").unwrap(),
-                NamedNode::new("bob").unwrap(),
+                NamedNode::new("alice").expect("should succeed"),
+                NamedNode::new("knows").expect("should succeed"),
+                NamedNode::new("bob").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         model
             .add_triple(Triple::new(
-                NamedNode::new("bob").unwrap(),
-                NamedNode::new("knows").unwrap(),
-                NamedNode::new("charlie").unwrap(),
+                NamedNode::new("bob").expect("should succeed"),
+                NamedNode::new("knows").expect("should succeed"),
+                NamedNode::new("charlie").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         model
             .add_triple(Triple::new(
-                NamedNode::new("alice").unwrap(),
-                NamedNode::new("likes").unwrap(),
-                NamedNode::new("charlie").unwrap(),
+                NamedNode::new("alice").expect("should succeed"),
+                NamedNode::new("likes").expect("should succeed"),
+                NamedNode::new("charlie").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         // Train the model
-        let stats = model.train(Some(50)).await.unwrap();
+        let stats = model.train(Some(50)).await.expect("should succeed");
 
         assert_eq!(stats.epochs_completed, 50);
         assert!(stats.final_loss >= 0.0);
@@ -708,7 +708,9 @@ mod tests {
         assert_eq!(model.relation_embeddings.len(), 2);
 
         // Test prediction
-        let score = model.score_triple("alice", "knows", "bob").unwrap();
+        let score = model
+            .score_triple("alice", "knows", "bob")
+            .expect("should succeed");
         assert!((0.0..=1.0).contains(&score)); // Sigmoid bounded
     }
 
@@ -728,25 +730,27 @@ mod tests {
         // Add training data
         model
             .add_triple(Triple::new(
-                NamedNode::new("alice").unwrap(),
-                NamedNode::new("knows").unwrap(),
-                NamedNode::new("bob").unwrap(),
+                NamedNode::new("alice").expect("should succeed"),
+                NamedNode::new("knows").expect("should succeed"),
+                NamedNode::new("bob").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         model
             .add_triple(Triple::new(
-                NamedNode::new("alice").unwrap(),
-                NamedNode::new("knows").unwrap(),
-                NamedNode::new("charlie").unwrap(),
+                NamedNode::new("alice").expect("should succeed"),
+                NamedNode::new("knows").expect("should succeed"),
+                NamedNode::new("charlie").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         // Train
-        model.train(Some(30)).await.unwrap();
+        model.train(Some(30)).await.expect("should succeed");
 
         // Rank objects
-        let ranked = model.predict_objects("alice", "knows", 2).unwrap();
+        let ranked = model
+            .predict_objects("alice", "knows", 2)
+            .expect("should succeed");
 
         assert!(ranked.len() <= 2);
         // Scores should be in descending order
@@ -773,34 +777,36 @@ mod tests {
         // Add and train
         model
             .add_triple(Triple::new(
-                NamedNode::new("alice").unwrap(),
-                NamedNode::new("knows").unwrap(),
-                NamedNode::new("bob").unwrap(),
+                NamedNode::new("alice").expect("should succeed"),
+                NamedNode::new("knows").expect("should succeed"),
+                NamedNode::new("bob").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         model
             .add_triple(Triple::new(
-                NamedNode::new("bob").unwrap(),
-                NamedNode::new("likes").unwrap(),
-                NamedNode::new("charlie").unwrap(),
+                NamedNode::new("bob").expect("should succeed"),
+                NamedNode::new("likes").expect("should succeed"),
+                NamedNode::new("charlie").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
-        model.train(Some(20)).await.unwrap();
+        model.train(Some(20)).await.expect("should succeed");
 
         // Get embedding before save
-        let emb_before = model.get_entity_embedding("alice").unwrap();
-        let score_before = model.score_triple("alice", "knows", "bob").unwrap();
+        let emb_before = model.get_entity_embedding("alice").expect("should succeed");
+        let score_before = model
+            .score_triple("alice", "knows", "bob")
+            .expect("should succeed");
 
         // Save model
         let model_path = temp_dir().join("test_hole_model.bin");
-        let path_str = model_path.to_str().unwrap();
-        model.save(path_str).unwrap();
+        let path_str = model_path.to_str().expect("should succeed");
+        model.save(path_str).expect("should succeed");
 
         // Create new model and load
         let mut loaded_model = HoLE::new(HoLEConfig::default());
-        loaded_model.load(path_str).unwrap();
+        loaded_model.load(path_str).expect("should succeed");
 
         // Verify loaded model
         assert!(loaded_model.is_trained());
@@ -808,14 +814,18 @@ mod tests {
         assert_eq!(loaded_model.get_relations().len(), 2);
 
         // Verify embeddings are preserved
-        let emb_after = loaded_model.get_entity_embedding("alice").unwrap();
+        let emb_after = loaded_model
+            .get_entity_embedding("alice")
+            .expect("should succeed");
         assert_eq!(emb_before.dimensions, emb_after.dimensions);
         for i in 0..emb_before.values.len() {
             assert!((emb_before.values[i] - emb_after.values[i]).abs() < 1e-6);
         }
 
         // Verify scoring is consistent
-        let score_after = loaded_model.score_triple("alice", "knows", "bob").unwrap();
+        let score_after = loaded_model
+            .score_triple("alice", "knows", "bob")
+            .expect("should succeed");
         assert!((score_before - score_after).abs() < 1e-6);
 
         // Cleanup

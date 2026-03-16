@@ -1288,7 +1288,7 @@ mod tests {
         let result = temporal_consciousness.analyze_temporal_patterns(&patterns);
         assert!(result.is_ok());
 
-        let analysis = result.unwrap();
+        let analysis = result.expect("should have value");
         assert!(analysis.coherence_score >= 0.0 && analysis.coherence_score <= 1.0);
         assert!(analysis.predictions.uncertainty >= 0.0 && analysis.predictions.uncertainty <= 1.0);
     }

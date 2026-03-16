@@ -441,9 +441,9 @@ mod tests {
     use crate::Vector;
 
     #[test]
-    fn test_batch_insert() {
+    fn test_batch_insert() -> Result<()> {
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         let vectors: Vec<(String, Vector)> = (0..100)
             .map(|i| {
@@ -453,22 +453,23 @@ mod tests {
             .collect();
 
         let batch_config = BatchInsertConfig::default();
-        let result = index.batch_insert(vectors, batch_config).unwrap();
+        let result = index.batch_insert(vectors, batch_config)?;
 
         assert_eq!(result.success_count, 100);
         assert_eq!(result.failure_count, 0);
         assert_eq!(index.len(), 100);
+        Ok(())
     }
 
     #[test]
-    fn test_batch_update() {
+    fn test_batch_update() -> Result<()> {
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         // Insert initial vectors
         for i in 0..10 {
             let vec = Vector::new(vec![i as f32, 0.0, 0.0]);
-            index.add_vector(format!("vec_{}", i), vec).unwrap();
+            index.add_vector(format!("vec_{}", i), vec)?;
         }
 
         // Update all vectors
@@ -479,59 +480,62 @@ mod tests {
             })
             .collect();
 
-        let result = index.batch_update(updates).unwrap();
+        let result = index.batch_update(updates)?;
 
         assert_eq!(result.success_count, 10);
         assert_eq!(result.failure_count, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_batch_delete() {
+    fn test_batch_delete() -> Result<()> {
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         // Insert vectors
         for i in 0..20 {
             let vec = Vector::new(vec![i as f32, 0.0, 0.0]);
-            index.add_vector(format!("vec_{}", i), vec).unwrap();
+            index.add_vector(format!("vec_{}", i), vec)?;
         }
 
         // Delete half of them
         let to_delete: Vec<String> = (0..10).map(|i| format!("vec_{}", i)).collect();
 
-        let result = index.batch_delete(to_delete).unwrap();
+        let result = index.batch_delete(to_delete)?;
 
         assert_eq!(result.success_count, 10);
         assert_eq!(result.failure_count, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_graph_optimization() {
+    fn test_graph_optimization() -> Result<()> {
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         // Insert vectors
         for i in 0..50 {
             let vec = Vector::new(vec![i as f32, (i * 2) as f32, (i * 3) as f32]);
-            index.add_vector(format!("vec_{}", i), vec).unwrap();
+            index.add_vector(format!("vec_{}", i), vec)?;
         }
 
         let size_before = index.len();
 
         // Optimize graph
-        index.optimize_graph_structure().unwrap();
+        index.optimize_graph_structure()?;
 
         // Graph should still have all nodes after optimization
         assert_eq!(index.len(), size_before);
 
         // Graph should still be functional - try a few searches
         let query1 = Vector::new(vec![0.0, 0.0, 0.0]);
-        let results1 = index.search_knn(&query1, 5).unwrap();
+        let results1 = index.search_knn(&query1, 5)?;
         // Note: Optimization may affect recall, so we just check the index is still functional
         // by verifying we can execute searches without errors
         assert!(results1.len() <= 5);
 
         let query2 = Vector::new(vec![25.0, 50.0, 75.0]);
-        let _results2 = index.search_knn(&query2, 5).unwrap();
+        let _results2 = index.search_knn(&query2, 5)?;
+        Ok(())
     }
 }

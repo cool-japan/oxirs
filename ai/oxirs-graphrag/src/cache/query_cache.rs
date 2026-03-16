@@ -283,14 +283,14 @@ impl<K: Hash + Eq + Clone, V: Clone> CacheInner<K, V> {
 /// use oxirs_graphrag::cache::query_cache::{QueryCache, QueryCacheConfig};
 ///
 /// let config = QueryCacheConfig {
-///     capacity: NonZeroUsize::new(100).unwrap(),
+///     capacity: NonZeroUsize::new(100).expect("should succeed"),
 ///     default_ttl: Duration::from_secs(60),
 ///     ..Default::default()
 /// };
 /// let cache: QueryCache<String, String> = QueryCache::new(config);
 ///
-/// cache.put("hello".to_string(), "world".to_string()).unwrap();
-/// assert_eq!(cache.get(&"hello".to_string()).unwrap(), Some("world".to_string()));
+/// cache.put("hello".to_string(), "world".to_string()).expect("should succeed");
+/// assert_eq!(cache.get(&"hello".to_string()).expect("should succeed"), Some("world".to_string()));
 /// ```
 #[derive(Clone)]
 pub struct QueryCache<K, V> {
@@ -457,68 +457,93 @@ mod tests {
     #[test]
     fn test_basic_put_get() {
         let cache = small_cache(10, 3600);
-        cache.put("key1".to_string(), "value1".to_string()).unwrap();
-        let result = cache.get(&"key1".to_string()).unwrap();
+        cache
+            .put("key1".to_string(), "value1".to_string())
+            .expect("should succeed");
+        let result = cache.get(&"key1".to_string()).expect("should succeed");
         assert_eq!(result, Some("value1".to_string()));
     }
 
     #[test]
     fn test_miss_on_absent_key() {
         let cache: QueryCache<String, String> = small_cache(10, 3600);
-        let result = cache.get(&"absent".to_string()).unwrap();
+        let result = cache.get(&"absent".to_string()).expect("should succeed");
         assert_eq!(result, None);
     }
 
     #[test]
     fn test_overwrite_key() {
         let cache = small_cache(10, 3600);
-        cache.put("k".to_string(), "v1".to_string()).unwrap();
-        cache.put("k".to_string(), "v2".to_string()).unwrap();
-        let result = cache.get(&"k".to_string()).unwrap();
+        cache
+            .put("k".to_string(), "v1".to_string())
+            .expect("should succeed");
+        cache
+            .put("k".to_string(), "v2".to_string())
+            .expect("should succeed");
+        let result = cache.get(&"k".to_string()).expect("should succeed");
         assert_eq!(result, Some("v2".to_string()));
     }
 
     #[test]
     fn test_ttl_expiry() {
         let cache = QueryCache::new(QueryCacheConfig {
-            capacity: NonZeroUsize::new(10).unwrap(),
+            capacity: NonZeroUsize::new(10).expect("should succeed"),
             default_ttl: Duration::from_millis(50),
             min_ttl: Duration::from_millis(1),
             max_ttl: Duration::from_secs(3600),
         });
-        cache.put("k".to_string(), "v".to_string()).unwrap();
+        cache
+            .put("k".to_string(), "v".to_string())
+            .expect("should succeed");
         // Entry should be fresh immediately.
-        assert_eq!(cache.get(&"k".to_string()).unwrap(), Some("v".to_string()));
+        assert_eq!(
+            cache.get(&"k".to_string()).expect("should succeed"),
+            Some("v".to_string())
+        );
         // Wait for TTL to expire.
         thread::sleep(Duration::from_millis(100));
         // Entry should now be stale / evicted.
-        assert_eq!(cache.get(&"k".to_string()).unwrap(), None);
+        assert_eq!(cache.get(&"k".to_string()).expect("should succeed"), None);
     }
 
     #[test]
     fn test_lru_eviction() {
         let cache = small_cache(3, 3600);
-        cache.put("a".to_string(), "1".to_string()).unwrap();
-        cache.put("b".to_string(), "2".to_string()).unwrap();
-        cache.put("c".to_string(), "3".to_string()).unwrap();
+        cache
+            .put("a".to_string(), "1".to_string())
+            .expect("should succeed");
+        cache
+            .put("b".to_string(), "2".to_string())
+            .expect("should succeed");
+        cache
+            .put("c".to_string(), "3".to_string())
+            .expect("should succeed");
 
         // Access "a" to make it recently used; "b" becomes LRU.
-        let _ = cache.get(&"a".to_string()).unwrap();
+        let _ = cache.get(&"a".to_string()).expect("should succeed");
 
         // Insert "d" – should evict "b" (LRU).
-        cache.put("d".to_string(), "4".to_string()).unwrap();
+        cache
+            .put("d".to_string(), "4".to_string())
+            .expect("should succeed");
 
         assert_eq!(
-            cache.get(&"b".to_string()).unwrap(),
+            cache.get(&"b".to_string()).expect("should succeed"),
             None,
             "b should be evicted"
         );
         assert!(
-            cache.get(&"a".to_string()).unwrap().is_some(),
+            cache
+                .get(&"a".to_string())
+                .expect("should succeed")
+                .is_some(),
             "a should survive"
         );
         assert!(
-            cache.get(&"d".to_string()).unwrap().is_some(),
+            cache
+                .get(&"d".to_string())
+                .expect("should succeed")
+                .is_some(),
             "d should be present"
         );
     }
@@ -526,37 +551,43 @@ mod tests {
     #[test]
     fn test_remove() {
         let cache = small_cache(10, 3600);
-        cache.put("k".to_string(), "v".to_string()).unwrap();
-        let removed = cache.remove(&"k".to_string()).unwrap();
+        cache
+            .put("k".to_string(), "v".to_string())
+            .expect("should succeed");
+        let removed = cache.remove(&"k".to_string()).expect("should succeed");
         assert_eq!(removed, Some("v".to_string()));
-        assert_eq!(cache.get(&"k".to_string()).unwrap(), None);
+        assert_eq!(cache.get(&"k".to_string()).expect("should succeed"), None);
     }
 
     #[test]
     fn test_evict_expired_batch() {
         let cache = QueryCache::new(QueryCacheConfig {
-            capacity: NonZeroUsize::new(20).unwrap(),
+            capacity: NonZeroUsize::new(20).expect("should succeed"),
             default_ttl: Duration::from_millis(50),
             min_ttl: Duration::from_millis(1),
             max_ttl: Duration::from_secs(3600),
         });
         for i in 0..5u32 {
-            cache.put(format!("k{}", i), format!("v{}", i)).unwrap();
+            cache
+                .put(format!("k{}", i), format!("v{}", i))
+                .expect("should succeed");
         }
         thread::sleep(Duration::from_millis(100));
-        let evicted = cache.evict_expired().unwrap();
+        let evicted = cache.evict_expired().expect("should succeed");
         assert_eq!(evicted, 5);
-        assert_eq!(cache.len().unwrap(), 0);
+        assert_eq!(cache.len().expect("should succeed"), 0);
     }
 
     #[test]
     fn test_stats_hit_rate() {
         let cache = small_cache(10, 3600);
-        cache.put("x".to_string(), "1".to_string()).unwrap();
-        let _ = cache.get(&"x".to_string()).unwrap(); // hit
-        let _ = cache.get(&"y".to_string()).unwrap(); // miss
+        cache
+            .put("x".to_string(), "1".to_string())
+            .expect("should succeed");
+        let _ = cache.get(&"x".to_string()).expect("should succeed"); // hit
+        let _ = cache.get(&"y".to_string()).expect("should succeed"); // miss
 
-        let stats = cache.stats().unwrap();
+        let stats = cache.stats().expect("should succeed");
         assert_eq!(stats.hits, 1);
         assert_eq!(stats.misses, 1);
         assert!((stats.hit_rate() - 0.5).abs() < 1e-9);
@@ -565,7 +596,7 @@ mod tests {
     #[test]
     fn test_put_with_explicit_ttl() {
         let cache = QueryCache::new(QueryCacheConfig {
-            capacity: NonZeroUsize::new(10).unwrap(),
+            capacity: NonZeroUsize::new(10).expect("should succeed"),
             default_ttl: Duration::from_secs(3600),
             min_ttl: Duration::from_millis(1),
             max_ttl: Duration::from_secs(86_400),
@@ -573,25 +604,32 @@ mod tests {
         // Use a very short explicit TTL.
         cache
             .put_with_ttl("k".to_string(), "v".to_string(), Duration::from_millis(50))
-            .unwrap();
-        assert!(cache.get(&"k".to_string()).unwrap().is_some());
+            .expect("should succeed");
+        assert!(cache
+            .get(&"k".to_string())
+            .expect("should succeed")
+            .is_some());
         thread::sleep(Duration::from_millis(100));
-        assert_eq!(cache.get(&"k".to_string()).unwrap(), None);
+        assert_eq!(cache.get(&"k".to_string()).expect("should succeed"), None);
     }
 
     #[test]
     fn test_clear() {
         let cache = small_cache(10, 3600);
-        cache.put("a".to_string(), "1".to_string()).unwrap();
-        cache.put("b".to_string(), "2".to_string()).unwrap();
-        cache.clear().unwrap();
-        assert_eq!(cache.len().unwrap(), 0);
+        cache
+            .put("a".to_string(), "1".to_string())
+            .expect("should succeed");
+        cache
+            .put("b".to_string(), "2".to_string())
+            .expect("should succeed");
+        cache.clear().expect("should succeed");
+        assert_eq!(cache.len().expect("should succeed"), 0);
     }
 
     #[test]
     fn test_thread_safe_concurrent_access() {
         let cache: QueryCache<String, usize> = QueryCache::new(QueryCacheConfig {
-            capacity: NonZeroUsize::new(256).unwrap(),
+            capacity: NonZeroUsize::new(256).expect("should succeed"),
             default_ttl: Duration::from_secs(60),
             min_ttl: Duration::from_millis(1),
             max_ttl: Duration::from_secs(3600),
@@ -614,7 +652,7 @@ mod tests {
             h.join().expect("thread panicked");
         }
 
-        let stats = cache.stats().unwrap();
+        let stats = cache.stats().expect("should succeed");
         // Each thread inserted 32 entries and read them back, so ≥256 hits.
         assert!(stats.hits >= 256, "expected hits ≥256, got {}", stats.hits);
     }
@@ -622,18 +660,24 @@ mod tests {
     #[test]
     fn test_peek_entry_metadata() {
         let cache = small_cache(10, 3600);
-        cache.put("k".to_string(), "v".to_string()).unwrap();
-        let hit_count = cache.peek_entry(&"k".to_string(), |e| e.hit_count).unwrap();
+        cache
+            .put("k".to_string(), "v".to_string())
+            .expect("should succeed");
+        let hit_count = cache
+            .peek_entry(&"k".to_string(), |e| e.hit_count)
+            .expect("should succeed");
         assert_eq!(hit_count, Some(0)); // No reads yet via `get`.
-        let _ = cache.get(&"k".to_string()).unwrap();
-        let hit_count2 = cache.peek_entry(&"k".to_string(), |e| e.hit_count).unwrap();
+        let _ = cache.get(&"k".to_string()).expect("should succeed");
+        let hit_count2 = cache
+            .peek_entry(&"k".to_string(), |e| e.hit_count)
+            .expect("should succeed");
         assert_eq!(hit_count2, Some(1));
     }
 
     #[test]
     fn test_ttl_clamping() {
         let cache = QueryCache::new(QueryCacheConfig {
-            capacity: NonZeroUsize::new(10).unwrap(),
+            capacity: NonZeroUsize::new(10).expect("should succeed"),
             default_ttl: Duration::from_secs(60),
             min_ttl: Duration::from_secs(10),
             max_ttl: Duration::from_secs(120),
@@ -641,9 +685,11 @@ mod tests {
         // Request TTL below minimum – should be clamped to min_ttl (10s).
         cache
             .put_with_ttl("k".to_string(), "v".to_string(), Duration::from_millis(1))
-            .unwrap();
+            .expect("should succeed");
         // Entry should still be alive (clamped to 10s).
-        let result = cache.peek_entry(&"k".to_string(), |e| e.ttl).unwrap();
+        let result = cache
+            .peek_entry(&"k".to_string(), |e| e.ttl)
+            .expect("should succeed");
         assert_eq!(result, Some(Duration::from_secs(10)));
     }
 }

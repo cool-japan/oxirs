@@ -721,9 +721,9 @@ mod tests {
         streamer
             .send_chunk(data.clone(), None, None, false, true)
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let chunk = receiver.recv().await.unwrap();
+        let chunk = receiver.recv().await.expect("should succeed");
         assert_eq!(chunk.data, data);
         assert!(!chunk.is_final);
         assert!(chunk.has_next);
@@ -741,7 +741,7 @@ mod tests {
         };
         streamer.send_error(error, None).await;
 
-        let chunk = receiver.recv().await.unwrap();
+        let chunk = receiver.recv().await.expect("should succeed");
         assert!(chunk.has_errors);
         assert!(!chunk.errors.is_empty());
     }
@@ -753,7 +753,7 @@ mod tests {
 
         streamer.complete().await;
 
-        let chunk = receiver.recv().await.unwrap();
+        let chunk = receiver.recv().await.expect("should succeed");
         assert!(chunk.is_final);
         assert!(!chunk.has_next);
     }
@@ -828,7 +828,7 @@ mod tests {
             PathSegment::Field("name".to_string()),
         ];
 
-        let json = serde_json::to_string(&path).unwrap();
+        let json = serde_json::to_string(&path).expect("should succeed");
         assert!(json.contains("users"));
     }
 
@@ -865,9 +865,9 @@ mod tests {
         let config = StreamingConfig::default();
         let (streamer, mut receiver) = ResponseStreamer::new(config);
 
-        streamer.send_heartbeat().await.unwrap();
+        streamer.send_heartbeat().await.expect("should succeed");
 
-        let chunk = receiver.recv().await.unwrap();
+        let chunk = receiver.recv().await.expect("should succeed");
         assert_eq!(chunk.label, Some("__heartbeat".to_string()));
     }
 
@@ -875,13 +875,15 @@ mod tests {
     async fn test_compression() {
         let data = b"Hello, World!";
 
-        let compressed = compression::compress(data, CompressionType::Gzip).unwrap();
+        let compressed =
+            compression::compress(data, CompressionType::Gzip).expect("should succeed");
         assert!(!compressed.is_empty());
 
-        let deflated = compression::compress(data, CompressionType::Deflate).unwrap();
+        let deflated =
+            compression::compress(data, CompressionType::Deflate).expect("should succeed");
         assert!(!deflated.is_empty());
 
-        let none = compression::compress(data, CompressionType::None).unwrap();
+        let none = compression::compress(data, CompressionType::None).expect("should succeed");
         assert_eq!(none, data);
     }
 }

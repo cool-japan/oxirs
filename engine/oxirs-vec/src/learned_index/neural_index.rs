@@ -317,6 +317,7 @@ impl NeuralVectorIndex {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use scirs2_core::random::Random;
 
@@ -338,43 +339,46 @@ mod tests {
     }
 
     #[test]
-    fn test_training_insufficient_data() {
+    fn test_training_insufficient_data() -> Result<()> {
         let config = LearnedIndexConfig::default_config();
-        let mut index = NeuralVectorIndex::new(config).unwrap();
+        let mut index = NeuralVectorIndex::new(config)?;
 
         let examples = create_test_examples(10);
         let result = index.train(examples);
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_prediction_before_training() {
+    fn test_prediction_before_training() -> Result<()> {
         let config = LearnedIndexConfig::default_config();
-        let mut index = NeuralVectorIndex::new(config).unwrap();
+        let mut index = NeuralVectorIndex::new(config)?;
 
         let key = vec![0.5, 0.5];
         let result = index.predict(&key);
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_training_and_prediction() {
+    fn test_training_and_prediction() -> Result<()> {
         let mut config = LearnedIndexConfig::speed_optimized();
         config.min_training_examples = 100;
 
-        let mut index = NeuralVectorIndex::new(config).unwrap();
+        let mut index = NeuralVectorIndex::new(config)?;
 
         let examples = create_test_examples(100);
-        let stats = index.train(examples).unwrap();
+        let stats = index.train(examples)?;
 
         assert!(stats.final_loss >= 0.0);
         assert!(index.is_trained());
 
         let key = vec![0.5, 0.5];
-        let bounds = index.predict(&key).unwrap();
+        let bounds = index.predict(&key)?;
 
         assert!(bounds.predicted < 100);
         assert!(bounds.lower_bound <= bounds.predicted);
         assert!(bounds.upper_bound > bounds.predicted);
+        Ok(())
     }
 }

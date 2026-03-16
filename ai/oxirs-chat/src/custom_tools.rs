@@ -543,12 +543,18 @@ mod tests {
         let registry = CustomToolsRegistry::new();
         let echo_tool = Arc::new(EchoTool);
 
-        registry.register_tool(echo_tool).await.unwrap();
+        registry
+            .register_tool(echo_tool)
+            .await
+            .expect("should succeed");
 
         let mut params = HashMap::new();
         params.insert("message".to_string(), JsonValue::String("test".to_string()));
 
-        let result = registry.execute_tool("echo", params).await.unwrap();
+        let result = registry
+            .execute_tool("echo", params)
+            .await
+            .expect("should succeed");
 
         assert!(result.success);
         assert_eq!(result.data, JsonValue::String("test".to_string()));
@@ -559,7 +565,10 @@ mod tests {
         let registry = CustomToolsRegistry::new();
         let echo_tool = Arc::new(EchoTool);
 
-        registry.register_tool(echo_tool).await.unwrap();
+        registry
+            .register_tool(echo_tool)
+            .await
+            .expect("should succeed");
 
         let tools = registry.list_tools().await;
         assert_eq!(tools.len(), 1);
@@ -571,7 +580,10 @@ mod tests {
         let registry = CustomToolsRegistry::new();
         let echo_tool = Arc::new(EchoTool);
 
-        registry.register_tool(echo_tool).await.unwrap();
+        registry
+            .register_tool(echo_tool)
+            .await
+            .expect("should succeed");
 
         // Missing required parameter
         let params = HashMap::new();
@@ -584,7 +596,10 @@ mod tests {
         let registry = CustomToolsRegistry::new();
         let echo_tool = Arc::new(EchoTool);
 
-        registry.register_tool(echo_tool).await.unwrap();
+        registry
+            .register_tool(echo_tool)
+            .await
+            .expect("should succeed");
 
         let mut params = HashMap::new();
         params.insert("message".to_string(), JsonValue::String("test".to_string()));

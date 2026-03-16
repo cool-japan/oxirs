@@ -561,6 +561,7 @@ impl Default for RateLimiter {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use std::thread;
     use std::time::Duration as StdDuration;
@@ -604,58 +605,57 @@ mod tests {
     }
 
     #[test]
-    fn test_quota_enforcer() {
+    fn test_quota_enforcer() -> Result<()> {
         let enforcer = QuotaEnforcer::new();
         let limits = QuotaLimits::free_tier("tenant1");
-        enforcer.set_limits(limits).unwrap();
+        enforcer.set_limits(limits)?;
 
         // Should allow within limits
-        assert!(enforcer
-            .check_quota("tenant1", ResourceType::VectorCount, 5000)
-            .unwrap());
+        assert!(enforcer.check_quota("tenant1", ResourceType::VectorCount, 5000)?);
 
         // Consume some quota
-        enforcer
-            .consume("tenant1", ResourceType::VectorCount, 5000)
-            .unwrap();
+        enforcer.consume("tenant1", ResourceType::VectorCount, 5000)?;
 
         // Should still allow more
-        assert!(enforcer
-            .check_quota("tenant1", ResourceType::VectorCount, 3000)
-            .unwrap());
+        assert!(enforcer.check_quota("tenant1", ResourceType::VectorCount, 3000)?);
 
         // Should reject exceeding quota
-        assert!(!enforcer
-            .check_quota("tenant1", ResourceType::VectorCount, 10000)
-            .unwrap());
+        assert!(!enforcer.check_quota("tenant1", ResourceType::VectorCount, 10000)?);
 
         // Consuming beyond quota should fail
         assert!(enforcer
             .consume("tenant1", ResourceType::VectorCount, 10000)
             .is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_rate_limiter() {
+    fn test_rate_limiter() -> Result<()> {
         let limiter = RateLimiter::new();
-        limiter.set_rate("tenant1", 10.0).unwrap(); // 10 requests per second
+        limiter.set_rate("tenant1", 10.0)?; // 10 requests per second
 
         // Should allow initial requests
-        assert!(limiter.allow_request("tenant1").unwrap());
-        assert!(limiter.allow_request("tenant1").unwrap());
+        let __val = limiter.allow_request("tenant1")?;
+        assert!(__val);
+        let __val = limiter.allow_request("tenant1")?;
+        assert!(__val);
 
         // Allow batch request
-        assert!(limiter.allow_batch_request("tenant1", 5).unwrap());
+        let __val = limiter.allow_batch_request("tenant1", 5)?;
+        assert!(__val);
 
         // After consuming many tokens, should be denied
         for _ in 0..20 {
             let _ = limiter.allow_request("tenant1");
         }
-        assert!(!limiter.allow_request("tenant1").unwrap());
+        let __val = !limiter.allow_request("tenant1")?;
+        assert!(__val);
 
         // After waiting, tokens should refill
         thread::sleep(StdDuration::from_millis(200));
-        assert!(limiter.allow_request("tenant1").unwrap());
+        let __val = limiter.allow_request("tenant1")?;
+        assert!(__val);
+        Ok(())
     }
 
     #[test]

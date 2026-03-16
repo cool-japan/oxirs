@@ -798,7 +798,9 @@ mod tests {
             confidence_level: 0.95,
         };
 
-        framework.create_experiment(experiment).unwrap();
+        framework
+            .create_experiment(experiment)
+            .expect("should succeed");
         assert_eq!(framework.experiments.len(), 1);
     }
 
@@ -844,11 +846,17 @@ mod tests {
             confidence_level: 0.95,
         };
 
-        framework.create_experiment(experiment).unwrap();
-        framework.start_experiment("exp1").unwrap();
+        framework
+            .create_experiment(experiment)
+            .expect("should succeed");
+        framework.start_experiment("exp1").expect("should succeed");
 
-        let variant1 = framework.assign_variant("exp1", "user1").unwrap();
-        let variant2 = framework.assign_variant("exp1", "user1").unwrap();
+        let variant1 = framework
+            .assign_variant("exp1", "user1")
+            .expect("should succeed");
+        let variant2 = framework
+            .assign_variant("exp1", "user1")
+            .expect("should succeed");
 
         // Same user should get same variant
         assert_eq!(variant1, variant2);
@@ -905,13 +913,15 @@ mod tests {
             confidence_level: 0.95,
         };
 
-        framework.create_experiment(experiment).unwrap();
+        framework
+            .create_experiment(experiment)
+            .expect("should succeed");
 
         framework
             .record_metric("exp1", "control", "accuracy", 0.95)
-            .unwrap();
+            .expect("should succeed");
 
-        let exp = framework.get_experiment("exp1").unwrap();
+        let exp = framework.get_experiment("exp1").expect("should succeed");
         assert_eq!(exp.variants[0].sample_count, 1);
     }
 }

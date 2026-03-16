@@ -33,12 +33,12 @@
 //!     ..Default::default()
 //! };
 //!
-//! # let runtime = Runtime::new().unwrap();
+//! # let runtime = Runtime::new().expect("should succeed");
 //! # runtime.block_on(async {
 //! // Create and start pipeline
-//! let mut pipeline = RealTimeEmbeddingPipeline::new(config).unwrap();
-//! pipeline.start().await.unwrap();
-//! pipeline.stop().await.unwrap();
+//! let mut pipeline = RealTimeEmbeddingPipeline::new(config).expect("should succeed");
+//! pipeline.start().await.expect("should succeed");
+//! pipeline.stop().await.expect("should succeed");
 //! # });
 //! ```
 

@@ -14,10 +14,13 @@
 //! ```
 //! use oxirs_did::revocation::StatusList2021;
 //!
-//! let mut list = StatusList2021::new("https://example.com/status/1", "https://example.com/issuer", 131072).unwrap();
-//! list.set_status(42, true).unwrap();  // Revoke credential at index 42
-//! assert!(list.is_revoked(42).unwrap());
-//! assert!(!list.is_revoked(43).unwrap());
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut list = StatusList2021::new("https://example.com/status/1", "https://example.com/issuer", 131072)?;
+//! list.set_status(42, true)?;  // Revoke credential at index 42
+//! assert!(list.is_revoked(42)?);
+//! assert!(!list.is_revoked(43)?);
+//! # Ok(())
+//! # }
 //! ```
 
 use crate::{DidError, DidResult};

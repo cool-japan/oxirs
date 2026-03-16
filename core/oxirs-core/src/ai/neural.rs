@@ -566,7 +566,8 @@ mod tests {
 
     #[test]
     fn test_activation_functions() {
-        let input = Array2::from_shape_vec((2, 2), vec![-1.0, 0.0, 1.0, 2.0]).unwrap();
+        let input =
+            Array2::from_shape_vec((2, 2), vec![-1.0, 0.0, 1.0, 2.0]).expect("valid array shape");
 
         let relu = apply_activation(&input, &ActivationFunction::ReLU);
         assert_eq!(relu[[0, 0]], 0.0);
@@ -581,7 +582,7 @@ mod tests {
         let layer = LinearLayer::new("test".to_string(), 3, 2);
         let input = Array2::ones((4, 3)); // batch_size=4, input_dim=3
 
-        let output = layer.forward(&input).unwrap();
+        let output = layer.forward(&input).expect("forward pass should succeed");
         assert_eq!(output.shape(), &[4, 2]);
     }
 
@@ -594,7 +595,9 @@ mod tests {
             .build();
 
         let input = Array2::ones((4, 10));
-        let output = network.forward(&input).unwrap();
+        let output = network
+            .forward(&input)
+            .expect("forward pass should succeed");
         assert_eq!(output.shape(), &[4, 5]);
     }
 

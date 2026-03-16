@@ -28,8 +28,8 @@
 //! use oxirs_geosparql::geometry::Geometry;
 //!
 //! let mut idx = SpatialRtreeIndex::new();
-//! idx.insert("city_A", Geometry::from_wkt("POINT(2 3)").unwrap()).unwrap();
-//! idx.insert("city_B", Geometry::from_wkt("POINT(5 6)").unwrap()).unwrap();
+//! idx.insert("city_A", Geometry::from_wkt("POINT(2 3)").expect("should succeed")).expect("should succeed");
+//! idx.insert("city_B", Geometry::from_wkt("POINT(5 6)").expect("should succeed")).expect("should succeed");
 //!
 //! let results = idx.query_bbox(0.0, 0.0, 4.0, 4.0);
 //! assert_eq!(results.len(), 1);
@@ -206,11 +206,11 @@ impl SpatialRtreeIndex {
     /// use oxirs_geosparql::geometry::Geometry;
     ///
     /// let items = vec![
-    ///     ("A".to_string(), Geometry::from_wkt("POINT(0 0)").unwrap()),
-    ///     ("B".to_string(), Geometry::from_wkt("POINT(1 1)").unwrap()),
-    ///     ("C".to_string(), Geometry::from_wkt("POINT(2 2)").unwrap()),
+    ///     ("A".to_string(), Geometry::from_wkt("POINT(0 0)").expect("should succeed")),
+    ///     ("B".to_string(), Geometry::from_wkt("POINT(1 1)").expect("should succeed")),
+    ///     ("C".to_string(), Geometry::from_wkt("POINT(2 2)").expect("should succeed")),
     /// ];
-    /// let idx = SpatialRtreeIndex::bulk_load(items).unwrap();
+    /// let idx = SpatialRtreeIndex::bulk_load(items).expect("should succeed");
     /// assert_eq!(idx.len(), 3);
     /// ```
     pub fn bulk_load(items: Vec<(String, Geometry)>) -> Result<Self> {
@@ -283,8 +283,8 @@ impl SpatialRtreeIndex {
     /// use oxirs_geosparql::geometry::Geometry;
     ///
     /// let mut idx = SpatialRtreeIndex::new();
-    /// idx.insert("in_box", Geometry::from_wkt("POINT(1 1)").unwrap()).unwrap();
-    /// idx.insert("outside", Geometry::from_wkt("POINT(9 9)").unwrap()).unwrap();
+    /// idx.insert("in_box", Geometry::from_wkt("POINT(1 1)").expect("should succeed")).expect("should succeed");
+    /// idx.insert("outside", Geometry::from_wkt("POINT(9 9)").expect("should succeed")).expect("should succeed");
     ///
     /// let hits = idx.query_bbox(0.0, 0.0, 3.0, 3.0);
     /// assert_eq!(hits.len(), 1);
@@ -337,11 +337,11 @@ impl SpatialRtreeIndex {
     /// use oxirs_geosparql::geometry::Geometry;
     ///
     /// let items = vec![
-    ///     ("close".to_string(), Geometry::from_wkt("POINT(1 1)").unwrap()),
-    ///     ("far".to_string(),   Geometry::from_wkt("POINT(100 100)").unwrap()),
-    ///     ("medium".to_string(), Geometry::from_wkt("POINT(5 5)").unwrap()),
+    ///     ("close".to_string(), Geometry::from_wkt("POINT(1 1)").expect("should succeed")),
+    ///     ("far".to_string(),   Geometry::from_wkt("POINT(100 100)").expect("should succeed")),
+    ///     ("medium".to_string(), Geometry::from_wkt("POINT(5 5)").expect("should succeed")),
     /// ];
-    /// let idx = SpatialRtreeIndex::bulk_load(items).unwrap();
+    /// let idx = SpatialRtreeIndex::bulk_load(items).expect("should succeed");
     ///
     /// let nn = idx.knn(0.0, 0.0, 2);
     /// assert_eq!(nn[0].label, "close");
@@ -429,13 +429,28 @@ mod tests {
 
     fn make_point_idx() -> SpatialRtreeIndex {
         let items = vec![
-            ("A".to_string(), Geometry::from_wkt("POINT(0 0)").unwrap()),
-            ("B".to_string(), Geometry::from_wkt("POINT(1 1)").unwrap()),
-            ("C".to_string(), Geometry::from_wkt("POINT(5 5)").unwrap()),
-            ("D".to_string(), Geometry::from_wkt("POINT(10 10)").unwrap()),
-            ("E".to_string(), Geometry::from_wkt("POINT(-3 -3)").unwrap()),
+            (
+                "A".to_string(),
+                Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+            ),
+            (
+                "B".to_string(),
+                Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
+            ),
+            (
+                "C".to_string(),
+                Geometry::from_wkt("POINT(5 5)").expect("should succeed"),
+            ),
+            (
+                "D".to_string(),
+                Geometry::from_wkt("POINT(10 10)").expect("should succeed"),
+            ),
+            (
+                "E".to_string(),
+                Geometry::from_wkt("POINT(-3 -3)").expect("should succeed"),
+            ),
         ];
-        SpatialRtreeIndex::bulk_load(items).unwrap()
+        SpatialRtreeIndex::bulk_load(items).expect("should succeed")
     }
 
     // ── Construction ─────────────────────────────────────────────────────────
@@ -456,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_bulk_load_empty_vec() {
-        let idx = SpatialRtreeIndex::bulk_load(vec![]).unwrap();
+        let idx = SpatialRtreeIndex::bulk_load(vec![]).expect("should succeed");
         assert_eq!(idx.len(), 0);
     }
 
@@ -465,14 +480,15 @@ mod tests {
         let items = vec![
             (
                 "square".to_string(),
-                Geometry::from_wkt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap(),
+                Geometry::from_wkt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed"),
             ),
             (
                 "big".to_string(),
-                Geometry::from_wkt("POLYGON((5 5, 10 5, 10 10, 5 10, 5 5))").unwrap(),
+                Geometry::from_wkt("POLYGON((5 5, 10 5, 10 10, 5 10, 5 5))")
+                    .expect("should succeed"),
             ),
         ];
-        let idx = SpatialRtreeIndex::bulk_load(items).unwrap();
+        let idx = SpatialRtreeIndex::bulk_load(items).expect("should succeed");
         assert_eq!(idx.len(), 2);
     }
 
@@ -482,8 +498,11 @@ mod tests {
     fn test_insert_single() {
         let mut idx = SpatialRtreeIndex::new();
         let id = idx
-            .insert("pt1", Geometry::from_wkt("POINT(3 4)").unwrap())
-            .unwrap();
+            .insert(
+                "pt1",
+                Geometry::from_wkt("POINT(3 4)").expect("should succeed"),
+            )
+            .expect("should succeed");
         assert_eq!(idx.len(), 1);
         assert_eq!(id, 0);
     }
@@ -492,11 +511,17 @@ mod tests {
     fn test_insert_increments_id() {
         let mut idx = SpatialRtreeIndex::new();
         let id0 = idx
-            .insert("p0", Geometry::from_wkt("POINT(0 0)").unwrap())
-            .unwrap();
+            .insert(
+                "p0",
+                Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+            )
+            .expect("should succeed");
         let id1 = idx
-            .insert("p1", Geometry::from_wkt("POINT(1 1)").unwrap())
-            .unwrap();
+            .insert(
+                "p1",
+                Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
+            )
+            .expect("should succeed");
         assert_eq!(id0, 0);
         assert_eq!(id1, 1);
     }
@@ -505,8 +530,11 @@ mod tests {
     fn test_remove_existing() {
         let mut idx = SpatialRtreeIndex::new();
         let id = idx
-            .insert("x", Geometry::from_wkt("POINT(0 0)").unwrap())
-            .unwrap();
+            .insert(
+                "x",
+                Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+            )
+            .expect("should succeed");
         assert_eq!(idx.len(), 1);
         let removed = idx.remove(id);
         assert!(removed);
@@ -523,8 +551,11 @@ mod tests {
     fn test_insert_after_bulk_load() {
         let mut idx = make_point_idx();
         let prev_len = idx.len();
-        idx.insert("new", Geometry::from_wkt("POINT(3 3)").unwrap())
-            .unwrap();
+        idx.insert(
+            "new",
+            Geometry::from_wkt("POINT(3 3)").expect("should succeed"),
+        )
+        .expect("should succeed");
         assert_eq!(idx.len(), prev_len + 1);
     }
 
@@ -642,9 +673,12 @@ mod tests {
     #[test]
     fn test_nearest_single_entry() {
         let mut idx = SpatialRtreeIndex::new();
-        idx.insert("only", Geometry::from_wkt("POINT(7 7)").unwrap())
-            .unwrap();
-        let n = idx.nearest(0.0, 0.0).unwrap();
+        idx.insert(
+            "only",
+            Geometry::from_wkt("POINT(7 7)").expect("should succeed"),
+        )
+        .expect("should succeed");
+        let n = idx.nearest(0.0, 0.0).expect("nearest should succeed");
         assert_eq!(n.label, "only");
     }
 
@@ -654,9 +688,12 @@ mod tests {
     fn test_get_by_id() {
         let mut idx = SpatialRtreeIndex::new();
         let id = idx
-            .insert("target", Geometry::from_wkt("POINT(3 3)").unwrap())
-            .unwrap();
-        let entry = idx.get_by_id(id).unwrap();
+            .insert(
+                "target",
+                Geometry::from_wkt("POINT(3 3)").expect("should succeed"),
+            )
+            .expect("should succeed");
+        let entry = idx.get_by_id(id).expect("should succeed");
         assert_eq!(entry.label, "target");
     }
 
@@ -669,12 +706,21 @@ mod tests {
     #[test]
     fn test_find_by_label() {
         let mut idx = SpatialRtreeIndex::new();
-        idx.insert("alpha", Geometry::from_wkt("POINT(0 0)").unwrap())
-            .unwrap();
-        idx.insert("beta", Geometry::from_wkt("POINT(1 1)").unwrap())
-            .unwrap();
-        idx.insert("alpha", Geometry::from_wkt("POINT(2 2)").unwrap())
-            .unwrap();
+        idx.insert(
+            "alpha",
+            Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+        )
+        .expect("should succeed");
+        idx.insert(
+            "beta",
+            Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
+        )
+        .expect("should succeed");
+        idx.insert(
+            "alpha",
+            Geometry::from_wkt("POINT(2 2)").expect("should succeed"),
+        )
+        .expect("should succeed");
 
         let found = idx.find_by_label("alpha");
         assert_eq!(found.len(), 2);
@@ -695,11 +741,20 @@ mod tests {
     fn test_insert_batch() {
         let mut idx = SpatialRtreeIndex::new();
         let items = vec![
-            ("x1".to_string(), Geometry::from_wkt("POINT(1 1)").unwrap()),
-            ("x2".to_string(), Geometry::from_wkt("POINT(2 2)").unwrap()),
-            ("x3".to_string(), Geometry::from_wkt("POINT(3 3)").unwrap()),
+            (
+                "x1".to_string(),
+                Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
+            ),
+            (
+                "x2".to_string(),
+                Geometry::from_wkt("POINT(2 2)").expect("should succeed"),
+            ),
+            (
+                "x3".to_string(),
+                Geometry::from_wkt("POINT(3 3)").expect("should succeed"),
+            ),
         ];
-        let ids = idx.insert_batch(items).unwrap();
+        let ids = idx.insert_batch(items).expect("should succeed");
         assert_eq!(ids.len(), 3);
         assert_eq!(idx.len(), 3);
     }
@@ -726,16 +781,17 @@ mod tests {
 
     #[test]
     fn test_rtree_entry_new_linestring() {
-        let geom = Geometry::from_wkt("LINESTRING(0 0, 10 10)").unwrap();
-        let e = RtreeEntry::new(1, "ls", geom).unwrap();
+        let geom = Geometry::from_wkt("LINESTRING(0 0, 10 10)").expect("should succeed");
+        let e = RtreeEntry::new(1, "ls", geom).expect("should succeed");
         assert_eq!(e.label, "ls");
         assert_eq!(e.id, 1);
     }
 
     #[test]
     fn test_rtree_entry_polygon_envelope() {
-        let geom = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-        let e = RtreeEntry::new(0, "poly", geom).unwrap();
+        let geom =
+            Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+        let e = RtreeEntry::new(0, "poly", geom).expect("should succeed");
         let env = e.envelope();
         let lower = env.lower();
         let upper = env.upper();
@@ -745,8 +801,8 @@ mod tests {
 
     #[test]
     fn test_rtree_entry_distance_2_outside() {
-        let geom = Geometry::from_wkt("POINT(3 4)").unwrap();
-        let e = RtreeEntry::new(0, "p", geom).unwrap();
+        let geom = Geometry::from_wkt("POINT(3 4)").expect("should succeed");
+        let e = RtreeEntry::new(0, "p", geom).expect("should succeed");
         // Distance squared from (0,0) to (3,4) = 25
         let d2 = e.distance_2(&[0.0, 0.0]);
         assert!((d2 - 25.0).abs() < 1e-8, "d2={d2}");
@@ -754,8 +810,9 @@ mod tests {
 
     #[test]
     fn test_rtree_entry_contains_point() {
-        let geom = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-        let e = RtreeEntry::new(0, "poly", geom).unwrap();
+        let geom =
+            Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+        let e = RtreeEntry::new(0, "poly", geom).expect("should succeed");
         assert!(e.contains_point(&[1.0, 1.0]));
         assert!(!e.contains_point(&[5.0, 5.0]));
     }
@@ -767,18 +824,18 @@ mod tests {
         let items = vec![
             (
                 "point".to_string(),
-                Geometry::from_wkt("POINT(1 1)").unwrap(),
+                Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
             ),
             (
                 "line".to_string(),
-                Geometry::from_wkt("LINESTRING(0 0, 5 5)").unwrap(),
+                Geometry::from_wkt("LINESTRING(0 0, 5 5)").expect("should succeed"),
             ),
             (
                 "poly".to_string(),
-                Geometry::from_wkt("POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))").unwrap(),
+                Geometry::from_wkt("POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))").expect("should succeed"),
             ),
         ];
-        let idx = SpatialRtreeIndex::bulk_load(items).unwrap();
+        let idx = SpatialRtreeIndex::bulk_load(items).expect("should succeed");
         assert_eq!(idx.len(), 3);
 
         let hits = idx.query_bbox(0.0, 0.0, 6.0, 6.0);

@@ -1063,7 +1063,7 @@ mod tests {
         let config = BatchProcessingConfig::default();
         let cache_config = crate::CacheConfig::default();
         let cache_manager = Arc::new(CacheManager::new(cache_config));
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = tempdir().expect("should succeed");
 
         let manager =
             BatchProcessingManager::new(config, cache_manager, temp_dir.path().to_path_buf());
@@ -1093,26 +1093,26 @@ mod tests {
         let mut iterator = MemoryOptimizedBatchIterator::new(data.clone(), 3, 1); // 1MB limit
 
         // Test first batch
-        let batch1 = iterator.next_batch().unwrap();
+        let batch1 = iterator.next_batch().expect("should succeed");
         assert_eq!(batch1.len(), 3);
         assert_eq!(batch1, vec![1, 2, 3]);
         assert_eq!(iterator.get_progress(), 0.3);
         assert!(!iterator.is_finished());
 
         // Test second batch
-        let batch2 = iterator.next_batch().unwrap();
+        let batch2 = iterator.next_batch().expect("should succeed");
         assert_eq!(batch2.len(), 3);
         assert_eq!(batch2, vec![4, 5, 6]);
         assert_eq!(iterator.get_progress(), 0.6);
 
         // Test third batch
-        let batch3 = iterator.next_batch().unwrap();
+        let batch3 = iterator.next_batch().expect("should succeed");
         assert_eq!(batch3.len(), 3);
         assert_eq!(batch3, vec![7, 8, 9]);
         assert_eq!(iterator.get_progress(), 0.9);
 
         // Test final batch
-        let batch4 = iterator.next_batch().unwrap();
+        let batch4 = iterator.next_batch().expect("should succeed");
         assert_eq!(batch4.len(), 1);
         assert_eq!(batch4, vec![10]);
         assert_eq!(iterator.get_progress(), 1.0);
@@ -1138,7 +1138,7 @@ mod tests {
         let data = vec![42];
         let mut iterator = MemoryOptimizedBatchIterator::new(data, 5, 1);
 
-        let batch = iterator.next_batch().unwrap();
+        let batch = iterator.next_batch().expect("should succeed");
         assert_eq!(batch.len(), 1);
         assert_eq!(batch[0], 42);
         assert_eq!(iterator.get_progress(), 1.0);
@@ -1151,7 +1151,7 @@ mod tests {
         let mut iterator = MemoryOptimizedBatchIterator::new(data, 3, 1);
 
         // Process one batch and check memory usage
-        let _batch = iterator.next_batch().unwrap();
+        let _batch = iterator.next_batch().expect("should succeed");
         let memory_usage = iterator.get_memory_usage();
         assert!(memory_usage > 0);
 
@@ -1163,7 +1163,8 @@ mod tests {
     #[test]
     fn test_parallel_batch_processor() {
         // Test basic functionality
-        let processor = ParallelBatchProcessor::new(ParallelBatchConfig::default()).unwrap();
+        let processor =
+            ParallelBatchProcessor::new(ParallelBatchConfig::default()).expect("should succeed");
         // Should use system's num_cpus
         assert!(processor.num_workers() > 0);
         assert!(processor.num_workers() <= num_cpus::get());

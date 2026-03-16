@@ -33,7 +33,7 @@
 //! let compliance_result = governance.check_compliance(
 //!     model_id,
 //!     &[ComplianceStandard::GDPR, ComplianceStandard::EUAI Act]
-//! ).unwrap();
+//! ).expect("should succeed");
 //!
 //! if compliance_result.is_compliant {
 //!     println!("Model is compliant!");
@@ -888,7 +888,7 @@ mod tests {
     #[test]
     fn test_governance_creation() {
         let governance = ModelGovernance::new();
-        let metrics = governance.get_metrics().unwrap();
+        let metrics = governance.get_metrics().expect("should succeed");
         assert_eq!(metrics.total_models, 0);
     }
 
@@ -916,7 +916,7 @@ mod tests {
 
         let model = governance.get_model("test_model");
         assert!(model.is_some());
-        assert_eq!(model.unwrap().model_name, "Test Model");
+        assert_eq!(model.expect("should succeed").model_name, "Test Model");
     }
 
     #[test]
@@ -939,11 +939,11 @@ mod tests {
             tags: vec![],
         };
 
-        governance.register_model(metadata).unwrap();
+        governance.register_model(metadata).expect("should succeed");
 
         let result = governance
             .check_compliance("test_model", &[ComplianceStandard::GDPR])
-            .unwrap();
+            .expect("should succeed");
 
         assert!(!result.checks.is_empty());
     }
@@ -968,25 +968,25 @@ mod tests {
             tags: vec![],
         };
 
-        governance.register_model(metadata).unwrap();
+        governance.register_model(metadata).expect("should succeed");
 
         // Request approval
         governance
             .request_approval("test_model", vec!["approver1".to_string()])
-            .unwrap();
+            .expect("should succeed");
 
-        let model = governance.get_model("test_model").unwrap();
+        let model = governance.get_model("test_model").expect("should succeed");
         assert_eq!(model.lifecycle_stage, ModelLifecycleStage::PendingApproval);
 
         // Approve
         governance
             .approve_model("test_model", "approver1", "Approved".to_string())
-            .unwrap();
+            .expect("should succeed");
         governance
             .approve_model("test_model", "approver2", "Approved".to_string())
-            .unwrap();
+            .expect("should succeed");
 
-        let model = governance.get_model("test_model").unwrap();
+        let model = governance.get_model("test_model").expect("should succeed");
         assert_eq!(model.lifecycle_stage, ModelLifecycleStage::Approved);
     }
 
@@ -1010,9 +1010,11 @@ mod tests {
             tags: vec![],
         };
 
-        governance.register_model(metadata).unwrap();
+        governance.register_model(metadata).expect("should succeed");
 
-        let assessment = governance.assess_risk("test_model").unwrap();
+        let assessment = governance
+            .assess_risk("test_model")
+            .expect("should succeed");
         assert!(!assessment.risk_factors.is_empty());
         assert!(!assessment.mitigation_strategies.is_empty());
     }

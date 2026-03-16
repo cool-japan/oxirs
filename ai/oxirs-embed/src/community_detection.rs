@@ -672,25 +672,27 @@ mod tests {
     fn test_community_detection_from_triples() {
         let triples = vec![
             Triple::new(
-                NamedNode::new("a").unwrap(),
-                NamedNode::new("r").unwrap(),
-                NamedNode::new("b").unwrap(),
+                NamedNode::new("a").expect("should succeed"),
+                NamedNode::new("r").expect("should succeed"),
+                NamedNode::new("b").expect("should succeed"),
             ),
             Triple::new(
-                NamedNode::new("b").unwrap(),
-                NamedNode::new("r").unwrap(),
-                NamedNode::new("c").unwrap(),
+                NamedNode::new("b").expect("should succeed"),
+                NamedNode::new("r").expect("should succeed"),
+                NamedNode::new("c").expect("should succeed"),
             ),
             Triple::new(
-                NamedNode::new("d").unwrap(),
-                NamedNode::new("r").unwrap(),
-                NamedNode::new("e").unwrap(),
+                NamedNode::new("d").expect("should succeed"),
+                NamedNode::new("r").expect("should succeed"),
+                NamedNode::new("e").expect("should succeed"),
             ),
         ];
 
         let config = CommunityConfig::default();
         let mut detector = CommunityDetector::new(config);
-        let result = detector.detect_from_triples(&triples).unwrap();
+        let result = detector
+            .detect_from_triples(&triples)
+            .expect("should succeed");
 
         assert!(result.num_communities > 0);
         assert_eq!(result.assignments.len(), 5); // a, b, c, d, e
@@ -711,7 +713,9 @@ mod tests {
         };
 
         let mut detector = CommunityDetector::new(config);
-        let result = detector.detect_from_embeddings(&embeddings).unwrap();
+        let result = detector
+            .detect_from_embeddings(&embeddings)
+            .expect("should succeed");
 
         assert!(result.num_communities >= 1);
         // Similar embeddings should be in same community

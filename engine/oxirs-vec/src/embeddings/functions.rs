@@ -131,41 +131,38 @@ mod tests {
         assert!(long_time_bert > short_time_bert);
     }
     #[test]
-    fn test_model_specific_text_preprocessing() {
+    fn test_model_specific_text_preprocessing() -> Result<()> {
         let config = EmbeddingConfig::default();
         let bert = SentenceTransformerGenerator::new(config.clone());
         let roberta = SentenceTransformerGenerator::roberta(config.clone());
         let multibert = SentenceTransformerGenerator::multilingual_bert(config.clone());
         let text = "Hello World";
-        let bert_processed = bert.preprocess_text_for_model(text, 512).unwrap();
+        let bert_processed = bert.preprocess_text_for_model(text, 512)?;
         assert!(bert_processed.contains("[CLS]"));
         assert!(bert_processed.contains("[SEP]"));
         assert!(bert_processed.contains("hello world"));
-        let roberta_processed = roberta.preprocess_text_for_model(text, 512).unwrap();
+        let roberta_processed = roberta.preprocess_text_for_model(text, 512)?;
         assert!(roberta_processed.contains("<s>"));
         assert!(roberta_processed.contains("</s>"));
         assert!(roberta_processed.contains("Hello World"));
         let latin_text = "Hello World";
         let chinese_text = "你好世界";
-        let latin_processed = multibert
-            .preprocess_text_for_model(latin_text, 512)
-            .unwrap();
-        let chinese_processed = multibert
-            .preprocess_text_for_model(chinese_text, 512)
-            .unwrap();
+        let latin_processed = multibert.preprocess_text_for_model(latin_text, 512)?;
+        let chinese_processed = multibert.preprocess_text_for_model(chinese_text, 512)?;
         assert!(latin_processed.contains("hello world"));
         assert!(chinese_processed.contains("你好世界"));
+        Ok(())
     }
     #[test]
-    fn test_embedding_generation_differences() {
+    fn test_embedding_generation_differences() -> Result<()> {
         let config = EmbeddingConfig::default();
         let bert = SentenceTransformerGenerator::new(config.clone());
         let roberta = SentenceTransformerGenerator::roberta(config.clone());
         let distilbert = SentenceTransformerGenerator::distilbert(config.clone());
         let content = EmbeddableContent::Text("This is a test sentence".to_string());
-        let bert_embedding = bert.generate(&content).unwrap();
-        let roberta_embedding = roberta.generate(&content).unwrap();
-        let distilbert_embedding = distilbert.generate(&content).unwrap();
+        let bert_embedding = bert.generate(&content)?;
+        let roberta_embedding = roberta.generate(&content)?;
+        let distilbert_embedding = distilbert.generate(&content)?;
         assert_ne!(bert_embedding.as_f32(), roberta_embedding.as_f32());
         assert_ne!(bert_embedding.as_f32(), distilbert_embedding.as_f32());
         assert_ne!(roberta_embedding.as_f32(), distilbert_embedding.as_f32());
@@ -195,6 +192,7 @@ mod tests {
             assert!((roberta_magnitude - 1.0).abs() < 0.1);
             assert!((distilbert_magnitude - 1.0).abs() < 0.1);
         }
+        Ok(())
     }
     #[test]
     fn test_tokenization_differences() {

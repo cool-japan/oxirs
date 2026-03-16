@@ -182,7 +182,7 @@ mod tests {
     use super::*;
 
     fn bb(min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> BoundingBox {
-        BoundingBox::new(min_x, min_y, max_x, max_y).unwrap()
+        BoundingBox::new(min_x, min_y, max_x, max_y).expect("should succeed")
     }
 
     // --- Construction ---
@@ -217,13 +217,14 @@ mod tests {
 
     #[test]
     fn test_from_points_single() {
-        let b = BoundingBox::from_points(&[(2.0, 3.0)]).unwrap();
+        let b = BoundingBox::from_points(&[(2.0, 3.0)]).expect("should succeed");
         assert!(b.is_point());
     }
 
     #[test]
     fn test_from_points_multiple() {
-        let b = BoundingBox::from_points(&[(1.0, 1.0), (4.0, 2.0), (2.0, 5.0)]).unwrap();
+        let b = BoundingBox::from_points(&[(1.0, 1.0), (4.0, 2.0), (2.0, 5.0)])
+            .expect("should succeed");
         assert_eq!(b.min_x, 1.0);
         assert_eq!(b.min_y, 1.0);
         assert_eq!(b.max_x, 4.0);
@@ -304,7 +305,7 @@ mod tests {
     fn test_intersection_overlapping() {
         let a = bb(0.0, 0.0, 4.0, 4.0);
         let b = bb(2.0, 2.0, 6.0, 6.0);
-        let i = a.intersection(&b).unwrap();
+        let i = a.intersection(&b).expect("should succeed");
         assert_eq!(i.min_x, 2.0);
         assert_eq!(i.min_y, 2.0);
         assert_eq!(i.max_x, 4.0);
@@ -420,7 +421,7 @@ mod tests {
     // --- from_points with negative values ---
     #[test]
     fn test_from_points_negative() {
-        let b = BoundingBox::from_points(&[(-2.0, -2.0), (2.0, 2.0)]).unwrap();
+        let b = BoundingBox::from_points(&[(-2.0, -2.0), (2.0, 2.0)]).expect("should succeed");
         assert_eq!(b.min_x, -2.0);
         assert_eq!(b.max_x, 2.0);
     }

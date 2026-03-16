@@ -586,39 +586,39 @@ mod tests {
 
     #[test]
     fn test_tokenize_keyword_select() {
-        let tokens = Tokenizer::tokenize("SELECT").unwrap();
+        let tokens = Tokenizer::tokenize("SELECT").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Keyword);
         assert_eq!(tokens[0].value, "SELECT");
     }
 
     #[test]
     fn test_tokenize_keyword_case_insensitive() {
-        let tokens = Tokenizer::tokenize("select").unwrap();
+        let tokens = Tokenizer::tokenize("select").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Keyword);
     }
 
     #[test]
     fn test_tokenize_keyword_where() {
-        let tokens = Tokenizer::tokenize("WHERE").unwrap();
+        let tokens = Tokenizer::tokenize("WHERE").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Keyword);
         assert_eq!(tokens[0].value, "WHERE");
     }
 
     #[test]
     fn test_tokenize_keyword_prefix() {
-        let tokens = Tokenizer::tokenize("PREFIX").unwrap();
+        let tokens = Tokenizer::tokenize("PREFIX").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Keyword);
     }
 
     #[test]
     fn test_tokenize_keyword_optional() {
-        let tokens = Tokenizer::tokenize("OPTIONAL").unwrap();
+        let tokens = Tokenizer::tokenize("OPTIONAL").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Keyword);
     }
 
     #[test]
     fn test_tokenize_iri() {
-        let tokens = Tokenizer::tokenize("<http://example.org/foo>").unwrap();
+        let tokens = Tokenizer::tokenize("<http://example.org/foo>").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Iri);
         assert_eq!(tokens[0].value, "<http://example.org/foo>");
         assert_eq!(tokens[0].position, 0);
@@ -626,103 +626,109 @@ mod tests {
 
     #[test]
     fn test_tokenize_iri_position() {
-        let tokens = Tokenizer::tokenize("  <http://example.org/>").unwrap();
-        let iri = tokens.iter().find(|t| t.kind == TokenKind::Iri).unwrap();
+        let tokens = Tokenizer::tokenize("  <http://example.org/>").expect("valid SPARQL input");
+        let iri = tokens
+            .iter()
+            .find(|t| t.kind == TokenKind::Iri)
+            .expect("should find element");
         assert_eq!(iri.position, 2);
     }
 
     #[test]
     fn test_tokenize_variable_question_mark() {
-        let tokens = Tokenizer::tokenize("?name").unwrap();
+        let tokens = Tokenizer::tokenize("?name").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Variable);
         assert_eq!(tokens[0].value, "?name");
     }
 
     #[test]
     fn test_tokenize_variable_dollar() {
-        let tokens = Tokenizer::tokenize("$subject").unwrap();
+        let tokens = Tokenizer::tokenize("$subject").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Variable);
         assert_eq!(tokens[0].value, "$subject");
     }
 
     #[test]
     fn test_tokenize_string_literal_double_quote() {
-        let tokens = Tokenizer::tokenize("\"hello\"").unwrap();
+        let tokens = Tokenizer::tokenize("\"hello\"").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Literal);
         assert_eq!(tokens[0].value, "\"hello\"");
     }
 
     #[test]
     fn test_tokenize_string_literal_single_quote() {
-        let tokens = Tokenizer::tokenize("'world'").unwrap();
+        let tokens = Tokenizer::tokenize("'world'").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Literal);
     }
 
     #[test]
     fn test_tokenize_numeric_literal_integer() {
-        let tokens = Tokenizer::tokenize("42").unwrap();
+        let tokens = Tokenizer::tokenize("42").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Literal);
         assert_eq!(tokens[0].value, "42");
     }
 
     #[test]
     fn test_tokenize_numeric_literal_float() {
-        let tokens = Tokenizer::tokenize("3.14").unwrap();
+        let tokens = Tokenizer::tokenize("3.14").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Literal);
         assert_eq!(tokens[0].value, "3.14");
     }
 
     #[test]
     fn test_tokenize_prefixed_name() {
-        let tokens = Tokenizer::tokenize("rdf:type").unwrap();
+        let tokens = Tokenizer::tokenize("rdf:type").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::PrefixedName);
         assert_eq!(tokens[0].value, "rdf:type");
     }
 
     #[test]
     fn test_tokenize_prefixed_name_empty_local() {
-        let tokens = Tokenizer::tokenize("ex:").unwrap();
+        let tokens = Tokenizer::tokenize("ex:").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::PrefixedName);
     }
 
     #[test]
     fn test_tokenize_punctuation_brace() {
-        let tokens = Tokenizer::tokenize("{").unwrap();
+        let tokens = Tokenizer::tokenize("{").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Punctuation);
         assert_eq!(tokens[0].value, "{");
     }
 
     #[test]
     fn test_tokenize_punctuation_dot() {
-        let tokens = Tokenizer::tokenize(".").unwrap();
+        let tokens = Tokenizer::tokenize(".").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Punctuation);
         assert_eq!(tokens[0].value, ".");
     }
 
     #[test]
     fn test_tokenize_whitespace() {
-        let tokens = Tokenizer::tokenize("   ").unwrap();
+        let tokens = Tokenizer::tokenize("   ").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Whitespace);
     }
 
     #[test]
     fn test_tokenize_comment() {
-        let tokens = Tokenizer::tokenize("# this is a comment\n").unwrap();
+        let tokens = Tokenizer::tokenize("# this is a comment\n").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Comment);
         assert!(tokens[0].value.starts_with('#'));
     }
 
     #[test]
     fn test_tokenize_eof_appended() {
-        let tokens = Tokenizer::tokenize("SELECT").unwrap();
-        assert_eq!(tokens.last().unwrap().kind, TokenKind::Eof);
+        let tokens = Tokenizer::tokenize("SELECT").expect("valid SPARQL input");
+        assert_eq!(
+            tokens.last().expect("collection should not be empty").kind,
+            TokenKind::Eof
+        );
     }
 
     #[test]
     fn test_tokenize_multiple_tokens() {
         let tokens =
             Tokenizer::tokenize_filtered("SELECT ?x WHERE { ?x rdf:type <http://a.org/A> }")
-                .unwrap();
+                .expect("operation should succeed");
         let kinds: Vec<&TokenKind> = tokens.iter().map(|t| &t.kind).collect();
         assert!(kinds.contains(&&TokenKind::Keyword));
         assert!(kinds.contains(&&TokenKind::Variable));
@@ -733,21 +739,22 @@ mod tests {
 
     #[test]
     fn test_tokenize_filtered_removes_whitespace() {
-        let all = Tokenizer::tokenize("SELECT ?x").unwrap();
-        let filtered = Tokenizer::tokenize_filtered("SELECT ?x").unwrap();
+        let all = Tokenizer::tokenize("SELECT ?x").expect("valid SPARQL input");
+        let filtered = Tokenizer::tokenize_filtered("SELECT ?x").expect("valid SPARQL input");
         assert!(all.len() > filtered.len());
         assert!(!filtered.iter().any(|t| t.kind == TokenKind::Whitespace));
     }
 
     #[test]
     fn test_tokenize_filtered_removes_comments() {
-        let filtered = Tokenizer::tokenize_filtered("SELECT # comment\n?x").unwrap();
+        let filtered =
+            Tokenizer::tokenize_filtered("SELECT # comment\n?x").expect("valid SPARQL input");
         assert!(!filtered.iter().any(|t| t.kind == TokenKind::Comment));
     }
 
     #[test]
     fn test_tokenize_string_with_language_tag() {
-        let tokens = Tokenizer::tokenize("\"hello\"@en").unwrap();
+        let tokens = Tokenizer::tokenize("\"hello\"@en").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Literal);
         assert!(tokens[0].value.contains("@en"));
     }
@@ -762,9 +769,9 @@ mod tests {
 
     #[test]
     fn test_stream_peek_first_token() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let tok = stream.peek().unwrap();
+        let tok = stream.peek().expect("stream should have tokens");
         assert_eq!(tok.kind, TokenKind::Keyword);
     }
 
@@ -776,18 +783,21 @@ mod tests {
 
     #[test]
     fn test_stream_next_advances() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT ?x").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT ?x").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let (tok, rest) = stream.next();
         assert!(tok.is_some());
-        assert_eq!(tok.unwrap().kind, TokenKind::Keyword);
+        assert_eq!(tok.expect("should have value").kind, TokenKind::Keyword);
         let (tok2, _) = rest.next();
-        assert_eq!(tok2.unwrap().kind, TokenKind::Variable);
+        assert_eq!(
+            tok2.expect("should have second token").kind,
+            TokenKind::Variable
+        );
     }
 
     #[test]
     fn test_stream_remaining_count() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT ?x WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT ?x WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         // SELECT ?x WHERE + EOF = 4, but remaining excludes EOF
         assert_eq!(stream.remaining(), 3);
@@ -795,7 +805,7 @@ mod tests {
 
     #[test]
     fn test_stream_is_empty_after_consuming_all() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let (_, rest) = stream.next(); // consume SELECT
         let (_, rest2) = rest.next(); // consume EOF
@@ -804,14 +814,14 @@ mod tests {
 
     #[test]
     fn test_stream_position_zero_initially() {
-        let tokens = Tokenizer::tokenize_filtered("WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         assert_eq!(stream.position(), 0);
     }
 
     #[test]
     fn test_stream_position_advances() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT ?x").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT ?x").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let (_, rest) = stream.next();
         assert_eq!(rest.position(), 1);
@@ -821,7 +831,7 @@ mod tests {
 
     #[test]
     fn test_expect_keyword_success() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let result = expect_keyword(stream, "SELECT");
         assert!(result.is_ok());
@@ -829,14 +839,14 @@ mod tests {
 
     #[test]
     fn test_expect_keyword_case_insensitive() {
-        let tokens = Tokenizer::tokenize_filtered("select").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("select").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         assert!(expect_keyword(stream, "SELECT").is_ok());
     }
 
     #[test]
     fn test_expect_keyword_wrong_keyword() {
-        let tokens = Tokenizer::tokenize_filtered("WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let result = expect_keyword(stream, "SELECT");
         assert!(result.is_err());
@@ -845,7 +855,7 @@ mod tests {
 
     #[test]
     fn test_expect_keyword_not_a_keyword() {
-        let tokens = Tokenizer::tokenize_filtered("?x").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("?x").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let result = expect_keyword(stream, "SELECT");
         assert!(result.is_err());
@@ -853,9 +863,9 @@ mod tests {
 
     #[test]
     fn test_expect_keyword_consumes_token() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (_, rest) = expect_keyword(stream, "SELECT").unwrap();
+        let (_, rest) = expect_keyword(stream, "SELECT").expect("keyword parse should succeed");
         assert!(expect_keyword(rest, "WHERE").is_ok());
     }
 
@@ -863,16 +873,20 @@ mod tests {
 
     #[test]
     fn test_expect_iri_success() {
-        let tokens = Tokenizer::tokenize_filtered("<http://example.org/>").unwrap();
+        let tokens =
+            Tokenizer::tokenize_filtered("<http://example.org/>").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let result = expect_iri(stream);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().0, "<http://example.org/>");
+        assert_eq!(
+            result.expect("should have value").0,
+            "<http://example.org/>"
+        );
     }
 
     #[test]
     fn test_expect_iri_prefixed_name() {
-        let tokens = Tokenizer::tokenize_filtered("rdf:type").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("rdf:type").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let result = expect_iri(stream);
         assert!(result.is_ok());
@@ -880,7 +894,7 @@ mod tests {
 
     #[test]
     fn test_expect_iri_failure_on_variable() {
-        let tokens = Tokenizer::tokenize_filtered("?x").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("?x").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let result = expect_iri(stream);
         assert!(result.is_err());
@@ -890,25 +904,25 @@ mod tests {
 
     #[test]
     fn test_expect_variable_success() {
-        let tokens = Tokenizer::tokenize_filtered("?subject").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("?subject").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let result = expect_variable(stream);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().0, "?subject");
+        assert_eq!(result.expect("should have value").0, "?subject");
     }
 
     #[test]
     fn test_expect_variable_dollar_prefix() {
-        let tokens = Tokenizer::tokenize_filtered("$pred").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("$pred").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let result = expect_variable(stream);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().0, "$pred");
+        assert_eq!(result.expect("should have value").0, "$pred");
     }
 
     #[test]
     fn test_expect_variable_failure_on_keyword() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let result = expect_variable(stream);
         assert!(result.is_err());
@@ -918,17 +932,19 @@ mod tests {
 
     #[test]
     fn test_optional_hit() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (result, _) = optional(stream, |s| expect_keyword(s, "SELECT")).unwrap();
+        let (result, _) = optional(stream, |s| expect_keyword(s, "SELECT"))
+            .expect("optional parse should succeed");
         assert!(result.is_some());
     }
 
     #[test]
     fn test_optional_miss_returns_none() {
-        let tokens = Tokenizer::tokenize_filtered("WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (result, rest) = optional(stream, |s| expect_keyword(s, "SELECT")).unwrap();
+        let (result, rest) = optional(stream, |s| expect_keyword(s, "SELECT"))
+            .expect("optional parse should succeed");
         assert!(result.is_none());
         // Stream should not have advanced
         assert_eq!(rest.position(), 0);
@@ -936,10 +952,11 @@ mod tests {
 
     #[test]
     fn test_optional_miss_does_not_advance_stream() {
-        let tokens = Tokenizer::tokenize_filtered("?x").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("?x").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let pos_before = stream.position();
-        let (_, rest) = optional(stream, |s| expect_keyword(s, "SELECT")).unwrap();
+        let (_, rest) = optional(stream, |s| expect_keyword(s, "SELECT"))
+            .expect("optional parse should succeed");
         assert_eq!(rest.position(), pos_before);
     }
 
@@ -947,26 +964,30 @@ mod tests {
 
     #[test]
     fn test_many0_zero_matches() {
-        let tokens = Tokenizer::tokenize_filtered("WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (results, rest) = many0(stream, |s| expect_keyword(s, "SELECT")).unwrap();
+        let (results, rest) = many0(stream, |s| expect_keyword(s, "SELECT"))
+            .expect("repetition parse should succeed");
         assert_eq!(results.len(), 0);
         assert_eq!(rest.position(), 0);
     }
 
     #[test]
     fn test_many0_one_match() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (results, _) = many0(stream, |s| expect_keyword(s, "SELECT")).unwrap();
+        let (results, _) = many0(stream, |s| expect_keyword(s, "SELECT"))
+            .expect("repetition parse should succeed");
         assert_eq!(results.len(), 1);
     }
 
     #[test]
     fn test_many0_multiple_matches() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT SELECT SELECT WHERE").unwrap();
+        let tokens =
+            Tokenizer::tokenize_filtered("SELECT SELECT SELECT WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (results, rest) = many0(stream, |s| expect_keyword(s, "SELECT")).unwrap();
+        let (results, rest) = many0(stream, |s| expect_keyword(s, "SELECT"))
+            .expect("repetition parse should succeed");
         assert_eq!(results.len(), 3);
         // remaining should show WHERE + EOF
         assert!(rest.remaining() >= 1);
@@ -974,9 +995,9 @@ mod tests {
 
     #[test]
     fn test_many0_variables() {
-        let tokens = Tokenizer::tokenize_filtered("?a ?b ?c WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("?a ?b ?c WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (vars, _) = many0(stream, expect_variable).unwrap();
+        let (vars, _) = many0(stream, expect_variable).expect("repetition parse should succeed");
         assert_eq!(vars.len(), 3);
         assert_eq!(vars[0], "?a");
         assert_eq!(vars[1], "?b");
@@ -987,31 +1008,31 @@ mod tests {
 
     #[test]
     fn test_choice_first_alternative() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let parsers: Vec<Box<dyn Fn(TokenStream) -> ParseResult<&'static str>>> = vec![
             Box::new(|s| expect_keyword(s, "SELECT").map(|(_, r)| ("SELECT", r))),
             Box::new(|s| expect_keyword(s, "ASK").map(|(_, r)| ("ASK", r))),
         ];
-        let (result, _) = choice(stream, parsers).unwrap();
+        let (result, _) = choice(stream, parsers).expect("choice parse should succeed");
         assert_eq!(result, "SELECT");
     }
 
     #[test]
     fn test_choice_second_alternative() {
-        let tokens = Tokenizer::tokenize_filtered("ASK").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("ASK").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let parsers: Vec<Box<dyn Fn(TokenStream) -> ParseResult<&'static str>>> = vec![
             Box::new(|s| expect_keyword(s, "SELECT").map(|(_, r)| ("SELECT", r))),
             Box::new(|s| expect_keyword(s, "ASK").map(|(_, r)| ("ASK", r))),
         ];
-        let (result, _) = choice(stream, parsers).unwrap();
+        let (result, _) = choice(stream, parsers).expect("choice parse should succeed");
         assert_eq!(result, "ASK");
     }
 
     #[test]
     fn test_choice_no_match_returns_error() {
-        let tokens = Tokenizer::tokenize_filtered("WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let parsers: Vec<Box<dyn Fn(TokenStream) -> ParseResult<&'static str>>> = vec![
             Box::new(|s| expect_keyword(s, "SELECT").map(|(_, r)| ("SELECT", r))),
@@ -1022,7 +1043,7 @@ mod tests {
 
     #[test]
     fn test_choice_empty_parsers_returns_error() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let parsers: Vec<Box<dyn Fn(TokenStream) -> ParseResult<String>>> = vec![];
         assert!(choice(stream, parsers).is_err());
@@ -1032,7 +1053,7 @@ mod tests {
 
     #[test]
     fn test_parse_error_position() {
-        let tokens = Tokenizer::tokenize_filtered("?x").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("?x").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let err = expect_keyword(stream, "SELECT").unwrap_err();
         assert_eq!(err.position, 0);
@@ -1040,7 +1061,7 @@ mod tests {
 
     #[test]
     fn test_parse_error_message_contains_expected() {
-        let tokens = Tokenizer::tokenize_filtered("?x").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("?x").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let err = expect_keyword(stream, "SELECT").unwrap_err();
         assert!(err.message.contains("SELECT"));
@@ -1059,12 +1080,12 @@ mod tests {
     #[test]
     fn test_parse_simple_triple_pattern() {
         // Parse: ?s rdf:type ?o
-        let tokens = Tokenizer::tokenize_filtered("?s rdf:type ?o").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("?s rdf:type ?o").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
 
-        let (subj, rest) = expect_variable(stream).unwrap();
-        let (pred, rest) = expect_iri(rest).unwrap();
-        let (obj, _) = expect_variable(rest).unwrap();
+        let (subj, rest) = expect_variable(stream).expect("variable parse should succeed");
+        let (pred, rest) = expect_iri(rest).expect("IRI parse should succeed");
+        let (obj, _) = expect_variable(rest).expect("variable parse should succeed");
 
         assert_eq!(subj, "?s");
         assert_eq!(pred, "rdf:type");
@@ -1073,11 +1094,11 @@ mod tests {
 
     #[test]
     fn test_parse_select_query_skeleton() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT ?x WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT ?x WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (_, rest) = expect_keyword(stream, "SELECT").unwrap();
-        let (vars, rest) = many0(rest, expect_variable).unwrap();
-        let (_, _) = expect_keyword(rest, "WHERE").unwrap();
+        let (_, rest) = expect_keyword(stream, "SELECT").expect("keyword parse should succeed");
+        let (vars, rest) = many0(rest, expect_variable).expect("repetition parse should succeed");
+        let (_, _) = expect_keyword(rest, "WHERE").expect("keyword parse should succeed");
         assert_eq!(vars, vec!["?x"]);
     }
 
@@ -1098,33 +1119,33 @@ mod tests {
 
     #[test]
     fn test_tokenize_two_char_operator_neq() {
-        let tokens = Tokenizer::tokenize("!=").unwrap();
+        let tokens = Tokenizer::tokenize("!=").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Punctuation);
         assert_eq!(tokens[0].value, "!=");
     }
 
     #[test]
     fn test_tokenize_two_char_operator_leq() {
-        let tokens = Tokenizer::tokenize("<=").unwrap();
+        let tokens = Tokenizer::tokenize("<=").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Punctuation);
         assert_eq!(tokens[0].value, "<=");
     }
 
     #[test]
     fn test_tokenize_keyword_filter() {
-        let tokens = Tokenizer::tokenize("FILTER").unwrap();
+        let tokens = Tokenizer::tokenize("FILTER").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Keyword);
     }
 
     #[test]
     fn test_tokenize_keyword_bind() {
-        let tokens = Tokenizer::tokenize("BIND").unwrap();
+        let tokens = Tokenizer::tokenize("BIND").expect("valid SPARQL input");
         assert_eq!(tokens[0].kind, TokenKind::Keyword);
     }
 
     #[test]
     fn test_stream_clone_independence() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT WHERE").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
         let clone = stream.clone();
         let (_, advanced) = stream.next();
@@ -1135,29 +1156,35 @@ mod tests {
 
     #[test]
     fn test_many0_with_iri() {
-        let tokens = Tokenizer::tokenize_filtered("<http://a.org/> <http://b.org/> ?x").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("<http://a.org/> <http://b.org/> ?x")
+            .expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (iris, rest) = many0(stream, expect_iri).unwrap();
+        let (iris, rest) = many0(stream, expect_iri).expect("repetition parse should succeed");
         assert_eq!(iris.len(), 2);
         assert_eq!(iris[0], "<http://a.org/>");
         assert_eq!(iris[1], "<http://b.org/>");
         // ?x should still be next
-        assert_eq!(rest.peek().unwrap().kind, TokenKind::Variable);
+        assert_eq!(
+            rest.peek().expect("stream should have tokens").kind,
+            TokenKind::Variable
+        );
     }
 
     #[test]
     fn test_optional_iri_hit() {
-        let tokens = Tokenizer::tokenize_filtered("<http://example.org/> WHERE").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("<http://example.org/> WHERE")
+            .expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (result, _) = optional(stream, expect_iri).unwrap();
+        let (result, _) = optional(stream, expect_iri).expect("optional parse should succeed");
         assert!(result.is_some());
     }
 
     #[test]
     fn test_optional_variable_miss_on_keyword() {
-        let tokens = Tokenizer::tokenize_filtered("SELECT").unwrap();
+        let tokens = Tokenizer::tokenize_filtered("SELECT").expect("valid SPARQL input");
         let stream = TokenStream::new(tokens);
-        let (result, rest) = optional(stream, expect_variable).unwrap();
+        let (result, rest) =
+            optional(stream, expect_variable).expect("optional parse should succeed");
         assert!(result.is_none());
         assert_eq!(rest.position(), 0);
     }

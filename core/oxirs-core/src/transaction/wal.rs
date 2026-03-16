@@ -435,8 +435,8 @@ mod tests {
 
     fn create_test_quad() -> Quad {
         Quad::new(
-            Subject::NamedNode(NamedNode::new("http://s").unwrap()),
-            Predicate::NamedNode(NamedNode::new("http://p").unwrap()),
+            Subject::NamedNode(NamedNode::new("http://s").expect("valid IRI")),
+            Predicate::NamedNode(NamedNode::new("http://p").expect("valid IRI")),
             Object::Literal(Literal::new("value")),
             GraphName::DefaultGraph,
         )

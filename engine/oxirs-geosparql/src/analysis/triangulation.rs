@@ -196,7 +196,7 @@ fn point_in_triangle(p: Coord<f64>, tri: &Triangle) -> bool {
 ///     Point::new(0.0, 1.0),
 /// ];
 ///
-/// let triangulation = delaunay_triangulation(&points).unwrap();
+/// let triangulation = delaunay_triangulation(&points).expect("should succeed");
 /// // A quadrilateral should produce at least 1 triangle
 /// assert!(!triangulation.triangles.is_empty());
 /// ```
@@ -379,7 +379,7 @@ mod tests {
             Point::new(0.5, 1.0),
         ];
 
-        let triangulation = delaunay_triangulation(&points).unwrap();
+        let triangulation = delaunay_triangulation(&points).expect("should succeed");
 
         assert_eq!(triangulation.triangles.len(), 1);
         assert_eq!(triangulation.points.len(), 3);
@@ -394,7 +394,7 @@ mod tests {
             Point::new(0.0, 1.0),
         ];
 
-        let triangulation = delaunay_triangulation(&points).unwrap();
+        let triangulation = delaunay_triangulation(&points).expect("should succeed");
 
         // Square should be split into at least 1 triangle (simplified implementation)
         assert!(!triangulation.triangles.is_empty());
@@ -410,7 +410,7 @@ mod tests {
             }
         }
 
-        let triangulation = delaunay_triangulation(&points).unwrap();
+        let triangulation = delaunay_triangulation(&points).expect("should succeed");
 
         // 5x5 grid should produce some triangles (simplified implementation)
         assert!(!triangulation.triangles.is_empty());
@@ -483,7 +483,7 @@ mod tests {
             Point::new(0.0, 1.0),
         ];
 
-        let triangulation = delaunay_triangulation(&points).unwrap();
+        let triangulation = delaunay_triangulation(&points).expect("should succeed");
         let edges = triangulation.edges();
 
         // Should have at least 3 edges (one triangle = 3 edges)

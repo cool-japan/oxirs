@@ -737,8 +737,9 @@ mod tests {
     #[test]
     fn test_config_serialization() {
         let config = AiConfig::default();
-        let serialized = serde_json::to_string(&config).unwrap();
-        let deserialized: AiConfig = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&config).expect("construction should succeed");
+        let deserialized: AiConfig =
+            serde_json::from_str(&serialized).expect("construction should succeed");
         assert_eq!(config.enable_gnn, deserialized.enable_gnn);
     }
 }

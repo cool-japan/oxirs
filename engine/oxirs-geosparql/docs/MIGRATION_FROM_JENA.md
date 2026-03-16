@@ -72,7 +72,7 @@ This guide helps you migrate from Apache Jena's GeoSPARQL implementation to OxiR
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-geosparql = { version = "0.2.1", features = ["performance"] }
+oxirs-geosparql = { version = "0.2.2", features = ["performance"] }
 ```
 
 ### Hello World Comparison

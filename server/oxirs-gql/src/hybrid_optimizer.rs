@@ -615,7 +615,7 @@ mod tests {
         let strategy = optimizer
             .select_adaptive_strategy(&simple_document)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Should select a reasonable strategy
         matches!(
@@ -645,7 +645,7 @@ mod tests {
         optimizer
             .update_strategy_performance(&result)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let performance_data = optimizer.get_strategy_performance().await;
         assert!(performance_data.contains_key("ml"));

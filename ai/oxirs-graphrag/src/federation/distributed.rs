@@ -661,7 +661,11 @@ mod tests {
 
         let merged = FederatedIndexBuilder::merge_indices(vec![i1, i2]);
         // key1: B wins (0.8 > 0.5)
-        let key1 = merged.entries.iter().find(|(k, _, _)| k == "key1").unwrap();
+        let key1 = merged
+            .entries
+            .iter()
+            .find(|(k, _, _)| k == "key1")
+            .expect("should succeed");
         assert!((key1.1 - 0.8).abs() < 1e-9);
         assert_eq!(key1.2, "B");
         // key2 from A, key3 from B

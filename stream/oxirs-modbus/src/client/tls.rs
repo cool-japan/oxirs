@@ -864,7 +864,7 @@ mod tests {
         let mut client = TlsModbusClient::from_stream(mock, 1, TlsConfig::default());
         let result = client.read_holding_registers(0, 3).await;
         assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
-        assert_eq!(result.unwrap(), vec![100, 200, 300]);
+        assert_eq!(result.expect("should succeed"), vec![100, 200, 300]);
     }
 
     #[tokio::test]
@@ -891,7 +891,7 @@ mod tests {
         let mut client = TlsModbusClient::from_stream(mock, 1, TlsConfig::default());
         let result = client.read_input_registers(0, 2).await;
         assert!(result.is_ok(), "Expected Ok, got: {:?}", result);
-        assert_eq!(result.unwrap(), vec![42, 84]);
+        assert_eq!(result.expect("should succeed"), vec![42, 84]);
     }
 
     #[tokio::test]

@@ -694,8 +694,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_node_registration() {
-        let distributed_search = DistributedVectorSearch::new(PartitioningStrategy::Hash).unwrap();
+    async fn test_node_registration() -> Result<()> {
+        let distributed_search = DistributedVectorSearch::new(PartitioningStrategy::Hash)?;
 
         let config = DistributedNodeConfig {
             node_id: "node1".to_string(),
@@ -713,11 +713,12 @@ mod tests {
         let stats = distributed_search.get_cluster_stats();
         assert_eq!(stats.total_nodes, 1);
         assert_eq!(stats.healthy_nodes, 1);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_distributed_query_execution() {
-        let distributed_search = DistributedVectorSearch::new(PartitioningStrategy::Hash).unwrap();
+    async fn test_distributed_query_execution() -> Result<()> {
+        let distributed_search = DistributedVectorSearch::new(PartitioningStrategy::Hash)?;
 
         // Register test nodes
         for i in 0..3 {
@@ -731,7 +732,7 @@ mod tests {
                 health_status: NodeHealthStatus::Healthy,
                 replication_factor: 2,
             };
-            distributed_search.register_node(config).await.unwrap();
+            distributed_search.register_node(config).await?;
         }
 
         // Create test query
@@ -745,10 +746,11 @@ mod tests {
             consistency_level: ConsistencyLevel::Quorum,
         };
 
-        let response = distributed_search.search(query).await.unwrap();
+        let response = distributed_search.search(query).await?;
 
         assert_eq!(response.nodes_queried, 3);
         assert!(response.nodes_responded > 0);
         assert!(!response.merged_results.is_empty());
+        Ok(())
     }
 }

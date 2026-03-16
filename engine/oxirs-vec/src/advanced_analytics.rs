@@ -1066,6 +1066,7 @@ impl Default for VectorAnalyticsEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
     use std::time::Duration;
 
     #[test]
@@ -1099,7 +1100,7 @@ mod tests {
     }
 
     #[test]
-    fn test_vector_distribution_analysis() {
+    fn test_vector_distribution_analysis() -> Result<()> {
         let engine = VectorAnalyticsEngine::new();
 
         let vectors = vec![
@@ -1110,12 +1111,13 @@ mod tests {
             vec![5.1, 6.1, 7.1],
         ];
 
-        let analysis = engine.analyze_vector_distribution(&vectors).unwrap();
+        let analysis = engine.analyze_vector_distribution(&vectors)?;
 
         assert_eq!(analysis.total_vectors, 5);
         assert_eq!(analysis.dimensionality, 3);
         assert!(analysis.density_estimate > 0.0);
         assert!(analysis.sparsity_ratio >= 0.0);
+        Ok(())
     }
 
     #[test]
@@ -1181,7 +1183,7 @@ mod tests {
     }
 
     #[test]
-    fn test_vector_quality_assessment() {
+    fn test_vector_quality_assessment() -> Result<()> {
         let engine = VectorAnalyticsEngine::new();
 
         let vectors = vec![
@@ -1191,23 +1193,25 @@ mod tests {
             vec![1.05, 2.05, 3.05, 0.0],
         ];
 
-        let assessment = engine.assess_vector_quality(&vectors).unwrap();
+        let assessment = engine.assess_vector_quality(&vectors)?;
 
         assert!(assessment.overall_quality_score >= 0.0 && assessment.overall_quality_score <= 1.0);
         assert_eq!(assessment.dimension_quality.len(), 4);
         assert!(assessment.noise_level >= 0.0);
         assert!(!assessment.recommendations.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_analytics_export() {
+    fn test_analytics_export() -> Result<()> {
         let engine = VectorAnalyticsEngine::new();
         let json_result = engine.export_analytics();
 
         assert!(json_result.is_ok());
-        let json_data = json_result.unwrap();
+        let json_data = json_result?;
         assert!(json_data.contains("query_count"));
         assert!(json_data.contains("performance_trends"));
         assert!(json_data.contains("recommendations"));
+        Ok(())
     }
 }

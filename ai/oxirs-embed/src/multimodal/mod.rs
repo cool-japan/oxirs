@@ -37,7 +37,9 @@ mod tests {
     #[test]
     fn test_text_encoder() {
         let encoder = TextEncoder::new("BERT".to_string(), 768, 512);
-        let embedding = encoder.encode("This is a test sentence").unwrap();
+        let embedding = encoder
+            .encode("This is a test sentence")
+            .expect("should succeed");
         assert_eq!(embedding.len(), 512);
     }
 
@@ -45,7 +47,7 @@ mod tests {
     fn test_kg_encoder() {
         let encoder = KGEncoder::new("ComplEx".to_string(), 128, 128, 512);
         let entity_emb = Array1::from_vec(vec![0.1; 128]);
-        let encoded = encoder.encode_entity(&entity_emb).unwrap();
+        let encoded = encoder.encode_entity(&entity_emb).expect("should succeed");
         assert_eq!(encoded.len(), 512);
     }
 
@@ -55,7 +57,7 @@ mod tests {
         let text_emb = Array1::from_vec(vec![0.1; 512]);
         let kg_emb = Array1::from_vec(vec![0.2; 512]);
 
-        let (unified, score) = network.align(&text_emb, &kg_emb).unwrap();
+        let (unified, score) = network.align(&text_emb, &kg_emb).expect("should succeed");
         assert_eq!(unified.len(), 512);
         assert!((-1.0..=1.0).contains(&score));
     }
@@ -70,7 +72,7 @@ mod tests {
         model.add_entity_description("http://example.org/Person", "A human being");
         model.add_property_text("http://example.org/knows", "knows relationship");
 
-        let stats = model.train(Some(10)).await.unwrap();
+        let stats = model.train(Some(10)).await.expect("should succeed");
 
         assert!(model.is_trained());
         assert_eq!(stats.epochs_completed, 10);
@@ -85,7 +87,7 @@ mod tests {
         let unified = model
             .generate_unified_embedding("A scientist working on AI", "http://example.org/Scientist")
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(unified.len(), 512); // unified_dim
         assert!(model
@@ -102,9 +104,15 @@ mod tests {
         let mut model = MultiModalEmbedding::new(config);
 
         // Add some KG embeddings
-        let scientist_embedding = model.get_or_create_kg_embedding("scientist").unwrap();
-        let doctor_embedding = model.get_or_create_kg_embedding("doctor").unwrap();
-        let teacher_embedding = model.get_or_create_kg_embedding("teacher").unwrap();
+        let scientist_embedding = model
+            .get_or_create_kg_embedding("scientist")
+            .expect("should succeed");
+        let doctor_embedding = model
+            .get_or_create_kg_embedding("doctor")
+            .expect("should succeed");
+        let teacher_embedding = model
+            .get_or_create_kg_embedding("teacher")
+            .expect("should succeed");
 
         model
             .kg_embeddings
@@ -124,7 +132,7 @@ mod tests {
         let predictions = model
             .zero_shot_prediction("A person who does research", &candidates)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(predictions.len(), 3);
         assert!(predictions[0].1 >= predictions[1].1); // Scores should be sorted
@@ -158,7 +166,7 @@ mod tests {
 
         let loss = model
             .contrastive_loss(&positive_pairs, &negative_pairs)
-            .unwrap();
+            .expect("should succeed");
         assert!(loss >= 0.0);
     }
 
@@ -212,7 +220,7 @@ mod tests {
         let predictions = model
             .few_shot_learn(&support_examples, &query_examples)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(predictions.len(), 2);
         assert!(predictions[0].1 >= 0.0 && predictions[0].1 <= 1.0); // Valid confidence score
@@ -240,7 +248,9 @@ mod tests {
             Array1::from_vec(vec![3.0, 4.0, 5.0]),
         ];
 
-        let prototype = few_shot.compute_prototype(&embeddings).unwrap();
+        let prototype = few_shot
+            .compute_prototype(&embeddings)
+            .expect("should succeed");
         assert_eq!(prototype.len(), 3);
         assert!((prototype[0] - 2.0).abs() < 1e-6); // Mean should be 2.0
         assert!((prototype[1] - 3.0).abs() < 1e-6); // Mean should be 3.0
@@ -265,7 +275,7 @@ mod tests {
         let loss = model
             .real_time_update("New scientific discovery", "researcher", "profession")
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert!(loss >= 0.0);
     }

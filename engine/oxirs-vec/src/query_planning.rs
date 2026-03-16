@@ -354,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn test_query_planning() {
+    fn test_query_planning() -> Result<()> {
         let planner = QueryPlanner::new(CostModel::default(), create_test_stats());
 
         let query = QueryCharacteristics {
@@ -368,13 +368,14 @@ mod tests {
         let plan = planner.plan(&query);
         assert!(plan.is_ok());
 
-        let plan = plan.unwrap();
+        let plan = plan?;
         assert!(plan.estimated_recall >= query.min_recall);
         assert!(!plan.alternatives.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_exhaustive_vs_approximate() {
+    fn test_exhaustive_vs_approximate() -> Result<()> {
         let planner = QueryPlanner::new(CostModel::default(), create_test_stats());
 
         // High recall requirement should avoid exhaustive if approximate is available
@@ -386,13 +387,14 @@ mod tests {
             query_type: VectorQueryType::Single,
         };
 
-        let plan = planner.plan(&query).unwrap();
+        let plan = planner.plan(&query)?;
         // Should prefer HNSW over exhaustive for speed
         assert_ne!(plan.strategy, QueryStrategy::ExhaustiveScan);
+        Ok(())
     }
 
     #[test]
-    fn test_batch_query_planning() {
+    fn test_batch_query_planning() -> Result<()> {
         let planner = QueryPlanner::new(CostModel::default(), create_test_stats());
 
         let query = QueryCharacteristics {
@@ -403,8 +405,9 @@ mod tests {
             query_type: VectorQueryType::Batch(100),
         };
 
-        let plan = planner.plan(&query).unwrap();
+        let plan = planner.plan(&query)?;
         assert!(plan.estimated_cost_us > 0.0);
+        Ok(())
     }
 
     #[test]

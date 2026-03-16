@@ -524,7 +524,7 @@ mod tests {
     }
 
     #[test]
-    fn test_incremental_reasoning() {
+    fn test_incremental_reasoning() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = IncrementalReasoningEngine::new();
 
         // Add a simple rule: Person -> Human
@@ -542,7 +542,7 @@ mod tests {
             }],
         };
 
-        engine.add_rules(vec![rule]).unwrap();
+        engine.add_rules(vec![rule])?;
 
         // Add initial facts
         let initial_facts = vec![RuleAtom::Triple {
@@ -552,7 +552,7 @@ mod tests {
         }];
 
         // Perform full reasoning first
-        let full_results = engine.full_reasoning_with_cache(initial_facts).unwrap();
+        let full_results = engine.full_reasoning_with_cache(initial_facts)?;
         assert!(!full_results.is_empty());
 
         // Add new facts incrementally
@@ -562,16 +562,17 @@ mod tests {
             object: Term::Constant("Person".to_string()),
         }];
 
-        let incremental_results = engine.add_facts_incremental(new_facts).unwrap();
+        let incremental_results = engine.add_facts_incremental(new_facts)?;
         assert!(!incremental_results.is_empty());
 
         // Check metrics
         let metrics = engine.get_incremental_metrics();
         assert_eq!(metrics.incremental_updates, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_hybrid_reasoning_engine() {
+    fn test_hybrid_reasoning_engine() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = HybridReasoningEngine::new(ReasoningStrategy::Adaptive {
             parallel_threshold: 5,
             complexity_threshold: 10,
@@ -592,7 +593,7 @@ mod tests {
             }],
         };
 
-        engine.add_rules(vec![rule]).unwrap();
+        engine.add_rules(vec![rule])?;
 
         // Test with small number of facts (should use incremental)
         let small_facts = vec![RuleAtom::Triple {
@@ -601,7 +602,7 @@ mod tests {
             object: Term::Constant("value".to_string()),
         }];
 
-        let results = engine.reason(small_facts).unwrap();
+        let results = engine.reason(small_facts)?;
         assert!(!results.is_empty());
 
         // Test with large number of facts (should use parallel)
@@ -613,16 +614,17 @@ mod tests {
             })
             .collect();
 
-        let large_results = engine.reason(large_facts).unwrap();
+        let large_results = engine.reason(large_facts)?;
         assert!(!large_results.is_empty());
 
         // Check that metrics were tracked
         let metrics = engine.get_performance_metrics();
         assert!(metrics.total_time > Duration::new(0, 0));
+        Ok(())
     }
 
     #[test]
-    fn test_incremental_vs_full_benchmark() {
+    fn test_incremental_vs_full_benchmark() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = IncrementalReasoningEngine::new();
 
         // Add rules
@@ -640,7 +642,7 @@ mod tests {
             }],
         }];
 
-        engine.add_rules(rules).unwrap();
+        engine.add_rules(rules)?;
 
         // Initial facts
         let initial_facts = vec![RuleAtom::Triple {
@@ -657,19 +659,18 @@ mod tests {
         }];
 
         // Run benchmark
-        let benchmark = engine
-            .benchmark_incremental_vs_full(initial_facts, new_facts)
-            .unwrap();
+        let benchmark = engine.benchmark_incremental_vs_full(initial_facts, new_facts)?;
 
         // Check that benchmark completed successfully
         assert!(benchmark.full_reasoning_time > Duration::new(0, 0));
         assert!(benchmark.facts_derived > 0);
 
         println!("Benchmark results: {benchmark}");
+        Ok(())
     }
 
     #[test]
-    fn test_change_tracking() {
+    fn test_change_tracking() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = IncrementalReasoningEngine::new();
 
         // Add a rule
@@ -687,7 +688,7 @@ mod tests {
             }],
         };
 
-        engine.add_rules(vec![rule]).unwrap();
+        engine.add_rules(vec![rule])?;
 
         // Add facts and verify change tracking
         let facts = vec![RuleAtom::Triple {
@@ -696,12 +697,13 @@ mod tests {
             object: Term::Constant("data".to_string()),
         }];
 
-        let results = engine.add_facts_incremental(facts).unwrap();
+        let results = engine.add_facts_incremental(facts)?;
         assert!(!results.is_empty());
 
         // Verify metrics were updated
         let metrics = engine.get_incremental_metrics();
         assert_eq!(metrics.incremental_updates, 1);
+        Ok(())
     }
 }
 

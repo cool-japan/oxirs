@@ -1128,7 +1128,7 @@ mod tests {
     }
 
     #[test]
-    fn test_intersection_on_left() {
+    fn test_intersection_on_left() -> anyhow::Result<()> {
         let mut r = Owl2ElReasoner::new();
         // Doctor ⊓ HaematologySpecialist ⊑ Haematologist
         r.add_axiom(ElAxiom::SubConceptOf {
@@ -1148,10 +1148,11 @@ mod tests {
             "Expected alice to be Haematologist via intersection. Got: {:?}",
             alice_types
         );
+        Ok(())
     }
 
     #[test]
-    fn test_existential_some_values_from_right() {
+    fn test_existential_some_values_from_right() -> anyhow::Result<()> {
         let mut r = Owl2ElReasoner::new();
         // Person ⊑ ∃hasParent.Human
         r.add_axiom(ElAxiom::SubConceptOf {
@@ -1172,10 +1173,11 @@ mod tests {
             "Expected alice OffspringOfHuman via existential chain. Got: {:?}",
             alice_types
         );
+        Ok(())
     }
 
     #[test]
-    fn test_transitive_role() {
+    fn test_transitive_role() -> anyhow::Result<()> {
         let mut r = Owl2ElReasoner::new();
         r.add_transitive_role("partOf");
         r.add_role_assertion("lug", "partOf", "wheel");
@@ -1190,10 +1192,11 @@ mod tests {
             "Expected lug partOf car via transitivity. Got: {:?}",
             lug_succs
         );
+        Ok(())
     }
 
     #[test]
-    fn test_property_chain() {
+    fn test_property_chain() -> anyhow::Result<()> {
         let mut r = Owl2ElReasoner::new();
         // hasParent o hasParent ⊑ hasGrandParent
         r.add_property_chain(
@@ -1214,10 +1217,11 @@ mod tests {
             "Expected child hasGrandParent grandparent via chain. Got: {:?}",
             child_grand
         );
+        Ok(())
     }
 
     #[test]
-    fn test_abox_type_propagation() {
+    fn test_abox_type_propagation() -> anyhow::Result<()> {
         let mut r = Owl2ElReasoner::new();
         r.add_subclass_of("Dog", "Animal");
         r.add_concept_assertion("fido", "Dog");
@@ -1229,6 +1233,7 @@ mod tests {
             "Expected fido to be Animal via subclass. Got: {:?}",
             fido_types
         );
+        Ok(())
     }
 
     #[test]
@@ -1282,7 +1287,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sub_role() {
+    fn test_sub_role() -> anyhow::Result<()> {
         let mut r = Owl2ElReasoner::new();
         r.add_axiom(ElAxiom::SubRole {
             sub: "isChildOf".to_string(),
@@ -1299,10 +1304,11 @@ mod tests {
             "Expected alice isRelatedTo bob via subRole. Got: {:?}",
             alice_related
         );
+        Ok(())
     }
 
     #[test]
-    fn test_some_sub_atom() {
+    fn test_some_sub_atom() -> anyhow::Result<()> {
         let mut r = Owl2ElReasoner::new();
         // ∃worksIn.Organization ⊑ Employee
         r.add_axiom(ElAxiom::SubConceptOf {
@@ -1319,10 +1325,11 @@ mod tests {
             "Expected alice to be Employee via ∃worksIn.Organization. Got: {:?}",
             alice_types
         );
+        Ok(())
     }
 
     #[test]
-    fn test_long_property_chain() {
+    fn test_long_property_chain() -> anyhow::Result<()> {
         let mut r = Owl2ElReasoner::new();
         // r1 o r2 o r3 ⊑ rResult
         r.add_property_chain(
@@ -1342,6 +1349,7 @@ mod tests {
             "Expected a rResult d via 3-chain. Got: {:?}",
             a_result
         );
+        Ok(())
     }
 }
 
@@ -1840,7 +1848,7 @@ mod tests_extended {
     }
 
     #[test]
-    fn test_get_subclasses_empty_for_leaf() {
+    fn test_get_subclasses_empty_for_leaf() -> anyhow::Result<()> {
         let mut r = Owl2ElReasoner::new();
         r.add_subclass_of("Dog", "Animal");
         let subs = r.get_subclasses("Dog").expect("get_subclasses failed");
@@ -1850,6 +1858,7 @@ mod tests_extended {
             "Dog should have no subclasses, got {:?}",
             subs
         );
+        Ok(())
     }
 
     #[test]

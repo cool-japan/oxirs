@@ -731,7 +731,7 @@ mod tests {
         let pdu = vec![0x03, 0x00, 0x00, 0x00, 0x0A]; // FC03, addr=0, count=10
         let adu = ModbusTcpAdu::new(0x0001, 1, pdu.clone());
         let bytes = adu.to_bytes();
-        let restored = ModbusTcpAdu::from_bytes(&bytes).unwrap();
+        let restored = ModbusTcpAdu::from_bytes(&bytes).expect("should succeed");
 
         assert_eq!(restored.transaction_id, 0x0001);
         assert_eq!(restored.protocol_id, 0x0000);
@@ -785,7 +785,7 @@ mod tests {
     fn test_rtu_frame_roundtrip() {
         let pdu = vec![0x03, 0x00, 0x00, 0x00, 0x05];
         let raw = make_rtu_bytes(1, &pdu);
-        let frame = ModbusRtuFrame::from_bytes(&raw).unwrap();
+        let frame = ModbusRtuFrame::from_bytes(&raw).expect("should succeed");
 
         assert_eq!(frame.unit_id, 1);
         assert_eq!(frame.pdu, pdu);
@@ -813,7 +813,7 @@ mod tests {
     fn test_rtu_frame_function_code() {
         let pdu = vec![0x06, 0x00, 0x01, 0x00, 0x64];
         let raw = make_rtu_bytes(2, &pdu);
-        let frame = ModbusRtuFrame::from_bytes(&raw).unwrap();
+        let frame = ModbusRtuFrame::from_bytes(&raw).expect("should succeed");
         assert_eq!(frame.function_code(), Some(0x06));
     }
 
@@ -877,10 +877,10 @@ mod tests {
             pdu: vec![0x03],
             enqueued_at: Instant::now(),
         };
-        q.enqueue(req).unwrap();
+        q.enqueue(req).expect("should succeed");
         assert_eq!(q.len(), 1);
 
-        let dequeued = q.dequeue().unwrap();
+        let dequeued = q.dequeue().expect("should succeed");
         assert_eq!(dequeued.transaction_id, 1);
         assert!(q.is_empty());
     }
@@ -895,7 +895,7 @@ mod tests {
                 pdu: vec![0x03],
                 enqueued_at: Instant::now(),
             })
-            .unwrap();
+            .expect("should succeed");
         }
         // Third enqueue should fail
         let result = q.enqueue(PendingRequest {
@@ -918,7 +918,7 @@ mod tests {
             pdu: vec![0x03],
             enqueued_at: Instant::now() - Duration::from_secs(10),
         };
-        q.enqueue(req).unwrap();
+        q.enqueue(req).expect("should succeed");
         // Also enqueue a fresh request
         q.enqueue(PendingRequest {
             transaction_id: 2,
@@ -926,7 +926,7 @@ mod tests {
             pdu: vec![0x03],
             enqueued_at: Instant::now(),
         })
-        .unwrap();
+        .expect("should succeed");
 
         let timed_out = q.drain_timed_out(Duration::from_secs(5));
         assert_eq!(timed_out.len(), 1);
@@ -944,10 +944,10 @@ mod tests {
                 pdu: vec![0x03],
                 enqueued_at: Instant::now(),
             })
-            .unwrap();
+            .expect("should succeed");
         }
         for expected in 1u16..=5 {
-            let req = q.dequeue().unwrap();
+            let req = q.dequeue().expect("should succeed");
             assert_eq!(req.transaction_id, expected);
         }
     }
@@ -957,10 +957,12 @@ mod tests {
     #[test]
     fn test_pool_add_and_remove() {
         let mut pool = GatewayConnectionPool::new(4);
-        let id = pool.add_connection("192.168.1.1:12345").unwrap();
+        let id = pool
+            .add_connection("192.168.1.1:12345")
+            .expect("should succeed");
         assert_eq!(pool.active_count(), 1);
 
-        let conn = pool.get(id).unwrap();
+        let conn = pool.get(id).expect("should succeed");
         assert_eq!(conn.peer_addr, "192.168.1.1:12345");
 
         pool.remove_connection(id);
@@ -970,8 +972,8 @@ mod tests {
     #[test]
     fn test_pool_full_rejected() {
         let mut pool = GatewayConnectionPool::new(2);
-        pool.add_connection("1.1.1.1:1").unwrap();
-        pool.add_connection("1.1.1.2:2").unwrap();
+        pool.add_connection("1.1.1.1:1").expect("should succeed");
+        pool.add_connection("1.1.1.2:2").expect("should succeed");
         assert!(pool.add_connection("1.1.1.3:3").is_err());
         assert!(pool.is_full());
     }
@@ -988,13 +990,15 @@ mod tests {
             rtu_timeout: Duration::from_secs(1),
             tcp_idle_timeout: Duration::from_secs(30),
         };
-        ModbusTcpGateway::new(cfg).unwrap()
+        ModbusTcpGateway::new(cfg).expect("should succeed")
     }
 
     #[test]
     fn test_gateway_accept_and_close() {
         let mut gw = make_gateway();
-        let id = gw.accept_connection("10.0.0.1:50000").unwrap();
+        let id = gw
+            .accept_connection("10.0.0.1:50000")
+            .expect("should succeed");
         assert_eq!(gw.active_connections(), 1);
         gw.close_connection(id);
         assert_eq!(gw.active_connections(), 0);
@@ -1003,14 +1007,18 @@ mod tests {
     #[test]
     fn test_gateway_handle_request_produces_rtu_frame() {
         let mut gw = make_gateway();
-        let conn_id = gw.accept_connection("10.0.0.2:50001").unwrap();
+        let conn_id = gw
+            .accept_connection("10.0.0.2:50001")
+            .expect("should succeed");
 
         // Build a TCP ADU: FC03, read 5 registers at address 0
         let pdu = vec![0x03u8, 0x00, 0x00, 0x00, 0x05];
         let adu = ModbusTcpAdu::new(1, 1, pdu.clone());
         let raw_tcp = adu.to_bytes();
 
-        let rtu_bytes = gw.handle_tcp_request(conn_id, &raw_tcp).unwrap();
+        let rtu_bytes = gw
+            .handle_tcp_request(conn_id, &raw_tcp)
+            .expect("should succeed");
 
         // RTU frame: [unit_id, ...pdu..., CRC_lo, CRC_hi]
         assert!(rtu_bytes.len() >= 4);
@@ -1022,21 +1030,26 @@ mod tests {
     #[test]
     fn test_gateway_handle_rtu_response_translates_back() {
         let mut gw = make_gateway();
-        let conn_id = gw.accept_connection("10.0.0.3:50002").unwrap();
+        let conn_id = gw
+            .accept_connection("10.0.0.3:50002")
+            .expect("should succeed");
 
         // Simulate a request first (to populate the pending queue)
         let pdu = vec![0x03u8, 0x00, 0x00, 0x00, 0x02];
         let adu = ModbusTcpAdu::new(5, 2, pdu);
-        gw.handle_tcp_request(conn_id, &adu.to_bytes()).unwrap();
+        gw.handle_tcp_request(conn_id, &adu.to_bytes())
+            .expect("should succeed");
 
         // Build a valid RTU response: FC03 response with 2 regs = 4 bytes of data
         let rtu_pdu = vec![0x03u8, 0x04, 0x01, 0x23, 0x04, 0x56];
         let rtu_bytes = make_rtu_bytes(2, &rtu_pdu);
 
-        let tcp_response = gw.handle_rtu_response(conn_id, &rtu_bytes).unwrap();
+        let tcp_response = gw
+            .handle_rtu_response(conn_id, &rtu_bytes)
+            .expect("should succeed");
 
         // Parse the TCP response
-        let response_adu = ModbusTcpAdu::from_bytes(&tcp_response).unwrap();
+        let response_adu = ModbusTcpAdu::from_bytes(&tcp_response).expect("should succeed");
         assert_eq!(response_adu.unit_id, 2);
         assert_eq!(response_adu.pdu, rtu_pdu);
     }
@@ -1050,13 +1063,16 @@ mod tests {
             rtu_timeout: Duration::from_millis(1), // Very short
             ..GatewayConfig::default()
         };
-        let mut gw = ModbusTcpGateway::new(cfg).unwrap();
-        let conn_id = gw.accept_connection("10.0.0.5:50003").unwrap();
+        let mut gw = ModbusTcpGateway::new(cfg).expect("should succeed");
+        let conn_id = gw
+            .accept_connection("10.0.0.5:50003")
+            .expect("should succeed");
 
         // Submit a request to populate the queue
         let pdu = vec![0x03u8, 0x00, 0x00, 0x00, 0x01];
         let adu = ModbusTcpAdu::new(1, 1, pdu);
-        gw.handle_tcp_request(conn_id, &adu.to_bytes()).unwrap();
+        gw.handle_tcp_request(conn_id, &adu.to_bytes())
+            .expect("should succeed");
 
         // Wait slightly longer than the 1ms timeout
         std::thread::sleep(Duration::from_millis(5));

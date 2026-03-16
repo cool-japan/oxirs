@@ -233,7 +233,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parallel_index_builder() {
+    fn test_parallel_index_builder() -> Result<()> {
         let vectors = create_test_vectors(100, 64);
 
         let result = ParallelHnswIndexBuilder::new()
@@ -243,11 +243,12 @@ mod tests {
             .build();
 
         assert!(result.is_ok());
-        let (index, stats) = result.unwrap();
+        let (index, stats) = result?;
 
         assert_eq!(index.len(), 100);
         assert_eq!(stats.vectors_processed, 100);
         assert!(stats.throughput > 0.0);
+        Ok(())
     }
 
     #[test]
@@ -270,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_threaded_build() {
+    fn test_multi_threaded_build() -> Result<()> {
         let vectors = create_test_vectors(500, 128);
 
         let result = ParallelHnswIndexBuilder::new()
@@ -279,9 +280,10 @@ mod tests {
             .build();
 
         assert!(result.is_ok());
-        let (_index, stats) = result.unwrap();
+        let (_index, stats) = result?;
 
         assert_eq!(stats.vectors_processed, 500);
         assert_eq!(stats.threads_used, 4);
+        Ok(())
     }
 }

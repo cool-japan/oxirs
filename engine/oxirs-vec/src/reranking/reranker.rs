@@ -298,6 +298,7 @@ impl CrossEncoderReranker {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use crate::reranking::config::FusionStrategy;
 
@@ -310,14 +311,14 @@ mod tests {
     }
 
     #[test]
-    fn test_select_candidates_topk() {
+    fn test_select_candidates_topk() -> Result<()> {
         let config = RerankingConfig {
             mode: RerankingMode::TopK,
             max_candidates: 5,
             ..RerankingConfig::default_config()
         };
 
-        let encoder = CrossEncoder::new("dummy", "local").unwrap();
+        let encoder = CrossEncoder::new("dummy", "local")?;
         let fusion = ScoreFusion::new(FusionStrategy::Linear, 0.3);
 
         let reranker = CrossEncoderReranker {
@@ -334,12 +335,13 @@ mod tests {
 
         let selected = reranker.select_candidates_for_reranking(&candidates);
         assert_eq!(selected.len(), 5);
+        Ok(())
     }
 
     #[test]
-    fn test_adaptive_threshold() {
+    fn test_adaptive_threshold() -> Result<()> {
         let config = RerankingConfig::default_config();
-        let encoder = CrossEncoder::new("dummy", "local").unwrap();
+        let encoder = CrossEncoder::new("dummy", "local")?;
         let fusion = ScoreFusion::new(FusionStrategy::Linear, 0.3);
 
         let reranker = CrossEncoderReranker {
@@ -361,5 +363,6 @@ mod tests {
         let threshold = reranker.calculate_adaptive_threshold(&candidates);
         assert!(threshold > 0.0);
         assert!(threshold < 0.9);
+        Ok(())
     }
 }

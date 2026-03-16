@@ -20,9 +20,9 @@
 //! use oxirs_core::model::NamedNode;
 //!
 //! // Facts: alice parent bob, bob parent carol
-//! let alice = N3Term::NamedNode(NamedNode::new("http://ex.org/alice").unwrap());
-//! let bob = N3Term::NamedNode(NamedNode::new("http://ex.org/bob").unwrap());
-//! let parent_iri = N3Term::NamedNode(NamedNode::new("http://ex.org/parent").unwrap());
+//! let alice = N3Term::NamedNode(NamedNode::new("http://ex.org/alice").expect("should succeed"));
+//! let bob = N3Term::NamedNode(NamedNode::new("http://ex.org/bob").expect("should succeed"));
+//! let parent_iri = N3Term::NamedNode(NamedNode::new("http://ex.org/parent").expect("should succeed"));
 //!
 //! let facts = vec![
 //!     N3Statement::new(alice.clone(), parent_iri.clone(), bob.clone()),

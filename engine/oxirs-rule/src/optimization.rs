@@ -21,7 +21,7 @@
 //!
 //! // Add rules
 //! let rules = vec![/* rules */];
-//! let optimized = optimizer.optimize_rules(rules).unwrap();
+//! let optimized = optimizer.optimize_rules(rules).expect("should succeed");
 //!
 //! // Rules are now in optimal execution order
 //! ```
@@ -485,7 +485,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_dependency_graph() {
+    fn test_dependency_graph() -> Result<(), Box<dyn std::error::Error>> {
         let mut graph = RuleDependencyGraph::new();
 
         graph.add_rule(
@@ -509,8 +509,9 @@ mod tests {
         // Rule 1 depends on rule 0, so rule 0 should come first in topo sort
         graph.add_dependency(1, 0);
 
-        let order = graph.topological_sort().unwrap();
+        let order = graph.topological_sort()?;
         assert_eq!(order, vec![0, 1]);
+        Ok(())
     }
 
     #[test]
@@ -535,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rule_optimizer() {
+    fn test_rule_optimizer() -> Result<(), Box<dyn std::error::Error>> {
         let mut optimizer = RuleOptimizer::new();
 
         let rules = vec![
@@ -551,7 +552,8 @@ mod tests {
             },
         ];
 
-        let optimized = optimizer.optimize_rules(rules).unwrap();
+        let optimized = optimizer.optimize_rules(rules)?;
         assert_eq!(optimized.len(), 2);
+        Ok(())
     }
 }

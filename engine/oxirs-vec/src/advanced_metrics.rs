@@ -311,94 +311,102 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pearson_correlation() {
+    fn test_pearson_correlation() -> Result<()> {
         let vec1 = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let vec2 = Vector::new(vec![2.0, 4.0, 6.0, 8.0, 10.0]);
 
-        let correlation = vec1.pearson_correlation(&vec2).unwrap();
+        let correlation = vec1.pearson_correlation(&vec2)?;
         assert!((correlation - 1.0).abs() < 1e-6); // Perfect correlation
+        Ok(())
     }
 
     #[test]
-    fn test_spearman_correlation() {
+    fn test_spearman_correlation() -> Result<()> {
         let vec1 = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let vec2 = Vector::new(vec![1.0, 4.0, 9.0, 16.0, 25.0]); // Monotonic but not linear
 
-        let correlation = vec1.spearman_correlation(&vec2).unwrap();
+        let correlation = vec1.spearman_correlation(&vec2)?;
         assert!((correlation - 1.0).abs() < 1e-6); // Perfect rank correlation
+        Ok(())
     }
 
     #[test]
-    fn test_jaccard_similarity() {
+    fn test_jaccard_similarity() -> Result<()> {
         let vec1 = Vector::binary(vec![0b11110000]);
         let vec2 = Vector::binary(vec![0b11001100]);
 
-        let similarity = vec1.jaccard_similarity(&vec2).unwrap();
+        let similarity = vec1.jaccard_similarity(&vec2)?;
         // Intersection: 0b11000000 (2 bits)
         // Union: 0b11111100 (6 bits)
         assert!((similarity - 2.0 / 6.0).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_hamming_distance() {
+    fn test_hamming_distance() -> Result<()> {
         let vec1 = Vector::binary(vec![0b11110000]);
         let vec2 = Vector::binary(vec![0b11001100]);
 
-        let distance = vec1.hamming_distance(&vec2).unwrap();
+        let distance = vec1.hamming_distance(&vec2)?;
         // XOR: 0b00111100 (4 different bits)
         assert_eq!(distance, 4);
+        Ok(())
     }
 
     #[test]
-    fn test_jensen_shannon_divergence() {
+    fn test_jensen_shannon_divergence() -> Result<()> {
         let vec1 = Vector::new(vec![0.25, 0.25, 0.25, 0.25]);
         let vec2 = Vector::new(vec![0.5, 0.3, 0.1, 0.1]);
 
-        let jsd = vec1.jensen_shannon_divergence(&vec2).unwrap();
+        let jsd = vec1.jensen_shannon_divergence(&vec2)?;
         assert!((0.0..=1.0).contains(&jsd));
 
         // Same distribution should have JSD = 0
-        let jsd_same = vec1.jensen_shannon_divergence(&vec1).unwrap();
+        let jsd_same = vec1.jensen_shannon_divergence(&vec1)?;
         assert!(jsd_same.abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_hellinger_distance() {
+    fn test_hellinger_distance() -> Result<()> {
         let vec1 = Vector::new(vec![0.25, 0.25, 0.25, 0.25]);
         let vec2 = Vector::new(vec![0.25, 0.25, 0.25, 0.25]);
 
-        let distance = vec1.hellinger_distance(&vec2).unwrap();
+        let distance = vec1.hellinger_distance(&vec2)?;
         assert!(distance.abs() < 1e-6); // Same distribution
 
         let vec3 = Vector::new(vec![1.0, 0.0, 0.0, 0.0]);
-        let distance2 = vec1.hellinger_distance(&vec3).unwrap();
+        let distance2 = vec1.hellinger_distance(&vec3)?;
         assert!(distance2 > 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_earth_movers_distance() {
+    fn test_earth_movers_distance() -> Result<()> {
         let vec1 = Vector::new(vec![1.0, 0.0, 0.0, 0.0]);
         let vec2 = Vector::new(vec![0.0, 0.0, 0.0, 1.0]);
 
-        let emd = vec1.earth_movers_distance(&vec2).unwrap();
+        let emd = vec1.earth_movers_distance(&vec2)?;
         assert!(emd > 0.0); // Mass needs to be moved
 
         // Same distribution
-        let emd_same = vec1.earth_movers_distance(&vec1).unwrap();
+        let emd_same = vec1.earth_movers_distance(&vec1)?;
         assert!(emd_same.abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_mahalanobis_distance() {
+    fn test_mahalanobis_distance() -> Result<()> {
         let vec1 = Vector::new(vec![1.0, 2.0, 3.0]);
         let vec2 = Vector::new(vec![4.0, 5.0, 6.0]);
         let variance = vec![1.0, 2.0, 3.0];
 
-        let distance = vec1.mahalanobis_distance(&vec2, &variance).unwrap();
+        let distance = vec1.mahalanobis_distance(&vec2, &variance)?;
         assert!(distance > 0.0);
 
         // Distance to self should be 0
-        let self_distance = vec1.mahalanobis_distance(&vec1, &variance).unwrap();
+        let self_distance = vec1.mahalanobis_distance(&vec1, &variance)?;
         assert!(self_distance.abs() < 1e-6);
+        Ok(())
     }
 }

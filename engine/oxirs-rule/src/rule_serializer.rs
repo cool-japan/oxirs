@@ -863,7 +863,7 @@ mod tests {
     }
 
     #[test]
-    fn test_n3_rule_name_preserved() {
+    fn test_n3_rule_name_preserved() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "?c")],
             vec![RuleAtom::new("?x", "b", "?c")],
@@ -873,10 +873,11 @@ mod tests {
         assert!(n3.contains("# rule: my_rule"));
         let recovered = deserialize_n3(&n3).expect("deserialize");
         assert_eq!(recovered.name.as_deref(), Some("my_rule"));
+        Ok(())
     }
 
     #[test]
-    fn test_n3_priority_preserved() {
+    fn test_n3_priority_preserved() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "b")],
             vec![RuleAtom::new("?x", "c", "d")],
@@ -885,10 +886,11 @@ mod tests {
         let n3 = serialize_n3(&rule).expect("serialize");
         let recovered = deserialize_n3(&n3).expect("deserialize");
         assert_eq!(recovered.priority, 42);
+        Ok(())
     }
 
     #[test]
-    fn test_n3_enabled_flag_preserved() {
+    fn test_n3_enabled_flag_preserved() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "b")],
             vec![RuleAtom::new("?x", "c", "d")],
@@ -898,6 +900,7 @@ mod tests {
         assert!(n3.contains("# enabled: false"));
         let recovered = deserialize_n3(&n3).expect("deserialize");
         assert!(!recovered.enabled);
+        Ok(())
     }
 
     #[test]
@@ -932,11 +935,12 @@ mod tests {
     }
 
     #[test]
-    fn test_n3_parse_error_missing_arrow() {
+    fn test_n3_parse_error_missing_arrow() -> anyhow::Result<()> {
         let bad = "{ ?x a ?y } { ?x b ?z } .";
         let result = deserialize_n3(bad);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), SerializerError::Parse { .. }));
+        Ok(())
     }
 
     // ── JSON serialize / deserialize ──────────────────────────────────────────
@@ -988,7 +992,7 @@ mod tests {
     }
 
     #[test]
-    fn test_json_disabled_rule() {
+    fn test_json_disabled_rule() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "b")],
             vec![RuleAtom::new("?x", "c", "d")],
@@ -998,6 +1002,7 @@ mod tests {
         assert!(json.contains("\"enabled\":false"));
         let recovered = deserialize_json(&json).expect("deserialize");
         assert!(!recovered.enabled);
+        Ok(())
     }
 
     #[test]
@@ -1028,7 +1033,7 @@ mod tests {
     // ── Batch serialization ───────────────────────────────────────────────────
 
     #[test]
-    fn test_batch_json_roundtrip() {
+    fn test_batch_json_roundtrip() -> anyhow::Result<()> {
         let rules = vec![
             sample_rule(),
             SerializableRule::new(
@@ -1044,10 +1049,11 @@ mod tests {
         assert_eq!(recovered.len(), 2);
         assert_eq!(recovered[0].name, rules[0].name);
         assert_eq!(recovered[1].name, rules[1].name);
+        Ok(())
     }
 
     #[test]
-    fn test_batch_n3_multiple_rules() {
+    fn test_batch_n3_multiple_rules() -> anyhow::Result<()> {
         let rules = vec![
             sample_rule(),
             SerializableRule::new(
@@ -1058,6 +1064,7 @@ mod tests {
         let n3 = serialize_batch_n3(&rules).expect("batch n3");
         // Both rules use `=>` so we expect at least two occurrences.
         assert_eq!(n3.matches("=>").count(), 2);
+        Ok(())
     }
 
     #[test]
@@ -1138,7 +1145,7 @@ mod tests {
     // ── Negative priority ─────────────────────────────────────────────────────
 
     #[test]
-    fn test_negative_priority_roundtrip() {
+    fn test_negative_priority_roundtrip() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "p", "o")],
             vec![RuleAtom::new("?x", "q", "r")],
@@ -1147,6 +1154,7 @@ mod tests {
         let json = serialize_json(&rule).expect("serialize");
         let recovered = deserialize_json(&json).expect("deserialize");
         assert_eq!(recovered.priority, -5);
+        Ok(())
     }
 
     // ── Extra coverage ────────────────────────────────────────────────────────
@@ -1174,7 +1182,7 @@ mod tests {
     }
 
     #[test]
-    fn test_json_multiple_antecedent_atoms() {
+    fn test_json_multiple_antecedent_atoms() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![
                 RuleAtom::new("?x", "a", "ex:Animal"),
@@ -1186,10 +1194,11 @@ mod tests {
         let json = serialize_json(&rule).expect("serialize");
         let recovered = deserialize_json(&json).expect("deserialize");
         assert_eq!(recovered.antecedent.len(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_n3_multi_consequent_atoms() {
+    fn test_n3_multi_consequent_atoms() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "ex:A")],
             vec![
@@ -1200,10 +1209,11 @@ mod tests {
         let n3 = serialize_n3(&rule).expect("serialize");
         let recovered = deserialize_n3(&n3).expect("deserialize");
         assert_eq!(recovered.consequent.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_n3_priority_zero_not_emitted_as_comment() {
+    fn test_n3_priority_zero_not_emitted_as_comment() -> anyhow::Result<()> {
         // Priority 0 is the default — we do not emit the comment when it is 0.
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "b")],
@@ -1214,10 +1224,11 @@ mod tests {
             !n3.contains("# priority:"),
             "zero priority should not be emitted"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_json_no_name_field_when_absent() {
+    fn test_json_no_name_field_when_absent() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "b")],
             vec![RuleAtom::new("?x", "c", "d")],
@@ -1225,10 +1236,11 @@ mod tests {
         let json = serialize_json(&rule).expect("serialize");
         // No "name" key should appear when name is None.
         assert!(!json.contains("\"name\""));
+        Ok(())
     }
 
     #[test]
-    fn test_json_name_present_when_set() {
+    fn test_json_name_present_when_set() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "b")],
             vec![RuleAtom::new("?x", "c", "d")],
@@ -1237,6 +1249,7 @@ mod tests {
         let json = serialize_json(&rule).expect("serialize");
         assert!(json.contains("\"name\""));
         assert!(json.contains("my_rule"));
+        Ok(())
     }
 
     #[test]
@@ -1288,7 +1301,7 @@ mod tests {
     }
 
     #[test]
-    fn test_json_empty_prefixes_object() {
+    fn test_json_empty_prefixes_object() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "b")],
             vec![RuleAtom::new("?x", "c", "d")],
@@ -1296,10 +1309,11 @@ mod tests {
         let json = serialize_json(&rule).expect("serialize");
         let recovered = deserialize_json(&json).expect("deserialize");
         assert!(recovered.prefixes.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_json_prefixes_roundtrip() {
+    fn test_json_prefixes_roundtrip() -> anyhow::Result<()> {
         let rule = SerializableRule::new(
             vec![RuleAtom::new("?x", "a", "b")],
             vec![RuleAtom::new("?x", "c", "d")],
@@ -1309,5 +1323,6 @@ mod tests {
         let json = serialize_json(&rule).expect("serialize");
         let recovered = deserialize_json(&json).expect("deserialize");
         assert_eq!(recovered.prefixes.len(), 2);
+        Ok(())
     }
 }

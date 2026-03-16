@@ -1,5 +1,7 @@
 //! Tests for the adaptive intelligent caching system
 
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
 use crate::similarity::SimilarityMetric;
 use std::collections::HashMap;
 use std::time::{Instant, SystemTime};
@@ -10,18 +12,19 @@ use super::eviction::LRUEvictionPolicy;
 use super::types::{CacheKey, CacheMetadata, CacheValue, ExportFormat};
 
 #[test]
-fn test_adaptive_cache_creation() {
+fn test_adaptive_cache_creation() -> Result<()> {
     let config = CacheConfiguration::default();
-    let cache = AdaptiveIntelligentCache::new(config).unwrap();
+    let cache = AdaptiveIntelligentCache::new(config)?;
     // Cache should be created successfully with default config (3 tiers)
     let stats = cache.get_statistics();
     assert_eq!(stats.tier_statistics.len(), 3);
+    Ok(())
 }
 
 #[test]
-fn test_cache_store_and_retrieve() {
+fn test_cache_store_and_retrieve() -> Result<()> {
     let config = CacheConfiguration::default();
-    let mut cache = AdaptiveIntelligentCache::new(config).unwrap();
+    let mut cache = AdaptiveIntelligentCache::new(config)?;
 
     let key = CacheKey {
         query_vector: vec![1, 2, 3, 4],
@@ -42,45 +45,47 @@ fn test_cache_store_and_retrieve() {
         access_count: 1,
     };
 
-    cache.store(key.clone(), value.clone()).unwrap();
+    cache.store(key.clone(), value.clone())?;
     let retrieved = cache.retrieve(&key);
 
     assert!(retrieved.is_some());
-    let retrieved_value = retrieved.unwrap();
+    let retrieved_value = retrieved.expect("retrieved value should be present");
     assert_eq!(retrieved_value.results, value.results);
+    Ok(())
 }
 
 #[test]
-fn test_cache_statistics() {
+fn test_cache_statistics() -> Result<()> {
     let config = CacheConfiguration::default();
-    let cache = AdaptiveIntelligentCache::new(config).unwrap();
+    let cache = AdaptiveIntelligentCache::new(config)?;
     let stats = cache.get_statistics();
 
     assert_eq!(stats.total_requests, 0);
     assert_eq!(stats.hit_rate, 0.0);
+    Ok(())
 }
 
 #[test]
-fn test_cache_optimization() {
+fn test_cache_optimization() -> Result<()> {
     let config = CacheConfiguration::default();
-    let mut cache = AdaptiveIntelligentCache::new(config).unwrap();
+    let mut cache = AdaptiveIntelligentCache::new(config)?;
 
-    let result = cache.optimize().unwrap();
+    let result = cache.optimize()?;
     assert!(result.improvement_score >= 0.0);
+    Ok(())
 }
 
 #[test]
-fn test_performance_data_export() {
+fn test_performance_data_export() -> Result<()> {
     let config = CacheConfiguration::default();
-    let cache = AdaptiveIntelligentCache::new(config).unwrap();
+    let cache = AdaptiveIntelligentCache::new(config)?;
 
-    let json_export = cache.export_performance_data(ExportFormat::Json).unwrap();
+    let json_export = cache.export_performance_data(ExportFormat::Json)?;
     assert!(!json_export.is_empty());
 
-    let prometheus_export = cache
-        .export_performance_data(ExportFormat::Prometheus)
-        .unwrap();
+    let prometheus_export = cache.export_performance_data(ExportFormat::Prometheus)?;
     assert!(!prometheus_export.is_empty());
+    Ok(())
 }
 
 #[test]
@@ -93,6 +98,7 @@ fn test_eviction_policies() {
     };
 
     use super::eviction::EvictionPolicy;
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     lru.on_store(&key, 1024, Instant::now());
     lru.on_access(&key, Instant::now());
 

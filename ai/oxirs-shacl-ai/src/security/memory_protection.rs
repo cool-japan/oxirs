@@ -223,7 +223,7 @@ mod tests {
         let guard = MemoryGuard::new(1024);
 
         assert!(guard.can_allocate(512));
-        let handle = guard.allocate(512, "test").unwrap();
+        let handle = guard.allocate(512, "test").expect("should succeed");
         assert_eq!(guard.current_usage(), 512);
 
         drop(handle);
@@ -235,8 +235,8 @@ mod tests {
         let guard = MemoryGuard::new(1024);
 
         // Allocate up to limit
-        let _h1 = guard.allocate(512, "test1").unwrap();
-        let _h2 = guard.allocate(512, "test2").unwrap();
+        let _h1 = guard.allocate(512, "test1").expect("should succeed");
+        let _h2 = guard.allocate(512, "test2").expect("should succeed");
 
         // Should fail to allocate more
         assert!(guard.allocate(1, "test3").is_err());
@@ -246,10 +246,10 @@ mod tests {
     fn test_memory_statistics() {
         let guard = MemoryGuard::new(1024);
 
-        let _h1 = guard.allocate(256, "embedding").unwrap();
-        let _h2 = guard.allocate(512, "model").unwrap();
+        let _h1 = guard.allocate(256, "embedding").expect("should succeed");
+        let _h2 = guard.allocate(512, "model").expect("should succeed");
 
-        let stats = guard.statistics().unwrap();
+        let stats = guard.statistics().expect("should succeed");
         assert_eq!(stats.current_usage, 768);
         assert_eq!(stats.available, 256);
         assert_eq!(stats.total_allocations, 2);

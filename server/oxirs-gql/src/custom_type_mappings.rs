@@ -501,7 +501,7 @@ mod tests {
         let result = mapper.map_type("http://www.w3.org/2001/XMLSchema#string");
 
         assert!(result.is_ok());
-        let gql_type = result.unwrap();
+        let gql_type = result.expect("should succeed");
 
         match gql_type {
             GraphQLType::Scalar(scalar) => assert_eq!(scalar.name, "String"),
@@ -515,7 +515,7 @@ mod tests {
         let result = mapper.map_type("http://www.w3.org/2001/XMLSchema#int");
 
         assert!(result.is_ok());
-        let gql_type = result.unwrap();
+        let gql_type = result.expect("should succeed");
 
         match gql_type {
             GraphQLType::Scalar(scalar) => assert_eq!(scalar.name, "Int"),
@@ -530,7 +530,7 @@ mod tests {
 
         assert!(result.is_ok());
         // Should default to String
-        let gql_type = result.unwrap();
+        let gql_type = result.expect("should succeed");
 
         match gql_type {
             GraphQLType::Scalar(scalar) => assert_eq!(scalar.name, "String"),
@@ -587,7 +587,10 @@ mod tests {
 
         // The alias should resolve to String
         assert!(mapper.type_aliases.contains_key("Str"));
-        assert_eq!(mapper.type_aliases.get("Str").unwrap(), "String");
+        assert_eq!(
+            mapper.type_aliases.get("Str").expect("should succeed"),
+            "String"
+        );
     }
 
     #[test]
@@ -604,7 +607,7 @@ mod tests {
         let result = mapper.map_type("http://example.org/ListType");
         assert!(result.is_ok());
 
-        match result.unwrap() {
+        match result.expect("should succeed") {
             GraphQLType::List(_) => {} // Success
             _ => panic!("Expected list type"),
         }
@@ -624,7 +627,7 @@ mod tests {
         let result = mapper.map_type("http://example.org/RequiredType");
         assert!(result.is_ok());
 
-        match result.unwrap() {
+        match result.expect("should succeed") {
             GraphQLType::NonNull(_) => {} // Success
             _ => panic!("Expected non-null type"),
         }

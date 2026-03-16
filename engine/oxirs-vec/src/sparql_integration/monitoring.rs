@@ -233,6 +233,7 @@ impl PerformanceReport {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use std::time::Duration;
 
@@ -266,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn test_operation_timings() {
+    fn test_operation_timings() -> Result<()> {
         let monitor = PerformanceMonitor::new();
 
         monitor.record_operation("search", Duration::from_millis(100));
@@ -276,8 +277,12 @@ mod tests {
         let report = monitor.generate_report();
         assert_eq!(report.operation_summaries.len(), 2);
 
-        let search_summary = report.operation_summaries.get("search").unwrap();
+        let search_summary = report
+            .operation_summaries
+            .get("search")
+            .expect("search summary should be present");
         assert_eq!(search_summary.count, 2);
         assert_eq!(search_summary.avg_time, Duration::from_millis(150));
+        Ok(())
     }
 }

@@ -912,34 +912,34 @@ mod tests {
 
         // Add some triples
         let triple1 = Triple::new(
-            NamedNode::new("http://example.org/Alice").unwrap(),
-            NamedNode::new("http://example.org/knows").unwrap(),
-            NamedNode::new("http://example.org/Bob").unwrap(),
+            NamedNode::new("http://example.org/Alice").expect("should succeed"),
+            NamedNode::new("http://example.org/knows").expect("should succeed"),
+            NamedNode::new("http://example.org/Bob").expect("should succeed"),
         );
 
         let triple2 = Triple::new(
-            NamedNode::new("http://example.org/Bob").unwrap(),
-            NamedNode::new("http://example.org/knows").unwrap(),
-            NamedNode::new("http://example.org/Charlie").unwrap(),
+            NamedNode::new("http://example.org/Bob").expect("should succeed"),
+            NamedNode::new("http://example.org/knows").expect("should succeed"),
+            NamedNode::new("http://example.org/Charlie").expect("should succeed"),
         );
 
-        model.add_triple(triple1).unwrap();
-        model.add_triple(triple2).unwrap();
+        model.add_triple(triple1).expect("should succeed");
+        model.add_triple(triple2).expect("should succeed");
 
         // Train the model
-        let _stats = model.train(Some(10)).await.unwrap();
+        let _stats = model.train(Some(10)).await.expect("should succeed");
         assert!(model.is_trained());
 
         // Get embeddings
         let alice_emb = model
             .get_entity_embedding("http://example.org/Alice")
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(alice_emb.dimensions, 100); // Default dimensions
 
         // Test predictions
         let predictions = model
             .predict_objects("http://example.org/Alice", "http://example.org/knows", 5)
-            .unwrap();
+            .expect("should succeed");
         assert!(!predictions.is_empty());
     }
 
@@ -959,13 +959,13 @@ mod tests {
             let mut model = GNNEmbedding::new(config);
 
             let triple = Triple::new(
-                NamedNode::new("http://example.org/A").unwrap(),
-                NamedNode::new("http://example.org/rel").unwrap(),
-                NamedNode::new("http://example.org/B").unwrap(),
+                NamedNode::new("http://example.org/A").expect("should succeed"),
+                NamedNode::new("http://example.org/rel").expect("should succeed"),
+                NamedNode::new("http://example.org/B").expect("should succeed"),
             );
 
-            model.add_triple(triple).unwrap();
-            let _stats = model.train(Some(5)).await.unwrap();
+            model.add_triple(triple).expect("should succeed");
+            let _stats = model.train(Some(5)).await.expect("should succeed");
             assert!(model.is_trained());
         }
     }

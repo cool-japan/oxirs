@@ -538,7 +538,7 @@ mod tests {
         let cardinality = optimizer.get_metric_cardinality("http_requests_total");
         assert!(cardinality.is_some());
 
-        let card = cardinality.unwrap();
+        let card = cardinality.expect("should succeed");
         assert_eq!(card.total_series, 10);
         assert_eq!(card.label_cardinalities.len(), 1);
         assert_eq!(card.label_cardinalities[0].unique_values, 10);
@@ -585,7 +585,10 @@ mod tests {
             normalized1.get("response_time"),
             normalized2.get("response_time")
         );
-        assert_eq!(normalized1.get("response_time").unwrap(), "100-200");
+        assert_eq!(
+            normalized1.get("response_time").expect("should succeed"),
+            "100-200"
+        );
     }
 
     #[test]
@@ -658,7 +661,10 @@ mod tests {
         labels.insert("transaction_id".to_string(), "1234567890abcdef".to_string());
 
         let normalized = optimizer.normalize_labels("test_metric", &labels);
-        assert_eq!(normalized.get("transaction_id").unwrap(), "12345678");
+        assert_eq!(
+            normalized.get("transaction_id").expect("should succeed"),
+            "12345678"
+        );
     }
 
     #[test]
@@ -682,7 +688,7 @@ mod tests {
         );
 
         let normalized = optimizer.normalize_labels("test_metric", &labels);
-        let value = normalized.get("long_value").unwrap();
+        let value = normalized.get("long_value").expect("should succeed");
         assert!(value.starts_with("hash_"));
     }
 
@@ -705,17 +711,20 @@ mod tests {
         let mut labels1 = HashMap::new();
         labels1.insert("endpoint".to_string(), "/api/users/123".to_string());
         let normalized1 = optimizer.normalize_labels("test_metric", &labels1);
-        assert_eq!(normalized1.get("endpoint").unwrap(), "api");
+        assert_eq!(normalized1.get("endpoint").expect("should succeed"), "api");
 
         let mut labels2 = HashMap::new();
         labels2.insert("endpoint".to_string(), "/web/dashboard".to_string());
         let normalized2 = optimizer.normalize_labels("test_metric", &labels2);
-        assert_eq!(normalized2.get("endpoint").unwrap(), "web");
+        assert_eq!(normalized2.get("endpoint").expect("should succeed"), "web");
 
         let mut labels3 = HashMap::new();
         labels3.insert("endpoint".to_string(), "/unknown/path".to_string());
         let normalized3 = optimizer.normalize_labels("test_metric", &labels3);
-        assert_eq!(normalized3.get("endpoint").unwrap(), "other");
+        assert_eq!(
+            normalized3.get("endpoint").expect("should succeed"),
+            "other"
+        );
     }
 
     #[test]
@@ -736,7 +745,10 @@ mod tests {
         let normalized = optimizer.normalize_labels("test", &labels);
 
         // Exempt labels should not be bucketed
-        assert_eq!(normalized.get("critical_label").unwrap(), "123");
+        assert_eq!(
+            normalized.get("critical_label").expect("should succeed"),
+            "123"
+        );
     }
 
     #[test]
@@ -795,7 +807,9 @@ mod tests {
             optimizer.record_metric("test", &labels);
         }
 
-        let cardinality = optimizer.get_metric_cardinality("test").unwrap();
+        let cardinality = optimizer
+            .get_metric_cardinality("test")
+            .expect("should succeed");
         let label_card = &cardinality.label_cardinalities[0];
 
         // Should have pruned to top 3 values
@@ -864,7 +878,9 @@ mod tests {
             optimizer.record_metric("test", &labels);
         }
 
-        let cardinality = optimizer.get_metric_cardinality("test").unwrap();
+        let cardinality = optimizer
+            .get_metric_cardinality("test")
+            .expect("should succeed");
         assert_eq!(cardinality.label_cardinalities.len(), 1);
 
         let label_card = &cardinality.label_cardinalities[0];
@@ -900,7 +916,9 @@ mod tests {
             optimizer.record_metric("http_requests", &labels);
         }
 
-        let cardinality = optimizer.get_metric_cardinality("http_requests").unwrap();
+        let cardinality = optimizer
+            .get_metric_cardinality("http_requests")
+            .expect("should succeed");
         let label_card = &cardinality.label_cardinalities[0];
 
         assert_eq!(label_card.total_occurrences, 5);

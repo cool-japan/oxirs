@@ -72,7 +72,7 @@ mod type_codes {
 /// use oxirs_geosparql::geometry::ewkb_parser::parse_ewkb;
 ///
 /// let ewkb_data = vec![0x01, 0x01, 0x00, 0x00, 0x20, 0xe6, 0x10, 0x00, 0x00, /* ... */];
-/// let geometry = parse_ewkb(&ewkb_data).unwrap();
+/// let geometry = parse_ewkb(&ewkb_data).expect("should succeed");
 /// ```
 pub fn parse_ewkb(ewkb: &[u8]) -> Result<Geometry> {
     let mut cursor = Cursor::new(ewkb);
@@ -244,8 +244,8 @@ fn parse_multipolygon(
 /// ```ignore
 /// use oxirs_geosparql::geometry::{Geometry, ewkb_parser::geometry_to_ewkb};
 ///
-/// let geom = Geometry::from_wkt("POINT(1 2)").unwrap();
-/// let ewkb = geometry_to_ewkb(&geom).unwrap();
+/// let geom = Geometry::from_wkt("POINT(1 2)").expect("should succeed");
+/// let ewkb = geometry_to_ewkb(&geom).expect("should succeed");
 /// ```
 pub fn geometry_to_ewkb(geometry: &Geometry) -> Result<Vec<u8>> {
     let mut buffer = Vec::new();
@@ -468,8 +468,8 @@ mod tests {
     #[test]
     fn test_point_round_trip() {
         let geom = Geometry::new(GeoGeometry::Point(point! { x: 1.0, y: 2.0 }));
-        let ewkb = geometry_to_ewkb(&geom).unwrap();
-        let parsed = parse_ewkb(&ewkb).unwrap();
+        let ewkb = geometry_to_ewkb(&geom).expect("should succeed");
+        let parsed = parse_ewkb(&ewkb).expect("should succeed");
 
         match parsed.geom {
             GeoGeometry::Point(p) => {
@@ -486,8 +486,8 @@ mod tests {
             GeoGeometry::Point(point! { x: 1.0, y: 2.0 }),
             Crs::epsg(4326),
         );
-        let ewkb = geometry_to_ewkb(&geom).unwrap();
-        let parsed = parse_ewkb(&ewkb).unwrap();
+        let ewkb = geometry_to_ewkb(&geom).expect("should succeed");
+        let parsed = parse_ewkb(&ewkb).expect("should succeed");
 
         assert_eq!(parsed.crs.epsg_code(), Some(4326));
         match parsed.geom {
@@ -507,8 +507,8 @@ mod tests {
             Coord { x: 2.0, y: 0.0 },
         ]);
         let geom = Geometry::new(GeoGeometry::LineString(ls));
-        let ewkb = geometry_to_ewkb(&geom).unwrap();
-        let parsed = parse_ewkb(&ewkb).unwrap();
+        let ewkb = geometry_to_ewkb(&geom).expect("should succeed");
+        let parsed = parse_ewkb(&ewkb).expect("should succeed");
 
         match parsed.geom {
             GeoGeometry::LineString(parsed_ls) => {
@@ -531,8 +531,8 @@ mod tests {
         ]);
         let poly = Polygon::new(exterior, vec![]);
         let geom = Geometry::new(GeoGeometry::Polygon(poly));
-        let ewkb = geometry_to_ewkb(&geom).unwrap();
-        let parsed = parse_ewkb(&ewkb).unwrap();
+        let ewkb = geometry_to_ewkb(&geom).expect("should succeed");
+        let parsed = parse_ewkb(&ewkb).expect("should succeed");
 
         match parsed.geom {
             GeoGeometry::Polygon(parsed_poly) => {
@@ -545,8 +545,14 @@ mod tests {
 
     #[test]
     fn test_byte_order() {
-        assert_eq!(ByteOrder::from_byte(0x00).unwrap(), ByteOrder::BigEndian);
-        assert_eq!(ByteOrder::from_byte(0x01).unwrap(), ByteOrder::LittleEndian);
+        assert_eq!(
+            ByteOrder::from_byte(0x00).expect("should succeed"),
+            ByteOrder::BigEndian
+        );
+        assert_eq!(
+            ByteOrder::from_byte(0x01).expect("should succeed"),
+            ByteOrder::LittleEndian
+        );
         assert!(ByteOrder::from_byte(0x02).is_err());
     }
 }

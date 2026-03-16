@@ -1,10 +1,10 @@
 # OxiRS DID - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
-OxiRS DID v0.1.0 provides W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) support for secure, decentralized identity management in semantic web applications.
+OxiRS DID v0.2.2 provides W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) support for secure, decentralized identity management in semantic web applications.
 
 ### Features
 - ✅ W3C DID Core specification compliance
@@ -15,26 +15,38 @@ OxiRS DID v0.1.0 provides W3C Decentralized Identifiers (DID) and Verifiable Cre
 - ✅ JSON-LD Signatures with RDFC-1.0 canonicalization
 - ✅ DID Document CRUD operations
 - ✅ Proof creation and verification
+- ✅ Additional DID methods (`did:ethr`, `did:ion`, `did:pkh`)
+- ✅ JWS signature support (JsonWebSignature2020)
+- ✅ Key rotation mechanism
+- ✅ Revocation lists (W3C Status List 2021)
+- ✅ Credential store (W3C VC storage)
+- ✅ Access control for DID operations
+- ✅ Trust chain verification
+- ✅ Presentation builder and VC presenter
+- ✅ VC verifier, presentation request
+- ✅ Key derivation and key manager
+- ✅ 1043 tests passing
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Extended Methods & Signatures (Q1 2026 - Expanded)
-- [ ] Additional DID methods (`did:ethr`, `did:ion`, `did:pkh`)
-- [ ] JWS signature support (JsonWebSignature2020)
-- [ ] Additional signature suites (ES256K, RS256, BBS+)
-- [ ] Key rotation mechanism
-- [ ] Revocation lists
-- [ ] Hardware Security Module (HSM) support
-- [ ] Cloud KMS integration (AWS, Azure, GCP)
-- [ ] ZKP-based selective disclosure
-- [ ] RDF integration (DID Documents as RDF)
-- [ ] oxirs-shacl integration for VC validation
+### v0.1.0 - Released (January 7, 2026)
+- ✅ DID Core, did:key/web, Ed25519, VC issuance/verification, 8 core features
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ Additional DID methods (did:ethr, did:ion, did:pkh)
+- ✅ JWS signature support (JsonWebSignature2020)
+- ✅ Key rotation mechanism
+- ✅ Revocation lists
+- ✅ Credential store, trust chain, presentation builder
+- ✅ Key derivation, key manager, access control
+- ✅ 1043 tests passing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] W3C test suite compliance
 - [ ] Long-term support guarantees
 - [ ] Enterprise security features
-- [ ] Comprehensive audit logging
+- [ ] Hardware Security Module (HSM) support
+- [ ] ZKP-based selective disclosure
 
 ## Contributing
 
@@ -42,4 +54,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS DID v0.1.0 - Decentralized identity for semantic web*
+*OxiRS DID v0.2.2 - Decentralized identity for semantic web*

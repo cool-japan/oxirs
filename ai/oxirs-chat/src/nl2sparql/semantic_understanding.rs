@@ -570,9 +570,9 @@ mod tests {
     fn test_query_type_inference() {
         let analyzer = SemanticQueryAnalyzer::new();
         let intent = crate::nlp::IntentRecognizer::new(IntentRecognitionConfig::default())
-            .unwrap()
+            .expect("should succeed")
             .recognize("How many movies are there?")
-            .unwrap();
+            .expect("should succeed");
 
         let query_type = analyzer.infer_query_type(&intent, "How many movies are there?");
         assert_eq!(query_type, QueryType::Select);
@@ -582,9 +582,9 @@ mod tests {
     fn test_aggregation_detection() {
         let analyzer = SemanticQueryAnalyzer::new();
         let intent = crate::nlp::IntentRecognizer::new(IntentRecognitionConfig::default())
-            .unwrap()
+            .expect("should succeed")
             .recognize("Count all users")
-            .unwrap();
+            .expect("should succeed");
 
         let aggregations = analyzer.detect_aggregations("Count all users", &intent);
         assert!(!aggregations.is_empty());
@@ -597,6 +597,6 @@ mod tests {
 
         let pagination = analyzer.extract_pagination("Show me the top 10 results");
         assert!(pagination.is_some());
-        assert_eq!(pagination.unwrap().limit, Some(10));
+        assert_eq!(pagination.expect("should succeed").limit, Some(10));
     }
 }

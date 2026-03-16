@@ -334,7 +334,7 @@ mod tests {
         assert_eq!(s2.as_str(), "world");
 
         // Test term allocation
-        let term = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
+        let term = Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI"));
         let arena_term = arena.alloc_term(&term);
         match arena_term {
             ArenaTerm::NamedNode(s) => assert_eq!(s.as_str(), "http://example.org/test"),
@@ -349,8 +349,8 @@ mod tests {
         let arena = LocalArena::new();
 
         let triple = Triple::new(
-            NamedNode::new("http://s").unwrap(),
-            NamedNode::new("http://p").unwrap(),
+            NamedNode::new("http://s").expect("valid IRI"),
+            NamedNode::new("http://p").expect("valid IRI"),
             Literal::new("object"),
         );
 
@@ -386,7 +386,7 @@ mod tests {
                 .collect();
 
             for handle in handles {
-                handle.join().unwrap();
+                handle.join().expect("thread should not panic");
             }
         });
 
@@ -402,7 +402,7 @@ mod tests {
         let arena = GraphArena::new();
 
         // Test term caching
-        let term1 = Term::NamedNode(NamedNode::new("http://example.org/same").unwrap());
+        let term1 = Term::NamedNode(NamedNode::new("http://example.org/same").expect("valid IRI"));
         let term2 = term1.clone();
 
         let allocated1 = arena.alloc_term(&term1);

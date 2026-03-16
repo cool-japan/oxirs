@@ -281,8 +281,8 @@ mod tests {
     use crate::model::{Literal, NamedNode};
 
     fn create_test_quad(graph_name: Option<NamedNode>) -> Quad {
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("object");
 
         if let Some(graph_name) = graph_name {
@@ -320,7 +320,7 @@ mod tests {
         let mut dataset = Dataset::new();
 
         let quad1 = create_test_quad(None); // Default graph
-        let graph_name = NamedNode::new("http://example.org/graph1").unwrap();
+        let graph_name = NamedNode::new("http://example.org/graph1").expect("valid IRI");
         let quad2 = create_test_quad(Some(graph_name.clone()));
 
         dataset.insert(quad1.clone());
@@ -332,7 +332,7 @@ mod tests {
 
         let named_graph = dataset
             .named_graph(&GraphName::NamedNode(graph_name.clone()))
-            .unwrap();
+            .expect("operation should succeed");
         assert_eq!(named_graph.len(), 1);
 
         // Test graph names iterator
@@ -345,11 +345,11 @@ mod tests {
     fn test_dataset_pattern_matching() {
         let mut dataset = Dataset::new();
 
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate1 = NamedNode::new("http://example.org/predicate1").unwrap();
-        let predicate2 = NamedNode::new("http://example.org/predicate2").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate1 = NamedNode::new("http://example.org/predicate1").expect("valid IRI");
+        let predicate2 = NamedNode::new("http://example.org/predicate2").expect("valid IRI");
         let object = Literal::new("object");
-        let graph_name = NamedNode::new("http://example.org/graph").unwrap();
+        let graph_name = NamedNode::new("http://example.org/graph").expect("valid IRI");
 
         let quad1 = Quad::new_default_graph(subject.clone(), predicate1.clone(), object.clone());
         let quad2 = Quad::new(subject.clone(), predicate2, object, graph_name.clone());
@@ -383,7 +383,7 @@ mod tests {
         let mut dataset = Dataset::new();
 
         let quad1 = create_test_quad(None);
-        let graph_name = NamedNode::new("http://example.org/graph").unwrap();
+        let graph_name = NamedNode::new("http://example.org/graph").expect("valid IRI");
         let quad2 = create_test_quad(Some(graph_name));
 
         dataset.insert(quad1.clone());
@@ -399,7 +399,7 @@ mod tests {
     fn test_dataset_remove_graph() {
         let mut dataset = Dataset::new();
 
-        let graph_name = NamedNode::new("http://example.org/graph").unwrap();
+        let graph_name = NamedNode::new("http://example.org/graph").expect("valid IRI");
         let quad = create_test_quad(Some(graph_name.clone()));
 
         dataset.insert(quad);

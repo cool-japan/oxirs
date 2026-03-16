@@ -203,7 +203,7 @@ mod tests {
 
     #[test]
     fn test_log_event() {
-        let logger = AuditLogger::new().unwrap();
+        let logger = AuditLogger::new().expect("should succeed");
 
         let event = SecurityEvent::InputValidation {
             user_id: "test_user".to_string(),
@@ -211,13 +211,13 @@ mod tests {
             timestamp: chrono::Utc::now(),
         };
 
-        logger.log_event(event).unwrap();
-        assert_eq!(logger.event_count().unwrap(), 1);
+        logger.log_event(event).expect("should succeed");
+        assert_eq!(logger.event_count().expect("should succeed"), 1);
     }
 
     #[test]
     fn test_get_events_since() {
-        let logger = AuditLogger::new().unwrap();
+        let logger = AuditLogger::new().expect("should succeed");
 
         let now = chrono::Utc::now();
         let past = now - chrono::Duration::minutes(10);
@@ -227,35 +227,35 @@ mod tests {
             timestamp: now,
         };
 
-        logger.log_event(event).unwrap();
+        logger.log_event(event).expect("should succeed");
 
-        let events = logger.get_events_since(past).unwrap();
+        let events = logger.get_events_since(past).expect("should succeed");
         assert_eq!(events.len(), 1);
     }
 
     #[test]
     fn test_statistics() {
-        let logger = AuditLogger::new().unwrap();
+        let logger = AuditLogger::new().expect("should succeed");
 
         logger.log_event(SecurityEvent::InputValidation {
             user_id: "user1".to_string(),
             input_length: 100,
             timestamp: chrono::Utc::now(),
-        }).unwrap();
+        }).expect("should succeed");
 
         logger.log_event(SecurityEvent::RateLimitExceeded {
             user_id: "user2".to_string(),
             timestamp: chrono::Utc::now(),
-        }).unwrap();
+        }).expect("should succeed");
 
-        let stats = logger.get_statistics().unwrap();
+        let stats = logger.get_statistics().expect("should succeed");
         assert_eq!(stats.input_validations, 1);
         assert_eq!(stats.rate_limit_violations, 1);
     }
 
     #[test]
     fn test_max_memory_events() {
-        let logger = AuditLogger::new().unwrap();
+        let logger = AuditLogger::new().expect("should succeed");
 
         // Add more events than max_memory_events
         for i in 0..15_000 {
@@ -263,10 +263,10 @@ mod tests {
                 user_id: format!("user{}", i),
                 input_length: 100,
                 timestamp: chrono::Utc::now(),
-            }).unwrap();
+            }).expect("should succeed");
         }
 
         // Should be trimmed to max
-        assert_eq!(logger.event_count().unwrap(), 10_000);
+        assert_eq!(logger.event_count().expect("should succeed"), 10_000);
     }
 }

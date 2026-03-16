@@ -249,10 +249,10 @@ mod tests {
     fn test_register_and_get() {
         let mut reg = EndpointRegistry::new();
         let ep = make_endpoint("ep1", 0, EndpointStatus::Active);
-        reg.register(ep).unwrap();
+        reg.register(ep).expect("should succeed");
         let found = reg.get("ep1");
         assert!(found.is_some());
-        assert_eq!(found.unwrap().id, "ep1");
+        assert_eq!(found.expect("should succeed").id, "ep1");
     }
 
     #[test]
@@ -265,7 +265,7 @@ mod tests {
     fn test_register_duplicate_id_errors() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         let result = reg.register(make_endpoint("ep1", 1, EndpointStatus::Active));
         assert!(matches!(result, Err(RegistryError::DuplicateId(_))));
     }
@@ -285,7 +285,7 @@ mod tests {
     fn test_deregister_existing() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         assert!(reg.deregister("ep1"));
         assert!(reg.get("ep1").is_none());
     }
@@ -300,9 +300,9 @@ mod tests {
     fn test_deregister_reduces_count() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("a", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         reg.register(make_endpoint("b", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         reg.deregister("a");
         assert_eq!(reg.endpoint_count(), 1);
     }
@@ -313,7 +313,7 @@ mod tests {
     fn test_update_health_returns_true() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         let new_health = EndpointHealth {
             status: EndpointStatus::Degraded,
             last_check_ms: 5_000,
@@ -322,7 +322,7 @@ mod tests {
         };
         assert!(reg.update_health("ep1", new_health));
         assert_eq!(
-            reg.get("ep1").unwrap().health.status,
+            reg.get("ep1").expect("should succeed").health.status,
             EndpointStatus::Degraded
         );
     }
@@ -337,7 +337,7 @@ mod tests {
     fn test_update_health_stores_latency() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         reg.update_health(
             "ep1",
             EndpointHealth {
@@ -347,7 +347,7 @@ mod tests {
                 error_rate: 0.0,
             },
         );
-        assert_eq!(reg.get("ep1").unwrap().health.latency_ms, Some(42));
+        assert_eq!(reg.get("ep1").expect("should succeed").health.latency_ms, Some(42));
     }
 
     // ── active_endpoints ──────────────────────────────────────────────────────
@@ -356,11 +356,11 @@ mod tests {
     fn test_active_endpoints_filters_by_status() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("a", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         reg.register(make_endpoint("b", 0, EndpointStatus::Inactive))
-            .unwrap();
+            .expect("should succeed");
         reg.register(make_endpoint("c", 0, EndpointStatus::Degraded))
-            .unwrap();
+            .expect("should succeed");
         let active = reg.active_endpoints();
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].id, "a");
@@ -381,7 +381,7 @@ mod tests {
             ("c", EndpointStatus::Degraded),
             ("d", EndpointStatus::Unknown),
         ] {
-            reg.register(make_endpoint(id, 0, status)).unwrap();
+            reg.register(make_endpoint(id, 0, status)).expect("should succeed");
         }
         assert_eq!(reg.active_endpoints().len(), 1);
     }
@@ -395,8 +395,8 @@ mod tests {
         ep1.tags = vec!["production".into(), "eu-west".into()];
         let mut ep2 = make_endpoint("ep2", 0, EndpointStatus::Active);
         ep2.tags = vec!["staging".into()];
-        reg.register(ep1).unwrap();
-        reg.register(ep2).unwrap();
+        reg.register(ep1).expect("should succeed");
+        reg.register(ep2).expect("should succeed");
         let tagged = reg.endpoints_by_tag("production");
         assert_eq!(tagged.len(), 1);
         assert_eq!(tagged[0].id, "ep1");
@@ -406,7 +406,7 @@ mod tests {
     fn test_endpoints_by_tag_no_match() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         assert!(reg.endpoints_by_tag("nonexistent-tag").is_empty());
     }
 
@@ -416,7 +416,7 @@ mod tests {
         for id in ["a", "b", "c"] {
             let mut ep = make_endpoint(id, 0, EndpointStatus::Active);
             ep.tags = vec!["shared-tag".into()];
-            reg.register(ep).unwrap();
+            reg.register(ep).expect("should succeed");
         }
         assert_eq!(reg.endpoints_by_tag("shared-tag").len(), 3);
     }
@@ -427,10 +427,10 @@ mod tests {
     fn test_best_endpoint_highest_priority() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("low", 1, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         reg.register(make_endpoint("high", 10, EndpointStatus::Active))
-            .unwrap();
-        let best = reg.best_endpoint().unwrap();
+            .expect("should succeed");
+        let best = reg.best_endpoint().expect("should succeed");
         assert_eq!(best.id, "high");
     }
 
@@ -438,10 +438,10 @@ mod tests {
     fn test_best_endpoint_ignores_inactive() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("top-inactive", 100, EndpointStatus::Inactive))
-            .unwrap();
+            .expect("should succeed");
         reg.register(make_endpoint("active-low", 1, EndpointStatus::Active))
-            .unwrap();
-        let best = reg.best_endpoint().unwrap();
+            .expect("should succeed");
+        let best = reg.best_endpoint().expect("should succeed");
         assert_eq!(best.id, "active-low");
     }
 
@@ -449,7 +449,7 @@ mod tests {
     fn test_best_endpoint_no_active_returns_none() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 5, EndpointStatus::Inactive))
-            .unwrap();
+            .expect("should succeed");
         assert!(reg.best_endpoint().is_none());
     }
 
@@ -470,9 +470,9 @@ mod tests {
     fn test_endpoint_count_after_inserts() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("a", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         reg.register(make_endpoint("b", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(reg.endpoint_count(), 2);
     }
 
@@ -483,7 +483,7 @@ mod tests {
         let mut reg = EndpointRegistry::new();
         let mut ep = make_endpoint("old", 0, EndpointStatus::Active);
         ep.health.last_check_ms = 100;
-        reg.register(ep).unwrap();
+        reg.register(ep).expect("should succeed");
         // current_time=10_000, max_age=1_000 → cutoff=9_000 → 100 < 9_000 → stale
         let stale = reg.stale_endpoints(10_000, 1_000);
         assert_eq!(stale.len(), 1);
@@ -494,7 +494,7 @@ mod tests {
         let mut reg = EndpointRegistry::new();
         let mut ep = make_endpoint("fresh", 0, EndpointStatus::Active);
         ep.health.last_check_ms = 9_500; // within max_age
-        reg.register(ep).unwrap();
+        reg.register(ep).expect("should succeed");
         let stale = reg.stale_endpoints(10_000, 1_000);
         assert!(stale.is_empty());
     }
@@ -506,7 +506,7 @@ mod tests {
         for (i, &t) in times.iter().enumerate() {
             let mut ep = make_endpoint(&i.to_string(), 0, EndpointStatus::Active);
             ep.health.last_check_ms = t;
-            reg.register(ep).unwrap();
+            reg.register(ep).expect("should succeed");
         }
         // cutoff = 10_000 - 1_000 = 9_000
         let stale = reg.stale_endpoints(10_000, 1_000);
@@ -526,8 +526,8 @@ mod tests {
             graph_count: Some(42),
             triple_count_estimate: Some(1_000_000),
         };
-        reg.register(ep).unwrap();
-        let caps = &reg.get("ep-caps").unwrap().capabilities;
+        reg.register(ep).expect("should succeed");
+        let caps = &reg.get("ep-caps").expect("should succeed").capabilities;
         assert!(caps.supports_sparql_11);
         assert!(caps.supports_update);
         assert!(caps.supports_federation);
@@ -559,7 +559,7 @@ mod tests {
     fn test_update_health_to_inactive() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         reg.update_health("ep1", EndpointHealth {
             status: EndpointStatus::Inactive,
             last_check_ms: 1_000,
@@ -573,7 +573,7 @@ mod tests {
     fn test_update_health_to_active() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 0, EndpointStatus::Unknown))
-            .unwrap();
+            .expect("should succeed");
         reg.update_health("ep1", EndpointHealth {
             status: EndpointStatus::Active,
             last_check_ms: 1_000,
@@ -588,16 +588,16 @@ mod tests {
         let mut reg = EndpointRegistry::new();
         let mut ep = make_endpoint("ep1", 0, EndpointStatus::Active);
         ep.label = Some("My Label".into());
-        reg.register(ep).unwrap();
-        assert_eq!(reg.get("ep1").unwrap().label.as_deref(), Some("My Label"));
+        reg.register(ep).expect("should succeed");
+        assert_eq!(reg.get("ep1").expect("should succeed").label.as_deref(), Some("My Label"));
     }
 
     #[test]
     fn test_priority_negative() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("neg", -10, EndpointStatus::Active))
-            .unwrap();
-        let ep = reg.get("neg").unwrap();
+            .expect("should succeed");
+        let ep = reg.get("neg").expect("should succeed");
         assert_eq!(ep.priority, -10);
     }
 
@@ -606,7 +606,7 @@ mod tests {
         let mut reg = EndpointRegistry::new();
         let mut ep = make_endpoint("ep1", 0, EndpointStatus::Active);
         ep.tags = vec!["tag1".into(), "tag2".into(), "tag3".into()];
-        reg.register(ep).unwrap();
+        reg.register(ep).expect("should succeed");
         assert_eq!(reg.endpoints_by_tag("tag2").len(), 1);
         assert_eq!(reg.endpoints_by_tag("tag3").len(), 1);
     }
@@ -616,9 +616,9 @@ mod tests {
         let mut reg = EndpointRegistry::new();
         let mut ep = make_endpoint("ep1", 0, EndpointStatus::Active);
         ep.sparql_url = "https://sparql.example.org/query".into();
-        reg.register(ep).unwrap();
+        reg.register(ep).expect("should succeed");
         assert_eq!(
-            reg.get("ep1").unwrap().sparql_url,
+            reg.get("ep1").expect("should succeed").sparql_url,
             "https://sparql.example.org/query"
         );
     }
@@ -629,7 +629,7 @@ mod tests {
         let mut ep = make_endpoint("ep1", 0, EndpointStatus::Active);
         // last_check_ms = cutoff exactly (9_000) → not stale (strict <)
         ep.health.last_check_ms = 9_000;
-        reg.register(ep).unwrap();
+        reg.register(ep).expect("should succeed");
         let stale = reg.stale_endpoints(10_000, 1_000);
         assert!(stale.is_empty());
     }
@@ -639,7 +639,7 @@ mod tests {
         let mut reg = EndpointRegistry::new();
         for i in 0..5 {
             reg.register(make_endpoint(&i.to_string(), i as i32, EndpointStatus::Active))
-                .unwrap();
+                .expect("should succeed");
         }
         assert_eq!(reg.endpoint_count(), 5);
     }
@@ -649,10 +649,10 @@ mod tests {
         let mut reg = EndpointRegistry::new();
         for i in 0..4 {
             reg.register(make_endpoint(&i.to_string(), 0, EndpointStatus::Active))
-                .unwrap();
+                .expect("should succeed");
         }
         reg.register(make_endpoint("x", 0, EndpointStatus::Degraded))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(reg.active_endpoints().len(), 4);
     }
 
@@ -660,10 +660,10 @@ mod tests {
     fn test_best_endpoint_degraded_ignored() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("d", 100, EndpointStatus::Degraded))
-            .unwrap();
+            .expect("should succeed");
         reg.register(make_endpoint("a", 1, EndpointStatus::Active))
-            .unwrap();
-        let best = reg.best_endpoint().unwrap();
+            .expect("should succeed");
+        let best = reg.best_endpoint().expect("should succeed");
         assert_eq!(best.id, "a");
     }
 
@@ -696,21 +696,21 @@ mod tests {
     fn test_endpoint_health_error_rate_stored() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         reg.update_health("ep1", EndpointHealth {
             status: EndpointStatus::Degraded,
             last_check_ms: 1_000,
             latency_ms: None,
             error_rate: 0.25,
         });
-        assert!((reg.get("ep1").unwrap().health.error_rate - 0.25).abs() < 1e-6);
+        assert!((reg.get("ep1").expect("should succeed").health.error_rate - 0.25).abs() < 1e-6);
     }
 
     #[test]
     fn test_register_then_deregister_then_register_again() {
         let mut reg = EndpointRegistry::new();
         reg.register(make_endpoint("ep1", 0, EndpointStatus::Active))
-            .unwrap();
+            .expect("should succeed");
         reg.deregister("ep1");
         // Should be able to register same ID again
         assert!(reg.register(make_endpoint("ep1", 0, EndpointStatus::Active)).is_ok());

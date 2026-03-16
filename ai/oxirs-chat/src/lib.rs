@@ -1,9 +1,9 @@
 //! # OxiRS Chat
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-chat/badge.svg)](https://docs.rs/oxirs-chat)
 //!
-//! **Status**: Production Release (v0.1.0)
+//! **Status**: Production Release (v0.2.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 #![allow(dead_code)]
@@ -1512,7 +1512,10 @@ mod tests {
             .expect("Failed to create chat");
 
         let session_id = "test-session".to_string();
-        let _session = chat.create_session(session_id.clone()).await.unwrap();
+        let _session = chat
+            .create_session(session_id.clone())
+            .await
+            .expect("should succeed");
 
         assert_eq!(chat.session_count().await, 1);
         assert!(chat.get_session(&session_id).await.is_some());

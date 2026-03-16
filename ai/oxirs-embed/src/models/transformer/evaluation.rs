@@ -439,7 +439,7 @@ mod tests {
         let relation_embeddings = HashMap::new();
         let evaluator = TransformerEvaluator::new(entity_embeddings, relation_embeddings);
 
-        let scientific_quality = evaluator.evaluate_domain_quality("scientific").unwrap();
+        let scientific_quality = evaluator.evaluate_domain_quality("scientific").expect("should succeed");
         assert!(scientific_quality > 0.0);
     }
 
@@ -454,6 +454,6 @@ mod tests {
 
         let report = evaluator.generate_evaluation_report();
         assert!(report.is_ok());
-        assert!(report.unwrap().contains("Evaluation Report"));
+        assert!(report.expect("should succeed").contains("Evaluation Report"));
     }
 }

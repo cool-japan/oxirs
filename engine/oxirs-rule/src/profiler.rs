@@ -45,7 +45,7 @@
 //!     object: Term::Constant("b".to_string()),
 //! }];
 //!
-//! let _results = engine.forward_chain(&facts).unwrap();
+//! let _results = engine.forward_chain(&facts).expect("should succeed");
 //!
 //! profiler.stop_profiling();
 //!
@@ -568,16 +568,17 @@ mod tests {
     }
 
     #[test]
-    fn test_json_export() {
+    fn test_json_export() -> Result<(), Box<dyn std::error::Error>> {
         let mut profiler = RuleProfiler::new();
 
         profiler.start_profiling(ProfilingMode::Detailed);
         profiler.record_rule_execution("rule1", Duration::from_millis(10));
         profiler.stop_profiling();
 
-        let json = profiler.export_to_json().unwrap();
+        let json = profiler.export_to_json()?;
         assert!(json.contains("rule1"));
         assert!(json.contains("total_inference_time_ms"));
+        Ok(())
     }
 
     #[test]

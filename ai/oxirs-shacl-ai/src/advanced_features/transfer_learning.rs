@@ -527,15 +527,15 @@ mod tests {
     #[test]
     fn test_transfer_learner_creation() {
         let config = TransferLearningConfig::default();
-        let learner = TransferLearner::new(config).unwrap();
+        let learner = TransferLearner::new(config).expect("should succeed");
         assert!(learner.pretrained_model.is_none());
     }
 
     #[test]
     fn test_domain_adapter() {
         let mut rng = Random::default();
-        let adapter =
-            DomainAdapter::new("source".to_string(), "target".to_string(), 64, &mut rng).unwrap();
+        let adapter = DomainAdapter::new("source".to_string(), "target".to_string(), 64, &mut rng)
+            .expect("should succeed");
 
         assert!(!adapter.adapted);
         assert_eq!(adapter.adaptation_matrix.shape(), &[64, 64]);
@@ -544,11 +544,13 @@ mod tests {
     #[test]
     fn test_feature_transformation() {
         let mut rng = Random::default();
-        let adapter =
-            DomainAdapter::new("source".to_string(), "target".to_string(), 64, &mut rng).unwrap();
+        let adapter = DomainAdapter::new("source".to_string(), "target".to_string(), 64, &mut rng)
+            .expect("should succeed");
 
         let features = Array1::ones(64);
-        let transformed = adapter.transform_features(&features).unwrap();
+        let transformed = adapter
+            .transform_features(&features)
+            .expect("should succeed");
         assert_eq!(transformed.len(), 64);
     }
 }

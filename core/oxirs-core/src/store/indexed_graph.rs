@@ -839,8 +839,8 @@ mod tests {
 
     fn create_test_triple(s: &str, p: &str, o: &str) -> Triple {
         Triple::new(
-            NamedNode::new(s).unwrap(),
-            NamedNode::new(p).unwrap(),
+            NamedNode::new(s).expect("valid IRI"),
+            NamedNode::new(p).expect("valid IRI"),
             Literal::new(o),
         )
     }
@@ -901,12 +901,12 @@ mod tests {
         }
 
         // Test S pattern
-        let s1 = Subject::NamedNode(NamedNode::new("http://example.org/s1").unwrap());
+        let s1 = Subject::NamedNode(NamedNode::new("http://example.org/s1").expect("valid IRI"));
         let results = graph.query(Some(&s1), None, None);
         assert_eq!(results.len(), 2);
 
         // Test P pattern
-        let p1 = Predicate::NamedNode(NamedNode::new("http://example.org/p1").unwrap());
+        let p1 = Predicate::NamedNode(NamedNode::new("http://example.org/p1").expect("valid IRI"));
         let results = graph.query(None, Some(&p1), None);
         assert_eq!(results.len(), 2);
 
@@ -1016,7 +1016,7 @@ mod tests {
         }
 
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().expect("thread should not panic");
         }
 
         assert_eq!(graph.len(), 10);
@@ -1030,7 +1030,7 @@ mod tests {
         }
 
         for handle in handles {
-            let count = handle.join().unwrap();
+            let count = handle.join().expect("thread should not panic");
             assert_eq!(count, 10);
         }
     }

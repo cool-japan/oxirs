@@ -430,6 +430,7 @@ impl EmbeddingGenerator for TensorFlowEmbedder {
 #[allow(unused_imports, clippy::useless_vec)]
 mod tests {
     use super::*;
+    use anyhow::Result;
     use std::path::PathBuf;
 
     #[test]
@@ -448,8 +449,8 @@ mod tests {
     }
 
     #[test]
-    fn test_preprocessing_pipeline() {
-        let mut embedder = TensorFlowEmbedder::new(TensorFlowConfig::default()).unwrap();
+    fn test_preprocessing_pipeline() -> Result<()> {
+        let mut embedder = TensorFlowEmbedder::new(TensorFlowConfig::default())?;
         let pipeline = PreprocessingPipeline {
             lowercase: true,
             remove_punctuation: true,
@@ -457,8 +458,9 @@ mod tests {
         };
         embedder.set_preprocessing_pipeline(pipeline);
 
-        let processed = embedder.preprocess_text("Hello, World!").unwrap();
+        let processed = embedder.preprocess_text("Hello, World!")?;
         assert_eq!(processed, "hello world");
+        Ok(())
     }
 
     #[test]
@@ -469,16 +471,17 @@ mod tests {
     }
 
     #[test]
-    fn test_model_registration() {
+    fn test_model_registration() -> Result<()> {
         let mut server =
             TensorFlowModelServer::new("test_model".to_string(), ServerConfig::default());
 
         let config = TensorFlowConfig::default();
-        let embedder = TensorFlowEmbedder::new(config).unwrap();
+        let embedder = TensorFlowEmbedder::new(config)?;
 
         let result = server.register_model("test_model".to_string(), embedder);
         assert!(result.is_ok());
         assert_eq!(server.list_models().len(), 1);
+        Ok(())
     }
 
     #[test]

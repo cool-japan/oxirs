@@ -1,9 +1,9 @@
 //! # OxiRS Stream - Ultra-High Performance RDF Streaming Platform
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-stream/badge.svg)](https://docs.rs/oxirs-stream)
 //!
-//! **Status**: Production Release (v0.1.0)
+//! **Status**: Production Release (v0.2.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Real-time streaming support with Kafka/NATS/Redis I/O, RDF Patch, SPARQL Update delta,
@@ -194,7 +194,7 @@ pub use webhook::{
     WebhookStatistics,
 };
 
-// New v0.1.0 feature exports
+// New v0.2.2 feature exports
 pub use custom_serialization::{
     BenchmarkResults, BsonSerializer, CustomSerializer, FlexBuffersSerializer, IonSerializer,
     RonSerializer, SerializerBenchmark, SerializerBenchmarkSuite, SerializerRegistry,
@@ -248,7 +248,7 @@ pub use zero_copy::{
     ZeroCopyBuffer, ZeroCopyConfig, ZeroCopyManager, ZeroCopyStats,
 };
 
-// New v0.1.0 exports for developer experience and performance
+// New v0.2.2 exports for developer experience and performance
 pub use numa_processing::{
     CpuAffinityMode, HugePageSize, MemoryBandwidthMonitor, MemoryInterleavePolicy, NodeBufferStats,
     NodeProcessorStats, NumaAllocationStrategy, NumaBuffer, NumaBufferPool, NumaBufferPoolConfig,
@@ -279,7 +279,7 @@ pub use testing_framework::{
     TestHarnessConfig, TestMetrics, TestReport, TestStatus,
 };
 
-// New v0.1.0 exports for ML, versioning, and migration
+// New v0.2.2 exports for ML, versioning, and migration
 pub use anomaly_detection::{
     Anomaly, AnomalyAlert, AnomalyConfig, AnomalyDetector as AdaptiveAnomalyDetector,
     AnomalySeverity, AnomalyStats as AdaptiveAnomalyStats, DetectorType, MultiDimensionalDetector,
@@ -301,7 +301,7 @@ pub use stream_versioning::{
     VersioningStats,
 };
 
-// New v0.1.0 advanced ML exports
+// New v0.2.2 advanced ML exports
 pub use automl_stream::{
     Algorithm, AutoML, AutoMLConfig, AutoMLStats, HyperParameters, ModelPerformance, TaskType,
     TrainedModel,
@@ -432,7 +432,7 @@ pub mod types;
 pub mod wasm_edge_computing;
 pub mod webhook;
 
-// New v0.1.0 modules for advanced features
+// New v0.2.2 modules for advanced features
 pub mod custom_serialization;
 pub mod end_to_end_encryption;
 pub mod gpu_acceleration;
@@ -444,20 +444,20 @@ pub mod stream_replay;
 pub mod transactional_processing;
 pub mod zero_copy;
 
-// New v0.1.0 modules for developer experience and performance
+// New v0.2.2 modules for developer experience and performance
 pub mod numa_processing;
 pub mod out_of_order;
 pub mod performance_profiler;
 pub mod stream_sql;
 pub mod testing_framework;
 
-// New v0.1.0 modules for ML, versioning, and migration
+// New v0.2.2 modules for ML, versioning, and migration
 pub mod anomaly_detection;
 pub mod migration_tools;
 pub mod online_learning;
 pub mod stream_versioning;
 
-// Advanced ML modules for v0.1.0 completion
+// Advanced ML modules for v0.2.2 completion
 pub mod automl_stream;
 pub mod feature_engineering;
 pub mod neural_architecture_search;

@@ -634,7 +634,7 @@ mod tests {
     #[test]
     fn test_parse_gml_point() {
         let gml = r#"<gml:Point><gml:pos>1.0 2.0</gml:pos></gml:Point>"#;
-        let geom = parse_gml(gml).unwrap();
+        let geom = parse_gml(gml).expect("should succeed");
 
         assert_eq!(geom.geometry_type(), "Point");
         match &geom.geom {
@@ -649,16 +649,16 @@ mod tests {
     #[test]
     fn test_parse_gml_point_with_srs() {
         let gml = r#"<gml:Point srsName="http://www.opengis.net/def/crs/EPSG/0/4326"><gml:pos>1.0 2.0</gml:pos></gml:Point>"#;
-        let geom = parse_gml(gml).unwrap();
+        let geom = parse_gml(gml).expect("should succeed");
 
         assert_eq!(geom.crs.uri, "http://www.opengis.net/def/crs/EPSG/0/4326");
     }
 
     #[test]
     fn test_roundtrip_point() {
-        let original = Geometry::from_wkt("POINT(1.5 2.5)").unwrap();
-        let gml = geometry_to_gml(&original).unwrap();
-        let parsed = parse_gml(&gml).unwrap();
+        let original = Geometry::from_wkt("POINT(1.5 2.5)").expect("should succeed");
+        let gml = geometry_to_gml(&original).expect("should succeed");
+        let parsed = parse_gml(&gml).expect("should succeed");
 
         match (&original.geom, &parsed.geom) {
             (GeoGeometry::Point(p1), GeoGeometry::Point(p2)) => {
@@ -672,7 +672,7 @@ mod tests {
     #[test]
     fn test_parse_gml_linestring() {
         let gml = r#"<gml:LineString><gml:posList>0.0 0.0 1.0 1.0 2.0 2.0</gml:posList></gml:LineString>"#;
-        let geom = parse_gml(gml).unwrap();
+        let geom = parse_gml(gml).expect("should succeed");
 
         assert_eq!(geom.geometry_type(), "LineString");
         match &geom.geom {
@@ -685,9 +685,9 @@ mod tests {
 
     #[test]
     fn test_roundtrip_linestring() {
-        let original = Geometry::from_wkt("LINESTRING(0 0, 1 1, 2 2)").unwrap();
-        let gml = geometry_to_gml(&original).unwrap();
-        let parsed = parse_gml(&gml).unwrap();
+        let original = Geometry::from_wkt("LINESTRING(0 0, 1 1, 2 2)").expect("should succeed");
+        let gml = geometry_to_gml(&original).expect("should succeed");
+        let parsed = parse_gml(&gml).expect("should succeed");
 
         assert_eq!(parsed.geometry_type(), "LineString");
     }
@@ -703,7 +703,7 @@ mod tests {
                 </gml:exterior>
             </gml:Polygon>
         "#;
-        let geom = parse_gml(gml).unwrap();
+        let geom = parse_gml(gml).expect("should succeed");
 
         assert_eq!(geom.geometry_type(), "Polygon");
         match &geom.geom {
@@ -731,7 +731,7 @@ mod tests {
                 </gml:interior>
             </gml:Polygon>
         "#;
-        let geom = parse_gml(gml).unwrap();
+        let geom = parse_gml(gml).expect("should succeed");
 
         assert_eq!(geom.geometry_type(), "Polygon");
         match &geom.geom {
@@ -746,9 +746,10 @@ mod tests {
 
     #[test]
     fn test_roundtrip_polygon() {
-        let original = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-        let gml = geometry_to_gml(&original).unwrap();
-        let parsed = parse_gml(&gml).unwrap();
+        let original =
+            Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+        let gml = geometry_to_gml(&original).expect("should succeed");
+        let parsed = parse_gml(&gml).expect("should succeed");
 
         assert_eq!(parsed.geometry_type(), "Polygon");
     }
@@ -757,9 +758,9 @@ mod tests {
     fn test_roundtrip_polygon_with_hole() {
         let original =
             Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 8 2, 8 8, 2 8, 2 2))")
-                .unwrap();
-        let gml = geometry_to_gml(&original).unwrap();
-        let parsed = parse_gml(&gml).unwrap();
+                .expect("should succeed");
+        let gml = geometry_to_gml(&original).expect("should succeed");
+        let parsed = parse_gml(&gml).expect("should succeed");
 
         assert_eq!(parsed.geometry_type(), "Polygon");
         match &parsed.geom {
@@ -782,7 +783,7 @@ mod tests {
                 </gml:pointMember>
             </gml:MultiPoint>
         "#;
-        let geom = parse_gml(gml).unwrap();
+        let geom = parse_gml(gml).expect("should succeed");
 
         assert_eq!(geom.geometry_type(), "MultiPoint");
         match &geom.geom {
@@ -795,9 +796,9 @@ mod tests {
 
     #[test]
     fn test_roundtrip_multipoint() {
-        let original = Geometry::from_wkt("MULTIPOINT((1 2), (3 4))").unwrap();
-        let gml = geometry_to_gml(&original).unwrap();
-        let parsed = parse_gml(&gml).unwrap();
+        let original = Geometry::from_wkt("MULTIPOINT((1 2), (3 4))").expect("should succeed");
+        let gml = geometry_to_gml(&original).expect("should succeed");
+        let parsed = parse_gml(&gml).expect("should succeed");
 
         assert_eq!(parsed.geometry_type(), "MultiPoint");
     }
@@ -814,7 +815,7 @@ mod tests {
                 </gml:curveMember>
             </gml:MultiCurve>
         "#;
-        let geom = parse_gml(gml).unwrap();
+        let geom = parse_gml(gml).expect("should succeed");
 
         assert_eq!(geom.geometry_type(), "MultiLineString");
         match &geom.geom {
@@ -827,9 +828,10 @@ mod tests {
 
     #[test]
     fn test_roundtrip_multilinestring() {
-        let original = Geometry::from_wkt("MULTILINESTRING((0 0, 1 1), (2 2, 3 3))").unwrap();
-        let gml = geometry_to_gml(&original).unwrap();
-        let parsed = parse_gml(&gml).unwrap();
+        let original =
+            Geometry::from_wkt("MULTILINESTRING((0 0, 1 1), (2 2, 3 3))").expect("should succeed");
+        let gml = geometry_to_gml(&original).expect("should succeed");
+        let parsed = parse_gml(&gml).expect("should succeed");
 
         assert_eq!(parsed.geometry_type(), "MultiLineString");
     }
@@ -858,7 +860,7 @@ mod tests {
                 </gml:surfaceMember>
             </gml:MultiSurface>
         "#;
-        let geom = parse_gml(gml).unwrap();
+        let geom = parse_gml(gml).expect("should succeed");
 
         assert_eq!(geom.geometry_type(), "MultiPolygon");
         match &geom.geom {
@@ -874,9 +876,9 @@ mod tests {
         let original = Geometry::from_wkt(
             "MULTIPOLYGON(((0 0, 2 0, 2 2, 0 2, 0 0)), ((3 3, 5 3, 5 5, 3 5, 3 3)))",
         )
-        .unwrap();
-        let gml = geometry_to_gml(&original).unwrap();
-        let parsed = parse_gml(&gml).unwrap();
+        .expect("should succeed");
+        let gml = geometry_to_gml(&original).expect("should succeed");
+        let parsed = parse_gml(&gml).expect("should succeed");
 
         assert_eq!(parsed.geometry_type(), "MultiPolygon");
     }
@@ -891,7 +893,7 @@ mod tests {
             Crs::epsg(3857),
         );
 
-        let gml = geometry_to_gml(&geom).unwrap();
+        let gml = geometry_to_gml(&geom).expect("should succeed");
         // Verify that GML contains srsName attribute for non-default CRS
         assert!(
             gml.contains("srsName"),
@@ -905,7 +907,7 @@ mod tests {
         );
 
         // Parse back and verify CRS is preserved
-        let parsed = parse_gml(&gml).unwrap();
+        let parsed = parse_gml(&gml).expect("should succeed");
         assert_eq!(parsed.crs.epsg_code(), Some(3857));
     }
 

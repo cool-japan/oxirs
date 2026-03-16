@@ -396,9 +396,9 @@ pub enum ThriftWriteMode {
 ///         datatype: None,
 ///     },
 ///     &mut buf,
-/// ).unwrap();
+/// ).expect("should succeed");
 ///
-/// writer.write_eof(&mut buf).unwrap();
+/// writer.write_eof(&mut buf).expect("should succeed");
 /// ```
 pub struct RdfThriftWriter {
     mode: ThriftWriteMode,
@@ -646,7 +646,7 @@ pub enum ThriftRow {
 /// let mut reader = RdfThriftReader::new(Cursor::new(data));
 ///
 /// loop {
-///     match reader.read_row().unwrap() {
+///     match reader.read_row().expect("should succeed") {
 ///         ThriftRow::Triple(s, p, o) => println!("triple: {s:?} {p:?} {o:?}"),
 ///         ThriftRow::Quad(s, p, o, g) => println!("quad: {s:?} {p:?} {o:?} in {g:?}"),
 ///         ThriftRow::Prefix { label, namespace } => {

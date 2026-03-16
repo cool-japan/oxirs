@@ -343,6 +343,7 @@ impl ReplicationLag {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     fn make_entry(id: u64, version: u64) -> VectorEntry {
         VectorEntry::new(id, vec![id as f32, version as f32], version)
@@ -474,7 +475,7 @@ mod tests {
     // ---- DeltaSync::apply_delta ----
 
     #[test]
-    fn test_apply_delta_add() {
+    fn test_apply_delta_add() -> Result<()> {
         let ds = DeltaSync::new();
         let mut base = IndexSnapshot::new();
         let delta = IndexDelta {
@@ -482,12 +483,13 @@ mod tests {
             removed: vec![],
             modified: vec![],
         };
-        ds.apply_delta(&mut base, &delta).unwrap();
+        ds.apply_delta(&mut base, &delta)?;
         assert!(base.get(1).is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_apply_delta_remove() {
+    fn test_apply_delta_remove() -> Result<()> {
         let ds = DeltaSync::new();
         let mut base = make_snapshot(vec![(1, 1), (2, 1)]);
         let delta = IndexDelta {
@@ -495,13 +497,14 @@ mod tests {
             removed: vec![1],
             modified: vec![],
         };
-        ds.apply_delta(&mut base, &delta).unwrap();
+        ds.apply_delta(&mut base, &delta)?;
         assert!(base.get(1).is_none());
         assert_eq!(base.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_apply_delta_modify() {
+    fn test_apply_delta_modify() -> Result<()> {
         let ds = DeltaSync::new();
         let mut base = make_snapshot(vec![(1, 1)]);
         let updated = make_entry(1, 2);
@@ -510,8 +513,9 @@ mod tests {
             removed: vec![],
             modified: vec![updated.clone()],
         };
-        ds.apply_delta(&mut base, &delta).unwrap();
-        assert_eq!(base.get(1).unwrap().version, 2);
+        ds.apply_delta(&mut base, &delta)?;
+        assert_eq!(base.get(1).expect("test value").version, 2);
+        Ok(())
     }
 
     #[test]
@@ -527,18 +531,19 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_delta_roundtrip() {
+    fn test_apply_delta_roundtrip() -> Result<()> {
         let ds = DeltaSync::new();
         let old = make_snapshot(vec![(1, 1), (2, 1), (3, 1)]);
         let new = make_snapshot(vec![(1, 2), (2, 1), (4, 1)]);
         let delta = ds.compute_delta(&old, &new);
         let mut applied = old.clone();
-        ds.apply_delta(&mut applied, &delta).unwrap();
+        ds.apply_delta(&mut applied, &delta)?;
         // applied should now match new
         assert_eq!(applied.len(), new.len());
         for (id, entry) in &new.entries {
             assert_eq!(applied.get(*id).map(|e| e.version), Some(entry.version));
         }
+        Ok(())
     }
 
     // ---- DeltaSync::delta_size_bytes ----
@@ -615,23 +620,25 @@ mod tests {
     }
 
     #[test]
-    fn test_alert_if_excessive_above_threshold() {
+    fn test_alert_if_excessive_above_threshold() -> Result<()> {
         let lag = ReplicationLag::new();
         let alert = lag.alert_if_excessive("dc-a", "dc-b", 1000, 500);
         assert!(alert.is_some());
-        let a = alert.unwrap();
+        let a = alert.expect("alert was None");
         assert_eq!(a.measured_lag_ms, 1000);
         assert_eq!(a.threshold_ms, 500);
         assert!(!a.message.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_check_and_alert_uses_recorded_lag() {
+    fn test_check_and_alert_uses_recorded_lag() -> Result<()> {
         let mut lag = ReplicationLag::new();
         lag.record("dc-a", "dc-b", 999);
         let alert = lag.check_and_alert("dc-a", "dc-b", 500);
         assert!(alert.is_some());
-        assert_eq!(alert.unwrap().measured_lag_ms, 999);
+        assert_eq!(alert.expect("test value").measured_lag_ms, 999);
+        Ok(())
     }
 
     #[test]

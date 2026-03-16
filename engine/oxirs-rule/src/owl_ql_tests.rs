@@ -380,7 +380,7 @@ fn test_unfold_type_atom_with_domain() {
 }
 
 #[test]
-fn test_unfold_type_atom_with_range() {
+fn test_unfold_type_atom_with_range() -> anyhow::Result<()> {
     // ∃worksAt⁻.⊤ ⊑ Employer → ?x:Employer can be rewritten as ?y worksAt ?x
     let tbox = make_tbox(vec![QlAxiom::ObjectPropertyRange {
         property: "worksAt".to_string(),
@@ -398,6 +398,7 @@ fn test_unfold_type_atom_with_range() {
         }
     });
     assert!(has_range_pattern, "should contain ?fresh worksAt ?x atom");
+    Ok(())
 }
 
 #[test]

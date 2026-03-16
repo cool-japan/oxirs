@@ -19,8 +19,8 @@ use std::hash::Hash;
 ///
 /// // Create a simple triple: <http://example.org/alice> <http://example.org/name> "Alice"
 /// let triple = Triple::new(
-///     NamedNode::new("http://example.org/alice").unwrap(),
-///     NamedNode::new("http://example.org/name").unwrap(),
+///     NamedNode::new("http://example.org/alice").expect("valid IRI"),
+///     NamedNode::new("http://example.org/name").expect("valid IRI"),
 ///     Literal::new("Alice"),
 /// );
 ///
@@ -62,23 +62,23 @@ impl Triple {
     ///
     /// // Triple with all Named Nodes
     /// let triple1 = Triple::new(
-    ///     NamedNode::new("http://example.org/alice").unwrap(),
-    ///     NamedNode::new("http://example.org/knows").unwrap(),
-    ///     NamedNode::new("http://example.org/bob").unwrap(),
+    ///     NamedNode::new("http://example.org/alice").expect("valid IRI"),
+    ///     NamedNode::new("http://example.org/knows").expect("valid IRI"),
+    ///     NamedNode::new("http://example.org/bob").expect("valid IRI"),
     /// );
     ///
     /// // Triple with a literal object
     /// let triple2 = Triple::new(
-    ///     NamedNode::new("http://example.org/alice").unwrap(),
-    ///     NamedNode::new("http://example.org/name").unwrap(),
+    ///     NamedNode::new("http://example.org/alice").expect("valid IRI"),
+    ///     NamedNode::new("http://example.org/name").expect("valid IRI"),
     ///     Literal::new("Alice"),
     /// );
     ///
     /// // Triple with a blank node subject
     /// let triple3 = Triple::new(
-    ///     BlankNode::new("b1").unwrap(),
-    ///     NamedNode::new("http://example.org/type").unwrap(),
-    ///     NamedNode::new("http://example.org/Person").unwrap(),
+    ///     BlankNode::new("b1").expect("valid blank node id"),
+    ///     NamedNode::new("http://example.org/type").expect("valid IRI"),
+    ///     NamedNode::new("http://example.org/Person").expect("valid IRI"),
     /// );
     /// ```
     pub fn new(
@@ -481,8 +481,8 @@ mod tests {
 
     #[test]
     fn test_triple_creation() {
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("object");
 
         let triple = Triple::new(subject.clone(), predicate.clone(), object.clone());
@@ -493,8 +493,8 @@ mod tests {
 
     #[test]
     fn test_triple_with_variable() {
-        let subject = Variable::new("x").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = Variable::new("x").expect("valid variable name");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("object");
 
         let triple = Triple::new(subject, predicate, object);
@@ -505,8 +505,8 @@ mod tests {
 
     #[test]
     fn test_triple_display() {
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("o");
 
         let triple = Triple::new(subject, predicate, object);
@@ -520,8 +520,8 @@ mod tests {
 
     #[test]
     fn test_triple_ref() {
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("o");
 
         let triple = Triple::new(subject, predicate, object);
@@ -533,8 +533,8 @@ mod tests {
 
     #[test]
     fn test_pattern_matching() {
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("o");
 
         let triple = Triple::new(subject.clone(), predicate.clone(), object.clone());
@@ -553,15 +553,15 @@ mod tests {
         assert!(triple.matches_pattern(None, None, Some(&Object::Literal(object.clone()))));
 
         // Test non-matches
-        let different_subject = NamedNode::new("http://example.org/different").unwrap();
+        let different_subject = NamedNode::new("http://example.org/different").expect("valid IRI");
         assert!(!triple.matches_pattern(Some(&Subject::NamedNode(different_subject)), None, None));
     }
 
     #[test]
     fn test_triple_ordering() {
-        let subject1 = NamedNode::new("http://example.org/a").unwrap();
-        let subject2 = NamedNode::new("http://example.org/b").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject1 = NamedNode::new("http://example.org/a").expect("valid IRI");
+        let subject2 = NamedNode::new("http://example.org/b").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("o");
 
         let triple1 = Triple::new(subject1, predicate.clone(), object.clone());
@@ -576,13 +576,14 @@ mod tests {
 
     #[test]
     fn test_triple_serialization() {
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("o");
 
         let triple = Triple::new(subject, predicate, object);
-        let json = serde_json::to_string(&triple).unwrap();
-        let deserialized: Triple = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&triple).expect("construction should succeed");
+        let deserialized: Triple =
+            serde_json::from_str(&json).expect("construction should succeed");
 
         assert_eq!(triple, deserialized);
     }

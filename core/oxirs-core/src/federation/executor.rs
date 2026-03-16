@@ -284,13 +284,13 @@ mod tests {
 
     #[test]
     fn test_merge_bindings_no_common_vars() {
-        let executor = FederationExecutor::new().unwrap();
+        let executor = FederationExecutor::new().expect("construction should succeed");
 
         let local = vec![{
             let mut m = HashMap::new();
             m.insert(
                 "x".to_string(),
-                Term::NamedNode(NamedNode::new("http://example.org/a").unwrap()),
+                Term::NamedNode(NamedNode::new("http://example.org/a").expect("valid IRI")),
             );
             m
         }];
@@ -299,7 +299,7 @@ mod tests {
             let mut m = HashMap::new();
             m.insert(
                 "y".to_string(),
-                Term::NamedNode(NamedNode::new("http://example.org/b").unwrap()),
+                Term::NamedNode(NamedNode::new("http://example.org/b").expect("valid IRI")),
             );
             m
         }];
@@ -311,16 +311,16 @@ mod tests {
 
     #[test]
     fn test_merge_bindings_with_common_vars() {
-        let executor = FederationExecutor::new().unwrap();
+        let executor = FederationExecutor::new().expect("construction should succeed");
 
-        let node = Term::NamedNode(NamedNode::new("http://example.org/same").unwrap());
+        let node = Term::NamedNode(NamedNode::new("http://example.org/same").expect("valid IRI"));
 
         let local = vec![{
             let mut m = HashMap::new();
             m.insert("x".to_string(), node.clone());
             m.insert(
                 "y".to_string(),
-                Term::NamedNode(NamedNode::new("http://example.org/a").unwrap()),
+                Term::NamedNode(NamedNode::new("http://example.org/a").expect("valid IRI")),
             );
             m
         }];
@@ -330,7 +330,7 @@ mod tests {
             m.insert("x".to_string(), node.clone());
             m.insert(
                 "z".to_string(),
-                Term::NamedNode(NamedNode::new("http://example.org/b").unwrap()),
+                Term::NamedNode(NamedNode::new("http://example.org/b").expect("valid IRI")),
             );
             m
         }];

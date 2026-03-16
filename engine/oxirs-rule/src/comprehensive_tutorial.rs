@@ -1137,26 +1137,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_complex_reasoning() {
+    fn test_complex_reasoning() -> Result<(), Box<dyn std::error::Error>> {
         let result = AdvancedFeatures::complex_reasoning_example();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
         assert!(!facts.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_temporal_reasoning() {
+    fn test_temporal_reasoning() -> Result<(), Box<dyn std::error::Error>> {
         let result = AdvancedFeatures::temporal_reasoning_example();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
         assert!(!facts.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_healthcare_diagnosis() {
+    fn test_healthcare_diagnosis() -> Result<(), Box<dyn std::error::Error>> {
         let result = RealWorldApplications::healthcare_diagnosis_system();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
 
         // Should have diagnosis results
         let diagnoses: Vec<_> = facts
@@ -1170,13 +1172,14 @@ mod tests {
             .collect();
 
         assert!(!diagnoses.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_fraud_detection() {
+    fn test_fraud_detection() -> Result<(), Box<dyn std::error::Error>> {
         let result = RealWorldApplications::fraud_detection_system();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
 
         // Should detect risks
         let risks: Vec<_> = facts
@@ -1192,13 +1195,14 @@ mod tests {
             .collect();
 
         assert!(!risks.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_supply_chain_optimization() {
+    fn test_supply_chain_optimization() -> Result<(), Box<dyn std::error::Error>> {
         let result = RealWorldApplications::supply_chain_optimization();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
 
         // Should have optimization actions
         let actions: Vec<_> = facts
@@ -1214,13 +1218,14 @@ mod tests {
             .collect();
 
         assert!(!actions.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_smart_home_automation() {
+    fn test_smart_home_automation() -> Result<(), Box<dyn std::error::Error>> {
         let result = RealWorldApplications::smart_home_automation();
         assert!(result.is_ok());
-        let facts = result.unwrap();
+        let facts = result?;
 
         // Should have automation actions
         let actions: Vec<_> = facts
@@ -1235,6 +1240,7 @@ mod tests {
             .collect();
 
         assert!(!actions.is_empty());
+        Ok(())
     }
 
     #[test]

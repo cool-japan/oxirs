@@ -443,11 +443,16 @@ mod tests {
             pattern: crate::model::pattern::TriplePattern::new(None, None, None),
         };
 
-        cache.put(query, plan, 100.0).unwrap();
+        cache
+            .put(query, plan, 100.0)
+            .expect("cache put should succeed");
 
         let cached = cache.get(query);
         assert!(cached.is_some());
-        assert_eq!(cached.unwrap().estimated_cost, 100.0);
+        assert_eq!(
+            cached.expect("cached value should exist").estimated_cost,
+            100.0
+        );
     }
 
     #[test]
@@ -472,7 +477,9 @@ mod tests {
             pattern: crate::model::pattern::TriplePattern::new(None, None, None),
         };
 
-        cache.put(query, plan, 50.0).unwrap();
+        cache
+            .put(query, plan, 50.0)
+            .expect("cache put should succeed");
         assert!(cache.get(query).is_some());
 
         cache.remove(query);
@@ -488,10 +495,14 @@ mod tests {
             pattern: crate::model::pattern::TriplePattern::new(None, None, None),
         };
 
-        cache.put("query1", plan.clone(), 50.0).unwrap();
-        cache.put("query2", plan, 75.0).unwrap();
+        cache
+            .put("query1", plan.clone(), 50.0)
+            .expect("cache put should succeed");
+        cache
+            .put("query2", plan, 75.0)
+            .expect("cache put should succeed");
 
-        cache.clear().unwrap();
+        cache.clear().expect("cache clear should succeed");
 
         let stats = cache.statistics();
         assert_eq!(stats.current_size, 0);
@@ -507,7 +518,9 @@ mod tests {
         };
 
         let query = "SELECT * WHERE { ?s ?p ?o }";
-        cache.put(query, plan, 100.0).unwrap();
+        cache
+            .put(query, plan, 100.0)
+            .expect("cache put should succeed");
 
         // One hit
         cache.get(query);
@@ -531,9 +544,15 @@ mod tests {
             pattern: crate::model::pattern::TriplePattern::new(None, None, None),
         };
 
-        cache.put("query1", plan.clone(), 10.0).unwrap();
-        cache.put("query2", plan.clone(), 20.0).unwrap();
-        cache.put("query3", plan, 30.0).unwrap(); // Should evict query1
+        cache
+            .put("query1", plan.clone(), 10.0)
+            .expect("cache put should succeed");
+        cache
+            .put("query2", plan.clone(), 20.0)
+            .expect("cache put should succeed");
+        cache
+            .put("query3", plan, 30.0)
+            .expect("cache put should succeed"); // Should evict query1
 
         assert!(cache.get("query1").is_none()); // Evicted
         assert!(cache.get("query2").is_some());
@@ -550,16 +569,22 @@ mod tests {
             pattern: crate::model::pattern::TriplePattern::new(None, None, None),
         };
 
-        cache.put(query, plan, 100.0).unwrap();
+        cache
+            .put(query, plan, 100.0)
+            .expect("cache put should succeed");
 
-        cache.update_execution_time(query, 50.0).unwrap();
+        cache
+            .update_execution_time(query, 50.0)
+            .expect("update should succeed");
 
-        let cached = cache.get(query).unwrap();
+        let cached = cache.get(query).expect("cache get should succeed");
         assert_eq!(cached.avg_execution_time_ms, 50.0);
 
-        cache.update_execution_time(query, 70.0).unwrap();
+        cache
+            .update_execution_time(query, 70.0)
+            .expect("update should succeed");
 
-        let cached2 = cache.get(query).unwrap();
+        let cached2 = cache.get(query).expect("cache get should succeed");
         // Should be exponential moving average
         assert!(cached2.avg_execution_time_ms > 50.0 && cached2.avg_execution_time_ms < 70.0);
     }
@@ -785,7 +810,7 @@ mod simple_cache_tests {
         cache.insert(make_plan(1, "SELECT ?s ?p ?o WHERE {?s ?p ?o}", 100.0));
         let plan = cache.get(1);
         assert!(plan.is_some());
-        assert_eq!(plan.unwrap().query_hash, 1);
+        assert_eq!(plan.expect("plan should exist").query_hash, 1);
     }
 
     #[test]

@@ -27,7 +27,7 @@ impl From<IriParseError> for OxirsError {
 ///
 /// assert_eq!(
 ///     "<http://example.com/foo>",
-///     NamedNode::new("http://example.com/foo").unwrap().to_string()
+///     NamedNode::new("http://example.com/foo").expect("valid IRI").to_string()
 /// );
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash)]
@@ -132,7 +132,7 @@ impl FromStr for NamedNode {
 ///
 /// assert_eq!(
 ///     "<http://example.com/foo>",
-///     NamedNodeRef::new("http://example.com/foo").unwrap().to_string()
+///     NamedNodeRef::new("http://example.com/foo").expect("valid IRI").to_string()
 /// );
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Copy, Hash)]
@@ -441,14 +441,14 @@ mod tests {
 
     #[test]
     fn test_named_node_creation() {
-        let node = NamedNode::new("http://example.com/test").unwrap();
+        let node = NamedNode::new("http://example.com/test").expect("valid IRI");
         assert_eq!(node.as_str(), "http://example.com/test");
         assert_eq!(node.to_string(), "<http://example.com/test>");
     }
 
     #[test]
     fn test_named_node_ref() {
-        let node = NamedNode::new("http://example.com/test").unwrap();
+        let node = NamedNode::new("http://example.com/test").expect("valid IRI");
         let node_ref = node.as_ref();
         assert_eq!(node_ref.as_str(), "http://example.com/test");
         assert_eq!(node_ref.to_string(), "<http://example.com/test>");
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn test_named_node_comparison() {
-        let node = NamedNode::new("http://example.com/test").unwrap();
+        let node = NamedNode::new("http://example.com/test").expect("valid IRI");
         assert_eq!(node, "http://example.com/test");
         assert_eq!("http://example.com/test", node);
     }
@@ -469,7 +469,7 @@ mod tests {
 
     #[test]
     fn test_owned_borrowed_conversion() {
-        let owned = NamedNode::new("http://example.com/test").unwrap();
+        let owned = NamedNode::new("http://example.com/test").expect("valid IRI");
         let borrowed = owned.as_ref();
         let owned_again = borrowed.into_owned();
         assert_eq!(owned, owned_again);
@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_rdf_term_trait() {
-        let node = NamedNode::new("http://example.com/test").unwrap();
+        let node = NamedNode::new("http://example.com/test").expect("valid IRI");
         assert!(node.is_named_node());
         assert!(!node.is_blank_node());
         assert!(!node.is_literal());

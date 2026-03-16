@@ -1581,15 +1581,21 @@ mod tests {
 
         model
             .start_task("task1".to_string(), "test".to_string())
-            .unwrap();
+            .expect("should succeed");
         assert!(model.current_task.is_some());
-        assert_eq!(model.current_task.as_ref().unwrap().task_id, "task1");
+        assert_eq!(
+            model.current_task.as_ref().expect("should succeed").task_id,
+            "task1"
+        );
 
         model
             .start_task("task2".to_string(), "test".to_string())
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(model.task_history.len(), 1);
-        assert_eq!(model.current_task.as_ref().unwrap().task_id, "task2");
+        assert_eq!(
+            model.current_task.as_ref().expect("should succeed").task_id,
+            "task2"
+        );
     }
 
     #[tokio::test]
@@ -1605,7 +1611,7 @@ mod tests {
 
         model
             .start_task("task1".to_string(), "test".to_string())
-            .unwrap();
+            .expect("should succeed");
 
         let data = Array1::from_vec(vec![1.0, 2.0, 3.0]);
         let target = Array1::from_vec(vec![1.0, 2.0, 3.0]); // Match dimensions
@@ -1613,11 +1619,18 @@ mod tests {
         model
             .add_example(data, target, Some("task1".to_string()))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(model.examples_seen, 1);
         assert_eq!(model.episodic_memory.len(), 1);
-        assert_eq!(model.current_task.as_ref().unwrap().examples_seen, 1);
+        assert_eq!(
+            model
+                .current_task
+                .as_ref()
+                .expect("should succeed")
+                .examples_seen,
+            1
+        );
     }
 
     #[tokio::test]
@@ -1634,7 +1647,7 @@ mod tests {
         let mut model = ContinualLearningModel::new(config);
         model
             .start_task("task1".to_string(), "test".to_string())
-            .unwrap();
+            .expect("should succeed");
 
         // Add more examples than capacity
         for i in 0..5 {
@@ -1643,7 +1656,7 @@ mod tests {
             model
                 .add_example(data, target, Some("task1".to_string()))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
         assert_eq!(model.episodic_memory.len(), 3); // Should be capped at capacity
@@ -1664,9 +1677,9 @@ mod tests {
         // Initialize the model's networks properly before training
         model
             .start_task("initial_task".to_string(), "training".to_string())
-            .unwrap();
+            .expect("should succeed");
 
-        let stats = model.train(Some(10)).await.unwrap();
+        let stats = model.train(Some(10)).await.expect("should succeed");
         assert_eq!(stats.epochs_completed, 10);
         assert!(model.is_trained());
         assert!(!model.task_history.is_empty()); // Should have created tasks during training

@@ -332,7 +332,7 @@ mod tests {
         budget_manager
             .create_user_budget("user1".to_string(), 10000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let remaining = budget_manager
             .get_remaining_budget(&"user1".to_string())
@@ -348,7 +348,7 @@ mod tests {
         budget_manager
             .create_user_budget("user1".to_string(), 10000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Should succeed
         let result = budget_manager
@@ -365,13 +365,13 @@ mod tests {
         budget_manager
             .create_user_budget("user1".to_string(), 10000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Use all tokens
         budget_manager
             .record_usage(&"user1".to_string(), 10000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Should fail
         let result = budget_manager.check_budget(&"user1".to_string(), 100).await;
@@ -386,21 +386,21 @@ mod tests {
         budget_manager
             .create_user_budget("user1".to_string(), 10000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         budget_manager
             .record_usage(&"user1".to_string(), 3000)
             .await
-            .unwrap();
+            .expect("should succeed");
         budget_manager
             .record_usage(&"user1".to_string(), 2000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let stats = budget_manager
             .get_usage_stats(&"user1".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(stats.used_tokens, 5000);
         assert_eq!(stats.remaining_tokens, 5000);
         assert!((stats.usage_percentage - 0.5).abs() < 0.01);
@@ -414,23 +414,23 @@ mod tests {
         budget_manager
             .create_user_budget("user1".to_string(), 10000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         budget_manager
             .record_usage(&"user1".to_string(), 5000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Reset budget
         budget_manager
             .reset_user_budget(&"user1".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let stats = budget_manager
             .get_usage_stats(&"user1".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(stats.used_tokens, 0);
         assert_eq!(stats.remaining_tokens, 10000);
     }
@@ -443,18 +443,18 @@ mod tests {
         budget_manager
             .create_user_budget("user1".to_string(), 10000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Update limit
         budget_manager
             .update_budget_limit(&"user1".to_string(), 20000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let stats = budget_manager
             .get_usage_stats(&"user1".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(stats.monthly_limit, 20000);
     }
 
@@ -473,7 +473,7 @@ mod tests {
         let stats = budget_manager
             .get_usage_stats(&"new_user".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(stats.monthly_limit, 100_000); // Default limit
     }
 
@@ -485,20 +485,20 @@ mod tests {
         budget_manager
             .create_user_budget("user1".to_string(), 10000)
             .await
-            .unwrap();
+            .expect("should succeed");
         budget_manager
             .create_user_budget("user2".to_string(), 20000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         budget_manager
             .record_usage(&"user1".to_string(), 5000)
             .await
-            .unwrap();
+            .expect("should succeed");
         budget_manager
             .record_usage(&"user2".to_string(), 10000)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let all_stats = budget_manager.get_all_usage_stats().await;
         assert_eq!(all_stats.len(), 2);

@@ -296,16 +296,16 @@ mod tests {
     fn test_register_and_get() {
         let mut store = make_store();
         let meta = make_meta("ts-1", "temperature");
-        store.register(meta).unwrap();
+        store.register(meta).expect("should succeed");
         let found = store.get("ts-1");
         assert!(found.is_some());
-        assert_eq!(found.unwrap().name, "temperature");
+        assert_eq!(found.expect("should succeed").name, "temperature");
     }
 
     #[test]
     fn test_register_duplicate_id_error() {
         let mut store = make_store();
-        store.register(make_meta("ts-1", "temp")).unwrap();
+        store.register(make_meta("ts-1", "temp")).expect("should succeed");
         let result = store.register(make_meta("ts-1", "other"));
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), MetadataError::DuplicateId(_)));
@@ -320,39 +320,39 @@ mod tests {
     #[test]
     fn test_update_description() {
         let mut store = make_store();
-        store.register(make_meta("ts-1", "temp")).unwrap();
+        store.register(make_meta("ts-1", "temp")).expect("should succeed");
         let upd = MetadataUpdate {
             description: Some(Some("Room temperature".to_string())),
             ..Default::default()
         };
-        store.update("ts-1", upd).unwrap();
-        let m = store.get("ts-1").unwrap();
+        store.update("ts-1", upd).expect("should succeed");
+        let m = store.get("ts-1").expect("should succeed");
         assert_eq!(m.description, Some("Room temperature".to_string()));
     }
 
     #[test]
     fn test_update_unit() {
         let mut store = make_store();
-        store.register(make_meta("ts-1", "temp")).unwrap();
+        store.register(make_meta("ts-1", "temp")).expect("should succeed");
         let upd = MetadataUpdate {
             unit: Some(Some("Celsius".to_string())),
             ..Default::default()
         };
-        store.update("ts-1", upd).unwrap();
-        let m = store.get("ts-1").unwrap();
+        store.update("ts-1", upd).expect("should succeed");
+        let m = store.get("ts-1").expect("should succeed");
         assert_eq!(m.unit, Some("Celsius".to_string()));
     }
 
     #[test]
     fn test_update_retention_days() {
         let mut store = make_store();
-        store.register(make_meta("ts-1", "temp")).unwrap();
+        store.register(make_meta("ts-1", "temp")).expect("should succeed");
         let upd = MetadataUpdate {
             retention_days: Some(Some(30)),
             ..Default::default()
         };
-        store.update("ts-1", upd).unwrap();
-        let m = store.get("ts-1").unwrap();
+        store.update("ts-1", upd).expect("should succeed");
+        let m = store.get("ts-1").expect("should succeed");
         assert_eq!(m.retention_days, Some(30));
     }
 
@@ -360,13 +360,13 @@ mod tests {
     fn test_update_clear_description() {
         let mut store = make_store();
         let meta = make_meta("ts-1", "temp").with_description("old desc");
-        store.register(meta).unwrap();
+        store.register(meta).expect("should succeed");
         let upd = MetadataUpdate {
             description: Some(None),
             ..Default::default()
         };
-        store.update("ts-1", upd).unwrap();
-        assert!(store.get("ts-1").unwrap().description.is_none());
+        store.update("ts-1", upd).expect("should succeed");
+        assert!(store.get("ts-1").expect("should succeed").description.is_none());
     }
 
     #[test]
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn test_delete_returns_true_when_found() {
         let mut store = make_store();
-        store.register(make_meta("ts-1", "temp")).unwrap();
+        store.register(make_meta("ts-1", "temp")).expect("should succeed");
         assert!(store.delete("ts-1"));
         assert_eq!(store.count(), 0);
     }
@@ -397,9 +397,9 @@ mod tests {
     #[test]
     fn test_search_by_name_prefix() {
         let mut store = make_store();
-        store.register(make_meta("ts-1", "temp_room")).unwrap();
-        store.register(make_meta("ts-2", "temp_outdoor")).unwrap();
-        store.register(make_meta("ts-3", "humidity")).unwrap();
+        store.register(make_meta("ts-1", "temp_room")).expect("should succeed");
+        store.register(make_meta("ts-2", "temp_outdoor")).expect("should succeed");
+        store.register(make_meta("ts-3", "humidity")).expect("should succeed");
 
         let filter = MetadataFilter::new().with_name_prefix("temp");
         let results = store.search(&filter);
@@ -412,9 +412,9 @@ mod tests {
         let m1 = make_meta("ts-1", "temp").with_tag("location", "room1");
         let m2 = make_meta("ts-2", "humidity").with_tag("location", "room1");
         let m3 = make_meta("ts-3", "pressure").with_tag("location", "room2");
-        store.register(m1).unwrap();
-        store.register(m2).unwrap();
-        store.register(m3).unwrap();
+        store.register(m1).expect("should succeed");
+        store.register(m2).expect("should succeed");
+        store.register(m3).expect("should succeed");
 
         let filter = MetadataFilter::new().with_tag("location", "room1");
         let results = store.search(&filter);
@@ -426,13 +426,13 @@ mod tests {
         let mut store = make_store();
         store
             .register(TimeSeriesMetadata::new("ts-1", "temp", ValueType::Float64, 0))
-            .unwrap();
+            .expect("should succeed");
         store
             .register(TimeSeriesMetadata::new("ts-2", "counter", ValueType::Int64, 0))
-            .unwrap();
+            .expect("should succeed");
         store
             .register(TimeSeriesMetadata::new("ts-3", "active", ValueType::Boolean, 0))
-            .unwrap();
+            .expect("should succeed");
 
         let filter = MetadataFilter::new().with_value_type(ValueType::Float64);
         let results = store.search(&filter);
@@ -443,9 +443,9 @@ mod tests {
     #[test]
     fn test_search_empty_filter_returns_all() {
         let mut store = make_store();
-        store.register(make_meta("ts-1", "a")).unwrap();
-        store.register(make_meta("ts-2", "b")).unwrap();
-        store.register(make_meta("ts-3", "c")).unwrap();
+        store.register(make_meta("ts-1", "a")).expect("should succeed");
+        store.register(make_meta("ts-2", "b")).expect("should succeed");
+        store.register(make_meta("ts-3", "c")).expect("should succeed");
 
         let filter = MetadataFilter::new();
         let results = store.search(&filter);
@@ -456,9 +456,9 @@ mod tests {
     fn test_count() {
         let mut store = make_store();
         assert_eq!(store.count(), 0);
-        store.register(make_meta("ts-1", "a")).unwrap();
+        store.register(make_meta("ts-1", "a")).expect("should succeed");
         assert_eq!(store.count(), 1);
-        store.register(make_meta("ts-2", "b")).unwrap();
+        store.register(make_meta("ts-2", "b")).expect("should succeed");
         assert_eq!(store.count(), 2);
     }
 
@@ -467,8 +467,8 @@ mod tests {
         let mut store = make_store();
         let m1 = make_meta("ts-1", "a").with_tag("k1", "v1").with_tag("k2", "v2");
         let m2 = make_meta("ts-2", "b").with_tag("k1", "v1");
-        store.register(m1).unwrap();
-        store.register(m2).unwrap();
+        store.register(m1).expect("should succeed");
+        store.register(m2).expect("should succeed");
 
         let tags = store.all_tags();
         // ts-1 has 2 tags, ts-2 has 1 tag = 3 total
@@ -487,9 +487,9 @@ mod tests {
         let m1 = make_meta("ts-1", "a").with_tag("env", "prod");
         let m2 = make_meta("ts-2", "b").with_tag("env", "prod");
         let m3 = make_meta("ts-3", "c").with_tag("env", "dev");
-        store.register(m1).unwrap();
-        store.register(m2).unwrap();
-        store.register(m3).unwrap();
+        store.register(m1).expect("should succeed");
+        store.register(m2).expect("should succeed");
+        store.register(m3).expect("should succeed");
 
         let results = store.series_by_tag("env", "prod");
         assert_eq!(results.len(), 2);
@@ -498,7 +498,7 @@ mod tests {
     #[test]
     fn test_series_by_tag_no_match() {
         let mut store = make_store();
-        store.register(make_meta("ts-1", "a")).unwrap();
+        store.register(make_meta("ts-1", "a")).expect("should succeed");
         let results = store.series_by_tag("env", "prod");
         assert!(results.is_empty());
     }
@@ -507,8 +507,8 @@ mod tests {
     fn test_metadata_tags_stored() {
         let mut store = make_store();
         let m = make_meta("ts-1", "temp").with_tag("region", "eu-west");
-        store.register(m).unwrap();
-        let found = store.get("ts-1").unwrap();
+        store.register(m).expect("should succeed");
+        let found = store.get("ts-1").expect("should succeed");
         assert_eq!(found.tags.len(), 1);
         assert_eq!(found.tags[0].key, "region");
         assert_eq!(found.tags[0].value, "eu-west");
@@ -518,8 +518,8 @@ mod tests {
     fn test_metadata_with_sample_rate() {
         let mut store = make_store();
         let m = make_meta("ts-1", "vibration").with_sample_rate(1000.0);
-        store.register(m).unwrap();
-        let found = store.get("ts-1").unwrap();
+        store.register(m).expect("should succeed");
+        let found = store.get("ts-1").expect("should succeed");
         assert_eq!(found.sample_rate_hz, Some(1000.0));
     }
 
@@ -532,9 +532,9 @@ mod tests {
             .with_tag("env", "dev");
         let m3 = make_meta("ts-3", "humidity")
             .with_tag("env", "prod");
-        store.register(m1).unwrap();
-        store.register(m2).unwrap();
-        store.register(m3).unwrap();
+        store.register(m1).expect("should succeed");
+        store.register(m2).expect("should succeed");
+        store.register(m3).expect("should succeed");
 
         let filter = MetadataFilter::new()
             .with_name_prefix("temp")
@@ -553,11 +553,11 @@ mod tests {
             .with_retention(90)
             .with_sample_rate(0.1)
             .with_tag("host", "server-01");
-        store.register(m).unwrap();
-        let found = store.get("ts-1").unwrap();
+        store.register(m).expect("should succeed");
+        let found = store.get("ts-1").expect("should succeed");
         assert_eq!(found.description, Some("CPU load percentage".to_string()));
         assert_eq!(found.unit, Some("%".to_string()));
         assert_eq!(found.retention_days, Some(90));
-        assert!((found.sample_rate_hz.unwrap() - 0.1).abs() < 1e-10);
+        assert!((found.sample_rate_hz.expect("should succeed") - 0.1).abs() < 1e-10);
     }
 }

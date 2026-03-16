@@ -170,7 +170,7 @@ mod tests {
 
         let result = analyzer.detect_datatype(&counts);
         assert!(result.is_some());
-        let constraint = result.unwrap();
+        let constraint = result.expect("should succeed");
         assert!(constraint.datatype.contains("string"));
         assert!(constraint.confidence > 0.9);
     }
@@ -187,7 +187,7 @@ mod tests {
 
         let datatype = analyzer.infer_from_patterns(&values);
         assert!(datatype.is_some());
-        assert!(datatype.unwrap().contains("integer"));
+        assert!(datatype.expect("should succeed").contains("integer"));
     }
 
     #[test]
@@ -197,7 +197,7 @@ mod tests {
 
         let datatype = analyzer.infer_from_patterns(&values);
         assert!(datatype.is_some());
-        assert!(datatype.unwrap().contains("decimal"));
+        assert!(datatype.expect("should succeed").contains("decimal"));
     }
 
     #[test]
@@ -212,7 +212,7 @@ mod tests {
 
         let datatype = analyzer.infer_from_patterns(&values);
         assert!(datatype.is_some());
-        assert!(datatype.unwrap().contains("boolean"));
+        assert!(datatype.expect("should succeed").contains("boolean"));
     }
 
     #[test]
@@ -226,7 +226,7 @@ mod tests {
 
         let datatype = analyzer.infer_from_patterns(&values);
         assert!(datatype.is_some());
-        assert!(datatype.unwrap().contains("date"));
+        assert!(datatype.expect("should succeed").contains("date"));
     }
 
     #[test]
@@ -236,7 +236,7 @@ mod tests {
 
         let datatype = analyzer.infer_from_patterns(&values);
         assert!(datatype.is_some());
-        assert!(datatype.unwrap().contains("string"));
+        assert!(datatype.expect("should succeed").contains("string"));
     }
 
     #[test]

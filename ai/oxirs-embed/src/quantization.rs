@@ -444,7 +444,9 @@ mod tests {
         let config = QuantizationConfig::default();
         let mut quantizer = ModelQuantizer::new(config);
 
-        let quantized = quantizer.quantize_embeddings(&embeddings).unwrap();
+        let quantized = quantizer
+            .quantize_embeddings(&embeddings)
+            .expect("should succeed");
 
         assert_eq!(quantized.len(), 2);
         assert!(quantizer.stats.compression_ratio > 1.0);
@@ -459,7 +461,9 @@ mod tests {
         let config = QuantizationConfig::default();
         let mut quantizer = ModelQuantizer::new(config);
 
-        let quantized = quantizer.quantize_embeddings(&embeddings).unwrap();
+        let quantized = quantizer
+            .quantize_embeddings(&embeddings)
+            .expect("should succeed");
         let dequantized = quantizer.dequantize_embeddings(&quantized);
 
         assert_eq!(dequantized.len(), 1);
@@ -486,7 +490,9 @@ mod tests {
         let config = QuantizationConfig::default();
         let mut quantizer = ModelQuantizer::new(config);
 
-        quantizer.quantize_embeddings(&embeddings).unwrap();
+        quantizer
+            .quantize_embeddings(&embeddings)
+            .expect("should succeed");
 
         // Int8 should give ~4x compression (32-bit to 8-bit)
         assert!(quantizer.stats.compression_ratio > 3.0);

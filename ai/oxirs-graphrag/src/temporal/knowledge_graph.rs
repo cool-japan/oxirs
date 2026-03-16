@@ -515,7 +515,7 @@ mod tests {
         let mut kg = TemporalKnowledgeGraph::new();
         kg.insert(make_triple("A", "p", "B", 0, None));
 
-        let path = kg.temporal_path("A", "B", 0).unwrap();
+        let path = kg.temporal_path("A", "B", 0).expect("should succeed");
         assert_eq!(path, vec!["A", "B"]);
     }
 
@@ -526,7 +526,7 @@ mod tests {
         kg.insert(make_triple("B", "p", "C", 0, None));
         kg.insert(make_triple("C", "p", "D", 0, None));
 
-        let path = kg.temporal_path("A", "D", 0).unwrap();
+        let path = kg.temporal_path("A", "D", 0).expect("should succeed");
         assert_eq!(path.first().map(|s| s.as_str()), Some("A"));
         assert_eq!(path.last().map(|s| s.as_str()), Some("D"));
         assert!(path.len() >= 2);
@@ -543,7 +543,7 @@ mod tests {
     #[test]
     fn test_temporal_path_same_node() {
         let kg = TemporalKnowledgeGraph::new();
-        let path = kg.temporal_path("A", "A", 0).unwrap();
+        let path = kg.temporal_path("A", "A", 0).expect("should succeed");
         assert_eq!(path, vec!["A"]);
     }
 

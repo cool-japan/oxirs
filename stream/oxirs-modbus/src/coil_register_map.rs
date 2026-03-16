@@ -321,7 +321,7 @@ mod tests {
     fn test_write_and_read_coil() {
         let mut rm = RegisterMap::new();
         rm.set_coil_direct(100, false);
-        rm.write_coil(100, true).unwrap();
+        rm.write_coil(100, true).expect("should succeed");
         assert_eq!(rm.read_coil(100), Some(true));
     }
 
@@ -341,8 +341,8 @@ mod tests {
     #[test]
     fn test_write_coil_false() {
         let mut rm = writable_map_with_coils(&[5]);
-        rm.write_coil(5, true).unwrap();
-        rm.write_coil(5, false).unwrap();
+        rm.write_coil(5, true).expect("should succeed");
+        rm.write_coil(5, false).expect("should succeed");
         assert_eq!(rm.read_coil(5), Some(false));
     }
 
@@ -351,9 +351,9 @@ mod tests {
     #[test]
     fn test_read_coils_range() {
         let mut rm = writable_map_with_coils(&[0, 1, 2, 3]);
-        rm.write_coil(1, true).unwrap();
-        rm.write_coil(3, true).unwrap();
-        let vals = rm.read_coils(0, 4).unwrap();
+        rm.write_coil(1, true).expect("should succeed");
+        rm.write_coil(3, true).expect("should succeed");
+        let vals = rm.read_coils(0, 4).expect("should succeed");
         assert_eq!(vals, vec![false, true, false, true]);
     }
 
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn test_read_coils_empty_count() {
         let rm = RegisterMap::new();
-        let vals = rm.read_coils(100, 0).unwrap();
+        let vals = rm.read_coils(100, 0).expect("should succeed");
         assert!(vals.is_empty());
     }
 
@@ -382,7 +382,9 @@ mod tests {
     #[test]
     fn test_write_coils_multiple() {
         let mut rm = writable_map_with_coils(&[10, 11, 12]);
-        let res = rm.write_coils(10, &[true, false, true]).unwrap();
+        let res = rm
+            .write_coils(10, &[true, false, true])
+            .expect("should succeed");
         assert_eq!(res.written, 3);
         assert_eq!(res.skipped_read_only, 0);
         assert_eq!(rm.read_coil(10), Some(true));
@@ -401,7 +403,9 @@ mod tests {
         rm.add_coil_block(block);
         // Also add a writable coil at address 3
         rm.set_coil_direct(3, false);
-        let res = rm.write_coils(0, &[true, true, true, true]).unwrap();
+        let res = rm
+            .write_coils(0, &[true, true, true, true])
+            .expect("should succeed");
         assert_eq!(res.skipped_read_only, 3);
         assert_eq!(res.written, 1);
     }
@@ -455,7 +459,7 @@ mod tests {
     fn test_writable_block_allows_write() {
         let mut rm = RegisterMap::new();
         rm.add_coil_block(CoilBlock::new(200, 3, false));
-        rm.write_coil(200, true).unwrap();
+        rm.write_coil(200, true).expect("should succeed");
         assert_eq!(rm.read_coil(200), Some(true));
     }
 
@@ -478,8 +482,8 @@ mod tests {
         let mut rm = RegisterMap::new();
         rm.add_coil_block(CoilBlock::new(0, 4, false));
         rm.add_coil_block(CoilBlock::new(100, 4, false));
-        rm.write_coil(2, true).unwrap();
-        rm.write_coil(101, true).unwrap();
+        rm.write_coil(2, true).expect("should succeed");
+        rm.write_coil(101, true).expect("should succeed");
         assert_eq!(rm.read_coil(2), Some(true));
         assert_eq!(rm.read_coil(101), Some(true));
     }
@@ -537,10 +541,10 @@ mod tests {
     fn test_packed_coils_single_byte() {
         let mut rm = writable_map_with_coils(&[0, 1, 2, 3, 4, 5, 6, 7]);
         // Set coils 0, 2, 4 → bits 0, 2, 4 → byte = 0b00010101 = 0x15
-        rm.write_coil(0, true).unwrap();
-        rm.write_coil(2, true).unwrap();
-        rm.write_coil(4, true).unwrap();
-        let bytes = rm.packed_coils(0, 8).unwrap();
+        rm.write_coil(0, true).expect("should succeed");
+        rm.write_coil(2, true).expect("should succeed");
+        rm.write_coil(4, true).expect("should succeed");
+        let bytes = rm.packed_coils(0, 8).expect("should succeed");
         assert_eq!(bytes.len(), 1);
         assert_eq!(bytes[0], 0b0001_0101);
     }
@@ -550,8 +554,8 @@ mod tests {
         let addrs: Vec<u16> = (0..9).collect();
         let mut rm = writable_map_with_coils(&addrs);
         // Bit 8 = address 8 in second byte (bit 0 of byte 1)
-        rm.write_coil(8, true).unwrap();
-        let bytes = rm.packed_coils(0, 9).unwrap();
+        rm.write_coil(8, true).expect("should succeed");
+        let bytes = rm.packed_coils(0, 9).expect("should succeed");
         assert_eq!(bytes.len(), 2);
         assert_eq!(bytes[1], 0b0000_0001);
     }
@@ -560,7 +564,7 @@ mod tests {
     fn test_packed_coils_all_false() {
         let addrs: Vec<u16> = (0..4).collect();
         let rm = writable_map_with_coils(&addrs);
-        let bytes = rm.packed_coils(0, 4).unwrap();
+        let bytes = rm.packed_coils(0, 4).expect("should succeed");
         assert_eq!(bytes, vec![0u8]);
     }
 
@@ -584,7 +588,9 @@ mod tests {
     #[test]
     fn test_write_result_all_written() {
         let mut rm = writable_map_with_coils(&[0, 1, 2]);
-        let res = rm.write_coils(0, &[true, true, true]).unwrap();
+        let res = rm
+            .write_coils(0, &[true, true, true])
+            .expect("should succeed");
         assert_eq!(
             res,
             WriteResult {
@@ -598,7 +604,9 @@ mod tests {
     fn test_write_result_all_skipped() {
         let mut rm = RegisterMap::new();
         rm.add_coil_block(CoilBlock::new(0, 4, true));
-        let res = rm.write_coils(0, &[true, true, true, true]).unwrap();
+        let res = rm
+            .write_coils(0, &[true, true, true, true])
+            .expect("should succeed");
         assert_eq!(
             res,
             WriteResult {
@@ -654,9 +662,9 @@ mod tests {
     fn test_write_coil_into_block_persists() {
         let mut rm = RegisterMap::new();
         rm.add_coil_block(CoilBlock::new(50, 4, false));
-        rm.write_coil(51, true).unwrap();
+        rm.write_coil(51, true).expect("should succeed");
         // Verify via block-level read
-        let vals = rm.read_coils(50, 4).unwrap();
+        let vals = rm.read_coils(50, 4).expect("should succeed");
         assert_eq!(vals, vec![false, true, false, false]);
     }
 
@@ -685,9 +693,9 @@ mod tests {
         let addrs: Vec<u16> = (0..8).collect();
         let mut rm = writable_map_with_coils(&addrs);
         for a in 0..8u16 {
-            rm.write_coil(a, true).unwrap();
+            rm.write_coil(a, true).expect("should succeed");
         }
-        let bytes = rm.packed_coils(0, 8).unwrap();
+        let bytes = rm.packed_coils(0, 8).expect("should succeed");
         assert_eq!(bytes[0], 0xFF);
     }
 
@@ -696,9 +704,9 @@ mod tests {
         // Only 3 coils, should fit in 1 byte with upper bits zero
         let addrs: Vec<u16> = (0..3).collect();
         let mut rm = writable_map_with_coils(&addrs);
-        rm.write_coil(0, true).unwrap(); // bit 0
-        rm.write_coil(2, true).unwrap(); // bit 2
-        let bytes = rm.packed_coils(0, 3).unwrap();
+        rm.write_coil(0, true).expect("should succeed"); // bit 0
+        rm.write_coil(2, true).expect("should succeed"); // bit 2
+        let bytes = rm.packed_coils(0, 3).expect("should succeed");
         assert_eq!(bytes.len(), 1);
         assert_eq!(bytes[0] & 0b111, 0b101);
     }
@@ -707,7 +715,7 @@ mod tests {
     fn test_write_coil_and_read_back_via_block() {
         let mut rm = RegisterMap::new();
         rm.add_coil_block(CoilBlock::new(1000, 10, false));
-        rm.write_coil(1005, true).unwrap();
+        rm.write_coil(1005, true).expect("should succeed");
         assert_eq!(rm.read_coil(1005), Some(true));
     }
 
@@ -721,7 +729,7 @@ mod tests {
     #[test]
     fn test_write_coils_empty_slice_ok() {
         let mut rm = RegisterMap::new();
-        let res = rm.write_coils(0, &[]).unwrap();
+        let res = rm.write_coils(0, &[]).expect("should succeed");
         assert_eq!(res.written, 0);
         assert_eq!(res.skipped_read_only, 0);
     }

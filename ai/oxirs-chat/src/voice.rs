@@ -780,20 +780,22 @@ mod tests {
     #[test]
     fn test_stt_provider_serialization() {
         let provider = SttProviderType::OpenAI;
-        let serialized = serde_json::to_string(&provider).unwrap();
+        let serialized = serde_json::to_string(&provider).expect("should succeed");
         assert_eq!(serialized, "\"open_a_i\""); // Snake case serialization
 
-        let deserialized: SttProviderType = serde_json::from_str(&serialized).unwrap();
+        let deserialized: SttProviderType =
+            serde_json::from_str(&serialized).expect("should succeed");
         assert_eq!(deserialized, SttProviderType::OpenAI);
     }
 
     #[test]
     fn test_tts_provider_serialization() {
         let provider = TtsProviderType::Google;
-        let serialized = serde_json::to_string(&provider).unwrap();
+        let serialized = serde_json::to_string(&provider).expect("should succeed");
         assert_eq!(serialized, "\"google\"");
 
-        let deserialized: TtsProviderType = serde_json::from_str(&serialized).unwrap();
+        let deserialized: TtsProviderType =
+            serde_json::from_str(&serialized).expect("should succeed");
         assert_eq!(deserialized, TtsProviderType::Google);
     }
 }

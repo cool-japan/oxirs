@@ -317,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn test_adaptation_on_low_recall() {
+    fn test_adaptation_on_low_recall() -> Result<()> {
         let config = AdaptiveSearchConfig {
             min_queries_for_adaptation: 5,
             target_recall: 0.95,
@@ -336,15 +336,16 @@ mod tests {
                 ef_search_used: 32,
                 timestamp: Instant::now(),
             };
-            tuner.record_query(metrics).unwrap();
+            tuner.record_query(metrics)?;
         }
 
         // ef_search should have increased
         assert!(tuner.get_ef_search() > 32);
+        Ok(())
     }
 
     #[test]
-    fn test_adaptation_on_high_latency() {
+    fn test_adaptation_on_high_latency() -> Result<()> {
         let config = AdaptiveSearchConfig {
             min_queries_for_adaptation: 5,
             target_latency_ms: 5.0,
@@ -364,11 +365,12 @@ mod tests {
                 ef_search_used: 128,
                 timestamp: Instant::now(),
             };
-            tuner.record_query(metrics).unwrap();
+            tuner.record_query(metrics)?;
         }
 
         // ef_search should have decreased
         assert!(tuner.get_ef_search() < 128);
+        Ok(())
     }
 
     #[test]

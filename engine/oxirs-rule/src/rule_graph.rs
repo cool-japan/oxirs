@@ -551,7 +551,7 @@ mod tests {
     // ── topological_sort ──────────────────────────────────────────────────
 
     #[test]
-    fn test_topological_sort_linear_chain() {
+    fn test_topological_sort_linear_chain() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = RuleGraph::new();
         g.add_rule(make_node("a", 0));
         g.add_rule(make_node("b", 0));
@@ -559,11 +559,21 @@ mod tests {
         g.add_dependency("a", "b", DependencyType::Positive);
         g.add_dependency("b", "c", DependencyType::Positive);
         let sorted = g.topological_sort().expect("No cycle");
-        let ia = sorted.iter().position(|x| x == "a").unwrap();
-        let ib = sorted.iter().position(|x| x == "b").unwrap();
-        let ic = sorted.iter().position(|x| x == "c").unwrap();
+        let ia = sorted
+            .iter()
+            .position(|x| x == "a")
+            .ok_or("expected Some value")?;
+        let ib = sorted
+            .iter()
+            .position(|x| x == "b")
+            .ok_or("expected Some value")?;
+        let ic = sorted
+            .iter()
+            .position(|x| x == "c")
+            .ok_or("expected Some value")?;
         assert!(ia < ib);
         assert!(ib < ic);
+        Ok(())
     }
 
     #[test]
@@ -592,7 +602,7 @@ mod tests {
     }
 
     #[test]
-    fn test_topological_sort_diamond() {
+    fn test_topological_sort_diamond() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = RuleGraph::new();
         for id in ["a", "b", "c", "d"] {
             g.add_rule(make_node(id, 0));
@@ -602,9 +612,16 @@ mod tests {
         g.add_dependency("b", "d", DependencyType::Positive);
         g.add_dependency("c", "d", DependencyType::Positive);
         let sorted = g.topological_sort().expect("No cycle");
-        let ia = sorted.iter().position(|x| x == "a").unwrap();
-        let id = sorted.iter().position(|x| x == "d").unwrap();
+        let ia = sorted
+            .iter()
+            .position(|x| x == "a")
+            .ok_or("expected Some value")?;
+        let id = sorted
+            .iter()
+            .position(|x| x == "d")
+            .ok_or("expected Some value")?;
         assert!(ia < id);
+        Ok(())
     }
 
     // ── has_cycle ─────────────────────────────────────────────────────────
@@ -697,29 +714,44 @@ mod tests {
     // ── execution_order ───────────────────────────────────────────────────
 
     #[test]
-    fn test_execution_order_respects_priority() {
+    fn test_execution_order_respects_priority() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = RuleGraph::new();
         // a and b have no dependencies between them → same level
         g.add_rule(RuleNode::new("a", 10, 1)); // high priority
         g.add_rule(RuleNode::new("b", 1, 1)); // low priority
         g.add_rule(RuleNode::new("c", 5, 1));
         let order = g.execution_order();
-        let ia = order.iter().position(|x| x == "a").unwrap();
-        let ib = order.iter().position(|x| x == "b").unwrap();
+        let ia = order
+            .iter()
+            .position(|x| x == "a")
+            .ok_or("expected Some value")?;
+        let ib = order
+            .iter()
+            .position(|x| x == "b")
+            .ok_or("expected Some value")?;
         // a (priority 10) should come before b (priority 1)
         assert!(ia < ib);
+        Ok(())
     }
 
     #[test]
-    fn test_execution_order_topological_before_priority() {
+    fn test_execution_order_topological_before_priority() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut g = RuleGraph::new();
         g.add_rule(RuleNode::new("a", 1, 1)); // low priority but no deps
         g.add_rule(RuleNode::new("b", 100, 1)); // high priority but depends on a
         g.add_dependency("a", "b", DependencyType::Positive);
         let order = g.execution_order();
-        let ia = order.iter().position(|x| x == "a").unwrap();
-        let ib = order.iter().position(|x| x == "b").unwrap();
+        let ia = order
+            .iter()
+            .position(|x| x == "a")
+            .ok_or("expected Some value")?;
+        let ib = order
+            .iter()
+            .position(|x| x == "b")
+            .ok_or("expected Some value")?;
         assert!(ia < ib);
+        Ok(())
     }
 
     #[test]
@@ -830,7 +862,7 @@ mod tests {
     }
 
     #[test]
-    fn test_topological_sort_parallel_branches() {
+    fn test_topological_sort_parallel_branches() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = RuleGraph::new();
         for id in ["root", "b1", "b2", "leaf"] {
             g.add_rule(make_node(id, 0));
@@ -840,9 +872,16 @@ mod tests {
         g.add_dependency("b1", "leaf", DependencyType::Positive);
         g.add_dependency("b2", "leaf", DependencyType::Positive);
         let sorted = g.topological_sort().expect("No cycle");
-        let i_root = sorted.iter().position(|x| x == "root").unwrap();
-        let i_leaf = sorted.iter().position(|x| x == "leaf").unwrap();
+        let i_root = sorted
+            .iter()
+            .position(|x| x == "root")
+            .ok_or("expected Some value")?;
+        let i_leaf = sorted
+            .iter()
+            .position(|x| x == "leaf")
+            .ok_or("expected Some value")?;
         assert!(i_root < i_leaf);
+        Ok(())
     }
 
     #[test]

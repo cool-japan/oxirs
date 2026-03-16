@@ -755,7 +755,7 @@ mod tests {
 
         // Set model prediction first.
         mgr.get_twin_mut(&id)
-            .unwrap()
+            .expect("should succeed")
             .set_model_value("temperature", 298.15);
 
         // Add sensor matching prediction.
@@ -772,16 +772,18 @@ mod tests {
     #[test]
     fn manager_synchronise_no_anomaly() {
         let mut mgr = DigitalTwinManager::new();
-        let id = mgr.register("Motor", "urn:example:motor:1").unwrap();
+        let id = mgr
+            .register("Motor", "urn:example:motor:1")
+            .expect("should succeed");
 
         // Set model prediction.
         mgr.get_twin_mut(&id)
-            .unwrap()
+            .expect("should succeed")
             .set_model_value("speed", 1500.0);
 
         // Sensor matches model prediction exactly.
         mgr.update_from_sensor(&id, SensorReading::new("s1", "speed", 1500.0, "rpm"))
-            .unwrap();
+            .expect("should succeed");
 
         let report = mgr.synchronize(&id).expect("sync failed");
         assert_eq!(report.synced_quantities.len(), 1);
@@ -794,18 +796,20 @@ mod tests {
     #[test]
     fn manager_synchronise_with_anomaly() {
         let mut mgr = DigitalTwinManager::new().with_anomaly_threshold(0.05);
-        let id = mgr.register("Sensor", "urn:example:s:1").unwrap();
+        let id = mgr
+            .register("Sensor", "urn:example:s:1")
+            .expect("should succeed");
 
         // Set digital model state to 300 K.
         mgr.get_twin_mut(&id)
-            .unwrap()
+            .expect("should succeed")
             .set_model_value("temperature", 300.0);
 
         // Push sensor with large deviation from model (>5%).
         mgr.update_from_sensor(&id, SensorReading::new("s1", "temperature", 400.0, "K"))
-            .unwrap();
+            .expect("should succeed");
 
-        let report = mgr.synchronize(&id).unwrap();
+        let report = mgr.synchronize(&id).expect("should succeed");
         assert!(
             !report.anomalies.is_empty(),
             "expected anomaly to be detected (model=300, sensor=400)"
@@ -866,7 +870,7 @@ mod tests {
             ]
         }"#;
 
-        let model = parse_dtdl_json(json).unwrap();
+        let model = parse_dtdl_json(json).expect("should succeed");
         let twin = model_to_digital_twin(&model);
 
         assert!(twin.model_state.contains_key("voltage"));

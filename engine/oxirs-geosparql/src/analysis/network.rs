@@ -21,14 +21,14 @@
 //!
 //! // Create network from LineString geometries
 //! let roads = vec![
-//!     Geometry::from_wkt("LINESTRING(0 0, 1 0)").unwrap(),
-//!     Geometry::from_wkt("LINESTRING(1 0, 2 1)").unwrap(),
+//!     Geometry::from_wkt("LINESTRING(0 0, 1 0)").expect("should succeed"),
+//!     Geometry::from_wkt("LINESTRING(1 0, 2 1)").expect("should succeed"),
 //! ];
 //!
-//! let network = Network::from_linestrings(&roads).unwrap();
+//! let network = Network::from_linestrings(&roads).expect("should succeed");
 //!
 //! // Find shortest path
-//! let path = dijkstra_shortest_path(&network, 0, 2).unwrap();
+//! let path = dijkstra_shortest_path(&network, 0, 2).expect("should succeed");
 //! ```
 
 use crate::error::{GeoSparqlError, Result};
@@ -307,10 +307,10 @@ pub struct PathResult {
 /// let n0 = network.add_node((0.0, 0.0).into());
 /// let n1 = network.add_node((1.0, 0.0).into());
 /// let n2 = network.add_node((2.0, 1.0).into());
-/// network.add_edge(n0, n1, 1.0).unwrap();
-/// network.add_edge(n1, n2, 1.5).unwrap();
+/// network.add_edge(n0, n1, 1.0).expect("should succeed");
+/// network.add_edge(n1, n2, 1.5).expect("should succeed");
 ///
-/// let path = dijkstra_shortest_path(&network, n0, n2).unwrap();
+/// let path = dijkstra_shortest_path(&network, n0, n2).expect("should succeed");
 /// assert_eq!(path.cost, 2.5);
 /// ```
 pub fn dijkstra_shortest_path(network: &Network, start: usize, end: usize) -> Result<PathResult> {
@@ -522,8 +522,8 @@ mod tests {
 
         assert_eq!(network.node_count(), 3);
 
-        network.add_edge(n0, n1, 1.0).unwrap();
-        network.add_edge(n1, n2, 1.0).unwrap();
+        network.add_edge(n0, n1, 1.0).expect("should succeed");
+        network.add_edge(n1, n2, 1.0).expect("should succeed");
 
         assert_eq!(network.edge_count(), 2);
     }
@@ -531,11 +531,11 @@ mod tests {
     #[test]
     fn test_from_linestrings() {
         let lines = vec![
-            Geometry::from_wkt("LINESTRING(0 0, 1 0)").unwrap(),
-            Geometry::from_wkt("LINESTRING(1 0, 2 1)").unwrap(),
+            Geometry::from_wkt("LINESTRING(0 0, 1 0)").expect("should succeed"),
+            Geometry::from_wkt("LINESTRING(1 0, 2 1)").expect("should succeed"),
         ];
 
-        let network = Network::from_linestrings(&lines).unwrap();
+        let network = Network::from_linestrings(&lines).expect("should succeed");
 
         assert_eq!(network.node_count(), 3);
         assert_eq!(network.edge_count(), 2);
@@ -549,10 +549,10 @@ mod tests {
         let n1 = network.add_node((1.0, 0.0).into());
         let n2 = network.add_node((2.0, 0.0).into());
 
-        network.add_edge(n0, n1, 1.0).unwrap();
-        network.add_edge(n1, n2, 1.0).unwrap();
+        network.add_edge(n0, n1, 1.0).expect("should succeed");
+        network.add_edge(n1, n2, 1.0).expect("should succeed");
 
-        let path = dijkstra_shortest_path(&network, n0, n2).unwrap();
+        let path = dijkstra_shortest_path(&network, n0, n2).expect("should succeed");
 
         assert_eq!(path.nodes, vec![n0, n1, n2]);
         assert_eq!(path.cost, 2.0);
@@ -569,12 +569,12 @@ mod tests {
         let n3 = network.add_node((2.0, 1.0).into());
 
         // Two routes: direct (cost 3) and via n1 (cost 2.5)
-        network.add_edge(n0, n3, 3.0).unwrap();
-        network.add_edge(n0, n1, 1.0).unwrap();
-        network.add_edge(n1, n2, 0.5).unwrap();
-        network.add_edge(n2, n3, 1.0).unwrap();
+        network.add_edge(n0, n3, 3.0).expect("should succeed");
+        network.add_edge(n0, n1, 1.0).expect("should succeed");
+        network.add_edge(n1, n2, 0.5).expect("should succeed");
+        network.add_edge(n2, n3, 1.0).expect("should succeed");
 
-        let path = dijkstra_shortest_path(&network, n0, n3).unwrap();
+        let path = dijkstra_shortest_path(&network, n0, n3).expect("should succeed");
 
         assert_eq!(path.cost, 2.5);
         assert_eq!(path.nodes.len(), 4);
@@ -588,10 +588,10 @@ mod tests {
         let n1 = network.add_node((1.0, 0.0).into());
         let n2 = network.add_node((2.0, 0.0).into());
 
-        network.add_edge(n0, n1, 1.0).unwrap();
-        network.add_edge(n1, n2, 1.0).unwrap();
+        network.add_edge(n0, n1, 1.0).expect("should succeed");
+        network.add_edge(n1, n2, 1.0).expect("should succeed");
 
-        let path = astar_shortest_path(&network, n0, n2).unwrap();
+        let path = astar_shortest_path(&network, n0, n2).expect("should succeed");
 
         assert_eq!(path.nodes, vec![n0, n1, n2]);
         assert_eq!(path.cost, 2.0);
@@ -605,7 +605,7 @@ mod tests {
         let n1 = network.add_node((1.0, 0.0).into());
         let n2 = network.add_node((10.0, 10.0).into());
 
-        network.add_edge(n0, n1, 1.0).unwrap();
+        network.add_edge(n0, n1, 1.0).expect("should succeed");
 
         // No path from n0 to n2
         assert!(dijkstra_shortest_path(&network, n0, n2).is_err());
@@ -621,7 +621,7 @@ mod tests {
 
         let nearest = network
             .find_nearest_node(&Coord { x: 0.9, y: 0.0 })
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(nearest, 1);
     }
 
@@ -633,8 +633,8 @@ mod tests {
         let n1 = network.add_node((1.0, 0.0).into());
         let n2 = network.add_node((2.0, 0.0).into());
 
-        network.add_edge(n0, n1, 1.0).unwrap();
-        network.add_edge(n0, n2, 2.0).unwrap();
+        network.add_edge(n0, n1, 1.0).expect("should succeed");
+        network.add_edge(n0, n2, 2.0).expect("should succeed");
 
         let neighbors = network.neighbors(n0);
         assert_eq!(neighbors.len(), 2);

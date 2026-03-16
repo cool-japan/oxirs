@@ -593,7 +593,7 @@ mod tests {
         ); // Dublin
         let d = r.distance_km(51.5, -0.1); // London
         assert!(d.is_some());
-        assert!(d.unwrap() > 400.0 && d.unwrap() < 600.0);
+        assert!(d.expect("should succeed") > 400.0 && d.expect("should succeed") < 600.0);
     }
 
     #[test]

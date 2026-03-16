@@ -590,9 +590,9 @@ mod tests {
 
     #[test]
     fn test_query_pattern_detection() {
-        let s = Subject::NamedNode(NamedNode::new("http://s").unwrap());
-        let p = Predicate::NamedNode(NamedNode::new("http://p").unwrap());
-        let o = Object::NamedNode(NamedNode::new("http://o").unwrap());
+        let s = Subject::NamedNode(NamedNode::new("http://s").expect("valid IRI"));
+        let p = Predicate::NamedNode(NamedNode::new("http://p").expect("valid IRI"));
+        let o = Object::NamedNode(NamedNode::new("http://o").expect("valid IRI"));
 
         assert_eq!(
             QueryPattern::from_components(Some(&s), Some(&p), Some(&o)),
@@ -626,17 +626,19 @@ mod tests {
         // Insert test data
         for i in 0..10 {
             let triple = Triple::new(
-                NamedNode::new(format!("http://s{i}")).unwrap(),
-                NamedNode::new("http://p").unwrap(),
-                NamedNode::new(format!("http://o{i}")).unwrap(),
+                NamedNode::new(format!("http://s{i}")).expect("valid IRI from format"),
+                NamedNode::new("http://p").expect("valid IRI"),
+                NamedNode::new(format!("http://o{i}")).expect("valid IRI from format"),
             );
-            manager.insert(triple).unwrap();
+            manager.insert(triple).expect("insert should succeed");
         }
 
         // Query the same pattern multiple times
-        let pred = Predicate::NamedNode(NamedNode::new("http://p").unwrap());
+        let pred = Predicate::NamedNode(NamedNode::new("http://p").expect("valid IRI"));
         for _ in 0..3 {
-            let results = manager.query(None, Some(&pred), None).unwrap();
+            let results = manager
+                .query(None, Some(&pred), None)
+                .expect("query should succeed");
             assert_eq!(results.len(), 10);
         }
 
@@ -655,18 +657,18 @@ mod tests {
         // Insert test data
         for i in 0..5 {
             let triple = Triple::new(
-                NamedNode::new(format!("http://s{i}")).unwrap(),
-                NamedNode::new("http://p1").unwrap(),
-                NamedNode::new(format!("http://o{i}")).unwrap(),
+                NamedNode::new(format!("http://s{i}")).expect("valid IRI from format"),
+                NamedNode::new("http://p1").expect("valid IRI"),
+                NamedNode::new(format!("http://o{i}")).expect("valid IRI from format"),
             );
             graph.write().insert(&triple);
         }
 
         for i in 0..3 {
             let triple = Triple::new(
-                NamedNode::new(format!("http://s{i}")).unwrap(),
-                NamedNode::new("http://p2").unwrap(),
-                NamedNode::new(format!("http://o{i}")).unwrap(),
+                NamedNode::new(format!("http://s{i}")).expect("valid IRI from format"),
+                NamedNode::new("http://p2").expect("valid IRI"),
+                NamedNode::new(format!("http://o{i}")).expect("valid IRI from format"),
             );
             graph.write().insert(&triple);
         }
@@ -674,12 +676,16 @@ mod tests {
         let index = PredicateIndex::new(graph.clone());
 
         // Query by predicate
-        let p1 = Predicate::NamedNode(NamedNode::new("http://p1").unwrap());
-        let results = index.query(None, Some(&p1), None).unwrap();
+        let p1 = Predicate::NamedNode(NamedNode::new("http://p1").expect("valid IRI"));
+        let results = index
+            .query(None, Some(&p1), None)
+            .expect("index query should succeed");
         assert_eq!(results.len(), 5);
 
-        let p2 = Predicate::NamedNode(NamedNode::new("http://p2").unwrap());
-        let results = index.query(None, Some(&p2), None).unwrap();
+        let p2 = Predicate::NamedNode(NamedNode::new("http://p2").expect("valid IRI"));
+        let results = index
+            .query(None, Some(&p2), None)
+            .expect("index query should succeed");
         assert_eq!(results.len(), 3);
     }
 
@@ -688,14 +694,16 @@ mod tests {
         let graph = Arc::new(RwLock::new(IndexedGraph::new()));
 
         // Insert test data
-        let s1 = Subject::NamedNode(NamedNode::new("http://s1").unwrap());
-        let p1 = Predicate::NamedNode(NamedNode::new("http://p1").unwrap());
+        let s1 = Subject::NamedNode(NamedNode::new("http://s1").expect("valid IRI"));
+        let p1 = Predicate::NamedNode(NamedNode::new("http://p1").expect("valid IRI"));
 
         for i in 0..5 {
             let triple = Triple::new(
                 s1.clone(),
                 p1.clone(),
-                Object::NamedNode(NamedNode::new(format!("http://o{i}")).unwrap()),
+                Object::NamedNode(
+                    NamedNode::new(format!("http://o{i}")).expect("valid IRI from format"),
+                ),
             );
             graph.write().insert(&triple);
         }
@@ -703,7 +711,9 @@ mod tests {
         let index = SubjectPredicateIndex::new(graph.clone());
 
         // Query by subject and predicate
-        let results = index.query(Some(&s1), Some(&p1), None).unwrap();
+        let results = index
+            .query(Some(&s1), Some(&p1), None)
+            .expect("index query should succeed");
         assert_eq!(results.len(), 5);
     }
 }

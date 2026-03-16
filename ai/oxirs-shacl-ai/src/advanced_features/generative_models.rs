@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn test_test_data_generator() {
         let generator = TestDataGenerator::new(64);
-        let samples = generator.generate_test_samples(10).unwrap();
+        let samples = generator.generate_test_samples(10).expect("should succeed");
         assert_eq!(samples.len(), 10);
     }
 }

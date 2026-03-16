@@ -498,43 +498,43 @@ mod tests {
 
     #[test]
     fn test_parse_simple_iri() {
-        let path = parse_property_path("<http://knows>").unwrap();
+        let path = parse_property_path("<http://knows>").expect("should succeed");
         assert!(matches!(path, PropertyPath::Iri(_)));
     }
 
     #[test]
     fn test_parse_zero_or_more() {
-        let path = parse_property_path("<http://knows>*").unwrap();
+        let path = parse_property_path("<http://knows>*").expect("should succeed");
         assert!(matches!(path, PropertyPath::ZeroOrMore(_)));
     }
 
     #[test]
     fn test_parse_one_or_more() {
-        let path = parse_property_path("<http://knows>+").unwrap();
+        let path = parse_property_path("<http://knows>+").expect("should succeed");
         assert!(matches!(path, PropertyPath::OneOrMore(_)));
     }
 
     #[test]
     fn test_parse_zero_or_one() {
-        let path = parse_property_path("<http://knows>?").unwrap();
+        let path = parse_property_path("<http://knows>?").expect("should succeed");
         assert!(matches!(path, PropertyPath::ZeroOrOne(_)));
     }
 
     #[test]
     fn test_parse_alternative() {
-        let path = parse_property_path("<http://a> | <http://b>").unwrap();
+        let path = parse_property_path("<http://a> | <http://b>").expect("should succeed");
         assert!(matches!(path, PropertyPath::Alternative(_, _)));
     }
 
     #[test]
     fn test_parse_sequence() {
-        let path = parse_property_path("<http://a> / <http://b>").unwrap();
+        let path = parse_property_path("<http://a> / <http://b>").expect("should succeed");
         assert!(matches!(path, PropertyPath::Sequence(_, _)));
     }
 
     #[test]
     fn test_parse_inverse() {
-        let path = parse_property_path("^<http://knows>").unwrap();
+        let path = parse_property_path("^<http://knows>").expect("should succeed");
         assert!(matches!(path, PropertyPath::Inverse(_)));
     }
 

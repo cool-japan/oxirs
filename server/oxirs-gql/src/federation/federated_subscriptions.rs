@@ -427,7 +427,10 @@ mod tests {
             ..Default::default()
         };
 
-        manager.register_subscription(config).await.unwrap();
+        manager
+            .register_subscription(config)
+            .await
+            .expect("should succeed");
         // Verify registration doesn't panic
     }
 
@@ -439,7 +442,10 @@ mod tests {
             targets: vec!["service1".to_string()],
             ..Default::default()
         };
-        manager.register_subscription(config).await.unwrap();
+        manager
+            .register_subscription(config)
+            .await
+            .expect("should succeed");
 
         let variables = HashMap::new();
         let stream = manager.subscribe("test_sub".to_string(), variables).await;
@@ -454,13 +460,16 @@ mod tests {
             targets: vec!["service1".to_string()],
             ..Default::default()
         };
-        manager.register_subscription(config).await.unwrap();
+        manager
+            .register_subscription(config)
+            .await
+            .expect("should succeed");
 
         let variables = HashMap::new();
         let _stream = manager
             .subscribe("test_sub".to_string(), variables)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let active = manager.list_active_subscriptions().await;
         assert_eq!(active.len(), 1);
@@ -474,18 +483,21 @@ mod tests {
             targets: vec!["service1".to_string()],
             ..Default::default()
         };
-        manager.register_subscription(config).await.unwrap();
+        manager
+            .register_subscription(config)
+            .await
+            .expect("should succeed");
 
         let variables = HashMap::new();
         let _stream = manager
             .subscribe("test_sub".to_string(), variables)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let active = manager.list_active_subscriptions().await;
-        let sub_id = active.first().unwrap().clone();
+        let sub_id = active.first().expect("should succeed").clone();
 
-        manager.unsubscribe(&sub_id).await.unwrap();
+        manager.unsubscribe(&sub_id).await.expect("should succeed");
         let active_after = manager.list_active_subscriptions().await;
         assert_eq!(active_after.len(), 0);
     }
@@ -498,20 +510,23 @@ mod tests {
             targets: vec!["service1".to_string(), "service2".to_string()],
             ..Default::default()
         };
-        manager.register_subscription(config).await.unwrap();
+        manager
+            .register_subscription(config)
+            .await
+            .expect("should succeed");
 
         let variables = HashMap::new();
         let _stream = manager
             .subscribe("test_sub".to_string(), variables)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let active = manager.list_active_subscriptions().await;
-        let sub_id = active.first().unwrap().clone();
+        let sub_id = active.first().expect("should succeed").clone();
 
         let info = manager.get_subscription_info(&sub_id).await;
         assert!(info.is_some());
-        let info = info.unwrap();
+        let info = info.expect("should succeed");
         assert_eq!(info.operation, "test_sub");
         assert_eq!(info.targets.len(), 2);
     }
@@ -533,7 +548,7 @@ mod tests {
         let merged = manager
             .aggregate_events(events, AggregationStrategy::Merge)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(merged.source, "merged");
         if let serde_json::Value::Object(obj) = merged.payload {
@@ -556,7 +571,7 @@ mod tests {
         let result = manager
             .aggregate_events(events, AggregationStrategy::First)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(result.source, "service1");
     }
@@ -574,7 +589,7 @@ mod tests {
         let result = manager
             .aggregate_events(events, AggregationStrategy::Latest)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(result.timestamp, event2.timestamp);
     }
@@ -622,7 +637,10 @@ mod tests {
     async fn test_register_event_handler() {
         let manager = FederatedSubscriptionManager::new();
         let handler = Box::new(LoggingEventHandler);
-        manager.register_event_handler(handler).await.unwrap();
+        manager
+            .register_event_handler(handler)
+            .await
+            .expect("should succeed");
     }
 
     #[tokio::test]
@@ -633,25 +651,31 @@ mod tests {
             targets: vec!["service1".to_string()],
             ..Default::default()
         };
-        manager.register_subscription(config).await.unwrap();
+        manager
+            .register_subscription(config)
+            .await
+            .expect("should succeed");
 
         let variables = HashMap::new();
         let mut stream = manager
             .subscribe("test_sub".to_string(), variables)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let active = manager.list_active_subscriptions().await;
-        let sub_id = active.first().unwrap().clone();
+        let sub_id = active.first().expect("should succeed").clone();
 
         let event = SubscriptionEvent::new("test".to_string(), serde_json::json!({"test": true}));
-        manager.publish_event(&sub_id, event.clone()).await.unwrap();
+        manager
+            .publish_event(&sub_id, event.clone())
+            .await
+            .expect("should succeed");
 
         // Try to receive the event (with timeout)
         let received =
             tokio::time::timeout(std::time::Duration::from_millis(100), stream.next()).await;
 
         assert!(received.is_ok());
-        assert!(received.unwrap().is_some());
+        assert!(received.expect("should succeed").is_some());
     }
 }

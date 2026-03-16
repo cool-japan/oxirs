@@ -310,21 +310,27 @@ mod tests {
     #[test]
     fn test_metres_to_kilometres() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(1000.0, "unit:metre", "unit:kilometre").unwrap();
+        let r = uc
+            .convert(1000.0, "unit:metre", "unit:kilometre")
+            .expect("should succeed");
         assert!(approx_eq(r.value, 1.0));
     }
 
     #[test]
     fn test_kilometres_to_metres() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(1.0, "unit:kilometre", "unit:metre").unwrap();
+        let r = uc
+            .convert(1.0, "unit:kilometre", "unit:metre")
+            .expect("should succeed");
         assert!(approx_eq(r.value, 1000.0));
     }
 
     #[test]
     fn test_same_unit_identity() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(42.0, "unit:metre", "unit:metre").unwrap();
+        let r = uc
+            .convert(42.0, "unit:metre", "unit:metre")
+            .expect("should succeed");
         assert!(approx_eq(r.value, 42.0));
     }
 
@@ -335,7 +341,7 @@ mod tests {
         let uc = UnitConverter::with_defaults();
         let r = uc
             .convert(0.0, "unit:degreeCelsius", "unit:degreeFahrenheit")
-            .unwrap();
+            .expect("should succeed");
         // 0°C = 32°F
         assert!((r.value - 32.0).abs() < 0.001);
     }
@@ -345,7 +351,7 @@ mod tests {
         let uc = UnitConverter::with_defaults();
         let r = uc
             .convert(100.0, "unit:degreeCelsius", "unit:degreeFahrenheit")
-            .unwrap();
+            .expect("should succeed");
         // 100°C = 212°F
         assert!((r.value - 212.0).abs() < 0.001);
     }
@@ -355,7 +361,7 @@ mod tests {
         let uc = UnitConverter::with_defaults();
         let r = uc
             .convert(32.0, "unit:degreeFahrenheit", "unit:degreeCelsius")
-            .unwrap();
+            .expect("should succeed");
         // 32°F = 0°C
         assert!(r.value.abs() < 0.001);
     }
@@ -365,7 +371,7 @@ mod tests {
         let uc = UnitConverter::with_defaults();
         let r = uc
             .convert(0.0, "unit:degreeCelsius", "unit:kelvin")
-            .unwrap();
+            .expect("should succeed");
         assert!((r.value - 273.15).abs() < 0.001);
     }
 
@@ -374,14 +380,18 @@ mod tests {
     #[test]
     fn test_miles_to_metres() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(1.0, "unit:mile", "unit:metre").unwrap();
+        let r = uc
+            .convert(1.0, "unit:mile", "unit:metre")
+            .expect("should succeed");
         assert!((r.value - 1609.344).abs() < 0.01);
     }
 
     #[test]
     fn test_inches_to_centimetres() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(1.0, "unit:inch", "unit:centimetre").unwrap();
+        let r = uc
+            .convert(1.0, "unit:inch", "unit:centimetre")
+            .expect("should succeed");
         assert!((r.value - 2.54).abs() < 0.001);
     }
 
@@ -390,7 +400,9 @@ mod tests {
     #[test]
     fn test_litres_to_gallons() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(1.0, "unit:litre", "unit:gallon").unwrap();
+        let r = uc
+            .convert(1.0, "unit:litre", "unit:gallon")
+            .expect("should succeed");
         // 1 L ≈ 0.264172 gal
         assert!((r.value - 0.264172).abs() < 0.0001);
     }
@@ -398,7 +410,9 @@ mod tests {
     #[test]
     fn test_gallons_to_litres() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(1.0, "unit:gallon", "unit:litre").unwrap();
+        let r = uc
+            .convert(1.0, "unit:gallon", "unit:litre")
+            .expect("should succeed");
         assert!((r.value - 3.785411784).abs() < 0.0001);
     }
 
@@ -430,30 +444,34 @@ mod tests {
     #[test]
     fn test_to_si_metre() {
         let uc = UnitConverter::with_defaults();
-        let si = uc.to_si(5.0, "unit:metre").unwrap();
+        let si = uc.to_si(5.0, "unit:metre").expect("should succeed");
         assert!(approx_eq(si, 5.0));
     }
 
     #[test]
     fn test_to_si_kilometre() {
         let uc = UnitConverter::with_defaults();
-        let si = uc.to_si(3.0, "unit:kilometre").unwrap();
+        let si = uc.to_si(3.0, "unit:kilometre").expect("should succeed");
         assert!(approx_eq(si, 3000.0));
     }
 
     #[test]
     fn test_from_si_metre_roundtrip() {
         let uc = UnitConverter::with_defaults();
-        let si = uc.to_si(7.5, "unit:kilometre").unwrap();
-        let back = uc.from_si(si, "unit:kilometre").unwrap();
+        let si = uc.to_si(7.5, "unit:kilometre").expect("should succeed");
+        let back = uc.from_si(si, "unit:kilometre").expect("should succeed");
         assert!((back - 7.5).abs() < EPSILON);
     }
 
     #[test]
     fn test_celsius_to_si_round_trip() {
         let uc = UnitConverter::with_defaults();
-        let si = uc.to_si(25.0, "unit:degreeCelsius").unwrap();
-        let back = uc.from_si(si, "unit:degreeCelsius").unwrap();
+        let si = uc
+            .to_si(25.0, "unit:degreeCelsius")
+            .expect("should succeed");
+        let back = uc
+            .from_si(si, "unit:degreeCelsius")
+            .expect("should succeed");
         assert!((back - 25.0).abs() < 0.001);
     }
 
@@ -508,7 +526,7 @@ mod tests {
         let uc = UnitConverter::with_defaults();
         let u = uc.get_unit("unit:metre");
         assert!(u.is_some());
-        assert_eq!(u.unwrap().symbol, "m");
+        assert_eq!(u.expect("should succeed").symbol, "m");
     }
 
     #[test]
@@ -538,7 +556,9 @@ mod tests {
     #[test]
     fn test_conversion_result_formula_populated() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(1000.0, "unit:metre", "unit:kilometre").unwrap();
+        let r = uc
+            .convert(1000.0, "unit:metre", "unit:kilometre")
+            .expect("should succeed");
         assert!(!r.formula.is_empty());
         assert!(r.formula.contains("km"));
     }
@@ -569,14 +589,18 @@ mod tests {
     #[test]
     fn test_grams_to_kilograms() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(1000.0, "unit:gram", "unit:kilogram").unwrap();
+        let r = uc
+            .convert(1000.0, "unit:gram", "unit:kilogram")
+            .expect("should succeed");
         assert!((r.value - 1.0).abs() < EPSILON);
     }
 
     #[test]
     fn test_pounds_to_kilograms() {
         let uc = UnitConverter::with_defaults();
-        let r = uc.convert(1.0, "unit:pound", "unit:kilogram").unwrap();
+        let r = uc
+            .convert(1.0, "unit:pound", "unit:kilogram")
+            .expect("should succeed");
         assert!((r.value - 0.453592).abs() < 0.0001);
     }
 }

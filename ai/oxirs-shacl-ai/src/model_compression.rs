@@ -681,7 +681,9 @@ mod tests {
     fn test_quantization_scheme() {
         let compressor = ModelCompressor::new();
         let tensor = Array2::from_shape_fn((3, 3), |(i, j)| (i + j) as f64 * 0.1);
-        let scheme = compressor.compute_quantization_scheme(&tensor, 8).unwrap();
+        let scheme = compressor
+            .compute_quantization_scheme(&tensor, 8)
+            .expect("should succeed");
 
         assert_eq!(scheme.bit_width, 8);
         assert!(scheme.scale_factor > 0.0);
@@ -691,7 +693,9 @@ mod tests {
     fn test_pruning() {
         let compressor = ModelCompressor::new();
         let tensor = Array2::from_shape_fn((10, 10), |(i, j)| ((i + j) as f64) * 0.1);
-        let (pruned, mask) = compressor.prune_tensor(&tensor, 0.5).unwrap();
+        let (pruned, mask) = compressor
+            .prune_tensor(&tensor, 0.5)
+            .expect("should succeed");
 
         // Check that pruning was applied
         let sparsity = mask.iter().filter(|&&x| x == 0.0).count() as f64 / mask.len() as f64;

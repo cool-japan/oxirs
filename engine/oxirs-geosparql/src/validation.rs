@@ -1656,7 +1656,7 @@ mod tests {
         assert_eq!(metrics.coordinate_count, 5);
         assert!(metrics.complexity_score > 1.0);
         assert!(metrics.compactness.is_some());
-        assert!(metrics.compactness.unwrap() > 0.0);
+        assert!(metrics.compactness.expect("should succeed") > 0.0);
     }
 
     #[test]

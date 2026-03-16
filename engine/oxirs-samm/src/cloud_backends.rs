@@ -1784,13 +1784,13 @@ mod tests {
 
     #[test]
     fn test_extract_host_standard_url() {
-        let host = extract_host("https://s3.amazonaws.com/my-bucket/key").unwrap();
+        let host = extract_host("https://s3.amazonaws.com/my-bucket/key").expect("should succeed");
         assert_eq!(host, "s3.amazonaws.com");
     }
 
     #[test]
     fn test_extract_host_url_with_port() {
-        let host = extract_host("http://localhost:9000/bucket").unwrap();
+        let host = extract_host("http://localhost:9000/bucket").expect("should succeed");
         assert_eq!(host, "localhost:9000");
     }
 

@@ -150,7 +150,11 @@ mod tests {
         let analyzer = ContentSemanticAnalyzer::new();
         let content = create_test_content();
 
-        let result = analyzer.analyze(&content).await.unwrap().unwrap();
+        let result = analyzer
+            .analyze(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.score > 0.0);
         assert!(result.confidence > 0.0);
     }
@@ -160,7 +164,11 @@ mod tests {
         let analyzer = CrossModalAnalyzer::new();
         let content = create_test_content();
 
-        let result = analyzer.analyze(&content).await.unwrap().unwrap();
+        let result = analyzer
+            .analyze(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.score > 0.0);
     }
 
@@ -169,7 +177,11 @@ mod tests {
         let analyzer = KnowledgeExtractionAnalyzer::new();
         let content = create_test_content();
 
-        let result = analyzer.analyze(&content).await.unwrap().unwrap();
+        let result = analyzer
+            .analyze(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.score > 0.0);
     }
 }

@@ -55,7 +55,7 @@
 //!     object: Term::Variable("Z".to_string()),
 //! };
 //!
-//! let results = materializer.query(&query).unwrap();
+//! let results = materializer.query(&query).expect("should succeed");
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
@@ -659,7 +659,7 @@ mod tests {
     }
 
     #[test]
-    fn test_lazy_query() {
+    fn test_lazy_query() -> Result<(), Box<dyn std::error::Error>> {
         let mut materializer = LazyMaterializer::new();
 
         // Add rule
@@ -681,14 +681,15 @@ mod tests {
             object: Term::Variable("Z".to_string()),
         };
 
-        let results = materializer.query(&query).unwrap();
+        let results = materializer.query(&query)?;
 
         // Should derive ancestor(john, mary) from parent(john, mary)
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_cache_hit() {
+    fn test_cache_hit() -> Result<(), Box<dyn std::error::Error>> {
         let mut materializer = LazyMaterializer::new();
 
         materializer.add_rule(create_simple_rule());
@@ -708,17 +709,18 @@ mod tests {
         };
 
         // First query - cache miss
-        let _results1 = materializer.query(&query).unwrap();
+        let _results1 = materializer.query(&query)?;
 
         // Second query - should hit cache
-        let _results2 = materializer.query(&query).unwrap();
+        let _results2 = materializer.query(&query)?;
 
         let stats = materializer.cache_stats();
         assert!(stats.hit_rate > 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_cache_invalidation() {
+    fn test_cache_invalidation() -> Result<(), Box<dyn std::error::Error>> {
         let mut materializer = LazyMaterializer::new();
 
         materializer.add_rule(create_simple_rule());
@@ -738,17 +740,18 @@ mod tests {
         };
 
         // Query to populate cache
-        let _results = materializer.query(&query).unwrap();
+        let _results = materializer.query(&query)?;
 
         // Invalidate cache
         materializer.invalidate_cache();
 
         let stats = materializer.cache_stats();
         assert_eq!(stats.cache_size, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_predicate_invalidation() {
+    fn test_predicate_invalidation() -> Result<(), Box<dyn std::error::Error>> {
         let mut materializer = LazyMaterializer::new();
 
         materializer.add_rule(create_simple_rule());
@@ -768,13 +771,14 @@ mod tests {
         };
 
         // Query to populate cache
-        let _results = materializer.query(&query).unwrap();
+        let _results = materializer.query(&query)?;
 
         // Invalidate specific predicate
         materializer.invalidate_predicate("ancestor");
 
         let stats = materializer.cache_stats();
         assert_eq!(stats.cache_size, 0);
+        Ok(())
     }
 
     #[test]

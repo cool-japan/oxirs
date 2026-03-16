@@ -17,7 +17,7 @@
 //! props.insert("name".into(), serde_json::Value::String("Berlin".into()));
 //! let feature = GeoJsonFeature { geometry: Some(point), properties: props };
 //! let collection = GeoJsonFeatureCollection { features: vec![feature] };
-//! let json = serializer.serialize_collection(&collection).unwrap();
+//! let json = serializer.serialize_collection(&collection).expect("should succeed");
 //! assert!(json.contains("FeatureCollection"));
 //! ```
 
@@ -471,8 +471,8 @@ mod tests {
     fn test_point_coordinates() {
         let s = GeoJsonSerializer::new();
         let v = s.geometry_to_json(&GeoJsonGeometry::Point([13.405, 52.52]));
-        assert!((v["coordinates"][0].as_f64().unwrap() - 13.405).abs() < 1e-10);
-        assert!((v["coordinates"][1].as_f64().unwrap() - 52.52).abs() < 1e-10);
+        assert!((v["coordinates"][0].as_f64().expect("should succeed") - 13.405).abs() < 1e-10);
+        assert!((v["coordinates"][1].as_f64().expect("should succeed") - 52.52).abs() < 1e-10);
     }
 
     #[test]
@@ -480,7 +480,10 @@ mod tests {
         let s = GeoJsonSerializer::new();
         let v = s.geometry_to_json(&GeoJsonGeometry::LineString(vec![[0.0, 0.0], [1.0, 1.0]]));
         assert_eq!(v["type"], "LineString");
-        assert_eq!(v["coordinates"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            v["coordinates"].as_array().expect("should succeed").len(),
+            2
+        );
     }
 
     #[test]
@@ -489,7 +492,10 @@ mod tests {
         let ring = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]];
         let v = s.geometry_to_json(&GeoJsonGeometry::Polygon(vec![ring]));
         assert_eq!(v["type"], "Polygon");
-        assert_eq!(v["coordinates"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            v["coordinates"].as_array().expect("should succeed").len(),
+            1
+        );
     }
 
     #[test]
@@ -507,7 +513,10 @@ mod tests {
             vec![[2.0, 2.0], [3.0, 3.0]],
         ]));
         assert_eq!(v["type"], "MultiLineString");
-        assert_eq!(v["coordinates"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            v["coordinates"].as_array().expect("should succeed").len(),
+            2
+        );
     }
 
     #[test]
@@ -525,7 +534,7 @@ mod tests {
             GeoJsonGeometry::Point([0.0, 0.0]),
         ]));
         assert_eq!(v["type"], "GeometryCollection");
-        assert_eq!(v["geometries"].as_array().unwrap().len(), 1);
+        assert_eq!(v["geometries"].as_array().expect("should succeed").len(), 1);
     }
 
     // -----------------------------------------------------------------------
@@ -575,7 +584,7 @@ mod tests {
     fn test_serialize_collection_produces_valid_json() {
         let s = GeoJsonSerializer::new();
         let collection = GeoJsonFeatureCollection { features: vec![] };
-        let json = s.serialize_collection(&collection).unwrap();
+        let json = s.serialize_collection(&collection).expect("should succeed");
         assert!(json.contains("FeatureCollection"));
     }
 
@@ -587,10 +596,13 @@ mod tests {
             properties: empty_props(),
         };
         let collection = GeoJsonFeatureCollection { features: vec![f] };
-        let json = s.serialize_collection(&collection).unwrap();
-        let parsed: Value = serde_json::from_str(&json).unwrap();
+        let json = s.serialize_collection(&collection).expect("should succeed");
+        let parsed: Value = serde_json::from_str(&json).expect("should succeed");
         assert_eq!(parsed["type"], "FeatureCollection");
-        assert_eq!(parsed["features"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            parsed["features"].as_array().expect("should succeed").len(),
+            1
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -599,7 +611,8 @@ mod tests {
 
     #[test]
     fn test_parse_wkt_point_basic() {
-        let geom = GeoJsonSerializer::parse_wkt_point("POINT(13.405 52.52)").unwrap();
+        let geom =
+            GeoJsonSerializer::parse_wkt_point("POINT(13.405 52.52)").expect("should succeed");
         if let GeoJsonGeometry::Point(c) = geom {
             assert!((c[0] - 13.405).abs() < 1e-10);
             assert!((c[1] - 52.52).abs() < 1e-10);
@@ -610,13 +623,14 @@ mod tests {
 
     #[test]
     fn test_parse_wkt_point_with_space() {
-        let geom = GeoJsonSerializer::parse_wkt_point("POINT (0.0 0.0)").unwrap();
+        let geom = GeoJsonSerializer::parse_wkt_point("POINT (0.0 0.0)").expect("should succeed");
         assert!(matches!(geom, GeoJsonGeometry::Point([_, _])));
     }
 
     #[test]
     fn test_parse_wkt_point_negative_coords() {
-        let geom = GeoJsonSerializer::parse_wkt_point("POINT(-73.9857 40.7484)").unwrap();
+        let geom =
+            GeoJsonSerializer::parse_wkt_point("POINT(-73.9857 40.7484)").expect("should succeed");
         if let GeoJsonGeometry::Point(c) = geom {
             assert!((c[0] + 73.9857).abs() < 1e-10);
         } else {
@@ -631,7 +645,8 @@ mod tests {
 
     #[test]
     fn test_parse_wkt_linestring_basic() {
-        let geom = GeoJsonSerializer::parse_wkt_linestring("LINESTRING(0 0, 1 1, 2 2)").unwrap();
+        let geom = GeoJsonSerializer::parse_wkt_linestring("LINESTRING(0 0, 1 1, 2 2)")
+            .expect("should succeed");
         if let GeoJsonGeometry::LineString(pts) = geom {
             assert_eq!(pts.len(), 3);
         } else {
@@ -652,7 +667,7 @@ mod tests {
     #[test]
     fn test_parse_wkt_polygon_basic() {
         let wkt = "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))";
-        let geom = GeoJsonSerializer::parse_wkt_polygon(wkt).unwrap();
+        let geom = GeoJsonSerializer::parse_wkt_polygon(wkt).expect("should succeed");
         if let GeoJsonGeometry::Polygon(rings) = geom {
             assert_eq!(rings.len(), 1);
             assert_eq!(rings[0].len(), 5);
@@ -688,7 +703,13 @@ mod tests {
         row.insert("lon".into(), "13.405".into());
         row.insert("name".into(), "Berlin".into());
         let fc = s.sparql_results_to_geojson(&[row], "lat", "lon", Some("name"));
-        assert_eq!(fc.features[0].properties.get("label").unwrap(), "Berlin");
+        assert_eq!(
+            fc.features[0]
+                .properties
+                .get("label")
+                .expect("should succeed"),
+            "Berlin"
+        );
     }
 
     #[test]
@@ -762,7 +783,7 @@ mod tests {
             properties: empty_props(),
         };
         let fc = GeoJsonFeatureCollection { features: vec![f] };
-        let bb = GeoJsonSerializer::bounding_box(&fc).unwrap();
+        let bb = GeoJsonSerializer::bounding_box(&fc).expect("should succeed");
         // [west, south, east, north]
         assert!((bb[0] - 10.0).abs() < 1e-10); // west
         assert!((bb[1] - 20.0).abs() < 1e-10); // south
@@ -783,7 +804,7 @@ mod tests {
             },
         ];
         let fc = GeoJsonFeatureCollection { features };
-        let bb = GeoJsonSerializer::bounding_box(&fc).unwrap();
+        let bb = GeoJsonSerializer::bounding_box(&fc).expect("should succeed");
         assert!((bb[0] + 10.0).abs() < 1e-10); // west = -10
         assert!((bb[1] + 5.0).abs() < 1e-10); // south = -5
         assert!((bb[2] - 20.0).abs() < 1e-10); // east = 20
@@ -807,7 +828,7 @@ mod tests {
             properties: empty_props(),
         };
         let fc = GeoJsonFeatureCollection { features: vec![f] };
-        let bb = GeoJsonSerializer::bounding_box(&fc).unwrap();
+        let bb = GeoJsonSerializer::bounding_box(&fc).expect("should succeed");
         assert!((bb[0] - 0.0).abs() < 1e-10);
         assert!((bb[2] - 5.0).abs() < 1e-10);
     }

@@ -332,8 +332,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_ntriples() {
-        let store = Arc::new(oxirs_core::RdfStore::new().unwrap());
+    fn test_parse_ntriples() -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(oxirs_core::RdfStore::new()?);
         let mut processor = SimpleRdfProcessor::new(store);
 
         let ntriples = r#"
@@ -344,7 +344,7 @@ mod tests {
 _:blank1 <http://example.org/p5> _:blank2 .
 "#;
 
-        let atoms = processor.process_ntriples(ntriples).unwrap();
+        let atoms = processor.process_ntriples(ntriples)?;
         assert_eq!(atoms.len(), 5);
 
         // Check first atom
@@ -376,11 +376,12 @@ _:blank1 <http://example.org/p5> _:blank2 .
             }
             _ => panic!("Expected triple"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parse_prefixes() {
-        let store = Arc::new(oxirs_core::RdfStore::new().unwrap());
+    fn test_parse_prefixes() -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(oxirs_core::RdfStore::new()?);
         let mut processor = SimpleRdfProcessor::new(store);
 
         let turtle = r#"
@@ -389,15 +390,16 @@ _:blank1 <http://example.org/p5> _:blank2 .
 @base <http://example.org/base/> .
 "#;
 
-        processor.process_turtle(turtle).unwrap();
+        processor.process_turtle(turtle)?;
 
         assert_eq!(
-            processor.namespaces.expand("ex:Person").unwrap(),
+            processor.namespaces.expand("ex:Person")?,
             "http://example.org/Person"
         );
         assert_eq!(
-            processor.namespaces.expand("foaf:name").unwrap(),
+            processor.namespaces.expand("foaf:name")?,
             "http://xmlns.com/foaf/0.1/name"
         );
+        Ok(())
     }
 }

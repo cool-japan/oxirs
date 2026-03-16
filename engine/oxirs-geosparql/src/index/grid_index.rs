@@ -46,7 +46,7 @@
 //! let index = GridIndex::new_auto(0.0, 0.0, 1000.0, 1000.0, 100);
 //!
 //! let geom = Geometry::new(GeoGeometry::Point(Point::new(500.0, 500.0)));
-//! let id = index.insert(geom).unwrap();
+//! let id = index.insert(geom).expect("should succeed");
 //!
 //! let results = index.query_bbox(400.0, 400.0, 600.0, 600.0);
 //! assert_eq!(results.len(), 1);
@@ -468,7 +468,7 @@ mod tests {
         let index = GridIndex::new(0.0, 0.0, 100.0, 100.0, 10);
         let geom = Geometry::new(GeoGeometry::Point(Point::new(50.0, 50.0)));
 
-        let id = index.insert(geom).unwrap();
+        let id = index.insert(geom).expect("insert should succeed");
         assert_eq!(index.len(), 1);
         assert!(id > 0);
     }
@@ -479,13 +479,13 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(25.0, 25.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(50.0, 50.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(75.0, 75.0))))
-            .unwrap();
+            .expect("should succeed");
 
         let results = index.query_bbox(20.0, 20.0, 60.0, 60.0);
         assert_eq!(results.len(), 2); // Points at (25,25) and (50,50)
@@ -497,10 +497,10 @@ mod tests {
 
         let id = index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(50.0, 50.0))))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(index.len(), 1);
 
-        let removed = index.remove(id).unwrap();
+        let removed = index.remove(id).expect("remove should succeed");
         assert!(removed);
         assert_eq!(index.len(), 0);
     }
@@ -511,12 +511,12 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(10.0, 10.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(90.0, 90.0))))
-            .unwrap();
+            .expect("should succeed");
 
-        let (geom, dist) = index.nearest(15.0, 15.0).unwrap();
+        let (geom, dist) = index.nearest(15.0, 15.0).expect("nearest should succeed");
 
         match geom.geom {
             GeoGeometry::Point(p) => {
@@ -534,13 +534,13 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(45.0, 45.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(48.0, 48.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(70.0, 70.0))))
-            .unwrap();
+            .expect("should succeed");
 
         // Query from middle of grid with points nearby
         let results = index.nearest_k(50.0, 50.0, 2);
@@ -554,13 +554,13 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(50.0, 50.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(55.0, 55.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(90.0, 90.0))))
-            .unwrap();
+            .expect("should succeed");
 
         let results = index.query_within_distance(50.0, 50.0, 10.0);
         assert_eq!(results.len(), 2); // Points at (50,50) and (55,55)
@@ -572,10 +572,10 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(25.0, 25.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(75.0, 75.0))))
-            .unwrap();
+            .expect("should succeed");
 
         let (geom_count, cells_used, _avg, _max, load_factor) = index.stats();
         assert_eq!(geom_count, 2);
@@ -608,7 +608,7 @@ mod tests {
             vec![],
         )));
 
-        index.insert(polygon).unwrap();
+        index.insert(polygon).expect("insert should succeed");
         assert_eq!(index.len(), 1);
 
         // Query overlapping region
@@ -622,10 +622,10 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(25.0, 25.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(75.0, 75.0))))
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(index.len(), 2);
 
@@ -644,7 +644,7 @@ mod tests {
             Geometry::new(GeoGeometry::Point(Point::new(75.0, 75.0))),
         ];
 
-        let ids = index.insert_batch(geometries).unwrap();
+        let ids = index.insert_batch(geometries).expect("should succeed");
         assert_eq!(ids.len(), 3);
         assert_eq!(index.len(), 3);
     }

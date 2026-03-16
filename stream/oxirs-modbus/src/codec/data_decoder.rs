@@ -435,31 +435,32 @@ mod tests {
 
     #[test]
     fn test_decode_bool() {
-        let v =
-            ModbusDecoder::decode(&[0xFF00], DecoderDataType::Bool, ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&[0xFF00], DecoderDataType::Bool, ByteOrder::BigEndian)
+            .expect("should succeed");
         assert_eq!(v, ModbusTypedValue::Bool(true));
 
-        let v =
-            ModbusDecoder::decode(&[0x0000], DecoderDataType::Bool, ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&[0x0000], DecoderDataType::Bool, ByteOrder::BigEndian)
+            .expect("should succeed");
         assert_eq!(v, ModbusTypedValue::Bool(false));
     }
 
     #[test]
     fn test_decode_i16() {
         // Positive
-        let v = ModbusDecoder::decode(&[255], DecoderDataType::I16, ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&[255], DecoderDataType::I16, ByteOrder::BigEndian)
+            .expect("should succeed");
         assert_eq!(v, ModbusTypedValue::I16(255));
 
         // Negative (two's complement)
-        let v =
-            ModbusDecoder::decode(&[0xFFFF], DecoderDataType::I16, ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&[0xFFFF], DecoderDataType::I16, ByteOrder::BigEndian)
+            .expect("should succeed");
         assert_eq!(v, ModbusTypedValue::I16(-1));
     }
 
     #[test]
     fn test_decode_u16() {
-        let v =
-            ModbusDecoder::decode(&[0xFFFF], DecoderDataType::U16, ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&[0xFFFF], DecoderDataType::U16, ByteOrder::BigEndian)
+            .expect("should succeed");
         assert_eq!(v, ModbusTypedValue::U16(65535));
     }
 
@@ -467,7 +468,8 @@ mod tests {
     fn test_decode_i32_big_endian() {
         // 0x0001_0000 = 65536
         let regs = [0x0001, 0x0000];
-        let v = ModbusDecoder::decode(&regs, DecoderDataType::I32, ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&regs, DecoderDataType::I32, ByteOrder::BigEndian)
+            .expect("should succeed");
         assert_eq!(v, ModbusTypedValue::I32(65536));
     }
 
@@ -476,8 +478,8 @@ mod tests {
         // Little-endian: regs[0]=lo, regs[1]=hi
         // [0x0000, 0x0001] → hi=0x0001, lo=0x0000 → 0x0001_0000 = 65536
         let regs = [0x0000, 0x0001];
-        let v =
-            ModbusDecoder::decode(&regs, DecoderDataType::I32, ByteOrder::LittleEndian).unwrap();
+        let v = ModbusDecoder::decode(&regs, DecoderDataType::I32, ByteOrder::LittleEndian)
+            .expect("should succeed");
         assert_eq!(v, ModbusTypedValue::I32(65536));
     }
 
@@ -487,10 +489,10 @@ mod tests {
         let be_regs = [0xDEAD, 0xBEEF]; // big-endian
         let le_regs = [0xBEEF, 0xDEAD]; // little-endian (word-swapped)
 
-        let v_be =
-            ModbusDecoder::decode(&be_regs, DecoderDataType::U32, ByteOrder::BigEndian).unwrap();
-        let v_le =
-            ModbusDecoder::decode(&le_regs, DecoderDataType::U32, ByteOrder::LittleEndian).unwrap();
+        let v_be = ModbusDecoder::decode(&be_regs, DecoderDataType::U32, ByteOrder::BigEndian)
+            .expect("should succeed");
+        let v_le = ModbusDecoder::decode(&le_regs, DecoderDataType::U32, ByteOrder::LittleEndian)
+            .expect("should succeed");
 
         assert_eq!(v_be, ModbusTypedValue::U32(0xDEADBEEF));
         assert_eq!(v_le, ModbusTypedValue::U32(0xDEADBEEF));
@@ -500,7 +502,8 @@ mod tests {
     fn test_decode_f32_big_endian() {
         // IEEE 754: 1.0 = 0x3F80_0000
         let regs = [0x3F80, 0x0000];
-        let v = ModbusDecoder::decode(&regs, DecoderDataType::F32, ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&regs, DecoderDataType::F32, ByteOrder::BigEndian)
+            .expect("should succeed");
         match v {
             ModbusTypedValue::F32(f) => assert!((f - 1.0f32).abs() < 1e-6),
             _ => panic!("Expected F32"),
@@ -517,7 +520,7 @@ mod tests {
             DecoderDataType::F32,
             ByteOrder::BigEndianSwapped,
         )
-        .unwrap();
+        .expect("should succeed");
         match v {
             ModbusTypedValue::F32(f) => assert!((f - 1.0f32).abs() < 1e-6),
             _ => panic!("Expected F32"),
@@ -528,7 +531,8 @@ mod tests {
     fn test_decode_f64_big_endian() {
         // 1.0_f64 = 0x3FF0_0000_0000_0000
         let regs = [0x3FF0, 0x0000, 0x0000, 0x0000];
-        let v = ModbusDecoder::decode(&regs, DecoderDataType::F64, ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&regs, DecoderDataType::F64, ByteOrder::BigEndian)
+            .expect("should succeed");
         match v {
             ModbusTypedValue::F64(f) => assert!((f - 1.0_f64).abs() < 1e-12),
             _ => panic!("Expected F64"),
@@ -539,8 +543,8 @@ mod tests {
     fn test_decode_string() {
         // "ABCD" = 0x4142, 0x4344
         let regs = [0x4142, 0x4344];
-        let v =
-            ModbusDecoder::decode(&regs, DecoderDataType::Str(4), ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&regs, DecoderDataType::Str(4), ByteOrder::BigEndian)
+            .expect("should succeed");
         assert_eq!(v, ModbusTypedValue::Str("ABCD".to_string()));
     }
 
@@ -548,8 +552,8 @@ mod tests {
     fn test_decode_string_with_nulls() {
         // "AB\0\0" — trailing nulls should be stripped
         let regs = [0x4142, 0x0000];
-        let v =
-            ModbusDecoder::decode(&regs, DecoderDataType::Str(4), ByteOrder::BigEndian).unwrap();
+        let v = ModbusDecoder::decode(&regs, DecoderDataType::Str(4), ByteOrder::BigEndian)
+            .expect("should succeed");
         assert_eq!(v, ModbusTypedValue::Str("AB".to_string()));
     }
 
@@ -565,7 +569,7 @@ mod tests {
     fn test_scale_linear() {
         let v = ModbusTypedValue::I16(625);
         // 625 * 0.1 + (-40.0) = 22.5
-        let scaled = ModbusDecoder::scale(&v, 0.1, -40.0).unwrap();
+        let scaled = ModbusDecoder::scale(&v, 0.1, -40.0).expect("should succeed");
         assert!((scaled - 22.5).abs() < 1e-9);
     }
 
@@ -580,10 +584,10 @@ mod tests {
     #[test]
     fn test_encode_i16_roundtrip() {
         let original = ModbusTypedValue::I16(-1024);
-        let encoded =
-            ModbusEncoder::encode(&original, DecoderDataType::I16, ByteOrder::BigEndian).unwrap();
-        let decoded =
-            ModbusDecoder::decode(&encoded, DecoderDataType::I16, ByteOrder::BigEndian).unwrap();
+        let encoded = ModbusEncoder::encode(&original, DecoderDataType::I16, ByteOrder::BigEndian)
+            .expect("should succeed");
+        let decoded = ModbusDecoder::decode(&encoded, DecoderDataType::I16, ByteOrder::BigEndian)
+            .expect("should succeed");
         assert_eq!(decoded, original);
     }
 
@@ -597,8 +601,10 @@ mod tests {
         ];
         let original = ModbusTypedValue::U32(0xCAFEBABE);
         for order in orders {
-            let encoded = ModbusEncoder::encode(&original, DecoderDataType::U32, order).unwrap();
-            let decoded = ModbusDecoder::decode(&encoded, DecoderDataType::U32, order).unwrap();
+            let encoded = ModbusEncoder::encode(&original, DecoderDataType::U32, order)
+                .expect("should succeed");
+            let decoded = ModbusDecoder::decode(&encoded, DecoderDataType::U32, order)
+                .expect("should succeed");
             assert_eq!(
                 decoded, original,
                 "roundtrip failed for byte order {:?}",
@@ -610,10 +616,10 @@ mod tests {
     #[test]
     fn test_encode_f32_roundtrip() {
         let original = ModbusTypedValue::F32(22.5);
-        let encoded =
-            ModbusEncoder::encode(&original, DecoderDataType::F32, ByteOrder::BigEndian).unwrap();
-        let decoded =
-            ModbusDecoder::decode(&encoded, DecoderDataType::F32, ByteOrder::BigEndian).unwrap();
+        let encoded = ModbusEncoder::encode(&original, DecoderDataType::F32, ByteOrder::BigEndian)
+            .expect("should succeed");
+        let decoded = ModbusDecoder::decode(&encoded, DecoderDataType::F32, ByteOrder::BigEndian)
+            .expect("should succeed");
         match decoded {
             ModbusTypedValue::F32(f) => assert!((f - 22.5).abs() < 1e-5),
             _ => panic!("Expected F32"),
@@ -625,8 +631,10 @@ mod tests {
         let original = ModbusTypedValue::F64(std::f64::consts::PI);
         let orders = [ByteOrder::BigEndian, ByteOrder::LittleEndian];
         for order in orders {
-            let encoded = ModbusEncoder::encode(&original, DecoderDataType::F64, order).unwrap();
-            let decoded = ModbusDecoder::decode(&encoded, DecoderDataType::F64, order).unwrap();
+            let encoded = ModbusEncoder::encode(&original, DecoderDataType::F64, order)
+                .expect("should succeed");
+            let decoded = ModbusDecoder::decode(&encoded, DecoderDataType::F64, order)
+                .expect("should succeed");
             match decoded {
                 ModbusTypedValue::F64(f) => {
                     assert!(
@@ -645,9 +653,10 @@ mod tests {
         let original = ModbusTypedValue::Str("Test".to_string());
         let encoded =
             ModbusEncoder::encode(&original, DecoderDataType::Str(4), ByteOrder::BigEndian)
-                .unwrap();
+                .expect("should succeed");
         let decoded =
-            ModbusDecoder::decode(&encoded, DecoderDataType::Str(4), ByteOrder::BigEndian).unwrap();
+            ModbusDecoder::decode(&encoded, DecoderDataType::Str(4), ByteOrder::BigEndian)
+                .expect("should succeed");
         assert_eq!(decoded, original);
     }
 
@@ -671,13 +680,16 @@ mod tests {
         assert!(
             (ModbusTypedValue::F32(std::f32::consts::PI)
                 .as_f64()
-                .unwrap()
+                .expect("should succeed")
                 - std::f64::consts::PI)
                 .abs()
                 < 1e-5
         );
         assert!(
-            (ModbusTypedValue::F64(std::f64::consts::E).as_f64().unwrap() - std::f64::consts::E)
+            (ModbusTypedValue::F64(std::f64::consts::E)
+                .as_f64()
+                .expect("should succeed")
+                - std::f64::consts::E)
                 .abs()
                 < 1e-12
         );

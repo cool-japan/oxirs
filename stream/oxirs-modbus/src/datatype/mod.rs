@@ -590,19 +590,19 @@ mod tests {
 
     #[test]
     fn test_bcd16_decode_zero() {
-        assert_eq!(decode_bcd16(0x0000).unwrap(), 0);
+        assert_eq!(decode_bcd16(0x0000).expect("should succeed"), 0);
     }
 
     #[test]
     fn test_bcd16_decode_max() {
         // 9999 = 0x9999 in BCD
-        assert_eq!(decode_bcd16(0x9999).unwrap(), 9999);
+        assert_eq!(decode_bcd16(0x9999).expect("should succeed"), 9999);
     }
 
     #[test]
     fn test_bcd16_decode_arbitrary() {
         // 1234 → 0x1234
-        assert_eq!(decode_bcd16(0x1234).unwrap(), 1234);
+        assert_eq!(decode_bcd16(0x1234).expect("should succeed"), 1234);
     }
 
     #[test]
@@ -614,8 +614,8 @@ mod tests {
     #[test]
     fn test_bcd16_encode_decode_roundtrip() {
         for v in [0u16, 1, 42, 999, 1234, 5678, 9999] {
-            let encoded = encode_bcd16(v).unwrap();
-            let decoded = decode_bcd16(encoded).unwrap();
+            let encoded = encode_bcd16(v).expect("should succeed");
+            let decoded = decode_bcd16(encoded).expect("should succeed");
             assert_eq!(decoded, v, "roundtrip failed for {}", v);
         }
     }
@@ -629,19 +629,22 @@ mod tests {
 
     #[test]
     fn test_bcd32_decode_zero() {
-        assert_eq!(decode_bcd32(0x0000, 0x0000).unwrap(), 0);
+        assert_eq!(decode_bcd32(0x0000, 0x0000).expect("should succeed"), 0);
     }
 
     #[test]
     fn test_bcd32_decode_max() {
-        assert_eq!(decode_bcd32(0x9999, 0x9999).unwrap(), 99_999_999);
+        assert_eq!(
+            decode_bcd32(0x9999, 0x9999).expect("should succeed"),
+            99_999_999
+        );
     }
 
     #[test]
     fn test_bcd32_decode_arbitrary() {
         // 12345678
-        let (hi, lo) = encode_bcd32(12_345_678).unwrap();
-        assert_eq!(decode_bcd32(hi, lo).unwrap(), 12_345_678);
+        let (hi, lo) = encode_bcd32(12_345_678).expect("should succeed");
+        assert_eq!(decode_bcd32(hi, lo).expect("should succeed"), 12_345_678);
     }
 
     #[test]
@@ -652,8 +655,8 @@ mod tests {
     #[test]
     fn test_bcd32_roundtrip() {
         for v in [0u32, 1, 12345678, 99999999] {
-            let (hi, lo) = encode_bcd32(v).unwrap();
-            let decoded = decode_bcd32(hi, lo).unwrap();
+            let (hi, lo) = encode_bcd32(v).expect("should succeed");
+            let decoded = decode_bcd32(hi, lo).expect("should succeed");
             assert_eq!(decoded, v, "BCD32 roundtrip failed for {}", v);
         }
     }
@@ -664,8 +667,8 @@ mod tests {
     fn test_float32_big_endian_decode() {
         // 1.0f32 = 0x3F80_0000
         let regs = [0x3F80u16, 0x0000u16];
-        let v =
-            decode_registers(&regs, ModbusDataTypeKind::Float32, Endianness::BigEndian).unwrap();
+        let v = decode_registers(&regs, ModbusDataTypeKind::Float32, Endianness::BigEndian)
+            .expect("should succeed");
         match v {
             TypedValue::Float32(f) => assert!((f - 1.0f32).abs() < 1e-6),
             _ => panic!("Expected Float32"),
@@ -676,8 +679,8 @@ mod tests {
     fn test_float32_little_endian_decode() {
         // 1.0f32 = 0x3F80_0000 → LE regs = [0x0000, 0x3F80]
         let regs = [0x0000u16, 0x3F80u16];
-        let v =
-            decode_registers(&regs, ModbusDataTypeKind::Float32, Endianness::LittleEndian).unwrap();
+        let v = decode_registers(&regs, ModbusDataTypeKind::Float32, Endianness::LittleEndian)
+            .expect("should succeed");
         match v {
             TypedValue::Float32(f) => assert!((f - 1.0f32).abs() < 1e-6),
             _ => panic!("Expected Float32"),
@@ -692,13 +695,13 @@ mod tests {
             ModbusDataTypeKind::Float32,
             Endianness::BigEndianSwapped,
         )
-        .unwrap();
+        .expect("should succeed");
         let decoded = decode_registers(
             &encoded,
             ModbusDataTypeKind::Float32,
             Endianness::BigEndianSwapped,
         )
-        .unwrap();
+        .expect("should succeed");
         match decoded {
             TypedValue::Float32(f) => assert!((f - std::f32::consts::PI).abs() < 1e-5),
             _ => panic!("Expected Float32"),
@@ -713,13 +716,13 @@ mod tests {
             ModbusDataTypeKind::Float32,
             Endianness::LittleEndianSwapped,
         )
-        .unwrap();
+        .expect("should succeed");
         let decoded = decode_registers(
             &encoded,
             ModbusDataTypeKind::Float32,
             Endianness::LittleEndianSwapped,
         )
-        .unwrap();
+        .expect("should succeed");
         match decoded {
             TypedValue::Float32(f) => assert!((f - (-273.15f32)).abs() < 1e-3),
             _ => panic!("Expected Float32"),
@@ -736,9 +739,10 @@ mod tests {
             ModbusDataTypeKind::Float64,
             Endianness::BigEndian,
         )
-        .unwrap();
+        .expect("should succeed");
         let decoded =
-            decode_registers(&encoded, ModbusDataTypeKind::Float64, Endianness::BigEndian).unwrap();
+            decode_registers(&encoded, ModbusDataTypeKind::Float64, Endianness::BigEndian)
+                .expect("should succeed");
         match decoded {
             TypedValue::Float64(f) => assert!((f - std::f64::consts::PI).abs() < 1e-12),
             _ => panic!("Expected Float64"),
@@ -753,13 +757,13 @@ mod tests {
             ModbusDataTypeKind::Float64,
             Endianness::LittleEndian,
         )
-        .unwrap();
+        .expect("should succeed");
         let decoded = decode_registers(
             &encoded,
             ModbusDataTypeKind::Float64,
             Endianness::LittleEndian,
         )
-        .unwrap();
+        .expect("should succeed");
         match decoded {
             TypedValue::Float64(f) => assert!((f - 1.23456789e10).abs() < 1.0),
             _ => panic!("Expected Float64"),
@@ -788,8 +792,10 @@ mod tests {
         ];
         for order in orders {
             let original = TypedValue::Int32(-123456);
-            let enc = encode_value(&original, ModbusDataTypeKind::Int32, order).unwrap();
-            let dec = decode_registers(&enc, ModbusDataTypeKind::Int32, order).unwrap();
+            let enc =
+                encode_value(&original, ModbusDataTypeKind::Int32, order).expect("should succeed");
+            let dec =
+                decode_registers(&enc, ModbusDataTypeKind::Int32, order).expect("should succeed");
             assert_eq!(dec, original, "Int32 roundtrip failed for {:?}", order);
         }
     }
@@ -797,7 +803,8 @@ mod tests {
     #[test]
     fn test_uint32_deadbeef_big_endian() {
         let regs = [0xDEADu16, 0xBEEFu16];
-        let v = decode_registers(&regs, ModbusDataTypeKind::Uint32, Endianness::BigEndian).unwrap();
+        let v = decode_registers(&regs, ModbusDataTypeKind::Uint32, Endianness::BigEndian)
+            .expect("should succeed");
         assert_eq!(v, TypedValue::Uint32(0xDEAD_BEEF));
     }
 
@@ -806,9 +813,10 @@ mod tests {
     #[test]
     fn test_int64_roundtrip_big_endian() {
         let original = TypedValue::Int64(i64::MIN);
-        let enc =
-            encode_value(&original, ModbusDataTypeKind::Int64, Endianness::BigEndian).unwrap();
-        let dec = decode_registers(&enc, ModbusDataTypeKind::Int64, Endianness::BigEndian).unwrap();
+        let enc = encode_value(&original, ModbusDataTypeKind::Int64, Endianness::BigEndian)
+            .expect("should succeed");
+        let dec = decode_registers(&enc, ModbusDataTypeKind::Int64, Endianness::BigEndian)
+            .expect("should succeed");
         assert_eq!(dec, original);
     }
 
@@ -820,9 +828,9 @@ mod tests {
             ModbusDataTypeKind::Uint64,
             Endianness::LittleEndian,
         )
-        .unwrap();
-        let dec =
-            decode_registers(&enc, ModbusDataTypeKind::Uint64, Endianness::LittleEndian).unwrap();
+        .expect("should succeed");
+        let dec = decode_registers(&enc, ModbusDataTypeKind::Uint64, Endianness::LittleEndian)
+            .expect("should succeed");
         assert_eq!(dec, original);
     }
 

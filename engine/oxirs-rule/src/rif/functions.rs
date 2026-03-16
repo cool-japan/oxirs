@@ -19,7 +19,7 @@ mod tests {
     };
     use crate::{Rule, RuleAtom, Term};
     #[test]
-    fn test_rif_parser_basic() {
+    fn test_rif_parser_basic() -> Result<(), Box<dyn std::error::Error>> {
         let mut parser = RifParser::new(RifDialect::Bld);
         let input = r#"
             Prefix(ex <http://example.org/>)
@@ -27,57 +27,62 @@ mod tests {
                 ex:ancestor(?x ?y) :- ex:parent(?x ?y)
             )
         "#;
-        let doc = parser.parse(input).unwrap();
+        let doc = parser.parse(input)?;
         assert_eq!(doc.groups.len(), 1);
         assert!(doc.prefixes.contains_key("ex"));
+        Ok(())
     }
     #[test]
-    fn test_rif_parser_forall() {
+    fn test_rif_parser_forall() -> Result<(), Box<dyn std::error::Error>> {
         let mut parser = RifParser::new(RifDialect::Bld);
         let input = r#"
             Forall ?x ?y (
                 ancestor(?x ?y) :- parent(?x ?y)
             )
         "#;
-        let doc = parser.parse(input).unwrap();
+        let doc = parser.parse(input)?;
         assert!(!doc.groups.is_empty());
+        Ok(())
     }
     #[test]
-    fn test_rif_parser_and_formula() {
+    fn test_rif_parser_and_formula() -> Result<(), Box<dyn std::error::Error>> {
         let mut parser = RifParser::new(RifDialect::Bld);
         let input = r#"
             Group (
                 ancestor(?x ?z) :- And(parent(?x ?y) ancestor(?y ?z))
             )
         "#;
-        let doc = parser.parse(input).unwrap();
+        let doc = parser.parse(input)?;
         assert!(!doc.groups.is_empty());
+        Ok(())
     }
     #[test]
-    fn test_rif_parser_naf() {
+    fn test_rif_parser_naf() -> Result<(), Box<dyn std::error::Error>> {
         let mut parser = RifParser::new(RifDialect::Bld);
         let input = r#"
             Group (
                 single(?x) :- And(person(?x) Naf(married(?x)))
             )
         "#;
-        let doc = parser.parse(input).unwrap();
+        let doc = parser.parse(input)?;
         assert!(!doc.groups.is_empty());
+        Ok(())
     }
     #[test]
-    fn test_rif_converter_to_oxirs() {
+    fn test_rif_converter_to_oxirs() -> Result<(), Box<dyn std::error::Error>> {
         let mut parser = RifParser::new(RifDialect::Bld);
         let input = r#"
             Group (
                 ancestor(?x ?y) :- parent(?x ?y)
             )
         "#;
-        let doc = parser.parse(input).unwrap();
-        let rules = doc.to_oxirs_rules().unwrap();
+        let doc = parser.parse(input)?;
+        let rules = doc.to_oxirs_rules()?;
         assert!(!rules.is_empty());
         let rule = &rules[0];
         assert_eq!(rule.body.len(), 1);
         assert_eq!(rule.head.len(), 1);
+        Ok(())
     }
     #[test]
     fn test_rif_converter_from_oxirs() {
@@ -98,7 +103,7 @@ mod tests {
         assert_eq!(doc.groups.len(), 1);
     }
     #[test]
-    fn test_rif_serializer() {
+    fn test_rif_serializer() -> Result<(), Box<dyn std::error::Error>> {
         let rule = Rule {
             name: "test_rule".to_string(),
             body: vec![RuleAtom::Triple {
@@ -114,12 +119,13 @@ mod tests {
         };
         let doc = RifDocument::from_oxirs_rules(&[rule], RifDialect::Bld);
         let serializer = RifSerializer::new(RifDialect::Bld);
-        let output = serializer.serialize(&doc).unwrap();
+        let output = serializer.serialize(&doc)?;
         assert!(output.contains("RIF-BLD"));
         assert!(output.contains("Group"));
+        Ok(())
     }
     #[test]
-    fn test_rif_roundtrip() {
+    fn test_rif_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         let original_rule = Rule {
             name: "roundtrip_test".to_string(),
             body: vec![RuleAtom::Triple {
@@ -136,11 +142,12 @@ mod tests {
         let doc =
             RifDocument::from_oxirs_rules(std::slice::from_ref(&original_rule), RifDialect::Bld);
         let serializer = RifSerializer::new(RifDialect::Bld);
-        let rif_text = serializer.serialize(&doc).unwrap();
+        let rif_text = serializer.serialize(&doc)?;
         let mut parser = RifParser::new(RifDialect::Bld);
-        let parsed_doc = parser.parse(&rif_text).unwrap();
-        let converted_rules = parsed_doc.to_oxirs_rules().unwrap();
+        let parsed_doc = parser.parse(&rif_text)?;
+        let converted_rules = parsed_doc.to_oxirs_rules()?;
         assert!(!converted_rules.is_empty());
+        Ok(())
     }
     #[test]
     fn test_rif_prefix_expansion() {
@@ -151,7 +158,7 @@ mod tests {
     }
     #[test]
     #[ignore = "Frame syntax parsing is complex and not yet fully optimized"]
-    fn test_rif_frame_syntax() {
+    fn test_rif_frame_syntax() -> Result<(), Box<dyn std::error::Error>> {
         let mut parser = RifParser::new(RifDialect::Bld);
         let input = r#"
             Group (
@@ -160,28 +167,31 @@ mod tests {
         "#;
         let result = parser.parse(input);
         assert!(result.is_ok() || result.is_err());
+        Ok(())
     }
     #[test]
-    fn test_rif_equality() {
+    fn test_rif_equality() -> Result<(), Box<dyn std::error::Error>> {
         let mut parser = RifParser::new(RifDialect::Bld);
         let input = r#"
             Group (
                 same(?x ?y) :- And(person(?x) person(?y) External(equal(?x ?y)))
             )
         "#;
-        let doc = parser.parse(input).unwrap();
+        let doc = parser.parse(input)?;
         assert!(!doc.groups.is_empty());
+        Ok(())
     }
     #[test]
-    fn test_rif_literals() {
+    fn test_rif_literals() -> Result<(), Box<dyn std::error::Error>> {
         let mut parser = RifParser::new(RifDialect::Bld);
         let input = r#"
             Group (
                 adult(?x) :- And(person(?x ?age) External(greaterThan(?age 18)))
             )
         "#;
-        let doc = parser.parse(input).unwrap();
+        let doc = parser.parse(input)?;
         assert!(!doc.groups.is_empty());
+        Ok(())
     }
     #[test]
     fn test_rif_document_metadata() {

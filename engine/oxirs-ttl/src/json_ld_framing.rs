@@ -671,7 +671,7 @@ mod tests {
         let alice = flat
             .iter()
             .find(|n| n.id.as_deref() == Some("http://example.org/alice"))
-            .unwrap();
+            .expect("should succeed");
         // works_at should now be a Reference
         if let Some(values) = alice.properties.get("works_at") {
             assert!(matches!(values[0], JsonLdValue::Reference(_)));

@@ -45,14 +45,14 @@ uuid.workspace = true
 threadpool = "1.8"
 sysinfo.workspace = true  # Updated to 0.33 to fix objc2-core-foundation conflict
 nalgebra = { workspace = true, features = ["serde-serialize"] }
-num-complex = { version = "0.4", features = ["serde"] }
+num-complex = { workspace = true, features = ["serde"] }
 async-trait.workspace = true
 futures.workspace = true
 dashmap.workspace = true
 # datafusion.workspace = true  # Temporarily disabled due to version conflicts
-fastrand = "2.3"
+fastrand.workspace = true
 base64.workspace = true
-url = { version = "2.5", features = ["serde"] }
+url = { workspace = true, features = ["serde"] }
 tokio-stream.workspace = true
 libm = "0.2"  # For erf function
 flate2 = { workspace = true }

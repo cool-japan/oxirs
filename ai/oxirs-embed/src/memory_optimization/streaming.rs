@@ -143,7 +143,7 @@ mod tests {
 
         let results = processor
             .process_chunks(data, |chunk| Ok(chunk.iter().map(|x| x * 2).collect()))
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(results.len(), 25);
         assert_eq!(results[0], 0);
@@ -159,7 +159,7 @@ mod tests {
             .process_stream(data.into_iter(), |chunk| {
                 Ok(chunk.iter().map(|x| x * 2).collect())
             })
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(results.len(), 10);
         assert_eq!(results[0], 2);
@@ -201,7 +201,7 @@ mod tests {
         });
 
         assert!(result.is_ok());
-        let embeddings = result.unwrap();
+        let embeddings = result.expect("should succeed");
         assert_eq!(embeddings.len(), 50);
     }
 }

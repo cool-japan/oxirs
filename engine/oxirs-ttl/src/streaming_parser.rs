@@ -716,7 +716,7 @@ mod tests {
     #[test]
     fn test_parse_complete_simple() {
         let input = "<http://s> <http://p> <http://o> .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
         assert_eq!(triples[0].subject, ParsedTerm::Iri("http://s".to_string()));
         assert_eq!(
@@ -728,20 +728,21 @@ mod tests {
 
     #[test]
     fn test_parse_complete_empty() {
-        let triples = StreamingParser::parse_complete("").unwrap();
+        let triples = StreamingParser::parse_complete("").expect("should succeed");
         assert!(triples.is_empty());
     }
 
     #[test]
     fn test_parse_complete_comment_only() {
-        let triples = StreamingParser::parse_complete("# just a comment\n").unwrap();
+        let triples =
+            StreamingParser::parse_complete("# just a comment\n").expect("should succeed");
         assert!(triples.is_empty());
     }
 
     #[test]
     fn test_parse_complete_multiple_triples() {
         let input = "<http://s1> <http://p> <http://o1> .\n<http://s2> <http://p> <http://o2> .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 2);
     }
 
@@ -750,14 +751,14 @@ mod tests {
     #[test]
     fn test_parse_prefix_declaration() {
         let input = "@prefix ex: <http://example.org/> .\n<http://s> <http://p> <http://o> .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
     }
 
     #[test]
     fn test_parse_prefixed_name_expansion() {
         let input = "@prefix ex: <http://example.org/> .\nex:Alice ex:knows ex:Bob .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
         assert_eq!(
             triples[0].subject,
@@ -768,7 +769,7 @@ mod tests {
     #[test]
     fn test_parse_sparql_prefix() {
         let input = "PREFIX ex: <http://example.org/>\n<http://s> <http://p> <http://o> .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
     }
 
@@ -780,7 +781,7 @@ mod tests {
         parser
             .prefixes
             .insert("ex".to_string(), "http://example.org/".to_string());
-        let expanded = parser.expand_prefix("ex:Alice").unwrap();
+        let expanded = parser.expand_prefix("ex:Alice").expect("should succeed");
         assert_eq!(expanded, "http://example.org/Alice");
     }
 
@@ -803,7 +804,7 @@ mod tests {
     #[test]
     fn test_parse_string_literal() {
         let input = "<http://s> <http://p> \"hello\" .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
         assert_eq!(
             triples[0].object,
@@ -818,7 +819,7 @@ mod tests {
     #[test]
     fn test_parse_literal_with_datatype() {
         let input = "<http://s> <http://p> \"42\"^^<http://www.w3.org/2001/XMLSchema#integer> .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
         match &triples[0].object {
             ParsedTerm::Literal {
@@ -834,7 +835,7 @@ mod tests {
     #[test]
     fn test_parse_literal_with_lang() {
         let input = "<http://s> <http://p> \"hello\"@en .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
         match &triples[0].object {
             ParsedTerm::Literal { value, lang, .. } => {
@@ -850,7 +851,7 @@ mod tests {
     #[test]
     fn test_parse_blank_node() {
         let input = "_:b0 <http://p> <http://o> .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
         assert_eq!(triples[0].subject, ParsedTerm::BlankNode("b0".to_string()));
     }
@@ -858,7 +859,7 @@ mod tests {
     #[test]
     fn test_parse_blank_node_object() {
         let input = "<http://s> <http://p> _:b1 .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
         assert_eq!(triples[0].object, ParsedTerm::BlankNode("b1".to_string()));
     }
@@ -870,9 +871,9 @@ mod tests {
         let mut parser = StreamingParser::new();
         let chunk1 = "<http://s> <http://p>";
         let chunk2 = " <http://o> .";
-        let t1 = parser.feed(chunk1).unwrap();
+        let t1 = parser.feed(chunk1).expect("should succeed");
         assert!(t1.is_empty()); // incomplete
-        let t2 = parser.feed(chunk2).unwrap();
+        let t2 = parser.feed(chunk2).expect("should succeed");
         assert_eq!(t2.len(), 1);
         assert_eq!(parser.triples_parsed(), 1);
     }
@@ -882,9 +883,9 @@ mod tests {
         let mut parser = StreamingParser::new();
         let chunk1 = "@prefix ex: <http://example.org/> .\n";
         let chunk2 = "ex:s ex:p ex:o .";
-        let t1 = parser.feed(chunk1).unwrap();
+        let t1 = parser.feed(chunk1).expect("should succeed");
         assert!(t1.is_empty());
-        let t2 = parser.feed(chunk2).unwrap();
+        let t2 = parser.feed(chunk2).expect("should succeed");
         assert_eq!(t2.len(), 1);
     }
 
@@ -896,8 +897,8 @@ mod tests {
         }
         let mut parser = StreamingParser::new();
         let mid = input.len() / 2;
-        let t1 = parser.feed(&input[..mid]).unwrap();
-        let t2 = parser.feed(&input[mid..]).unwrap();
+        let t1 = parser.feed(&input[..mid]).expect("should succeed");
+        let t2 = parser.feed(&input[mid..]).expect("should succeed");
         let total = t1.len() + t2.len();
         assert_eq!(total, 10, "Expected 10 triples, got {total}");
     }
@@ -907,8 +908,12 @@ mod tests {
     #[test]
     fn test_triples_parsed_counter() {
         let mut parser = StreamingParser::new();
-        parser.feed("<http://s1> <http://p> <http://o1> .").unwrap();
-        parser.feed("<http://s2> <http://p> <http://o2> .").unwrap();
+        parser
+            .feed("<http://s1> <http://p> <http://o1> .")
+            .expect("should succeed");
+        parser
+            .feed("<http://s2> <http://p> <http://o2> .")
+            .expect("should succeed");
         assert_eq!(parser.triples_parsed(), 2);
     }
 
@@ -917,7 +922,9 @@ mod tests {
     #[test]
     fn test_prefixes_accessor() {
         let mut parser = StreamingParser::new();
-        parser.feed("@prefix ex: <http://example.org/> .").unwrap();
+        parser
+            .feed("@prefix ex: <http://example.org/> .")
+            .expect("should succeed");
         assert!(parser.prefixes().contains_key("ex"));
     }
 
@@ -926,8 +933,12 @@ mod tests {
     #[test]
     fn test_reset() {
         let mut parser = StreamingParser::new();
-        parser.feed("<http://s> <http://p> <http://o> .").unwrap();
-        parser.feed("@prefix ex: <http://example.org/> .").unwrap();
+        parser
+            .feed("<http://s> <http://p> <http://o> .")
+            .expect("should succeed");
+        parser
+            .feed("@prefix ex: <http://example.org/> .")
+            .expect("should succeed");
         parser.reset();
         assert_eq!(parser.triples_parsed(), 0);
         assert!(parser.prefixes().is_empty());
@@ -959,15 +970,17 @@ mod tests {
     #[test]
     fn test_flush_empty_buffer() {
         let mut parser = StreamingParser::new();
-        let result = parser.flush().unwrap();
+        let result = parser.flush().expect("should succeed");
         assert!(result.is_empty());
     }
 
     #[test]
     fn test_flush_after_complete_triple() {
         let mut parser = StreamingParser::new();
-        parser.feed("<http://s> <http://p> <http://o> .").unwrap();
-        let result = parser.flush().unwrap();
+        parser
+            .feed("<http://s> <http://p> <http://o> .")
+            .expect("should succeed");
+        let result = parser.flush().expect("should succeed");
         assert!(result.is_empty()); // already parsed
     }
 
@@ -999,7 +1012,7 @@ mod tests {
     #[test]
     fn test_rdf_type_shorthand() {
         let input = "<http://s> a <http://Type> .";
-        let triples = StreamingParser::parse_complete(input).unwrap();
+        let triples = StreamingParser::parse_complete(input).expect("should succeed");
         assert_eq!(triples.len(), 1);
         assert_eq!(
             triples[0].predicate,

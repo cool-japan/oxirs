@@ -38,7 +38,7 @@
 //!     subject: Term::Constant("socrates".to_string()),
 //!     predicate: Term::Constant("type".to_string()),
 //!     object: Term::Constant("human".to_string()),
-//! }).unwrap();
+//! }).expect("should succeed");
 //!
 //! // Only newly derived facts are returned
 //! assert!(!delta.is_empty());
@@ -601,7 +601,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_incremental_add_fact() {
+    fn test_incremental_add_fact() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = IncrementalReasoner::new();
 
         // Add a simple rule
@@ -620,13 +620,11 @@ mod tests {
         });
 
         // Add a fact
-        let delta = reasoner
-            .add_fact(RuleAtom::Triple {
-                subject: Term::Constant("socrates".to_string()),
-                predicate: Term::Constant("type".to_string()),
-                object: Term::Constant("human".to_string()),
-            })
-            .unwrap();
+        let delta = reasoner.add_fact(RuleAtom::Triple {
+            subject: Term::Constant("socrates".to_string()),
+            predicate: Term::Constant("type".to_string()),
+            object: Term::Constant("human".to_string()),
+        })?;
 
         // Should derive that socrates is mortal
         assert!(!delta.is_empty());
@@ -634,10 +632,11 @@ mod tests {
         let stats = reasoner.get_stats();
         assert_eq!(stats.asserted_facts, 1);
         assert!(stats.derived_facts > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_incremental_remove_fact() {
+    fn test_incremental_remove_fact() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = IncrementalReasoner::new();
 
         let fact = RuleAtom::Triple {
@@ -646,31 +645,31 @@ mod tests {
             object: Term::Constant("human".to_string()),
         };
 
-        reasoner.add_fact(fact.clone()).unwrap();
-        let removed = reasoner.remove_fact(&fact).unwrap();
+        reasoner.add_fact(fact.clone())?;
+        let removed = reasoner.remove_fact(&fact)?;
 
         assert!(!removed.is_empty());
         assert_eq!(reasoner.get_stats().total_facts, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_snapshot_restore() {
+    fn test_snapshot_restore() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = IncrementalReasoner::new();
 
         reasoner.create_snapshot();
 
-        reasoner
-            .add_fact(RuleAtom::Triple {
-                subject: Term::Constant("test".to_string()),
-                predicate: Term::Constant("p".to_string()),
-                object: Term::Constant("o".to_string()),
-            })
-            .unwrap();
+        reasoner.add_fact(RuleAtom::Triple {
+            subject: Term::Constant("test".to_string()),
+            predicate: Term::Constant("p".to_string()),
+            object: Term::Constant("o".to_string()),
+        })?;
 
         assert_eq!(reasoner.get_stats().total_facts, 1);
 
-        reasoner.restore_snapshot().unwrap();
+        reasoner.restore_snapshot()?;
 
         assert_eq!(reasoner.get_stats().total_facts, 0);
+        Ok(())
     }
 }

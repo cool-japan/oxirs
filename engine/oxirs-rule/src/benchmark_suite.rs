@@ -34,13 +34,13 @@
 //! let mut suite = BenchmarkSuite::new(config);
 //!
 //! // Run all benchmarks
-//! let results = suite.run_all().unwrap();
+//! let results = suite.run_all().expect("should succeed");
 //!
 //! // Print report
 //! println!("{}", results.generate_report());
 //!
 //! // Run specific category
-//! let forward_results = suite.run_category(BenchmarkCategory::ForwardChaining).unwrap();
+//! let forward_results = suite.run_category(BenchmarkCategory::ForwardChaining).expect("should succeed");
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
@@ -716,13 +716,11 @@ mod tests {
     }
 
     #[test]
-    fn test_benchmark_forward_chaining() {
+    fn test_benchmark_forward_chaining() -> Result<(), Box<dyn std::error::Error>> {
         let config = BenchmarkConfig::default().with_iterations(5).with_warmup(1);
         let mut suite = BenchmarkSuite::new(config);
 
-        let results = suite
-            .run_category(BenchmarkCategory::ForwardChaining)
-            .unwrap();
+        let results = suite.run_category(BenchmarkCategory::ForwardChaining)?;
         assert!(!results.results.is_empty());
 
         for result in &results.results {
@@ -730,42 +728,42 @@ mod tests {
             assert!(result.throughput > 0.0);
             assert!(result.samples > 0);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_benchmark_backward_chaining() {
+    fn test_benchmark_backward_chaining() -> Result<(), Box<dyn std::error::Error>> {
         let config = BenchmarkConfig::default().with_iterations(1).with_warmup(0);
         let mut suite = BenchmarkSuite::new(config);
 
-        let results = suite
-            .run_category(BenchmarkCategory::BackwardChaining)
-            .unwrap();
+        let results = suite.run_category(BenchmarkCategory::BackwardChaining)?;
         assert!(!results.results.is_empty());
         // Should only have one result (small dataset)
         assert_eq!(results.results.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_benchmark_rete_matching() {
+    fn test_benchmark_rete_matching() -> Result<(), Box<dyn std::error::Error>> {
         let config = BenchmarkConfig::default().with_iterations(5).with_warmup(1);
         let mut suite = BenchmarkSuite::new(config);
 
-        let results = suite.run_category(BenchmarkCategory::ReteMatching).unwrap();
+        let results = suite.run_category(BenchmarkCategory::ReteMatching)?;
         assert!(!results.results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_benchmark_results_report() {
+    fn test_benchmark_results_report() -> Result<(), Box<dyn std::error::Error>> {
         let config = BenchmarkConfig::default().with_iterations(5);
         let mut suite = BenchmarkSuite::new(config);
 
-        let results = suite
-            .run_category(BenchmarkCategory::ForwardChaining)
-            .unwrap();
+        let results = suite.run_category(BenchmarkCategory::ForwardChaining)?;
         let report = results.generate_report();
 
         assert!(report.contains("Benchmark Report"));
         assert!(report.contains("Forward Chaining"));
+        Ok(())
     }
 
     #[test]
@@ -789,7 +787,7 @@ mod tests {
     }
 
     #[test]
-    fn test_benchmark_fastest_slowest() {
+    fn test_benchmark_fastest_slowest() -> Result<(), Box<dyn std::error::Error>> {
         let results = BenchmarkResults {
             results: vec![
                 BenchmarkResult {
@@ -822,36 +820,36 @@ mod tests {
 
         let fastest = results
             .fastest_in_category(BenchmarkCategory::ForwardChaining)
-            .unwrap();
+            .ok_or("expected Some value")?;
         assert_eq!(fastest.name, "fast");
 
         let slowest = results
             .slowest_in_category(BenchmarkCategory::ForwardChaining)
-            .unwrap();
+            .ok_or("expected Some value")?;
         assert_eq!(slowest.name, "slow");
+        Ok(())
     }
 
     #[test]
-    fn test_run_all_benchmarks() {
+    fn test_run_all_benchmarks() -> Result<(), Box<dyn std::error::Error>> {
         let config = BenchmarkConfig::default().with_iterations(2).with_warmup(1);
         let mut suite = BenchmarkSuite::new(config);
 
-        let results = suite.run_all().unwrap();
+        let results = suite.run_all()?;
         assert!(!results.results.is_empty());
 
         let (total_time, avg_throughput) = results.overall_stats();
         assert!(total_time.as_millis() > 0);
         assert!(avg_throughput > 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_memory_tracking() {
+    fn test_memory_tracking() -> Result<(), Box<dyn std::error::Error>> {
         let config = BenchmarkConfig::default().with_iterations(1).with_warmup(0);
         let mut suite = BenchmarkSuite::new(config);
 
-        let results = suite
-            .run_category(BenchmarkCategory::ForwardChaining)
-            .unwrap();
+        let results = suite.run_category(BenchmarkCategory::ForwardChaining)?;
 
         // Verify memory tracking is working
         for result in &results.results {
@@ -869,5 +867,6 @@ mod tests {
                 "Memory usage should be < 100MB for tests"
             );
         }
+        Ok(())
     }
 }

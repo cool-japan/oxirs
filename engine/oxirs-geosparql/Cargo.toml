@@ -29,7 +29,7 @@ scirs2-stats = { workspace = true }
 geo.workspace = true
 geo-types = "0.7"
 wkt.workspace = true
-quick-xml = { version = "0.39", optional = true }
+quick-xml = { workspace = true, optional = true }
 geojson = { workspace = true, optional = true }
 shapefile = { version = "0.7", optional = true }
 geos = { version = "11.1", optional = true }
@@ -59,7 +59,7 @@ tracing.workspace = true
 once_cell.workspace = true
 parking_lot.workspace = true
 regex.workspace = true
-dashmap = { version = "6.1", optional = true }
+dashmap = { workspace = true, optional = true }
 
 # Optional parallel processing
 rayon = { workspace = true, optional = true }

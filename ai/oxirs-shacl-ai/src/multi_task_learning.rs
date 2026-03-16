@@ -944,7 +944,7 @@ mod tests {
             performance_history: VecDeque::new(),
         };
 
-        learner.register_task(task).unwrap();
+        learner.register_task(task).expect("should succeed");
         assert_eq!(learner.task_heads.len(), 1);
         assert_eq!(learner.task_weights.len(), 1);
     }

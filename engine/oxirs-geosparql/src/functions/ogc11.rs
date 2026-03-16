@@ -97,10 +97,10 @@ impl UnitOfMeasure {
     /// ```
     /// use oxirs_geosparql::functions::ogc11::UnitOfMeasure;
     ///
-    /// let m = UnitOfMeasure::from_uri("http://www.opengis.net/def/uom/UCUM/m").unwrap();
+    /// let m = UnitOfMeasure::from_uri("http://www.opengis.net/def/uom/UCUM/m").expect("should succeed");
     /// assert_eq!(m, UnitOfMeasure::Metre);
     ///
-    /// let km = UnitOfMeasure::from_uri("km").unwrap();
+    /// let km = UnitOfMeasure::from_uri("km").expect("should succeed");
     /// assert_eq!(km, UnitOfMeasure::Kilometre);
     /// ```
     pub fn from_uri(uri: &str) -> Result<Self> {
@@ -169,11 +169,11 @@ impl UnitOfMeasure {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::ogc11::{distance_with_unit, UnitOfMeasure};
 ///
-/// let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-/// let p2 = Geometry::from_wkt("POINT(1000 0)").unwrap();
+/// let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+/// let p2 = Geometry::from_wkt("POINT(1000 0)").expect("should succeed");
 ///
 /// // native units are metres — 1000m should be 1km
-/// let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Kilometre).unwrap();
+/// let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Kilometre).expect("should succeed");
 /// assert!((d - 1.0).abs() < 1e-6);
 /// ```
 pub fn distance_with_unit(geom1: &Geometry, geom2: &Geometry, unit: &UnitOfMeasure) -> Result<f64> {
@@ -189,10 +189,10 @@ pub fn distance_with_unit(geom1: &Geometry, geom2: &Geometry, unit: &UnitOfMeasu
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::ogc11::distance_with_unit_uri;
 ///
-/// let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-/// let p2 = Geometry::from_wkt("POINT(1609.344 0)").unwrap();
+/// let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+/// let p2 = Geometry::from_wkt("POINT(1609.344 0)").expect("should succeed");
 ///
-/// let d = distance_with_unit_uri(&p1, &p2, "mi").unwrap();
+/// let d = distance_with_unit_uri(&p1, &p2, "mi").expect("should succeed");
 /// assert!((d - 1.0).abs() < 1e-4);
 /// ```
 pub fn distance_with_unit_uri(geom1: &Geometry, geom2: &Geometry, unit_uri: &str) -> Result<f64> {
@@ -219,8 +219,8 @@ pub fn distance_with_unit_uri(geom1: &Geometry, geom2: &Geometry, unit_uri: &str
 /// use oxirs_geosparql::functions::ogc11::{length_with_unit, UnitOfMeasure};
 ///
 /// // A line 2000m long
-/// let line = Geometry::from_wkt("LINESTRING(0 0, 2000 0)").unwrap();
-/// let km = length_with_unit(&line, &UnitOfMeasure::Kilometre).unwrap();
+/// let line = Geometry::from_wkt("LINESTRING(0 0, 2000 0)").expect("should succeed");
+/// let km = length_with_unit(&line, &UnitOfMeasure::Kilometre).expect("should succeed");
 /// assert!((km - 2.0).abs() < 1e-6);
 /// ```
 pub fn length_with_unit(geom: &Geometry, unit: &UnitOfMeasure) -> Result<f64> {
@@ -252,8 +252,8 @@ pub fn length_with_unit_uri(geom: &Geometry, unit_uri: &str) -> Result<f64> {
 /// use oxirs_geosparql::functions::ogc11::{area_with_unit, UnitOfMeasure};
 ///
 /// // A 1000×1000 m square = 1 km²
-/// let square = Geometry::from_wkt("POLYGON((0 0, 1000 0, 1000 1000, 0 1000, 0 0))").unwrap();
-/// let km2 = area_with_unit(&square, &UnitOfMeasure::Kilometre).unwrap();
+/// let square = Geometry::from_wkt("POLYGON((0 0, 1000 0, 1000 1000, 0 1000, 0 0))").expect("should succeed");
+/// let km2 = area_with_unit(&square, &UnitOfMeasure::Kilometre).expect("should succeed");
 /// assert!((km2 - 1.0).abs() < 1e-6);
 /// ```
 pub fn area_with_unit(geom: &Geometry, unit: &UnitOfMeasure) -> Result<f64> {
@@ -308,9 +308,9 @@ pub fn area_with_unit_uri(geom: &Geometry, unit_uri: &str) -> Result<f64> {
 ///
 /// let mp = Geometry::from_wkt(
 ///     "MULTIPOINT((0 0),(1 0),(2 0),(2 1),(2 2),(1 2),(0 2),(0 1),(1 1))"
-/// ).unwrap();
+/// ).expect("should succeed");
 ///
-/// let hull = concave_hull(&mp, 0.3).unwrap();
+/// let hull = concave_hull(&mp, 0.3).expect("should succeed");
 /// assert_eq!(hull.geometry_type(), "Polygon");
 /// ```
 pub fn concave_hull(geom: &Geometry, ratio: f64) -> Result<Geometry> {
@@ -583,35 +583,43 @@ mod tests {
 
     #[test]
     fn test_uom_from_uri_full_prefix() {
-        let m = UnitOfMeasure::from_uri("http://www.opengis.net/def/uom/UCUM/m").unwrap();
+        let m = UnitOfMeasure::from_uri("http://www.opengis.net/def/uom/UCUM/m")
+            .expect("should succeed");
         assert_eq!(m, UnitOfMeasure::Metre);
 
-        let km = UnitOfMeasure::from_uri("http://www.opengis.net/def/uom/UCUM/km").unwrap();
+        let km = UnitOfMeasure::from_uri("http://www.opengis.net/def/uom/UCUM/km")
+            .expect("should succeed");
         assert_eq!(km, UnitOfMeasure::Kilometre);
     }
 
     #[test]
     fn test_uom_from_uri_short_names() {
-        assert_eq!(UnitOfMeasure::from_uri("m").unwrap(), UnitOfMeasure::Metre);
         assert_eq!(
-            UnitOfMeasure::from_uri("km").unwrap(),
+            UnitOfMeasure::from_uri("m").expect("should succeed"),
+            UnitOfMeasure::Metre
+        );
+        assert_eq!(
+            UnitOfMeasure::from_uri("km").expect("should succeed"),
             UnitOfMeasure::Kilometre
         );
-        assert_eq!(UnitOfMeasure::from_uri("mi").unwrap(), UnitOfMeasure::Mile);
         assert_eq!(
-            UnitOfMeasure::from_uri("[mi_i]").unwrap(),
+            UnitOfMeasure::from_uri("mi").expect("should succeed"),
             UnitOfMeasure::Mile
         );
         assert_eq!(
-            UnitOfMeasure::from_uri("[ft_i]").unwrap(),
+            UnitOfMeasure::from_uri("[mi_i]").expect("should succeed"),
+            UnitOfMeasure::Mile
+        );
+        assert_eq!(
+            UnitOfMeasure::from_uri("[ft_i]").expect("should succeed"),
             UnitOfMeasure::Foot
         );
         assert_eq!(
-            UnitOfMeasure::from_uri("[yd_i]").unwrap(),
+            UnitOfMeasure::from_uri("[yd_i]").expect("should succeed"),
             UnitOfMeasure::Yard
         );
         assert_eq!(
-            UnitOfMeasure::from_uri("[nmi_i]").unwrap(),
+            UnitOfMeasure::from_uri("[nmi_i]").expect("should succeed"),
             UnitOfMeasure::NauticalMile
         );
     }
@@ -619,27 +627,27 @@ mod tests {
     #[test]
     fn test_uom_from_uri_aliases() {
         assert_eq!(
-            UnitOfMeasure::from_uri("metre").unwrap(),
+            UnitOfMeasure::from_uri("metre").expect("should succeed"),
             UnitOfMeasure::Metre
         );
         assert_eq!(
-            UnitOfMeasure::from_uri("meter").unwrap(),
+            UnitOfMeasure::from_uri("meter").expect("should succeed"),
             UnitOfMeasure::Metre
         );
         assert_eq!(
-            UnitOfMeasure::from_uri("kilometre").unwrap(),
+            UnitOfMeasure::from_uri("kilometre").expect("should succeed"),
             UnitOfMeasure::Kilometre
         );
         assert_eq!(
-            UnitOfMeasure::from_uri("mile").unwrap(),
+            UnitOfMeasure::from_uri("mile").expect("should succeed"),
             UnitOfMeasure::Mile
         );
         assert_eq!(
-            UnitOfMeasure::from_uri("foot").unwrap(),
+            UnitOfMeasure::from_uri("foot").expect("should succeed"),
             UnitOfMeasure::Foot
         );
         assert_eq!(
-            UnitOfMeasure::from_uri("feet").unwrap(),
+            UnitOfMeasure::from_uri("feet").expect("should succeed"),
             UnitOfMeasure::Foot
         );
     }
@@ -669,68 +677,68 @@ mod tests {
 
     #[test]
     fn test_distance_with_unit_metres() {
-        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT(3 4)").unwrap();
-        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Metre).unwrap();
+        let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT(3 4)").expect("should succeed");
+        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Metre).expect("should succeed");
         assert!((d - 5.0).abs() < 1e-10, "expected 5.0 m, got {d}");
     }
 
     #[test]
     fn test_distance_with_unit_km() {
         // 1000 m = 1 km
-        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT(1000 0)").unwrap();
-        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Kilometre).unwrap();
+        let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT(1000 0)").expect("should succeed");
+        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Kilometre).expect("should succeed");
         assert!((d - 1.0).abs() < 1e-6, "expected 1.0 km, got {d}");
     }
 
     #[test]
     fn test_distance_with_unit_miles() {
         // 1609.344 m = 1 mile
-        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT(1609.344 0)").unwrap();
-        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Mile).unwrap();
+        let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT(1609.344 0)").expect("should succeed");
+        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Mile).expect("should succeed");
         assert!((d - 1.0).abs() < 1e-4, "expected 1.0 mi, got {d}");
     }
 
     #[test]
     fn test_distance_with_unit_feet() {
         // 0.3048 m = 1 foot
-        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT(0.3048 0)").unwrap();
-        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Foot).unwrap();
+        let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT(0.3048 0)").expect("should succeed");
+        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Foot).expect("should succeed");
         assert!((d - 1.0).abs() < 1e-4, "expected 1.0 ft, got {d}");
     }
 
     #[test]
     fn test_distance_with_unit_nautical_miles() {
         // 1852 m = 1 nautical mile
-        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT(1852 0)").unwrap();
-        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::NauticalMile).unwrap();
+        let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT(1852 0)").expect("should succeed");
+        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::NauticalMile).expect("should succeed");
         assert!((d - 1.0).abs() < 1e-4, "expected 1.0 nmi, got {d}");
     }
 
     #[test]
     fn test_distance_with_unit_uri() {
-        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT(1000 0)").unwrap();
-        let d = distance_with_unit_uri(&p1, &p2, "km").unwrap();
+        let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT(1000 0)").expect("should succeed");
+        let d = distance_with_unit_uri(&p1, &p2, "km").expect("should succeed");
         assert!((d - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_distance_with_unit_uri_invalid_unit() {
-        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
-        let p2 = Geometry::from_wkt("POINT(1 0)").unwrap();
+        let p1 = Geometry::from_wkt("POINT(0 0)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT(1 0)").expect("should succeed");
         assert!(distance_with_unit_uri(&p1, &p2, "furlong").is_err());
     }
 
     #[test]
     fn test_distance_with_unit_zero() {
-        let p1 = Geometry::from_wkt("POINT(5 5)").unwrap();
-        let p2 = Geometry::from_wkt("POINT(5 5)").unwrap();
-        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Kilometre).unwrap();
+        let p1 = Geometry::from_wkt("POINT(5 5)").expect("should succeed");
+        let p2 = Geometry::from_wkt("POINT(5 5)").expect("should succeed");
+        let d = distance_with_unit(&p1, &p2, &UnitOfMeasure::Kilometre).expect("should succeed");
         assert!(d.abs() < 1e-12, "same point should have distance 0");
     }
 
@@ -738,46 +746,48 @@ mod tests {
 
     #[test]
     fn test_length_with_unit_metres() {
-        let line = Geometry::from_wkt("LINESTRING(0 0, 5 0)").unwrap();
-        let l = length_with_unit(&line, &UnitOfMeasure::Metre).unwrap();
+        let line = Geometry::from_wkt("LINESTRING(0 0, 5 0)").expect("should succeed");
+        let l = length_with_unit(&line, &UnitOfMeasure::Metre).expect("should succeed");
         assert!((l - 5.0).abs() < 1e-10, "expected 5.0 m, got {l}");
     }
 
     #[test]
     fn test_length_with_unit_km() {
-        let line = Geometry::from_wkt("LINESTRING(0 0, 2000 0)").unwrap();
-        let l = length_with_unit(&line, &UnitOfMeasure::Kilometre).unwrap();
+        let line = Geometry::from_wkt("LINESTRING(0 0, 2000 0)").expect("should succeed");
+        let l = length_with_unit(&line, &UnitOfMeasure::Kilometre).expect("should succeed");
         assert!((l - 2.0).abs() < 1e-6, "expected 2.0 km, got {l}");
     }
 
     #[test]
     fn test_length_with_unit_miles() {
         // 3218.688 m = 2 miles
-        let line = Geometry::from_wkt("LINESTRING(0 0, 3218.688 0)").unwrap();
-        let l = length_with_unit(&line, &UnitOfMeasure::Mile).unwrap();
+        let line = Geometry::from_wkt("LINESTRING(0 0, 3218.688 0)").expect("should succeed");
+        let l = length_with_unit(&line, &UnitOfMeasure::Mile).expect("should succeed");
         assert!((l - 2.0).abs() < 1e-3, "expected 2.0 mi, got {l}");
     }
 
     #[test]
     fn test_length_with_unit_polygon_perimeter() {
         // 10×10 square: perimeter = 40 m
-        let square = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
-        let l = length_with_unit(&square, &UnitOfMeasure::Metre).unwrap();
+        let square =
+            Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
+        let l = length_with_unit(&square, &UnitOfMeasure::Metre).expect("should succeed");
         assert!((l - 40.0).abs() < 1e-6, "expected 40 m perimeter, got {l}");
     }
 
     #[test]
     fn test_length_with_unit_uri() {
-        let line = Geometry::from_wkt("LINESTRING(0 0, 1000 0)").unwrap();
-        let l = length_with_unit_uri(&line, "km").unwrap();
+        let line = Geometry::from_wkt("LINESTRING(0 0, 1000 0)").expect("should succeed");
+        let l = length_with_unit_uri(&line, "km").expect("should succeed");
         assert!((l - 1.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_length_with_unit_multilinestring() {
         // Two segments of 500 m each = 1000 m = 1 km
-        let mls = Geometry::from_wkt("MULTILINESTRING((0 0, 500 0),(0 0, 0 500))").unwrap();
-        let l = length_with_unit(&mls, &UnitOfMeasure::Kilometre).unwrap();
+        let mls = Geometry::from_wkt("MULTILINESTRING((0 0, 500 0),(0 0, 0 500))")
+            .expect("should succeed");
+        let l = length_with_unit(&mls, &UnitOfMeasure::Kilometre).expect("should succeed");
         assert!((l - 1.0).abs() < 1e-6, "expected 1 km, got {l}");
     }
 
@@ -786,16 +796,18 @@ mod tests {
     #[test]
     fn test_area_with_unit_sq_metres() {
         // 5×5 square = 25 m²
-        let square = Geometry::from_wkt("POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))").unwrap();
-        let a = area_with_unit(&square, &UnitOfMeasure::Metre).unwrap();
+        let square =
+            Geometry::from_wkt("POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))").expect("should succeed");
+        let a = area_with_unit(&square, &UnitOfMeasure::Metre).expect("should succeed");
         assert!((a - 25.0).abs() < 1e-8, "expected 25 m², got {a}");
     }
 
     #[test]
     fn test_area_with_unit_sq_km() {
         // 1000×1000 m = 1 km²
-        let square = Geometry::from_wkt("POLYGON((0 0, 1000 0, 1000 1000, 0 1000, 0 0))").unwrap();
-        let a = area_with_unit(&square, &UnitOfMeasure::Kilometre).unwrap();
+        let square = Geometry::from_wkt("POLYGON((0 0, 1000 0, 1000 1000, 0 1000, 0 0))")
+            .expect("should succeed");
+        let a = area_with_unit(&square, &UnitOfMeasure::Kilometre).expect("should succeed");
         assert!((a - 1.0).abs() < 1e-8, "expected 1 km², got {a}");
     }
 
@@ -804,22 +816,23 @@ mod tests {
         // 1609.344×1609.344 m = 1 mi²
         let side = 1_609.344;
         let wkt = format!("POLYGON((0 0, {side} 0, {side} {side}, 0 {side}, 0 0))");
-        let square = Geometry::from_wkt(&wkt).unwrap();
-        let a = area_with_unit(&square, &UnitOfMeasure::Mile).unwrap();
+        let square = Geometry::from_wkt(&wkt).expect("valid WKT");
+        let a = area_with_unit(&square, &UnitOfMeasure::Mile).expect("should succeed");
         assert!((a - 1.0).abs() < 1e-4, "expected 1 mi², got {a}");
     }
 
     #[test]
     fn test_area_with_unit_uri() {
-        let square = Geometry::from_wkt("POLYGON((0 0, 1000 0, 1000 1000, 0 1000, 0 0))").unwrap();
-        let a = area_with_unit_uri(&square, "km").unwrap();
+        let square = Geometry::from_wkt("POLYGON((0 0, 1000 0, 1000 1000, 0 1000, 0 0))")
+            .expect("should succeed");
+        let a = area_with_unit_uri(&square, "km").expect("should succeed");
         assert!((a - 1.0).abs() < 1e-8);
     }
 
     #[test]
     fn test_area_with_unit_non_polygon_returns_zero() {
-        let line = Geometry::from_wkt("LINESTRING(0 0, 1 0)").unwrap();
-        let a = area_with_unit(&line, &UnitOfMeasure::Metre).unwrap();
+        let line = Geometry::from_wkt("LINESTRING(0 0, 1 0)").expect("should succeed");
+        let a = area_with_unit(&line, &UnitOfMeasure::Metre).expect("should succeed");
         assert_eq!(a, 0.0, "non-polygon area should be 0");
     }
 
@@ -829,8 +842,8 @@ mod tests {
         let mp = Geometry::from_wkt(
             "MULTIPOLYGON(((0 0,100 0,100 100,0 100,0 0)),((200 0,300 0,300 100,200 100,200 0)))",
         )
-        .unwrap();
-        let a = area_with_unit(&mp, &UnitOfMeasure::Metre).unwrap();
+        .expect("should succeed");
+        let a = area_with_unit(&mp, &UnitOfMeasure::Metre).expect("should succeed");
         assert!((a - 20_000.0).abs() < 1e-6, "expected 20000 m², got {a}");
     }
 
@@ -838,16 +851,19 @@ mod tests {
 
     #[test]
     fn test_concave_hull_returns_polygon() {
-        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(4 0),(4 4),(0 4),(2 2))").unwrap();
-        let hull = concave_hull(&mp, 0.5).unwrap();
+        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(4 0),(4 4),(0 4),(2 2))")
+            .expect("should succeed");
+        let hull = concave_hull(&mp, 0.5).expect("should succeed");
         assert_eq!(hull.geometry_type(), "Polygon");
     }
 
     #[test]
     fn test_concave_hull_ratio_one_equals_convex() {
-        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(4 0),(4 4),(0 4),(2 2),(1 1))").unwrap();
-        let concave = concave_hull(&mp, 1.0).unwrap();
-        let convex = crate::functions::geometric_operations::convex_hull(&mp).unwrap();
+        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(4 0),(4 4),(0 4),(2 2),(1 1))")
+            .expect("should succeed");
+        let concave = concave_hull(&mp, 1.0).expect("should succeed");
+        let convex =
+            crate::functions::geometric_operations::convex_hull(&mp).expect("should succeed");
         // Both should be Polygon types
         assert_eq!(concave.geometry_type(), "Polygon");
         assert_eq!(convex.geometry_type(), "Polygon");
@@ -858,15 +874,15 @@ mod tests {
         let mp = Geometry::from_wkt(
             "MULTIPOINT((0 0),(5 0),(10 0),(10 5),(10 10),(5 10),(0 10),(0 5),(5 5))",
         )
-        .unwrap();
-        let hull = concave_hull(&mp, 0.0).unwrap();
+        .expect("should succeed");
+        let hull = concave_hull(&mp, 0.0).expect("should succeed");
         assert_eq!(hull.geometry_type(), "Polygon");
     }
 
     #[test]
     fn test_concave_hull_degenerate_too_few_points() {
         // 2 points → falls back to convex hull (which may be a LineString)
-        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(1 1))").unwrap();
+        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(1 1))").expect("should succeed");
         let result = concave_hull(&mp, 0.5);
         // Should not panic — result may be Ok or Err
         let _ = result;
@@ -874,27 +890,28 @@ mod tests {
 
     #[test]
     fn test_concave_hull_invalid_ratio_negative() {
-        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(1 0),(1 1),(0 1))").unwrap();
+        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(1 0),(1 1),(0 1))").expect("should succeed");
         assert!(concave_hull(&mp, -0.1).is_err());
     }
 
     #[test]
     fn test_concave_hull_invalid_ratio_over_one() {
-        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(1 0),(1 1),(0 1))").unwrap();
+        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(1 0),(1 1),(0 1))").expect("should succeed");
         assert!(concave_hull(&mp, 1.1).is_err());
     }
 
     #[test]
     fn test_concave_hull_polygon_input() {
-        let poly = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
-        let hull = concave_hull(&poly, 0.5).unwrap();
+        let poly =
+            Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
+        let hull = concave_hull(&poly, 0.5).expect("should succeed");
         assert_eq!(hull.geometry_type(), "Polygon");
     }
 
     #[test]
     fn test_concave_hull_linestring_input() {
-        let ls = Geometry::from_wkt("LINESTRING(0 0, 5 5, 10 0, 5 -5)").unwrap();
-        let hull = concave_hull(&ls, 0.5).unwrap();
+        let ls = Geometry::from_wkt("LINESTRING(0 0, 5 5, 10 0, 5 -5)").expect("should succeed");
+        let hull = concave_hull(&ls, 0.5).expect("should succeed");
         assert_eq!(hull.geometry_type(), "Polygon");
     }
 
@@ -908,8 +925,8 @@ mod tests {
              (0 2),(4 2),\
              (0 3),(4 3))",
         )
-        .unwrap();
-        let hull = concave_hull(&mp, 0.3).unwrap();
+        .expect("should succeed");
+        let hull = concave_hull(&mp, 0.3).expect("should succeed");
         assert_eq!(hull.geometry_type(), "Polygon");
         // Concave hull should be non-empty
         assert!(!hull.is_empty());
@@ -917,7 +934,7 @@ mod tests {
 
     #[test]
     fn test_concave_hull_single_point_fallback() {
-        let pt = Geometry::from_wkt("POINT(1 1)").unwrap();
+        let pt = Geometry::from_wkt("POINT(1 1)").expect("should succeed");
         // 1 point: should fall back gracefully
         let result = concave_hull(&pt, 0.5);
         // Convex hull of single point returns Point, which is fine
@@ -938,7 +955,7 @@ mod tests {
 
     #[test]
     fn test_extract_points_multipoint() {
-        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(1 1),(2 2))").unwrap();
+        let mp = Geometry::from_wkt("MULTIPOINT((0 0),(1 1),(2 2))").expect("should succeed");
         let pts = extract_points(&mp);
         assert_eq!(pts.len(), 3);
     }
@@ -946,7 +963,8 @@ mod tests {
     #[test]
     fn test_extract_points_polygon() {
         // Polygon exterior has 5 coords (4 unique + closing point which is deduped)
-        let poly = Geometry::from_wkt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap();
+        let poly =
+            Geometry::from_wkt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed");
         let pts = extract_points(&poly);
         assert!(pts.len() >= 4, "expected at least 4 unique points");
     }
@@ -954,7 +972,7 @@ mod tests {
     #[test]
     fn test_extract_points_deduplication() {
         // Duplicate points should be removed
-        let mp = Geometry::from_wkt("MULTIPOINT((1 1),(1 1),(2 2))").unwrap();
+        let mp = Geometry::from_wkt("MULTIPOINT((1 1),(1 1),(2 2))").expect("should succeed");
         let pts = extract_points(&mp);
         assert_eq!(pts.len(), 2, "duplicates should be removed, got {pts:?}");
     }

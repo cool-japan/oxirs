@@ -713,7 +713,7 @@ mod tests {
             attention_maps: HashMap::new(),
         };
 
-        distiller.add_teacher(teacher).unwrap();
+        distiller.add_teacher(teacher).expect("should succeed");
         assert_eq!(distiller.teacher_models.len(), 1);
     }
 

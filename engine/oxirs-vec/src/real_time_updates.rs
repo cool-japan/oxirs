@@ -680,10 +680,10 @@ mod tests {
     use crate::MemoryVectorIndex;
 
     #[tokio::test]
-    async fn test_real_time_updater() {
+    async fn test_real_time_updater() -> Result<()> {
         let index = Arc::new(RwLock::new(MemoryVectorIndex::new()));
         let config = RealTimeConfig::default();
-        let updater = RealTimeVectorUpdater::new(index, config).unwrap();
+        let updater = RealTimeVectorUpdater::new(index, config)?;
 
         // Test basic operations
         let operation = UpdateOperation::Insert {
@@ -692,18 +692,19 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        updater.submit_update(operation).await.unwrap();
-        updater.flush_pending_updates().await.unwrap();
+        updater.submit_update(operation).await?;
+        updater.flush_pending_updates().await?;
 
         let stats = updater.get_stats();
         assert!(stats.total_updates > 0);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_batch_operations() {
+    async fn test_batch_operations() -> Result<()> {
         let index = Arc::new(RwLock::new(MemoryVectorIndex::new()));
         let config = RealTimeConfig::default();
-        let updater = RealTimeVectorUpdater::new(index, config).unwrap();
+        let updater = RealTimeVectorUpdater::new(index, config)?;
 
         let operations = vec![
             UpdateOperation::Insert {
@@ -718,10 +719,11 @@ mod tests {
             },
         ];
 
-        updater.submit_batch(operations).await.unwrap();
-        updater.flush_pending_updates().await.unwrap();
+        updater.submit_batch(operations).await?;
+        updater.flush_pending_updates().await?;
 
         let stats = updater.get_stats();
         assert_eq!(stats.total_updates, 2);
+        Ok(())
     }
 }

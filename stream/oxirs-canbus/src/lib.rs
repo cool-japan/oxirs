@@ -1,6 +1,6 @@
 //! CANbus/J1939 protocol support for OxiRS
 //!
-//! **Status**: ✅ Production Ready (v0.1.0)
+//! **Status**: ✅ Production Ready (v0.2.2)
 //!
 //! This crate provides CANbus integration for automotive and heavy
 //! machinery data ingestion into RDF knowledge graphs.

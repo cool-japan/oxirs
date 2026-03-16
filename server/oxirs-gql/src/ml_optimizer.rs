@@ -1163,7 +1163,7 @@ mod tests {
                 features: QueryFeatures::from_vector(&[
                     1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
                 ])
-                .unwrap(),
+                .expect("should succeed"),
                 execution_time_ms: 100.0,
                 memory_usage_mb: 0.0,
                 cache_hit: false,
@@ -1174,7 +1174,7 @@ mod tests {
                 features: QueryFeatures::from_vector(&[
                     2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0,
                 ])
-                .unwrap(),
+                .expect("should succeed"),
                 execution_time_ms: 200.0,
                 memory_usage_mb: 0.0,
                 cache_hit: false,
@@ -1205,7 +1205,7 @@ mod tests {
                 features: QueryFeatures::from_vector(&[
                     1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
                 ])
-                .unwrap(),
+                .expect("should succeed"),
                 execution_time_ms: 100.0,
                 memory_usage_mb: 50.0, // Realistic test value
                 cache_hit: false,
@@ -1216,7 +1216,7 @@ mod tests {
                 features: QueryFeatures::from_vector(&[
                     2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0,
                 ])
-                .unwrap(),
+                .expect("should succeed"),
                 execution_time_ms: 200.0,
                 memory_usage_mb: 20.0,
                 cache_hit: true,
@@ -1272,7 +1272,9 @@ mod tests {
             })],
         };
 
-        let features = optimizer.extract_features(&document).unwrap();
+        let features = optimizer
+            .extract_features(&document)
+            .expect("should succeed");
         assert!(features.field_count > 0.0);
         assert!(features.max_depth > 0.0);
     }

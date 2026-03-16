@@ -610,11 +610,13 @@ mod tests {
             let time = 100.0 + (i as f64 * 10.0);
             estimator
                 .record_execution("query { user { name } }", time, 50, 1024)
-                .unwrap();
+                .expect("should succeed");
         }
 
         // Estimate cost
-        let estimate = estimator.estimate_cost("query { user { name } }").unwrap();
+        let estimate = estimator
+            .estimate_cost("query { user { name } }")
+            .expect("should succeed");
 
         assert!(estimate.sample_count == 10);
         assert!(estimate.estimated_time_ms > 0.0);
@@ -626,7 +628,9 @@ mod tests {
         let estimator = HistoricalCostEstimator::new();
 
         // Query with no history should return default estimate
-        let estimate = estimator.estimate_cost("query { unknown }").unwrap();
+        let estimate = estimator
+            .estimate_cost("query { unknown }")
+            .expect("should succeed");
 
         assert_eq!(estimate.sample_count, 0);
         assert_eq!(estimate.confidence, 0.0);
@@ -647,8 +651,8 @@ mod tests {
         let estimator = HistoricalCostEstimator::new();
         let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 
-        let p50 = estimator.percentile(&values, 0.50).unwrap();
-        let p95 = estimator.percentile(&values, 0.95).unwrap();
+        let p50 = estimator.percentile(&values, 0.50).expect("should succeed");
+        let p95 = estimator.percentile(&values, 0.95).expect("should succeed");
 
         assert!((p50 - 5.5).abs() < 1.0);
         assert!(p95 >= 9.0);
@@ -662,16 +666,16 @@ mod tests {
         for _ in 0..5 {
             estimator
                 .record_execution("query { user { name } }", 100.0, 50, 1024)
-                .unwrap();
+                .expect("should succeed");
         }
 
         for _ in 0..3 {
             estimator
                 .record_execution("query { posts { title } }", 150.0, 60, 2048)
-                .unwrap();
+                .expect("should succeed");
         }
 
-        let stats = estimator.get_statistics().unwrap();
+        let stats = estimator.get_statistics().expect("should succeed");
 
         assert_eq!(stats.total_patterns, 2);
         assert_eq!(stats.total_queries, 8);
@@ -684,14 +688,14 @@ mod tests {
 
         estimator
             .record_execution("query { user { name } }", 100.0, 50, 1024)
-            .unwrap();
+            .expect("should succeed");
         assert!(!estimator
             .historical_data
             .read()
             .expect("lock should not be poisoned")
             .is_empty());
 
-        estimator.clear().unwrap();
+        estimator.clear().expect("should succeed");
         assert!(estimator
             .historical_data
             .read()
@@ -717,10 +721,14 @@ mod tests {
         let mut estimator = HistoricalCostEstimator::new();
 
         let query = "query { user { name } }";
-        estimator.record_execution(query, 100.0, 50, 1024).unwrap();
-        estimator.record_execution(query, 120.0, 52, 1100).unwrap();
+        estimator
+            .record_execution(query, 100.0, 50, 1024)
+            .expect("should succeed");
+        estimator
+            .record_execution(query, 120.0, 52, 1100)
+            .expect("should succeed");
 
-        let history = estimator.get_query_history(query).unwrap();
+        let history = estimator.get_query_history(query).expect("should succeed");
 
         assert_eq!(history.len(), 2);
         assert_eq!(history[0].execution_time_ms, 100.0);
@@ -735,9 +743,9 @@ mod tests {
 
         estimator
             .record_metrics("query { user { name } }", metrics)
-            .unwrap();
+            .expect("should succeed");
 
-        let stats = estimator.get_statistics().unwrap();
+        let stats = estimator.get_statistics().expect("should succeed");
         assert!(stats.cache_hit_rate > 0.0);
     }
 }

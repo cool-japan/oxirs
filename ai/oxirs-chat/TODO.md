@@ -1,6 +1,6 @@
 # OxiRS Chat - TODO
 
-*Version: 0.2.1 | Last Updated: 2026-03-05*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready (Experimental)
 
@@ -52,19 +52,25 @@
 - Real-time collaboration (WebSocket, shared sessions)
 - Analytics dashboard backend
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Enhanced NLP (Q1 2026 - Expanded)
+### v0.1.0 - Released (January 7, 2026)
+- ✅ NL-to-SPARQL, RAG system, multi-LLM providers, webhooks, plugin system
+
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ Additional LLM providers (Cohere, Groq, Mistral)
+- ✅ Enhanced context management (context window with sliding compression)
+- ✅ Advanced analytics dashboards
+- ✅ Conversation history management
+- ✅ Custom model fine-tuning workflows
+- ✅ Session store for persistent chat sessions
+- ✅ Dialogue manager for multi-turn conversation
+- ✅ 1195 tests passing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Web-based chat UI components
 - [ ] Visual query builder UI
-- [ ] Additional LLM providers (Cohere, Groq, Mistral)
-- [ ] Enhanced context management
-- [ ] Advanced analytics dashboards
 - [ ] Enterprise SSO integration
-- [ ] Conversation history management
-- [ ] Custom model fine-tuning workflows
-
-### v1.0.0 - LTS Release (Q2 2026)
 - [ ] Long-term support guarantees
 - [ ] Enterprise features
 - [ ] Comprehensive documentation
@@ -76,4 +82,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Chat v0.1.0 - AI-powered conversational RDF interface*
+*OxiRS Chat v0.2.2 - AI-powered conversational RDF interface*

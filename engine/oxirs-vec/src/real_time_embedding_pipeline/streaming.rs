@@ -363,9 +363,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_stream_processor_start_stop() {
+    async fn test_stream_processor_start_stop() -> Result<()> {
         let config = StreamConfig::default();
-        let processor = StreamProcessor::new("test_stream".to_string(), config).unwrap();
+        let processor = StreamProcessor::new("test_stream".to_string(), config)?;
 
         assert!(!processor.is_running());
 
@@ -375,6 +375,7 @@ mod tests {
 
         let stop_result = processor.stop().await;
         assert!(stop_result.is_ok());
+        Ok(())
     }
 
     #[test]

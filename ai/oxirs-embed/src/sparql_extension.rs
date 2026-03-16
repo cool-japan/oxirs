@@ -768,11 +768,11 @@ mod tests {
 
         for (s, p, o) in triples {
             let triple = Triple::new(
-                NamedNode::new(&format!("http://example.org/{s}")).unwrap(),
-                NamedNode::new(&format!("http://example.org/{p}")).unwrap(),
-                NamedNode::new(&format!("http://example.org/{o}")).unwrap(),
+                NamedNode::new(&format!("http://example.org/{s}")).expect("should succeed"),
+                NamedNode::new(&format!("http://example.org/{p}")).expect("should succeed"),
+                NamedNode::new(&format!("http://example.org/{o}")).expect("should succeed"),
             );
-            model.add_triple(triple).unwrap();
+            model.add_triple(triple).expect("should succeed");
         }
 
         model

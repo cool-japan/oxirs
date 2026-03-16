@@ -255,7 +255,9 @@ mod tests {
             Triple::new("http://x", "http://rel", "http://y"),
         ];
 
-        let result = traversal.expand_local(&seeds, &triples).unwrap();
+        let result = traversal
+            .expand_local(&seeds, &triples)
+            .expect("should succeed");
 
         // Should include a->b and b->c (2 hops from a)
         assert!(result.iter().any(|t| t.subject == "http://a"));

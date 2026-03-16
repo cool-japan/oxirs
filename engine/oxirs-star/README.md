@@ -1,13 +1,13 @@
 # OxiRS-Star ⭐
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
-[![Tests](https://img.shields.io/badge/tests-292%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
+[![Tests](https://img.shields.io/badge/tests-1%2C628%20passing-brightgreen)](https://github.com/cool-japan/oxirs)
 
-**Status**: Production Release (v0.2.1) - Feature Complete - March 10, 2026
+**Status**: Production Release (v0.2.2) - Feature Complete - March 16, 2026
 
-✅ **Production Ready**: All v0.2.1 features complete with 292 passing tests. Enterprise-ready RDF-star capabilities with comprehensive tooling for compliance, migration, distributed processing, and analysis.
+✅ **Production Ready**: All v0.2.2 features complete with 1,628 passing tests. Enterprise-ready RDF-star capabilities with comprehensive tooling for compliance, migration, distributed processing, and analysis.
 
 **RDF-star and SPARQL-star implementation providing support for quoted triples, reification, and advanced semantic metadata processing.**
 
@@ -22,11 +22,11 @@ OxiRS-Star extends the standard RDF model with complete RDF-star capabilities, e
 - **📄 Multi-format Support** - All major RDF-star serialization formats (Turtle-star, N-Triples-star, TriG-star, N-Quads-star, JSON-LD-star)
 - **🚀 High Performance** - SIMD-optimized indexing, parallel query execution, memory-efficient storage
 - **🔗 Ecosystem Integration** - Seamless integration with 8 major RDF platforms (Jena, RDF4J, Stardog, Neptune, etc.)
-- **⚡ Production Ready** - 100% feature complete with 292 passing tests
+- **⚡ Production Ready** - 100% feature complete with 1,628 passing tests
 - **🏢 Enterprise Features** - Compliance reporting (GDPR, HIPAA, SOC2), audit logging, distributed clustering
 - **🔧 Developer Tools** - Graph diff, migration helpers, validation framework, testing utilities
 - **📊 Observability** - Comprehensive metrics, monitoring, and performance profiling
-- **🧪 Comprehensive Testing** - 292 unit tests covering all production features
+- **🧪 Comprehensive Testing** - 1,628 unit tests covering all production features
 
 ## Features
 
@@ -88,7 +88,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-star = "0.2.1"
+oxirs-star = "0.2.2"
 ```
 
 ### Basic Usage
@@ -232,8 +232,8 @@ cargo nextest run --features "reification,sparql-star" --no-fail-fast
 
 ## Roadmap
 
-### v0.2.1 (Current - Feature Complete ✅)
-All core features implemented and tested (292/292 tests passing):
+### v0.2.2 (Current - Feature Complete ✅)
+All core features implemented and tested (1,628/1,628 tests passing):
 - ✅ Complete RDF-star specification compliance
 - ✅ All serialization formats (Turtle-star, N-Triples-star, TriG-star, N-Quads-star, JSON-LD-star)
 - ✅ Advanced annotation and provenance features
@@ -241,7 +241,7 @@ All core features implemented and tested (292/292 tests passing):
 - ✅ 8 RDF platform integrations
 - ✅ Comprehensive developer tools
 
-### v0.2.1 (Planned)
+### v0.2.2 (Planned)
 - Visual UI tools for annotation exploration
 - Advanced distributed consensus algorithms
 - Machine learning integration for pattern detection
@@ -260,7 +260,7 @@ See [TODO.md](TODO.md) for development roadmap. Current focus areas:
 4. **Cloud integrations** - Kubernetes operators and cloud deployment templates
 5. **Machine learning** - Pattern detection and automated optimization
 
-For v0.2.1 final release, we're preparing:
+For v0.2.2 final release, we're preparing:
 - Performance benchmarking validation
 - Documentation updates
 - Release notes preparation

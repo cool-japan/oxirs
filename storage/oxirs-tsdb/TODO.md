@@ -1,6 +1,6 @@
 # OxiRS TSDB - TODO
 
-*Version: 0.2.1 | Last Updated: 2026-03-05*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -38,29 +38,33 @@
 - **Query Router** - Automatic backend routing
 
 ### Test Coverage
-- **128 tests passing** with comprehensive coverage
+- **1127 tests passing** with comprehensive coverage
 - Integration, SPARQL, storage, query, and write path tests
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Performance & Scale (Q1 2026 - Expanded)
-- [ ] 1M+ writes/sec sustained performance
-- [ ] Memory usage profiling and optimization
-- [ ] Performance tuning guide
-- [ ] Advanced compression (adaptive, dictionary, RLE)
-- [ ] Raft replication for high availability
-- [ ] Multi-region deployment
-- [ ] Read replicas for query scaling
+### v0.1.0 - Released (January 7, 2026)
+- ✅ Gorilla compression, delta-of-delta, columnar storage, WAL, hybrid RDF/TSDB, 128 tests
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ 1M+ writes/sec sustained performance
+- ✅ Memory usage profiling and optimization
+- ✅ Advanced compression (adaptive, dictionary, RLE)
+- ✅ Anomaly detection algorithms
+- ✅ Holt-Winters forecasting support
+- ✅ Apache Arrow integration (zero-copy export)
+- ✅ Parquet export for analytics
+- ✅ Prometheus remote write API
+- ✅ Rollup engine, downsampler, gap filler, retention policy
+- ✅ Anomaly detector, series metadata, compression codec
+- ✅ 1127 tests passing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] GPU-accelerated aggregations
 - [ ] Kalman filter integration
-- [ ] Anomaly detection algorithms
-- [ ] Forecasting support
-- [ ] Apache Arrow integration (zero-copy export)
-- [ ] Parquet export for analytics
 - [ ] DuckDB integration
-- [ ] Prometheus remote write API
+- [ ] Raft replication for high availability
+- [ ] Multi-region deployment
 
 ## Documentation
 
@@ -81,4 +85,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TSDB v0.1.0 - Time-series database for IoT-scale workloads*
+*OxiRS TSDB v0.2.2 - Time-series database for IoT-scale workloads*

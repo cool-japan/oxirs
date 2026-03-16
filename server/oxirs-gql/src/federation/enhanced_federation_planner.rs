@@ -593,7 +593,7 @@ mod tests {
         let planner = make_planner();
         let src = planner.route_field("User", "name");
         assert!(src.is_some());
-        assert_eq!(src.unwrap().id, "users");
+        assert_eq!(src.expect("should succeed").id, "users");
     }
 
     #[test]
@@ -602,7 +602,7 @@ mod tests {
         // "User.bio" is not explicitly listed but User type is owned by "users".
         let src = planner.route_field("User", "bio");
         assert!(src.is_some());
-        assert_eq!(src.unwrap().id, "users");
+        assert_eq!(src.expect("should succeed").id, "users");
     }
 
     #[test]
@@ -617,7 +617,7 @@ mod tests {
         let planner = make_planner();
         let src = planner.route_field("Product", "price");
         assert!(src.is_some());
-        assert_eq!(src.unwrap().id, "products");
+        assert_eq!(src.expect("should succeed").id, "products");
     }
 
     // --- Plan construction ---
@@ -625,7 +625,7 @@ mod tests {
     #[test]
     fn test_plan_empty_requests() {
         let planner = make_planner();
-        let plan = planner.plan_fields(&[]).unwrap();
+        let plan = planner.plan_fields(&[]).expect("should succeed");
         assert!(plan.is_empty());
         assert_eq!(plan.total_cost, 0.0);
     }
@@ -637,7 +637,7 @@ mod tests {
             FieldRequest::new("User", "id", "users"),
             FieldRequest::new("User", "name", "users"),
         ];
-        let plan = planner.plan_fields(&requests).unwrap();
+        let plan = planner.plan_fields(&requests).expect("should succeed");
         assert_eq!(plan.sub_plans.len(), 1);
         assert_eq!(plan.sub_plans[0].source_id, "users");
         assert_eq!(plan.sub_plans[0].field_count(), 2);
@@ -650,7 +650,7 @@ mod tests {
             FieldRequest::new("User", "name", "users"),
             FieldRequest::new("Product", "price", "products"),
         ];
-        let plan = planner.plan_fields(&requests).unwrap();
+        let plan = planner.plan_fields(&requests).expect("should succeed");
         assert_eq!(plan.sub_plans.len(), 2);
         assert_eq!(plan.contributing_sources.len(), 2);
     }
@@ -663,7 +663,7 @@ mod tests {
             FieldRequest::new("User", "name", "users"),
             FieldRequest::new("Product", "sku", "products"),
         ];
-        let plan = planner.plan_fields(&requests).unwrap();
+        let plan = planner.plan_fields(&requests).expect("should succeed");
         assert_eq!(plan.total_field_count(), 3);
     }
 
@@ -671,7 +671,7 @@ mod tests {
     fn test_plan_cost_nonzero() {
         let planner = make_planner();
         let requests = vec![FieldRequest::new("User", "id", "users")];
-        let plan = planner.plan_fields(&requests).unwrap();
+        let plan = planner.plan_fields(&requests).expect("should succeed");
         assert!(plan.total_cost > 0.0);
     }
 
@@ -679,7 +679,7 @@ mod tests {
     fn test_plan_latency_nonzero() {
         let planner = make_planner();
         let requests = vec![FieldRequest::new("User", "id", "users")];
-        let plan = planner.plan_fields(&requests).unwrap();
+        let plan = planner.plan_fields(&requests).expect("should succeed");
         assert!(plan.critical_path_latency_ms > 0);
     }
 
@@ -690,7 +690,7 @@ mod tests {
             FieldRequest::new("User", "id", "users"),
             FieldRequest::new("Product", "sku", "products"),
         ];
-        let plan = planner.plan_fields(&requests).unwrap();
+        let plan = planner.plan_fields(&requests).expect("should succeed");
         // Without explicit cross-type dependencies, sub-plans are independent.
         assert!(plan.is_fully_parallel);
     }
@@ -738,7 +738,7 @@ mod tests {
         let requests: Vec<FieldRequest> = (0..5)
             .map(|i| FieldRequest::new("Item", format!("field{i}").as_str(), "src"))
             .collect();
-        let plan = planner.plan_fields(&requests).unwrap();
+        let plan = planner.plan_fields(&requests).expect("should succeed");
         // 5 fields with max_batch_size=2 → 3 sub-plans (2+2+1)
         assert_eq!(plan.sub_plans.len(), 3);
     }
@@ -760,7 +760,7 @@ mod tests {
             FieldRequest::new("Foo", "a", "no_batch"),
             FieldRequest::new("Foo", "b", "no_batch"),
         ];
-        let plan = planner.plan_fields(&requests).unwrap();
+        let plan = planner.plan_fields(&requests).expect("should succeed");
         // Each field becomes its own sub-plan when batching is unsupported.
         assert_eq!(plan.sub_plans.len(), 2);
     }
@@ -827,14 +827,14 @@ mod tests {
         // Should prefer "fast"
         let src = planner.route_field("Shared", "field");
         assert!(src.is_some());
-        assert_eq!(src.unwrap().id, "fast");
+        assert_eq!(src.expect("should succeed").id, "fast");
     }
 
     #[test]
     fn test_plan_is_not_empty() {
         let planner = make_planner();
         let requests = vec![FieldRequest::new("User", "id", "users")];
-        let plan = planner.plan_fields(&requests).unwrap();
+        let plan = planner.plan_fields(&requests).expect("should succeed");
         assert!(!plan.is_empty());
     }
 }

@@ -892,18 +892,18 @@ pub struct StreamConsumer {
 /// Backend-agnostic consumer wrapper
 enum BackendConsumer {
     #[cfg(feature = "kafka")]
-    Kafka(backend::kafka::KafkaConsumer),
+    Kafka(Box<backend::kafka::KafkaConsumer>),
     #[cfg(feature = "nats")]
     Nats(Box<backend::nats::NatsConsumer>),
     #[cfg(feature = "redis")]
-    Redis(backend::redis::RedisConsumer),
+    Redis(Box<backend::redis::RedisConsumer>),
     #[cfg(feature = "kinesis")]
-    Kinesis(backend::kinesis::KinesisConsumer),
+    Kinesis(Box<backend::kinesis::KinesisConsumer>),
     #[cfg(feature = "pulsar")]
     Pulsar(Box<backend::pulsar::PulsarConsumer>),
     #[cfg(feature = "rabbitmq")]
     RabbitMQ(Box<backend::rabbitmq::RabbitMQConsumer>),
-    Memory(MemoryConsumer),
+    Memory(Box<MemoryConsumer>),
 }
 
 /// Consumer statistics for monitoring
@@ -1064,7 +1064,7 @@ impl StreamConsumer {
 
                 let mut consumer = backend::kafka::KafkaConsumer::new(stream_config)?;
                 consumer.connect().await?;
-                BackendConsumer::Kafka(consumer)
+                BackendConsumer::Kafka(Box::new(consumer))
             }
             #[cfg(feature = "nats")]
             StreamBackendType::Nats {
@@ -1124,7 +1124,7 @@ impl StreamConsumer {
 
                 let mut consumer = backend::redis::RedisConsumer::new(stream_config)?;
                 consumer.connect().await?;
-                BackendConsumer::Redis(consumer)
+                BackendConsumer::Redis(Box::new(consumer))
             }
             #[cfg(feature = "kinesis")]
             StreamBackendType::Kinesis {
@@ -1154,7 +1154,7 @@ impl StreamConsumer {
 
                 let mut consumer = backend::kinesis::KinesisConsumer::new(stream_config)?;
                 consumer.connect().await?;
-                BackendConsumer::Kinesis(consumer)
+                BackendConsumer::Kinesis(Box::new(consumer))
             }
             #[cfg(feature = "pulsar")]
             StreamBackendType::Pulsar {
@@ -1217,7 +1217,9 @@ impl StreamConsumer {
             StreamBackendType::Memory {
                 max_size: _,
                 persistence: _,
-            } => BackendConsumer::Memory(MemoryConsumer::with_topic(config.topic.clone())),
+            } => {
+                BackendConsumer::Memory(Box::new(MemoryConsumer::with_topic(config.topic.clone())))
+            }
         };
 
         let stats = Arc::new(RwLock::new(ConsumerStats {

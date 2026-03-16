@@ -710,7 +710,7 @@ mod tests {
 
         let explanation = nlg
             .generate_explanation(&anomaly, &attributions, &[])
-            .unwrap();
+            .expect("should succeed");
         assert!(!explanation.is_empty());
         assert!(explanation.contains("contextual"));
     }

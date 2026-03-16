@@ -898,35 +898,38 @@ mod tests {
     #[tokio::test]
     async fn test_entity_resolution() {
         let config = AiConfig::default();
-        let mut resolver = EntityResolver::new(&config).unwrap();
+        let mut resolver = EntityResolver::new(&config).expect("construction should succeed");
 
         // Use a lower similarity threshold for testing
         resolver.config.similarity_threshold = 0.3;
 
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/person1").unwrap(),
-                NamedNode::new("http://example.org/name").unwrap(),
+                NamedNode::new("http://example.org/person1").expect("valid IRI"),
+                NamedNode::new("http://example.org/name").expect("valid IRI"),
                 Literal::new("John Smith"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/person2").unwrap(),
-                NamedNode::new("http://example.org/name").unwrap(),
+                NamedNode::new("http://example.org/person2").expect("valid IRI"),
+                NamedNode::new("http://example.org/name").expect("valid IRI"),
                 Literal::new("John Smith"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/person3").unwrap(),
-                NamedNode::new("http://example.org/name").unwrap(),
+                NamedNode::new("http://example.org/person3").expect("valid IRI"),
+                NamedNode::new("http://example.org/name").expect("valid IRI"),
                 Literal::new("Jane Doe"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/person4").unwrap(),
-                NamedNode::new("http://example.org/name").unwrap(),
+                NamedNode::new("http://example.org/person4").expect("valid IRI"),
+                NamedNode::new("http://example.org/name").expect("valid IRI"),
                 Literal::new("Jane Doe"),
             ),
         ];
 
-        let clusters = resolver.resolve_entities(&triples).await.unwrap();
+        let clusters = resolver
+            .resolve_entities(&triples)
+            .await
+            .expect("async operation should succeed");
         // Should create clusters for similar entities
         assert!(!clusters.is_empty());
     }
@@ -959,7 +962,9 @@ mod tests {
             quality_score: 1.0,
         };
 
-        let similarity = calculator.calculate_similarity(&entity1, &entity2).unwrap();
+        let similarity = calculator
+            .calculate_similarity(&entity1, &entity2)
+            .expect("operation should succeed");
         assert!(similarity > 0.0);
         assert!(similarity <= 1.0);
     }

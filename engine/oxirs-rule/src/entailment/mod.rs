@@ -980,15 +980,17 @@ mod tests {
     // ── Simple entailment ──────────────────────────────────────────────────
 
     #[test]
-    fn test_simple_entailment_no_new_triples() {
+    fn test_simple_entailment_no_new_triples() -> Result<(), Box<dyn std::error::Error>> {
         let engine = EntailmentEngine::new(EntailmentRegime::Simple);
         let g = Graph::new();
-        let result = engine.materialize(&g).unwrap();
+        let result = engine.materialize(&g)?;
         assert!(result.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_simple_entailment_explicit_triple_is_entailed() {
+    fn test_simple_entailment_explicit_triple_is_entailed() -> Result<(), Box<dyn std::error::Error>>
+    {
         let engine = EntailmentEngine::new(EntailmentRegime::Simple);
         let mut g = Graph::new();
         g.add(
@@ -1001,24 +1003,28 @@ mod tests {
             "http://example.org/p",
             "http://example.org/b",
         );
-        assert!(engine.is_entailed(&g, &triple).unwrap());
+        assert!(engine.is_entailed(&g, &triple)?);
+        Ok(())
     }
 
     #[test]
-    fn test_simple_entailment_implicit_triple_not_entailed() {
+    fn test_simple_entailment_implicit_triple_not_entailed(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let engine = EntailmentEngine::new(EntailmentRegime::Simple);
         let mut g = Graph::new();
         g.add("alice", &rdf("type"), "Person");
         g.add("Person", &rdfs("subClassOf"), "Animal");
         // Simple does not infer alice rdf:type Animal
         let triple = EntailmentTriple::new("alice", rdf("type"), "Animal");
-        assert!(!engine.is_entailed(&g, &triple).unwrap());
+        assert!(!engine.is_entailed(&g, &triple)?);
+        Ok(())
     }
 
     // ── RDF entailment ─────────────────────────────────────────────────────
 
     #[test]
-    fn test_rdf_entailment_predicates_become_properties() {
+    fn test_rdf_entailment_predicates_become_properties() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut g = Graph::new();
         g.add(
             "http://example.org/alice",
@@ -1026,13 +1032,14 @@ mod tests {
             "http://example.org/bob",
         );
         let engine = EntailmentEngine::new(EntailmentRegime::Rdf);
-        let new_triples = engine.materialize(&g).unwrap();
+        let new_triples = engine.materialize(&g)?;
         // foaf:knows should become rdf:Property
         assert!(new_triples.iter().any(|t| {
             t.subject == "http://xmlns.com/foaf/0.1/knows"
                 && t.predicate == rdf("type")
                 && t.object == rdf("Property")
         }));
+        Ok(())
     }
 
     #[test]
@@ -1201,7 +1208,7 @@ mod tests {
     // ── RDFS full materialization ──────────────────────────────────────────
 
     #[test]
-    fn test_rdfs_full_materialize_chain() {
+    fn test_rdfs_full_materialize_chain() -> Result<(), Box<dyn std::error::Error>> {
         // Poodle subClassOf Dog, Dog subClassOf Animal, fido:type Poodle
         // → fido:type Dog, fido:type Animal
         let mut g = Graph::new();
@@ -1209,34 +1216,37 @@ mod tests {
         g.add("Dog", &rdfs("subClassOf"), "Animal");
         g.add("fido", &rdf("type"), "Poodle");
         let engine = EntailmentEngine::new(EntailmentRegime::Rdfs);
-        let new = engine.materialize(&g).unwrap();
+        let new = engine.materialize(&g)?;
         assert!(new
             .iter()
             .any(|t| { t.subject == "fido" && t.predicate == rdf("type") && t.object == "Dog" }));
         assert!(new.iter().any(|t| {
             t.subject == "fido" && t.predicate == rdf("type") && t.object == "Animal"
         }));
+        Ok(())
     }
 
     #[test]
-    fn test_rdfs_is_entailed_chain() {
+    fn test_rdfs_is_entailed_chain() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = Graph::new();
         g.add("Cat", &rdfs("subClassOf"), "Mammal");
         g.add("Mammal", &rdfs("subClassOf"), "Animal");
         g.add("whiskers", &rdf("type"), "Cat");
         let engine = EntailmentEngine::new(EntailmentRegime::Rdfs);
         let triple = EntailmentTriple::new("whiskers", rdf("type"), "Animal");
-        assert!(engine.is_entailed(&g, &triple).unwrap());
+        assert!(engine.is_entailed(&g, &triple)?);
+        Ok(())
     }
 
     #[test]
-    fn test_rdfs_is_not_entailed_without_facts() {
+    fn test_rdfs_is_not_entailed_without_facts() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = Graph::new();
         g.add("Cat", &rdfs("subClassOf"), "Mammal");
         // No instance typed as Cat
         let engine = EntailmentEngine::new(EntailmentRegime::Rdfs);
         let triple = EntailmentTriple::new("whiskers", rdf("type"), "Mammal");
-        assert!(!engine.is_entailed(&g, &triple).unwrap());
+        assert!(!engine.is_entailed(&g, &triple)?);
+        Ok(())
     }
 
     // ── OWL 2 RL entailment ────────────────────────────────────────────────
@@ -1265,46 +1275,49 @@ mod tests {
     }
 
     #[test]
-    fn test_owl_rl_inverse_property() {
+    fn test_owl_rl_inverse_property() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = Graph::new();
         g.add("hasMother", &owl("inverseOf"), "isMotherOf");
         g.add("alice", "hasMother", "eve");
         let engine = EntailmentEngine::new(EntailmentRegime::Owl2Rl);
-        let new = engine.materialize(&g).unwrap();
+        let new = engine.materialize(&g)?;
         assert!(new
             .iter()
             .any(|t| { t.subject == "eve" && t.predicate == "isMotherOf" && t.object == "alice" }));
+        Ok(())
     }
 
     #[test]
-    fn test_owl_rl_transitive_property() {
+    fn test_owl_rl_transitive_property() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = Graph::new();
         g.add("ancestor", &rdf("type"), &owl("TransitiveProperty"));
         g.add("alice", "ancestor", "bob");
         g.add("bob", "ancestor", "carol");
         let engine = EntailmentEngine::new(EntailmentRegime::Owl2Rl);
-        let new = engine.materialize(&g).unwrap();
+        let new = engine.materialize(&g)?;
         assert!(new
             .iter()
             .any(|t| { t.subject == "alice" && t.predicate == "ancestor" && t.object == "carol" }));
+        Ok(())
     }
 
     #[test]
-    fn test_owl_rl_symmetric_property() {
+    fn test_owl_rl_symmetric_property() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = Graph::new();
         g.add("marriedTo", &rdf("type"), &owl("SymmetricProperty"));
         g.add("alice", "marriedTo", "bob");
         let engine = EntailmentEngine::new(EntailmentRegime::Owl2Rl);
-        let new = engine.materialize(&g).unwrap();
+        let new = engine.materialize(&g)?;
         assert!(new
             .iter()
             .any(|t| { t.subject == "bob" && t.predicate == "marriedTo" && t.object == "alice" }));
+        Ok(())
     }
 
     // ── is_entailed checks ─────────────────────────────────────────────────
 
     #[test]
-    fn test_is_entailed_explicit_triple_all_regimes() {
+    fn test_is_entailed_explicit_triple_all_regimes() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = Graph::new();
         g.add("s", "p", "o");
         let triple = EntailmentTriple::new("s", "p", "o");
@@ -1316,75 +1329,83 @@ mod tests {
         ] {
             let engine = EntailmentEngine::new(regime.clone());
             assert!(
-                engine.is_entailed(&g, &triple).unwrap(),
+                engine.is_entailed(&g, &triple)?,
                 "explicit triple must be entailed under {regime:?}"
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn test_is_entailed_inferred_triple_rdfs() {
+    fn test_is_entailed_inferred_triple_rdfs() -> Result<(), Box<dyn std::error::Error>> {
         let mut g = Graph::new();
         g.add("Dog", &rdfs("subClassOf"), "Animal");
         g.add("rex", &rdf("type"), "Dog");
         let engine = EntailmentEngine::new(EntailmentRegime::Rdfs);
         let triple = EntailmentTriple::new("rex", rdf("type"), "Animal");
-        assert!(engine.is_entailed(&g, &triple).unwrap());
+        assert!(engine.is_entailed(&g, &triple)?);
+        Ok(())
     }
 
     #[test]
-    fn test_is_not_entailed_non_existing_triple() {
+    fn test_is_not_entailed_non_existing_triple() -> Result<(), Box<dyn std::error::Error>> {
         let g = Graph::new();
         let engine = EntailmentEngine::new(EntailmentRegime::Rdfs);
         let triple = EntailmentTriple::new("a", "b", "c");
-        assert!(!engine.is_entailed(&g, &triple).unwrap());
+        assert!(!engine.is_entailed(&g, &triple)?);
+        Ok(())
     }
 
     // ── Query expansion ────────────────────────────────────────────────────
 
     #[test]
-    fn test_query_expansion_simple_passthrough() {
+    fn test_query_expansion_simple_passthrough() -> Result<(), Box<dyn std::error::Error>> {
         let engine = EntailmentEngine::new(EntailmentRegime::Simple);
         let g = Graph::new();
         let q = "SELECT * WHERE { ?s ?p ?o }";
-        let expanded = engine.expand_query(q, &g).unwrap();
+        let expanded = engine.expand_query(q, &g)?;
         assert_eq!(expanded, q);
+        Ok(())
     }
 
     #[test]
-    fn test_query_expansion_rdfs_annotates() {
+    fn test_query_expansion_rdfs_annotates() -> Result<(), Box<dyn std::error::Error>> {
         let engine = EntailmentEngine::new(EntailmentRegime::Rdfs);
         let g = Graph::new();
         let q = "SELECT * WHERE { ?s a ?t }";
-        let expanded = engine.expand_query(q, &g).unwrap();
+        let expanded = engine.expand_query(q, &g)?;
         assert!(expanded.contains("RDFS entailment"));
+        Ok(())
     }
 
     #[test]
-    fn test_query_expansion_owl_ql_annotates() {
+    fn test_query_expansion_owl_ql_annotates() -> Result<(), Box<dyn std::error::Error>> {
         let engine = EntailmentEngine::new(EntailmentRegime::Owl2Ql);
         let g = Graph::new();
         let q = "SELECT * WHERE { ?s ?p ?o }";
-        let expanded = engine.expand_query(q, &g).unwrap();
+        let expanded = engine.expand_query(q, &g)?;
         assert!(expanded.contains("OWL2-QL"));
+        Ok(())
     }
 
     #[test]
-    fn test_query_expansion_owl_rl_annotates() {
+    fn test_query_expansion_owl_rl_annotates() -> Result<(), Box<dyn std::error::Error>> {
         let engine = EntailmentEngine::new(EntailmentRegime::Owl2Rl);
         let g = Graph::new();
         let q = "SELECT * WHERE { ?s ?p ?o }";
-        let expanded = engine.expand_query(q, &g).unwrap();
+        let expanded = engine.expand_query(q, &g)?;
         assert!(expanded.contains("OWL2-RL"));
+        Ok(())
     }
 
     #[test]
-    fn test_query_expansion_d_entailment_annotates() {
+    fn test_query_expansion_d_entailment_annotates() -> Result<(), Box<dyn std::error::Error>> {
         let engine = EntailmentEngine::new(EntailmentRegime::D);
         let g = Graph::new();
         let q = "SELECT * WHERE { ?s ?p ?o }";
-        let expanded = engine.expand_query(q, &g).unwrap();
+        let expanded = engine.expand_query(q, &g)?;
         assert!(expanded.contains("D-entailment"));
+        Ok(())
     }
 
     // ── OWL 2 QL entailment ────────────────────────────────────────────────
@@ -1434,7 +1455,7 @@ mod tests {
     // ── Multiple regime independence ───────────────────────────────────────
 
     #[test]
-    fn test_owl_rl_extends_rdfs() {
+    fn test_owl_rl_extends_rdfs() -> Result<(), Box<dyn std::error::Error>> {
         // Under OWL RL we get both RDFS inferences AND OWL inferences
         let mut g = Graph::new();
         g.add("Dog", &rdfs("subClassOf"), "Animal");
@@ -1442,7 +1463,7 @@ mod tests {
         g.add("knows", &rdf("type"), &owl("SymmetricProperty"));
         g.add("alice", "knows", "bob");
         let engine = EntailmentEngine::new(EntailmentRegime::Owl2Rl);
-        let new = engine.materialize(&g).unwrap();
+        let new = engine.materialize(&g)?;
         // RDFS: rex rdf:type Animal
         assert!(new
             .iter()
@@ -1451,6 +1472,7 @@ mod tests {
         assert!(new
             .iter()
             .any(|t| { t.subject == "bob" && t.predicate == "knows" && t.object == "alice" }));
+        Ok(())
     }
 
     // ── EntailmentTriple equality ──────────────────────────────────────────

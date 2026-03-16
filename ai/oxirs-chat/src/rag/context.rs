@@ -526,7 +526,9 @@ mod tests {
             create_test_result("doc2", "Content 2", 0.8),
         ];
 
-        let formatted = formatter.format_natural_text(&results).unwrap();
+        let formatted = formatter
+            .format_natural_text(&results)
+            .expect("should succeed");
         assert!(formatted.contains("Content 1"));
         assert!(formatted.contains("Content 2"));
     }
@@ -536,7 +538,9 @@ mod tests {
         let formatter = ContextFormatter::new(&AssemblyConfig::default());
         let results = vec![create_test_result("doc1", "Content 1", 0.9)];
 
-        let formatted = formatter.format_structured(&results).unwrap();
+        let formatted = formatter
+            .format_structured(&results)
+            .expect("should succeed");
         assert!(formatted.contains("## Section 1"));
         assert!(formatted.contains("Relevance: 0.90"));
     }

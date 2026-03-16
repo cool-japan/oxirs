@@ -462,9 +462,11 @@ mod tests {
     use oxirs_core::model::{Literal, NamedNode};
 
     fn create_test_triple() -> Triple {
-        let subject = NamedNode::new("http://example.com/device/plc001").unwrap();
-        let predicate = NamedNode::new("http://example.com/property/temperature").unwrap();
-        let datatype = NamedNode::new("http://www.w3.org/2001/XMLSchema#float").unwrap();
+        let subject = NamedNode::new("http://example.com/device/plc001").expect("should succeed");
+        let predicate =
+            NamedNode::new("http://example.com/property/temperature").expect("should succeed");
+        let datatype =
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#float").expect("should succeed");
         let literal = Literal::new_typed("22.5", datatype);
         Triple::new(subject, predicate, literal)
     }
@@ -500,7 +502,9 @@ mod tests {
         let mut updater = GraphUpdater::new(config);
 
         let triple = create_test_triple();
-        let query = updater.insert_triples_local(&[triple]).unwrap();
+        let query = updater
+            .insert_triples_local(&[triple])
+            .expect("should succeed");
 
         assert!(!query.is_empty());
         assert_eq!(updater.stats().successful_updates, 1);
@@ -513,7 +517,7 @@ mod tests {
         let mut updater = GraphUpdater::new(config).with_batch_size(2);
 
         let triples: Vec<Triple> = (0..5).map(|_| create_test_triple()).collect();
-        let queries = updater.insert_batches(&triples).unwrap();
+        let queries = updater.insert_batches(&triples).expect("should succeed");
 
         // 5 triples / 2 batch size = 3 batches
         assert_eq!(queries.len(), 3);
@@ -533,7 +537,7 @@ mod tests {
         batch.add(create_test_triple());
         assert!(batch.should_flush());
 
-        let query = batch.flush_local().unwrap();
+        let query = batch.flush_local().expect("should succeed");
         assert!(query.is_some());
         assert_eq!(batch.pending_count(), 0);
     }
@@ -568,7 +572,7 @@ mod tests {
         let config = SparqlEndpointConfig::default();
         let mut updater = GraphUpdater::new(config);
 
-        let query = updater.insert_triples_local(&[]).unwrap();
+        let query = updater.insert_triples_local(&[]).expect("should succeed");
         assert!(query.is_empty());
         assert_eq!(updater.stats().total_updates, 0);
     }
@@ -579,7 +583,9 @@ mod tests {
         let mut updater = GraphUpdater::new(config);
 
         let triple = create_test_triple();
-        updater.insert_triples_local(&[triple]).unwrap();
+        updater
+            .insert_triples_local(&[triple])
+            .expect("should succeed");
         assert_eq!(updater.stats().successful_updates, 1);
 
         updater.reset_stats();

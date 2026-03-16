@@ -463,8 +463,8 @@ mod tests {
     fn test_write_read_no_compression() {
         let writer = ParquetWriter::new(ParquetCompression::None);
         let cols = make_columns();
-        let bytes = writer.write_columns(&cols).unwrap();
-        let decoded = ParquetReader::read_columns(&bytes).unwrap();
+        let bytes = writer.write_columns(&cols).expect("should succeed");
+        let decoded = ParquetReader::read_columns(&bytes).expect("should succeed");
         assert_eq!(cols, decoded);
     }
 
@@ -472,8 +472,8 @@ mod tests {
     fn test_write_read_snappy_compression() {
         let writer = ParquetWriter::new(ParquetCompression::Snappy);
         let cols = make_columns();
-        let bytes = writer.write_columns(&cols).unwrap();
-        let decoded = ParquetReader::read_columns(&bytes).unwrap();
+        let bytes = writer.write_columns(&cols).expect("should succeed");
+        let decoded = ParquetReader::read_columns(&bytes).expect("should succeed");
         assert_eq!(cols, decoded);
     }
 
@@ -481,16 +481,16 @@ mod tests {
     fn test_write_read_gzip_compression() {
         let writer = ParquetWriter::new(ParquetCompression::Gzip);
         let cols = make_columns();
-        let bytes = writer.write_columns(&cols).unwrap();
-        let decoded = ParquetReader::read_columns(&bytes).unwrap();
+        let bytes = writer.write_columns(&cols).expect("should succeed");
+        let decoded = ParquetReader::read_columns(&bytes).expect("should succeed");
         assert_eq!(cols, decoded);
     }
 
     #[test]
     fn test_write_read_empty_columns() {
         let writer = ParquetWriter::new(ParquetCompression::None);
-        let bytes = writer.write_columns(&[]).unwrap();
-        let decoded = ParquetReader::read_columns(&bytes).unwrap();
+        let bytes = writer.write_columns(&[]).expect("should succeed");
+        let decoded = ParquetReader::read_columns(&bytes).expect("should succeed");
         assert!(decoded.is_empty());
     }
 
@@ -501,8 +501,8 @@ mod tests {
             "ts",
             ParquetValues::Int64(vec![i64::MIN, 0, i64::MAX]),
         )];
-        let bytes = writer.write_columns(&cols).unwrap();
-        let decoded = ParquetReader::read_columns(&bytes).unwrap();
+        let bytes = writer.write_columns(&cols).expect("should succeed");
+        let decoded = ParquetReader::read_columns(&bytes).expect("should succeed");
         assert_eq!(cols, decoded);
     }
 
@@ -513,8 +513,8 @@ mod tests {
             "val",
             ParquetValues::Double(vec![0.0, -1.0, f64::INFINITY]),
         )];
-        let bytes = writer.write_columns(&cols).unwrap();
-        let decoded = ParquetReader::read_columns(&bytes).unwrap();
+        let bytes = writer.write_columns(&cols).expect("should succeed");
+        let decoded = ParquetReader::read_columns(&bytes).expect("should succeed");
         if let (ParquetValues::Double(orig), ParquetValues::Double(dec)) =
             (&cols[0].values, &decoded[0].values)
         {
@@ -533,8 +533,8 @@ mod tests {
             "data",
             ParquetValues::ByteArray(vec![vec![0u8, 1, 2, 3], vec![], b"hello world".to_vec()]),
         )];
-        let bytes = writer.write_columns(&cols).unwrap();
-        let decoded = ParquetReader::read_columns(&bytes).unwrap();
+        let bytes = writer.write_columns(&cols).expect("should succeed");
+        let decoded = ParquetReader::read_columns(&bytes).expect("should succeed");
         assert_eq!(cols, decoded);
     }
 
@@ -545,8 +545,8 @@ mod tests {
             (2000, 2.5, "cpu_usage".to_owned()),
             (3000, 0.5, "mem_free".to_owned()),
         ];
-        let bytes = ParquetWriter::time_series_to_parquet(&series).unwrap();
-        let cols = ParquetReader::read_columns(&bytes).unwrap();
+        let bytes = ParquetWriter::time_series_to_parquet(&series).expect("should succeed");
+        let cols = ParquetReader::read_columns(&bytes).expect("should succeed");
         assert_eq!(cols.len(), 3);
         assert_eq!(cols[0].name, "timestamp");
         assert_eq!(cols[1].name, "value");

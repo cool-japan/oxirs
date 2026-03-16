@@ -1011,7 +1011,9 @@ mod tests {
             legal_protection: LegalProtectionLevel::Strict,
         };
 
-        detector.register_protected_attribute(attribute).unwrap();
+        detector
+            .register_protected_attribute(attribute)
+            .expect("should succeed");
         assert_eq!(detector.protected_attributes.len(), 1);
     }
 

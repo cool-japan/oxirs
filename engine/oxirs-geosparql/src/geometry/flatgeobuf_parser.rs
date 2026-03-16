@@ -974,7 +974,8 @@ mod tests {
 
         // Write to temp file
         let temp_path = temp_dir().join("test_point.fgb");
-        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        let result =
+            write_flatgeobuf_to_file(&geometries, temp_path.to_str().expect("should succeed"));
         assert!(
             result.is_ok(),
             "Failed to write FlatGeobuf: {:?}",
@@ -982,9 +983,9 @@ mod tests {
         );
 
         // Read back
-        let file = std::fs::File::open(&temp_path).unwrap();
+        let file = std::fs::File::open(&temp_path).expect("should succeed");
         let reader = std::io::BufReader::new(file);
-        let read_geometries = parse_flatgeobuf(reader).unwrap();
+        let read_geometries = parse_flatgeobuf(reader).expect("should succeed");
 
         // Verify
         assert_eq!(read_geometries.len(), 1);
@@ -1017,13 +1018,14 @@ mod tests {
 
         // Write to temp file
         let temp_path = temp_dir().join("test_linestring.fgb");
-        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        let result =
+            write_flatgeobuf_to_file(&geometries, temp_path.to_str().expect("should succeed"));
         assert!(result.is_ok());
 
         // Read back
-        let file = std::fs::File::open(&temp_path).unwrap();
+        let file = std::fs::File::open(&temp_path).expect("should succeed");
         let reader = std::io::BufReader::new(file);
-        let read_geometries = parse_flatgeobuf(reader).unwrap();
+        let read_geometries = parse_flatgeobuf(reader).expect("should succeed");
 
         // Verify
         assert_eq!(read_geometries.len(), 1);
@@ -1067,13 +1069,14 @@ mod tests {
 
         // Write to temp file
         let temp_path = temp_dir().join("test_polygon.fgb");
-        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        let result =
+            write_flatgeobuf_to_file(&geometries, temp_path.to_str().expect("should succeed"));
         assert!(result.is_ok());
 
         // Read back
-        let file = std::fs::File::open(&temp_path).unwrap();
+        let file = std::fs::File::open(&temp_path).expect("should succeed");
         let reader = std::io::BufReader::new(file);
-        let read_geometries = parse_flatgeobuf(reader).unwrap();
+        let read_geometries = parse_flatgeobuf(reader).expect("should succeed");
 
         // Verify
         assert_eq!(read_geometries.len(), 1);
@@ -1107,13 +1110,14 @@ mod tests {
 
         // Write to temp file
         let temp_path = temp_dir().join("test_multipoint.fgb");
-        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        let result =
+            write_flatgeobuf_to_file(&geometries, temp_path.to_str().expect("should succeed"));
         assert!(result.is_ok());
 
         // Read back
-        let file = std::fs::File::open(&temp_path).unwrap();
+        let file = std::fs::File::open(&temp_path).expect("should succeed");
         let reader = std::io::BufReader::new(file);
-        let read_geometries = parse_flatgeobuf(reader).unwrap();
+        let read_geometries = parse_flatgeobuf(reader).expect("should succeed");
 
         // Verify
         assert_eq!(read_geometries.len(), 1);
@@ -1151,13 +1155,14 @@ mod tests {
 
         // Write to temp file
         let temp_path = temp_dir().join("test_multilinestring.fgb");
-        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        let result =
+            write_flatgeobuf_to_file(&geometries, temp_path.to_str().expect("should succeed"));
         assert!(result.is_ok());
 
         // Read back
-        let file = std::fs::File::open(&temp_path).unwrap();
+        let file = std::fs::File::open(&temp_path).expect("should succeed");
         let reader = std::io::BufReader::new(file);
-        let read_geometries = parse_flatgeobuf(reader).unwrap();
+        let read_geometries = parse_flatgeobuf(reader).expect("should succeed");
 
         // Verify
         assert_eq!(read_geometries.len(), 1);
@@ -1206,13 +1211,14 @@ mod tests {
 
         // Write to temp file
         let temp_path = temp_dir().join("test_multipolygon.fgb");
-        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        let result =
+            write_flatgeobuf_to_file(&geometries, temp_path.to_str().expect("should succeed"));
         assert!(result.is_ok());
 
         // Read back
-        let file = std::fs::File::open(&temp_path).unwrap();
+        let file = std::fs::File::open(&temp_path).expect("should succeed");
         let reader = std::io::BufReader::new(file);
-        let read_geometries = parse_flatgeobuf(reader).unwrap();
+        let read_geometries = parse_flatgeobuf(reader).expect("should succeed");
 
         // Verify
         assert_eq!(read_geometries.len(), 1);
@@ -1243,13 +1249,14 @@ mod tests {
 
         // Write to temp file
         let temp_path = temp_dir().join("test_multiple.fgb");
-        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        let result =
+            write_flatgeobuf_to_file(&geometries, temp_path.to_str().expect("should succeed"));
         assert!(result.is_ok());
 
         // Read back
-        let file = std::fs::File::open(&temp_path).unwrap();
+        let file = std::fs::File::open(&temp_path).expect("should succeed");
         let reader = std::io::BufReader::new(file);
-        let read_geometries = parse_flatgeobuf(reader).unwrap();
+        let read_geometries = parse_flatgeobuf(reader).expect("should succeed");
 
         // Verify count
         assert_eq!(read_geometries.len(), 4);
@@ -1272,7 +1279,7 @@ mod tests {
             .collect();
 
         // Sort for comparison (FlatGeobuf may not preserve order)
-        coords.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        coords.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("should succeed"));
 
         assert_eq!(coords.len(), 4);
         for (i, (x, y)) in coords.iter().enumerate() {

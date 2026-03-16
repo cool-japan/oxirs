@@ -120,7 +120,7 @@ mod tests {
     fn test_pool_allocation() {
         let mut pool = MemoryPool::new(10240);
 
-        let buffer = pool.allocate(1024).unwrap();
+        let buffer = pool.allocate(1024).expect("should succeed");
         assert_eq!(buffer.len(), 1024);
         assert_eq!(pool.current_usage(), 1024);
     }
@@ -129,7 +129,7 @@ mod tests {
     fn test_pool_reuse() {
         let mut pool = MemoryPool::new(10240);
 
-        let buffer1 = pool.allocate(1024).unwrap();
+        let buffer1 = pool.allocate(1024).expect("should succeed");
         let data = match buffer1 {
             PooledBuffer::Pooled { data } => data,
             PooledBuffer::Heap { data } => data,
@@ -137,7 +137,7 @@ mod tests {
 
         pool.deallocate(data);
 
-        let buffer2 = pool.allocate(1024).unwrap();
+        let buffer2 = pool.allocate(1024).expect("should succeed");
         assert_eq!(buffer2.len(), 1024);
     }
 
@@ -145,8 +145,8 @@ mod tests {
     fn test_pool_exhaustion() {
         let mut pool = MemoryPool::new(1024);
 
-        let _b1 = pool.allocate(512).unwrap();
-        let _b2 = pool.allocate(512).unwrap();
+        let _b1 = pool.allocate(512).expect("should succeed");
+        let _b2 = pool.allocate(512).expect("should succeed");
 
         // Pool should be exhausted
         let result = pool.allocate(1);
@@ -159,7 +159,7 @@ mod tests {
 
         assert_eq!(pool.available(), 10240);
 
-        let _buffer = pool.allocate(1024).unwrap();
+        let _buffer = pool.allocate(1024).expect("should succeed");
         assert_eq!(pool.available(), 9216);
     }
 }

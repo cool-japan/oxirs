@@ -313,14 +313,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_scheduler_connect() {
-        let server = MockModbusServer::start().await.unwrap();
+        let server = MockModbusServer::start().await.expect("should succeed");
         let config = create_test_config(server.address());
         let map = create_test_map();
 
         let mut scheduler = PollingScheduler::new(config, map);
 
         assert!(!scheduler.is_connected());
-        scheduler.connect().await.unwrap();
+        scheduler.connect().await.expect("should succeed");
         assert!(scheduler.is_connected());
         scheduler.disconnect();
         assert!(!scheduler.is_connected());
@@ -330,14 +330,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_scheduler_poll_once() {
-        let server = MockModbusServer::start().await.unwrap();
+        let server = MockModbusServer::start().await.expect("should succeed");
         let config = create_test_config(server.address());
         let map = create_test_map();
 
         let mut scheduler = PollingScheduler::new(config, map);
-        scheduler.connect().await.unwrap();
+        scheduler.connect().await.expect("should succeed");
 
-        let triples = scheduler.poll_once().await.unwrap();
+        let triples = scheduler.poll_once().await.expect("should succeed");
 
         // Should generate 1 triple (from holding register 0)
         assert_eq!(triples.len(), 1);
@@ -349,12 +349,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_scheduler_stats() {
-        let server = MockModbusServer::start().await.unwrap();
+        let server = MockModbusServer::start().await.expect("should succeed");
         let config = create_test_config(server.address());
         let map = create_test_map();
 
         let mut scheduler = PollingScheduler::new(config, map);
-        scheduler.connect().await.unwrap();
+        scheduler.connect().await.expect("should succeed");
 
         // Poll multiple times
         for _ in 0..5 {

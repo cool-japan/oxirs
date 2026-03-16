@@ -635,7 +635,7 @@ mod tests {
     }
 
     #[test]
-    fn test_two_cond_production_needs_two_wmes() {
+    fn test_two_cond_production_needs_two_wmes() -> Result<(), Box<dyn std::error::Error>> {
         let mut net = ReteNetwork::new();
         // Production: ?x type Person, ?x knows ?y
         let conds = vec![
@@ -649,6 +649,7 @@ mod tests {
 
         let t2 = net.add_wme(wme("alice", "knows", "bob"));
         assert!(t2.contains(&"p_knows_person".to_string()));
+        Ok(())
     }
 
     #[test]
@@ -708,7 +709,7 @@ mod tests {
     // ── Alpha memory ──────────────────────────────────────────
 
     #[test]
-    fn test_alpha_memory_populated_after_add_wme() {
+    fn test_alpha_memory_populated_after_add_wme() -> Result<(), Box<dyn std::error::Error>> {
         let mut net = ReteNetwork::new();
         let cond = const_cond(CondField::Predicate, "type");
         net.add_production(Production::new("p", vec![cond.clone()], ""));
@@ -717,7 +718,8 @@ mod tests {
         let key = super::alpha_key(&cond);
         let am = net.get_alpha_memory(&key);
         assert!(am.is_some());
-        assert_eq!(am.unwrap().len(), 1);
+        assert_eq!(am.ok_or("expected Some value")?.len(), 1);
+        Ok(())
     }
 
     #[test]
@@ -801,9 +803,10 @@ mod tests {
     }
 
     #[test]
-    fn test_alpha_key_variable() {
+    fn test_alpha_key_variable() -> Result<(), Box<dyn std::error::Error>> {
         let c = var_cond(CondField::Predicate, "p");
         assert_eq!(super::alpha_key(&c), "p:?p");
+        Ok(())
     }
 
     #[test]

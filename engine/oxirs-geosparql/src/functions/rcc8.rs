@@ -30,10 +30,10 @@ use geo::{Contains, Intersects};
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::rcc8::rcc8_eq;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
-/// assert!(rcc8_eq(&poly1, &poly2).unwrap());
+/// assert!(rcc8_eq(&poly1, &poly2).expect("should succeed"));
 /// ```
 pub fn rcc8_eq(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     // RCC8 equals is the same as Simple Features equals
@@ -50,10 +50,10 @@ pub fn rcc8_eq(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::rcc8::rcc8_dc;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((5 5, 7 5, 7 7, 5 7, 5 5))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((5 5, 7 5, 7 7, 5 7, 5 5))").expect("should succeed");
 ///
-/// assert!(rcc8_dc(&poly1, &poly2).unwrap());
+/// assert!(rcc8_dc(&poly1, &poly2).expect("should succeed"));
 /// ```
 pub fn rcc8_dc(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     // Disconnected is the same as disjoint
@@ -75,10 +75,10 @@ pub fn rcc8_dc(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::rcc8::rcc8_ec;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((2 0, 4 0, 4 2, 2 2, 2 0))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((2 0, 4 0, 4 2, 2 2, 2 0))").expect("should succeed");
 ///
-/// assert!(rcc8_ec(&poly1, &poly2).unwrap());
+/// assert!(rcc8_ec(&poly1, &poly2).expect("should succeed"));
 /// ```
 #[cfg(feature = "geos-backend")]
 pub fn rcc8_ec(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
@@ -130,10 +130,10 @@ pub fn rcc8_ec(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::rcc8::rcc8_po;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((2 2, 5 2, 5 5, 2 5, 2 2))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((2 2, 5 2, 5 5, 2 5, 2 2))").expect("should succeed");
 ///
-/// assert!(rcc8_po(&poly1, &poly2).unwrap());
+/// assert!(rcc8_po(&poly1, &poly2).expect("should succeed"));
 /// ```
 pub fn rcc8_po(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     geom1.validate_crs_compatibility(geom2)?;
@@ -167,10 +167,10 @@ pub fn rcc8_po(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::rcc8::rcc8_tpp;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
-/// assert!(rcc8_tpp(&poly1, &poly2).unwrap());
+/// assert!(rcc8_tpp(&poly1, &poly2).expect("should succeed"));
 /// ```
 #[cfg(feature = "geos-backend")]
 pub fn rcc8_tpp(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
@@ -213,10 +213,10 @@ pub fn rcc8_tpp(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::rcc8::rcc8_tppi;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
 ///
-/// assert!(rcc8_tppi(&poly1, &poly2).unwrap());
+/// assert!(rcc8_tppi(&poly1, &poly2).expect("should succeed"));
 /// ```
 #[cfg(feature = "geos-backend")]
 pub fn rcc8_tppi(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
@@ -247,10 +247,10 @@ pub fn rcc8_tppi(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::rcc8::rcc8_ntpp;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
-/// assert!(rcc8_ntpp(&poly1, &poly2).unwrap());
+/// assert!(rcc8_ntpp(&poly1, &poly2).expect("should succeed"));
 /// ```
 #[cfg(feature = "geos-backend")]
 pub fn rcc8_ntpp(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
@@ -293,10 +293,10 @@ pub fn rcc8_ntpp(_geom1: &Geometry, _geom2: &Geometry) -> Result<bool> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::rcc8::rcc8_ntppi;
 ///
-/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-/// let poly2 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").unwrap();
+/// let poly1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+/// let poly2 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").expect("should succeed");
 ///
-/// assert!(rcc8_ntppi(&poly1, &poly2).unwrap());
+/// assert!(rcc8_ntppi(&poly1, &poly2).expect("should succeed"));
 /// ```
 #[cfg(feature = "geos-backend")]
 pub fn rcc8_ntppi(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
@@ -332,7 +332,7 @@ mod tests {
         )));
 
         let poly2 = poly1.clone();
-        assert!(rcc8_eq(&poly1, &poly2).unwrap());
+        assert!(rcc8_eq(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -359,7 +359,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(rcc8_dc(&poly1, &poly2).unwrap());
+        assert!(rcc8_dc(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -386,7 +386,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(rcc8_ec(&poly1, &poly2).unwrap());
+        assert!(rcc8_ec(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -413,7 +413,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(rcc8_po(&poly1, &poly2).unwrap());
+        assert!(rcc8_po(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -440,7 +440,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(rcc8_tpp(&poly1, &poly2).unwrap());
+        assert!(rcc8_tpp(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -467,7 +467,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(rcc8_tppi(&poly1, &poly2).unwrap());
+        assert!(rcc8_tppi(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -494,7 +494,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(rcc8_ntpp(&poly1, &poly2).unwrap());
+        assert!(rcc8_ntpp(&poly1, &poly2).expect("should succeed"));
     }
 
     #[test]
@@ -521,7 +521,7 @@ mod tests {
             vec![],
         )));
 
-        assert!(rcc8_ntppi(&poly1, &poly2).unwrap());
+        assert!(rcc8_ntppi(&poly1, &poly2).expect("should succeed"));
     }
 }
 

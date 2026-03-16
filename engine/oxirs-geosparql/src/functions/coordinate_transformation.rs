@@ -251,7 +251,7 @@ pub fn transform_batch(geometries: &[Geometry], target_crs: &Crs) -> Result<Vec<
 ///             "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT({} {})",
 ///             139.0 + i as f64 * 0.01,
 ///             35.0 + i as f64 * 0.01
-///         )).unwrap()
+///         )).expect("should succeed")
 ///     })
 ///     .collect();
 ///
@@ -295,7 +295,7 @@ mod tests {
             Geometry::with_crs(GeoGeometry::Point(Point::new(139.7, 35.7)), Crs::epsg(4326));
 
         // Transform to Web Mercator (EPSG:3857)
-        let transformed = transform(&point, &Crs::epsg(3857)).unwrap();
+        let transformed = transform(&point, &Crs::epsg(3857)).expect("should succeed");
 
         // Verify CRS changed
         assert_eq!(transformed.crs, Crs::epsg(3857));
@@ -338,7 +338,7 @@ mod tests {
         let point =
             Geometry::with_crs(GeoGeometry::Point(Point::new(139.7, 35.7)), Crs::epsg(4326));
 
-        let result = transform(&point, &Crs::epsg(4326)).unwrap();
+        let result = transform(&point, &Crs::epsg(4326)).expect("should succeed");
 
         // Should return identical coordinates
         assert_eq!(result.geom, point.geom);
@@ -357,7 +357,7 @@ mod tests {
             Crs::epsg(4326),
         );
 
-        let transformed = transform(&line, &Crs::epsg(3857)).unwrap();
+        let transformed = transform(&line, &Crs::epsg(3857)).expect("should succeed");
 
         assert_eq!(transformed.crs, Crs::epsg(3857));
         assert_eq!(transformed.geometry_type(), "LineString");
@@ -381,7 +381,7 @@ mod tests {
             Crs::epsg(4326),
         );
 
-        let transformed = transform(&polygon, &Crs::epsg(3857)).unwrap();
+        let transformed = transform(&polygon, &Crs::epsg(3857)).expect("should succeed");
 
         assert_eq!(transformed.crs, Crs::epsg(3857));
         assert_eq!(transformed.geometry_type(), "Polygon");
@@ -405,7 +405,7 @@ mod tests {
             Geometry::with_crs(GeoGeometry::Point(Point::new(140.0, 36.0)), Crs::epsg(4326)),
         ];
 
-        let transformed = transform_batch(&geometries, &Crs::epsg(3857)).unwrap();
+        let transformed = transform_batch(&geometries, &Crs::epsg(3857)).expect("should succeed");
 
         assert_eq!(transformed.len(), 2);
         assert!(transformed.iter().all(|g| g.crs == Crs::epsg(3857)));
@@ -424,7 +424,7 @@ mod tests {
             .collect();
 
         // Transform batch - should create ONE Transformer and reuse it
-        let transformed = transform_batch(&geometries, &Crs::epsg(3857)).unwrap();
+        let transformed = transform_batch(&geometries, &Crs::epsg(3857)).expect("should succeed");
 
         assert_eq!(transformed.len(), 10);
         assert!(transformed.iter().all(|g| g.crs == Crs::epsg(3857)));
@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn test_transform_batch_empty() {
         let geometries: Vec<Geometry> = vec![];
-        let transformed = transform_batch(&geometries, &Crs::epsg(3857)).unwrap();
+        let transformed = transform_batch(&geometries, &Crs::epsg(3857)).expect("should succeed");
         assert_eq!(transformed.len(), 0);
     }
 
@@ -445,7 +445,7 @@ mod tests {
         ];
 
         // Transform to same CRS - should just clone
-        let transformed = transform_batch(&geometries, &Crs::epsg(4326)).unwrap();
+        let transformed = transform_batch(&geometries, &Crs::epsg(4326)).expect("should succeed");
 
         assert_eq!(transformed.len(), 2);
         assert!(transformed.iter().all(|g| g.crs == Crs::epsg(4326)));

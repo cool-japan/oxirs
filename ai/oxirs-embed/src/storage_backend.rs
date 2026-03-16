@@ -719,44 +719,70 @@ mod tests {
         embeddings.insert("entity1".to_string(), Vector::new(vec![1.0, 2.0, 3.0]));
         embeddings.insert("entity2".to_string(), Vector::new(vec![4.0, 5.0, 6.0]));
 
-        backend.save_entity_embeddings(&embeddings).await.unwrap();
-        let loaded = backend.load_entity_embeddings().await.unwrap();
+        backend
+            .save_entity_embeddings(&embeddings)
+            .await
+            .expect("should succeed");
+        let loaded = backend
+            .load_entity_embeddings()
+            .await
+            .expect("should succeed");
 
         assert_eq!(loaded.len(), 2);
-        assert_eq!(loaded.get("entity1").unwrap().values, vec![1.0, 2.0, 3.0]);
+        assert_eq!(
+            loaded.get("entity1").expect("should succeed").values,
+            vec![1.0, 2.0, 3.0]
+        );
     }
 
     #[tokio::test]
     async fn test_disk_backend() {
         use tempfile::TempDir;
 
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("should succeed");
         let config = StorageBackendConfig::default();
-        let mut backend = DiskBackend::new(temp_dir.path().to_path_buf(), config).unwrap();
+        let mut backend =
+            DiskBackend::new(temp_dir.path().to_path_buf(), config).expect("should succeed");
 
         let mut embeddings = HashMap::new();
         embeddings.insert("entity1".to_string(), Vector::new(vec![1.0, 2.0, 3.0]));
 
-        backend.save_entity_embeddings(&embeddings).await.unwrap();
-        let loaded = backend.load_entity_embeddings().await.unwrap();
+        backend
+            .save_entity_embeddings(&embeddings)
+            .await
+            .expect("should succeed");
+        let loaded = backend
+            .load_entity_embeddings()
+            .await
+            .expect("should succeed");
 
         assert_eq!(loaded.len(), 1);
-        assert_eq!(loaded.get("entity1").unwrap().values, vec![1.0, 2.0, 3.0]);
+        assert_eq!(
+            loaded.get("entity1").expect("should succeed").values,
+            vec![1.0, 2.0, 3.0]
+        );
     }
 
     #[tokio::test]
     async fn test_disk_backend_checkpoints() {
         use tempfile::TempDir;
 
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new().expect("should succeed");
         let config = StorageBackendConfig::default();
-        let mut backend = DiskBackend::new(temp_dir.path().to_path_buf(), config).unwrap();
+        let mut backend =
+            DiskBackend::new(temp_dir.path().to_path_buf(), config).expect("should succeed");
 
         let mut embeddings = HashMap::new();
         embeddings.insert("entity1".to_string(), Vector::new(vec![1.0, 2.0, 3.0]));
 
-        backend.save_entity_embeddings(&embeddings).await.unwrap();
-        backend.create_checkpoint("checkpoint1").await.unwrap();
+        backend
+            .save_entity_embeddings(&embeddings)
+            .await
+            .expect("should succeed");
+        backend
+            .create_checkpoint("checkpoint1")
+            .await
+            .expect("should succeed");
 
         // Modify embeddings
         let mut new_embeddings = HashMap::new();
@@ -764,11 +790,17 @@ mod tests {
         backend
             .save_entity_embeddings(&new_embeddings)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Restore checkpoint
-        backend.restore_checkpoint("checkpoint1").await.unwrap();
-        let restored = backend.load_entity_embeddings().await.unwrap();
+        backend
+            .restore_checkpoint("checkpoint1")
+            .await
+            .expect("should succeed");
+        let restored = backend
+            .load_entity_embeddings()
+            .await
+            .expect("should succeed");
 
         assert_eq!(restored.len(), 1);
         assert!(restored.contains_key("entity1"));

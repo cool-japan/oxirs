@@ -333,7 +333,7 @@ mod tests {
         let graph = Arc::new(ConcurrentGraph::new());
         let reader = OptimizedReader::new(graph);
 
-        let triples = reader.bulk_read(100).unwrap();
+        let triples = reader.bulk_read(100).expect("operation should succeed");
         assert_eq!(triples.len(), 0);
     }
 
@@ -366,8 +366,8 @@ mod tests {
         let graph = Arc::new(ConcurrentGraph::new());
         let reader = OptimizedReader::new(graph);
 
-        let s = Subject::NamedNode(NamedNode::new("http://example.org/s").unwrap());
-        let p = Predicate::NamedNode(NamedNode::new("http://example.org/p").unwrap());
+        let s = Subject::NamedNode(NamedNode::new("http://example.org/s").expect("valid IRI"));
+        let p = Predicate::NamedNode(NamedNode::new("http://example.org/p").expect("valid IRI"));
         let o = Object::Literal(Literal::new("test"));
         let triple = Triple::new(s, p, o);
 

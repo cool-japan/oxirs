@@ -121,46 +121,49 @@ mod tests {
     }
 
     #[test]
-    fn test_builtin_equal() {
+    fn test_builtin_equal() -> Result<(), Box<dyn std::error::Error>> {
         let args = vec![
             SwrlArgument::Literal("5".to_string()),
             SwrlArgument::Literal("5".to_string()),
         ];
-        assert!(builtin_equal(&args).unwrap());
+        assert!(builtin_equal(&args)?);
 
         let args = vec![
             SwrlArgument::Literal("5".to_string()),
             SwrlArgument::Literal("6".to_string()),
         ];
-        assert!(!builtin_equal(&args).unwrap());
+        assert!(!builtin_equal(&args)?);
+        Ok(())
     }
 
     #[test]
-    fn test_builtin_add() {
+    fn test_builtin_add() -> Result<(), Box<dyn std::error::Error>> {
         let args = vec![
             SwrlArgument::Literal("5".to_string()),
             SwrlArgument::Literal("3".to_string()),
             SwrlArgument::Literal("8".to_string()),
         ];
-        assert!(builtin_add(&args).unwrap());
+        assert!(builtin_add(&args)?);
 
         let args = vec![
             SwrlArgument::Literal("5".to_string()),
             SwrlArgument::Literal("3".to_string()),
             SwrlArgument::Literal("7".to_string()),
         ];
-        assert!(!builtin_add(&args).unwrap());
+        assert!(!builtin_add(&args)?);
+        Ok(())
     }
 
     #[test]
-    fn test_string_concat() {
+    fn test_string_concat() -> Result<(), Box<dyn std::error::Error>> {
         let args = vec![
             SwrlArgument::Literal("Hello".to_string()),
             SwrlArgument::Literal(" ".to_string()),
             SwrlArgument::Literal("World".to_string()),
             SwrlArgument::Literal("Hello World".to_string()),
         ];
-        assert!(builtin_string_concat(&args).unwrap());
+        assert!(builtin_string_concat(&args)?);
+        Ok(())
     }
 
     // TODO: Re-enable when convert_swrl_to_rule is made public or test is refactored
@@ -181,7 +184,7 @@ mod tests {
     //         metadata: HashMap::new(),
     //     };
     //
-    //     let rule = engine.convert_swrl_to_rule(&swrl_rule).unwrap();
+    //     let rule = engine.convert_swrl_to_rule(&swrl_rule).expect("should succeed");
     //     assert_eq!(rule.name, "test_rule");
     //     assert_eq!(rule.body.len(), 1);
     //     assert_eq!(rule.head.len(), 1);

@@ -705,9 +705,9 @@ mod tests {
         let store = ZeroCopyTripleStore::new();
         assert!(store.is_ok());
 
-        let store = store.unwrap();
-        assert_eq!(store.len().unwrap(), 0);
-        assert!(store.is_empty().unwrap());
+        let store = store.expect("store should be available");
+        assert_eq!(store.len().expect("store operation should succeed"), 0);
+        assert!(store.is_empty().expect("store operation should succeed"));
     }
 
     #[test]

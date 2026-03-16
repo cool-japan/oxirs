@@ -25,8 +25,8 @@ use geo::algorithm::bounding_rect::BoundingRect;
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::bbox_utils::bboxes_disjoint;
 ///
-/// let geom1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-/// let geom2 = Geometry::from_wkt("POLYGON((5 5, 7 5, 7 7, 5 7, 5 5))").unwrap();
+/// let geom1 = Geometry::from_wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+/// let geom2 = Geometry::from_wkt("POLYGON((5 5, 7 5, 7 7, 5 7, 5 5))").expect("should succeed");
 ///
 /// assert!(bboxes_disjoint(&geom1, &geom2));
 /// ```
@@ -58,8 +58,8 @@ pub fn bboxes_disjoint(geom1: &Geometry, geom2: &Geometry) -> bool {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::bbox_utils::bboxes_intersect;
 ///
-/// let geom1 = Geometry::from_wkt("POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))").unwrap();
-/// let geom2 = Geometry::from_wkt("POLYGON((2 2, 5 2, 5 5, 2 5, 2 2))").unwrap();
+/// let geom1 = Geometry::from_wkt("POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))").expect("should succeed");
+/// let geom2 = Geometry::from_wkt("POLYGON((2 2, 5 2, 5 5, 2 5, 2 2))").expect("should succeed");
 ///
 /// assert!(bboxes_intersect(&geom1, &geom2));
 /// ```
@@ -78,8 +78,8 @@ pub fn bboxes_intersect(geom1: &Geometry, geom2: &Geometry) -> bool {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::bbox_utils::bbox_could_contain;
 ///
-/// let geom1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-/// let geom2 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").unwrap();
+/// let geom1 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+/// let geom2 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").expect("should succeed");
 ///
 /// assert!(bbox_could_contain(&geom1, &geom2));
 /// ```
@@ -110,8 +110,8 @@ pub fn bbox_could_contain(geom1: &Geometry, geom2: &Geometry) -> bool {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::bbox_utils::bbox_within;
 ///
-/// let geom1 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").unwrap();
-/// let geom2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+/// let geom1 = Geometry::from_wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))").expect("should succeed");
+/// let geom2 = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 ///
 /// assert!(bbox_within(&geom1, &geom2));
 /// ```

@@ -589,7 +589,10 @@ mod tests {
         };
 
         let coordinator = FederatedCoordinator::new(config);
-        let stats = coordinator.get_federation_statistics().await.unwrap();
+        let stats = coordinator
+            .get_federation_statistics()
+            .await
+            .expect("should succeed");
         assert_eq!(stats.total_nodes, 0);
     }
 
@@ -653,8 +656,14 @@ mod tests {
             last_seen: SystemTime::now(),
         };
 
-        coordinator.register_node(node).await.unwrap();
-        let stats = coordinator.get_federation_statistics().await.unwrap();
+        coordinator
+            .register_node(node)
+            .await
+            .expect("should succeed");
+        let stats = coordinator
+            .get_federation_statistics()
+            .await
+            .expect("should succeed");
         assert_eq!(stats.total_nodes, 1);
     }
 }

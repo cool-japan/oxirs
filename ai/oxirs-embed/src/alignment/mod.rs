@@ -674,7 +674,7 @@ mod tests {
         let seeds = make_seed_pairs(3);
         let result = aligner.align_to_pivot("fr", &seeds);
         assert!(result.is_some(), "should return alignment result");
-        let r = result.unwrap();
+        let r = result.expect("should succeed");
         assert!(r.alignment_score.is_finite());
     }
 
@@ -692,7 +692,7 @@ mod tests {
         let v = vec![1.0_f32, 2.0, 3.0, 4.0];
         let out = aligner.translate(&v, "en", "en");
         assert!(out.is_some());
-        assert_eq!(out.unwrap(), v);
+        assert_eq!(out.expect("should succeed"), v);
     }
 
     #[test]

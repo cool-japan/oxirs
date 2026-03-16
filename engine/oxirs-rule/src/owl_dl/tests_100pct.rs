@@ -77,7 +77,7 @@ fn test_max_cardinality_one_two_values_violation() {
 }
 
 #[test]
-fn test_max_cardinality_post_loop_inconsistency() {
+fn test_max_cardinality_post_loop_inconsistency() -> anyhow::Result<()> {
     // The post-loop check should register an inconsistency message
     let mut r = new_reasoner();
     r.add_max_cardinality("AtMostOne", "hasFriend", 1);
@@ -91,6 +91,7 @@ fn test_max_cardinality_post_loop_inconsistency() {
             .any(|m| m.contains("maxCardinality") || m.contains("Nothing")),
         "expected maxCardinality violation in inconsistencies: {msgs:?}"
     );
+    Ok(())
 }
 
 #[test]
@@ -487,7 +488,7 @@ fn test_all_different_materialises_different_from() {
 }
 
 #[test]
-fn test_all_different_violation_detected_when_same_as() {
+fn test_all_different_violation_detected_when_same_as() -> anyhow::Result<()> {
     let mut r = new_reasoner();
     r.add_all_different(vec![":a".to_string(), ":b".to_string()]);
     // Contradictory: also assert a sameAs b
@@ -499,6 +500,7 @@ fn test_all_different_violation_detected_when_same_as() {
         "expected AllDifferent violation in inconsistencies: {msgs:?}"
     );
     assert!(!r.is_consistent());
+    Ok(())
 }
 
 #[test]

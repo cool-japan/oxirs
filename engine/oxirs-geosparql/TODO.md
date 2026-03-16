@@ -1,10 +1,10 @@
 # OxiRS GeoSPARQL - TODO
 
-*Version: 0.2.1 | Last Updated: 2026-03-05*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS GeoSPARQL v0.2.1 is production-ready, providing complete OGC GeoSPARQL 1.0/1.1 implementation for spatial data and queries in RDF/SPARQL.
+OxiRS GeoSPARQL v0.2.2 is production-ready, providing complete OGC GeoSPARQL 1.0/1.1 implementation for spatial data and queries in RDF/SPARQL.
 
 ### Production Features
 - ✅ **GeoSPARQL Vocabulary** - Full support for GeoSPARQL ontology and datatypes
@@ -13,15 +13,15 @@ OxiRS GeoSPARQL v0.2.1 is production-ready, providing complete OGC GeoSPARQL 1.0
 - ✅ **Geometric Operations** - Distance, buffer, convex hull, intersection, union
 - ✅ **Spatial Indexing** - R-tree based spatial index for efficient queries
 - ✅ **CRS Support** - Coordinate Reference System handling with EPSG codes
-- ✅ **250+ tests passing** with comprehensive coverage
+- ✅ **1713 tests passing** with comprehensive coverage
 
 ## Roadmap
 
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ GeoSPARQL vocabulary, WKT/GML, topological predicates, spatial indexing
-- ✅ 250+ tests passing
+- ✅ 1713 tests passing
 
-### v0.2.1 - Current Release (March 5, 2026)
+### v0.2.2 - Current Release (March 16, 2026)
 - ✅ Additional coordinate systems
 - ✅ 3D geometry support
 - ✅ Enhanced spatial indexing
@@ -43,4 +43,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GeoSPARQL v0.2.1 - Spatial data support for RDF*
+*OxiRS GeoSPARQL v0.2.2 - Spatial data support for RDF*

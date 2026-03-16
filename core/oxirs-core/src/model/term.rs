@@ -567,10 +567,10 @@ impl RdfTerm for Variable {
 /// use oxirs_core::model::{Term, NamedNode, Literal, BlankNode, Variable};
 ///
 /// // Create different types of terms
-/// let named_node = Term::NamedNode(NamedNode::new("http://example.org/resource").unwrap());
+/// let named_node = Term::NamedNode(NamedNode::new("http://example.org/resource").expect("valid IRI"));
 /// let literal = Term::Literal(Literal::new("Hello World"));
-/// let blank_node = Term::BlankNode(BlankNode::new("b1").unwrap());
-/// let variable = Term::Variable(Variable::new("x").unwrap());
+/// let blank_node = Term::BlankNode(BlankNode::new("b1").expect("valid blank node id"));
+/// let variable = Term::Variable(Variable::new("x").expect("valid variable name"));
 ///
 /// // Check term types
 /// assert!(named_node.is_named_node());
@@ -629,7 +629,7 @@ impl Term {
     /// ```rust
     /// use oxirs_core::model::{Term, NamedNode, Literal};
     ///
-    /// let named_node = Term::NamedNode(NamedNode::new("http://example.org/resource").unwrap());
+    /// let named_node = Term::NamedNode(NamedNode::new("http://example.org/resource").expect("valid IRI"));
     /// let literal = Term::Literal(Literal::new("Hello"));
     ///
     /// assert!(named_node.is_named_node());
@@ -646,7 +646,7 @@ impl Term {
     /// ```rust
     /// use oxirs_core::model::{Term, BlankNode, Literal};
     ///
-    /// let blank_node = Term::BlankNode(BlankNode::new("b1").unwrap());
+    /// let blank_node = Term::BlankNode(BlankNode::new("b1").expect("valid blank node id"));
     /// let literal = Term::Literal(Literal::new("Hello"));
     ///
     /// assert!(blank_node.is_blank_node());
@@ -664,7 +664,7 @@ impl Term {
     /// use oxirs_core::model::{Term, NamedNode, Literal};
     ///
     /// let literal = Term::Literal(Literal::new("Hello"));
-    /// let named_node = Term::NamedNode(NamedNode::new("http://example.org/resource").unwrap());
+    /// let named_node = Term::NamedNode(NamedNode::new("http://example.org/resource").expect("valid IRI"));
     ///
     /// assert!(literal.is_literal());
     /// assert!(!named_node.is_literal());
@@ -680,7 +680,7 @@ impl Term {
     /// ```rust
     /// use oxirs_core::model::{Term, Variable, Literal};
     ///
-    /// let variable = Term::Variable(Variable::new("x").unwrap());
+    /// let variable = Term::Variable(Variable::new("x").expect("valid variable name"));
     /// let literal = Term::Literal(Literal::new("Hello"));
     ///
     /// assert!(variable.is_variable());
@@ -1224,7 +1224,7 @@ mod tests {
 
     #[test]
     fn test_blank_node() {
-        let blank = BlankNode::new("b1").unwrap();
+        let blank = BlankNode::new("b1").expect("valid blank node id");
         assert_eq!(blank.id(), "b1");
         assert_eq!(blank.local_id(), "b1");
         assert!(blank.is_blank_node());
@@ -1233,7 +1233,7 @@ mod tests {
 
     #[test]
     fn test_blank_node_with_prefix() {
-        let blank = BlankNode::new("_:test").unwrap();
+        let blank = BlankNode::new("_:test").expect("valid blank node id");
         assert_eq!(blank.id(), "_:test");
         assert_eq!(blank.local_id(), "test");
     }
@@ -1250,8 +1250,10 @@ mod tests {
 
     #[test]
     fn test_blank_node_unique_with_prefix() {
-        let blank1 = BlankNode::new_unique_with_prefix("test").unwrap();
-        let blank2 = BlankNode::new_unique_with_prefix("test").unwrap();
+        let blank1 =
+            BlankNode::new_unique_with_prefix("test").expect("construction should succeed");
+        let blank2 =
+            BlankNode::new_unique_with_prefix("test").expect("construction should succeed");
         assert_ne!(blank1.id(), blank2.id());
         assert!(blank1.id().starts_with("test_"));
         assert!(blank2.id().starts_with("test_"));
@@ -1274,15 +1276,16 @@ mod tests {
 
     #[test]
     fn test_blank_node_serde() {
-        let blank = BlankNode::new("serializable").unwrap();
-        let json = serde_json::to_string(&blank).unwrap();
-        let deserialized: BlankNode = serde_json::from_str(&json).unwrap();
+        let blank = BlankNode::new("serializable").expect("valid blank node id");
+        let json = serde_json::to_string(&blank).expect("construction should succeed");
+        let deserialized: BlankNode =
+            serde_json::from_str(&json).expect("construction should succeed");
         assert_eq!(blank, deserialized);
     }
 
     #[test]
     fn test_variable() {
-        let var = Variable::new("x").unwrap();
+        let var = Variable::new("x").expect("valid variable name");
         assert_eq!(var.name(), "x");
         assert!(var.is_variable());
         assert_eq!(format!("{var}"), "?x");
@@ -1291,8 +1294,8 @@ mod tests {
 
     #[test]
     fn test_variable_with_prefix() {
-        let var1 = Variable::new("?test").unwrap();
-        let var2 = Variable::new("$test").unwrap();
+        let var1 = Variable::new("?test").expect("valid variable name");
+        let var2 = Variable::new("$test").expect("valid variable name");
         assert_eq!(var1.name(), "test");
         assert_eq!(var2.name(), "test");
         assert_eq!(var1, var2); // Same after normalization
@@ -1323,15 +1326,16 @@ mod tests {
 
     #[test]
     fn test_variable_serde() {
-        let var = Variable::new("serializable").unwrap();
-        let json = serde_json::to_string(&var).unwrap();
-        let deserialized: Variable = serde_json::from_str(&json).unwrap();
+        let var = Variable::new("serializable").expect("valid variable name");
+        let json = serde_json::to_string(&var).expect("construction should succeed");
+        let deserialized: Variable =
+            serde_json::from_str(&json).expect("construction should succeed");
         assert_eq!(var, deserialized);
     }
 
     #[test]
     fn test_term_enum() {
-        let term = Term::NamedNode(NamedNode::new("http://example.org").unwrap());
+        let term = Term::NamedNode(NamedNode::new("http://example.org").expect("valid IRI"));
         assert!(term.is_named_node());
         assert!(term.as_named_node().is_some());
         assert!(term.as_blank_node().is_none());
@@ -1340,12 +1344,12 @@ mod tests {
     #[test]
     fn test_blank_node_numerical() {
         // Test hex ID optimization - hex IDs must still follow blank node rules (can't start with digit)
-        let blank1 = BlankNode::new("a100a").unwrap();
+        let blank1 = BlankNode::new("a100a").expect("valid blank node id");
         assert_eq!(blank1.unique_id(), Some(0xa100a));
         assert_eq!(blank1.local_id(), "a100a");
 
         // Non-hex IDs should not get numerical IDs
-        let blank2 = BlankNode::new("a100A").unwrap(); // Capital letters not supported in hex optimization
+        let blank2 = BlankNode::new("a100A").expect("valid blank node id"); // Capital letters not supported in hex optimization
         assert_eq!(blank2.unique_id(), None);
 
         // Direct numerical ID creation

@@ -621,27 +621,21 @@ mod tests {
     }
 
     #[test]
-    fn test_hierarchical_similarity() {
+    fn test_hierarchical_similarity() -> Result<()> {
         let config = HierarchicalSimilarityConfig::default();
         let hierarchical_sim = HierarchicalSimilarity::new(config);
 
         // Add some test concepts
-        hierarchical_sim
-            .add_concept_relationship("Animal", "Mammal")
-            .unwrap();
-        hierarchical_sim
-            .add_concept_relationship("Mammal", "Dog")
-            .unwrap();
+        hierarchical_sim.add_concept_relationship("Animal", "Mammal")?;
+        hierarchical_sim.add_concept_relationship("Mammal", "Dog")?;
 
         // Associate resources with concepts
+        hierarchical_sim.associate_resource_with_concepts("resource1", vec!["Dog".to_string()])?;
         hierarchical_sim
-            .associate_resource_with_concepts("resource1", vec!["Dog".to_string()])
-            .unwrap();
-        hierarchical_sim
-            .associate_resource_with_concepts("resource2", vec!["Mammal".to_string()])
-            .unwrap();
+            .associate_resource_with_concepts("resource2", vec!["Mammal".to_string()])?;
 
         // Test would require a VectorStore instance, which is complex to set up in a unit test
         // In practice, integration tests would cover this functionality
+        Ok(())
     }
 }

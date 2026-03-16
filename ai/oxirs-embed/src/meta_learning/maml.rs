@@ -342,7 +342,7 @@ mod tests {
         let result = maml.adapt_to_task(&task).await;
         assert!(result.is_ok());
         
-        let adaptation_result = result.unwrap();
+        let adaptation_result = result.expect("should succeed");
         assert_eq!(adaptation_result.task_id, task.id);
         assert!(adaptation_result.final_loss >= 0.0);
     }
@@ -356,7 +356,7 @@ mod tests {
         let result = maml.forward(&maml.base_params, &input);
         
         assert!(result.is_ok());
-        let output = result.unwrap();
+        let output = result.expect("should succeed");
         assert_eq!(output.len(), 128); // Output dimension should match config
     }
 

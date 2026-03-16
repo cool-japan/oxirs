@@ -112,46 +112,55 @@ mod tests {
 
     #[tokio::test]
     async fn test_async_store_creation() {
-        let store = RdfStore::new().unwrap();
+        let store = RdfStore::new().expect("store creation should succeed");
         let _async_store = AsyncRdfStore::new(store);
     }
 
     #[tokio::test]
     async fn test_async_insert_and_query() {
-        let store = RdfStore::new().unwrap();
+        let store = RdfStore::new().expect("store creation should succeed");
         let async_store = AsyncRdfStore::new(store);
 
         let quad = Quad::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
-            NamedNode::new("http://example.org/o").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            NamedNode::new("http://example.org/o").expect("valid IRI"),
             GraphName::DefaultGraph,
         );
 
-        async_store.insert_quad_async(quad).await.unwrap();
+        async_store
+            .insert_quad_async(quad)
+            .await
+            .expect("async operation should succeed");
 
-        let count = async_store.len_async().await.unwrap();
+        let count = async_store
+            .len_async()
+            .await
+            .expect("async operation should succeed");
         assert_eq!(count, 1);
     }
 
     #[tokio::test]
     async fn test_async_query() {
-        let store = RdfStore::new().unwrap();
+        let store = RdfStore::new().expect("store creation should succeed");
         let async_store = AsyncRdfStore::new(store);
 
         let quad = Quad::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
-            NamedNode::new("http://example.org/o").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            NamedNode::new("http://example.org/o").expect("valid IRI"),
             GraphName::DefaultGraph,
         );
 
-        async_store.insert_quad_async(quad).await.unwrap();
+        async_store
+            .insert_quad_async(quad)
+            .await
+            .expect("async operation should succeed");
 
         let _results = async_store
             .query_async("SELECT * WHERE { ?s ?p ?o }")
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Query executed successfully
     }

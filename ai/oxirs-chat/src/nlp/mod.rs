@@ -146,11 +146,11 @@ mod tests {
 
     #[test]
     fn test_nlp_pipeline_processing() {
-        let mut pipeline = NLPPipeline::new().unwrap();
+        let mut pipeline = NLPPipeline::new().expect("should succeed");
         let result = pipeline.process("msg1".to_string(), "Show me all movies from 2023");
         assert!(result.is_ok());
 
-        let nlp_result = result.unwrap();
+        let nlp_result = result.expect("should succeed");
         assert_eq!(nlp_result.intent.primary_intent, IntentType::Exploration);
     }
 }

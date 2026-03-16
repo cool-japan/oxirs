@@ -443,28 +443,32 @@ mod tests {
 
     #[test]
     fn test_create_feature_table() {
-        let mut gpkg = GeoPackage::create_memory().unwrap();
+        let mut gpkg = GeoPackage::create_memory().expect("should succeed");
         let result = gpkg.create_feature_table("test_points", "geom", "POINT", 4326, false, false);
         assert!(result.is_ok());
 
         // Verify table was registered
-        let tables = gpkg.get_feature_tables().unwrap();
+        let tables = gpkg.get_feature_tables().expect("should succeed");
         assert!(tables.contains(&"test_points".to_string()));
     }
 
     #[test]
     fn test_insert_and_query_geometry() {
-        let mut gpkg = GeoPackage::create_memory().unwrap();
+        let mut gpkg = GeoPackage::create_memory().expect("should succeed");
         gpkg.create_feature_table("points", "geom", "POINT", 4326, false, false)
-            .unwrap();
+            .expect("should succeed");
 
         // Insert a point
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        let id = gpkg.insert_geometry("points", "geom", &point).unwrap();
+        let id = gpkg
+            .insert_geometry("points", "geom", &point)
+            .expect("should succeed");
         assert!(id > 0);
 
         // Query back
-        let geometries = gpkg.query_geometries("points", "geom").unwrap();
+        let geometries = gpkg
+            .query_geometries("points", "geom")
+            .expect("should succeed");
         assert_eq!(geometries.len(), 1);
 
         // Verify coordinates
@@ -478,36 +482,42 @@ mod tests {
 
     #[test]
     fn test_multiple_geometries() {
-        let mut gpkg = GeoPackage::create_memory().unwrap();
+        let mut gpkg = GeoPackage::create_memory().expect("should succeed");
         gpkg.create_feature_table("multi_points", "geom", "POINT", 4326, false, false)
-            .unwrap();
+            .expect("should succeed");
 
         // Insert multiple points
         for i in 0..5 {
             let point = Geometry::new(GeoGeometry::Point(Point::new(i as f64, i as f64 * 2.0)));
             gpkg.insert_geometry("multi_points", "geom", &point)
-                .unwrap();
+                .expect("should succeed");
         }
 
         // Query all
-        let geometries = gpkg.query_geometries("multi_points", "geom").unwrap();
+        let geometries = gpkg
+            .query_geometries("multi_points", "geom")
+            .expect("should succeed");
         assert_eq!(geometries.len(), 5);
     }
 
     #[test]
     #[ignore] // TODO: 3D WKB encoding needs enhancement
     fn test_3d_geometry() {
-        let mut gpkg = GeoPackage::create_memory().unwrap();
+        let mut gpkg = GeoPackage::create_memory().expect("should succeed");
         gpkg.create_feature_table("points_3d", "geom", "POINT", 4326, true, false)
-            .unwrap();
+            .expect("should succeed");
 
         // Insert 3D point
-        let point = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
-        let id = gpkg.insert_geometry("points_3d", "geom", &point).unwrap();
+        let point = Geometry::from_wkt("POINT Z(1 2 3)").expect("should succeed");
+        let id = gpkg
+            .insert_geometry("points_3d", "geom", &point)
+            .expect("should succeed");
         assert!(id > 0);
 
         // Query back
-        let geometries = gpkg.query_geometries("points_3d", "geom").unwrap();
+        let geometries = gpkg
+            .query_geometries("points_3d", "geom")
+            .expect("should succeed");
         assert_eq!(geometries.len(), 1);
         // Note: 3D coordinate preservation requires enhanced WKB encoding
         // assert!(geometries[0].is_3d());
@@ -515,14 +525,16 @@ mod tests {
 
     #[test]
     fn test_spatial_ref_sys_defaults() {
-        let gpkg = GeoPackage::create_memory().unwrap();
+        let gpkg = GeoPackage::create_memory().expect("should succeed");
 
         // Verify default SRS entries exist
         let mut stmt = gpkg
             .conn
             .prepare("SELECT COUNT(*) FROM gpkg_spatial_ref_sys")
-            .unwrap();
-        let count: i64 = stmt.query_row([], |row| row.get(0)).unwrap();
+            .expect("should succeed");
+        let count: i64 = stmt
+            .query_row([], |row| row.get(0))
+            .expect("should succeed");
         assert!(count >= 3); // At least WGS 84, Undefined Cartesian, Undefined Geographic
     }
 }

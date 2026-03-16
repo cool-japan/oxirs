@@ -786,7 +786,9 @@ mod tests {
         let context =
             DirectiveContext::new().with_value(DirectiveValue::String("hello".to_string()));
 
-        let result = handler.execute(&directive, &context).unwrap();
+        let result = handler
+            .execute(&directive, &context)
+            .expect("should succeed");
         assert_eq!(result.as_string(), Some("HELLO"));
     }
 
@@ -798,7 +800,9 @@ mod tests {
         let context =
             DirectiveContext::new().with_value(DirectiveValue::String("HELLO".to_string()));
 
-        let result = handler.execute(&directive, &context).unwrap();
+        let result = handler
+            .execute(&directive, &context)
+            .expect("should succeed");
         assert_eq!(result.as_string(), Some("hello"));
     }
 

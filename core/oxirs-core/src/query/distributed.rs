@@ -1279,7 +1279,9 @@ mod tests {
             status: EndpointStatus::Healthy,
         };
 
-        engine.register_endpoint(endpoint).unwrap();
+        engine
+            .register_endpoint(endpoint)
+            .expect("operation should succeed");
 
         let endpoints = engine
             .endpoints
@@ -1329,7 +1331,9 @@ mod tests {
             dataset: crate::query::algebra::Dataset::default(),
         };
 
-        let routes = router.route_query(&query, &endpoints).unwrap();
+        let routes = router
+            .route_query(&query, &endpoints)
+            .expect("operation should succeed");
         assert_eq!(routes.len(), 1);
         assert_eq!(routes[0].endpoint, "http://endpoint1.org/sparql");
     }

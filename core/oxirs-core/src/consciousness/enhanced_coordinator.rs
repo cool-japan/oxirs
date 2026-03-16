@@ -978,7 +978,7 @@ mod tests {
         let analysis = coordinator.analyze_patterns(&patterns);
         assert!(analysis.is_ok());
 
-        let analysis = analysis.unwrap();
+        let analysis = analysis.expect("analysis should be available");
         assert_eq!(analysis.complexity_score, 0.0);
         assert!(!analysis.recommended_components.is_empty());
     }

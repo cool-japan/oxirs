@@ -762,8 +762,14 @@ mod tests {
         // Use a larger, more repetitive string that will actually compress well
         let original_data = b"This is a test string for compression. ".repeat(100);
 
-        let compressed = compression.compress(&original_data).await.unwrap();
-        let decompressed = compression.decompress(&compressed).await.unwrap();
+        let compressed = compression
+            .compress(&original_data)
+            .await
+            .expect("should succeed");
+        let decompressed = compression
+            .decompress(&compressed)
+            .await
+            .expect("should succeed");
 
         assert_eq!(original_data.as_slice(), decompressed.as_slice());
         assert!(compressed.len() < original_data.len()); // Should be compressed

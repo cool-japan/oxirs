@@ -1233,13 +1233,13 @@ mod tests {
         let plan = ExecutionPlan::TripleScan {
             pattern: crate::model::pattern::TriplePattern::new(
                 Some(crate::model::pattern::SubjectPattern::Variable(
-                    Variable::new("?s").unwrap(),
+                    Variable::new("?s").expect("valid variable name"),
                 )),
                 Some(crate::model::pattern::PredicatePattern::Variable(
-                    Variable::new("?p").unwrap(),
+                    Variable::new("?p").expect("valid variable name"),
                 )),
                 Some(crate::model::pattern::ObjectPattern::Variable(
-                    Variable::new("?o").unwrap(),
+                    Variable::new("?o").expect("valid variable name"),
                 )),
             ),
         };

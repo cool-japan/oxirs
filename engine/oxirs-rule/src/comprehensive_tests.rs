@@ -5,7 +5,7 @@ use crate::swrl::{SwrlArgument, SwrlAtom, SwrlEngine, SwrlRule};
 
 /// Test integrated forward and backward chaining
 #[test]
-fn test_integrated_forward_backward_chaining() {
+fn test_integrated_forward_backward_chaining() -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = RuleEngine::new();
 
     // Add simple inheritance rule: ancestor(X,Y) :- parent(X,Y)
@@ -31,7 +31,7 @@ fn test_integrated_forward_backward_chaining() {
     }];
 
     // Test forward chaining
-    let forward_results = engine.forward_chain(&facts).unwrap();
+    let forward_results = engine.forward_chain(&facts)?;
 
     // Should derive ancestor relationship from parent relationship
     assert!(forward_results.iter().any(|fact| {
@@ -50,12 +50,13 @@ fn test_integrated_forward_backward_chaining() {
     };
 
     engine.add_facts(facts);
-    assert!(engine.backward_chain(&goal).unwrap());
+    assert!(engine.backward_chain(&goal)?);
+    Ok(())
 }
 
 /// Test RDFS reasoning integration
 #[test]
-fn test_rdfs_integration() {
+fn test_rdfs_integration() -> Result<(), Box<dyn std::error::Error>> {
     let mut rdfs_reasoner = RdfsReasoner::new();
 
     // Add RDFS vocabulary
@@ -76,7 +77,7 @@ fn test_rdfs_integration() {
         },
     ];
 
-    let inferred = rdfs_reasoner.infer(&facts).unwrap();
+    let inferred = rdfs_reasoner.infer(&facts)?;
 
     // Should infer that john is a LivingThing
     assert!(inferred.iter().any(|fact| {
@@ -86,11 +87,12 @@ fn test_rdfs_integration() {
             object: Term::Constant(o)
         } if s == "john" && p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" && o == "LivingThing")
     }));
+    Ok(())
 }
 
 /// Test OWL reasoning integration
 #[test]
-fn test_owl_integration() {
+fn test_owl_integration() -> Result<(), Box<dyn std::error::Error>> {
     let mut owl_reasoner = OwlReasoner::new();
 
     // Add OWL equivalence
@@ -109,7 +111,7 @@ fn test_owl_integration() {
         },
     ];
 
-    let inferred = owl_reasoner.infer(&facts).unwrap();
+    let inferred = owl_reasoner.infer(&facts)?;
 
     // Should infer that john is a Person due to equivalence
     assert!(inferred.iter().any(|fact| {
@@ -119,11 +121,12 @@ fn test_owl_integration() {
             object: Term::Constant(o)
         } if s == "john" && p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" && o == "Person")
     }));
+    Ok(())
 }
 
 /// Test SWRL reasoning integration
 #[test]
-fn test_swrl_integration() {
+fn test_swrl_integration() -> Result<(), Box<dyn std::error::Error>> {
     let mut swrl_engine = SwrlEngine::new();
 
     // Create SWRL rule: Person(?x) ∧ hasAge(?x, ?age) ∧ greaterThan(?age, 18) → Adult(?x)
@@ -154,7 +157,7 @@ fn test_swrl_integration() {
         metadata: std::collections::HashMap::new(),
     };
 
-    swrl_engine.add_rule(swrl_rule).unwrap();
+    swrl_engine.add_rule(swrl_rule)?;
 
     // Add facts
     let facts = vec![
@@ -172,7 +175,7 @@ fn test_swrl_integration() {
         },
     ];
 
-    let results = swrl_engine.execute(&facts).unwrap();
+    let results = swrl_engine.execute(&facts)?;
 
     // Should infer that john is an Adult
     assert!(results.iter().any(|fact| {
@@ -182,11 +185,12 @@ fn test_swrl_integration() {
             object: Term::Constant(o)
         } if s == "john" && p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" && o == "Adult")
     }));
+    Ok(())
 }
 
 /// Test RETE network integration
 #[test]
-fn test_rete_integration() {
+fn test_rete_integration() -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = RuleEngine::new();
 
     // Add rules for testing RETE efficiency
@@ -217,7 +221,7 @@ fn test_rete_integration() {
         },
     ];
 
-    let rete_results = engine.rete_forward_chain(facts).unwrap();
+    let rete_results = engine.rete_forward_chain(facts)?;
 
     // Should derive Human types for both alice and bob
     assert!(rete_results.len() >= 4); // Original facts + derived facts
@@ -228,16 +232,17 @@ fn test_rete_integration() {
             object: Term::Constant(o)
         } if s == "alice" && p == "type" && o == "Human")
     }));
+    Ok(())
 }
 
 /// Test error handling and edge cases
 #[test]
-fn test_error_handling() {
+fn test_error_handling() -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = RuleEngine::new();
 
     // Test with empty facts
     let empty_facts = vec![];
-    let results = engine.forward_chain(&empty_facts).unwrap();
+    let results = engine.forward_chain(&empty_facts)?;
     assert!(results.is_empty());
 
     // Test backward chaining with non-existent goal
@@ -246,7 +251,7 @@ fn test_error_handling() {
         predicate: Term::Constant("nonexistent".to_string()),
         object: Term::Constant("nonexistent".to_string()),
     };
-    assert!(!engine.backward_chain(&non_existent_goal).unwrap());
+    assert!(!engine.backward_chain(&non_existent_goal)?);
 
     // Test with circular rules (should not cause infinite loops)
     engine.add_rule(Rule {
@@ -284,13 +289,14 @@ fn test_error_handling() {
     }];
 
     // Should terminate without infinite loop
-    let results = engine.forward_chain(&circular_facts).unwrap();
+    let results = engine.forward_chain(&circular_facts)?;
     assert!(!results.is_empty());
+    Ok(())
 }
 
 /// Test performance with large knowledge bases
 #[test]
-fn test_performance_scalability() {
+fn test_performance_scalability() -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = RuleEngine::new();
 
     // Add a simple rule
@@ -320,17 +326,18 @@ fn test_performance_scalability() {
 
     // Test that it can handle large inputs efficiently
     let start = std::time::Instant::now();
-    let results = engine.forward_chain(&large_facts).unwrap();
+    let results = engine.forward_chain(&large_facts)?;
     let duration = start.elapsed();
 
     // Should complete in reasonable time (< 1 second for 1000 facts)
     assert!(duration.as_secs() < 1);
     assert!(results.len() >= 2000); // Input + output facts
+    Ok(())
 }
 
 /// Test cross-reasoning compatibility
 #[test]
-fn test_cross_reasoning_compatibility() {
+fn test_cross_reasoning_compatibility() -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = RuleEngine::new();
     let mut rdfs_reasoner = RdfsReasoner::new();
     let mut owl_reasoner = OwlReasoner::new();
@@ -354,10 +361,10 @@ fn test_cross_reasoning_compatibility() {
     ];
 
     // Apply RDFS reasoning
-    let rdfs_inferred = rdfs_reasoner.infer(&rdfs_facts).unwrap();
+    let rdfs_inferred = rdfs_reasoner.infer(&rdfs_facts)?;
 
     // Apply OWL reasoning to RDFS results
-    let owl_inferred = owl_reasoner.infer(&rdfs_inferred).unwrap();
+    let owl_inferred = owl_reasoner.infer(&rdfs_inferred)?;
 
     // Apply rule engine to combined results
     engine.add_rule(Rule {
@@ -376,7 +383,7 @@ fn test_cross_reasoning_compatibility() {
         }],
     });
 
-    let final_results = engine.forward_chain(&owl_inferred).unwrap();
+    let final_results = engine.forward_chain(&owl_inferred)?;
 
     // Should derive that john is conscious through the chain:
     // john:Student -> john:Person (RDFS) -> john:conscious (rules)
@@ -387,11 +394,12 @@ fn test_cross_reasoning_compatibility() {
             object: Term::Constant(o)
         } if s == "john" && p == "hasProperty" && o == "conscious")
     }));
+    Ok(())
 }
 
 /// Test complex rule interactions
 #[test]
-fn test_complex_rule_interactions() {
+fn test_complex_rule_interactions() -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = RuleEngine::new();
 
     // Add complex interacting rules
@@ -457,7 +465,7 @@ fn test_complex_rule_interactions() {
         },
     ];
 
-    let results = engine.forward_chain(&complex_facts).unwrap();
+    let results = engine.forward_chain(&complex_facts)?;
 
     // Should derive through chain of rules:
     // mary hasParent john -> john hasChild mary -> john isParent true -> john category adult_parent
@@ -468,6 +476,7 @@ fn test_complex_rule_interactions() {
             object: Term::Constant(o)
         } if s == "john" && p == "category" && o == "adult_parent")
     }));
+    Ok(())
 }
 
 // =========================================================================
@@ -899,7 +908,7 @@ fn test_owl_equivalent_class_deep() {
 
 /// Test SWRL rule with less-than builtin
 #[test]
-fn test_swrl_less_than_builtin() {
+fn test_swrl_less_than_builtin() -> Result<(), Box<dyn std::error::Error>> {
     let mut swrl_engine = SwrlEngine::new();
 
     let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -963,11 +972,12 @@ fn test_swrl_less_than_builtin() {
         }),
         "tommy should be inferred as Minor via SWRL lessThan builtin"
     );
+    Ok(())
 }
 
 /// Test SWRL rule with individual property atom
 #[test]
-fn test_swrl_individual_property_rule() {
+fn test_swrl_individual_property_rule() -> Result<(), Box<dyn std::error::Error>> {
     let mut swrl_engine = SwrlEngine::new();
 
     let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -1033,11 +1043,12 @@ fn test_swrl_individual_property_rule() {
         }),
         "drsmith should be inferred as MedicalProfessional"
     );
+    Ok(())
 }
 
 /// Test SWRL rule with same individual constraint
 #[test]
-fn test_swrl_same_individual_constraint() {
+fn test_swrl_same_individual_constraint() -> Result<(), Box<dyn std::error::Error>> {
     let mut swrl_engine = SwrlEngine::new();
 
     let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -1095,6 +1106,7 @@ fn test_swrl_same_individual_constraint() {
         }),
         "alicia should be inferred as Person via sameAs"
     );
+    Ok(())
 }
 
 // =========================================================================

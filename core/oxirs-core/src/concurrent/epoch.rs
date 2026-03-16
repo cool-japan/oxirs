@@ -242,12 +242,12 @@ mod tests {
             .collect();
 
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().expect("thread should not panic");
         }
 
         // Check final state
         let guard = epoch::pin();
-        let final_value = ptr.load(&guard).unwrap();
+        let final_value = ptr.load(&guard).expect("load should succeed");
         assert!(*final_value >= 0);
     }
 
@@ -262,7 +262,10 @@ mod tests {
         // Load value
         let loaded = hp.load(&guard);
         unsafe {
-            assert_eq!(loaded.as_ref().unwrap(), &"updated");
+            assert_eq!(
+                loaded.as_ref().expect("operation should succeed"),
+                &"updated"
+            );
         }
     }
 }

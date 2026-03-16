@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn test_embedding_initialization() {
         let config = SciRS2NeuralConfig::default();
-        let mut model = SciRS2NeuralEmbedding::new(config).unwrap();
+        let mut model = SciRS2NeuralEmbedding::new(config).expect("should succeed");
 
         let triples = vec![
             ("alice".to_string(), "knows".to_string(), "bob".to_string()),

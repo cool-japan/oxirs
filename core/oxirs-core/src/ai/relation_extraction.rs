@@ -511,10 +511,13 @@ mod tests {
     #[tokio::test]
     async fn test_relation_extraction() {
         let config = AiConfig::default();
-        let extractor = RelationExtractor::new(&config).unwrap();
+        let extractor = RelationExtractor::new(&config).expect("construction should succeed");
 
         let text = "John works for Microsoft. He lives in Seattle.";
-        let relations = extractor.extract_relations(text).await.unwrap();
+        let relations = extractor
+            .extract_relations(text)
+            .await
+            .expect("async operation should succeed");
 
         // Should extract some relations (depends on dummy implementation)
         assert!(!relations.is_empty());
@@ -523,7 +526,7 @@ mod tests {
     #[test]
     fn test_sentence_segmentation() {
         let config = AiConfig::default();
-        let extractor = RelationExtractor::new(&config).unwrap();
+        let extractor = RelationExtractor::new(&config).expect("construction should succeed");
 
         let text = "First sentence. Second sentence. Third sentence.";
         let sentences = extractor.segment_sentences(text);
@@ -535,7 +538,7 @@ mod tests {
     #[test]
     fn test_to_triples() {
         let config = AiConfig::default();
-        let extractor = RelationExtractor::new(&config).unwrap();
+        let extractor = RelationExtractor::new(&config).expect("construction should succeed");
 
         let relation = ExtractedRelation {
             subject: ExtractedEntity {
@@ -571,7 +574,9 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        let triples = extractor.to_triples(&[relation]).unwrap();
+        let triples = extractor
+            .to_triples(&[relation])
+            .expect("operation should succeed");
         assert_eq!(triples.len(), 1);
     }
 }

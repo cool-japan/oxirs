@@ -1080,7 +1080,9 @@ mod tests {
             storage_path: "/tmp/raft_test".to_string(),
         };
 
-        let node = RaftNode::new(config).await.unwrap();
+        let node = RaftNode::new(config)
+            .await
+            .expect("async operation should succeed");
 
         // Check initial state
         assert_eq!(*node.state.read().await, NodeState::Follower);
@@ -1098,8 +1100,9 @@ mod tests {
                 index: i,
                 term: 1,
                 entry: LogEntry::AddTriple(Triple::new(
-                    NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
-                    NamedNode::new("http://example.org/p").unwrap(),
+                    NamedNode::new(format!("http://example.org/s{i}"))
+                        .expect("valid IRI from format"),
+                    NamedNode::new("http://example.org/p").expect("valid IRI"),
                     crate::model::Object::Literal(Literal::new(format!("value{i}"))),
                 )),
                 timestamp: i,
@@ -1113,7 +1116,7 @@ mod tests {
 
         // Test get
         assert!(log.get(5).is_some());
-        assert_eq!(log.get(5).unwrap().index, 5);
+        assert_eq!(log.get(5).expect("index should be valid").index, 5);
     }
 
     #[tokio::test]
@@ -1126,8 +1129,9 @@ mod tests {
                 index: i,
                 term: 1,
                 entry: LogEntry::AddTriple(Triple::new(
-                    NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
-                    NamedNode::new("http://example.org/p").unwrap(),
+                    NamedNode::new(format!("http://example.org/s{i}"))
+                        .expect("valid IRI from format"),
+                    NamedNode::new("http://example.org/p").expect("valid IRI"),
                     crate::model::Object::Literal(Literal::new(format!("value{i}"))),
                 )),
                 timestamp: i,

@@ -547,7 +547,11 @@ mod tests {
         let validator = NaturalLanguageValidator::new();
         let content = create_test_content("This is a test of natural language validation.");
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.confidence > 0.5);
     }
@@ -557,7 +561,11 @@ mod tests {
         let validator = SentimentValidator::new();
         let content = create_test_content("This is a great and wonderful day!");
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("sentiment_score"));
     }
@@ -567,8 +575,18 @@ mod tests {
         let validator = LanguageDetectionValidator::new();
         let content = create_test_content("The quick brown fox jumps over the lazy dog.");
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
-        assert!(result.details.get("detected_language").unwrap() == "en");
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
+        assert!(
+            result
+                .details
+                .get("detected_language")
+                .expect("should succeed")
+                == "en"
+        );
     }
 
     #[tokio::test]
@@ -576,7 +594,11 @@ mod tests {
         let validator = EntityExtractionValidator::new();
         let content = create_test_content("John Smith visited New York last Tuesday.");
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("entity_count"));
     }
@@ -586,7 +608,11 @@ mod tests {
         let validator = TextQualityValidator::new();
         let content = create_test_content("This is a quality text with sufficient length.");
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
     }
 
@@ -596,7 +622,11 @@ mod tests {
         let content =
             create_test_content("This is a clean text without any inappropriate content.");
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
     }
 }

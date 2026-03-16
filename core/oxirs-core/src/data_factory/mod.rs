@@ -58,7 +58,7 @@ impl DataFactory {
     ///
     /// ```rust
     /// use oxirs_core::data_factory::DataFactory;
-    /// let n = DataFactory::named_node("http://example.org/s").unwrap();
+    /// let n = DataFactory::named_node("http://example.org/s").expect("valid IRI for named node");
     /// assert_eq!(n.as_str(), "http://example.org/s");
     /// ```
     pub fn named_node(iri: impl Into<String>) -> Result<NamedNode> {
@@ -124,7 +124,7 @@ impl DataFactory {
     ///
     /// ```rust
     /// use oxirs_core::data_factory::DataFactory;
-    /// let l = DataFactory::language_literal("Bonjour", "fr").unwrap();
+    /// let l = DataFactory::language_literal("Bonjour", "fr").expect("valid language literal");
     /// assert_eq!(l.language(), Some("fr"));
     /// ```
     pub fn language_literal(value: impl Into<String>, lang: impl Into<String>) -> Result<Literal> {
@@ -140,9 +140,9 @@ impl DataFactory {
     /// ```rust
     /// use oxirs_core::data_factory::DataFactory;
     /// use oxirs_core::model::{Subject, Object};
-    /// let s = DataFactory::named_node("http://example.org/s").unwrap();
-    /// let p = DataFactory::named_node("http://example.org/p").unwrap();
-    /// let o = DataFactory::named_node("http://example.org/o").unwrap();
+    /// let s = DataFactory::named_node("http://example.org/s").expect("valid IRI for named node");
+    /// let p = DataFactory::named_node("http://example.org/p").expect("valid IRI for named node");
+    /// let o = DataFactory::named_node("http://example.org/o").expect("valid IRI for named node");
     /// let triple = DataFactory::triple(s.into(), p, o.into());
     /// ```
     pub fn triple(subject: Subject, predicate: NamedNode, object: Object) -> Triple {
@@ -158,9 +158,9 @@ impl DataFactory {
     /// ```rust
     /// use oxirs_core::data_factory::DataFactory;
     /// use oxirs_core::model::{Subject, Object};
-    /// let s = DataFactory::named_node("http://example.org/s").unwrap();
-    /// let p = DataFactory::named_node("http://example.org/p").unwrap();
-    /// let o = DataFactory::named_node("http://example.org/o").unwrap();
+    /// let s = DataFactory::named_node("http://example.org/s").expect("valid IRI for named node");
+    /// let p = DataFactory::named_node("http://example.org/p").expect("valid IRI for named node");
+    /// let o = DataFactory::named_node("http://example.org/o").expect("valid IRI for named node");
     /// let g = DataFactory::default_graph();
     /// let quad = DataFactory::quad(s.into(), p, o.into(), g);
     /// ```
@@ -614,19 +614,20 @@ mod tests {
 
     #[test]
     fn test_named_node_valid_http() {
-        let n = DataFactory::named_node("http://example.org/s").unwrap();
+        let n = DataFactory::named_node("http://example.org/s").expect("valid IRI for named node");
         assert_eq!(n.as_str(), "http://example.org/s");
     }
 
     #[test]
     fn test_named_node_valid_https() {
-        let n = DataFactory::named_node("https://schema.org/Person").unwrap();
+        let n =
+            DataFactory::named_node("https://schema.org/Person").expect("valid IRI for named node");
         assert_eq!(n.as_str(), "https://schema.org/Person");
     }
 
     #[test]
     fn test_named_node_valid_urn() {
-        let n = DataFactory::named_node("urn:example:foo").unwrap();
+        let n = DataFactory::named_node("urn:example:foo").expect("valid IRI for named node");
         assert_eq!(n.as_str(), "urn:example:foo");
     }
 
@@ -642,13 +643,15 @@ mod tests {
 
     #[test]
     fn test_named_node_with_fragment() {
-        let n = DataFactory::named_node("http://example.org/ont#Class").unwrap();
+        let n = DataFactory::named_node("http://example.org/ont#Class")
+            .expect("valid IRI for named node");
         assert!(n.as_str().ends_with("#Class"));
     }
 
     #[test]
     fn test_named_node_with_query() {
-        let n = DataFactory::named_node("http://example.org/q?a=1").unwrap();
+        let n =
+            DataFactory::named_node("http://example.org/q?a=1").expect("valid IRI for named node");
         assert!(n.as_str().contains("a=1"));
     }
 
@@ -748,7 +751,8 @@ mod tests {
 
     #[test]
     fn test_typed_literal_custom_datatype() {
-        let dt = DataFactory::named_node("http://example.org/myType").unwrap();
+        let dt =
+            DataFactory::named_node("http://example.org/myType").expect("valid IRI for named node");
         let l = DataFactory::typed_literal("custom", dt);
         assert!(l.datatype().as_str().contains("myType"));
     }
@@ -757,26 +761,26 @@ mod tests {
 
     #[test]
     fn test_language_literal_value_and_lang() {
-        let l = DataFactory::language_literal("Bonjour", "fr").unwrap();
+        let l = DataFactory::language_literal("Bonjour", "fr").expect("valid language literal");
         assert_eq!(l.value(), "Bonjour");
         assert_eq!(l.language(), Some("fr"));
     }
 
     #[test]
     fn test_language_literal_en() {
-        let l = DataFactory::language_literal("Hello", "en").unwrap();
+        let l = DataFactory::language_literal("Hello", "en").expect("valid language literal");
         assert_eq!(l.language(), Some("en"));
     }
 
     #[test]
     fn test_language_literal_zh_hans() {
-        let l = DataFactory::language_literal("你好", "zh-Hans").unwrap();
+        let l = DataFactory::language_literal("你好", "zh-Hans").expect("valid language literal");
         assert_eq!(l.language(), Some("zh-hans"));
     }
 
     #[test]
     fn test_language_literal_en_us() {
-        let l = DataFactory::language_literal("Color", "en-US").unwrap();
+        let l = DataFactory::language_literal("Color", "en-US").expect("valid language literal");
         assert_eq!(l.language(), Some("en-us"));
     }
 
@@ -795,9 +799,9 @@ mod tests {
 
     #[test]
     fn test_triple_subject_predicate_object() {
-        let s = DataFactory::named_node("http://example.org/s").unwrap();
-        let p = DataFactory::named_node("http://example.org/p").unwrap();
-        let o = DataFactory::named_node("http://example.org/o").unwrap();
+        let s = DataFactory::named_node("http://example.org/s").expect("valid IRI for named node");
+        let p = DataFactory::named_node("http://example.org/p").expect("valid IRI for named node");
+        let o = DataFactory::named_node("http://example.org/o").expect("valid IRI for named node");
         let t = DataFactory::triple(s.into(), p.clone(), o.into());
         // Access via Display
         let text = format!("{t}");
@@ -806,8 +810,8 @@ mod tests {
 
     #[test]
     fn test_triple_with_literal_object() {
-        let s = DataFactory::named_node("http://example.org/s").unwrap();
-        let p = DataFactory::named_node("http://example.org/p").unwrap();
+        let s = DataFactory::named_node("http://example.org/s").expect("valid IRI for named node");
+        let p = DataFactory::named_node("http://example.org/p").expect("valid IRI for named node");
         let o: Object = DataFactory::literal("hello").into();
         let t = DataFactory::triple(s.into(), p, o);
         let text = format!("{t}");
@@ -817,7 +821,7 @@ mod tests {
     #[test]
     fn test_triple_with_blank_node_subject() {
         let s: Subject = DataFactory::blank_node().into();
-        let p = DataFactory::named_node("http://example.org/p").unwrap();
+        let p = DataFactory::named_node("http://example.org/p").expect("valid IRI for named node");
         let o: Object = DataFactory::literal("val").into();
         let _t = DataFactory::triple(s, p, o);
     }
@@ -826,9 +830,9 @@ mod tests {
 
     #[test]
     fn test_quad_default_graph() {
-        let s = DataFactory::named_node("http://example.org/s").unwrap();
-        let p = DataFactory::named_node("http://example.org/p").unwrap();
-        let o = DataFactory::named_node("http://example.org/o").unwrap();
+        let s = DataFactory::named_node("http://example.org/s").expect("valid IRI for named node");
+        let p = DataFactory::named_node("http://example.org/p").expect("valid IRI for named node");
+        let o = DataFactory::named_node("http://example.org/o").expect("valid IRI for named node");
         let g = DataFactory::default_graph();
         let q = DataFactory::quad(s.into(), p, o.into(), g);
         let text = format!("{q}");
@@ -837,10 +841,11 @@ mod tests {
 
     #[test]
     fn test_quad_named_graph() {
-        let s = DataFactory::named_node("http://example.org/s").unwrap();
-        let p = DataFactory::named_node("http://example.org/p").unwrap();
-        let o = DataFactory::named_node("http://example.org/o").unwrap();
-        let g = DataFactory::named_graph("http://example.org/graph1").unwrap();
+        let s = DataFactory::named_node("http://example.org/s").expect("valid IRI for named node");
+        let p = DataFactory::named_node("http://example.org/p").expect("valid IRI for named node");
+        let o = DataFactory::named_node("http://example.org/o").expect("valid IRI for named node");
+        let g = DataFactory::named_graph("http://example.org/graph1")
+            .expect("construction should succeed");
         let q = DataFactory::quad(s.into(), p, o.into(), g);
         let text = format!("{q}");
         assert!(text.contains("graph1"));
@@ -1097,9 +1102,9 @@ mod tests {
     #[test]
     fn test_roundtrip_named_node_via_string() {
         let iri = "http://example.org/roundtrip";
-        let n = DataFactory::named_node(iri).unwrap();
+        let n = DataFactory::named_node(iri).expect("valid IRI for named node");
         let s = n.as_str().to_string();
-        let n2 = DataFactory::named_node(s).unwrap();
+        let n2 = DataFactory::named_node(s).expect("valid IRI for named node");
         assert_eq!(n, n2);
     }
 
@@ -1114,10 +1119,10 @@ mod tests {
 
     #[test]
     fn test_roundtrip_language_literal() {
-        let l = DataFactory::language_literal("Hola", "es").unwrap();
+        let l = DataFactory::language_literal("Hola", "es").expect("valid language literal");
         let val = l.value().to_string();
-        let lang = l.language().unwrap().to_string();
-        let l2 = DataFactory::language_literal(val, lang).unwrap();
+        let lang = l.language().expect("operation should succeed").to_string();
+        let l2 = DataFactory::language_literal(val, lang).expect("valid language literal");
         assert_eq!(l.value(), l2.value());
         assert_eq!(l.language(), l2.language());
     }
@@ -1132,7 +1137,7 @@ mod tests {
 
     #[test]
     fn test_quad_default_graph_roundtrip() {
-        let s = DataFactory::named_node("http://example.org/s").unwrap();
+        let s = DataFactory::named_node("http://example.org/s").expect("valid IRI for named node");
         let p = vocab::rdf::r#type();
         let o = vocab::owl::class();
         let g = DataFactory::default_graph();

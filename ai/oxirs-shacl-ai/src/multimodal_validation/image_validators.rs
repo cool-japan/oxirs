@@ -488,9 +488,19 @@ mod tests {
         let png_data = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
         let content = create_test_image_content(&png_data);
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
-        assert_eq!(result.details.get("detected_format").unwrap(), "png");
+        assert_eq!(
+            result
+                .details
+                .get("detected_format")
+                .expect("should succeed"),
+            "png"
+        );
     }
 
     #[tokio::test]
@@ -500,9 +510,19 @@ mod tests {
         let jpeg_data = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46];
         let content = create_test_image_content(&jpeg_data);
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
-        assert_eq!(result.details.get("detected_format").unwrap(), "jpeg");
+        assert_eq!(
+            result
+                .details
+                .get("detected_format")
+                .expect("should succeed"),
+            "jpeg"
+        );
     }
 
     #[tokio::test]
@@ -516,7 +536,11 @@ mod tests {
 
         let content = create_test_image_content(&png_data);
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("width"));
         assert!(result.details.contains_key("height"));
@@ -527,7 +551,11 @@ mod tests {
         let validator = FaceDetectionValidator::new();
         let content = create_test_image_content(&[0xFF, 0xD8, 0xFF]); // Minimal JPEG
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("face_count"));
     }
@@ -537,7 +565,11 @@ mod tests {
         let validator = ObjectRecognitionValidator::new();
         let content = create_test_image_content(&[0xFF, 0xD8, 0xFF]); // Minimal JPEG
 
-        let result = validator.validate(&content).await.unwrap().unwrap();
+        let result = validator
+            .validate(&content)
+            .await
+            .expect("should succeed")
+            .expect("should succeed");
         assert!(result.is_valid);
         assert!(result.details.contains_key("object_count"));
     }

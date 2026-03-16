@@ -753,7 +753,7 @@ mod tests {
         let result = CompressionCodec::compress_timestamps(&ts, CodecType::Delta);
         let dec =
             CompressionCodec::decompress_timestamps(&result.compressed, CodecType::Delta, ts.len())
-                .unwrap();
+                .expect("should succeed");
         assert_eq!(dec, ts);
     }
 
@@ -763,7 +763,7 @@ mod tests {
         let result = CompressionCodec::compress_timestamps(&ts, CodecType::Rle);
         let dec =
             CompressionCodec::decompress_timestamps(&result.compressed, CodecType::Rle, ts.len())
-                .unwrap();
+                .expect("should succeed");
         assert_eq!(dec, ts);
     }
 
@@ -773,7 +773,7 @@ mod tests {
         let result = CompressionCodec::compress_timestamps(&ts, CodecType::Plain);
         let dec =
             CompressionCodec::decompress_timestamps(&result.compressed, CodecType::Plain, ts.len())
-                .unwrap();
+                .expect("should succeed");
         assert_eq!(dec, ts);
     }
 
@@ -786,7 +786,7 @@ mod tests {
             CodecType::Zigzag,
             ts.len(),
         )
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(dec, ts);
     }
 
@@ -801,7 +801,7 @@ mod tests {
 
     #[test]
     fn test_decompress_count_zero_returns_empty() {
-        let dec = CompressionCodec::decompress(&[], CodecType::Plain, 0).unwrap();
+        let dec = CompressionCodec::decompress(&[], CodecType::Plain, 0).expect("should succeed");
         assert!(dec.values.is_empty());
     }
 

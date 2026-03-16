@@ -433,13 +433,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_custom_prompts_manager_creation() {
-        let manager = CustomPromptsManager::new().unwrap();
+        let manager = CustomPromptsManager::new().expect("should succeed");
         assert!(manager.get_default(PromptCategory::System).is_some());
     }
 
     #[tokio::test]
     async fn test_register_and_get_template() {
-        let manager = CustomPromptsManager::new().unwrap();
+        let manager = CustomPromptsManager::new().expect("should succeed");
 
         let template = PromptTemplate {
             id: "test_template".to_string(),
@@ -454,15 +454,21 @@ mod tests {
             updated_at: chrono::Utc::now(),
         };
 
-        manager.register_template(template.clone()).await.unwrap();
+        manager
+            .register_template(template.clone())
+            .await
+            .expect("should succeed");
 
-        let retrieved = manager.get_template("test_template").await.unwrap();
+        let retrieved = manager
+            .get_template("test_template")
+            .await
+            .expect("should succeed");
         assert_eq!(retrieved.id, "test_template");
     }
 
     #[tokio::test]
     async fn test_render_template() {
-        let manager = CustomPromptsManager::new().unwrap();
+        let manager = CustomPromptsManager::new().expect("should succeed");
 
         let template = PromptTemplate {
             id: "greeting".to_string(),
@@ -481,18 +487,24 @@ mod tests {
             updated_at: chrono::Utc::now(),
         };
 
-        manager.register_template(template).await.unwrap();
+        manager
+            .register_template(template)
+            .await
+            .expect("should succeed");
 
         let mut vars = PromptVariables::new();
         vars.add("name", "Alice");
 
-        let rendered = manager.render("greeting", &vars).await.unwrap();
+        let rendered = manager
+            .render("greeting", &vars)
+            .await
+            .expect("should succeed");
         assert_eq!(rendered, "Hello Alice, welcome to the system!");
     }
 
     #[tokio::test]
     async fn test_compose_templates() {
-        let manager = CustomPromptsManager::new().unwrap();
+        let manager = CustomPromptsManager::new().expect("should succeed");
 
         let template1 = PromptTemplate {
             id: "part1".to_string(),
@@ -520,8 +532,14 @@ mod tests {
             updated_at: chrono::Utc::now(),
         };
 
-        manager.register_template(template1).await.unwrap();
-        manager.register_template(template2).await.unwrap();
+        manager
+            .register_template(template1)
+            .await
+            .expect("should succeed");
+        manager
+            .register_template(template2)
+            .await
+            .expect("should succeed");
 
         let mut vars = PromptVariables::new();
         vars.add("content1", "First");
@@ -534,7 +552,7 @@ mod tests {
                 CompositionStrategy::Concatenate,
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert!(composed.contains("Part 1: First"));
         assert!(composed.contains("Part 2: Second"));
@@ -542,7 +560,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_required_variable() {
-        let manager = CustomPromptsManager::new().unwrap();
+        let manager = CustomPromptsManager::new().expect("should succeed");
 
         let template = PromptTemplate {
             id: "required_test".to_string(),
@@ -557,7 +575,10 @@ mod tests {
             updated_at: chrono::Utc::now(),
         };
 
-        manager.register_template(template).await.unwrap();
+        manager
+            .register_template(template)
+            .await
+            .expect("should succeed");
 
         let vars = PromptVariables::new(); // Empty variables
 

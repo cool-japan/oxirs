@@ -668,7 +668,7 @@ mod tests {
         let mut r = retriever();
         r.add_document(doc_emb("d1", "text", vec![1.0, 0.0, 0.0]));
         let results = r.search_vector(&[1.0, 0.0, 0.0]);
-        assert!((results[0].vector_score.unwrap() - 1.0).abs() < 1e-5);
+        assert!((results[0].vector_score.expect("should succeed") - 1.0).abs() < 1e-5);
     }
 
     // 24. Orthogonal embeddings → vector_score ≈ 0.0
@@ -677,7 +677,7 @@ mod tests {
         let mut r = retriever();
         r.add_document(doc_emb("d1", "text", vec![1.0, 0.0]));
         let results = r.search_vector(&[0.0, 1.0]);
-        assert!(results[0].vector_score.unwrap().abs() < 1e-5);
+        assert!(results[0].vector_score.expect("should succeed").abs() < 1e-5);
     }
 
     // 25. Document metadata is stored

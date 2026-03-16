@@ -1,9 +1,9 @@
 //! # OxiRS SHACL-AI
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Production Release (v0.1.0)
+//! **Status**: Production Release (v0.2.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.
@@ -563,7 +563,7 @@ pub use constraint_synthesizer::{
 };
 
 // Re-export key types for convenience with explicit imports to avoid ambiguity
-// A/B Testing Framework (v0.1.0 Final - NEW)
+// A/B Testing Framework (v0.2.2 Final - NEW)
 pub use ab_testing::{
     ABTestConfig, ABTestFramework, Experiment as ABExperiment, ExperimentResults,
     ExperimentStatus as ABExperimentStatus, MetricDefinition, MetricGoal, MetricSummary,
@@ -571,7 +571,7 @@ pub use ab_testing::{
     StatisticalTestType, Variant,
 };
 
-// Advanced Features (v0.1.0 - NEW)
+// Advanced Features (v0.2.2 - NEW)
 pub use advanced_features::{
     // Active Learning
     ActiveLearner,
@@ -1570,7 +1570,7 @@ mod tests {
     #[test]
     fn test_shacl_ai_assistant_creation() {
         let assistant = ShaclAiAssistant::new();
-        let stats = assistant.get_ai_statistics().unwrap();
+        let stats = assistant.get_ai_statistics().expect("should succeed");
 
         assert_eq!(stats.shapes_learned, 0);
         assert_eq!(stats.quality_assessments, 0);

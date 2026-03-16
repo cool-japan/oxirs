@@ -1,9 +1,9 @@
 //! # OxiRS GeoSPARQL
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-geosparql/badge.svg)](https://docs.rs/oxirs-geosparql)
 //!
-//! **Status**: Production Release (v0.1.0)
+//! **Status**: Production Release (v0.2.2)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
@@ -25,11 +25,11 @@
 //! use oxirs_geosparql::functions::simple_features;
 //!
 //! // Parse WKT geometries
-//! let point = Geometry::from_wkt("POINT(1.0 2.0)").unwrap();
-//! let polygon = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+//! let point = Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed");
+//! let polygon = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
 //!
 //! // Test spatial relations
-//! let contains = simple_features::sf_contains(&polygon, &point).unwrap();
+//! let contains = simple_features::sf_contains(&polygon, &point).expect("should succeed");
 //! assert!(contains);
 //! ```
 //!

@@ -388,7 +388,7 @@ impl DeviceProfile {
 ///             .with_unit("V"),
 ///     );
 ///
-/// registry.register(profile).unwrap();
+/// registry.register(profile).expect("should succeed");
 /// assert_eq!(registry.len(), 1);
 /// ```
 #[derive(Debug, Default)]
@@ -616,8 +616,8 @@ mod tests {
     #[test]
     fn test_profile_json_roundtrip() {
         let profile = make_energy_meter_profile();
-        let json = profile.to_json().unwrap();
-        let restored = DeviceProfile::from_json(&json).unwrap();
+        let json = profile.to_json().expect("should succeed");
+        let restored = DeviceProfile::from_json(&json).expect("should succeed");
 
         assert_eq!(restored.model, "PAC3200");
         assert_eq!(restored.vendor, "Siemens");
@@ -627,7 +627,7 @@ mod tests {
     #[test]
     fn test_profile_json_contains_fields() {
         let profile = make_energy_meter_profile();
-        let json = profile.to_json().unwrap();
+        let json = profile.to_json().expect("should succeed");
         assert!(json.contains("PAC3200"));
         assert!(json.contains("voltage_l1"));
         assert!(json.contains("kW"));
@@ -638,8 +638,8 @@ mod tests {
     #[test]
     fn test_profile_toml_roundtrip() {
         let profile = make_energy_meter_profile();
-        let toml_str = profile.to_toml().unwrap();
-        let restored = DeviceProfile::from_toml(&toml_str).unwrap();
+        let toml_str = profile.to_toml().expect("should succeed");
+        let restored = DeviceProfile::from_toml(&toml_str).expect("should succeed");
 
         assert_eq!(restored.model, "PAC3200");
         assert_eq!(restored.registers.len(), 3);
@@ -655,7 +655,8 @@ mod tests {
     #[test]
     fn test_registry_register_and_get() {
         let mut reg = DeviceProfileRegistry::new();
-        reg.register(make_energy_meter_profile()).unwrap();
+        reg.register(make_energy_meter_profile())
+            .expect("should succeed");
         assert_eq!(reg.len(), 1);
         assert!(reg.get("PAC3200").is_some());
     }
@@ -663,22 +664,26 @@ mod tests {
     #[test]
     fn test_registry_duplicate_rejected() {
         let mut reg = DeviceProfileRegistry::new();
-        reg.register(make_energy_meter_profile()).unwrap();
+        reg.register(make_energy_meter_profile())
+            .expect("should succeed");
         assert!(reg.register(make_energy_meter_profile()).is_err());
     }
 
     #[test]
     fn test_registry_upsert() {
         let mut reg = DeviceProfileRegistry::new();
-        reg.upsert(make_energy_meter_profile()).unwrap();
-        reg.upsert(make_energy_meter_profile()).unwrap();
+        reg.upsert(make_energy_meter_profile())
+            .expect("should succeed");
+        reg.upsert(make_energy_meter_profile())
+            .expect("should succeed");
         assert_eq!(reg.len(), 1);
     }
 
     #[test]
     fn test_registry_remove() {
         let mut reg = DeviceProfileRegistry::new();
-        reg.register(make_energy_meter_profile()).unwrap();
+        reg.register(make_energy_meter_profile())
+            .expect("should succeed");
         let removed = reg.remove("PAC3200");
         assert!(removed.is_some());
         assert!(reg.is_empty());
@@ -687,11 +692,12 @@ mod tests {
     #[test]
     fn test_registry_find_by_vendor() {
         let mut reg = DeviceProfileRegistry::new();
-        reg.register(make_energy_meter_profile()).unwrap();
+        reg.register(make_energy_meter_profile())
+            .expect("should succeed");
         let profile2 = DeviceProfile::new("Other").with_vendor("Siemens");
-        reg.register(profile2).unwrap();
+        reg.register(profile2).expect("should succeed");
         let profile3 = DeviceProfile::new("ThirdParty").with_vendor("ACME");
-        reg.register(profile3).unwrap();
+        reg.register(profile3).expect("should succeed");
 
         let siemens = reg.find_by_vendor("siemens");
         assert_eq!(siemens.len(), 2);
@@ -703,9 +709,12 @@ mod tests {
     #[test]
     fn test_registry_list_sorted() {
         let mut reg = DeviceProfileRegistry::new();
-        reg.register(DeviceProfile::new("ZZZ")).unwrap();
-        reg.register(DeviceProfile::new("AAA")).unwrap();
-        reg.register(DeviceProfile::new("MMM")).unwrap();
+        reg.register(DeviceProfile::new("ZZZ"))
+            .expect("should succeed");
+        reg.register(DeviceProfile::new("AAA"))
+            .expect("should succeed");
+        reg.register(DeviceProfile::new("MMM"))
+            .expect("should succeed");
 
         let sorted = reg.list_sorted();
         assert_eq!(sorted[0].model, "AAA");
@@ -716,11 +725,13 @@ mod tests {
     #[test]
     fn test_registry_json_roundtrip() {
         let mut reg = DeviceProfileRegistry::new();
-        reg.register(make_energy_meter_profile()).unwrap();
-        reg.register(DeviceProfile::new("Simple")).unwrap();
+        reg.register(make_energy_meter_profile())
+            .expect("should succeed");
+        reg.register(DeviceProfile::new("Simple"))
+            .expect("should succeed");
 
-        let json = reg.to_json().unwrap();
-        let restored = DeviceProfileRegistry::from_json(&json).unwrap();
+        let json = reg.to_json().expect("should succeed");
+        let restored = DeviceProfileRegistry::from_json(&json).expect("should succeed");
 
         assert_eq!(restored.len(), 2);
         assert!(restored.get("PAC3200").is_some());
@@ -741,12 +752,12 @@ mod tests {
     #[test]
     fn test_profile_json_file_roundtrip() {
         let profile = make_energy_meter_profile();
-        let json = profile.to_json().unwrap();
+        let json = profile.to_json().expect("should succeed");
 
         let tmp = std::env::temp_dir().join("oxirs_profile_test.json");
-        std::fs::write(&tmp, &json).unwrap();
-        let read_back = std::fs::read_to_string(&tmp).unwrap();
-        let restored = DeviceProfile::from_json(&read_back).unwrap();
+        std::fs::write(&tmp, &json).expect("should succeed");
+        let read_back = std::fs::read_to_string(&tmp).expect("should succeed");
+        let restored = DeviceProfile::from_json(&read_back).expect("should succeed");
 
         std::fs::remove_file(&tmp).ok();
 
@@ -757,12 +768,12 @@ mod tests {
     #[test]
     fn test_profile_toml_file_roundtrip() {
         let profile = make_energy_meter_profile();
-        let toml_str = profile.to_toml().unwrap();
+        let toml_str = profile.to_toml().expect("should succeed");
 
         let tmp = std::env::temp_dir().join("oxirs_profile_test.toml");
-        std::fs::write(&tmp, &toml_str).unwrap();
-        let read_back = std::fs::read_to_string(&tmp).unwrap();
-        let restored = DeviceProfile::from_toml(&read_back).unwrap();
+        std::fs::write(&tmp, &toml_str).expect("should succeed");
+        let read_back = std::fs::read_to_string(&tmp).expect("should succeed");
+        let restored = DeviceProfile::from_toml(&read_back).expect("should succeed");
 
         std::fs::remove_file(&tmp).ok();
 

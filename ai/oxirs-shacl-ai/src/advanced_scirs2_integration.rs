@@ -304,13 +304,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_engine_creation() {
-        let engine = AdvancedSciRS2Engine::new().unwrap();
+        let engine = AdvancedSciRS2Engine::new().expect("should succeed");
         assert_eq!(engine.config().parallel_workers, num_cpus::get());
     }
 
     #[tokio::test]
     async fn test_simd_embeddings() {
-        let engine = AdvancedSciRS2Engine::new().unwrap();
+        let engine = AdvancedSciRS2Engine::new().expect("should succeed");
         let nodes = Array2::zeros((10, 5));
         let edges = Array2::zeros((5, 8));
 
@@ -320,7 +320,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_parallel_processing() {
-        let engine = AdvancedSciRS2Engine::new().unwrap();
+        let engine = AdvancedSciRS2Engine::new().expect("should succeed");
         let triples = Array2::zeros((100, 10));
 
         let result = engine.process_triples_parallel(triples.view()).await;
@@ -334,13 +334,13 @@ mod tests {
             ..Default::default()
         };
 
-        let engine = AdvancedSciRS2Engine::with_config(config).unwrap();
+        let engine = AdvancedSciRS2Engine::with_config(config).expect("should succeed");
         let nodes = Array2::zeros((10, 5));
         let edges = Array2::zeros((5, 8));
 
         let _ = engine.compute_embeddings_simd(&nodes, &edges).await;
 
-        let stats = engine.get_profiling_stats().await.unwrap();
+        let stats = engine.get_profiling_stats().await.expect("should succeed");
         assert!(!stats.is_empty());
     }
 
@@ -351,12 +351,12 @@ mod tests {
             ..Default::default()
         };
 
-        let engine = AdvancedSciRS2Engine::with_config(config).unwrap();
+        let engine = AdvancedSciRS2Engine::with_config(config).expect("should succeed");
         let triples = Array2::zeros((100, 10));
 
         let _ = engine.process_triples_parallel(triples.view()).await;
 
-        let metrics = engine.get_metrics().await.unwrap();
+        let metrics = engine.get_metrics().await.expect("should succeed");
         // Metrics should be recorded
     }
 
@@ -376,7 +376,7 @@ mod tests {
             return;
         }
 
-        let engine = engine_result.unwrap();
+        let engine = engine_result.expect("should succeed");
         let nodes = Array2::from_elem((100, 64), 1.0f32);
         let edges = Array2::from_elem((64, 128), 1.0f32);
 
@@ -386,12 +386,12 @@ mod tests {
         // Should either succeed with GPU or fallback to SIMD
         assert!(result.is_ok());
 
-        let embeddings = result.unwrap();
+        let embeddings = result.expect("should succeed");
         assert_eq!(embeddings.shape(), &[100, 128]);
 
         // Verify profiling was recorded if enabled
         if engine.config().enable_profiling {
-            let stats = engine.get_profiling_stats().await.unwrap();
+            let stats = engine.get_profiling_stats().await.expect("should succeed");
             assert!(stats.contains_key("gpu_embeddings") || stats.contains_key("simd_embeddings"));
         }
     }
@@ -406,22 +406,22 @@ mod tests {
             ..Default::default()
         };
 
-        let engine = AdvancedSciRS2Engine::with_config(config).unwrap();
+        let engine = AdvancedSciRS2Engine::with_config(config).expect("should succeed");
 
         // Create a temporary test file with binary data
         let test_file_path = std::env::temp_dir().join("test_mmap_data.bin");
 
         {
-            let mut file = File::create(&test_file_path).unwrap();
+            let mut file = File::create(&test_file_path).expect("should succeed");
             let test_data: Vec<f32> = (0..1000).map(|i| i as f32).collect();
             // Safe conversion using standard library methods
             let bytes: Vec<u8> = test_data.iter().flat_map(|&f| f.to_le_bytes()).collect();
-            file.write_all(&bytes).unwrap();
+            file.write_all(&bytes).expect("should succeed");
         }
 
         // Test memory-mapped file loading
         let mmap_result = engine
-            .load_large_dataset(test_file_path.to_str().unwrap())
+            .load_large_dataset(test_file_path.to_str().expect("should succeed"))
             .await;
 
         if mmap_result.is_err() {
@@ -430,7 +430,7 @@ mod tests {
             return;
         }
 
-        let mmap = mmap_result.unwrap();
+        let mmap = mmap_result.expect("should succeed");
 
         // Verify we can access the data
         assert!(!mmap.shape.is_empty());
@@ -456,7 +456,8 @@ mod tests {
             ..Default::default()
         };
 
-        let cpu_engine = AdvancedSciRS2Engine::with_config(cpu_config.clone()).unwrap();
+        let cpu_engine =
+            AdvancedSciRS2Engine::with_config(cpu_config.clone()).expect("should succeed");
         assert!(!cpu_engine.config().enable_gpu);
         assert!(cpu_engine.config().enable_simd);
 
@@ -470,7 +471,8 @@ mod tests {
             ..Default::default()
         };
 
-        let minimal_engine = AdvancedSciRS2Engine::with_config(minimal_config).unwrap();
+        let minimal_engine =
+            AdvancedSciRS2Engine::with_config(minimal_config).expect("should succeed");
         assert_eq!(minimal_engine.config().parallel_workers, 1);
 
         // Test high-performance configuration
@@ -484,7 +486,8 @@ mod tests {
             ..Default::default()
         };
 
-        let hp_engine = AdvancedSciRS2Engine::with_config(hp_config.clone()).unwrap();
+        let hp_engine =
+            AdvancedSciRS2Engine::with_config(hp_config.clone()).expect("should succeed");
         assert_eq!(hp_engine.config().memory_limit_mb, 8192);
     }
 
@@ -497,7 +500,7 @@ mod tests {
             ..Default::default()
         };
 
-        let engine = AdvancedSciRS2Engine::with_config(config).unwrap();
+        let engine = AdvancedSciRS2Engine::with_config(config).expect("should succeed");
         let nodes = Array2::from_elem((50, 32), 1.0f32);
         let edges = Array2::from_elem((32, 64), 1.0f32);
 
@@ -505,7 +508,7 @@ mod tests {
         let result = engine.compute_embeddings_gpu(&nodes, &edges).await;
         assert!(result.is_ok());
 
-        let embeddings = result.unwrap();
+        let embeddings = result.expect("should succeed");
         assert_eq!(embeddings.shape(), &[50, 64]);
     }
 }

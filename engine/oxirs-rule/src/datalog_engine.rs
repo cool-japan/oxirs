@@ -645,15 +645,16 @@ mod tests {
     }
 
     #[test]
-    fn test_rule_atom_is_not_ground() {
+    fn test_rule_atom_is_not_ground() -> anyhow::Result<()> {
         let atom = var_atom("pred", &["?X", "b"]);
         assert!(!atom.is_ground());
+        Ok(())
     }
 
     // ── Simple rules ─────────────────────────────────────────────────────────
 
     #[test]
-    fn test_simple_deduction() {
+    fn test_simple_deduction() -> anyhow::Result<()> {
         // parent(X,Y) → ancestor(X,Y)
         let mut engine = DatalogEngine::new();
         engine.add_fact("parent", vec!["alice", "bob"]);
@@ -663,10 +664,11 @@ mod tests {
         );
         let facts = engine.evaluate();
         assert!(has_fact(&facts, "ancestor", &["alice", "bob"]));
+        Ok(())
     }
 
     #[test]
-    fn test_chain_rules() {
+    fn test_chain_rules() -> anyhow::Result<()> {
         // parent → grandparent chain
         let mut engine = DatalogEngine::new();
         engine.add_fact("parent", vec!["alice", "bob"]);
@@ -681,10 +683,11 @@ mod tests {
         );
         let facts = engine.evaluate();
         assert!(has_fact(&facts, "grandparent", &["alice", "carol"]));
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_rules() {
+    fn test_multiple_rules() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("edge", vec!["a", "b"]);
         engine.add_fact("edge", vec!["b", "c"]);
@@ -703,12 +706,13 @@ mod tests {
         assert!(has_fact(&facts, "reachable", &["a", "b"]));
         assert!(has_fact(&facts, "reachable", &["a", "c"]));
         assert!(has_fact(&facts, "reachable", &["b", "c"]));
+        Ok(())
     }
 
     // ── Recursive rules ───────────────────────────────────────────────────────
 
     #[test]
-    fn test_transitive_closure() {
+    fn test_transitive_closure() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("edge", vec!["1", "2"]);
         engine.add_fact("edge", vec!["2", "3"]);
@@ -733,10 +737,11 @@ mod tests {
         assert!(has_fact(&facts, "tc", &["2", "3"]));
         assert!(has_fact(&facts, "tc", &["2", "4"]));
         assert!(has_fact(&facts, "tc", &["3", "4"]));
+        Ok(())
     }
 
     #[test]
-    fn test_ancestor_recursive() {
+    fn test_ancestor_recursive() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("parent", vec!["a", "b"]);
         engine.add_fact("parent", vec!["b", "c"]);
@@ -760,10 +765,11 @@ mod tests {
         assert!(has_fact(&facts, "ancestor", &["a", "d"]));
         assert!(has_fact(&facts, "ancestor", &["b", "c"]));
         assert!(has_fact(&facts, "ancestor", &["b", "d"]));
+        Ok(())
     }
 
     #[test]
-    fn test_graph_reachability() {
+    fn test_graph_reachability() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         // A diamond graph: a→b, a→c, b→d, c→d
         engine.add_fact("edge", vec!["a", "b"]);
@@ -789,12 +795,13 @@ mod tests {
         // b can reach d; c can reach d
         assert!(has_fact(&facts, "reach", &["b", "d"]));
         assert!(has_fact(&facts, "reach", &["c", "d"]));
+        Ok(())
     }
 
     // ── Negation-as-failure ───────────────────────────────────────────────────
 
     #[test]
-    fn test_negation_as_failure_basic() {
+    fn test_negation_as_failure_basic() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("person", vec!["alice"]);
         engine.add_fact("person", vec!["bob"]);
@@ -810,10 +817,11 @@ mod tests {
         let facts = engine.evaluate();
         assert!(has_fact(&facts, "allowed", &["alice"]));
         assert!(!has_fact(&facts, "allowed", &["bob"]));
+        Ok(())
     }
 
     #[test]
-    fn test_negation_bachelor() {
+    fn test_negation_bachelor() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("person", vec!["alice"]);
         engine.add_fact("person", vec!["bob"]);
@@ -833,6 +841,7 @@ mod tests {
         assert!(!has_fact(&facts, "bachelor", &["alice"]));
         assert!(has_fact(&facts, "bachelor", &["bob"]));
         assert!(has_fact(&facts, "bachelor", &["carol"]));
+        Ok(())
     }
 
     // ── Query interface ───────────────────────────────────────────────────────
@@ -889,7 +898,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ternary_rule() {
+    fn test_ternary_rule() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("knows", vec!["alice", "bob", "2020"]);
         // friends(X,Y) :- knows(X,Y,_T)
@@ -899,12 +908,13 @@ mod tests {
         );
         let facts = engine.evaluate();
         assert!(has_fact(&facts, "friends", &["alice", "bob"]));
+        Ok(())
     }
 
     // ── SemiNaiveEvaluation ───────────────────────────────────────────────────
 
     #[test]
-    fn test_semi_naive_basic() {
+    fn test_semi_naive_basic() -> anyhow::Result<()> {
         let rules = vec![DatalogRule::new(
             var_atom("reachable", &["?X", "?Y"]),
             vec![var_atom("edge", &["?X", "?Y"])],
@@ -913,6 +923,7 @@ mod tests {
         let mut eval = SemiNaiveEvaluation::new(initial);
         let all = eval.run_to_fixpoint(&rules);
         assert!(all.contains(&ground("reachable", &["a", "b"])));
+        Ok(())
     }
 
     #[test]
@@ -925,7 +936,7 @@ mod tests {
     }
 
     #[test]
-    fn test_semi_naive_delta_tracking() {
+    fn test_semi_naive_delta_tracking() -> anyhow::Result<()> {
         let rules = vec![DatalogRule::new(
             var_atom("derived", &["?X"]),
             vec![var_atom("base", &["?X"])],
@@ -935,6 +946,7 @@ mod tests {
         let changed = eval.step(&rules);
         assert!(changed);
         assert!(eval.delta.contains(&ground("derived", &["a"])));
+        Ok(())
     }
 
     #[test]
@@ -950,13 +962,14 @@ mod tests {
     // ── Engine utilities ─────────────────────────────────────────────────────
 
     #[test]
-    fn test_engine_counts() {
+    fn test_engine_counts() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("p", vec!["a"]);
         engine.add_fact("p", vec!["b"]);
         engine.add_rule(var_atom("q", &["?X"]), vec![var_atom("p", &["?X"])]);
         assert_eq!(engine.fact_count(), 2);
         assert_eq!(engine.rule_count(), 1);
+        Ok(())
     }
 
     #[test]
@@ -969,7 +982,7 @@ mod tests {
     }
 
     #[test]
-    fn test_deduplication() {
+    fn test_deduplication() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("p", vec!["a"]);
         engine.add_fact("p", vec!["a"]); // duplicate
@@ -977,10 +990,11 @@ mod tests {
         let facts = engine.evaluate();
         let q_count = facts.iter().filter(|f| f.predicate == "q").count();
         assert_eq!(q_count, 1); // deduplicated
+        Ok(())
     }
 
     #[test]
-    fn test_unary_predicate_rule() {
+    fn test_unary_predicate_rule() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("mammal", vec!["cat"]);
         engine.add_rule(
@@ -989,10 +1003,11 @@ mod tests {
         );
         let facts = engine.evaluate();
         assert!(has_fact(&facts, "animal", &["cat"]));
+        Ok(())
     }
 
     #[test]
-    fn test_constant_join() {
+    fn test_constant_join() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("likes", vec!["alice", "pizza"]);
         engine.add_fact("likes", vec!["bob", "pizza"]);
@@ -1007,10 +1022,11 @@ mod tests {
         assert!(has_fact(&facts, "pizza_fan", &["alice"]));
         assert!(has_fact(&facts, "pizza_fan", &["bob"]));
         assert!(!has_fact(&facts, "pizza_fan", &["carol"]));
+        Ok(())
     }
 
     #[test]
-    fn test_add_datalog_rule() {
+    fn test_add_datalog_rule() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("base", vec!["x"]);
         let rule = DatalogRule::new(
@@ -1020,10 +1036,11 @@ mod tests {
         engine.add_datalog_rule(rule);
         let facts = engine.evaluate();
         assert!(has_fact(&facts, "derived", &["x"]));
+        Ok(())
     }
 
     #[test]
-    fn test_rule_with_two_variable_joins() {
+    fn test_rule_with_two_variable_joins() -> anyhow::Result<()> {
         let mut engine = DatalogEngine::new();
         engine.add_fact("student", vec!["alice"]);
         engine.add_fact("course", vec!["alice", "math"]);
@@ -1036,5 +1053,6 @@ mod tests {
         );
         let facts = engine.evaluate();
         assert!(has_fact(&facts, "math_student", &["alice"]));
+        Ok(())
     }
 }

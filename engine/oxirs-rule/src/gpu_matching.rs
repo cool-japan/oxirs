@@ -25,7 +25,7 @@
 //! use oxirs_rule::{Rule, RuleAtom, Term};
 //!
 //! // Create GPU matcher
-//! let mut matcher = GpuRuleMatcher::new().unwrap();
+//! let mut matcher = GpuRuleMatcher::new().expect("should succeed");
 //!
 //! // Add rules
 //! let rule = Rule {
@@ -46,7 +46,7 @@
 //!
 //! // Match against facts
 //! let facts = vec![/* ... */];
-//! let matches = matcher.match_facts(&facts).unwrap();
+//! let matches = matcher.match_facts(&facts).expect("should succeed");
 //! ```
 
 use crate::{Rule, RuleAtom, Term};
@@ -569,16 +569,17 @@ mod tests {
     }
 
     #[test]
-    fn test_add_rule() {
-        let mut matcher = GpuRuleMatcher::new().unwrap();
+    fn test_add_rule() -> Result<(), Box<dyn std::error::Error>> {
+        let mut matcher = GpuRuleMatcher::new()?;
         let rule = create_test_rule();
         matcher.add_rule(rule);
         assert_eq!(matcher.rules.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_descriptor_creation() {
-        let matcher = GpuRuleMatcher::new().unwrap();
+    fn test_pattern_descriptor_creation() -> Result<(), Box<dyn std::error::Error>> {
+        let matcher = GpuRuleMatcher::new()?;
         let atom = RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
             predicate: Term::Variable("P".to_string()),
@@ -590,30 +591,33 @@ mod tests {
         assert_eq!(desc.subject_type, 0); // Constant
         assert_eq!(desc.predicate_type, 1); // Variable
         assert_eq!(desc.object_type, 2); // Literal
+        Ok(())
     }
 
     #[test]
-    fn test_fnv1a_hash() {
-        let matcher = GpuRuleMatcher::new().unwrap();
+    fn test_fnv1a_hash() -> Result<(), Box<dyn std::error::Error>> {
+        let matcher = GpuRuleMatcher::new()?;
         let hash1 = matcher.fnv1a_hash(0xcbf29ce484222325, b"test");
         let hash2 = matcher.fnv1a_hash(0xcbf29ce484222325, b"test");
         let hash3 = matcher.fnv1a_hash(0xcbf29ce484222325, b"different");
 
         assert_eq!(hash1, hash2);
         assert_ne!(hash1, hash3);
+        Ok(())
     }
 
     #[test]
-    fn test_term_type() {
-        let matcher = GpuRuleMatcher::new().unwrap();
+    fn test_term_type() -> Result<(), Box<dyn std::error::Error>> {
+        let matcher = GpuRuleMatcher::new()?;
         assert_eq!(matcher.term_type(&Term::Constant("x".to_string())), 0);
         assert_eq!(matcher.term_type(&Term::Variable("X".to_string())), 1);
         assert_eq!(matcher.term_type(&Term::Literal("lit".to_string())), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_term_matches() {
-        let matcher = GpuRuleMatcher::new().unwrap();
+    fn test_term_matches() -> Result<(), Box<dyn std::error::Error>> {
+        let matcher = GpuRuleMatcher::new()?;
 
         // Variable matches anything
         assert!(matcher.term_matches(
@@ -631,11 +635,12 @@ mod tests {
             &Term::Constant("john".to_string()),
             &Term::Constant("mary".to_string())
         ));
+        Ok(())
     }
 
     #[test]
-    fn test_atom_matches() {
-        let matcher = GpuRuleMatcher::new().unwrap();
+    fn test_atom_matches() -> Result<(), Box<dyn std::error::Error>> {
+        let matcher = GpuRuleMatcher::new()?;
 
         let pattern = RuleAtom::Triple {
             subject: Term::Variable("X".to_string()),
@@ -657,47 +662,52 @@ mod tests {
 
         assert!(matcher.atom_matches(&pattern, &fact1));
         assert!(!matcher.atom_matches(&pattern, &fact2));
+        Ok(())
     }
 
     #[test]
-    fn test_cpu_match_facts() {
-        let mut matcher = GpuRuleMatcher::new().unwrap();
+    fn test_cpu_match_facts() -> Result<(), Box<dyn std::error::Error>> {
+        let mut matcher = GpuRuleMatcher::new()?;
         matcher.add_rule(create_test_rule());
 
         let facts = vec![create_test_fact()];
-        let matches = matcher.match_facts(&facts).unwrap();
+        let matches = matcher.match_facts(&facts)?;
 
         assert!(!matches.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_batch_match() {
-        let mut matcher = GpuRuleMatcher::new().unwrap();
+    fn test_batch_match() -> Result<(), Box<dyn std::error::Error>> {
+        let mut matcher = GpuRuleMatcher::new()?;
         matcher.add_rule(create_test_rule());
 
         let fact_sets = vec![vec![create_test_fact()], vec![create_test_fact()]];
 
-        let results = matcher.batch_match(&fact_sets).unwrap();
+        let results = matcher.batch_match(&fact_sets)?;
         assert_eq!(results.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_metrics_tracking() {
-        let mut matcher = GpuRuleMatcher::new().unwrap();
+    fn test_metrics_tracking() -> Result<(), Box<dyn std::error::Error>> {
+        let mut matcher = GpuRuleMatcher::new()?;
         matcher.add_rule(create_test_rule());
 
         let facts = vec![create_test_fact()];
-        matcher.match_facts(&facts).unwrap();
+        matcher.match_facts(&facts)?;
 
         let _metrics = matcher.get_metrics();
         // Metrics tracked internally
+        Ok(())
     }
 
     #[test]
-    fn test_batch_size_setting() {
-        let mut matcher = GpuRuleMatcher::new().unwrap();
+    fn test_batch_size_setting() -> Result<(), Box<dyn std::error::Error>> {
+        let mut matcher = GpuRuleMatcher::new()?;
         matcher.set_batch_size(2048);
         assert_eq!(matcher.batch_size, 2048);
+        Ok(())
     }
 
     #[test]
@@ -707,41 +717,45 @@ mod tests {
     }
 
     #[test]
-    fn test_gpu_forward_chainer_add_rules() {
-        let mut chainer = GpuForwardChainer::new().unwrap();
+    fn test_gpu_forward_chainer_add_rules() -> Result<(), Box<dyn std::error::Error>> {
+        let mut chainer = GpuForwardChainer::new()?;
         chainer.add_rules(vec![create_test_rule()]);
         assert_eq!(chainer.matcher.rules.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_max_iterations_setting() {
-        let mut chainer = GpuForwardChainer::new().unwrap();
+    fn test_max_iterations_setting() -> Result<(), Box<dyn std::error::Error>> {
+        let mut chainer = GpuForwardChainer::new()?;
         chainer.set_max_iterations(50);
         assert_eq!(chainer.max_iterations, 50);
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_cache() {
-        let mut matcher = GpuRuleMatcher::new().unwrap();
+    fn test_pattern_cache() -> Result<(), Box<dyn std::error::Error>> {
+        let mut matcher = GpuRuleMatcher::new()?;
         let rule = create_test_rule();
         let body_len = rule.body.len();
 
         matcher.add_rule(rule);
         assert_eq!(matcher.pattern_cache.len(), body_len);
+        Ok(())
     }
 
     #[test]
-    fn test_fact_index_building() {
-        let mut matcher = GpuRuleMatcher::new().unwrap();
+    fn test_fact_index_building() -> Result<(), Box<dyn std::error::Error>> {
+        let mut matcher = GpuRuleMatcher::new()?;
         let facts = vec![create_test_fact()];
 
         matcher.build_fact_index(&facts);
         assert!(!matcher.fact_hashes.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_compute_pattern_hash() {
-        let matcher = GpuRuleMatcher::new().unwrap();
+    fn test_compute_pattern_hash() -> Result<(), Box<dyn std::error::Error>> {
+        let matcher = GpuRuleMatcher::new()?;
         let hash1 = matcher.compute_pattern_hash(
             &Term::Constant("john".to_string()),
             &Term::Constant("type".to_string()),
@@ -755,11 +769,12 @@ mod tests {
         );
 
         assert_eq!(hash1, hash2);
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_rules() {
-        let mut matcher = GpuRuleMatcher::new().unwrap();
+    fn test_multiple_rules() -> Result<(), Box<dyn std::error::Error>> {
+        let mut matcher = GpuRuleMatcher::new()?;
 
         let rule1 = Rule {
             name: "rule1".to_string(),
@@ -791,5 +806,6 @@ mod tests {
 
         matcher.add_rules(vec![rule1, rule2]);
         assert_eq!(matcher.rules.len(), 2);
+        Ok(())
     }
 }

@@ -48,7 +48,7 @@
 //! }];
 //!
 //! // Execute with lock-free parallelism
-//! let results = engine.infer(&facts).unwrap();
+//! let results = engine.infer(&facts).expect("should succeed");
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
@@ -638,7 +638,7 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn test_lockfree_basic_inference() {
+    fn test_lockfree_basic_inference() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = LockFreeEngine::new();
 
         engine.add_rule(Rule {
@@ -661,7 +661,7 @@ mod tests {
             object: Term::Constant("b".to_string()),
         }];
 
-        let results = engine.infer(&facts).unwrap();
+        let results = engine.infer(&facts)?;
 
         // Should contain both original fact and derived fact
         assert!(results.len() >= 2);
@@ -670,10 +670,11 @@ mod tests {
             predicate: Term::Constant(p),
             object: Term::Constant(o)
         } if s == "a" && p == "q" && o == "b")));
+        Ok(())
     }
 
     #[test]
-    fn test_lockfree_multiple_workers() {
+    fn test_lockfree_multiple_workers() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = LockFreeEngine::with_config(4, 100);
 
         // Add multiple rules
@@ -703,10 +704,11 @@ mod tests {
             });
         }
 
-        let results = engine.infer(&facts).unwrap();
+        let results = engine.infer(&facts)?;
 
         // Should derive facts for all rules
         assert!(results.len() >= 20); // 10 input + 10 derived
+        Ok(())
     }
 
     #[test]
@@ -766,7 +768,7 @@ mod tests {
     }
 
     #[test]
-    fn test_lockfree_convergence() {
+    fn test_lockfree_convergence() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = LockFreeEngine::new();
 
         // Transitive rule: p(X,Y) ∧ p(Y,Z) → p(X,Z)
@@ -798,14 +800,15 @@ mod tests {
             },
         ];
 
-        let results = engine.infer(&facts).unwrap();
+        let results = engine.infer(&facts)?;
 
         // Should converge to fixpoint
         assert!(results.len() >= 2);
+        Ok(())
     }
 
     #[test]
-    fn test_lockfree_empty_rules() {
+    fn test_lockfree_empty_rules() -> Result<(), Box<dyn std::error::Error>> {
         let engine = LockFreeEngine::new();
 
         let facts = vec![RuleAtom::Triple {
@@ -814,10 +817,11 @@ mod tests {
             object: Term::Constant("b".to_string()),
         }];
 
-        let results = engine.infer(&facts).unwrap();
+        let results = engine.infer(&facts)?;
 
         // Should return only original facts
         assert_eq!(results.len(), 1);
+        Ok(())
     }
 
     #[test]
@@ -834,7 +838,7 @@ mod tests {
     }
 
     #[test]
-    fn test_lockfree_performance_scaling() {
+    fn test_lockfree_performance_scaling() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = LockFreeEngine::with_config(4, 100);
 
         // Add rules
@@ -867,12 +871,13 @@ mod tests {
         }
 
         let start = std::time::Instant::now();
-        let results = engine.infer(&facts).unwrap();
+        let results = engine.infer(&facts)?;
         let duration = start.elapsed();
 
         // Should handle large workload efficiently
         assert!(results.len() >= 200); // 200 input facts
         assert!(duration.as_secs() < 5); // Should complete in reasonable time
+        Ok(())
     }
 
     #[test]
@@ -969,7 +974,7 @@ mod tests {
     }
 
     #[test]
-    fn test_lockfree_concurrent_insertion() {
+    fn test_lockfree_concurrent_insertion() -> Result<(), Box<dyn std::error::Error>> {
         use std::thread;
 
         let fact_set = Arc::new(LockFreeFactSet::with_capacity(256));
@@ -993,15 +998,16 @@ mod tests {
 
         // Wait for all threads to complete
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().map_err(|_| "thread panicked")?;
         }
 
         // Should have 100 unique facts (4 threads * 25 facts)
         assert_eq!(fact_set.len(), 100);
+        Ok(())
     }
 
     #[test]
-    fn test_lockfree_duplicate_handling_concurrent() {
+    fn test_lockfree_duplicate_handling_concurrent() -> Result<(), Box<dyn std::error::Error>> {
         use std::thread;
 
         let fact_set = Arc::new(LockFreeFactSet::with_capacity(64));
@@ -1022,11 +1028,12 @@ mod tests {
         }
 
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().map_err(|_| "thread panicked")?;
         }
 
         // Should have exactly 1 fact (duplicates rejected)
         assert_eq!(fact_set.len(), 1);
+        Ok(())
     }
 
     #[test]

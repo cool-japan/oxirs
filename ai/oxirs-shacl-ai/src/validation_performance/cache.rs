@@ -278,7 +278,7 @@ mod tests {
 
         let retrieved = cache.get("test_key");
         assert!(retrieved.is_some());
-        assert!(retrieved.unwrap().is_valid);
+        assert!(retrieved.expect("should succeed").is_valid);
     }
 
     #[test]

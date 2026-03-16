@@ -512,7 +512,7 @@ mod tests {
 
         let data = mgr.get_view_data("v1");
         assert!(data.is_some());
-        assert_eq!(data.unwrap().len(), 1);
+        assert_eq!(data.expect("data should be available").len(), 1);
     }
 
     #[test]

@@ -728,6 +728,7 @@ impl Default for MultiLanguageProcessor {
 mod tests {
     use super::*;
     use crate::embeddings::EmbeddingStrategy;
+    use anyhow::Result;
 
     #[test]
     fn test_rdf_entity_creation() {
@@ -768,20 +769,21 @@ mod tests {
     }
 
     #[test]
-    fn test_uri_decomposition() {
+    fn test_uri_decomposition() -> Result<()> {
         let config = RdfContentConfig::default();
-        let processor = RdfContentProcessor::new(config, EmbeddingStrategy::TfIdf).unwrap();
+        let processor = RdfContentProcessor::new(config, EmbeddingStrategy::TfIdf)?;
 
         let components = processor.decompose_uri("http://example.org/ontology/PersonClass");
         assert!(components.contains(&"example.org".to_string()));
         assert!(components.contains(&"person".to_string()));
         assert!(components.contains(&"class".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_identifier_splitting() {
+    fn test_identifier_splitting() -> Result<()> {
         let config = RdfContentConfig::default();
-        let processor = RdfContentProcessor::new(config, EmbeddingStrategy::TfIdf).unwrap();
+        let processor = RdfContentProcessor::new(config, EmbeddingStrategy::TfIdf)?;
 
         let words = processor.split_identifier("PersonClass");
         assert_eq!(words, vec!["person", "class"]);
@@ -791,6 +793,7 @@ mod tests {
 
         let words = processor.split_identifier("person-class");
         assert_eq!(words, vec!["person", "class"]);
+        Ok(())
     }
 
     #[test]

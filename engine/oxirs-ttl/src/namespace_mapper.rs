@@ -274,14 +274,14 @@ mod tests {
     #[test]
     fn test_add_lookup() {
         let mut m = NamespaceMapper::new();
-        m.add("ex", "http://example.org/").unwrap();
+        m.add("ex", "http://example.org/").expect("should succeed");
         assert_eq!(m.get_namespace("ex"), Some("http://example.org/"));
     }
 
     #[test]
     fn test_add_duplicate_error() {
         let mut m = NamespaceMapper::new();
-        m.add("ex", "http://example.org/").unwrap();
+        m.add("ex", "http://example.org/").expect("should succeed");
         let err = m.add("ex", "http://other.org/").unwrap_err();
         assert_eq!(err, NamespaceError::DuplicatePrefix("ex".into()));
     }
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn test_remove_existing() {
         let mut m = NamespaceMapper::new();
-        m.add("ex", "http://example.org/").unwrap();
+        m.add("ex", "http://example.org/").expect("should succeed");
         assert!(m.remove("ex"));
         assert!(m.get_namespace("ex").is_none());
     }
@@ -318,7 +318,7 @@ mod tests {
     fn test_len_and_is_empty() {
         let mut m = NamespaceMapper::new();
         assert!(m.is_empty());
-        m.add("a", "http://a.org/").unwrap();
+        m.add("a", "http://a.org/").expect("should succeed");
         assert_eq!(m.len(), 1);
         assert!(!m.is_empty());
     }
@@ -348,7 +348,8 @@ mod tests {
     #[test]
     fn test_abbreviate_empty_local() {
         let mut m = NamespaceMapper::new();
-        m.add("ns", "http://ns.example.org/").unwrap();
+        m.add("ns", "http://ns.example.org/")
+            .expect("should succeed");
         let curie = m.abbreviate("http://ns.example.org/");
         assert_eq!(curie, Some("ns:".into()));
     }
@@ -389,7 +390,7 @@ mod tests {
     #[test]
     fn test_turtle_declarations_format() {
         let mut m = NamespaceMapper::new();
-        m.add("ex", "http://example.org/").unwrap();
+        m.add("ex", "http://example.org/").expect("should succeed");
         let decls = m.to_turtle_declarations();
         assert!(decls.contains("@prefix ex: <http://example.org/> ."));
     }
@@ -410,7 +411,7 @@ mod tests {
     #[test]
     fn test_sparql_declarations_format() {
         let mut m = NamespaceMapper::new();
-        m.add("ex", "http://example.org/").unwrap();
+        m.add("ex", "http://example.org/").expect("should succeed");
         let decls = m.to_sparql_declarations();
         assert!(decls.contains("PREFIX ex: <http://example.org/>"));
     }
@@ -428,10 +429,11 @@ mod tests {
     #[test]
     fn test_merge_adds_missing_prefixes() {
         let mut m1 = NamespaceMapper::new();
-        m1.add("ex", "http://example.org/").unwrap();
+        m1.add("ex", "http://example.org/").expect("should succeed");
 
         let mut m2 = NamespaceMapper::new();
-        m2.add("schema", "https://schema.org/").unwrap();
+        m2.add("schema", "https://schema.org/")
+            .expect("should succeed");
 
         m1.merge(&m2);
         assert!(m1.get_namespace("ex").is_some());
@@ -441,10 +443,10 @@ mod tests {
     #[test]
     fn test_merge_skips_duplicates() {
         let mut m1 = NamespaceMapper::new();
-        m1.add("ex", "http://example.org/").unwrap();
+        m1.add("ex", "http://example.org/").expect("should succeed");
 
         let mut m2 = NamespaceMapper::new();
-        m2.add("ex", "http://other.org/").unwrap();
+        m2.add("ex", "http://other.org/").expect("should succeed");
 
         // Should not overwrite
         m1.merge(&m2);
@@ -529,8 +531,8 @@ mod tests {
     fn test_round_trip_abbreviate_expand() {
         let m = NamespaceMapper::with_defaults();
         let iri = "http://www.w3.org/2002/07/owl#Class";
-        let curie = m.abbreviate(iri).unwrap();
-        let expanded = m.expand(&curie).unwrap();
+        let curie = m.abbreviate(iri).expect("should succeed");
+        let expanded = m.expand(&curie).expect("should succeed");
         assert_eq!(expanded, iri);
     }
 
@@ -539,7 +541,7 @@ mod tests {
     #[test]
     fn test_remove_clears_reverse_index() {
         let mut m = NamespaceMapper::new();
-        m.add("ex", "http://example.org/").unwrap();
+        m.add("ex", "http://example.org/").expect("should succeed");
         m.remove("ex");
         // Reverse lookup must also be gone
         assert!(m.get_prefix("http://example.org/").is_none());
@@ -552,7 +554,7 @@ mod tests {
         let mut m = NamespaceMapper::new();
         for i in 0..10_u32 {
             m.add(format!("ns{i}"), format!("http://ns{i}.example.org/"))
-                .unwrap();
+                .expect("should succeed");
         }
         assert_eq!(m.len(), 10);
     }

@@ -490,7 +490,7 @@ mod tests {
     #[tokio::test]
     async fn test_simple_embedding_model() {
         let model = SimpleEmbeddingModel::new(128);
-        let embedding = model.get_entity_embedding("test").unwrap();
+        let embedding = model.get_entity_embedding("test").expect("should succeed");
         assert_eq!(embedding.values.len(), 128);
     }
 
@@ -504,13 +504,13 @@ mod tests {
         let embedding1 = manager
             .get_embedding("test", Some("test_model"))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Second call should hit cache
         let embedding2 = manager
             .get_embedding("test", Some("test_model"))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(embedding1.values, embedding2.values);
 
@@ -533,7 +533,7 @@ mod tests {
         let embeddings = manager
             .get_embeddings_batch(&texts, Some("test_model"))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(embeddings.len(), 3);
         for embedding in embeddings {

@@ -522,7 +522,7 @@ mod tests {
     #[test]
     fn test_stats_increment_on_success() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).unwrap();
+        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
         assert_eq!(client.stats().total_requests, 1);
         assert_eq!(client.stats().successful, 1);
         assert_eq!(client.stats().failed, 0);
@@ -539,7 +539,7 @@ mod tests {
     #[test]
     fn test_stats_total_elapsed_grows() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?x WHERE { ?x ?p ?o }")).unwrap();
+        client.execute(select_query("SELECT ?x WHERE { ?x ?p ?o }")).expect("should succeed");
         assert!(client.stats().total_elapsed_ms > 0);
     }
 
@@ -547,7 +547,7 @@ mod tests {
     fn test_stats_multiple_queries() {
         let mut client = default_client();
         for _ in 0..5 {
-            client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).unwrap();
+            client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
         }
         assert_eq!(client.stats().total_requests, 5);
         assert_eq!(client.stats().successful, 5);
@@ -559,14 +559,14 @@ mod tests {
     fn test_history_grows_on_execute() {
         let mut client = default_client();
         assert_eq!(client.history().len(), 0);
-        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).unwrap();
+        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
         assert_eq!(client.history().len(), 1);
     }
 
     #[test]
     fn test_clear_history() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).unwrap();
+        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
         client.clear_history();
         assert_eq!(client.history().len(), 0);
     }
@@ -580,7 +580,7 @@ mod tests {
     #[test]
     fn test_last_query_after_execute() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?x WHERE { ?x ?p ?o }")).unwrap();
+        client.execute(select_query("SELECT ?x WHERE { ?x ?p ?o }")).expect("should succeed");
         let last = client.last_query().expect("last query");
         assert!(last.text.contains("?x"));
     }
@@ -589,7 +589,7 @@ mod tests {
     fn test_history_records_query_text() {
         let mut client = default_client();
         let text = "SELECT ?name WHERE { ?s :name ?name }";
-        client.execute(select_query(text)).unwrap();
+        client.execute(select_query(text)).expect("should succeed");
         assert_eq!(client.history()[0].text, text);
     }
 
@@ -605,7 +605,7 @@ mod tests {
     #[test]
     fn test_execute_update_increments_stats() {
         let mut client = default_client();
-        client.execute_update("DELETE DATA { <a> <b> <c> }").unwrap();
+        client.execute_update("DELETE DATA { <a> <b> <c> }").expect("should succeed");
         assert_eq!(client.stats().total_requests, 1);
         assert_eq!(client.stats().successful, 1);
     }
@@ -714,7 +714,7 @@ mod tests {
     fn test_clear_history_after_multiple() {
         let mut client = default_client();
         for _ in 0..3 {
-            client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).unwrap();
+            client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
         }
         assert_eq!(client.history().len(), 3);
         client.clear_history();
@@ -768,7 +768,7 @@ mod tests {
     #[test]
     fn test_request_stats_total_is_success_plus_failed() {
         let mut client = default_client();
-        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).unwrap();
+        client.execute(select_query("SELECT ?s WHERE { ?s ?p ?o }")).expect("should succeed");
         let _ = client.execute(select_query(""));
         let s = client.stats();
         assert_eq!(s.total_requests, s.successful + s.failed);

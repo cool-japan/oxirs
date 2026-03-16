@@ -40,13 +40,13 @@
 //!     },
 //! ];
 //!
-//! classifier.load_ontology(axioms).unwrap();
+//! classifier.load_ontology(axioms).expect("should succeed");
 //!
 //! // Classify
-//! classifier.classify().unwrap();
+//! classifier.classify().expect("should succeed");
 //!
 //! // Check subsumption
-//! let is_subsumer = classifier.is_subsumed_by("Dog", "Animal").unwrap();
+//! let is_subsumer = classifier.is_subsumed_by("Dog", "Animal").expect("should succeed");
 //! assert!(is_subsumer);
 //! ```
 
@@ -618,102 +618,109 @@ mod tests {
     }
 
     #[test]
-    fn test_load_ontology() {
+    fn test_load_ontology() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![
             create_subclass_axiom("Dog", "Animal"),
             create_subclass_axiom("Cat", "Animal"),
         ];
 
-        classifier.load_ontology(axioms).unwrap();
+        classifier.load_ontology(axioms)?;
         assert!(classifier.concepts.contains("Dog"));
         assert!(classifier.concepts.contains("Cat"));
         assert!(classifier.concepts.contains("Animal"));
+        Ok(())
     }
 
     #[test]
-    fn test_told_subsumers() {
+    fn test_told_subsumers() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![create_subclass_axiom("Dog", "Animal")];
 
-        classifier.load_ontology(axioms).unwrap();
+        classifier.load_ontology(axioms)?;
 
         let told = classifier.told_subsumers.get("Dog");
         assert!(told.is_some());
-        assert_eq!(told.unwrap()[0], "Animal");
+        assert_eq!(told.ok_or("expected Some value")?[0], "Animal");
+        Ok(())
     }
 
     #[test]
-    fn test_classify() {
+    fn test_classify() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![
             create_subclass_axiom("Dog", "Animal"),
             create_subclass_axiom("Animal", "LivingThing"),
         ];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
         // Dog should be subsumed by both Animal and LivingThing
         let subsumers = classifier.get_superclasses("Dog");
         assert!(subsumers.is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_is_subsumed_by() {
+    fn test_is_subsumed_by() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![create_subclass_axiom("Dog", "Animal")];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
-        assert!(classifier.is_subsumed_by("Dog", "Animal").unwrap());
-        assert!(!classifier.is_subsumed_by("Animal", "Dog").unwrap());
+        assert!(classifier.is_subsumed_by("Dog", "Animal")?);
+        assert!(!classifier.is_subsumed_by("Animal", "Dog")?);
+        Ok(())
     }
 
     #[test]
-    fn test_get_subclasses() {
+    fn test_get_subclasses() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![
             create_subclass_axiom("Dog", "Animal"),
             create_subclass_axiom("Cat", "Animal"),
         ];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
         let subclasses = classifier.get_subclasses("Animal");
         assert!(subclasses.contains(&"Dog".to_string()));
         assert!(subclasses.contains(&"Cat".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_direct_superclasses() {
+    fn test_direct_superclasses() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![
             create_subclass_axiom("Dog", "Mammal"),
             create_subclass_axiom("Mammal", "Animal"),
         ];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
         // Dog's direct superclass should be Mammal, not Animal
         let direct = classifier.get_direct_superclasses("Dog");
         assert!(direct.is_some());
         // Note: Current implementation may include both; full optimization TBD
+        Ok(())
     }
 
     #[test]
-    fn test_metrics_tracking() {
+    fn test_metrics_tracking() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![create_subclass_axiom("Dog", "Animal")];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
         let _metrics = classifier.get_metrics();
         // Metrics tracked internally
+        Ok(())
     }
 
     #[test]
@@ -727,15 +734,16 @@ mod tests {
     }
 
     #[test]
-    fn test_clear() {
+    fn test_clear() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![create_subclass_axiom("Dog", "Animal")];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
         classifier.clear();
         assert!(classifier.subsumers.is_empty());
+        Ok(())
     }
 
     #[test]
@@ -745,29 +753,31 @@ mod tests {
     }
 
     #[test]
-    fn test_hierarchy_builder_build() {
+    fn test_hierarchy_builder_build() -> Result<(), Box<dyn std::error::Error>> {
         let mut builder = SubsumptionHierarchyBuilder::new();
         let axioms = vec![
             create_subclass_axiom("Dog", "Mammal"),
             create_subclass_axiom("Mammal", "Animal"),
         ];
 
-        builder.build(axioms).unwrap();
+        builder.build(axioms)?;
         let levels = builder.get_levels();
 
         assert!(!levels.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_to_dot_graph() {
+    fn test_to_dot_graph() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![create_subclass_axiom("Dog", "Animal")];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
         let dot = classifier.to_dot_graph();
         assert!(dot.contains("digraph"));
+        Ok(())
     }
 
     #[test]
@@ -791,7 +801,7 @@ mod tests {
     }
 
     #[test]
-    fn test_transitive_subsumption() {
+    fn test_transitive_subsumption() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![
             create_subclass_axiom("Poodle", "Dog"),
@@ -799,43 +809,50 @@ mod tests {
             create_subclass_axiom("Mammal", "Animal"),
         ];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
         // Poodle should be subsumed by Animal transitively
         let subsumers = classifier.get_superclasses("Poodle");
         assert!(subsumers.is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_superclasses() {
+    fn test_multiple_superclasses() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![
             create_subclass_axiom("FlyingFish", "Fish"),
             create_subclass_axiom("FlyingFish", "FlyingAnimal"),
         ];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
         let subsumers = classifier.get_superclasses("FlyingFish");
         assert!(subsumers.is_some());
-        assert!(subsumers.unwrap().contains(&"Fish".to_string()));
-        assert!(subsumers.unwrap().contains(&"FlyingAnimal".to_string()));
+        assert!(subsumers
+            .ok_or("expected Some value")?
+            .contains(&"Fish".to_string()));
+        assert!(subsumers
+            .ok_or("expected Some value")?
+            .contains(&"FlyingAnimal".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_cache_usage() {
+    fn test_cache_usage() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = PelletClassifier::new();
         let axioms = vec![create_subclass_axiom("Dog", "Animal")];
 
-        classifier.load_ontology(axioms).unwrap();
-        classifier.classify().unwrap();
+        classifier.load_ontology(axioms)?;
+        classifier.classify()?;
 
         // Second classification should use cache
-        classifier.classify().unwrap();
+        classifier.classify()?;
 
         let _metrics = classifier.get_metrics();
         // Cache metrics tracked internally
+        Ok(())
     }
 }

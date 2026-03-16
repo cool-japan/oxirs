@@ -460,7 +460,9 @@ mod tests {
             detector.record_query("GetUser", 100, false);
         }
 
-        let (mean, std_dev, count) = detector.get_baseline_stats("GetUser").unwrap();
+        let (mean, std_dev, count) = detector
+            .get_baseline_stats("GetUser")
+            .expect("should succeed");
 
         assert_eq!(mean, 100.0);
         assert_eq!(std_dev, 0.0);
@@ -483,7 +485,7 @@ mod tests {
         let anomaly = detector.detect_anomaly("GetUser", 5000, false);
 
         assert!(anomaly.is_some());
-        let anomaly = anomaly.unwrap();
+        let anomaly = anomaly.expect("should succeed");
         assert_eq!(anomaly.anomaly_type, AnomalyType::SlowQuery);
         assert!(anomaly.deviation.abs() > 3.0);
     }
@@ -534,7 +536,7 @@ mod tests {
         let anomaly = detector.detect_anomaly("GetUser", 100, true);
 
         assert!(anomaly.is_some());
-        let anomaly = anomaly.unwrap();
+        let anomaly = anomaly.expect("should succeed");
         assert_eq!(anomaly.anomaly_type, AnomalyType::ErrorSpike);
     }
 
@@ -658,7 +660,9 @@ mod tests {
             detector.record_query("GetUser", i as u64, false);
         }
 
-        let (_mean, _std_dev, count) = detector.get_baseline_stats("GetUser").unwrap();
+        let (_mean, _std_dev, count) = detector
+            .get_baseline_stats("GetUser")
+            .expect("should succeed");
         assert_eq!(count, 1000); // Should be capped at max_baseline_size
     }
 

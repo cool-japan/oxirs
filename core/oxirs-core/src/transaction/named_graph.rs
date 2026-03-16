@@ -288,8 +288,8 @@ mod tests {
 
     fn create_test_quad(graph: GraphName) -> Quad {
         Quad::new(
-            Subject::NamedNode(NamedNode::new("http://example.org/subject").unwrap()),
-            Predicate::from(NamedNode::new("http://example.org/predicate").unwrap()),
+            Subject::NamedNode(NamedNode::new("http://example.org/subject").expect("valid IRI")),
+            Predicate::from(NamedNode::new("http://example.org/predicate").expect("valid IRI")),
             Object::Literal(Literal::new("test")),
             graph,
         )
@@ -300,7 +300,8 @@ mod tests {
         // This test would require a full transaction manager setup
         // For now, we test the data structures
 
-        let graph = GraphName::NamedNode(NamedNode::new("http://example.org/graph1").unwrap());
+        let graph =
+            GraphName::NamedNode(NamedNode::new("http://example.org/graph1").expect("valid IRI"));
 
         let mut ops = GraphOperations::default();
         ops.inserts.push(create_test_quad(graph.clone()));

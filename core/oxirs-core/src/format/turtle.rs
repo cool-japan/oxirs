@@ -539,7 +539,7 @@ mod tests {
         let parser = TurtleParser::new();
         let result = parser.parse_str("");
         assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        assert!(result.expect("should have value").is_empty());
     }
 
     #[test]
@@ -548,6 +548,6 @@ mod tests {
         let turtle = "# This is a comment\n# Another comment";
         let result = parser.parse_str(turtle);
         assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        assert!(result.expect("should have value").is_empty());
     }
 }

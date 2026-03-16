@@ -795,7 +795,7 @@ mod tests {
 
         loader.load(&mut source, &dict, &mut index, None).unwrap();
 
-        let dict_guard = dict.lock().unwrap();
+        let dict_guard = dict.lock().unwrap_or_else(|e| e.into_inner());
         // "http://subject" and "http://predicate" appear twice but encoded once
         assert_eq!(dict_guard.size(), 4); // s, p, o1, o2
     }

@@ -23,7 +23,7 @@
 //!
 //! // Decode a CAN frame
 //! let frame_data = [0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-//! let values = decoder.decode_message(2024, &frame_data).unwrap();
+//! let values = decoder.decode_message(2024, &frame_data).expect("should succeed");
 //! println!("Engine Speed: {:?} rpm", values["EngineSpeed"]);
 //! ```
 

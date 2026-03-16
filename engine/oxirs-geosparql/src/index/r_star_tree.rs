@@ -32,7 +32,7 @@
 //! let mut index = RStarTree::new();
 //!
 //! let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-//! let id = index.insert(geom).unwrap();
+//! let id = index.insert(geom).expect("should succeed");
 //!
 //! // Query for geometries
 //! let results = index.query_bbox(0.0, 0.0, 5.0, 5.0);
@@ -289,7 +289,7 @@ mod tests {
         let index = RStarTree::new();
         let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
 
-        let id = index.insert(geom).unwrap();
+        let id = index.insert(geom).expect("insert should succeed");
         assert_eq!(index.len(), 1);
         assert!(id > 0);
     }
@@ -316,13 +316,13 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(1.0, 1.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(5.0, 5.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(10.0, 10.0))))
-            .unwrap();
+            .expect("should succeed");
 
         let results = index.query_bbox(0.0, 0.0, 6.0, 6.0);
         assert_eq!(results.len(), 2); // Points (1,1) and (5,5)
@@ -334,12 +334,12 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(5.0, 5.0))))
-            .unwrap();
+            .expect("should succeed");
 
-        let (geom, dist) = index.nearest(1.0, 1.0).unwrap();
+        let (geom, dist) = index.nearest(1.0, 1.0).expect("nearest should succeed");
 
         match geom.geom {
             GeoGeometry::Point(p) => {
@@ -357,13 +357,13 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(1.0, 1.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0))))
-            .unwrap();
+            .expect("should succeed");
 
         let results = index.nearest_k(0.0, 0.0, 2);
         assert_eq!(results.len(), 2);
@@ -378,10 +378,10 @@ mod tests {
 
         let id = index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0))))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(index.len(), 1);
 
-        let removed = index.remove(id).unwrap();
+        let removed = index.remove(id).expect("remove should succeed");
         assert!(removed);
         assert_eq!(index.len(), 0);
     }
@@ -392,13 +392,13 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(10.0, 10.0))))
-            .unwrap();
+            .expect("should succeed");
 
         let results = index.query_within_distance(0.0, 0.0, 6.0);
         assert_eq!(results.len(), 2); // (0,0) and (3,4) are within distance 6
@@ -413,7 +413,7 @@ mod tests {
             geo_types::Coord { x: 1.0, y: 1.0 },
         ])));
 
-        index.insert(linestring).unwrap();
+        index.insert(linestring).expect("insert should succeed");
         assert_eq!(index.len(), 1);
 
         let results = index.query_bbox(-1.0, -1.0, 2.0, 2.0);
@@ -435,7 +435,7 @@ mod tests {
             vec![],
         )));
 
-        index.insert(polygon).unwrap();
+        index.insert(polygon).expect("insert should succeed");
         assert_eq!(index.len(), 1);
 
         // Query should find polygon by its centroid
@@ -449,10 +449,10 @@ mod tests {
 
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0))))
-            .unwrap();
+            .expect("should succeed");
         index
             .insert(Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0))))
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(index.len(), 2);
 
@@ -470,7 +470,7 @@ mod tests {
             Geometry::new(GeoGeometry::Point(Point::new(5.0, 6.0))),
         ];
 
-        let ids = index.insert_batch(geometries).unwrap();
+        let ids = index.insert_batch(geometries).expect("should succeed");
         assert_eq!(ids.len(), 3);
         assert_eq!(index.len(), 3);
     }

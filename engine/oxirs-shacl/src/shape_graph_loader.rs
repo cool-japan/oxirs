@@ -220,7 +220,7 @@ mod tests {
     fn test_add_and_get_shape() {
         let mut sg = ShapeGraph::new();
         sg.add_shape(node_shape("http://s1", Some("http://Person")))
-            .unwrap();
+            .expect("should succeed");
         assert!(sg.get_shape("http://s1").is_some());
     }
 
@@ -233,7 +233,8 @@ mod tests {
     #[test]
     fn test_duplicate_id_error() {
         let mut sg = ShapeGraph::new();
-        sg.add_shape(node_shape("http://s1", None)).unwrap();
+        sg.add_shape(node_shape("http://s1", None))
+            .expect("should succeed");
         let err = sg.add_shape(node_shape("http://s1", None));
         assert!(matches!(err, Err(ShapeGraphError::DuplicateId(_))));
     }
@@ -247,9 +248,10 @@ mod tests {
     #[test]
     fn test_shape_count_after_adds() {
         let mut sg = ShapeGraph::new();
-        sg.add_shape(node_shape("http://s1", None)).unwrap();
+        sg.add_shape(node_shape("http://s1", None))
+            .expect("should succeed");
         sg.add_shape(property_shape("http://ps1", Some("http://name")))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(sg.shape_count(), 2);
     }
 
@@ -258,9 +260,10 @@ mod tests {
     #[test]
     fn test_node_shapes_filter() {
         let mut sg = ShapeGraph::new();
-        sg.add_shape(node_shape("http://ns1", None)).unwrap();
+        sg.add_shape(node_shape("http://ns1", None))
+            .expect("should succeed");
         sg.add_shape(property_shape("http://ps1", Some("http://p")))
-            .unwrap();
+            .expect("should succeed");
         let ns = sg.node_shapes();
         assert_eq!(ns.len(), 1);
         assert_eq!(ns[0].id, "http://ns1");
@@ -269,11 +272,12 @@ mod tests {
     #[test]
     fn test_property_shapes_filter() {
         let mut sg = ShapeGraph::new();
-        sg.add_shape(node_shape("http://ns1", None)).unwrap();
+        sg.add_shape(node_shape("http://ns1", None))
+            .expect("should succeed");
         sg.add_shape(property_shape("http://ps1", Some("http://p")))
-            .unwrap();
+            .expect("should succeed");
         sg.add_shape(property_shape("http://ps2", Some("http://q")))
-            .unwrap();
+            .expect("should succeed");
         let ps = sg.property_shapes();
         assert_eq!(ps.len(), 2);
     }
@@ -284,9 +288,9 @@ mod tests {
     fn test_shapes_for_class_match() {
         let mut sg = ShapeGraph::new();
         sg.add_shape(node_shape("http://s1", Some("http://Person")))
-            .unwrap();
+            .expect("should succeed");
         sg.add_shape(node_shape("http://s2", Some("http://Organization")))
-            .unwrap();
+            .expect("should succeed");
         let result = sg.shapes_for_class("http://Person");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].id, "http://s1");
@@ -296,7 +300,7 @@ mod tests {
     fn test_shapes_for_class_no_match() {
         let mut sg = ShapeGraph::new();
         sg.add_shape(node_shape("http://s1", Some("http://Person")))
-            .unwrap();
+            .expect("should succeed");
         let result = sg.shapes_for_class("http://Animal");
         assert!(result.is_empty());
     }
@@ -305,9 +309,9 @@ mod tests {
     fn test_shapes_for_class_multiple() {
         let mut sg = ShapeGraph::new();
         sg.add_shape(node_shape("http://s1", Some("http://Person")))
-            .unwrap();
+            .expect("should succeed");
         sg.add_shape(node_shape("http://s2", Some("http://Person")))
-            .unwrap();
+            .expect("should succeed");
         let result = sg.shapes_for_class("http://Person");
         assert_eq!(result.len(), 2);
     }
@@ -319,9 +323,9 @@ mod tests {
         let mut sg = ShapeGraph::new();
         let mut ns = node_shape("http://ns1", None);
         ns.property_shapes = vec!["http://ps1".to_string()];
-        sg.add_shape(ns).unwrap();
+        sg.add_shape(ns).expect("should succeed");
         sg.add_shape(property_shape("http://ps1", Some("http://name")))
-            .unwrap();
+            .expect("should succeed");
         let resolved = sg.resolve_property_shapes("http://ns1");
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].id, "http://ps1");
@@ -332,7 +336,7 @@ mod tests {
         let mut sg = ShapeGraph::new();
         let mut ns = node_shape("http://ns1", None);
         ns.property_shapes = vec!["http://missing_ps".to_string()];
-        sg.add_shape(ns).unwrap();
+        sg.add_shape(ns).expect("should succeed");
         let resolved = sg.resolve_property_shapes("http://ns1");
         assert!(resolved.is_empty());
     }
@@ -351,9 +355,9 @@ mod tests {
         let mut sg = ShapeGraph::new();
         let mut ns = node_shape("http://ns1", None);
         ns.property_shapes = vec!["http://ps1".to_string()];
-        sg.add_shape(ns).unwrap();
+        sg.add_shape(ns).expect("should succeed");
         sg.add_shape(property_shape("http://ps1", Some("http://name")))
-            .unwrap();
+            .expect("should succeed");
         let warnings: Vec<_> = sg
             .validate_graph()
             .into_iter()
@@ -367,7 +371,7 @@ mod tests {
         let mut sg = ShapeGraph::new();
         let mut ns = node_shape("http://ns1", None);
         ns.property_shapes = vec!["http://missing_ps".to_string()];
-        sg.add_shape(ns).unwrap();
+        sg.add_shape(ns).expect("should succeed");
         let warnings = sg.validate_graph();
         assert!(warnings.iter().any(|w| w.contains("missing")));
     }
@@ -375,7 +379,8 @@ mod tests {
     #[test]
     fn test_validate_property_shape_no_path() {
         let mut sg = ShapeGraph::new();
-        sg.add_shape(property_shape("http://ps1", None)).unwrap();
+        sg.add_shape(property_shape("http://ps1", None))
+            .expect("should succeed");
         let warnings = sg.validate_graph();
         assert!(warnings.iter().any(|w| w.contains("no sh:path")));
     }
@@ -385,7 +390,7 @@ mod tests {
         let mut sg = ShapeGraph::new();
         let mut s = node_shape("http://s1", None);
         s.deactivated = true;
-        sg.add_shape(s).unwrap();
+        sg.add_shape(s).expect("should succeed");
         let warnings = sg.validate_graph();
         assert!(warnings.iter().any(|w| w.contains("deactivated")));
     }
@@ -395,7 +400,8 @@ mod tests {
     #[test]
     fn test_remove_shape_present() {
         let mut sg = ShapeGraph::new();
-        sg.add_shape(node_shape("http://s1", None)).unwrap();
+        sg.add_shape(node_shape("http://s1", None))
+            .expect("should succeed");
         assert!(sg.remove_shape("http://s1"));
         assert_eq!(sg.shape_count(), 0);
     }
@@ -411,7 +417,8 @@ mod tests {
     #[test]
     fn test_deactivated_shapes_none() {
         let mut sg = ShapeGraph::new();
-        sg.add_shape(node_shape("http://s1", None)).unwrap();
+        sg.add_shape(node_shape("http://s1", None))
+            .expect("should succeed");
         assert!(sg.deactivated_shapes().is_empty());
     }
 
@@ -420,8 +427,9 @@ mod tests {
         let mut sg = ShapeGraph::new();
         let mut s = node_shape("http://s1", None);
         s.deactivated = true;
-        sg.add_shape(s).unwrap();
-        sg.add_shape(node_shape("http://s2", None)).unwrap();
+        sg.add_shape(s).expect("should succeed");
+        sg.add_shape(node_shape("http://s2", None))
+            .expect("should succeed");
         assert_eq!(sg.deactivated_shapes().len(), 1);
     }
 
@@ -435,8 +443,8 @@ mod tests {
             constraint_type: "sh:minCount".to_string(),
             value: "1".to_string(),
         }];
-        sg.add_shape(s).unwrap();
-        let stored = sg.get_shape("http://s1").unwrap();
+        sg.add_shape(s).expect("should succeed");
+        let stored = sg.get_shape("http://s1").expect("should succeed");
         assert_eq!(stored.constraints.len(), 1);
         assert_eq!(stored.constraints[0].constraint_type, "sh:minCount");
         assert_eq!(stored.constraints[0].value, "1");
@@ -456,8 +464,8 @@ mod tests {
                 value: "xsd:string".to_string(),
             },
         ];
-        sg.add_shape(s).unwrap();
-        let stored = sg.get_shape("http://ps1").unwrap();
+        sg.add_shape(s).expect("should succeed");
+        let stored = sg.get_shape("http://ps1").expect("should succeed");
         assert_eq!(stored.constraints.len(), 2);
     }
 
@@ -480,9 +488,12 @@ mod tests {
     #[test]
     fn test_shape_type_node() {
         let mut sg = ShapeGraph::new();
-        sg.add_shape(node_shape("http://ns1", None)).unwrap();
+        sg.add_shape(node_shape("http://ns1", None))
+            .expect("should succeed");
         assert_eq!(
-            sg.get_shape("http://ns1").unwrap().shape_type,
+            sg.get_shape("http://ns1")
+                .expect("should succeed")
+                .shape_type,
             ShapeType::NodeShape
         );
     }
@@ -491,9 +502,11 @@ mod tests {
     fn test_shape_type_property() {
         let mut sg = ShapeGraph::new();
         sg.add_shape(property_shape("http://ps1", Some("http://p")))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(
-            sg.get_shape("http://ps1").unwrap().shape_type,
+            sg.get_shape("http://ps1")
+                .expect("should succeed")
+                .shape_type,
             ShapeType::PropertyShape
         );
     }
@@ -503,9 +516,12 @@ mod tests {
         let mut sg = ShapeGraph::new();
         let mut s = node_shape("http://ns1", None);
         s.target_node = Some("http://alice".to_string());
-        sg.add_shape(s).unwrap();
+        sg.add_shape(s).expect("should succeed");
         assert_eq!(
-            sg.get_shape("http://ns1").unwrap().target_node.as_deref(),
+            sg.get_shape("http://ns1")
+                .expect("should succeed")
+                .target_node
+                .as_deref(),
             Some("http://alice")
         );
     }
@@ -514,9 +530,12 @@ mod tests {
     fn test_path_stored_in_property_shape() {
         let mut sg = ShapeGraph::new();
         sg.add_shape(property_shape("http://ps1", Some("http://schema.org/name")))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(
-            sg.get_shape("http://ps1").unwrap().path.as_deref(),
+            sg.get_shape("http://ps1")
+                .expect("should succeed")
+                .path
+                .as_deref(),
             Some("http://schema.org/name")
         );
     }

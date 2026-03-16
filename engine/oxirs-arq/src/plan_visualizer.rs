@@ -22,8 +22,10 @@
 //!     .with_cost(6.0);
 //!
 //! let viz = QueryPlanVisualizer::new();
-//! let dot = viz.render(&root, VisOutputFormat::Dot).unwrap();
+//! let dot = viz.render(&root, VisOutputFormat::Dot)
+//!     .map_err(|e| anyhow::anyhow!(e))?;
 //! assert!(dot.contains("digraph"));
+//! # Ok::<(), anyhow::Error>(())
 //! ```
 
 use std::collections::HashMap;

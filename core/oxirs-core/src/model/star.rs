@@ -333,8 +333,8 @@ mod tests {
 
     #[test]
     fn test_quoted_triple() {
-        let subject = NamedNode::new("http://example.org/alice").unwrap();
-        let predicate = NamedNode::new("http://example.org/says").unwrap();
+        let subject = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/says").expect("valid IRI");
         let object = Object::Literal(Literal::new("Hello"));
 
         let triple = Triple::new(subject, predicate, object);
@@ -349,18 +349,18 @@ mod tests {
 
     #[test]
     fn test_annotation() {
-        let subject = NamedNode::new("http://example.org/alice").unwrap();
-        let predicate = NamedNode::new("http://example.org/age").unwrap();
+        let subject = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/age").expect("valid IRI");
         let object = Object::Literal(Literal::new_typed(
             "30",
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("valid IRI"),
         ));
 
         let statement = Triple::new(subject, predicate, object);
-        let ann_property = NamedNode::new("http://example.org/confidence").unwrap();
+        let ann_property = NamedNode::new("http://example.org/confidence").expect("valid IRI");
         let ann_value = Object::Literal(Literal::new_typed(
             "0.9",
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").expect("valid IRI"),
         ));
 
         let annotation = Annotation::new(statement, ann_property, ann_value);

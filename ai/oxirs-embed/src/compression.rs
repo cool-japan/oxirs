@@ -1188,7 +1188,9 @@ mod tests {
         let processor = QuantizationProcessor::new(config);
 
         let tensor = Array2::from_shape_fn((4, 4), |(i, j)| (i + j) as f32 * 0.1);
-        let params = processor.calculate_quantization_params(&tensor).unwrap();
+        let params = processor
+            .calculate_quantization_params(&tensor)
+            .expect("should succeed");
 
         assert!(params.scale > 0.0);
         assert!(params.min_val <= params.max_val);
@@ -1200,7 +1202,9 @@ mod tests {
         let processor = PruningProcessor::new(config);
 
         let tensor = Array2::from_shape_fn((4, 4), |(i, j)| if i == j { 1.0 } else { 0.01 });
-        let mask = processor.generate_pruning_mask(&tensor).unwrap();
+        let mask = processor
+            .generate_pruning_mask(&tensor)
+            .expect("should succeed");
 
         // Should preserve diagonal elements (higher magnitude)
         assert!(mask[[0, 0]]);
@@ -1222,7 +1226,10 @@ mod tests {
         );
 
         let target = CompressionTarget::default();
-        let result = manager.compress_model(&weights, target).await.unwrap();
+        let result = manager
+            .compress_model(&weights, target)
+            .await
+            .expect("should succeed");
 
         assert!(result.stats.size_reduction_ratio > 0.0);
         assert!(result.stats.memory_savings_mb >= 0.0);

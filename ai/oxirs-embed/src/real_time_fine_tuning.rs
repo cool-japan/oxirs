@@ -954,7 +954,7 @@ mod tests {
         model
             .add_example(input, target, Some("task1".to_string()))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(model.examples_seen, 1);
         assert_eq!(model.replay_buffer.len(), 1);
@@ -972,13 +972,15 @@ mod tests {
         });
 
         // Save task parameters
-        model.save_task_parameters("task1".to_string()).unwrap();
+        model
+            .save_task_parameters("task1".to_string())
+            .expect("should succeed");
 
         // Modify embeddings
         model.embeddings *= 2.0;
 
         // Load task parameters
-        model.load_task_parameters("task1").unwrap();
+        model.load_task_parameters("task1").expect("should succeed");
 
         assert!(model.task_memory.contains_key("task1"));
     }
@@ -1011,9 +1013,12 @@ mod tests {
         // Add some examples to replay buffer
         let input = Array1::from_vec(vec![1.0, 2.0, 3.0]);
         let target = Array1::from_vec(vec![4.0, 5.0, 6.0]);
-        model.add_example(input, target, None).await.unwrap();
+        model
+            .add_example(input, target, None)
+            .await
+            .expect("should succeed");
 
-        let stats = model.train(Some(5)).await.unwrap();
+        let stats = model.train(Some(5)).await.expect("should succeed");
         assert_eq!(stats.epochs_completed, 5);
         assert!(model.is_trained());
     }

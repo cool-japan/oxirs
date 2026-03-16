@@ -1019,7 +1019,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "SPARQL 1.1 SELECT");
         assert!(api.is_some(), "SPARQL 1.1 SELECT should be registered");
-        assert!(api.unwrap().is_stable());
+        assert!(api.expect("API should be registered").is_stable());
     }
 
     #[test]
@@ -1030,7 +1030,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "RDF 1.2 Data Model");
         assert!(api.is_some());
-        assert!(api.unwrap().is_stable());
+        assert!(api.expect("API should be registered").is_stable());
     }
 
     #[test]
@@ -1038,7 +1038,7 @@ mod tests {
         let reg = registry();
         let api = reg.all_apis().iter().find(|m| m.feature == "GraphQL API");
         assert!(api.is_some());
-        assert!(api.unwrap().is_stable());
+        assert!(api.expect("API should be registered").is_stable());
     }
 
     #[test]
@@ -1046,7 +1046,7 @@ mod tests {
         let reg = registry();
         let api = reg.all_apis().iter().find(|m| m.feature == "GeoSPARQL 1.1");
         assert!(api.is_some());
-        assert!(api.unwrap().is_stable());
+        assert!(api.expect("API should be registered").is_stable());
     }
 
     #[test]
@@ -1057,7 +1057,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "SHACL Validation");
         assert!(api.is_some());
-        assert!(api.unwrap().is_stable());
+        assert!(api.expect("API should be registered").is_stable());
     }
 
     #[test]
@@ -1068,7 +1068,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "Time-Series Database");
         assert!(api.is_some());
-        assert!(api.unwrap().is_beta());
+        assert!(api.expect("API should be registered").is_beta());
     }
 
     #[test]
@@ -1079,7 +1079,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "GraphRAG Retrieval");
         assert!(api.is_some());
-        assert!(api.unwrap().is_beta());
+        assert!(api.expect("API should be registered").is_beta());
     }
 
     #[test]
@@ -1090,7 +1090,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "Physics Simulation");
         assert!(api.is_some());
-        assert!(api.unwrap().is_experimental());
+        assert!(api.expect("API should be registered").is_experimental());
     }
 
     #[test]
@@ -1101,7 +1101,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "Quantum Graph Optimization");
         assert!(api.is_some());
-        assert!(api.unwrap().is_experimental());
+        assert!(api.expect("API should be registered").is_experimental());
     }
 
     #[test]
@@ -1319,7 +1319,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "SPARQL 1.1 Update");
         assert!(api.is_some());
-        assert!(api.unwrap().is_stable());
+        assert!(api.expect("API should be registered").is_stable());
     }
 
     #[test]
@@ -1330,7 +1330,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "OWL 2 RL Reasoning");
         assert!(api.is_some());
-        assert!(api.unwrap().is_stable());
+        assert!(api.expect("API should be registered").is_stable());
     }
 
     #[test]
@@ -1341,7 +1341,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "OWL 2 QL Reasoning");
         assert!(api.is_some());
-        assert!(api.unwrap().is_beta());
+        assert!(api.expect("API should be registered").is_beta());
     }
 
     #[test]
@@ -1383,7 +1383,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "Zero-Knowledge Proofs");
         assert!(api.is_some());
-        assert!(api.unwrap().is_experimental());
+        assert!(api.expect("API should be registered").is_experimental());
     }
 
     #[test]
@@ -1394,7 +1394,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "DID (Decentralised Identifiers)");
         assert!(api.is_some());
-        assert!(api.unwrap().is_beta());
+        assert!(api.expect("API should be registered").is_beta());
     }
 
     #[test]
@@ -1405,7 +1405,7 @@ mod tests {
             .iter()
             .find(|m| m.feature == "Turtle Serialization");
         assert!(api.is_some());
-        assert!(api.unwrap().spec_url.is_some());
+        assert!(api.expect("API should be registered").spec_url.is_some());
     }
 
     #[test]

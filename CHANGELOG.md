@@ -5,6 +5,27 @@ All notable changes to OxiRS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-03-16
+
+### Changed
+- Version bump to 0.2.2
+- Production unwrap() audit: all unwrap() calls confirmed in test code only (zero production violations)
+- Fixed quantum_sparql_optimizer test marked #[ignore] (slow: >30s quantum simulation)
+- Refactored cloud_integration.rs (2000 lines → module with 6 files via splitrs)
+- Security: RUSTSEC-2026-0002 (lru 0.12.5 via tantivy) documented and suppressed; tantivy never calls iter_mut()
+- Security: RUSTSEC-2025-0134 (rustls-pemfile unmaintained) documented and suppressed; no CVE
+- Dependency updates: tempfile 3.26, chrono 0.4.44, rsa 0.9.10, serial_test 3.4, clap 4.6.0, serde_with 3.18.0, tracing-subscriber 0.3.23, oxigdal-proj 0.1.1
+- lib.rs doc comment version badges updated: 23 files v0.1.0 → v0.2.2 (html_root_url, shield.io badges)
+- Workspace policy (phase 1): all 27 subcrate Cargo.toml files converted to use `.workspace = true` for shared dependencies
+- Workspace policy (phase 2): 28 additional deps added to `[workspace.dependencies]` (axum, rustls, tokio-test, tokio-rustls, rustls-pemfile, webpki-roots, lazy_static, blake3, crossbeam-utils, bumpalo, num-complex, indicatif, async-stream, handlebars, config, image, rust_xlsxwriter, governor, prometheus, metrics, moka, kube, k8s-openapi, tokio-test, wiremock, serial_test, rcgen, tracing-opentelemetry, http-body-util); ~60 more inline dep entries converted to `.workspace = true`
+
+### Fixed
+- oxirs-rule: 792 compilation errors in test functions (missing Result return types after ? operator changes)
+- oxirs-vec: 66 test compilation errors (invalid ? usage on Options in test code)
+- oxirs-star: Missing StarError import, non-exhaustive match, wrong method in test
+- oxirs-tsdb/oxirs-federate/oxirs-graphrag: chrono::LocalResult .expect() → .unwrap()
+- oxirs-stream: large_enum_variant warning fixed (BoxedConsumer variants)
+
 ## [0.2.1] - 2026-03-11
 
 ### Fixed

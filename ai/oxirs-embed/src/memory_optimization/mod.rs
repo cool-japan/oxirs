@@ -232,44 +232,44 @@ mod tests {
 
     #[test]
     fn test_memory_optimizer_creation() {
-        let optimizer = MemoryOptimizer::new(MemoryOptimizationConfig::default()).unwrap();
-        let metrics = optimizer.metrics().unwrap();
+        let optimizer = MemoryOptimizer::new(MemoryOptimizationConfig::default()).expect("should succeed");
+        let metrics = optimizer.metrics().expect("should succeed");
         assert_eq!(metrics.total_allocated, 0);
     }
 
     #[test]
     fn test_memory_allocation() {
-        let optimizer = MemoryOptimizer::new(MemoryOptimizationConfig::default()).unwrap();
+        let optimizer = MemoryOptimizer::new(MemoryOptimizationConfig::default()).expect("should succeed");
 
-        let buffer = optimizer.allocate(1024).unwrap();
+        let buffer = optimizer.allocate(1024).expect("should succeed");
         assert!(buffer.len() >= 1024);
 
-        let metrics = optimizer.metrics().unwrap();
+        let metrics = optimizer.metrics().expect("should succeed");
         assert_eq!(metrics.pool_hits, 1);
         assert_eq!(metrics.total_allocated, 1024);
     }
 
     #[test]
     fn test_compression() {
-        let optimizer = MemoryOptimizer::new(MemoryOptimizationConfig::default()).unwrap();
+        let optimizer = MemoryOptimizer::new(MemoryOptimizationConfig::default()).expect("should succeed");
 
         let data = vec![42u8; 1000];
-        let compressed = optimizer.compress(&data).unwrap();
+        let compressed = optimizer.compress(&data).expect("should succeed");
         assert!(compressed.len() < data.len());
 
-        let decompressed = optimizer.decompress(&compressed).unwrap();
+        let decompressed = optimizer.decompress(&compressed).expect("should succeed");
         assert_eq!(decompressed, data);
     }
 
     #[test]
     fn test_pool_hit_rate() {
-        let optimizer = MemoryOptimizer::new(MemoryOptimizationConfig::default()).unwrap();
+        let optimizer = MemoryOptimizer::new(MemoryOptimizationConfig::default()).expect("should succeed");
 
         // Allocate from pool
-        let _b1 = optimizer.allocate(1024).unwrap();
-        let _b2 = optimizer.allocate(2048).unwrap();
+        let _b1 = optimizer.allocate(1024).expect("should succeed");
+        let _b2 = optimizer.allocate(2048).expect("should succeed");
 
-        let hit_rate = optimizer.pool_hit_rate().unwrap();
+        let hit_rate = optimizer.pool_hit_rate().expect("should succeed");
         assert!(hit_rate > 0.0);
     }
 }

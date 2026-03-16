@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the Tantivy full-text search integration implemented for OxiRS as part of Phase 2.1 (v0.2.1). This integration supplements the existing BM25 implementation with advanced text search capabilities powered by the Tantivy search engine library.
+This document describes the Tantivy full-text search integration implemented for OxiRS as part of Phase 2.1 (v0.2.2). This integration supplements the existing BM25 implementation with advanced text search capabilities powered by the Tantivy search engine library.
 
 ## Implementation Details
 
@@ -345,6 +345,6 @@ For questions or issues, refer to the OxiRS documentation or the COOLJAPAN OU te
 
 ---
 
-**Version**: OxiRS v0.2.1 Phase 2.1
+**Version**: OxiRS v0.2.2 Phase 2.1
 **Author**: Claude Sonnet 4.5 (COOLJAPAN OU)
 **Date**: 2026-02-09

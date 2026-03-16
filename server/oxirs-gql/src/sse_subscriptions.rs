@@ -554,7 +554,7 @@ mod tests {
         let result = manager.create_connection("client-123".to_string()).await;
         assert!(result.is_ok());
 
-        let (connection_id, _rx) = result.unwrap();
+        let (connection_id, _rx) = result.expect("should succeed");
         assert!(!connection_id.is_empty());
 
         let stats = manager.get_stats().await;
@@ -590,7 +590,7 @@ mod tests {
         let (connection_id, _rx) = manager
             .create_connection("client-123".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let result = manager
             .subscribe(
@@ -622,7 +622,7 @@ mod tests {
         let (connection_id, mut rx) = manager
             .create_connection("client-123".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         manager
             .subscribe(
@@ -639,7 +639,7 @@ mod tests {
                 },
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let data = serde_json::json!({"test": "data"});
         let result = manager.publish_event("sub-123", data).await;
@@ -659,7 +659,7 @@ mod tests {
         let (connection_id, _rx) = manager
             .create_connection("client-123".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let result = manager.close_connection(&connection_id).await;
         assert!(result.is_ok());

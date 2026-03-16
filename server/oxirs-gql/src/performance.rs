@@ -571,7 +571,7 @@ mod tests {
 
         tracker.record_operation(metrics);
 
-        let stats = tracker.get_stats().unwrap();
+        let stats = tracker.get_stats().expect("should succeed");
         assert_eq!(stats.total_requests, 1);
         assert_eq!(stats.total_errors, 0);
     }
@@ -602,7 +602,7 @@ mod tests {
         tracker.record_field_resolution("test_field", Duration::from_millis(150), false);
         tracker.record_field_resolution("test_field", Duration::from_millis(200), true);
 
-        let stats = tracker.get_stats().unwrap();
+        let stats = tracker.get_stats().expect("should succeed");
         assert_eq!(stats.slowest_fields.len(), 1);
         assert_eq!(stats.slowest_fields[0].field_name, "test_field");
         assert_eq!(stats.slowest_fields[0].call_count, 2);
@@ -618,6 +618,6 @@ mod tests {
         timer.mark_parsing_complete();
 
         assert!(timer.parsing_time.is_some());
-        assert!(timer.parsing_time.unwrap() > Duration::from_millis(0));
+        assert!(timer.parsing_time.expect("should succeed") > Duration::from_millis(0));
     }
 }

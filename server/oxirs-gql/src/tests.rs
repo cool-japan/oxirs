@@ -150,10 +150,11 @@ fn test_literal_creation() {
     let lang_literal = Literal::new("Bonjour".to_string()).with_language("fr".to_string());
     assert!(lang_literal.is_language_tagged());
     assert!(!lang_literal.is_typed());
-    assert_eq!(lang_literal.language.unwrap(), "fr");
+    assert_eq!(lang_literal.language.expect("should succeed"), "fr");
 
     // Test typed literal
-    let iri = IRI::new("http://www.w3.org/2001/XMLSchema#integer".to_string()).unwrap();
+    let iri =
+        IRI::new("http://www.w3.org/2001/XMLSchema#integer".to_string()).expect("should succeed");
     let typed_literal = Literal::new("42".to_string()).with_datatype(iri);
     assert!(!typed_literal.is_language_tagged());
     assert!(typed_literal.is_typed());
@@ -164,14 +165,14 @@ fn test_geolocation() {
     // Test valid coordinates
     let geo = GeoLocation::new(40.7128, -74.0060);
     assert!(geo.is_ok());
-    let geo = geo.unwrap();
+    let geo = geo.expect("should succeed");
     assert_eq!(geo.latitude, 40.7128);
     assert_eq!(geo.longitude, -74.0060);
     assert!(geo.altitude.is_none());
 
     // Test with altitude
     let geo_with_alt = GeoLocation::new(40.7128, -74.0060)
-        .unwrap()
+        .expect("should succeed")
         .with_altitude(10.0);
     assert_eq!(geo_with_alt.altitude, Some(10.0));
 
@@ -258,7 +259,7 @@ async fn test_introspection_resolver() {
     // Test unknown field
     let result = resolver.resolve_field("unknown", &args, &context).await;
     assert!(result.is_ok());
-    assert!(matches!(result.unwrap(), Value::NullValue));
+    assert!(matches!(result.expect("should succeed"), Value::NullValue));
 }
 
 #[test]
@@ -266,7 +267,7 @@ fn test_resolver_registry() {
     let mut registry = ResolverRegistry::new();
 
     // Create an RDF store for testing
-    let store = Arc::new(crate::RdfStore::new().unwrap());
+    let store = Arc::new(crate::RdfStore::new().expect("should succeed"));
 
     // Set up default resolvers
     registry.setup_default_resolvers(store);

@@ -1260,7 +1260,9 @@ mod tests {
     #[test]
     fn test_process_dream_step() {
         let mut processor = DreamProcessor::new();
-        processor.enter_dream_state(DreamState::DeepSleep).unwrap();
+        processor
+            .enter_dream_state(DreamState::DeepSleep)
+            .expect("operation should succeed");
 
         let result = processor.process_dream_step();
         assert!(result.is_ok());
@@ -1269,12 +1271,14 @@ mod tests {
     #[test]
     fn test_wake_up() {
         let mut processor = DreamProcessor::new();
-        processor.enter_dream_state(DreamState::REM).unwrap();
+        processor
+            .enter_dream_state(DreamState::REM)
+            .expect("operation should succeed");
 
         let wake_report = processor.wake_up();
         assert!(wake_report.is_ok());
 
-        let report = wake_report.unwrap();
+        let report = wake_report.expect("wake report should be available");
         assert!(matches!(report.previous_dream_state, DreamState::REM));
         assert!(matches!(processor.dream_state, DreamState::Awake));
     }

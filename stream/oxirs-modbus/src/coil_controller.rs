@@ -314,13 +314,13 @@ mod tests {
 
     #[test]
     fn test_coil_address_value() {
-        let addr = CoilAddress::new(42).unwrap();
+        let addr = CoilAddress::new(42).expect("should succeed");
         assert_eq!(addr.value(), 42);
     }
 
     #[test]
     fn test_coil_address_display() {
-        let addr = CoilAddress::new(100).unwrap();
+        let addr = CoilAddress::new(100).expect("should succeed");
         assert_eq!(format!("{addr}"), "100");
     }
 
@@ -332,8 +332,8 @@ mod tests {
 
     #[test]
     fn test_coil_address_ordering() {
-        let a = CoilAddress::new(10).unwrap();
-        let b = CoilAddress::new(20).unwrap();
+        let a = CoilAddress::new(10).expect("should succeed");
+        let b = CoilAddress::new(20).expect("should succeed");
         assert!(a < b);
     }
 
@@ -373,32 +373,35 @@ mod tests {
 
     #[test]
     fn test_coil_range_valid() {
-        let r = CoilRange::new(CoilAddress::new(0).unwrap(), 100).unwrap();
+        let r = CoilRange::new(CoilAddress::new(0).expect("should succeed"), 100)
+            .expect("should succeed");
         assert_eq!(r.count, 100);
     }
 
     #[test]
     fn test_coil_range_overflow() {
-        let r = CoilRange::new(CoilAddress::new(9990).unwrap(), 20);
+        let r = CoilRange::new(CoilAddress::new(9990).expect("should succeed"), 20);
         assert!(r.is_none(), "range should exceed address space");
     }
 
     #[test]
     fn test_coil_range_zero_count() {
-        let r = CoilRange::new(CoilAddress::new(0).unwrap(), 0);
+        let r = CoilRange::new(CoilAddress::new(0).expect("should succeed"), 0);
         assert!(r.is_none());
     }
 
     #[test]
     fn test_coil_range_addresses() {
-        let r = CoilRange::new(CoilAddress::new(10).unwrap(), 5).unwrap();
+        let r = CoilRange::new(CoilAddress::new(10).expect("should succeed"), 5)
+            .expect("should succeed");
         let addrs: Vec<u16> = r.addresses().map(|a| a.value()).collect();
         assert_eq!(addrs, vec![10, 11, 12, 13, 14]);
     }
 
     #[test]
     fn test_coil_range_boundary() {
-        let r = CoilRange::new(CoilAddress::new(9999).unwrap(), 1).unwrap();
+        let r = CoilRange::new(CoilAddress::new(9999).expect("should succeed"), 1)
+            .expect("should succeed");
         let addrs: Vec<u16> = r.addresses().map(|a| a.value()).collect();
         assert_eq!(addrs, vec![9999]);
     }
@@ -408,14 +411,14 @@ mod tests {
     #[test]
     fn test_controller_all_off_initially() {
         let ctrl = CoilController::new();
-        let addr = CoilAddress::new(0).unwrap();
+        let addr = CoilAddress::new(0).expect("should succeed");
         assert_eq!(ctrl.read_coil(addr), CoilState::Off);
     }
 
     #[test]
     fn test_controller_write_and_read_single() {
         let mut ctrl = CoilController::new();
-        let addr = CoilAddress::new(50).unwrap();
+        let addr = CoilAddress::new(50).expect("should succeed");
         ctrl.write_coil(addr, CoilState::On);
         assert_eq!(ctrl.read_coil(addr), CoilState::On);
     }
@@ -423,10 +426,10 @@ mod tests {
     #[test]
     fn test_controller_write_and_read_multiple() {
         let mut ctrl = CoilController::new();
-        let start = CoilAddress::new(0).unwrap();
+        let start = CoilAddress::new(0).expect("should succeed");
         let states = vec![CoilState::On, CoilState::Off, CoilState::On, CoilState::On];
         ctrl.write_coils(start, &states);
-        let range = CoilRange::new(start, 4).unwrap();
+        let range = CoilRange::new(start, 4).expect("should succeed");
         let read = ctrl.read_coils(range);
         assert_eq!(read, states);
     }
@@ -434,7 +437,7 @@ mod tests {
     #[test]
     fn test_controller_toggle() {
         let mut ctrl = CoilController::new();
-        let addr = CoilAddress::new(1).unwrap();
+        let addr = CoilAddress::new(1).expect("should succeed");
         assert_eq!(ctrl.read_coil(addr), CoilState::Off);
         ctrl.toggle(addr);
         assert_eq!(ctrl.read_coil(addr), CoilState::On);
@@ -445,9 +448,9 @@ mod tests {
     #[test]
     fn test_controller_count_on() {
         let mut ctrl = CoilController::new();
-        ctrl.write_coil(CoilAddress::new(0).unwrap(), CoilState::On);
-        ctrl.write_coil(CoilAddress::new(1).unwrap(), CoilState::On);
-        ctrl.write_coil(CoilAddress::new(2).unwrap(), CoilState::On);
+        ctrl.write_coil(CoilAddress::new(0).expect("should succeed"), CoilState::On);
+        ctrl.write_coil(CoilAddress::new(1).expect("should succeed"), CoilState::On);
+        ctrl.write_coil(CoilAddress::new(2).expect("should succeed"), CoilState::On);
         assert_eq!(ctrl.count_on(), 3);
     }
 
@@ -460,7 +463,7 @@ mod tests {
     #[test]
     fn test_controller_write_overwrite() {
         let mut ctrl = CoilController::new();
-        let addr = CoilAddress::new(5).unwrap();
+        let addr = CoilAddress::new(5).expect("should succeed");
         ctrl.write_coil(addr, CoilState::On);
         ctrl.write_coil(addr, CoilState::Off);
         assert_eq!(ctrl.read_coil(addr), CoilState::Off);
@@ -469,15 +472,15 @@ mod tests {
     #[test]
     fn test_controller_write_coils_partial_range() {
         let mut ctrl = CoilController::new();
-        let start = CoilAddress::new(9998).unwrap();
+        let start = CoilAddress::new(9998).expect("should succeed");
         // Only two states fit (9998, 9999); third is clamped
         ctrl.write_coils(start, &[CoilState::On, CoilState::On, CoilState::On]);
         assert_eq!(
-            ctrl.read_coil(CoilAddress::new(9998).unwrap()),
+            ctrl.read_coil(CoilAddress::new(9998).expect("should succeed")),
             CoilState::On
         );
         assert_eq!(
-            ctrl.read_coil(CoilAddress::new(9999).unwrap()),
+            ctrl.read_coil(CoilAddress::new(9999).expect("should succeed")),
             CoilState::On
         );
     }
@@ -492,14 +495,16 @@ mod tests {
 
     #[test]
     fn test_encode_fc01_function_code() {
-        let range = CoilRange::new(CoilAddress::new(0).unwrap(), 1).unwrap();
+        let range = CoilRange::new(CoilAddress::new(0).expect("should succeed"), 1)
+            .expect("should succeed");
         let pdu = encode_fc01_request(range);
         assert_eq!(pdu[0], 0x01);
     }
 
     #[test]
     fn test_encode_fc01_address_bytes() {
-        let range = CoilRange::new(CoilAddress::new(0x0102).unwrap(), 1).unwrap();
+        let range = CoilRange::new(CoilAddress::new(0x0102).expect("should succeed"), 1)
+            .expect("should succeed");
         let pdu = encode_fc01_request(range);
         assert_eq!(pdu[1], 0x01);
         assert_eq!(pdu[2], 0x02);
@@ -507,7 +512,8 @@ mod tests {
 
     #[test]
     fn test_encode_fc01_count_bytes() {
-        let range = CoilRange::new(CoilAddress::new(0).unwrap(), 0x0105).unwrap();
+        let range = CoilRange::new(CoilAddress::new(0).expect("should succeed"), 0x0105)
+            .expect("should succeed");
         let pdu = encode_fc01_request(range);
         assert_eq!(pdu[3], 0x01);
         assert_eq!(pdu[4], 0x05);
@@ -515,7 +521,8 @@ mod tests {
 
     #[test]
     fn test_encode_fc01_length() {
-        let range = CoilRange::new(CoilAddress::new(0).unwrap(), 10).unwrap();
+        let range = CoilRange::new(CoilAddress::new(0).expect("should succeed"), 10)
+            .expect("should succeed");
         assert_eq!(encode_fc01_request(range).len(), 5);
     }
 
@@ -569,34 +576,37 @@ mod tests {
 
     #[test]
     fn test_encode_fc05_function_code() {
-        let pdu = encode_fc05_request(CoilAddress::new(0).unwrap(), CoilState::On);
+        let pdu = encode_fc05_request(CoilAddress::new(0).expect("should succeed"), CoilState::On);
         assert_eq!(pdu[0], 0x05);
     }
 
     #[test]
     fn test_encode_fc05_on_value() {
-        let pdu = encode_fc05_request(CoilAddress::new(0).unwrap(), CoilState::On);
+        let pdu = encode_fc05_request(CoilAddress::new(0).expect("should succeed"), CoilState::On);
         assert_eq!(pdu[3], 0xFF);
         assert_eq!(pdu[4], 0x00);
     }
 
     #[test]
     fn test_encode_fc05_off_value() {
-        let pdu = encode_fc05_request(CoilAddress::new(0).unwrap(), CoilState::Off);
+        let pdu = encode_fc05_request(CoilAddress::new(0).expect("should succeed"), CoilState::Off);
         assert_eq!(pdu[3], 0x00);
         assert_eq!(pdu[4], 0x00);
     }
 
     #[test]
     fn test_encode_fc05_address() {
-        let pdu = encode_fc05_request(CoilAddress::new(0x1234).unwrap(), CoilState::On);
+        let pdu = encode_fc05_request(
+            CoilAddress::new(0x1234).expect("should succeed"),
+            CoilState::On,
+        );
         assert_eq!(pdu[1], 0x12);
         assert_eq!(pdu[2], 0x34);
     }
 
     #[test]
     fn test_encode_fc05_length() {
-        let pdu = encode_fc05_request(CoilAddress::new(0).unwrap(), CoilState::Off);
+        let pdu = encode_fc05_request(CoilAddress::new(0).expect("should succeed"), CoilState::Off);
         assert_eq!(pdu.len(), 5);
     }
 
@@ -604,14 +614,17 @@ mod tests {
 
     #[test]
     fn test_encode_fc15_function_code() {
-        let pdu = encode_fc15_request(CoilAddress::new(0).unwrap(), &[CoilState::On]);
+        let pdu = encode_fc15_request(
+            CoilAddress::new(0).expect("should succeed"),
+            &[CoilState::On],
+        );
         assert_eq!(pdu[0], 0x0F);
     }
 
     #[test]
     fn test_encode_fc15_count() {
         let states = vec![CoilState::On; 10];
-        let pdu = encode_fc15_request(CoilAddress::new(0).unwrap(), &states);
+        let pdu = encode_fc15_request(CoilAddress::new(0).expect("should succeed"), &states);
         let count = u16::from_be_bytes([pdu[3], pdu[4]]);
         assert_eq!(count, 10);
     }
@@ -620,28 +633,28 @@ mod tests {
     fn test_encode_fc15_byte_count() {
         // 10 coils → ceil(10/8) = 2 bytes
         let states = vec![CoilState::On; 10];
-        let pdu = encode_fc15_request(CoilAddress::new(0).unwrap(), &states);
+        let pdu = encode_fc15_request(CoilAddress::new(0).expect("should succeed"), &states);
         assert_eq!(pdu[5], 2);
     }
 
     #[test]
     fn test_encode_fc15_all_on_single_byte() {
         let states = vec![CoilState::On; 8];
-        let pdu = encode_fc15_request(CoilAddress::new(0).unwrap(), &states);
+        let pdu = encode_fc15_request(CoilAddress::new(0).expect("should succeed"), &states);
         assert_eq!(pdu[6], 0xFF);
     }
 
     #[test]
     fn test_encode_fc15_all_off_single_byte() {
         let states = vec![CoilState::Off; 8];
-        let pdu = encode_fc15_request(CoilAddress::new(0).unwrap(), &states);
+        let pdu = encode_fc15_request(CoilAddress::new(0).expect("should succeed"), &states);
         assert_eq!(pdu[6], 0x00);
     }
 
     #[test]
     fn test_encode_fc15_address() {
         let states = vec![CoilState::On];
-        let pdu = encode_fc15_request(CoilAddress::new(0x0055).unwrap(), &states);
+        let pdu = encode_fc15_request(CoilAddress::new(0x0055).expect("should succeed"), &states);
         assert_eq!(pdu[1], 0x00);
         assert_eq!(pdu[2], 0x55);
     }
@@ -660,7 +673,7 @@ mod tests {
             CoilState::On,
             CoilState::Off,
         ];
-        let pdu = encode_fc15_request(CoilAddress::new(0).unwrap(), &original);
+        let pdu = encode_fc15_request(CoilAddress::new(0).expect("should succeed"), &original);
         // Coil bytes start at index 6 in FC15
         let coil_bytes = &pdu[6..];
         let decoded = decode_fc01_response(coil_bytes, 8);
@@ -681,7 +694,7 @@ mod tests {
             CoilState::On,
             CoilState::On,
         ];
-        let pdu = encode_fc15_request(CoilAddress::new(0).unwrap(), &original);
+        let pdu = encode_fc15_request(CoilAddress::new(0).expect("should succeed"), &original);
         let coil_bytes = &pdu[6..];
         let decoded = decode_fc01_response(coil_bytes, 10);
         assert_eq!(decoded, original);
@@ -689,14 +702,20 @@ mod tests {
 
     #[test]
     fn test_roundtrip_1_coil_on() {
-        let pdu = encode_fc15_request(CoilAddress::new(0).unwrap(), &[CoilState::On]);
+        let pdu = encode_fc15_request(
+            CoilAddress::new(0).expect("should succeed"),
+            &[CoilState::On],
+        );
         let decoded = decode_fc01_response(&pdu[6..], 1);
         assert_eq!(decoded, vec![CoilState::On]);
     }
 
     #[test]
     fn test_roundtrip_1_coil_off() {
-        let pdu = encode_fc15_request(CoilAddress::new(0).unwrap(), &[CoilState::Off]);
+        let pdu = encode_fc15_request(
+            CoilAddress::new(0).expect("should succeed"),
+            &[CoilState::Off],
+        );
         let decoded = decode_fc01_response(&pdu[6..], 1);
         assert_eq!(decoded, vec![CoilState::Off]);
     }
@@ -1018,7 +1037,7 @@ mod bank_tests {
     #[test]
     fn test_write_protected_rejected() {
         let mut b = make_bank();
-        b.set_write_protected(0, true).unwrap();
+        b.set_write_protected(0, true).expect("should succeed");
         assert_eq!(b.write(0, CoilState::On), Err(CoilError::WriteProtected(0)));
     }
 
@@ -1099,7 +1118,7 @@ mod bank_tests {
     #[test]
     fn test_toggle_write_protected() {
         let mut b = make_bank();
-        b.set_write_protected(0, true).unwrap();
+        b.set_write_protected(0, true).expect("should succeed");
         assert_eq!(b.toggle(0), Err(CoilError::WriteProtected(0)));
     }
 
@@ -1114,9 +1133,9 @@ mod bank_tests {
     #[test]
     fn test_set_write_protected_then_unprotect() {
         let mut b = make_bank();
-        b.set_write_protected(0, true).unwrap();
+        b.set_write_protected(0, true).expect("should succeed");
         assert!(b.write(0, CoilState::On).is_err());
-        b.set_write_protected(0, false).unwrap();
+        b.set_write_protected(0, false).expect("should succeed");
         assert!(b.write(0, CoilState::On).is_ok());
     }
 
@@ -1132,8 +1151,8 @@ mod bank_tests {
     #[test]
     fn test_active_coils_after_write() {
         let mut b = make_bank();
-        b.write(0, CoilState::On).unwrap();
-        b.write(2, CoilState::On).unwrap();
+        b.write(0, CoilState::On).expect("should succeed");
+        b.write(2, CoilState::On).expect("should succeed");
         let mut active = b.active_coils();
         active.sort_unstable();
         assert_eq!(active, vec![0u16, 1, 2]);

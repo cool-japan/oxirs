@@ -738,9 +738,9 @@ mod tests {
 
         // Create test geometries
         let geometries = vec![
-            Geometry::from_wkt("POINT(1.0 2.0)").unwrap(),
-            Geometry::from_wkt("POINT(3.0 4.0)").unwrap(),
-            Geometry::from_wkt("POINT(5.0 6.0)").unwrap(),
+            Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed"),
+            Geometry::from_wkt("POINT(3.0 4.0)").expect("should succeed"),
+            Geometry::from_wkt("POINT(5.0 6.0)").expect("should succeed"),
         ];
 
         // Write shapefile
@@ -777,8 +777,9 @@ mod tests {
 
         // Create test geometries
         let geometries = vec![
-            Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap(),
-            Geometry::from_wkt("POLYGON((10 10, 14 10, 14 14, 10 14, 10 10))").unwrap(),
+            Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON((10 10, 14 10, 14 14, 10 14, 10 10))")
+                .expect("should succeed"),
         ];
 
         // Write shapefile
@@ -815,8 +816,8 @@ mod tests {
 
         // Create test geometries
         let geometries = vec![
-            Geometry::from_wkt("LINESTRING(0 0, 1 1, 2 2)").unwrap(),
-            Geometry::from_wkt("LINESTRING(3 3, 4 4, 5 5)").unwrap(),
+            Geometry::from_wkt("LINESTRING(0 0, 1 1, 2 2)").expect("should succeed"),
+            Geometry::from_wkt("LINESTRING(3 3, 4 4, 5 5)").expect("should succeed"),
         ];
 
         // Write shapefile
@@ -858,8 +859,8 @@ mod tests {
 
         let temp_path = temp_dir().join("test_mixed_crs.shp");
 
-        let geom1 = Geometry::from_wkt("POINT(1.0 2.0)").unwrap();
-        let mut geom2 = Geometry::from_wkt("POINT(3.0 4.0)").unwrap();
+        let geom1 = Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed");
+        let mut geom2 = Geometry::from_wkt("POINT(3.0 4.0)").expect("should succeed");
 
         // Set different CRS
         geom2.crs = Crs::new("http://www.opengis.net/def/crs/EPSG/0/3857");

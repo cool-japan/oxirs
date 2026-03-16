@@ -128,12 +128,12 @@ fn test_optional_multiple_subjects() {
         .iter()
         .find(|r| r.get("s").map(|v| v.contains("alice")).unwrap_or(false));
     assert!(alice_row.is_some());
-    assert!(alice_row.unwrap().contains_key("age"));
+    assert!(alice_row.expect("should succeed").contains_key("age"));
     let carol_row = results
         .iter()
         .find(|r| r.get("s").map(|v| v.contains("carol")).unwrap_or(false));
     assert!(carol_row.is_some());
-    assert!(!carol_row.unwrap().contains_key("age"));
+    assert!(!carol_row.expect("should succeed").contains_key("age"));
 }
 
 #[test]

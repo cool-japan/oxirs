@@ -554,7 +554,7 @@ mod tests {
             })
             .collect();
 
-        let (train, val) = manager.split_data(&triples).unwrap();
+        let (train, val) = manager.split_data(&triples).expect("should succeed");
         assert_eq!(train.len(), 80);
         assert_eq!(val.len(), 20);
     }

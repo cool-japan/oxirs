@@ -1002,20 +1002,20 @@ mod tests {
 
     #[test]
     fn test_term_ref() {
-        let node = NamedNode::new("http://example.org/test").unwrap();
+        let node = NamedNode::new("http://example.org/test").expect("valid IRI");
         let term_ref = TermRef::from_named_node(&node);
 
         assert!(term_ref.is_named_node());
         assert_eq!(term_ref.as_str(), "http://example.org/test");
 
-        let owned = term_ref.to_owned().unwrap();
+        let owned = term_ref.to_owned().expect("operation should succeed");
         assert!(owned.is_named_node());
     }
 
     #[test]
     fn test_triple_ref() {
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("test object");
         let triple = Triple::new(subject, predicate, object);
 
@@ -1024,7 +1024,7 @@ mod tests {
         assert!(triple_ref.predicate.is_named_node());
         assert!(triple_ref.object.is_literal());
 
-        let owned = triple_ref.to_owned().unwrap();
+        let owned = triple_ref.to_owned().expect("operation should succeed");
         assert_eq!(owned, triple);
     }
 
@@ -1033,8 +1033,8 @@ mod tests {
         let graph = LockFreeGraph::new();
         assert!(graph.is_empty());
 
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("test object");
         let triple = Triple::new(subject, predicate, object);
 
@@ -1048,8 +1048,8 @@ mod tests {
     fn test_optimized_graph() {
         let graph = OptimizedGraph::new();
 
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("test object");
         let triple = Triple::new(subject.clone(), predicate.clone(), object.clone());
 
@@ -1125,8 +1125,9 @@ mod tests {
             .map(|i| {
                 let graph = Arc::clone(&graph);
                 thread::spawn(move || {
-                    let subject = NamedNode::new(format!("http://example.org/s{i}")).unwrap();
-                    let predicate = NamedNode::new("http://example.org/p").unwrap();
+                    let subject = NamedNode::new(format!("http://example.org/s{i}"))
+                        .expect("valid IRI from format");
+                    let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
                     let object = Literal::new(format!("object{i}"));
                     let triple = Triple::new(subject, predicate, object);
 
@@ -1135,7 +1136,10 @@ mod tests {
             })
             .collect();
 
-        let results: Vec<bool> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let results: Vec<bool> = handles
+            .into_iter()
+            .map(|h| h.join().expect("thread should not panic"))
+            .collect();
         assert!(results.iter().all(|&inserted| inserted));
 
         let stats = graph.stats();

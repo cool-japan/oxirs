@@ -138,36 +138,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_simd_cosine_distance() {
+    fn test_simd_cosine_distance() -> Result<()> {
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![1.0, 0.0, 0.0];
-        let dist = simd_cosine_distance(&a, &b).unwrap();
+        let dist = simd_cosine_distance(&a, &b)?;
         assert!((dist - 0.0).abs() < 1e-6); // Identical vectors have distance 0
 
         let c = vec![0.0, 1.0, 0.0];
-        let dist = simd_cosine_distance(&a, &c).unwrap();
+        let dist = simd_cosine_distance(&a, &c)?;
         assert!((dist - 1.0).abs() < 1e-6); // Orthogonal vectors have distance 1
+        Ok(())
     }
 
     #[test]
-    fn test_simd_euclidean() {
+    fn test_simd_euclidean() -> Result<()> {
         let a = vec![0.0, 0.0, 0.0];
         let b = vec![1.0, 1.0, 1.0];
-        let dist = simd_euclidean(&a, &b).unwrap();
+        let dist = simd_euclidean(&a, &b)?;
         let expected = 3.0_f32.sqrt();
         assert!((dist - expected).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_simd_manhattan() {
+    fn test_simd_manhattan() -> Result<()> {
         let a = vec![0.0, 0.0, 0.0];
         let b = vec![1.0, 1.0, 1.0];
-        let dist = simd_manhattan(&a, &b).unwrap();
+        let dist = simd_manhattan(&a, &b)?;
         assert!((dist - 3.0).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_simd_batch_distances() {
+    fn test_simd_batch_distances() -> Result<()> {
         let query = vec![1.0, 0.0, 0.0];
         let vectors = vec![
             vec![1.0, 0.0, 0.0],
@@ -175,10 +178,11 @@ mod tests {
             vec![0.0, 0.0, 1.0],
         ];
 
-        let distances = simd_batch_cosine_distances(&query, &vectors).unwrap();
+        let distances = simd_batch_cosine_distances(&query, &vectors)?;
         assert_eq!(distances.len(), 3);
         assert!((distances[0] - 0.0).abs() < 1e-6); // Same vector
         assert!((distances[1] - 1.0).abs() < 1e-6); // Orthogonal
         assert!((distances[2] - 1.0).abs() < 1e-6); // Orthogonal
+        Ok(())
     }
 }

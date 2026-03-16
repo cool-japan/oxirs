@@ -1221,13 +1221,13 @@ mod tests {
     #[test]
     fn test_model_audit() {
         let config = SecurityAuditConfig::default();
-        let mut framework = SecurityAuditFramework::new(config).unwrap();
+        let mut framework = SecurityAuditFramework::new(config).expect("should succeed");
         let model_data = create_test_model_data();
 
         let result = framework.audit_model("test_model", &model_data);
         assert!(result.is_ok());
 
-        let report = result.unwrap();
+        let report = result.expect("should succeed");
         assert_eq!(report.model_id, "test_model");
         assert!(report.overall_security_score <= 100.0);
         assert!(report.overall_security_score >= 0.0);
@@ -1238,7 +1238,7 @@ mod tests {
         let mut tester = AdversarialRobustnessTester::new();
         let model_data = create_test_model_data();
 
-        let findings = tester.test_robustness(&model_data).unwrap();
+        let findings = tester.test_robustness(&model_data).expect("should succeed");
         // Findings may or may not be present depending on random tests
         assert!(findings.len() <= 3); // At most 3 types of attacks
     }
@@ -1248,7 +1248,7 @@ mod tests {
         let mut analyzer = PrivacyLeakAnalyzer::new();
         let model_data = create_test_model_data();
 
-        let findings = analyzer.detect_leaks(&model_data).unwrap();
+        let findings = analyzer.detect_leaks(&model_data).expect("should succeed");
         assert!(findings.len() <= 3); // At most 3 types of privacy attacks
     }
 
@@ -1257,7 +1257,9 @@ mod tests {
         let mut detector = BackdoorDetector::new();
         let model_data = create_test_model_data();
 
-        let findings = detector.detect_backdoors(&model_data).unwrap();
+        let findings = detector
+            .detect_backdoors(&model_data)
+            .expect("should succeed");
         assert!(findings.len() <= 3); // At most 3 types of backdoor tests
     }
 
@@ -1266,7 +1268,9 @@ mod tests {
         let checker = ComplianceChecker::new();
         let model_data = create_test_model_data();
 
-        let compliance = checker.check_compliance(&model_data).unwrap();
+        let compliance = checker
+            .check_compliance(&model_data)
+            .expect("should succeed");
         assert!(compliance.contains_key("GDPR"));
         assert!(compliance.contains_key("CCPA"));
         assert!(compliance.contains_key("EU_AI_ACT"));
@@ -1301,7 +1305,7 @@ mod tests {
     #[test]
     fn test_security_score_calculation() {
         let config = SecurityAuditConfig::default();
-        let framework = SecurityAuditFramework::new(config).unwrap();
+        let framework = SecurityAuditFramework::new(config).expect("should succeed");
 
         let findings = vec![
             SecurityFinding {
@@ -1333,7 +1337,7 @@ mod tests {
     #[test]
     fn test_recommendation_generation() {
         let config = SecurityAuditConfig::default();
-        let framework = SecurityAuditFramework::new(config).unwrap();
+        let framework = SecurityAuditFramework::new(config).expect("should succeed");
 
         let findings = vec![SecurityFinding {
             finding_id: Uuid::new_v4(),

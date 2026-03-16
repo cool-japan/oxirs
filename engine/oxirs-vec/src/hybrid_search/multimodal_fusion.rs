@@ -524,128 +524,137 @@ mod tests {
     }
 
     #[test]
-    fn test_weighted_fusion() {
+    fn test_weighted_fusion() -> Result<()> {
         let (text, vector, spatial) = create_test_results();
         let fusion = MultimodalFusion::new(FusionConfig::default());
 
         let weights = vec![0.4, 0.4, 0.2]; // Text, Vector, Spatial
         let strategy = FusionStrategy::Weighted { weights };
 
-        let results = fusion
-            .fuse(&text, &vector, &spatial, Some(strategy))
-            .unwrap();
+        let results = fusion.fuse(&text, &vector, &spatial, Some(strategy))?;
 
         assert!(!results.is_empty());
         assert!(results[0].total_score > 0.0);
         // doc1 appears in all three lists, should have high score
-        let doc1 = results.iter().find(|r| r.uri == "doc1").unwrap();
+        let doc1 = results
+            .iter()
+            .find(|r| r.uri == "doc1")
+            .expect("doc1 should be found");
         assert!(doc1.scores.len() == 3);
+        Ok(())
     }
 
     #[test]
-    fn test_sequential_fusion() {
+    fn test_sequential_fusion() -> Result<()> {
         let (text, vector, spatial) = create_test_results();
         let fusion = MultimodalFusion::new(FusionConfig::default());
 
         let order = vec![Modality::Text, Modality::Vector];
         let strategy = FusionStrategy::Sequential { order };
 
-        let results = fusion
-            .fuse(&text, &vector, &spatial, Some(strategy))
-            .unwrap();
+        let results = fusion.fuse(&text, &vector, &spatial, Some(strategy))?;
 
         assert!(!results.is_empty());
         // Should only include docs that passed text filter
         assert!(results
             .iter()
             .all(|r| ["doc1", "doc2", "doc3"].contains(&r.uri.as_str())));
+        Ok(())
     }
 
     #[test]
-    fn test_cascade_fusion() {
+    fn test_cascade_fusion() -> Result<()> {
         let (text, vector, spatial) = create_test_results();
         let fusion = MultimodalFusion::new(FusionConfig::default());
 
         let thresholds = vec![0.0, 0.0, 0.0]; // Accept all for testing
         let strategy = FusionStrategy::Cascade { thresholds };
 
-        let results = fusion
-            .fuse(&text, &vector, &spatial, Some(strategy))
-            .unwrap();
+        let results = fusion.fuse(&text, &vector, &spatial, Some(strategy))?;
 
         assert!(!results.is_empty());
         // Should have scores from multiple modalities
         if let Some(doc1) = results.iter().find(|r| r.uri == "doc1") {
             assert!(doc1.scores.len() >= 2);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_rank_fusion() {
+    fn test_rank_fusion() -> Result<()> {
         let (text, vector, spatial) = create_test_results();
         let fusion = MultimodalFusion::new(FusionConfig::default());
 
         let strategy = FusionStrategy::RankFusion;
-        let results = fusion
-            .fuse(&text, &vector, &spatial, Some(strategy))
-            .unwrap();
+        let results = fusion.fuse(&text, &vector, &spatial, Some(strategy))?;
 
         assert!(!results.is_empty());
         // doc1 appears in all three lists at good positions
-        let doc1 = results.iter().find(|r| r.uri == "doc1").unwrap();
+        let doc1 = results
+            .iter()
+            .find(|r| r.uri == "doc1")
+            .expect("doc1 should be found");
         // doc4 appears only in vector list
-        let doc4 = results.iter().find(|r| r.uri == "doc4").unwrap();
+        let doc4 = results
+            .iter()
+            .find(|r| r.uri == "doc4")
+            .expect("doc4 should be found");
         // doc1 should have higher RRF score
         assert!(doc1.total_score > doc4.total_score);
+        Ok(())
     }
 
     #[test]
-    fn test_min_max_normalization() {
+    fn test_min_max_normalization() -> Result<()> {
         let fusion = MultimodalFusion::new(FusionConfig::default());
         let scores = vec![10.0, 5.0, 0.0];
 
-        let normalized = fusion.min_max_normalize(&scores).unwrap();
+        let normalized = fusion.min_max_normalize(&scores)?;
 
         assert!((normalized[0] - 1.0).abs() < 1e-6);
         assert!((normalized[1] - 0.5).abs() < 1e-6);
         assert!((normalized[2] - 0.0).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_z_score_normalization() {
+    fn test_z_score_normalization() -> Result<()> {
         let fusion = MultimodalFusion::new(FusionConfig::default());
         let scores = vec![10.0, 5.0, 0.0];
 
-        let normalized = fusion.z_score_normalize(&scores).unwrap();
+        let normalized = fusion.z_score_normalize(&scores)?;
 
         // Mean should be ~5.0
         // Z-scores should have mean ~0
         let mean: f64 = normalized.iter().sum::<f64>() / normalized.len() as f64;
         assert!(mean.abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_sigmoid_normalization() {
+    fn test_sigmoid_normalization() -> Result<()> {
         let fusion = MultimodalFusion::new(FusionConfig::default());
         let scores = vec![0.0, 1.0, -1.0];
 
-        let normalized = fusion.sigmoid_normalize(&scores).unwrap();
+        let normalized = fusion.sigmoid_normalize(&scores)?;
 
         // Sigmoid of 0 should be 0.5
         assert!((normalized[0] - 0.5).abs() < 1e-6);
         // All values should be in (0, 1)
         assert!(normalized.iter().all(|&s| s > 0.0 && s < 1.0));
+        Ok(())
     }
 
     #[test]
-    fn test_empty_results() {
+    fn test_empty_results() -> Result<()> {
         let fusion = MultimodalFusion::new(FusionConfig::default());
         let empty: Vec<DocumentScore> = Vec::new();
 
         let strategy = FusionStrategy::RankFusion;
-        let results = fusion.fuse(&empty, &empty, &empty, Some(strategy)).unwrap();
+        let results = fusion.fuse(&empty, &empty, &empty, Some(strategy))?;
 
         assert!(results.is_empty());
+        Ok(())
     }
 
     #[test]

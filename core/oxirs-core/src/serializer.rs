@@ -1019,25 +1019,26 @@ mod tests {
         let mut graph = Graph::new();
 
         // Add a simple triple
-        let subject = NamedNode::new("http://example.org/alice").unwrap();
-        let predicate = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
+        let subject = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let predicate = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI");
         let object = Literal::new("Alice Smith");
         let triple1 = Triple::new(subject.clone(), predicate, object);
 
         // Add a typed literal triple
-        let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
+        let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").expect("valid IRI");
         let age_obj = Literal::new_typed("30", crate::vocab::xsd::INTEGER.clone());
         let triple2 = Triple::new(subject.clone(), age_pred, age_obj);
 
         // Add a language-tagged literal triple
-        let desc_pred = NamedNode::new("http://example.org/description").unwrap();
-        let desc_obj = Literal::new_lang("Une personne", "fr").unwrap();
+        let desc_pred = NamedNode::new("http://example.org/description").expect("valid IRI");
+        let desc_obj =
+            Literal::new_lang("Une personne", "fr").expect("construction should succeed");
         let triple3 = Triple::new(subject, desc_pred, desc_obj);
 
         // Add a blank node triple
-        let blank_subject = BlankNode::new("person1").unwrap();
-        let knows_pred = NamedNode::new("http://xmlns.com/foaf/0.1/knows").unwrap();
-        let knows_obj = NamedNode::new("http://example.org/bob").unwrap();
+        let blank_subject = BlankNode::new("person1").expect("valid blank node id");
+        let knows_pred = NamedNode::new("http://xmlns.com/foaf/0.1/knows").expect("valid IRI");
+        let knows_obj = NamedNode::new("http://example.org/bob").expect("valid IRI");
         let triple4 = Triple::new(blank_subject, knows_pred, knows_obj);
 
         graph.insert(triple1);
@@ -1056,7 +1057,7 @@ mod tests {
         let result = serializer.serialize_graph(&graph);
         assert!(result.is_ok());
 
-        let ntriples = result.unwrap();
+        let ntriples = result.expect("should have value");
         assert!(!ntriples.is_empty());
 
         // Check that all lines end with " ."
@@ -1078,8 +1079,8 @@ mod tests {
     #[test]
     fn test_literal_escaping() {
         let mut graph = Graph::new();
-        let subject = NamedNode::new("http://example.org/test").unwrap();
-        let predicate = NamedNode::new("http://example.org/description").unwrap();
+        let subject = NamedNode::new("http://example.org/test").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/description").expect("valid IRI");
 
         // Test literal with quotes and escape sequences
         let object = Literal::new("Text with \"quotes\" and \n newlines \t and tabs");
@@ -1087,7 +1088,9 @@ mod tests {
         graph.insert(triple);
 
         let serializer = Serializer::new(RdfFormat::NTriples);
-        let result = serializer.serialize_graph(&graph).unwrap();
+        let result = serializer
+            .serialize_graph(&graph)
+            .expect("operation should succeed");
 
         // Check that quotes and escape sequences are properly escaped
         assert!(result.contains("\\\"quotes\\\""));
@@ -1103,15 +1106,15 @@ mod tests {
         let result = serializer.serialize_graph(&graph);
         assert!(result.is_ok());
 
-        let ntriples = result.unwrap();
+        let ntriples = result.expect("should have value");
         assert!(ntriples.is_empty());
     }
 
     #[test]
     fn test_variable_serialization_error() {
         let mut graph = Graph::new();
-        let variable_subject = Variable::new("x").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let variable_subject = Variable::new("x").expect("valid variable name");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("test");
 
         let triple = Triple::new(variable_subject, predicate, object);
@@ -1135,7 +1138,7 @@ mod tests {
         let result = serializer.serialize_graph(&graph);
         assert!(result.is_ok());
 
-        let turtle = result.unwrap();
+        let turtle = result.expect("should have value");
         assert!(!turtle.is_empty());
 
         // Should contain prefix declarations
@@ -1153,10 +1156,11 @@ mod tests {
         let mut graph = Graph::new();
 
         // Create triples using FOAF vocabulary
-        let alice = NamedNode::new("http://example.org/alice").unwrap();
-        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
-        let person_type = NamedNode::new("http://xmlns.com/foaf/0.1/Person").unwrap();
-        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+        let alice = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI");
+        let person_type = NamedNode::new("http://xmlns.com/foaf/0.1/Person").expect("valid IRI");
+        let rdf_type =
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
 
         let name_literal = Literal::new("Alice");
 
@@ -1164,7 +1168,9 @@ mod tests {
         graph.insert(Triple::new(alice, rdf_type, person_type));
 
         let serializer = Serializer::new(RdfFormat::Turtle);
-        let turtle = serializer.serialize_graph(&graph).unwrap();
+        let turtle = serializer
+            .serialize_graph(&graph)
+            .expect("operation should succeed");
 
         // Should include FOAF prefix
         assert!(turtle.contains("@prefix foaf: <http://xmlns.com/foaf/0.1/>"));
@@ -1180,9 +1186,9 @@ mod tests {
     fn test_turtle_serialization_abbreviated_syntax() {
         let mut graph = Graph::new();
 
-        let alice = NamedNode::new("http://example.org/alice").unwrap();
-        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
-        let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
+        let alice = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI");
+        let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").expect("valid IRI");
 
         let name_literal = Literal::new("Alice");
         let age_literal = Literal::new_typed("30", crate::vocab::xsd::INTEGER.clone());
@@ -1191,7 +1197,9 @@ mod tests {
         graph.insert(Triple::new(alice, age_pred, age_literal));
 
         let serializer = Serializer::new(RdfFormat::Turtle);
-        let turtle = serializer.serialize_graph(&graph).unwrap();
+        let turtle = serializer
+            .serialize_graph(&graph)
+            .expect("operation should succeed");
 
         // Should use ; syntax for same subject
         assert!(turtle.contains(";"));
@@ -1204,12 +1212,13 @@ mod tests {
     fn test_turtle_serialization_literals() {
         let mut graph = Graph::new();
 
-        let subject = NamedNode::new("http://example.org/test").unwrap();
-        let desc_pred = NamedNode::new("http://example.org/description").unwrap();
-        let age_pred = NamedNode::new("http://example.org/age").unwrap();
+        let subject = NamedNode::new("http://example.org/test").expect("valid IRI");
+        let desc_pred = NamedNode::new("http://example.org/description").expect("valid IRI");
+        let age_pred = NamedNode::new("http://example.org/age").expect("valid IRI");
 
         // Language-tagged literal
-        let desc_literal = Literal::new_lang("Une description", "fr").unwrap();
+        let desc_literal =
+            Literal::new_lang("Une description", "fr").expect("construction should succeed");
         // Typed literal
         let age_literal = Literal::new_typed("25", crate::vocab::xsd::INTEGER.clone());
 
@@ -1217,7 +1226,9 @@ mod tests {
         graph.insert(Triple::new(subject, age_pred, age_literal));
 
         let serializer = Serializer::new(RdfFormat::Turtle);
-        let turtle = serializer.serialize_graph(&graph).unwrap();
+        let turtle = serializer
+            .serialize_graph(&graph)
+            .expect("operation should succeed");
 
         // Should contain language tag
         assert!(turtle.contains("@fr"));

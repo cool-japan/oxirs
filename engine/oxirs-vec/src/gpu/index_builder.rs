@@ -1164,6 +1164,7 @@ impl PipelinedIndexBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     fn make_test_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
         (0..n)
@@ -1199,27 +1200,29 @@ mod tests {
     }
 
     #[test]
-    fn test_add_vector_dimension_check() {
+    fn test_add_vector_dimension_check() -> Result<()> {
         let config = GpuIndexBuilderConfig::default();
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
 
-        builder.add_vector(0, vec![1.0, 2.0, 3.0]).unwrap();
+        builder.add_vector(0, vec![1.0, 2.0, 3.0])?;
 
         // Adding vector with different dimension should fail
         let result = builder.add_vector(1, vec![1.0, 2.0]);
         assert!(result.is_err(), "Should reject mismatched dimensions");
+        Ok(())
     }
 
     #[test]
-    fn test_add_empty_vector_fails() {
+    fn test_add_empty_vector_fails() -> Result<()> {
         let config = GpuIndexBuilderConfig::default();
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
         let result = builder.add_vector(0, vec![]);
         assert!(result.is_err(), "Should reject empty vector");
+        Ok(())
     }
 
     #[test]
-    fn test_build_small_index() {
+    fn test_build_small_index() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 4,
             ef_construction: 10,
@@ -1227,21 +1230,22 @@ mod tests {
             ..Default::default()
         };
 
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
         let vectors = make_test_vectors(20, 8);
 
         for (i, v) in vectors.iter().enumerate() {
-            builder.add_vector(i, v.clone()).unwrap();
+            builder.add_vector(i, v.clone())?;
         }
 
-        let graph = builder.build().unwrap();
+        let graph = builder.build()?;
         assert_eq!(graph.nodes.len(), 20);
         assert!(graph.stats.vectors_indexed == 20);
         // build_time_ms may be 0 for fast builds, no assertion needed
+        Ok(())
     }
 
     #[test]
-    fn test_build_produces_valid_graph() {
+    fn test_build_produces_valid_graph() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 4,
             ef_construction: 20,
@@ -1249,14 +1253,14 @@ mod tests {
             ..Default::default()
         };
 
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
         let vectors = make_test_vectors(50, 16);
 
         for (i, v) in vectors.iter().enumerate() {
-            builder.add_vector(i, v.clone()).unwrap();
+            builder.add_vector(i, v.clone())?;
         }
 
-        let graph = builder.build().unwrap();
+        let graph = builder.build()?;
 
         // Every node should have valid neighbor IDs
         for node in &graph.nodes {
@@ -1271,10 +1275,11 @@ mod tests {
                 }
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_hnsw_graph_search() {
+    fn test_hnsw_graph_search() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 8,
             ef_construction: 50,
@@ -1283,18 +1288,18 @@ mod tests {
             ..Default::default()
         };
 
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
         let vectors = make_test_vectors(100, 8);
 
         for (i, v) in vectors.iter().enumerate() {
-            builder.add_vector(i, v.clone()).unwrap();
+            builder.add_vector(i, v.clone())?;
         }
 
-        let graph = builder.build().unwrap();
+        let graph = builder.build()?;
 
         // Search for nearest neighbor
         let query = vectors[5].clone();
-        let results = graph.search_knn(&query, 5, 50).unwrap();
+        let results = graph.search_knn(&query, 5, 50)?;
 
         assert!(!results.is_empty(), "Search should return results");
         assert!(results.len() <= 5, "Should return at most k results");
@@ -1303,10 +1308,11 @@ mod tests {
         if !results.is_empty() {
             assert!(results[0].1 >= 0.0, "Distance should be non-negative");
         }
+        Ok(())
     }
 
     #[test]
-    fn test_hnsw_graph_search_cosine() {
+    fn test_hnsw_graph_search_cosine() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 4,
             ef_construction: 20,
@@ -1315,35 +1321,37 @@ mod tests {
             ..Default::default()
         };
 
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
 
         // Add orthogonal unit vectors (maximally different)
         for i in 0..10 {
             let mut v = vec![0.0f32; 10];
             v[i] = 1.0;
-            builder.add_vector(i, v).unwrap();
+            builder.add_vector(i, v)?;
         }
 
-        let graph = builder.build().unwrap();
+        let graph = builder.build()?;
 
         // Searching for v[0] should find v[0] as nearest
         let query = vec![1.0f32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-        let results = graph.search_knn(&query, 3, 30).unwrap();
+        let results = graph.search_knn(&query, 3, 30)?;
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_build_empty_fails() {
+    fn test_build_empty_fails() -> Result<()> {
         let config = GpuIndexBuilderConfig::default();
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
         assert!(
             builder.build().is_err(),
             "Build with no vectors should fail"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_build_stats_populated() {
+    fn test_build_stats_populated() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 4,
             ef_construction: 10,
@@ -1353,21 +1361,22 @@ mod tests {
             ..Default::default()
         };
 
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
         let vectors = make_test_vectors(10, 4);
         for (i, v) in vectors.iter().enumerate() {
-            builder.add_vector(i, v.clone()).unwrap();
+            builder.add_vector(i, v.clone())?;
         }
-        let graph = builder.build().unwrap();
+        let graph = builder.build()?;
 
         assert_eq!(graph.stats.vectors_indexed, 10);
         assert!(graph.stats.used_mixed_precision);
         assert!(!graph.stats.used_tensor_cores);
         assert!(graph.stats.batches_processed > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_incremental_builder_flush() {
+    fn test_incremental_builder_flush() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 4,
             ef_construction: 10,
@@ -1375,24 +1384,25 @@ mod tests {
             ..Default::default()
         };
 
-        let mut inc_builder = IncrementalGpuIndexBuilder::new(config, 5).unwrap();
+        let mut inc_builder = IncrementalGpuIndexBuilder::new(config, 5)?;
         let vectors = make_test_vectors(15, 4);
 
         for (i, v) in vectors.iter().enumerate() {
-            inc_builder.add_vector(i, v.clone()).unwrap();
+            inc_builder.add_vector(i, v.clone())?;
         }
 
-        let graph = inc_builder.build().unwrap();
+        let graph = inc_builder.build()?;
         assert_eq!(graph.nodes.len(), 15);
+        Ok(())
     }
 
     #[test]
-    fn test_batch_distance_computer_cosine() {
+    fn test_batch_distance_computer_cosine() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             distance_metric: GpuDistanceMetric::Cosine,
             ..Default::default()
         };
-        let computer = GpuBatchDistanceComputer::new(config).unwrap();
+        let computer = GpuBatchDistanceComputer::new(config)?;
 
         let queries = vec![vec![1.0f32, 0.0, 0.0], vec![0.0, 1.0, 0.0]];
         let database = vec![
@@ -1401,7 +1411,7 @@ mod tests {
             vec![0.0, 0.0, 1.0],
         ];
 
-        let distances = computer.compute_distances(&queries, &database).unwrap();
+        let distances = computer.compute_distances(&queries, &database)?;
         assert_eq!(distances.len(), 2);
         assert_eq!(distances[0].len(), 3);
 
@@ -1415,58 +1425,62 @@ mod tests {
             (distances[0][1] - 1.0).abs() < 1e-5,
             "Orthogonal vectors should have cosine distance 1.0"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_batch_distance_computer_euclidean() {
+    fn test_batch_distance_computer_euclidean() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             distance_metric: GpuDistanceMetric::Euclidean,
             ..Default::default()
         };
-        let computer = GpuBatchDistanceComputer::new(config).unwrap();
+        let computer = GpuBatchDistanceComputer::new(config)?;
 
         let queries = vec![vec![0.0f32, 0.0, 0.0]];
         let database = vec![vec![3.0f32, 4.0, 0.0]]; // Distance = 5.0
 
-        let distances = computer.compute_distances(&queries, &database).unwrap();
+        let distances = computer.compute_distances(&queries, &database)?;
         assert!(
             (distances[0][0] - 5.0).abs() < 1e-4,
             "Expected Euclidean distance of 5.0"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_batch_distance_dimension_mismatch() {
+    fn test_batch_distance_dimension_mismatch() -> Result<()> {
         let config = GpuIndexBuilderConfig::default();
-        let computer = GpuBatchDistanceComputer::new(config).unwrap();
+        let computer = GpuBatchDistanceComputer::new(config)?;
 
         let queries = vec![vec![1.0f32, 2.0]];
         let database = vec![vec![1.0f32, 2.0, 3.0]]; // Wrong dimension
 
         let result = computer.compute_distances(&queries, &database);
         assert!(result.is_err(), "Should fail on dimension mismatch");
+        Ok(())
     }
 
     #[test]
-    fn test_distance_metric_inner_product() {
+    fn test_distance_metric_inner_product() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             distance_metric: GpuDistanceMetric::InnerProduct,
             ..Default::default()
         };
-        let computer = GpuBatchDistanceComputer::new(config).unwrap();
+        let computer = GpuBatchDistanceComputer::new(config)?;
 
         let queries = vec![vec![1.0f32, 2.0, 3.0]];
         let database = vec![vec![4.0f32, 5.0, 6.0]]; // dot = 4+10+18 = 32 -> neg = -32
 
-        let distances = computer.compute_distances(&queries, &database).unwrap();
+        let distances = computer.compute_distances(&queries, &database)?;
         assert!(
             (distances[0][0] + 32.0).abs() < 1e-4,
             "Inner product distance should be -32"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_builder_clears_after_build() {
+    fn test_builder_clears_after_build() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 4,
             ef_construction: 10,
@@ -1474,29 +1488,30 @@ mod tests {
             ..Default::default()
         };
 
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
         let vectors = make_test_vectors(10, 4);
         for (i, v) in vectors.iter().enumerate() {
-            builder.add_vector(i, v.clone()).unwrap();
+            builder.add_vector(i, v.clone())?;
         }
 
-        let _ = builder.build().unwrap();
+        let _ = builder.build()?;
 
         // After build, pending_vectors should be empty
         assert!(
             builder.pending_vectors.is_empty(),
             "Pending vectors should be cleared after build"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_layer_assignment_distribution() {
+    fn test_layer_assignment_distribution() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 16,
             num_layers: 5,
             ..Default::default()
         };
-        let builder = GpuHnswIndexBuilder::new(config.clone()).unwrap();
+        let builder = GpuHnswIndexBuilder::new(config.clone())?;
         let layers = builder.assign_layers(1000);
 
         // Most vectors should be at layer 0
@@ -1511,10 +1526,11 @@ mod tests {
         for &l in &layers {
             assert!(l < config.num_layers, "Layer {} exceeds num_layers", l);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_search_dimension_mismatch_error() {
+    fn test_search_dimension_mismatch_error() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 4,
             ef_construction: 10,
@@ -1522,11 +1538,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut builder = GpuHnswIndexBuilder::new(config).unwrap();
+        let mut builder = GpuHnswIndexBuilder::new(config)?;
         for i in 0..5 {
-            builder.add_vector(i, vec![1.0f32; 8]).unwrap();
+            builder.add_vector(i, vec![1.0f32; 8])?;
         }
-        let graph = builder.build().unwrap();
+        let graph = builder.build()?;
 
         // Query with wrong dimension
         let result = graph.search_knn(&[1.0, 2.0], 3, 10);
@@ -1534,10 +1550,11 @@ mod tests {
             result.is_err(),
             "Should fail on dimension mismatch in search"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_search_empty_graph() {
+    fn test_search_empty_graph() -> Result<()> {
         let config = GpuIndexBuilderConfig::default();
         let graph = HnswGraph {
             nodes: Vec::new(),
@@ -1547,15 +1564,16 @@ mod tests {
             stats: GpuIndexBuildStats::default(),
         };
 
-        let results = graph.search_knn(&[1.0, 2.0], 5, 10).unwrap();
+        let results = graph.search_knn(&[1.0, 2.0], 5, 10)?;
         assert!(
             results.is_empty(),
             "Empty graph search should return no results"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_incremental_builder_pending_count() {
+    fn test_incremental_builder_pending_count() -> Result<()> {
         let config = GpuIndexBuilderConfig {
             m: 4,
             ef_construction: 10,
@@ -1563,16 +1581,17 @@ mod tests {
             ..Default::default()
         };
 
-        let mut inc_builder = IncrementalGpuIndexBuilder::new(config, 100).unwrap();
+        let mut inc_builder = IncrementalGpuIndexBuilder::new(config, 100)?;
         assert_eq!(inc_builder.pending_count(), 0);
 
-        inc_builder.add_vector(0, vec![1.0f32; 4]).unwrap();
-        inc_builder.add_vector(1, vec![2.0f32; 4]).unwrap();
+        inc_builder.add_vector(0, vec![1.0f32; 4])?;
+        inc_builder.add_vector(1, vec![2.0f32; 4])?;
         assert_eq!(inc_builder.pending_count(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_gpu_distance_metric_variants() {
+    fn test_gpu_distance_metric_variants() -> Result<()> {
         let metrics = [
             GpuDistanceMetric::Cosine,
             GpuDistanceMetric::Euclidean,
@@ -1589,7 +1608,7 @@ mod tests {
                 num_layers: 2,
                 ..Default::default()
             };
-            let computer = GpuBatchDistanceComputer::new(config).unwrap();
+            let computer = GpuBatchDistanceComputer::new(config)?;
             let queries = vec![vec![1.0f32, 0.0]];
             let db = vec![vec![0.0f32, 1.0]];
             let result = computer.compute_distances(&queries, &db);
@@ -1599,6 +1618,7 @@ mod tests {
                 metric
             );
         }
+        Ok(())
     }
 
     // ---- GpuIndexOptimizer tests ----

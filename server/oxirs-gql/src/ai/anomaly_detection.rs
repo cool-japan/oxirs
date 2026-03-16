@@ -291,7 +291,7 @@ mod tests {
                     result_size_bytes: 1024,
                 })
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
         // Detect anomaly
@@ -304,7 +304,7 @@ mod tests {
                 result_size_bytes: 1024000,
             })
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert!(!result.is_empty());
     }

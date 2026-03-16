@@ -764,20 +764,20 @@ mod tests {
 
     #[test]
     fn test_oxigraph_compat_store_creation() {
-        let store = Store::new().unwrap();
-        assert!(store.is_empty().unwrap());
-        assert_eq!(store.len().unwrap(), 0);
+        let store = Store::new().expect("construction should succeed");
+        assert!(store.is_empty().expect("store operation should succeed"));
+        assert_eq!(store.len().expect("store operation should succeed"), 0);
     }
 
     #[test]
     fn test_oxigraph_compat_insert_and_query() {
-        let store = Store::new().unwrap();
+        let store = Store::new().expect("construction should succeed");
 
         // Create test quad
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("test object");
-        let graph = NamedNode::new("http://example.org/graph").unwrap();
+        let graph = NamedNode::new("http://example.org/graph").expect("valid IRI");
 
         let quad = Quad::new(
             subject.clone(),
@@ -787,12 +787,16 @@ mod tests {
         );
 
         // Insert quad
-        assert!(store.insert(QuadRef::from(&quad)).unwrap());
-        assert_eq!(store.len().unwrap(), 1);
-        assert!(!store.is_empty().unwrap());
+        assert!(store
+            .insert(QuadRef::from(&quad))
+            .expect("store insert should succeed"));
+        assert_eq!(store.len().expect("store operation should succeed"), 1);
+        assert!(!store.is_empty().expect("store operation should succeed"));
 
         // Check contains
-        assert!(store.contains(QuadRef::from(&quad)).unwrap());
+        assert!(store
+            .contains(QuadRef::from(&quad))
+            .expect("store contains should succeed"));
 
         // Query by pattern
         let quads: Vec<_> = store
@@ -807,46 +811,50 @@ mod tests {
         assert_eq!(quads[0], quad);
 
         // Remove quad
-        assert!(store.remove(QuadRef::from(&quad)).unwrap());
-        assert!(store.is_empty().unwrap());
+        assert!(store
+            .remove(QuadRef::from(&quad))
+            .expect("store remove should succeed"));
+        assert!(store.is_empty().expect("store operation should succeed"));
     }
 
     #[test]
     fn test_oxigraph_compat_extend() {
-        let store = Store::new().unwrap();
+        let store = Store::new().expect("construction should succeed");
 
         let quads = [
             Quad::new(
-                NamedNode::new("http://example.org/s1").unwrap(),
-                NamedNode::new("http://example.org/p1").unwrap(),
+                NamedNode::new("http://example.org/s1").expect("valid IRI"),
+                NamedNode::new("http://example.org/p1").expect("valid IRI"),
                 Literal::new("o1"),
                 GraphName::DefaultGraph,
             ),
             Quad::new(
-                NamedNode::new("http://example.org/s2").unwrap(),
-                NamedNode::new("http://example.org/p2").unwrap(),
+                NamedNode::new("http://example.org/s2").expect("valid IRI"),
+                NamedNode::new("http://example.org/p2").expect("valid IRI"),
                 Literal::new("o2"),
-                NamedNode::new("http://example.org/g1").unwrap(),
+                NamedNode::new("http://example.org/g1").expect("valid IRI"),
             ),
         ];
 
-        store.extend(quads.iter().map(QuadRef::from)).unwrap();
-        assert_eq!(store.len().unwrap(), 2);
+        store
+            .extend(quads.iter().map(QuadRef::from))
+            .expect("extend should succeed");
+        assert_eq!(store.len().expect("store operation should succeed"), 2);
     }
 
     #[test]
     fn test_oxigraph_compat_named_graphs() {
-        let store = Store::new().unwrap();
+        let store = Store::new().expect("construction should succeed");
 
         // Create nodes
-        let s1 = NamedNode::new("http://example.org/s1").unwrap();
-        let s2 = NamedNode::new("http://example.org/s2").unwrap();
-        let p1 = NamedNode::new("http://example.org/p1").unwrap();
-        let p2 = NamedNode::new("http://example.org/p2").unwrap();
+        let s1 = NamedNode::new("http://example.org/s1").expect("valid IRI");
+        let s2 = NamedNode::new("http://example.org/s2").expect("valid IRI");
+        let p1 = NamedNode::new("http://example.org/p1").expect("valid IRI");
+        let p2 = NamedNode::new("http://example.org/p2").expect("valid IRI");
         let o1 = Literal::new("o1");
         let o2 = Literal::new("o2");
-        let g1 = NamedNode::new("http://example.org/g1").unwrap();
-        let g2 = NamedNode::new("http://example.org/g2").unwrap();
+        let g1 = NamedNode::new("http://example.org/g1").expect("valid IRI");
+        let g2 = NamedNode::new("http://example.org/g2").expect("valid IRI");
 
         // Insert quads in different graphs
         store
@@ -856,7 +864,7 @@ mod tests {
                 ObjectRef::Literal(&o1),
                 GraphNameRef::NamedNode(&g1),
             ))
-            .unwrap();
+            .expect("operation should succeed");
 
         store
             .insert(QuadRef::new(
@@ -865,7 +873,7 @@ mod tests {
                 ObjectRef::Literal(&o2),
                 GraphNameRef::NamedNode(&g2),
             ))
-            .unwrap();
+            .expect("operation should succeed");
 
         // Check named graphs
         let graphs: Vec<_> = store.named_graphs().collect();
@@ -876,24 +884,24 @@ mod tests {
         // Check contains_named_graph
         assert!(store
             .contains_named_graph(NamedOrBlankNodeRef::NamedNode(&g1))
-            .unwrap());
+            .expect("operation should succeed"));
         assert!(store
             .contains_named_graph(NamedOrBlankNodeRef::NamedNode(&g2))
-            .unwrap());
+            .expect("operation should succeed"));
     }
 
     #[test]
     fn test_oxigraph_compat_clear_graph() {
-        let store = Store::new().unwrap();
+        let store = Store::new().expect("construction should succeed");
 
         // Create nodes
-        let s1 = NamedNode::new("http://example.org/s1").unwrap();
-        let s2 = NamedNode::new("http://example.org/s2").unwrap();
-        let p1 = NamedNode::new("http://example.org/p1").unwrap();
-        let p2 = NamedNode::new("http://example.org/p2").unwrap();
+        let s1 = NamedNode::new("http://example.org/s1").expect("valid IRI");
+        let s2 = NamedNode::new("http://example.org/s2").expect("valid IRI");
+        let p1 = NamedNode::new("http://example.org/p1").expect("valid IRI");
+        let p2 = NamedNode::new("http://example.org/p2").expect("valid IRI");
         let o1 = Literal::new("o1");
         let o2 = Literal::new("o2");
-        let graph = NamedNode::new("http://example.org/graph").unwrap();
+        let graph = NamedNode::new("http://example.org/graph").expect("valid IRI");
 
         // Add quads to specific graph and default graph
         store
@@ -903,7 +911,7 @@ mod tests {
                 ObjectRef::Literal(&o1),
                 GraphNameRef::NamedNode(&graph),
             ))
-            .unwrap();
+            .expect("operation should succeed");
 
         store
             .insert(QuadRef::new(
@@ -912,22 +920,24 @@ mod tests {
                 ObjectRef::Literal(&o2),
                 GraphNameRef::DefaultGraph,
             ))
-            .unwrap();
+            .expect("operation should succeed");
 
-        assert_eq!(store.len().unwrap(), 2);
+        assert_eq!(store.len().expect("store operation should succeed"), 2);
 
         // Clear specific graph
-        store.clear_graph(GraphNameRef::NamedNode(&graph)).unwrap();
-        assert_eq!(store.len().unwrap(), 1); // Only default graph quad remains
+        store
+            .clear_graph(GraphNameRef::NamedNode(&graph))
+            .expect("clear_graph should succeed");
+        assert_eq!(store.len().expect("store operation should succeed"), 1); // Only default graph quad remains
 
         // Clear all
-        store.clear().unwrap();
-        assert!(store.is_empty().unwrap());
+        store.clear().expect("store operation should succeed");
+        assert!(store.is_empty().expect("store operation should succeed"));
     }
 
     #[test]
     fn test_oxigraph_compat_load_from_reader() {
-        let store = Store::new().unwrap();
+        let store = Store::new().expect("construction should succeed");
 
         let turtle_data = r#"
             @prefix ex: <http://example.org/> .
@@ -942,9 +952,9 @@ mod tests {
                 Some("http://example.org/"),
                 None::<GraphName>,
             )
-            .unwrap();
+            .expect("operation should succeed");
 
-        assert_eq!(store.len().unwrap(), 1);
+        assert_eq!(store.len().expect("store operation should succeed"), 1);
 
         // Verify the loaded data
         let quads: Vec<_> = store.iter().collect();
@@ -961,11 +971,11 @@ mod tests {
 
     #[test]
     fn test_oxigraph_compat_dump_to_writer() {
-        let store = Store::new().unwrap();
+        let store = Store::new().expect("construction should succeed");
 
         // Create nodes
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("object");
 
         // Add some test data
@@ -976,15 +986,15 @@ mod tests {
                 ObjectRef::Literal(&object),
                 GraphNameRef::DefaultGraph,
             ))
-            .unwrap();
+            .expect("operation should succeed");
 
         // Dump to N-Triples format
         let mut output = Vec::new();
         store
             .dump_to_writer(&mut output, RdfFormat::NTriples, None::<GraphNameRef>)
-            .unwrap();
+            .expect("operation should succeed");
 
-        let result = String::from_utf8(output).unwrap();
+        let result = String::from_utf8(output).expect("bytes should be valid UTF-8");
         assert!(result.contains("<http://example.org/subject>"));
         assert!(result.contains("<http://example.org/predicate>"));
         assert!(result.contains("\"object\""));

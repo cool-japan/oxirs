@@ -931,7 +931,7 @@ mod tests {
     #[test]
     fn test_test_type_determination() {
         let config = W3cRdfTestConfig::default();
-        let runner = W3cRdfTestSuiteRunner::new(config).unwrap();
+        let runner = W3cRdfTestSuiteRunner::new(config).expect("construction should succeed");
 
         let test_types = vec!["http://www.w3.org/ns/rdftest#PositiveParserTest".to_string()];
         assert_eq!(

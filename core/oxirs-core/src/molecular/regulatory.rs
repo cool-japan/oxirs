@@ -854,7 +854,9 @@ mod tests {
     #[test]
     fn test_checkpoint_system() {
         let checkpoint = CheckpointSystem::new();
-        let result = checkpoint.evaluate_checkpoints().unwrap();
+        let result = checkpoint
+            .evaluate_checkpoints()
+            .expect("operation should succeed");
         assert!(result.overall_pass);
     }
 
@@ -873,7 +875,7 @@ mod tests {
     fn test_protein_activity_calculation() {
         let mut protein =
             RegulatoryProtein::new("TestProtein".to_string(), RegulatoryFunction::Loading);
-        protein.activate().unwrap();
+        protein.activate().expect("operation should succeed");
 
         let activity = protein.calculate_current_activity();
         assert!(activity > 0.0);

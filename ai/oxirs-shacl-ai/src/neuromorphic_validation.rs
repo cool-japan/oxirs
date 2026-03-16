@@ -976,7 +976,7 @@ mod tests {
         let topology = NetworkTopology::default();
         let network = NeuromorphicValidationNetwork::new(topology.clone());
 
-        network.initialize_network().await.unwrap();
+        network.initialize_network().await.expect("should succeed");
 
         let neurons = network.neurons.read().await;
         let synapses = network.synapses.read().await;

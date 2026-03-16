@@ -1347,7 +1347,7 @@ mod tests {
 
         let cached = cache_manager.get_embedding("test_entity");
         assert!(cached.is_some());
-        assert_eq!(cached.unwrap().values, embedding.values);
+        assert_eq!(cached.expect("should succeed").values, embedding.values);
 
         // Test computation caching
         let key = ComputationKey {

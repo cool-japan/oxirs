@@ -30,7 +30,7 @@
 //! let fingerprint_hash = "query_fingerprint_12345".to_string();
 //! let results = vec![1, 2, 3, 4, 5];
 //!
-//! cache.put(fingerprint_hash.clone(), results.clone()).unwrap();
+//! cache.put(fingerprint_hash.clone(), results.clone())?;
 //!
 //! // Retrieve from cache
 //! if let Some(cached) = cache.get(&fingerprint_hash) {

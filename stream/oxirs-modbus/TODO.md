@@ -1,10 +1,10 @@
 # OxiRS Modbus - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
-OxiRS Modbus v0.1.0 provides industrial Modbus protocol support with RDF mapping for factory automation, energy management, and IoT integration.
+OxiRS Modbus v0.2.2 provides industrial Modbus protocol support with RDF mapping for factory automation, energy management, and IoT integration.
 
 ### Features
 - ✅ Modbus TCP client implementation
@@ -19,25 +19,38 @@ OxiRS Modbus v0.1.0 provides industrial Modbus protocol support with RDF mapping
 - ✅ QUDT unit support
 - ✅ Polling scheduler with interval configuration
 - ✅ Connection pooling and health monitoring
-- ✅ 40 tests passing
+- ✅ Additional function codes: Read Coils (0x01), Read Discrete Inputs (0x02), Write Multiple Coils (0x0F)
+- ✅ Coil register map (FC01/02/05/15)
+- ✅ SAMM aspect model integration
+- ✅ Prometheus metrics integration
+- ✅ Modbus ASCII support (legacy devices)
+- ✅ Modbus over TLS (security extensions)
+- ✅ Register watcher for change detection
+- ✅ Register encoder and validator
+- ✅ 1095 tests passing
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Extended Protocol Support (Q1 2026 - Expanded)
-- [ ] Additional function codes (Read Coils 0x01, Read Discrete Inputs 0x02)
-- [ ] Write Multiple Registers (0x10) and Write Multiple Coils (0x0F)
-- [ ] SAMM aspect model integration
-- [ ] Real-world PLC testing
-- [ ] Prometheus metrics integration
-- [ ] Modbus ASCII support (legacy devices)
-- [ ] Modbus over TLS (security extensions)
-- [ ] Register auto-discovery
+### v0.1.0 - Released (January 7, 2026)
+- ✅ Modbus TCP/RTU, register mapping, RDF generation, 40 tests
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ Additional function codes (Read Coils 0x01, Read Discrete Inputs 0x02)
+- ✅ Write Multiple Registers (0x10) and Write Multiple Coils (0x0F)
+- ✅ SAMM aspect model integration
+- ✅ Prometheus metrics integration
+- ✅ Modbus ASCII support (legacy devices)
+- ✅ Modbus over TLS (security extensions)
+- ✅ Holding register bank, coil register map, signal decoder
+- ✅ Diagnostic monitor, register watcher, register encoder
+- ✅ 1095 tests passing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Long-term support guarantees
 - [ ] Enterprise integration features
 - [ ] GUI register browser
 - [ ] OPC UA translation support
+- [ ] Register auto-discovery
 
 ## Contributing
 
@@ -45,4 +58,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Modbus v0.1.0 - Industrial IoT for semantic web*
+*OxiRS Modbus v0.2.2 - Industrial IoT for semantic web*

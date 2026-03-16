@@ -1400,7 +1400,7 @@ mod tests {
 
         manager
             .register_source_domain("source".to_string(), source_model, source_characteristics)
-            .unwrap();
+            .expect("should succeed");
 
         // Create target domain
         let target_spec = TransferUtils::create_test_domain_specification(
@@ -1415,7 +1415,9 @@ mod tests {
             ],
         );
 
-        manager.register_target_domain(target_spec).unwrap();
+        manager
+            .register_target_domain(target_spec)
+            .expect("should succeed");
 
         // Evaluate transfer
         let results = manager
@@ -1423,7 +1425,7 @@ mod tests {
             .await;
 
         assert!(results.is_ok());
-        let results = results.unwrap();
+        let results = results.expect("should succeed");
         assert_eq!(results.source_domain, "source");
         assert_eq!(results.target_domain, "target");
         assert!(results.overall_quality >= 0.0);
@@ -1478,7 +1480,7 @@ mod tests {
 
         let similarity = manager
             .calculate_domain_similarity(&source, &target)
-            .unwrap();
+            .expect("should succeed");
         assert!(similarity > 0.0);
         assert!(similarity <= 1.0);
 

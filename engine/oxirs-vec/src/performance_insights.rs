@@ -999,16 +999,17 @@ mod tests {
     }
 
     #[test]
-    fn test_vector_analysis() {
+    fn test_vector_analysis() -> Result<()> {
         let mut analyzer = PerformanceInsightsAnalyzer::new();
         let vectors = vec![
             ("vec1".to_string(), Vector::new(vec![1.0, 2.0, 3.0])),
             ("vec2".to_string(), Vector::new(vec![4.0, 5.0, 6.0])),
         ];
 
-        let stats = analyzer.analyze_vector_dataset(&vectors).unwrap();
+        let stats = analyzer.analyze_vector_dataset(&vectors)?;
         assert_eq!(stats.total_vectors, 2);
         assert_eq!(stats.average_dimension, 3);
+        Ok(())
     }
 
     #[test]
@@ -1032,16 +1033,13 @@ mod tests {
     }
 
     #[test]
-    fn test_report_export() {
+    fn test_report_export() -> Result<()> {
         let analyzer = PerformanceInsightsAnalyzer::new();
-        let json_report = analyzer
-            .export_performance_report(ReportFormat::Json)
-            .unwrap();
+        let json_report = analyzer.export_performance_report(ReportFormat::Json)?;
         assert!(!json_report.is_empty());
 
-        let csv_report = analyzer
-            .export_performance_report(ReportFormat::Csv)
-            .unwrap();
+        let csv_report = analyzer.export_performance_report(ReportFormat::Csv)?;
         assert!(csv_report.contains("Metric,Value,Unit"));
+        Ok(())
     }
 }

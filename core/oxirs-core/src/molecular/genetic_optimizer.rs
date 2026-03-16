@@ -771,15 +771,15 @@ mod tests {
         let optimizer = GeneticGraphOptimizer::new(10, fitness_fn);
 
         let triples = vec![Triple::new(
-            NamedNode::new("http://example.org/subject").unwrap(),
-            NamedNode::new("http://example.org/predicate").unwrap(),
+            NamedNode::new("http://example.org/subject").expect("valid IRI"),
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
             Literal::new("object"),
         )];
 
         let structure = optimizer.create_random_structure(&triples);
         assert!(structure.is_ok());
 
-        let structure = structure.unwrap();
+        let structure = structure.expect("structure should be available");
         assert!(structure.fitness >= 0.0);
         assert!(!structure.indexing_genes.secondary_indexes.is_empty());
     }
@@ -790,15 +790,19 @@ mod tests {
         let optimizer = GeneticGraphOptimizer::new(10, fitness_fn);
 
         let triples = vec![Triple::new(
-            NamedNode::new("http://example.org/subject").unwrap(),
-            NamedNode::new("http://example.org/predicate").unwrap(),
+            NamedNode::new("http://example.org/subject").expect("valid IRI"),
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
             Literal::new("object"),
         )];
 
-        let mut structure = optimizer.create_random_structure(&triples).unwrap();
+        let mut structure = optimizer
+            .create_random_structure(&triples)
+            .expect("operation should succeed");
         let _old_block_size = structure.storage_genes.block_size;
 
-        optimizer.mutate(&mut structure).unwrap();
+        optimizer
+            .mutate(&mut structure)
+            .expect("operation should succeed");
 
         // Structure should have some changes
         assert!(!structure.mutations.is_empty());
@@ -810,12 +814,14 @@ mod tests {
         let optimizer = GeneticGraphOptimizer::new(10, fitness_fn);
 
         let triples = vec![Triple::new(
-            NamedNode::new("http://example.org/subject").unwrap(),
-            NamedNode::new("http://example.org/predicate").unwrap(),
+            NamedNode::new("http://example.org/subject").expect("valid IRI"),
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
             Literal::new("object"),
         )];
 
-        let structure = optimizer.create_random_structure(&triples).unwrap();
+        let structure = optimizer
+            .create_random_structure(&triples)
+            .expect("operation should succeed");
         let fitness = default_fitness_function(&structure);
 
         assert!(fitness >= 0.0);

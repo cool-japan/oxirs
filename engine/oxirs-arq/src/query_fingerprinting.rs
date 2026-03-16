@@ -25,12 +25,13 @@
 //! let query1 = "SELECT ?s WHERE { ?s <http://example.org/name> \"Alice\" }";
 //! let query2 = "SELECT ?s WHERE { ?s <http://example.org/name> \"Bob\" }";
 //!
-//! let fp1 = fingerprinter.fingerprint(query1).unwrap();
-//! let fp2 = fingerprinter.fingerprint(query2).unwrap();
+//! let fp1 = fingerprinter.fingerprint(query1)?;
+//! let fp2 = fingerprinter.fingerprint(query2)?;
 //!
 //! // Same structure, different literals -> similar fingerprints
 //! let similarity = fingerprinter.similarity(&fp1, &fp2);
 //! println!("Similarity: {:.2}", similarity);
+//! # Ok::<(), anyhow::Error>(())
 //! ```
 
 use anyhow::Result;

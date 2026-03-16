@@ -372,23 +372,25 @@ mod tests {
     #[test]
     fn test_data_type_from_str() {
         assert_eq!(
-            "INT16".parse::<ModbusDataType>().unwrap(),
+            "INT16".parse::<ModbusDataType>().expect("should succeed"),
             ModbusDataType::Int16
         );
         assert_eq!(
-            "UINT16".parse::<ModbusDataType>().unwrap(),
+            "UINT16".parse::<ModbusDataType>().expect("should succeed"),
             ModbusDataType::Uint16
         );
         assert_eq!(
-            "FLOAT32".parse::<ModbusDataType>().unwrap(),
+            "FLOAT32".parse::<ModbusDataType>().expect("should succeed"),
             ModbusDataType::Float32
         );
         assert_eq!(
-            "BIT5".parse::<ModbusDataType>().unwrap(),
+            "BIT5".parse::<ModbusDataType>().expect("should succeed"),
             ModbusDataType::Bit(5)
         );
         assert_eq!(
-            "STRING10".parse::<ModbusDataType>().unwrap(),
+            "STRING10"
+                .parse::<ModbusDataType>()
+                .expect("should succeed"),
             ModbusDataType::String(10)
         );
     }
@@ -397,19 +399,19 @@ mod tests {
     fn test_decode_int16() {
         // Positive value
         let regs = [0x00FF];
-        let val = decode_registers(&regs, ModbusDataType::Int16).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Int16).expect("should succeed");
         assert_eq!(val, ModbusValue::Int(255));
 
         // Negative value (two's complement)
         let regs = [0xFFFF];
-        let val = decode_registers(&regs, ModbusDataType::Int16).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Int16).expect("should succeed");
         assert_eq!(val, ModbusValue::Int(-1));
     }
 
     #[test]
     fn test_decode_uint16() {
         let regs = [0xFFFF];
-        let val = decode_registers(&regs, ModbusDataType::Uint16).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Uint16).expect("should succeed");
         assert_eq!(val, ModbusValue::Uint(65535));
     }
 
@@ -417,12 +419,12 @@ mod tests {
     fn test_decode_int32() {
         // Big-endian: 0x0001_0000 = 65536
         let regs = [0x0001, 0x0000];
-        let val = decode_registers(&regs, ModbusDataType::Int32).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Int32).expect("should succeed");
         assert_eq!(val, ModbusValue::Int(65536));
 
         // Negative: -1
         let regs = [0xFFFF, 0xFFFF];
-        let val = decode_registers(&regs, ModbusDataType::Int32).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Int32).expect("should succeed");
         assert_eq!(val, ModbusValue::Int(-1));
     }
 
@@ -430,7 +432,7 @@ mod tests {
     fn test_decode_float32() {
         // IEEE 754: 1.0 = 0x3F800000
         let regs = [0x3F80, 0x0000];
-        let val = decode_registers(&regs, ModbusDataType::Float32).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Float32).expect("should succeed");
         match val {
             ModbusValue::Float(v) => assert!((v - 1.0).abs() < 0.0001),
             _ => panic!("Expected Float"),
@@ -438,7 +440,7 @@ mod tests {
 
         // IEEE 754: 22.5 = 0x41B40000
         let regs = [0x41B4, 0x0000];
-        let val = decode_registers(&regs, ModbusDataType::Float32).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Float32).expect("should succeed");
         match val {
             ModbusValue::Float(v) => assert!((v - 22.5).abs() < 0.0001),
             _ => panic!("Expected Float"),
@@ -449,13 +451,13 @@ mod tests {
     fn test_decode_bit() {
         let regs = [0b0000_0000_0010_0100]; // Bits 2 and 5 are set
 
-        let val = decode_registers(&regs, ModbusDataType::Bit(2)).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Bit(2)).expect("should succeed");
         assert_eq!(val, ModbusValue::Bool(true));
 
-        let val = decode_registers(&regs, ModbusDataType::Bit(5)).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Bit(5)).expect("should succeed");
         assert_eq!(val, ModbusValue::Bool(true));
 
-        let val = decode_registers(&regs, ModbusDataType::Bit(0)).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::Bit(0)).expect("should succeed");
         assert_eq!(val, ModbusValue::Bool(false));
     }
 
@@ -463,7 +465,7 @@ mod tests {
     fn test_decode_string() {
         // "AB" = 0x4142
         let regs = [0x4142, 0x4344];
-        let val = decode_registers(&regs, ModbusDataType::String(4)).unwrap();
+        let val = decode_registers(&regs, ModbusDataType::String(4)).expect("should succeed");
         assert_eq!(val, ModbusValue::String("ABCD".to_string()));
     }
 
@@ -493,14 +495,14 @@ mod tests {
     #[test]
     fn test_encode_int16() {
         let val = ModbusValue::Int(-1);
-        let regs = encode_value(&val, ModbusDataType::Int16).unwrap();
+        let regs = encode_value(&val, ModbusDataType::Int16).expect("should succeed");
         assert_eq!(regs, vec![0xFFFF]);
     }
 
     #[test]
     fn test_encode_float32() {
         let val = ModbusValue::Float(1.0);
-        let regs = encode_value(&val, ModbusDataType::Float32).unwrap();
+        let regs = encode_value(&val, ModbusDataType::Float32).expect("should succeed");
         assert_eq!(regs, vec![0x3F80, 0x0000]);
     }
 

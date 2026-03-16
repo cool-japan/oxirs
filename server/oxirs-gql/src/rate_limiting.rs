@@ -642,7 +642,7 @@ mod tests {
 
         let result = limiter.check_rate_limit("client1", Some(1)).await;
         assert!(result.is_ok());
-        let result = result.unwrap();
+        let result = result.expect("should succeed");
         assert!(result.allowed);
     }
 
@@ -658,12 +658,18 @@ mod tests {
 
         // Make 5 requests (should succeed)
         for _ in 0..5 {
-            let result = limiter.check_rate_limit("client1", Some(1)).await.unwrap();
+            let result = limiter
+                .check_rate_limit("client1", Some(1))
+                .await
+                .expect("should succeed");
             assert!(result.allowed);
         }
 
         // 6th request should fail
-        let result = limiter.check_rate_limit("client1", Some(1)).await.unwrap();
+        let result = limiter
+            .check_rate_limit("client1", Some(1))
+            .await
+            .expect("should succeed");
         assert!(!result.allowed);
         assert!(result.retry_after.is_some());
     }
@@ -684,13 +690,16 @@ mod tests {
                 ..RateLimitConfig::default()
             },
         );
-        limiter.add_policy(vip_policy).await.unwrap();
+        limiter
+            .add_policy(vip_policy)
+            .await
+            .expect("should succeed");
 
         // VIP client should have higher limits
         let result = limiter
             .check_rate_limit("vip_client", Some(1))
             .await
-            .unwrap();
+            .expect("should succeed");
         assert!(result.allowed);
         assert_eq!(result.limit, 1000);
     }
@@ -706,7 +715,10 @@ mod tests {
         let limiter = RateLimiter::new(config);
 
         // High complexity query
-        let result = limiter.check_rate_limit("client1", Some(50)).await.unwrap();
+        let result = limiter
+            .check_rate_limit("client1", Some(50))
+            .await
+            .expect("should succeed");
         assert!(result.allowed);
     }
 
@@ -725,14 +737,23 @@ mod tests {
         }
 
         // Should be rate limited
-        let result = limiter.check_rate_limit("client1", Some(1)).await.unwrap();
+        let result = limiter
+            .check_rate_limit("client1", Some(1))
+            .await
+            .expect("should succeed");
         assert!(!result.allowed);
 
         // Reset client
-        limiter.reset_client("client1").await.unwrap();
+        limiter
+            .reset_client("client1")
+            .await
+            .expect("should succeed");
 
         // Should be allowed again
-        let result = limiter.check_rate_limit("client1", Some(1)).await.unwrap();
+        let result = limiter
+            .check_rate_limit("client1", Some(1))
+            .await
+            .expect("should succeed");
         assert!(result.allowed);
     }
 }

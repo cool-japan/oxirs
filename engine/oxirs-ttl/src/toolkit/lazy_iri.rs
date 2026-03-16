@@ -33,7 +33,7 @@ use std::sync::Arc;
 /// let iri = LazyIri::from_prefixed("ex", "Person", prefixes.clone());
 ///
 /// // Resolution happens on-demand
-/// assert_eq!(iri.resolve().unwrap(), "http://example.org/Person");
+/// assert_eq!(iri.resolve().expect("should succeed"), "http://example.org/Person");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LazyIri {
@@ -336,8 +336,8 @@ impl std::error::Error for IriResolutionError {}
 /// prefixes.insert("ex".to_string(), "http://example.org/".to_string());
 ///
 /// // Resolve prefixed name
-/// let iri1 = resolver.resolve_prefixed("ex", "Person", &prefixes).unwrap();
-/// let iri2 = resolver.resolve_prefixed("ex", "Person", &prefixes).unwrap();
+/// let iri1 = resolver.resolve_prefixed("ex", "Person", &prefixes).expect("should succeed");
+/// let iri2 = resolver.resolve_prefixed("ex", "Person", &prefixes).expect("should succeed");
 ///
 /// // Second resolution should hit cache
 /// assert!(std::sync::Arc::ptr_eq(&iri1, &iri2));

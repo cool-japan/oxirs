@@ -414,7 +414,8 @@ mod tests {
 
     #[test]
     fn test_pronoun_extraction() {
-        let resolver = CoreferenceResolver::new(CoreferenceConfig::default()).unwrap();
+        let resolver =
+            CoreferenceResolver::new(CoreferenceConfig::default()).expect("should succeed");
         let pronouns = resolver.extract_pronouns("Show me it and them", "msg1");
 
         assert_eq!(pronouns.len(), 2);
@@ -424,7 +425,8 @@ mod tests {
 
     #[test]
     fn test_definite_description_extraction() {
-        let resolver = CoreferenceResolver::new(CoreferenceConfig::default()).unwrap();
+        let resolver =
+            CoreferenceResolver::new(CoreferenceConfig::default()).expect("should succeed");
         let descriptions =
             resolver.extract_definite_descriptions("Tell me about the movie", "msg1");
 
@@ -434,7 +436,8 @@ mod tests {
 
     #[test]
     fn test_coreference_resolution() {
-        let mut resolver = CoreferenceResolver::new(CoreferenceConfig::default()).unwrap();
+        let mut resolver =
+            CoreferenceResolver::new(CoreferenceConfig::default()).expect("should succeed");
 
         // Add conversation history
         resolver.add_message(
@@ -443,7 +446,7 @@ mod tests {
         );
         resolver.add_message("msg2".to_string(), "Tell me more about it".to_string());
 
-        let chains = resolver.resolve("msg2").unwrap();
+        let chains = resolver.resolve("msg2").expect("should succeed");
 
         // Should find coreference between "it" and "Inception"
         assert!(!chains.is_empty());

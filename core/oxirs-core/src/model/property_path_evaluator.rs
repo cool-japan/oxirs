@@ -775,7 +775,7 @@ mod tests {
 
     #[test]
     fn test_parse_iri() {
-        let p = parse_path("<http://example.org/p>").unwrap();
+        let p = parse_path("<http://example.org/p>").expect("path parse should succeed");
         assert_eq!(p, PropertyPath::Iri("http://example.org/p".to_string()));
     }
 
@@ -787,7 +787,7 @@ mod tests {
 
     #[test]
     fn test_parse_sequence() {
-        let p = parse_path("<a>/<b>").unwrap();
+        let p = parse_path("<a>/<b>").expect("path parse should succeed");
         assert_eq!(
             p,
             PropertyPath::Sequence(
@@ -799,7 +799,7 @@ mod tests {
 
     #[test]
     fn test_parse_alternative() {
-        let p = parse_path("<a>|<b>").unwrap();
+        let p = parse_path("<a>|<b>").expect("path parse should succeed");
         assert_eq!(
             p,
             PropertyPath::Alternative(
@@ -811,7 +811,7 @@ mod tests {
 
     #[test]
     fn test_parse_zero_or_more() {
-        let p = parse_path("<a>*").unwrap();
+        let p = parse_path("<a>*").expect("path parse should succeed");
         assert_eq!(
             p,
             PropertyPath::ZeroOrMore(Box::new(PropertyPath::Iri("a".to_string())))
@@ -820,7 +820,7 @@ mod tests {
 
     #[test]
     fn test_parse_one_or_more() {
-        let p = parse_path("<a>+").unwrap();
+        let p = parse_path("<a>+").expect("path parse should succeed");
         assert_eq!(
             p,
             PropertyPath::OneOrMore(Box::new(PropertyPath::Iri("a".to_string())))
@@ -829,7 +829,7 @@ mod tests {
 
     #[test]
     fn test_parse_zero_or_one() {
-        let p = parse_path("<a>?").unwrap();
+        let p = parse_path("<a>?").expect("path parse should succeed");
         assert_eq!(
             p,
             PropertyPath::ZeroOrOne(Box::new(PropertyPath::Iri("a".to_string())))
@@ -838,7 +838,7 @@ mod tests {
 
     #[test]
     fn test_parse_inverse() {
-        let p = parse_path("^<a>").unwrap();
+        let p = parse_path("^<a>").expect("path parse should succeed");
         assert_eq!(
             p,
             PropertyPath::Inverse(Box::new(PropertyPath::Iri("a".to_string())))
@@ -847,7 +847,7 @@ mod tests {
 
     #[test]
     fn test_parse_negated_set_single() {
-        let p = parse_path("!(<http://example.org/p>)").unwrap();
+        let p = parse_path("!(<http://example.org/p>)").expect("path parse should succeed");
         assert_eq!(
             p,
             PropertyPath::NegatedSet(vec!["http://example.org/p".to_string()])
@@ -856,7 +856,7 @@ mod tests {
 
     #[test]
     fn test_parse_negated_set_multiple() {
-        let p = parse_path("!(<a>|<b>)").unwrap();
+        let p = parse_path("!(<a>|<b>)").expect("path parse should succeed");
         assert_eq!(
             p,
             PropertyPath::NegatedSet(vec!["a".to_string(), "b".to_string()])
@@ -865,7 +865,7 @@ mod tests {
 
     #[test]
     fn test_parse_bare_name() {
-        let p = parse_path("rdf:type").unwrap();
+        let p = parse_path("rdf:type").expect("path parse should succeed");
         assert_eq!(p, PropertyPath::Iri("rdf:type".to_string()));
     }
 

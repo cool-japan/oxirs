@@ -338,20 +338,13 @@ impl CompactAnnotationStore {
             source: compact
                 .source_id
                 .and_then(|id| self.dictionary.get(id).map(|s| s.to_string())),
-            timestamp: compact.timestamp.map(|ts| {
-                Utc.timestamp_opt(ts, 0)
-                    .single()
-                    .expect("timestamp should be valid")
-            }),
-            validity_period: compact.validity_period.map(|(start, end)| {
-                (
-                    Utc.timestamp_opt(start, 0)
-                        .single()
-                        .expect("timestamp should be valid"),
-                    Utc.timestamp_opt(end, 0)
-                        .single()
-                        .expect("timestamp should be valid"),
-                )
+            timestamp: compact
+                .timestamp
+                .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
+            validity_period: compact.validity_period.and_then(|(start, end)| {
+                let s = Utc.timestamp_opt(start, 0).single()?;
+                let e = Utc.timestamp_opt(end, 0).single()?;
+                Some((s, e))
             }),
             evidence: compact
                 .evidence
@@ -435,7 +428,7 @@ impl CompactAnnotationStore {
             timestamp: Utc
                 .timestamp_opt(compact.timestamp, 0)
                 .single()
-                .expect("timestamp should be valid"),
+                .unwrap_or_default(),
             activity: compact
                 .activity_id
                 .and_then(|id| self.dictionary.get(id).map(|s| s.to_string())),

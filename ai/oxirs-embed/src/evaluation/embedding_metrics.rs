@@ -602,9 +602,9 @@ mod tests {
         let ev = EmbeddingEvaluator::new();
         let mock = MockModel::new(vec!["e1".into()]);
         let triple = Triple::new(
-            crate::NamedNode::new("e1").unwrap(),
-            crate::NamedNode::new("r").unwrap(),
-            crate::NamedNode::new("e1").unwrap(),
+            crate::NamedNode::new("e1").expect("should succeed"),
+            crate::NamedNode::new("r").expect("should succeed"),
+            crate::NamedNode::new("e1").expect("should succeed"),
         );
         assert_eq!(ev.hits_at_k(&mock, &[triple], 0), 0.0);
     }
@@ -860,9 +860,9 @@ mod tests {
         // MockModel scores entity[0] highest, so entity "e1" is rank-1.
         let mock = MockModel::new(vec!["e1".into(), "e2".into(), "e3".into()]);
         let triple = Triple::new(
-            NamedNode::new("e1").unwrap(),
-            NamedNode::new("r").unwrap(),
-            NamedNode::new("e1").unwrap(),
+            NamedNode::new("e1").expect("should succeed"),
+            NamedNode::new("r").expect("should succeed"),
+            NamedNode::new("e1").expect("should succeed"),
         );
         let mrr = ev.link_prediction_mrr(&mock, &[triple]);
         assert!((mrr - 1.0).abs() < 1e-9, "expected MRR=1 got {mrr}");
@@ -873,9 +873,9 @@ mod tests {
         let ev = EmbeddingEvaluator::new();
         let mock = MockModel::new(vec!["e1".into(), "e2".into(), "e3".into()]);
         let triple = Triple::new(
-            NamedNode::new("e1").unwrap(),
-            NamedNode::new("r").unwrap(),
-            NamedNode::new("e1").unwrap(),
+            NamedNode::new("e1").expect("should succeed"),
+            NamedNode::new("r").expect("should succeed"),
+            NamedNode::new("e1").expect("should succeed"),
         );
         let h = ev.hits_at_k(&mock, &[triple], 1);
         assert!((h - 1.0).abs() < 1e-9);
@@ -887,9 +887,9 @@ mod tests {
         // Entity "e3" is last in list (rank 3), so Hits@1 = 0.
         let mock = MockModel::new(vec!["e1".into(), "e2".into(), "e3".into()]);
         let triple = Triple::new(
-            NamedNode::new("e1").unwrap(),
-            NamedNode::new("r").unwrap(),
-            NamedNode::new("e3").unwrap(),
+            NamedNode::new("e1").expect("should succeed"),
+            NamedNode::new("r").expect("should succeed"),
+            NamedNode::new("e3").expect("should succeed"),
         );
         let h = ev.hits_at_k(&mock, &[triple], 1);
         assert!((h - 0.0).abs() < 1e-9);

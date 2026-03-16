@@ -520,6 +520,7 @@ impl GraphAwareSearch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn test_graph_context_creation() {
@@ -570,7 +571,7 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_search_scope() {
+    fn test_graph_search_scope() -> Result<()> {
         let context = GraphContext {
             primary_graph: "http://example.org/main".to_string(),
             additional_graphs: vec![],
@@ -579,9 +580,10 @@ mod tests {
         };
 
         let search = GraphAwareSearch::new(GraphAwareConfig::default());
-        let graphs = search.resolve_search_graphs(&context).unwrap();
+        let graphs = search.resolve_search_graphs(&context)?;
 
         assert_eq!(graphs.len(), 1);
         assert_eq!(graphs[0], "http://example.org/main");
+        Ok(())
     }
 }

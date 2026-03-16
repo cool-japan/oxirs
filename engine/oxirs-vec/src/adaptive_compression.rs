@@ -1033,17 +1033,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_vector_stats() {
+    fn test_vector_stats() -> Result<()> {
         let vector = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
-        let stats = VectorStats::from_vector(&vector).unwrap();
+        let stats = VectorStats::from_vector(&vector)?;
 
         assert_eq!(stats.dimensions, 5);
         assert_eq!(stats.mean, 3.0);
         assert!(stats.std_dev > 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_adaptive_compression() {
+    fn test_adaptive_compression() -> Result<()> {
         let vectors = vec![
             Vector::new(vec![1.0, 2.0, 3.0, 4.0]),
             Vector::new(vec![2.0, 3.0, 4.0, 5.0]),
@@ -1051,10 +1052,11 @@ mod tests {
         ];
 
         let mut compressor = AdaptiveCompressor::new();
-        let recommended = compressor.analyze_and_recommend(&vectors).unwrap();
+        let recommended = compressor.analyze_and_recommend(&vectors)?;
 
         // Should recommend some compression method
         assert!(!matches!(recommended, CompressionMethod::None));
+        Ok(())
     }
 
     #[test]
@@ -1076,13 +1078,13 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_level_compression() {
+    fn test_multi_level_compression() -> Result<()> {
         let mut compressor = AdaptiveCompressor::new();
         // Use a larger vector with repetitive patterns that compress well
         let values: Vec<f32> = (0..256).map(|i| (i % 16) as f32).collect();
         let vector = Vector::new(values);
 
-        let compressed = compressor.compress_multi_level(&vector, 0.1).unwrap();
+        let compressed = compressor.compress_multi_level(&vector, 0.1)?;
 
         // Should achieve significant compression on this larger, repetitive vector
         // Original size would be 256 * 4 = 1024 bytes
@@ -1094,18 +1096,20 @@ mod tests {
         );
         assert!(compressed.len() < vector.dimensions * 4); // At least some compression
         assert!(compressed.len() < 900); // Should achieve at least 12% compression
+        Ok(())
     }
 
     #[test]
-    fn test_stats_aggregation() {
+    fn test_stats_aggregation() -> Result<()> {
         let vectors = vec![
             Vector::new(vec![1.0, 2.0]),
             Vector::new(vec![3.0, 4.0]),
             Vector::new(vec![5.0, 6.0]),
         ];
 
-        let stats = VectorStats::from_vectors(&vectors).unwrap();
+        let stats = VectorStats::from_vectors(&vectors)?;
         assert_eq!(stats.dimensions, 2);
         assert!(stats.mean > 0.0);
+        Ok(())
     }
 }

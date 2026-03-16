@@ -20,12 +20,12 @@ use std::time::{Duration, Instant};
 ///
 /// // Profile geometry parsing
 /// profiler.start("parse");
-/// let geom = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
+/// let geom = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
 /// profiler.stop("parse");
 ///
 /// // Profile area calculation
 /// profiler.start("area");
-/// let _area = area(&geom).unwrap();
+/// let _area = area(&geom).expect("should succeed");
 /// profiler.stop("area");
 ///
 /// // Print report
@@ -390,7 +390,9 @@ mod tests {
         thread::sleep(Duration::from_millis(10));
         profiler.stop("test_operation");
 
-        let stats = profiler.get_stats("test_operation").unwrap();
+        let stats = profiler
+            .get_stats("test_operation")
+            .expect("should succeed");
         assert_eq!(stats.count, 1);
         assert!(stats.total >= Duration::from_millis(10));
     }
@@ -405,7 +407,9 @@ mod tests {
             profiler.stop("loop_operation");
         }
 
-        let stats = profiler.get_stats("loop_operation").unwrap();
+        let stats = profiler
+            .get_stats("loop_operation")
+            .expect("should succeed");
         assert_eq!(stats.count, 5);
     }
 
@@ -418,7 +422,7 @@ mod tests {
             thread::sleep(Duration::from_millis(5));
         }
 
-        let stats = profiler.get_stats("scope_test").unwrap();
+        let stats = profiler.get_stats("scope_test").expect("should succeed");
         assert_eq!(stats.count, 1);
         assert!(stats.total >= Duration::from_millis(5));
     }
@@ -440,7 +444,7 @@ mod tests {
         let mut profiler = Profiler::new();
         profiler.record("manual", Duration::from_millis(100));
 
-        let stats = profiler.get_stats("manual").unwrap();
+        let stats = profiler.get_stats("manual").expect("should succeed");
         assert_eq!(stats.count, 1);
         assert_eq!(stats.total, Duration::from_millis(100));
     }

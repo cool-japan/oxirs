@@ -737,9 +737,9 @@ mod tests {
     fn test_superposition_creation() {
         let mut processor = QuantumGraphProcessor::new();
         let triples = vec![Triple::new(
-            NamedNode::new("http://example.org/s1").unwrap(),
-            NamedNode::new("http://example.org/p1").unwrap(),
-            NamedNode::new("http://example.org/o1").unwrap(),
+            NamedNode::new("http://example.org/s1").expect("valid IRI"),
+            NamedNode::new("http://example.org/p1").expect("valid IRI"),
+            NamedNode::new("http://example.org/o1").expect("valid IRI"),
         )];
 
         let result = processor.create_superposition(triples);

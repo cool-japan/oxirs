@@ -431,7 +431,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parallel_engine() {
+    fn test_parallel_engine() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ParallelEngine::new();
 
         engine.add_rule(Rule {
@@ -454,8 +454,9 @@ mod tests {
             object: Term::Constant("b".to_string()),
         }];
 
-        let result = engine.execute_parallel(&facts).unwrap();
+        let result = engine.execute_parallel(&facts)?;
         assert!(!result.is_empty());
+        Ok(())
     }
 
     #[test]

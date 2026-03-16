@@ -415,11 +415,11 @@ mod tests {
     fn test_exact_search() {
         let embeddings = create_test_embeddings();
         let mut index = VectorSearchIndex::new(SearchConfig::default());
-        index.build(&embeddings).unwrap();
+        index.build(&embeddings).expect("should succeed");
 
         // Search for entities similar to [1, 0, 0]
         let query = vec![1.0, 0.0, 0.0];
-        let results = index.search(&query, 3).unwrap();
+        let results = index.search(&query, 3).expect("should succeed");
 
         assert_eq!(results.len(), 3);
         // entity1 should be most similar
@@ -436,10 +436,10 @@ mod tests {
 
         let embeddings = create_test_embeddings();
         let mut index = VectorSearchIndex::new(config);
-        index.build(&embeddings).unwrap();
+        index.build(&embeddings).expect("should succeed");
 
         let query = vec![1.0, 1.0, 0.0];
-        let results = index.search(&query, 2).unwrap();
+        let results = index.search(&query, 2).expect("should succeed");
 
         assert_eq!(results.len(), 2);
         // entity5 [0.7, 0.7, 0] should be most similar
@@ -450,11 +450,11 @@ mod tests {
     fn test_batch_search() {
         let embeddings = create_test_embeddings();
         let mut index = VectorSearchIndex::new(SearchConfig::default());
-        index.build(&embeddings).unwrap();
+        index.build(&embeddings).expect("should succeed");
 
         let queries = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]];
 
-        let results = index.batch_search(&queries, 2).unwrap();
+        let results = index.batch_search(&queries, 2).expect("should succeed");
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].len(), 2);
@@ -465,10 +465,10 @@ mod tests {
     fn test_radius_search() {
         let embeddings = create_test_embeddings();
         let mut index = VectorSearchIndex::new(SearchConfig::default());
-        index.build(&embeddings).unwrap();
+        index.build(&embeddings).expect("should succeed");
 
         let query = vec![1.0, 0.0, 0.0];
-        let results = index.radius_search(&query, 0.3).unwrap();
+        let results = index.radius_search(&query, 0.3).expect("should succeed");
 
         // Should find entities within distance 0.3
         assert!(!results.is_empty());
@@ -493,10 +493,10 @@ mod tests {
             };
 
             let mut index = VectorSearchIndex::new(config);
-            index.build(&embeddings).unwrap();
+            index.build(&embeddings).expect("should succeed");
 
             let query = vec![1.0, 0.0, 0.0];
-            let results = index.search(&query, 3).unwrap();
+            let results = index.search(&query, 3).expect("should succeed");
 
             assert_eq!(results.len(), 3);
         }
@@ -506,7 +506,7 @@ mod tests {
     fn test_index_stats() {
         let embeddings = create_test_embeddings();
         let mut index = VectorSearchIndex::new(SearchConfig::default());
-        index.build(&embeddings).unwrap();
+        index.build(&embeddings).expect("should succeed");
 
         let stats = index.get_stats();
         assert_eq!(stats.num_entities, 5);

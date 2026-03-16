@@ -659,7 +659,7 @@ mod tests {
     #[test]
     fn test_simple_query() {
         let query = "{ hello }";
-        let doc = parse_document(query).unwrap();
+        let doc = parse_document(query).expect("should succeed");
 
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Operation(op) = &doc.definitions[0] {
@@ -671,7 +671,7 @@ mod tests {
     #[test]
     fn test_named_query() {
         let query = "query GetUser { user { id name } }";
-        let doc = parse_document(query).unwrap();
+        let doc = parse_document(query).expect("should succeed");
 
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Operation(op) = &doc.definitions[0] {
@@ -683,7 +683,7 @@ mod tests {
     #[test]
     fn test_query_with_arguments() {
         let query = r#"{ user(id: "123") { name } }"#;
-        let doc = parse_document(query).unwrap();
+        let doc = parse_document(query).expect("should succeed");
 
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Operation(op) = &doc.definitions[0] {
@@ -698,7 +698,7 @@ mod tests {
     #[test]
     fn test_query_with_variables() {
         let query = "query GetUser($id: ID!) { user(id: $id) { name } }";
-        let doc = parse_document(query).unwrap();
+        let doc = parse_document(query).expect("should succeed");
 
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Operation(op) = &doc.definitions[0] {
@@ -710,7 +710,7 @@ mod tests {
     #[test]
     fn test_fragment() {
         let query = "fragment UserFields on User { id name email }";
-        let doc = parse_document(query).unwrap();
+        let doc = parse_document(query).expect("should succeed");
 
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Fragment(frag) = &doc.definitions[0] {

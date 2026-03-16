@@ -943,7 +943,7 @@ mod tests {
         let prediction = network.predict_emotional_response("error_pattern");
         assert!(prediction.is_ok());
 
-        let prediction = prediction.unwrap();
+        let prediction = prediction.expect("prediction should succeed");
         assert!(prediction.confidence >= 0.0 && prediction.confidence <= 1.0);
     }
 
@@ -953,7 +953,7 @@ mod tests {
         let response = network.generate_empathetic_response(EmotionalState::Cautious);
         assert!(response.is_ok());
 
-        let response = response.unwrap();
+        let response = response.expect("response should be available");
         assert!(response.intensity > 0.0);
         assert!(!response.response_action.is_empty());
     }
@@ -964,7 +964,7 @@ mod tests {
         let outcome = network.regulate_emotion(EmotionalState::Cautious, EmotionalState::Confident);
         assert!(outcome.is_ok());
 
-        let outcome = outcome.unwrap();
+        let outcome = outcome.expect("outcome should be available");
         assert!(!outcome.strategy_used.is_empty());
         assert!(outcome.effectiveness >= 0.0 && outcome.effectiveness <= 1.0);
     }

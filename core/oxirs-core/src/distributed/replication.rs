@@ -1237,26 +1237,28 @@ mod tests {
             },
         };
 
-        let manager = ReplicationManager::new(config).await.unwrap();
+        let manager = ReplicationManager::new(config)
+            .await
+            .expect("async operation should succeed");
 
         // Test write replication
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             crate::model::Object::Literal(Literal::new("test")),
         );
 
         manager
             .replicate_write(triple.clone(), OpType::Insert)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Test query
         let pattern = TriplePattern::new(None, None, None);
         let results = manager
             .query(&pattern, ConsistencyLevel::Eventual)
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], triple);
     }

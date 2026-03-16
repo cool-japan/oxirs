@@ -456,7 +456,7 @@ mod tests {
         let mut engine = TemplateEngine::new();
         engine.register(PromptTemplate::new("t", "Old", "old"));
         engine.register(PromptTemplate::new("t", "New", "new"));
-        assert_eq!(engine.get("t").unwrap().name, "New");
+        assert_eq!(engine.get("t").expect("should succeed").name, "New");
     }
 
     // ── render ────────────────────────────────────────────────────────────────
@@ -465,7 +465,9 @@ mod tests {
     fn test_render_simple_substitution() {
         let mut engine = TemplateEngine::new();
         engine.register(PromptTemplate::new("t", "T", "Hello, {{name}}!"));
-        let result = engine.render("t", &vars(&[("name", "Alice")])).unwrap();
+        let result = engine
+            .render("t", &vars(&[("name", "Alice")]))
+            .expect("should succeed");
         assert_eq!(result, "Hello, Alice!");
     }
 
@@ -493,7 +495,7 @@ mod tests {
             PromptTemplate::new("t", "T", "Style: {{style}}")
                 .with_var(TemplateVar::optional("style", "desc", "formal")),
         );
-        let result = engine.render("t", &vars(&[])).unwrap();
+        let result = engine.render("t", &vars(&[])).expect("should succeed");
         assert_eq!(result, "Style: formal");
     }
 
@@ -504,7 +506,9 @@ mod tests {
             PromptTemplate::new("t", "T", "{{style}}")
                 .with_var(TemplateVar::optional("style", "desc", "formal")),
         );
-        let result = engine.render("t", &vars(&[("style", "casual")])).unwrap();
+        let result = engine
+            .render("t", &vars(&[("style", "casual")]))
+            .expect("should succeed");
         assert_eq!(result, "casual");
     }
 
@@ -516,7 +520,9 @@ mod tests {
                 .with_var(TemplateVar::required("q", "q"))
                 .with_system("System: be helpful"),
         );
-        let result = engine.render("t", &vars(&[("q", "hello")])).unwrap();
+        let result = engine
+            .render("t", &vars(&[("q", "hello")]))
+            .expect("should succeed");
         assert!(result.contains("System: be helpful"));
         assert!(result.contains("Body: hello"));
         assert!(result.contains("---"));
@@ -532,7 +538,9 @@ mod tests {
             "T",
             "A{{#if x}} and {{x}}{{/if}}!",
         ));
-        let result = engine.render("t", &vars(&[("x", "B")])).unwrap();
+        let result = engine
+            .render("t", &vars(&[("x", "B")]))
+            .expect("should succeed");
         assert_eq!(result, "A and B!");
     }
 
@@ -544,7 +552,7 @@ mod tests {
             "T",
             "A{{#if x}} and {{x}}{{/if}}!",
         ));
-        let result = engine.render("t", &vars(&[])).unwrap();
+        let result = engine.render("t", &vars(&[])).expect("should succeed");
         assert_eq!(result, "A!");
     }
 
@@ -552,7 +560,9 @@ mod tests {
     fn test_conditional_block_false_when_empty() {
         let mut engine = TemplateEngine::new();
         engine.register(PromptTemplate::new("t", "T", "A{{#if x}}[{{x}}]{{/if}}B"));
-        let result = engine.render("t", &vars(&[("x", "")])).unwrap();
+        let result = engine
+            .render("t", &vars(&[("x", "")]))
+            .expect("should succeed");
         assert_eq!(result, "AB");
     }
 
@@ -566,7 +576,7 @@ mod tests {
         ));
         let result = engine
             .render("t", &vars(&[("a", "yes"), ("b", "")]))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(result, "A");
     }
 
@@ -612,7 +622,7 @@ mod tests {
                 .with_var(TemplateVar::required("input", "chained input")),
         );
         let v = vars(&[("name", "Alice")]);
-        let result = engine.chain(&["t1", "t2"], &v).unwrap();
+        let result = engine.chain(&["t1", "t2"], &v).expect("should succeed");
         assert_eq!(result, "Summary: Hello Alice");
     }
 
@@ -627,7 +637,9 @@ mod tests {
     fn test_chain_single_template() {
         let mut engine = TemplateEngine::new();
         engine.register(PromptTemplate::new("t1", "T1", "Value: {{v}}"));
-        let result = engine.chain(&["t1"], &vars(&[("v", "42")])).unwrap();
+        let result = engine
+            .chain(&["t1"], &vars(&[("v", "42")]))
+            .expect("should succeed");
         assert_eq!(result, "Value: 42");
     }
 
@@ -640,7 +652,7 @@ mod tests {
                 .with_var(TemplateVar::required("input", "")),
         );
         let v = vars(&[("a", "X"), ("b", "Y")]);
-        let result = engine.chain(&["t1", "t2"], &v).unwrap();
+        let result = engine.chain(&["t1", "t2"], &v).expect("should succeed");
         assert_eq!(result, "X + Y");
     }
 
@@ -650,7 +662,7 @@ mod tests {
     fn test_builtin_sparql_query() {
         let engine = TemplateEngine::with_builtins();
         let v = vars(&[("question", "Who is Alice?")]);
-        let result = engine.render("sparql_query", &v).unwrap();
+        let result = engine.render("sparql_query", &v).expect("should succeed");
         assert!(result.contains("Who is Alice?"));
     }
 
@@ -661,7 +673,7 @@ mod tests {
             ("context", "Alice is a developer."),
             ("question", "Who is Alice?"),
         ]);
-        let result = engine.render("rag_answer", &v).unwrap();
+        let result = engine.render("rag_answer", &v).expect("should succeed");
         assert!(result.contains("Alice is a developer."));
         assert!(result.contains("Who is Alice?"));
     }
@@ -670,7 +682,7 @@ mod tests {
     fn test_builtin_summarize() {
         let engine = TemplateEngine::with_builtins();
         let v = vars(&[("input", "Long text here.")]);
-        let result = engine.render("summarize", &v).unwrap();
+        let result = engine.render("summarize", &v).expect("should succeed");
         assert!(result.contains("Long text here."));
     }
 
@@ -681,7 +693,7 @@ mod tests {
             ("input", "I love Rust!"),
             ("categories", "positive,negative"),
         ]);
-        let result = engine.render("classify", &v).unwrap();
+        let result = engine.render("classify", &v).expect("should succeed");
         assert!(result.contains("positive,negative"));
         assert!(result.contains("I love Rust!"));
     }
@@ -693,7 +705,7 @@ mod tests {
             ("question", "Count triples"),
             ("graph", "http://example.org/graph"),
         ]);
-        let result = engine.render("sparql_query", &v).unwrap();
+        let result = engine.render("sparql_query", &v).expect("should succeed");
         assert!(result.contains("http://example.org/graph"));
     }
 
@@ -701,7 +713,7 @@ mod tests {
     fn test_builtin_sparql_without_graph_no_angle_brackets() {
         let engine = TemplateEngine::with_builtins();
         let v = vars(&[("question", "Count triples")]);
-        let result = engine.render("sparql_query", &v).unwrap();
+        let result = engine.render("sparql_query", &v).expect("should succeed");
         // The {{#if graph}} block should be suppressed
         assert!(!result.contains("<>"));
     }
@@ -731,7 +743,7 @@ mod tests {
         engine.register(PromptTemplate::new("t", "T", "{{a}}-{{b}}-{{c}}"));
         let result = engine
             .render("t", &vars(&[("a", "1"), ("b", "2"), ("c", "3")]))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(result, "1-2-3");
     }
 
@@ -739,7 +751,9 @@ mod tests {
     fn test_render_repeated_var() {
         let mut engine = TemplateEngine::new();
         engine.register(PromptTemplate::new("t", "T", "{{x}} and {{x}}"));
-        let result = engine.render("t", &vars(&[("x", "hello")])).unwrap();
+        let result = engine
+            .render("t", &vars(&[("x", "hello")]))
+            .expect("should succeed");
         assert_eq!(result, "hello and hello");
     }
 
@@ -747,7 +761,7 @@ mod tests {
     fn test_render_unknown_var_silently_dropped() {
         let mut engine = TemplateEngine::new();
         engine.register(PromptTemplate::new("t", "T", "A{{z}}B"));
-        let result = engine.render("t", &vars(&[])).unwrap();
+        let result = engine.render("t", &vars(&[])).expect("should succeed");
         assert_eq!(result, "AB");
     }
 

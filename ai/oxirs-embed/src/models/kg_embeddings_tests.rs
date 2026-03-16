@@ -231,7 +231,7 @@ fn test_transe_loss_recorded_per_epoch() {
         ..default_config()
     };
     let mut model = TransE::new(cfg);
-    let history = model.train(&triples, 4, 1).unwrap();
+    let history = model.train(&triples, 4, 1).expect("should succeed");
     assert_eq!(history.losses.len(), 10);
 }
 
@@ -239,8 +239,10 @@ fn test_transe_loss_recorded_per_epoch() {
 fn test_transe_score_is_finite_after_training() {
     let triples = make_synthetic_kg(4, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 4, 1).unwrap();
-    let s = model.score(&KgTriple::new(0, 0, 1)).unwrap();
+    model.train(&triples, 4, 1).expect("should succeed");
+    let s = model
+        .score(&KgTriple::new(0, 0, 1))
+        .expect("should succeed");
     assert!(s.is_finite());
 }
 
@@ -255,9 +257,13 @@ fn test_transe_score_negative_for_trained_pair() {
         ..default_config()
     };
     let mut model = TransE::new(cfg);
-    model.train(&triples, 6, 1).unwrap();
-    let s_pos = model.score(&KgTriple::new(0, 0, 1)).unwrap();
-    let s_other = model.score(&KgTriple::new(0, 0, 3)).unwrap();
+    model.train(&triples, 6, 1).expect("should succeed");
+    let s_pos = model
+        .score(&KgTriple::new(0, 0, 1))
+        .expect("should succeed");
+    let s_other = model
+        .score(&KgTriple::new(0, 0, 3))
+        .expect("should succeed");
     assert!(s_pos.is_finite());
     assert!(s_other.is_finite());
 }
@@ -266,7 +272,7 @@ fn test_transe_score_negative_for_trained_pair() {
 fn test_transe_unknown_entity_error() {
     let triples = make_synthetic_kg(3, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 3, 1).unwrap();
+    model.train(&triples, 3, 1).expect("should succeed");
     let err = model.score(&KgTriple::new(99, 0, 0));
     assert!(matches!(err, Err(KgError::UnknownEntity(99))));
 }
@@ -275,7 +281,7 @@ fn test_transe_unknown_entity_error() {
 fn test_transe_unknown_relation_error() {
     let triples = make_synthetic_kg(3, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 3, 1).unwrap();
+    model.train(&triples, 3, 1).expect("should succeed");
     let err = model.score(&KgTriple::new(0, 99, 1));
     assert!(matches!(err, Err(KgError::UnknownRelation(99))));
 }
@@ -284,8 +290,8 @@ fn test_transe_unknown_relation_error() {
 fn test_transe_predict_tail_length() {
     let triples = make_synthetic_kg(5, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 5, 1).unwrap();
-    let preds = model.predict_tail(0, 0, 3).unwrap();
+    model.train(&triples, 5, 1).expect("should succeed");
+    let preds = model.predict_tail(0, 0, 3).expect("should succeed");
     assert_eq!(preds.len(), 3);
 }
 
@@ -293,8 +299,8 @@ fn test_transe_predict_tail_length() {
 fn test_transe_predict_tail_sorted_descending() {
     let triples = make_synthetic_kg(5, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 5, 1).unwrap();
-    let preds = model.predict_tail(0, 0, 5).unwrap();
+    model.train(&triples, 5, 1).expect("should succeed");
+    let preds = model.predict_tail(0, 0, 5).expect("should succeed");
     for w in preds.windows(2) {
         assert!(w[0].1 >= w[1].1, "predictions not sorted: {:?}", preds);
     }
@@ -304,8 +310,8 @@ fn test_transe_predict_tail_sorted_descending() {
 fn test_transe_predict_head_length() {
     let triples = make_synthetic_kg(5, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 5, 1).unwrap();
-    let preds = model.predict_head(0, 1, 5).unwrap();
+    model.train(&triples, 5, 1).expect("should succeed");
+    let preds = model.predict_head(0, 1, 5).expect("should succeed");
     assert_eq!(preds.len(), 5);
 }
 
@@ -313,7 +319,7 @@ fn test_transe_predict_head_length() {
 fn test_transe_predict_tail_top_k_zero_error() {
     let triples = make_synthetic_kg(3, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 3, 1).unwrap();
+    model.train(&triples, 3, 1).expect("should succeed");
     let err = model.predict_tail(0, 0, 0);
     assert!(matches!(err, Err(KgError::InvalidTopK)));
 }
@@ -322,9 +328,9 @@ fn test_transe_predict_tail_top_k_zero_error() {
 fn test_transe_normalize_entities() {
     let triples = make_synthetic_kg(4, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 4, 1).unwrap();
+    model.train(&triples, 4, 1).expect("should succeed");
     model.normalize_entities();
-    let emb = model.embeddings.as_ref().unwrap();
+    let emb = model.embeddings.as_ref().expect("should succeed");
     for v in &emb.entity_embeddings {
         let n = l2_norm(v);
         assert!((n - 1.0).abs() < 1e-10, "entity not unit norm: {n}");
@@ -339,8 +345,8 @@ fn test_transe_embedding_dimensions() {
         ..default_config()
     };
     let mut model = TransE::new(cfg);
-    model.train(&triples, 4, 2).unwrap();
-    let emb = model.embeddings.as_ref().unwrap();
+    model.train(&triples, 4, 2).expect("should succeed");
+    let emb = model.embeddings.as_ref().expect("should succeed");
     assert_eq!(emb.entity_embeddings.len(), 4);
     assert_eq!(emb.relation_embeddings.len(), 2);
     for v in &emb.entity_embeddings {
@@ -356,8 +362,8 @@ fn test_transe_deterministic_with_same_seed() {
     let triples = make_synthetic_kg(4, 1);
     let mut m1 = TransE::new(default_config());
     let mut m2 = TransE::new(default_config());
-    let h1 = m1.train(&triples, 4, 1).unwrap();
-    let h2 = m2.train(&triples, 4, 1).unwrap();
+    let h1 = m1.train(&triples, 4, 1).expect("should succeed");
+    let h2 = m2.train(&triples, 4, 1).expect("should succeed");
     assert_eq!(h1.final_loss.to_bits(), h2.final_loss.to_bits());
 }
 
@@ -402,7 +408,7 @@ fn test_distmult_not_trained_error() {
 fn test_distmult_trains_without_error() {
     let triples = make_synthetic_kg(5, 2);
     let mut model = DistMult::new(default_config());
-    let history = model.train(&triples, 5, 2).unwrap();
+    let history = model.train(&triples, 5, 2).expect("should succeed");
     assert_eq!(history.epochs_trained, 20);
     assert!(history.final_loss.is_finite());
 }
@@ -411,8 +417,10 @@ fn test_distmult_trains_without_error() {
 fn test_distmult_score_finite_after_training() {
     let triples = make_synthetic_kg(4, 1);
     let mut model = DistMult::new(default_config());
-    model.train(&triples, 4, 1).unwrap();
-    let s = model.score(&KgTriple::new(0, 0, 1)).unwrap();
+    model.train(&triples, 4, 1).expect("should succeed");
+    let s = model
+        .score(&KgTriple::new(0, 0, 1))
+        .expect("should succeed");
     assert!(s.is_finite());
 }
 
@@ -424,7 +432,7 @@ fn test_distmult_loss_per_epoch() {
         ..default_config()
     };
     let mut model = DistMult::new(cfg);
-    let h = model.train(&triples, 4, 1).unwrap();
+    let h = model.train(&triples, 4, 1).expect("should succeed");
     assert_eq!(h.losses.len(), 15);
 }
 
@@ -432,8 +440,8 @@ fn test_distmult_loss_per_epoch() {
 fn test_distmult_predict_tail_returns_k() {
     let triples = make_synthetic_kg(6, 1);
     let mut model = DistMult::new(default_config());
-    model.train(&triples, 6, 1).unwrap();
-    let preds = model.predict_tail(0, 0, 4).unwrap();
+    model.train(&triples, 6, 1).expect("should succeed");
+    let preds = model.predict_tail(0, 0, 4).expect("should succeed");
     assert_eq!(preds.len(), 4);
 }
 
@@ -441,8 +449,8 @@ fn test_distmult_predict_tail_returns_k() {
 fn test_distmult_predict_tail_sorted() {
     let triples = make_synthetic_kg(6, 1);
     let mut model = DistMult::new(default_config());
-    model.train(&triples, 6, 1).unwrap();
-    let preds = model.predict_tail(0, 0, 6).unwrap();
+    model.train(&triples, 6, 1).expect("should succeed");
+    let preds = model.predict_tail(0, 0, 6).expect("should succeed");
     for w in preds.windows(2) {
         assert!(w[0].1 >= w[1].1);
     }
@@ -456,8 +464,8 @@ fn test_distmult_embedding_shape() {
         ..default_config()
     };
     let mut model = DistMult::new(cfg);
-    model.train(&triples, 3, 2).unwrap();
-    let emb = model.embeddings.as_ref().unwrap();
+    model.train(&triples, 3, 2).expect("should succeed");
+    let emb = model.embeddings.as_ref().expect("should succeed");
     assert_eq!(emb.entity_embeddings.len(), 3);
     assert_eq!(emb.relation_embeddings.len(), 2);
     for v in &emb.entity_embeddings {
@@ -469,7 +477,7 @@ fn test_distmult_embedding_shape() {
 fn test_distmult_unknown_entity_error() {
     let triples = make_synthetic_kg(3, 1);
     let mut model = DistMult::new(default_config());
-    model.train(&triples, 3, 1).unwrap();
+    model.train(&triples, 3, 1).expect("should succeed");
     assert!(matches!(
         model.score(&KgTriple::new(50, 0, 0)),
         Err(KgError::UnknownEntity(50))
@@ -480,8 +488,8 @@ fn test_distmult_unknown_entity_error() {
 fn test_distmult_predict_head_sorted() {
     let triples = make_synthetic_kg(5, 1);
     let mut model = DistMult::new(default_config());
-    model.train(&triples, 5, 1).unwrap();
-    let preds = model.predict_head(0, 2, 5).unwrap();
+    model.train(&triples, 5, 1).expect("should succeed");
+    let preds = model.predict_head(0, 2, 5).expect("should succeed");
     for w in preds.windows(2) {
         assert!(w[0].1 >= w[1].1);
     }
@@ -498,7 +506,7 @@ fn test_distmult_convergence_trend() {
         ..default_config()
     };
     let mut model = DistMult::new(cfg);
-    let history = model.train(&triples, 6, 2).unwrap();
+    let history = model.train(&triples, 6, 2).expect("should succeed");
     let early: f64 = history.losses[..5].iter().sum::<f64>() / 5.0;
     let late: f64 = history.losses[25..].iter().sum::<f64>() / 5.0;
     assert!(
@@ -546,7 +554,7 @@ fn test_rotate_not_trained_error() {
 fn test_rotate_trains_without_error() {
     let triples = make_synthetic_kg(5, 2);
     let mut model = RotatE::new(default_config());
-    let history = model.train(&triples, 5, 2).unwrap();
+    let history = model.train(&triples, 5, 2).expect("should succeed");
     assert_eq!(history.epochs_trained, 20);
     assert!(history.final_loss.is_finite());
 }
@@ -555,8 +563,10 @@ fn test_rotate_trains_without_error() {
 fn test_rotate_score_finite_after_training() {
     let triples = make_synthetic_kg(4, 1);
     let mut model = RotatE::new(default_config());
-    model.train(&triples, 4, 1).unwrap();
-    let s = model.score(&KgTriple::new(0, 0, 1)).unwrap();
+    model.train(&triples, 4, 1).expect("should succeed");
+    let s = model
+        .score(&KgTriple::new(0, 0, 1))
+        .expect("should succeed");
     assert!(s.is_finite());
 }
 
@@ -564,18 +574,25 @@ fn test_rotate_score_finite_after_training() {
 fn test_rotate_embedding_count() {
     let triples = make_synthetic_kg(5, 3);
     let mut model = RotatE::new(default_config());
-    model.train(&triples, 5, 3).unwrap();
-    assert_eq!(model.entity_re.as_ref().unwrap().len(), 5);
-    assert_eq!(model.entity_im.as_ref().unwrap().len(), 5);
-    assert_eq!(model.relation_phases.as_ref().unwrap().len(), 3);
+    model.train(&triples, 5, 3).expect("should succeed");
+    assert_eq!(model.entity_re.as_ref().expect("should succeed").len(), 5);
+    assert_eq!(model.entity_im.as_ref().expect("should succeed").len(), 5);
+    assert_eq!(
+        model
+            .relation_phases
+            .as_ref()
+            .expect("should succeed")
+            .len(),
+        3
+    );
 }
 
 #[test]
 fn test_rotate_predict_tail_length() {
     let triples = make_synthetic_kg(5, 1);
     let mut model = RotatE::new(default_config());
-    model.train(&triples, 5, 1).unwrap();
-    let preds = model.predict_tail(0, 0, 3).unwrap();
+    model.train(&triples, 5, 1).expect("should succeed");
+    let preds = model.predict_tail(0, 0, 3).expect("should succeed");
     assert_eq!(preds.len(), 3);
 }
 
@@ -583,8 +600,8 @@ fn test_rotate_predict_tail_length() {
 fn test_rotate_predict_tail_sorted() {
     let triples = make_synthetic_kg(5, 1);
     let mut model = RotatE::new(default_config());
-    model.train(&triples, 5, 1).unwrap();
-    let preds = model.predict_tail(0, 0, 5).unwrap();
+    model.train(&triples, 5, 1).expect("should succeed");
+    let preds = model.predict_tail(0, 0, 5).expect("should succeed");
     for w in preds.windows(2) {
         assert!(w[0].1 >= w[1].1, "not sorted: {:?}", preds);
     }
@@ -594,8 +611,8 @@ fn test_rotate_predict_tail_sorted() {
 fn test_rotate_predict_head_sorted() {
     let triples = make_synthetic_kg(5, 1);
     let mut model = RotatE::new(default_config());
-    model.train(&triples, 5, 1).unwrap();
-    let preds = model.predict_head(0, 2, 5).unwrap();
+    model.train(&triples, 5, 1).expect("should succeed");
+    let preds = model.predict_head(0, 2, 5).expect("should succeed");
     for w in preds.windows(2) {
         assert!(w[0].1 >= w[1].1, "not sorted: {:?}", preds);
     }
@@ -609,7 +626,7 @@ fn test_rotate_loss_per_epoch() {
         ..default_config()
     };
     let mut model = RotatE::new(cfg);
-    let h = model.train(&triples, 4, 1).unwrap();
+    let h = model.train(&triples, 4, 1).expect("should succeed");
     assert_eq!(h.losses.len(), 12);
 }
 
@@ -617,7 +634,7 @@ fn test_rotate_loss_per_epoch() {
 fn test_rotate_unknown_entity_error() {
     let triples = make_synthetic_kg(3, 1);
     let mut model = RotatE::new(default_config());
-    model.train(&triples, 3, 1).unwrap();
+    model.train(&triples, 3, 1).expect("should succeed");
     assert!(matches!(
         model.score(&KgTriple::new(99, 0, 0)),
         Err(KgError::UnknownEntity(99))
@@ -628,7 +645,7 @@ fn test_rotate_unknown_entity_error() {
 fn test_rotate_unknown_relation_error() {
     let triples = make_synthetic_kg(3, 1);
     let mut model = RotatE::new(default_config());
-    model.train(&triples, 3, 1).unwrap();
+    model.train(&triples, 3, 1).expect("should succeed");
     assert!(matches!(
         model.score(&KgTriple::new(0, 99, 1)),
         Err(KgError::UnknownRelation(99))
@@ -639,7 +656,7 @@ fn test_rotate_unknown_relation_error() {
 fn test_rotate_zero_top_k_error() {
     let triples = make_synthetic_kg(3, 1);
     let mut model = RotatE::new(default_config());
-    model.train(&triples, 3, 1).unwrap();
+    model.train(&triples, 3, 1).expect("should succeed");
     assert!(matches!(
         model.predict_tail(0, 0, 0),
         Err(KgError::InvalidTopK)
@@ -681,9 +698,11 @@ fn test_corrupt_triple_keeps_relation() {
 fn test_kg_model_trait_transe() {
     let triples = make_synthetic_kg(4, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 4, 1).unwrap();
+    model.train(&triples, 4, 1).expect("should succeed");
     let dyn_model: &dyn KgModel = &model;
-    let s = dyn_model.score(&KgTriple::new(0, 0, 1)).unwrap();
+    let s = dyn_model
+        .score(&KgTriple::new(0, 0, 1))
+        .expect("should succeed");
     assert!(s.is_finite());
 }
 
@@ -691,9 +710,11 @@ fn test_kg_model_trait_transe() {
 fn test_kg_model_trait_distmult() {
     let triples = make_synthetic_kg(4, 1);
     let mut model = DistMult::new(default_config());
-    model.train(&triples, 4, 1).unwrap();
+    model.train(&triples, 4, 1).expect("should succeed");
     let dyn_model: &dyn KgModel = &model;
-    let s = dyn_model.score(&KgTriple::new(0, 0, 1)).unwrap();
+    let s = dyn_model
+        .score(&KgTriple::new(0, 0, 1))
+        .expect("should succeed");
     assert!(s.is_finite());
 }
 
@@ -701,9 +722,11 @@ fn test_kg_model_trait_distmult() {
 fn test_kg_model_trait_rotate() {
     let triples = make_synthetic_kg(4, 1);
     let mut model = RotatE::new(default_config());
-    model.train(&triples, 4, 1).unwrap();
+    model.train(&triples, 4, 1).expect("should succeed");
     let dyn_model: &dyn KgModel = &model;
-    let s = dyn_model.score(&KgTriple::new(0, 0, 1)).unwrap();
+    let s = dyn_model
+        .score(&KgTriple::new(0, 0, 1))
+        .expect("should succeed");
     assert!(s.is_finite());
 }
 
@@ -722,7 +745,7 @@ fn test_hits_at_k_perfect() {
         ..default_config()
     };
     let mut model = TransE::new(cfg);
-    model.train(&triples, 5, 1).unwrap();
+    model.train(&triples, 5, 1).expect("should succeed");
     let h5 = LinkPredictionEvaluator::hits_at_k(&model, &triples, 5);
     assert!((0.0..=1.0).contains(&h5), "Hits@5 out of range: {h5}");
 }
@@ -753,7 +776,7 @@ fn test_mean_rank_empty() {
 fn test_mean_rank_trained() {
     let triples = make_synthetic_kg(6, 1);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 6, 1).unwrap();
+    model.train(&triples, 6, 1).expect("should succeed");
     let mr = LinkPredictionEvaluator::mean_rank(&model, &triples, 6);
     assert!((1.0..=7.0).contains(&mr), "mean rank out of range: {mr}");
 }
@@ -769,7 +792,7 @@ fn test_mrr_empty() {
 fn test_mrr_trained_in_range() {
     let triples = make_synthetic_kg(5, 1);
     let mut model = DistMult::new(default_config());
-    model.train(&triples, 5, 1).unwrap();
+    model.train(&triples, 5, 1).expect("should succeed");
     let mrr = LinkPredictionEvaluator::mrr(&model, &triples, 5);
     assert!((0.0..=1.0).contains(&mrr), "MRR out of [0,1]: {mrr}");
 }
@@ -783,7 +806,7 @@ fn test_hits_at_1_leq_hits_at_3_leq_hits_at_10() {
         ..default_config()
     };
     let mut model = TransE::new(cfg);
-    model.train(&triples, 10, 2).unwrap();
+    model.train(&triples, 10, 2).expect("should succeed");
     let h1 = LinkPredictionEvaluator::hits_at_k(&model, &triples, 1);
     let h3 = LinkPredictionEvaluator::hits_at_k(&model, &triples, 3);
     let h10 = LinkPredictionEvaluator::hits_at_k(&model, &triples, 10);
@@ -799,10 +822,10 @@ fn test_hits_at_1_leq_hits_at_3_leq_hits_at_10() {
 fn test_serialize_round_trip() {
     let triples = make_synthetic_kg(4, 2);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 4, 2).unwrap();
-    let emb = model.embeddings.as_ref().unwrap();
+    model.train(&triples, 4, 2).expect("should succeed");
+    let emb = model.embeddings.as_ref().expect("should succeed");
     let bytes = serialize_embeddings(emb);
-    let restored = deserialize_embeddings(&bytes).unwrap();
+    let restored = deserialize_embeddings(&bytes).expect("should succeed");
     assert_eq!(
         restored.entity_embeddings.len(),
         emb.entity_embeddings.len()
@@ -838,7 +861,7 @@ fn test_serialize_empty_embeddings() {
         relation_to_id: HashMap::new(),
     };
     let bytes = serialize_embeddings(&emb);
-    let restored = deserialize_embeddings(&bytes).unwrap();
+    let restored = deserialize_embeddings(&bytes).expect("should succeed");
     assert!(restored.entity_embeddings.is_empty());
     assert!(restored.relation_embeddings.is_empty());
 }
@@ -847,10 +870,10 @@ fn test_serialize_empty_embeddings() {
 fn test_serialize_preserves_relation_count() {
     let triples = make_synthetic_kg(3, 3);
     let mut model = DistMult::new(default_config());
-    model.train(&triples, 3, 3).unwrap();
-    let emb = model.embeddings.as_ref().unwrap();
+    model.train(&triples, 3, 3).expect("should succeed");
+    let emb = model.embeddings.as_ref().expect("should succeed");
     let bytes = serialize_embeddings(emb);
-    let restored = deserialize_embeddings(&bytes).unwrap();
+    let restored = deserialize_embeddings(&bytes).expect("should succeed");
     assert_eq!(restored.relation_embeddings.len(), 3);
 }
 
@@ -883,7 +906,7 @@ fn test_transe_larger_kg_convergence() {
         ..default_config()
     };
     let mut model = TransE::new(cfg);
-    let h = model.train(&triples, 15, 3).unwrap();
+    let h = model.train(&triples, 15, 3).expect("should succeed");
     assert!(h.final_loss.is_finite());
     assert!(h.final_loss >= 0.0);
 }
@@ -899,7 +922,7 @@ fn test_distmult_larger_kg_convergence() {
         ..default_config()
     };
     let mut model = DistMult::new(cfg);
-    let h = model.train(&triples, 15, 3).unwrap();
+    let h = model.train(&triples, 15, 3).expect("should succeed");
     assert!(h.final_loss.is_finite());
     assert!(h.final_loss >= 0.0);
 }
@@ -915,7 +938,7 @@ fn test_rotate_larger_kg_convergence() {
         ..default_config()
     };
     let mut model = RotatE::new(cfg);
-    let h = model.train(&triples, 15, 3).unwrap();
+    let h = model.train(&triples, 15, 3).expect("should succeed");
     assert!(h.final_loss.is_finite());
     assert!(h.final_loss >= 0.0);
 }
@@ -924,9 +947,9 @@ fn test_rotate_larger_kg_convergence() {
 fn test_all_scores_finite_for_all_triples() {
     let triples = make_synthetic_kg(6, 2);
     let mut model = TransE::new(default_config());
-    model.train(&triples, 6, 2).unwrap();
+    model.train(&triples, 6, 2).expect("should succeed");
     for t in &triples {
-        let s = model.score(t).unwrap();
+        let s = model.score(t).expect("should succeed");
         assert!(s.is_finite(), "non-finite score for triple {t:?}: {s}");
     }
 }

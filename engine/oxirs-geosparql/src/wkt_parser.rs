@@ -486,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_parse_point_2d() {
-        let g = WktParser::parse("POINT (1.0 2.0)").unwrap();
+        let g = WktParser::parse("POINT (1.0 2.0)").expect("should succeed");
         match g {
             WktGeometry::Point { x, y, z } => {
                 assert!(approx(x, 1.0));
@@ -499,12 +499,12 @@ mod tests {
 
     #[test]
     fn test_parse_point_3d() {
-        let g = WktParser::parse("POINT Z (1.0 2.0 3.5)").unwrap();
+        let g = WktParser::parse("POINT Z (1.0 2.0 3.5)").expect("should succeed");
         match g {
             WktGeometry::Point { x, y, z } => {
                 assert!(approx(x, 1.0));
                 assert!(approx(y, 2.0));
-                assert!(approx(z.unwrap(), 3.5));
+                assert!(approx(z.expect("should succeed"), 3.5));
             }
             _ => panic!("Expected Point"),
         }
@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn test_parse_point_negative_coords() {
-        let g = WktParser::parse("POINT (-10.5 -20.3)").unwrap();
+        let g = WktParser::parse("POINT (-10.5 -20.3)").expect("should succeed");
         match g {
             WktGeometry::Point { x, y, .. } => {
                 assert!(approx(x, -10.5));
@@ -526,7 +526,7 @@ mod tests {
 
     #[test]
     fn test_parse_linestring() {
-        let g = WktParser::parse("LINESTRING (0 0, 1 1, 2 2)").unwrap();
+        let g = WktParser::parse("LINESTRING (0 0, 1 1, 2 2)").expect("should succeed");
         match g {
             WktGeometry::LineString { points } => {
                 assert_eq!(points.len(), 3);
@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn test_linestring_point_count() {
-        let g = WktParser::parse("LINESTRING (0 0, 1 1, 2 2)").unwrap();
+        let g = WktParser::parse("LINESTRING (0 0, 1 1, 2 2)").expect("should succeed");
         assert_eq!(WktParser::point_count(&g), 3);
     }
 
@@ -547,7 +547,7 @@ mod tests {
 
     #[test]
     fn test_parse_polygon_no_hole() {
-        let g = WktParser::parse("POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
+        let g = WktParser::parse("POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
         match &g {
             WktGeometry::Polygon { exterior, holes } => {
                 assert_eq!(exterior.len(), 5);
@@ -561,7 +561,7 @@ mod tests {
     fn test_parse_polygon_with_hole() {
         let g =
             WktParser::parse("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 4 2, 4 4, 2 4, 2 2))")
-                .unwrap();
+                .expect("should succeed");
         match &g {
             WktGeometry::Polygon { exterior, holes } => {
                 assert_eq!(exterior.len(), 5);
@@ -576,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_parse_multipoint() {
-        let g = WktParser::parse("MULTIPOINT (1 2, 3 4, 5 6)").unwrap();
+        let g = WktParser::parse("MULTIPOINT (1 2, 3 4, 5 6)").expect("should succeed");
         match g {
             WktGeometry::MultiPoint { points } => {
                 assert_eq!(points.len(), 3);
@@ -587,8 +587,8 @@ mod tests {
 
     #[test]
     fn test_multipoint_bounding_box() {
-        let g = WktParser::parse("MULTIPOINT (1 2, 5 3, 3 7)").unwrap();
-        let bb = WktParser::bounding_box(&g).unwrap();
+        let g = WktParser::parse("MULTIPOINT (1 2, 5 3, 3 7)").expect("should succeed");
+        let bb = WktParser::bounding_box(&g).expect("should succeed");
         assert!(approx(bb.0, 1.0)); // min_x
         assert!(approx(bb.1, 2.0)); // min_y
         assert!(approx(bb.2, 5.0)); // max_x
@@ -599,8 +599,8 @@ mod tests {
 
     #[test]
     fn test_parse_geometry_collection() {
-        let g =
-            WktParser::parse("GEOMETRYCOLLECTION (POINT (1 2), LINESTRING (0 0, 1 1))").unwrap();
+        let g = WktParser::parse("GEOMETRYCOLLECTION (POINT (1 2), LINESTRING (0 0, 1 1))")
+            .expect("should succeed");
         match &g {
             WktGeometry::GeometryCollection { geometries } => {
                 assert_eq!(geometries.len(), 2);
@@ -612,7 +612,7 @@ mod tests {
     #[test]
     fn test_geometry_collection_point_count() {
         let g = WktParser::parse("GEOMETRYCOLLECTION (POINT (1 2), LINESTRING (0 0, 1 1, 2 2))")
-            .unwrap();
+            .expect("should succeed");
         // 1 from POINT + 3 from LINESTRING
         assert_eq!(WktParser::point_count(&g), 4);
     }
@@ -646,18 +646,18 @@ mod tests {
     #[test]
     fn test_serialize_linestring_round_trip() {
         let wkt = "LINESTRING (0 0, 1 1, 2 2)";
-        let g = WktParser::parse(wkt).unwrap();
+        let g = WktParser::parse(wkt).expect("should succeed");
         let s = WktParser::serialize(&g);
         assert!(s.starts_with("LINESTRING"));
         // Parse serialized back
-        let g2 = WktParser::parse(&s).unwrap();
+        let g2 = WktParser::parse(&s).expect("should succeed");
         assert_eq!(WktParser::point_count(&g), WktParser::point_count(&g2));
     }
 
     #[test]
     fn test_serialize_polygon() {
         let wkt = "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0))";
-        let g = WktParser::parse(wkt).unwrap();
+        let g = WktParser::parse(wkt).expect("should succeed");
         let s = WktParser::serialize(&g);
         assert!(s.starts_with("POLYGON"));
     }
@@ -671,7 +671,7 @@ mod tests {
             y: 7.0,
             z: None,
         };
-        let bb = WktParser::bounding_box(&g).unwrap();
+        let bb = WktParser::bounding_box(&g).expect("should succeed");
         assert!(approx(bb.0, 5.0));
         assert!(approx(bb.1, 7.0));
         assert!(approx(bb.2, 5.0));
@@ -680,8 +680,8 @@ mod tests {
 
     #[test]
     fn test_bounding_box_linestring() {
-        let g = WktParser::parse("LINESTRING (0 5, 3 2, 1 8)").unwrap();
-        let bb = WktParser::bounding_box(&g).unwrap();
+        let g = WktParser::parse("LINESTRING (0 5, 3 2, 1 8)").expect("should succeed");
+        let bb = WktParser::bounding_box(&g).expect("should succeed");
         assert!(approx(bb.0, 0.0));
         assert!(approx(bb.1, 2.0));
         assert!(approx(bb.2, 3.0));
@@ -697,15 +697,15 @@ mod tests {
             y: 4.0,
             z: None,
         };
-        let c = WktParser::centroid(&g).unwrap();
+        let c = WktParser::centroid(&g).expect("should succeed");
         assert!(approx(c.0, 2.0));
         assert!(approx(c.1, 4.0));
     }
 
     #[test]
     fn test_centroid_linestring() {
-        let g = WktParser::parse("LINESTRING (0 0, 2 0, 2 2, 0 2)").unwrap();
-        let c = WktParser::centroid(&g).unwrap();
+        let g = WktParser::parse("LINESTRING (0 0, 2 0, 2 2, 0 2)").expect("should succeed");
+        let c = WktParser::centroid(&g).expect("should succeed");
         assert!(approx(c.0, 1.0));
         assert!(approx(c.1, 1.0));
     }
@@ -797,7 +797,8 @@ mod tests {
 
     #[test]
     fn test_parse_multilinestring() {
-        let g = WktParser::parse("MULTILINESTRING ((0 0, 1 1), (2 2, 3 3, 4 4))").unwrap();
+        let g = WktParser::parse("MULTILINESTRING ((0 0, 1 1), (2 2, 3 3, 4 4))")
+            .expect("should succeed");
         match &g {
             WktGeometry::MultiLineString { lines } => {
                 assert_eq!(lines.len(), 2);
@@ -834,7 +835,7 @@ mod tests {
     fn test_point_count_polygon_with_hole() {
         let g =
             WktParser::parse("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 4 2, 4 4, 2 4, 2 2))")
-                .unwrap();
+                .expect("should succeed");
         // 5 exterior + 5 hole
         assert_eq!(WktParser::point_count(&g), 10);
     }

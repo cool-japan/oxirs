@@ -648,13 +648,13 @@ mod tests {
 
     #[test]
     fn test_adaptive_accelerator_creation() {
-        let accelerator = AdaptiveEmbeddingAccelerator::new(None, 1000).unwrap();
+        let accelerator = AdaptiveEmbeddingAccelerator::new(None, 1000).expect("should succeed");
         assert!(accelerator.info().contains("CPU only"));
     }
 
     #[test]
     fn test_fallback_distance_computation() {
-        let accelerator = AdaptiveEmbeddingAccelerator::new(None, 1000).unwrap();
+        let accelerator = AdaptiveEmbeddingAccelerator::new(None, 1000).expect("should succeed");
 
         let vectors_a = vec![
             Array1::from_vec(vec![1.0, 2.0, 3.0]),
@@ -667,20 +667,20 @@ mod tests {
 
         let distances = accelerator
             .adaptive_batch_distances(&vectors_a, &vectors_b)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(distances.len(), 4); // 2x2 combinations
     }
 
     #[test]
     fn test_fallback_gradient_update() {
-        let accelerator = AdaptiveEmbeddingAccelerator::new(None, 1000).unwrap();
+        let accelerator = AdaptiveEmbeddingAccelerator::new(None, 1000).expect("should succeed");
 
         let mut embeddings = vec![Array2::zeros((2, 3))];
         let gradients = vec![Array2::ones((2, 3))];
 
         accelerator
             .adaptive_gradient_update(&mut embeddings, &gradients, 0.01, 0.001)
-            .unwrap();
+            .expect("should succeed");
 
         // Check that gradients were applied
         assert!(embeddings[0][[0, 0]] != 0.0);

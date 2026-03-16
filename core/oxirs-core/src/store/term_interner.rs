@@ -593,9 +593,11 @@ mod tests {
     fn test_subject_interning() {
         let interner = TermInterner::new();
 
-        let subject1 = Subject::NamedNode(NamedNode::new("http://example.org/s1").unwrap());
-        let subject2 = Subject::BlankNode(BlankNode::new("b1").unwrap());
-        let subject3 = Subject::NamedNode(NamedNode::new("http://example.org/s1").unwrap());
+        let subject1 =
+            Subject::NamedNode(NamedNode::new("http://example.org/s1").expect("valid IRI"));
+        let subject2 = Subject::BlankNode(BlankNode::new("b1").expect("valid blank node id"));
+        let subject3 =
+            Subject::NamedNode(NamedNode::new("http://example.org/s1").expect("valid IRI"));
 
         let id1 = interner.intern_subject(&subject1);
         let id2 = interner.intern_subject(&subject2);
@@ -619,9 +621,12 @@ mod tests {
     fn test_predicate_interning() {
         let interner = TermInterner::new();
 
-        let pred1 = Predicate::NamedNode(NamedNode::new("http://example.org/p1").unwrap());
-        let pred2 = Predicate::NamedNode(NamedNode::new("http://example.org/p2").unwrap());
-        let pred3 = Predicate::NamedNode(NamedNode::new("http://example.org/p1").unwrap());
+        let pred1 =
+            Predicate::NamedNode(NamedNode::new("http://example.org/p1").expect("valid IRI"));
+        let pred2 =
+            Predicate::NamedNode(NamedNode::new("http://example.org/p2").expect("valid IRI"));
+        let pred3 =
+            Predicate::NamedNode(NamedNode::new("http://example.org/p1").expect("valid IRI"));
 
         let id1 = interner.intern_predicate(&pred1);
         let id2 = interner.intern_predicate(&pred2);
@@ -639,7 +644,7 @@ mod tests {
         let interner = TermInterner::new();
 
         let obj1 = Object::Literal(Literal::new("test"));
-        let obj2 = Object::NamedNode(NamedNode::new("http://example.org/o1").unwrap());
+        let obj2 = Object::NamedNode(NamedNode::new("http://example.org/o1").expect("valid IRI"));
         let obj3 = Object::Literal(Literal::new("test"));
 
         let id1 = interner.intern_object(&obj1);
@@ -657,7 +662,8 @@ mod tests {
     fn test_clear() {
         let interner = TermInterner::new();
 
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/s1").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/s1").expect("valid IRI"));
         let id = interner.intern_subject(&subject);
 
         assert!(interner.get_subject(id).is_some());
@@ -680,14 +686,18 @@ mod tests {
             let interner_clone = Arc::clone(&interner);
             let handle = thread::spawn(move || {
                 let subject = Subject::NamedNode(
-                    NamedNode::new(format!("http://example.org/s{}", i % 3)).unwrap(),
+                    NamedNode::new(format!("http://example.org/s{}", i % 3))
+                        .expect("valid IRI from format"),
                 );
                 interner_clone.intern_subject(&subject)
             });
             handles.push(handle);
         }
 
-        let ids: Vec<u32> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let ids: Vec<u32> = handles
+            .into_iter()
+            .map(|h| h.join().expect("thread should not panic"))
+            .collect();
 
         // Should have only 3 unique IDs (s0, s1, s2)
         let unique_ids: std::collections::HashSet<_> = ids.iter().collect();

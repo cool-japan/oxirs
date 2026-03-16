@@ -13,6 +13,7 @@
 //!     AuthMethod, AuthenticatorConfig, Authenticator, AuthResponse,
 //! };
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let config = AuthenticatorConfig {
 //!     challenge_ttl_ms: 30_000,
 //!     max_active_challenges: 100,
@@ -21,8 +22,10 @@
 //!
 //! auth.register_did("did:example:alice", AuthMethod::Ed25519("aabbcc".to_string()));
 //!
-//! let challenge = auth.issue_challenge("did:example:alice", 1_000).unwrap();
+//! let challenge = auth.issue_challenge("did:example:alice", 1_000)?;
 //! assert_eq!(challenge.did, "did:example:alice");
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

@@ -447,19 +447,19 @@ mod tests {
 
     #[test]
     fn test_arithmetic() {
-        let a = Decimal::from_str("10.5").unwrap();
-        let b = Decimal::from_str("2.5").unwrap();
+        let a = Decimal::from_str("10.5").expect("valid decimal string");
+        let b = Decimal::from_str("2.5").expect("valid decimal string");
 
-        assert_eq!(a.checked_add(b).unwrap().to_string(), "13");
-        assert_eq!(a.checked_sub(b).unwrap().to_string(), "8");
-        assert_eq!(a.checked_div(b).unwrap().to_string(), "4.2");
+        assert_eq!(a.checked_add(b).expect("operation should succeed").to_string(), "13");
+        assert_eq!(a.checked_sub(b).expect("operation should succeed").to_string(), "8");
+        assert_eq!(a.checked_div(b).expect("operation should succeed").to_string(), "4.2");
     }
 
     #[test]
     fn test_rounding() {
-        let a = Decimal::from_str("10.7").unwrap();
-        let b = Decimal::from_str("10.3").unwrap();
-        let c = Decimal::from_str("-10.7").unwrap();
+        let a = Decimal::from_str("10.7").expect("valid decimal string");
+        let b = Decimal::from_str("10.3").expect("valid decimal string");
+        let c = Decimal::from_str("-10.7").expect("valid decimal string");
 
         assert_eq!(a.floor().to_string(), "10");
         assert_eq!(a.ceil().to_string(), "11");
@@ -479,7 +479,7 @@ mod tests {
         let dec = Decimal::from(42);
         assert_eq!(dec.to_string(), "42");
 
-        let int_back: Integer = dec.try_into().unwrap();
+        let int_back: Integer = dec.try_into().expect("operation should succeed");
         assert_eq!(int_back, Integer::from(42));
 
         let bool_dec = Decimal::from(Boolean::from(true));

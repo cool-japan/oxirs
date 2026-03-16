@@ -1332,7 +1332,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_kmeans_clustering() {
+    fn test_kmeans_clustering() -> Result<()> {
         let config = ClusteringConfig {
             algorithm: ClusteringAlgorithm::KMeans,
             num_clusters: Some(2),
@@ -1350,14 +1350,15 @@ mod tests {
             ("res4".to_string(), Vector::new(vec![10.1, 10.1, 10.1])),
         ];
 
-        let result = engine.cluster(&resources).unwrap();
+        let result = engine.cluster(&resources)?;
 
         assert_eq!(result.clusters.len(), 2);
         assert!(result.noise.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_dbscan_clustering() {
+    fn test_dbscan_clustering() -> Result<()> {
         let config = ClusteringConfig {
             algorithm: ClusteringAlgorithm::DBSCAN,
             similarity_threshold: 0.9,
@@ -1373,12 +1374,13 @@ mod tests {
             ("res3".to_string(), Vector::new(vec![10.0, 10.0, 10.0])),
         ];
 
-        let result = engine.cluster(&resources).unwrap();
+        let result = engine.cluster(&resources)?;
         assert!(result.clusters.len() <= 2);
+        Ok(())
     }
 
     #[test]
-    fn test_similarity_clustering() {
+    fn test_similarity_clustering() -> Result<()> {
         let config = ClusteringConfig {
             algorithm: ClusteringAlgorithm::Similarity,
             similarity_threshold: 0.95,
@@ -1393,8 +1395,9 @@ mod tests {
             ("res3".to_string(), Vector::new(vec![0.0, 0.0, 1.0])),
         ];
 
-        let result = engine.cluster(&resources).unwrap();
+        let result = engine.cluster(&resources)?;
         // Should have 3 clusters since vectors are orthogonal
         assert_eq!(result.clusters.len(), 3);
+        Ok(())
     }
 }

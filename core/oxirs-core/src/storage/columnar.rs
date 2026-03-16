@@ -729,7 +729,7 @@ mod tests {
             "/tmp/oxirs_columnar_test_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_millis()
         );
         let config = ColumnarConfig {
@@ -737,29 +737,29 @@ mod tests {
             ..Default::default()
         };
 
-        let storage = ColumnarStorage::new(config).await.unwrap();
+        let storage = ColumnarStorage::new(config).await.expect("async operation should succeed");
 
         // Create test triple
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             crate::model::Object::Literal(Literal::new("test")),
         );
 
         // Store triple
-        storage.store_triple(&triple).await.unwrap();
+        storage.store_triple(&triple).await.expect("async operation should succeed");
 
         // Flush to ensure it's written
         {
             let mut writer_guard = storage.writer.write().await;
-            storage.flush_batch(&mut writer_guard).await.unwrap();
+            storage.flush_batch(&mut writer_guard).await.expect("async operation should succeed");
         }
 
         // Query using SQL
         let results = storage
             .query_sql("SELECT * FROM triples WHERE object_value = 'test'")
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(results.len(), 1);
     }
@@ -770,7 +770,7 @@ mod tests {
             "/tmp/oxirs_columnar_analytics_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("operation should succeed")
                 .as_millis()
         );
         let config = ColumnarConfig {
@@ -779,30 +779,30 @@ mod tests {
             ..Default::default()
         };
 
-        let storage = ColumnarStorage::new(config).await.unwrap();
+        let storage = ColumnarStorage::new(config).await.expect("async operation should succeed");
 
         // Store multiple triples
         let predicates = ["p1", "p1", "p2", "p1", "p3"];
         for (i, pred) in predicates.iter().enumerate() {
             let triple = Triple::new(
-                NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
-                NamedNode::new(format!("http://example.org/{pred}")).unwrap(),
+                NamedNode::new(format!("http://example.org/s{i}")).expect("valid IRI from format"),
+                NamedNode::new(format!("http://example.org/{pred}")).expect("valid IRI from format"),
                 crate::model::Object::Literal(Literal::new(format!("value{i}"))),
             );
-            storage.store_triple(&triple).await.unwrap();
+            storage.store_triple(&triple).await.expect("async operation should succeed");
         }
 
         // Flush remaining
         {
             let mut writer_guard = storage.writer.write().await;
-            storage.flush_batch(&mut writer_guard).await.unwrap();
+            storage.flush_batch(&mut writer_guard).await.expect("async operation should succeed");
         }
 
         // Count by predicate
         let result = storage
             .analyze(AnalyticalQuery::CountByPredicate)
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         if let AnalysisResult::PredicateCounts(counts) = result {
             assert_eq!(counts.get("http://example.org/p1"), Some(&3));

@@ -797,6 +797,7 @@ impl KGEmbeddingModel for GraphSAGE {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn test_gcn_creation() {
@@ -837,7 +838,7 @@ mod tests {
     }
 
     #[test]
-    fn test_gnn_training() {
+    fn test_gnn_training() -> Result<()> {
         let config = KGEmbeddingConfig {
             model: crate::kg_embeddings::KGEmbeddingModelType::GCN,
             dimensions: 32,
@@ -872,11 +873,12 @@ mod tests {
         ];
 
         // Should not panic
-        gcn.train(&triples).unwrap();
+        gcn.train(&triples)?;
 
         // Should have embeddings for all entities
         assert!(gcn.get_entity_embedding("entity1").is_some());
         assert!(gcn.get_entity_embedding("entity2").is_some());
         assert!(gcn.get_entity_embedding("entity3").is_some());
+        Ok(())
     }
 }

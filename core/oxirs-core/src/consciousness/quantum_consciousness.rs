@@ -514,7 +514,7 @@ mod tests {
         let measurement = quantum_state.measure_consciousness_state();
         assert!(measurement.is_ok());
 
-        let measurement = measurement.unwrap();
+        let measurement = measurement.expect("measurement should succeed");
         assert!(measurement.probability >= 0.0 && measurement.probability <= 1.0);
         assert!(measurement.fidelity >= 0.0 && measurement.fidelity <= 1.0);
     }
@@ -543,12 +543,12 @@ mod tests {
         let mut quantum_state = QuantumConsciousnessState::new();
         quantum_state
             .entangle_patterns("pattern_a", "pattern_b", 0.9)
-            .unwrap();
+            .expect("operation should succeed");
 
         let bell_measurement = quantum_state.bell_test_measurement("pattern_a", "pattern_b");
         assert!(bell_measurement.is_ok());
 
-        let measurement = bell_measurement.unwrap();
+        let measurement = bell_measurement.expect("Bell measurement should succeed");
         assert!(measurement.bell_violation >= 0.0 && measurement.bell_violation <= 4.0);
     }
 

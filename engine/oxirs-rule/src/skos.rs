@@ -856,7 +856,7 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_rule_broader_transitive_chain_simple() {
+    fn test_rule_broader_transitive_chain_simple() -> anyhow::Result<()> {
         let mut graph = g();
         add(&mut graph, "ex:A", BROADER_TRANSITIVE, "ex:B");
         add(&mut graph, "ex:B", BROADER_TRANSITIVE, "ex:C");
@@ -867,6 +867,7 @@ mod tests {
                 .any(|(s, p, o)| s == "ex:A" && p == BROADER_TRANSITIVE && o == "ex:C"),
             "Expected ex:A broaderTransitive ex:C; got {new:?}"
         );
+        Ok(())
     }
 
     #[test]
@@ -1104,7 +1105,7 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_apply_rules_broader_chain_fixpoint() {
+    fn test_apply_rules_broader_chain_fixpoint() -> anyhow::Result<()> {
         let mut graph = g();
         add(&mut graph, "ex:A", BROADER, "ex:B");
         add(&mut graph, "ex:B", BROADER, "ex:C");
@@ -1137,6 +1138,7 @@ mod tests {
             final_graph.contains("ex:A", BROADER_TRANSITIVE, "ex:D") || contains_bt("ex:A", "ex:D"),
             "Expected A broaderTransitive D; new triples = {new:?}"
         );
+        Ok(())
     }
 
     #[test]

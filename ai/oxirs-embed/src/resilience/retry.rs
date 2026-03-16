@@ -252,7 +252,7 @@ mod tests {
         .await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
         assert_eq!(call_count, 3);
     }
 

@@ -818,6 +818,7 @@ impl MultiGpuConfigFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     fn make_batch_search_task(id: u64, n_queries: usize, dim: usize) -> MultiGpuTask {
         let queries = (0..n_queries)
@@ -853,77 +854,81 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_gpu_manager_creation() {
+    fn test_multi_gpu_manager_creation() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 2,
             ..Default::default()
         };
         let manager = MultiGpuManager::new(config);
         assert!(manager.is_ok(), "Manager creation should succeed");
-        let manager = manager.unwrap();
+        let manager = manager?;
         assert_eq!(manager.num_devices(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_single_device_dispatch_and_execute() {
+    fn test_single_device_dispatch_and_execute() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 1,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         let task = make_batch_search_task(0, 5, 8);
-        let task_id = manager.dispatch(task).unwrap();
+        let task_id = manager.dispatch(task)?;
         assert_eq!(task_id, 0);
 
         let results = manager.execute_pending();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].task_id, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_round_robin_distribution() {
+    fn test_round_robin_distribution() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 3,
             strategy: LoadBalancingStrategy::RoundRobin,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         // Dispatch 6 tasks - should distribute 2 each to 3 devices
         for i in 0..6u64 {
             let task = make_batch_search_task(i, 2, 4);
-            manager.dispatch(task).unwrap();
+            manager.dispatch(task)?;
         }
 
         // Execute all
         let results = manager.execute_pending();
         assert_eq!(results.len(), 6);
+        Ok(())
     }
 
     #[test]
-    fn test_execute_sync() {
+    fn test_execute_sync() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 1,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         let task = make_batch_search_task(42, 3, 8);
-        let result = manager.execute_sync(task).unwrap();
+        let result = manager.execute_sync(task)?;
 
         assert_eq!(result.task_id, 42);
         assert_eq!(result.device_id, 0);
         matches!(result.output, GpuTaskOutput::SearchResults(_));
+        Ok(())
     }
 
     #[test]
-    fn test_distance_matrix_task() {
+    fn test_distance_matrix_task() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 1,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         let task = MultiGpuTask::DistanceMatrix {
             task_id: 1,
@@ -932,7 +937,7 @@ mod tests {
             priority: TaskPriority::Normal,
         };
 
-        let result = manager.execute_sync(task).unwrap();
+        let result = manager.execute_sync(task)?;
         match result.output {
             GpuTaskOutput::DistanceMatrix(m) => {
                 assert_eq!(m.len(), 2);
@@ -944,15 +949,16 @@ mod tests {
             }
             _ => panic!("Expected DistanceMatrix output"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_normalize_batch_task() {
+    fn test_normalize_batch_task() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 1,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         let task = MultiGpuTask::NormalizeBatch {
             task_id: 2,
@@ -960,7 +966,7 @@ mod tests {
             priority: TaskPriority::Normal,
         };
 
-        let result = manager.execute_sync(task).unwrap();
+        let result = manager.execute_sync(task)?;
         match result.output {
             GpuTaskOutput::NormalizedVectors(vecs) => {
                 assert_eq!(vecs.len(), 2);
@@ -976,18 +982,19 @@ mod tests {
             }
             _ => panic!("Expected NormalizedVectors output"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_build_index_task() {
+    fn test_build_index_task() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 1,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         let task = make_build_index_task(3, 100, 16);
-        let result = manager.execute_sync(task).unwrap();
+        let result = manager.execute_sync(task)?;
 
         match result.output {
             GpuTaskOutput::IndexBuild { nodes_built } => {
@@ -995,15 +1002,16 @@ mod tests {
             }
             _ => panic!("Expected IndexBuild output"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_custom_kernel_task() {
+    fn test_custom_kernel_task() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 1,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         let task = MultiGpuTask::CustomKernel {
             task_id: 4,
@@ -1013,13 +1021,14 @@ mod tests {
             priority: TaskPriority::High,
         };
 
-        let result = manager.execute_sync(task).unwrap();
+        let result = manager.execute_sync(task)?;
         match result.output {
             GpuTaskOutput::CustomOutput(out) => {
                 assert_eq!(out, vec![2.0, 4.0, 6.0]);
             }
             _ => panic!("Expected CustomOutput"),
         }
+        Ok(())
     }
 
     #[test]
@@ -1040,66 +1049,70 @@ mod tests {
     }
 
     #[test]
-    fn test_get_stats() {
+    fn test_get_stats() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 2,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         let task1 = make_batch_search_task(0, 5, 4);
         let task2 = make_batch_search_task(1, 5, 4);
 
-        manager.dispatch(task1).unwrap();
-        manager.dispatch(task2).unwrap();
+        manager.dispatch(task1)?;
+        manager.dispatch(task2)?;
         manager.execute_pending();
 
         let stats = manager.get_stats();
         assert_eq!(stats.total_tasks_dispatched, 2);
         assert_eq!(stats.total_tasks_completed, 2);
         assert_eq!(stats.device_metrics.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_least_utilized_device() {
+    fn test_least_utilized_device() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 3,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
         let device = manager.least_utilized_device();
         assert!(device.is_some());
-        assert!((0..3).contains(&device.unwrap()));
+        assert!((0..3).contains(&device.expect("test value")));
+        Ok(())
     }
 
     #[test]
-    fn test_set_strategy_runtime() {
+    fn test_set_strategy_runtime() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 2,
             strategy: LoadBalancingStrategy::RoundRobin,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
         manager.set_strategy(LoadBalancingStrategy::ShortestQueue);
         // Should not panic
+        Ok(())
     }
 
     #[test]
-    fn test_max_queue_depth_rejection() {
+    fn test_max_queue_depth_rejection() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 1,
             max_queue_depth: 2,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         // Fill up the queue
-        manager.dispatch(make_batch_search_task(0, 1, 4)).unwrap();
-        manager.dispatch(make_batch_search_task(1, 1, 4)).unwrap();
+        manager.dispatch(make_batch_search_task(0, 1, 4))?;
+        manager.dispatch(make_batch_search_task(1, 1, 4))?;
 
         // Third task should fail (queue full)
         let result = manager.dispatch(make_batch_search_task(2, 1, 4));
         assert!(result.is_err(), "Should reject task when queue is full");
+        Ok(())
     }
 
     #[test]
@@ -1126,25 +1139,26 @@ mod tests {
     }
 
     #[test]
-    fn test_all_healthy_check() {
+    fn test_all_healthy_check() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 2,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
         // Initially all devices should be healthy (utilization = 0)
         assert!(manager.all_healthy());
+        Ok(())
     }
 
     #[test]
-    fn test_reset_stats() {
+    fn test_reset_stats() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 1,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
-        manager.dispatch(make_batch_search_task(0, 1, 4)).unwrap();
+        manager.dispatch(make_batch_search_task(0, 1, 4))?;
         manager.execute_pending();
 
         let stats_before = manager.get_stats();
@@ -1153,15 +1167,16 @@ mod tests {
         manager.reset_stats();
         let stats_after = manager.get_stats();
         assert_eq!(stats_after.total_tasks_dispatched, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_next_task_id_monotonic() {
+    fn test_next_task_id_monotonic() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 1,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         let id0 = manager.next_task_id();
         let id1 = manager.next_task_id();
@@ -1169,59 +1184,63 @@ mod tests {
 
         assert!(id1 > id0);
         assert!(id2 > id1);
+        Ok(())
     }
 
     #[test]
-    fn test_least_utilized_strategy_dispatch() {
+    fn test_least_utilized_strategy_dispatch() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 2,
             strategy: LoadBalancingStrategy::LeastUtilized,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         for i in 0..4u64 {
-            manager.dispatch(make_batch_search_task(i, 2, 4)).unwrap();
+            manager.dispatch(make_batch_search_task(i, 2, 4))?;
         }
         let results = manager.execute_pending();
         assert_eq!(results.len(), 4);
+        Ok(())
     }
 
     #[test]
-    fn test_shortest_queue_strategy_dispatch() {
+    fn test_shortest_queue_strategy_dispatch() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 2,
             strategy: LoadBalancingStrategy::ShortestQueue,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
 
         for i in 0..6u64 {
-            manager.dispatch(make_batch_search_task(i, 2, 4)).unwrap();
+            manager.dispatch(make_batch_search_task(i, 2, 4))?;
         }
         let results = manager.execute_pending();
         assert_eq!(results.len(), 6);
+        Ok(())
     }
 
     #[test]
-    fn test_load_imbalance_factor() {
+    fn test_load_imbalance_factor() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 2,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
         let stats = manager.get_stats();
         // With zero utilization on all devices, imbalance should be 1.0
         assert!(stats.load_imbalance_factor >= 1.0);
+        Ok(())
     }
 
     #[test]
-    fn test_device_metrics_structure() {
+    fn test_device_metrics_structure() -> Result<()> {
         let config = MultiGpuConfig {
             num_devices: 2,
             ..Default::default()
         };
-        let manager = MultiGpuManager::new(config).unwrap();
+        let manager = MultiGpuManager::new(config)?;
         let metrics = manager.get_device_metrics();
 
         assert_eq!(metrics.len(), 2);
@@ -1229,5 +1248,6 @@ mod tests {
             assert_eq!(m.device_id, i as i32);
             assert!(m.compute_weight > 0.0);
         }
+        Ok(())
     }
 }

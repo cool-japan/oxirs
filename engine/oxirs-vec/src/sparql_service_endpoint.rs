@@ -706,7 +706,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cosine_similarity_function() {
+    fn test_cosine_similarity_function() -> Result<()> {
         let function = CosineSimilarityFunction;
 
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
@@ -714,7 +714,7 @@ mod tests {
 
         let args = vec![VectorServiceArg::Vector(v1), VectorServiceArg::Vector(v2)];
 
-        let result = function.execute(&args).unwrap();
+        let result = function.execute(&args)?;
 
         match result {
             VectorServiceResult::Number(similarity) => {
@@ -722,6 +722,7 @@ mod tests {
             }
             _ => panic!("Expected number result"),
         }
+        Ok(())
     }
 
     #[test]

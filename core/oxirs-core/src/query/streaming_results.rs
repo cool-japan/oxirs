@@ -582,8 +582,8 @@ mod tests {
     #[test]
     fn test_solution_creation() {
         let mut bindings = HashMap::new();
-        let var = Variable::new("x").unwrap();
-        let term = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
+        let var = Variable::new("x").expect("valid variable name");
+        let term = Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI"));
         bindings.insert(var.clone(), Some(term.clone()));
 
         let solution = Solution::new(bindings);
@@ -595,7 +595,7 @@ mod tests {
     fn test_streaming_select_results() {
         let builder = StreamingResultBuilder::new().with_buffer_size(10);
 
-        let variables = vec![Variable::new("x").unwrap()];
+        let variables = vec![Variable::new("x").expect("valid variable name")];
         let (mut results, sender) = builder.build_select(variables.clone());
 
         // Send some solutions
@@ -603,7 +603,9 @@ mod tests {
             let mut bindings = HashMap::new();
             let term = Term::Literal(Literal::new(i.to_string()));
             bindings.insert(variables[0].clone(), Some(term));
-            sender.send(Ok(Solution::new(bindings))).unwrap();
+            sender
+                .send(Ok(Solution::new(bindings)))
+                .expect("send should succeed");
         }
         drop(sender);
 
@@ -620,7 +622,7 @@ mod tests {
     #[test]
     fn test_batch_operations() {
         let builder = StreamingResultBuilder::new();
-        let variables = vec![Variable::new("x").unwrap()];
+        let variables = vec![Variable::new("x").expect("valid variable name")];
         let (mut results, sender) = builder.build_select(variables.clone());
 
         // Send 20 solutions
@@ -628,30 +630,32 @@ mod tests {
             let mut bindings = HashMap::new();
             let term = Term::Literal(Literal::new(i.to_string()));
             bindings.insert(variables[0].clone(), Some(term));
-            sender.send(Ok(Solution::new(bindings))).unwrap();
+            sender
+                .send(Ok(Solution::new(bindings)))
+                .expect("send should succeed");
         }
         drop(sender);
 
         // Take batch of 10
-        let batch = results.next_batch(10).unwrap();
+        let batch = results.next_batch(10).expect("operation should succeed");
         assert_eq!(batch.len(), 10);
 
         // Skip 5 using our skip method
-        results.skip_results(5).unwrap();
+        results.skip_results(5).expect("operation should succeed");
 
         // Take remaining using our take method
-        let remaining = results.take_results(10).unwrap();
+        let remaining = results.take_results(10).expect("operation should succeed");
         assert_eq!(remaining.len(), 5);
     }
 
     #[test]
     fn test_cancellation() {
         let builder = StreamingResultBuilder::new();
-        let variables = vec![Variable::new("x").unwrap()];
+        let variables = vec![Variable::new("x").expect("valid variable name")];
         let (mut results, _sender) = builder.build_select(variables);
 
         results.cancel();
         assert!(results.is_cancelled());
-        assert!(results.next().unwrap().is_none());
+        assert!(results.next().expect("should have next item").is_none());
     }
 }

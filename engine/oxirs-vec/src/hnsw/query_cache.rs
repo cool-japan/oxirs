@@ -247,10 +247,11 @@ impl QueryCache {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
-    fn test_query_cache_basic() {
+    fn test_query_cache_basic() -> Result<()> {
         let config = QueryCacheConfig::default();
         let cache = QueryCache::new(config);
 
@@ -264,10 +265,11 @@ mod tests {
         cache.put(&query, 5, results.clone());
 
         // Cache hit on second access
-        let cached = cache.get(&query, 5).unwrap();
+        let cached = cache.get(&query, 5).expect("cache should have results");
         assert_eq!(cached.len(), 2);
         assert_eq!(cached[0].0, "uri1");
         assert_eq!(cached[0].1, 0.9);
+        Ok(())
     }
 
     #[test]
@@ -343,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn test_query_cache_different_k() {
+    fn test_query_cache_different_k() -> Result<()> {
         let config = QueryCacheConfig::default();
         let cache = QueryCache::new(config);
 
@@ -358,10 +360,13 @@ mod tests {
         cache.put(&query, 10, results_k10);
 
         // Different k values should have different cache entries
-        let cached_k5 = cache.get(&query, 5).unwrap();
-        let cached_k10 = cache.get(&query, 10).unwrap();
+        let cached_k5 = cache.get(&query, 5).expect("cache k5 should have results");
+        let cached_k10 = cache
+            .get(&query, 10)
+            .expect("cache k10 should have results");
 
         assert_eq!(cached_k5.len(), 1);
         assert_eq!(cached_k10.len(), 2);
+        Ok(())
     }
 }

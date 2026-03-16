@@ -111,7 +111,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let scenario = result.unwrap();
+        let scenario = result.expect("should succeed");
         assert_eq!(scenario.test_type, TestType::EndToEndValidation);
         assert_eq!(scenario.complexity_level, TestComplexityLevel::Simple);
     }

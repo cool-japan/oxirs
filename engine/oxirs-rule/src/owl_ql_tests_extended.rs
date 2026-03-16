@@ -448,7 +448,7 @@ fn test_all_subproperties_inverse_includes_self() {
 }
 
 #[test]
-fn test_unfold_property_with_inverse_subproperty() {
+fn test_unfold_property_with_inverse_subproperty() -> anyhow::Result<()> {
     // Q⁻ ⊑ P means if (y,x):Q then (x,y):P
     // So querying ?x P ?y should also yield ?y Q ?x
     let tbox = make_tbox(vec![QlAxiom::SubObjectPropertyOf {
@@ -466,6 +466,7 @@ fn test_unfold_property_with_inverse_subproperty() {
         }
     });
     assert!(has_q_inv, "should contain ?y Q ?x from inverse subproperty");
+    Ok(())
 }
 
 #[test]

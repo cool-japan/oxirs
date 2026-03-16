@@ -421,7 +421,7 @@ mod tests {
             .add_entity("User", EntityKey::new(vec!["id".to_string()]))
             .add_entity("Product", EntityKey::new(vec!["sku".to_string()]))
             .build()
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(schema.version, FederationVersion::V2);
         assert_eq!(schema.entities.len(), 2);
@@ -435,7 +435,7 @@ mod tests {
         let schema = FederationSchemaBuilder::new(FederationVersion::V2)
             .add_entity("User", EntityKey::new(vec!["id".to_string()]))
             .build()
-            .unwrap();
+            .expect("should succeed");
 
         let sdl = schema.to_sdl();
         assert!(sdl.contains("@link"));

@@ -1108,7 +1108,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rdfs_reasoner() {
+    fn test_rdfs_reasoner() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = RdfsReasoner::new();
 
         let facts = vec![
@@ -1128,7 +1128,7 @@ mod tests {
             },
         ];
 
-        let inferred = reasoner.infer(&facts).unwrap();
+        let inferred = reasoner.infer(&facts)?;
 
         // Should infer that john is of type Agent
         let expected = RuleAtom::Triple {
@@ -1140,6 +1140,7 @@ mod tests {
         };
 
         assert!(inferred.contains(&expected));
+        Ok(())
     }
 
     #[test]
@@ -1288,7 +1289,7 @@ mod tests {
     }
 
     #[test]
-    fn test_disabled_rules_not_generating_facts() {
+    fn test_disabled_rules_not_generating_facts() -> Result<(), Box<dyn std::error::Error>> {
         use vocabulary::*;
 
         // Create reasoner with only rdfs9 enabled
@@ -1310,7 +1311,7 @@ mod tests {
             },
         ];
 
-        let inferred = reasoner.infer(&facts).unwrap();
+        let inferred = reasoner.infer(&facts)?;
 
         // Should infer john is type Agent (rdfs9 is enabled)
         let expected_agent = RuleAtom::Triple {
@@ -1327,10 +1328,11 @@ mod tests {
             object: Term::Constant(RDFS_RESOURCE.to_string()),
         };
         assert!(!inferred.contains(&unexpected_resource));
+        Ok(())
     }
 
     #[test]
-    fn test_full_profile_generates_noisy_facts() {
+    fn test_full_profile_generates_noisy_facts() -> Result<(), Box<dyn std::error::Error>> {
         use vocabulary::*;
 
         // Create reasoner with Full profile
@@ -1342,7 +1344,7 @@ mod tests {
             object: Term::Constant("mary".to_string()),
         }];
 
-        let inferred = reasoner.infer(&facts).unwrap();
+        let inferred = reasoner.infer(&facts)?;
 
         // Full profile should generate Resource types (rdfs4a/rdfs4b)
         let john_resource = RuleAtom::Triple {
@@ -1358,10 +1360,11 @@ mod tests {
 
         assert!(inferred.contains(&john_resource));
         assert!(inferred.contains(&mary_resource));
+        Ok(())
     }
 
     #[test]
-    fn test_minimal_profile_skips_noisy_facts() {
+    fn test_minimal_profile_skips_noisy_facts() -> Result<(), Box<dyn std::error::Error>> {
         use vocabulary::*;
 
         // Create reasoner with Minimal profile (default)
@@ -1373,7 +1376,7 @@ mod tests {
             object: Term::Constant("mary".to_string()),
         }];
 
-        let inferred = reasoner.infer(&facts).unwrap();
+        let inferred = reasoner.infer(&facts)?;
 
         // Minimal profile should NOT generate Resource types
         let john_resource = RuleAtom::Triple {
@@ -1383,11 +1386,12 @@ mod tests {
         };
 
         assert!(!inferred.contains(&john_resource));
+        Ok(())
     }
 
     /// Benchmark test: Compare fact counts between profiles
     #[test]
-    fn bench_profile_comparison() {
+    fn bench_profile_comparison() -> Result<(), Box<dyn std::error::Error>> {
         // Generate test triples
         let mut triples = Vec::new();
         for i in 0..100 {
@@ -1401,13 +1405,13 @@ mod tests {
         // Test Minimal profile
         let mut minimal_reasoner = RdfsReasoner::with_profile(RdfsProfile::Minimal);
         let minimal_start = std::time::Instant::now();
-        let minimal_result = minimal_reasoner.infer(&triples).unwrap();
+        let minimal_result = minimal_reasoner.infer(&triples)?;
         let minimal_duration = minimal_start.elapsed();
 
         // Test Full profile
         let mut full_reasoner = RdfsReasoner::with_profile(RdfsProfile::Full);
         let full_start = std::time::Instant::now();
-        let full_result = full_reasoner.infer(&triples).unwrap();
+        let full_result = full_reasoner.infer(&triples)?;
         let full_duration = full_start.elapsed();
 
         println!(
@@ -1430,5 +1434,6 @@ mod tests {
             "Full profile generated {}x more facts",
             full_result.len() as f64 / minimal_result.len() as f64
         );
+        Ok(())
     }
 }

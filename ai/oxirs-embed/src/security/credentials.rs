@@ -191,53 +191,53 @@ mod tests {
 
     #[test]
     fn test_credential_storage_and_retrieval() {
-        let mut manager = CredentialManager::new(false).unwrap();
+        let mut manager = CredentialManager::new(false).expect("should succeed");
 
         // Store credential
-        manager.store("openai", "sk-test-key-123").unwrap();
+        manager.store("openai", "sk-test-key-123").expect("should succeed");
 
         // Retrieve credential
-        let api_key = manager.get_api_key("openai").unwrap();
+        let api_key = manager.get_api_key("openai").expect("should succeed");
         assert_eq!(api_key, Some("sk-test-key-123".to_string()));
     }
 
     #[test]
     fn test_encrypted_credential_storage() {
-        let mut manager = CredentialManager::new(true).unwrap();
+        let mut manager = CredentialManager::new(true).expect("should succeed");
 
         // Store encrypted credential
-        manager.store("anthropic", "sk-ant-key-456").unwrap();
+        manager.store("anthropic", "sk-ant-key-456").expect("should succeed");
 
         // Retrieve and decrypt
-        let api_key = manager.get_api_key("anthropic").unwrap();
+        let api_key = manager.get_api_key("anthropic").expect("should succeed");
         assert_eq!(api_key, Some("sk-ant-key-456".to_string()));
     }
 
     #[test]
     fn test_credential_removal() {
-        let mut manager = CredentialManager::new(false).unwrap();
+        let mut manager = CredentialManager::new(false).expect("should succeed");
 
-        manager.store("test_provider", "test_key").unwrap();
-        assert!(manager.get_api_key("test_provider").unwrap().is_some());
+        manager.store("test_provider", "test_key").expect("should succeed");
+        assert!(manager.get_api_key("test_provider").expect("should succeed").is_some());
 
-        manager.remove("test_provider").unwrap();
-        assert!(manager.get_api_key("test_provider").unwrap().is_none());
+        manager.remove("test_provider").expect("should succeed");
+        assert!(manager.get_api_key("test_provider").expect("should succeed").is_none());
     }
 
     #[test]
     fn test_list_metadata() {
-        let mut manager = CredentialManager::new(false).unwrap();
+        let mut manager = CredentialManager::new(false).expect("should succeed");
 
-        manager.store("provider1", "key1").unwrap();
-        manager.store("provider2", "key2").unwrap();
+        manager.store("provider1", "key1").expect("should succeed");
+        manager.store("provider2", "key2").expect("should succeed");
 
-        let metadata = manager.list_metadata().unwrap();
+        let metadata = manager.list_metadata().expect("should succeed");
         assert_eq!(metadata.len(), 2);
     }
 
     #[test]
     fn test_invalid_input() {
-        let mut manager = CredentialManager::new(false).unwrap();
+        let mut manager = CredentialManager::new(false).expect("should succeed");
 
         // Empty provider should fail
         assert!(manager.store("", "key").is_err());

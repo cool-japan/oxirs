@@ -231,7 +231,7 @@ mod tests {
         let c = IriCatalog::with_common_prefixes();
         assert!(c
             .resolve_curie("rdf:type")
-            .unwrap()
+            .expect("should succeed")
             .contains("rdf-syntax-ns#type"));
     }
 
@@ -239,7 +239,7 @@ mod tests {
     fn test_common_prefixes_xsd() {
         let c = IriCatalog::with_common_prefixes();
         assert_eq!(
-            c.resolve_curie("xsd:string").unwrap(),
+            c.resolve_curie("xsd:string").expect("should succeed"),
             "http://www.w3.org/2001/XMLSchema#string"
         );
     }
@@ -247,7 +247,10 @@ mod tests {
     #[test]
     fn test_common_prefixes_owl() {
         let c = IriCatalog::with_common_prefixes();
-        assert!(c.resolve_curie("owl:Class").unwrap().contains("owl#Class"));
+        assert!(c
+            .resolve_curie("owl:Class")
+            .expect("should succeed")
+            .contains("owl#Class"));
     }
 
     // --- add_prefix ---
@@ -264,7 +267,10 @@ mod tests {
         c.add_prefix("ex", "http://first.org/");
         c.add_prefix("ex", "http://second.org/");
         assert_eq!(c.prefix_count(), 1);
-        assert_eq!(c.resolve_curie("ex:Foo").unwrap(), "http://second.org/Foo");
+        assert_eq!(
+            c.resolve_curie("ex:Foo").expect("should succeed"),
+            "http://second.org/Foo"
+        );
     }
 
     // --- resolve_curie ---
@@ -273,7 +279,7 @@ mod tests {
         let mut c = IriCatalog::new();
         c.add_prefix("ex", "http://example.org/");
         assert_eq!(
-            c.resolve_curie("ex:Person").unwrap(),
+            c.resolve_curie("ex:Person").expect("should succeed"),
             "http://example.org/Person"
         );
     }
@@ -283,7 +289,7 @@ mod tests {
         let mut c = IriCatalog::new();
         c.add_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#");
         assert_eq!(
-            c.resolve_curie("rdf:").unwrap(),
+            c.resolve_curie("rdf:").expect("should succeed"),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
         );
     }
@@ -311,7 +317,7 @@ mod tests {
     fn test_resolve_relative_success() {
         let c = IriCatalog::with_base("http://base.org/dir/");
         assert_eq!(
-            c.resolve_relative("file.ttl").unwrap(),
+            c.resolve_relative("file.ttl").expect("should succeed"),
             "http://base.org/dir/file.ttl"
         );
     }
@@ -319,14 +325,17 @@ mod tests {
     #[test]
     fn test_resolve_relative_empty_string_returns_base() {
         let c = IriCatalog::with_base("http://base.org/doc");
-        assert_eq!(c.resolve_relative("").unwrap(), "http://base.org/doc");
+        assert_eq!(
+            c.resolve_relative("").expect("should succeed"),
+            "http://base.org/doc"
+        );
     }
 
     #[test]
     fn test_resolve_relative_fragment() {
         let c = IriCatalog::with_base("http://base.org/ont");
         assert_eq!(
-            c.resolve_relative("#Class").unwrap(),
+            c.resolve_relative("#Class").expect("should succeed"),
             "http://base.org/ont#Class"
         );
     }
@@ -346,7 +355,7 @@ mod tests {
         let mut c = IriCatalog::new();
         c.set_base("http://first.org/");
         c.set_base("http://second.org/");
-        let r = c.resolve_relative("x").unwrap();
+        let r = c.resolve_relative("x").expect("should succeed");
         assert!(r.contains("second.org"));
     }
 

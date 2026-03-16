@@ -640,6 +640,7 @@ impl GpuHnswIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     fn make_index(batch_size: usize) -> GpuHnswIndex {
         let config = GpuHnswConfig {
@@ -669,79 +670,81 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_pending_accumulates() {
+    fn test_insert_pending_accumulates() -> Result<()> {
         let mut index = make_index(8);
-        index.insert("a".to_string(), vec2(1.0, 0.0)).unwrap();
-        index.insert("b".to_string(), vec2(0.0, 1.0)).unwrap();
+        index.insert("a".to_string(), vec2(1.0, 0.0))?;
+        index.insert("b".to_string(), vec2(0.0, 1.0))?;
         assert_eq!(index.pending_count(), 2);
         assert_eq!(index.len(), 0); // Not yet flushed
+        Ok(())
     }
 
     #[test]
-    fn test_auto_flush_on_batch_full() {
+    fn test_auto_flush_on_batch_full() -> Result<()> {
         let mut index = make_index(3);
         for i in 0..3 {
-            index
-                .insert(format!("v{}", i), vec![i as f32, 0.0])
-                .unwrap();
+            index.insert(format!("v{}", i), vec![i as f32, 0.0])?;
         }
         // Batch of 3 triggers auto-flush
         assert_eq!(index.len(), 3);
         assert_eq!(index.pending_count(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_manual_flush() {
+    fn test_manual_flush() -> Result<()> {
         let mut index = make_index(16);
-        index.insert("x".to_string(), vec2(1.0, 1.0)).unwrap();
+        index.insert("x".to_string(), vec2(1.0, 1.0))?;
         assert_eq!(index.pending_count(), 1);
-        index.flush().unwrap();
+        index.flush()?;
         assert_eq!(index.len(), 1);
         assert_eq!(index.pending_count(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_search_empty_returns_empty() {
+    fn test_search_empty_returns_empty() -> Result<()> {
         let index = make_index(4);
-        let result = index.search(&[1.0, 0.0], 5).unwrap();
+        let result = index.search(&[1.0, 0.0], 5)?;
         assert!(result.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_search_single_vector() {
+    fn test_search_single_vector() -> Result<()> {
         let mut index = make_index(4);
-        index.insert("only".to_string(), vec2(1.0, 0.0)).unwrap();
-        index.flush().unwrap();
-        let result = index.search(&[1.0, 0.0], 1).unwrap();
+        index.insert("only".to_string(), vec2(1.0, 0.0))?;
+        index.flush()?;
+        let result = index.search(&[1.0, 0.0], 1)?;
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].0, "only");
+        Ok(())
     }
 
     #[test]
-    fn test_search_nearest_neighbour() {
+    fn test_search_nearest_neighbour() -> Result<()> {
         let mut index = make_index(8);
-        index.insert("origin".to_string(), vec2(0.0, 0.0)).unwrap();
-        index.insert("right".to_string(), vec2(10.0, 0.0)).unwrap();
-        index.insert("up".to_string(), vec2(0.0, 10.0)).unwrap();
-        index.flush().unwrap();
+        index.insert("origin".to_string(), vec2(0.0, 0.0))?;
+        index.insert("right".to_string(), vec2(10.0, 0.0))?;
+        index.insert("up".to_string(), vec2(0.0, 10.0))?;
+        index.flush()?;
 
         // Query near origin
-        let result = index.search(&[0.1, 0.1], 1).unwrap();
+        let result = index.search(&[0.1, 0.1], 1)?;
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].0, "origin");
+        Ok(())
     }
 
     #[test]
-    fn test_search_top_k_ordering() {
+    fn test_search_top_k_ordering() -> Result<()> {
         let mut index = make_index(4);
         for i in 0..4 {
-            index
-                .insert(format!("v{}", i), vec![i as f32 * 2.0, 0.0])
-                .unwrap();
+            index.insert(format!("v{}", i), vec![i as f32 * 2.0, 0.0])?;
         }
-        index.flush().unwrap();
+        index.flush()?;
 
-        let result = index.search(&[0.0, 0.0], 2).unwrap();
+        let result = index.search(&[0.0, 0.0], 2)?;
         assert!(result.len() <= 2);
         // Closest should come first
         if result.len() == 2 {
@@ -750,73 +753,73 @@ mod tests {
                 "Results should be ordered by distance"
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn test_duplicate_uri_rejected() {
+    fn test_duplicate_uri_rejected() -> Result<()> {
         let mut index = make_index(8);
-        index.insert("dup".to_string(), vec2(1.0, 0.0)).unwrap();
-        index.flush().unwrap();
+        index.insert("dup".to_string(), vec2(1.0, 0.0))?;
+        index.flush()?;
         let err = index.insert("dup".to_string(), vec2(2.0, 0.0));
         assert!(err.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_stats_accumulate() {
+    fn test_stats_accumulate() -> Result<()> {
         let mut index = make_index(4);
         for i in 0..8 {
-            index
-                .insert(format!("v{}", i), vec![i as f32, 0.0])
-                .unwrap();
+            index.insert(format!("v{}", i), vec![i as f32, 0.0])?;
         }
-        index.flush().unwrap(); // flush any remainder
+        index.flush()?; // flush any remainder
         let stats = index.stats();
         assert_eq!(stats.vector_count, 8);
         assert!(stats.batch_stats.batches_processed >= 2);
         assert_eq!(stats.batch_stats.vectors_inserted, 8);
+        Ok(())
     }
 
     #[test]
-    fn test_stats_avg_batch_time_positive() {
+    fn test_stats_avg_batch_time_positive() -> Result<()> {
         let mut index = make_index(2);
-        index.insert("a".to_string(), vec2(0.0, 0.0)).unwrap();
-        index.insert("b".to_string(), vec2(1.0, 0.0)).unwrap();
+        index.insert("a".to_string(), vec2(0.0, 0.0))?;
+        index.insert("b".to_string(), vec2(1.0, 0.0))?;
         let stats = index.stats();
         assert!(stats.batch_stats.avg_batch_us > 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_larger_dataset_correctness() {
+    fn test_larger_dataset_correctness() -> Result<()> {
         let mut index = make_index(10);
         // Add 50 vectors in a line along x-axis
         for i in 0..50 {
-            index
-                .insert(format!("v{}", i), vec![i as f32, 0.0])
-                .unwrap();
+            index.insert(format!("v{}", i), vec![i as f32, 0.0])?;
         }
-        index.flush().unwrap();
+        index.flush()?;
 
         assert_eq!(index.len(), 50);
 
         // Nearest to x=25 should be v25
-        let result = index.search(&[25.0, 0.0], 3).unwrap();
+        let result = index.search(&[25.0, 0.0], 3)?;
         assert!(!result.is_empty());
         // The closest vector should be very close to 25.0
         assert!(result[0].1 < 2.0_f32);
+        Ok(())
     }
 
     #[test]
-    fn test_multi_batch_flush_consistency() {
+    fn test_multi_batch_flush_consistency() -> Result<()> {
         let mut index = make_index(5);
         for i in 0..20 {
-            index
-                .insert(format!("v{}", i), vec![i as f32, (i % 3) as f32])
-                .unwrap();
+            index.insert(format!("v{}", i), vec![i as f32, (i % 3) as f32])?;
         }
-        index.flush().unwrap();
+        index.flush()?;
         let stats = index.stats();
         assert_eq!(stats.vector_count, 20);
         assert!(stats.batch_stats.batches_processed >= 4);
+        Ok(())
     }
 
     #[test]
@@ -839,85 +842,90 @@ mod tests {
     }
 
     #[test]
-    fn test_single_dimension_vectors() {
+    fn test_single_dimension_vectors() -> Result<()> {
         let mut index = make_index(4);
-        index.insert("a".to_string(), vec![1.0]).unwrap();
-        index.insert("b".to_string(), vec![5.0]).unwrap();
-        index.insert("c".to_string(), vec![10.0]).unwrap();
-        index.insert("d".to_string(), vec![3.0]).unwrap();
-        index.flush().unwrap();
-        let result = index.search(&[4.5], 2).unwrap();
+        index.insert("a".to_string(), vec![1.0])?;
+        index.insert("b".to_string(), vec![5.0])?;
+        index.insert("c".to_string(), vec![10.0])?;
+        index.insert("d".to_string(), vec![3.0])?;
+        index.flush()?;
+        let result = index.search(&[4.5], 2)?;
         assert!(!result.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_high_dimensional_vectors() {
+    fn test_high_dimensional_vectors() -> Result<()> {
         let dim = 128;
         let mut index = make_index(8);
         for i in 0..16 {
             let v: Vec<f32> = (0..dim).map(|d| (i * dim + d) as f32 * 0.01).collect();
-            index.insert(format!("v{}", i), v).unwrap();
+            index.insert(format!("v{}", i), v)?;
         }
-        index.flush().unwrap();
+        index.flush()?;
         let query: Vec<f32> = (0..dim).map(|d| d as f32 * 0.01).collect();
-        let result = index.search(&query, 3).unwrap();
+        let result = index.search(&query, 3)?;
         assert!(!result.is_empty());
         assert_eq!(result[0].0, "v0"); // v0 is at 0..dim * 0.01
+        Ok(())
     }
 
     #[test]
-    fn test_search_returns_at_most_k() {
+    fn test_search_returns_at_most_k() -> Result<()> {
         let mut index = make_index(4);
         for i in 0..10 {
-            index.insert(format!("v{}", i), vec![i as f32]).unwrap();
+            index.insert(format!("v{}", i), vec![i as f32])?;
         }
-        index.flush().unwrap();
-        let result = index.search(&[5.0], 3).unwrap();
+        index.flush()?;
+        let result = index.search(&[5.0], 3)?;
         assert!(result.len() <= 3);
+        Ok(())
     }
 
     #[test]
-    fn test_distance_computations_counted() {
+    fn test_distance_computations_counted() -> Result<()> {
         let mut index = make_index(4);
         for i in 0..8 {
-            index
-                .insert(format!("v{}", i), vec![i as f32, 0.0])
-                .unwrap();
+            index.insert(format!("v{}", i), vec![i as f32, 0.0])?;
         }
-        index.flush().unwrap();
+        index.flush()?;
         let stats = index.stats();
         // Some distance computations should have occurred during construction
         assert!(stats.batch_stats.distance_computations > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_pending_not_searched() {
+    fn test_pending_not_searched() -> Result<()> {
         let mut index = make_index(100); // Large batch so nothing auto-flushes
-        index.insert("pending".to_string(), vec2(0.0, 0.0)).unwrap();
+        index.insert("pending".to_string(), vec2(0.0, 0.0))?;
         // pending_count = 1, len = 0
         assert_eq!(index.pending_count(), 1);
         assert_eq!(index.len(), 0);
         // Search on empty committed graph
-        let result = index.search(&[0.0, 0.0], 1).unwrap();
+        let result = index.search(&[0.0, 0.0], 1)?;
         assert!(result.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_flush_empty_pending_noop() {
+    fn test_flush_empty_pending_noop() -> Result<()> {
         let mut index = make_index(4);
-        index.insert("a".to_string(), vec2(1.0, 0.0)).unwrap();
-        index.flush().unwrap();
+        index.insert("a".to_string(), vec2(1.0, 0.0))?;
+        index.flush()?;
         // Second flush on empty pending
-        index.flush().unwrap();
+        index.flush()?;
         assert_eq!(index.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_layer_count_in_stats() {
+    fn test_layer_count_in_stats() -> Result<()> {
         let mut index = make_index(4);
-        index.insert("a".to_string(), vec2(0.0, 0.0)).unwrap();
-        index.flush().unwrap();
+        index.insert("a".to_string(), vec2(0.0, 0.0))?;
+        index.flush()?;
         let stats = index.stats();
         assert!(stats.layer_count >= 1);
+        Ok(())
     }
 }

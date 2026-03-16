@@ -534,6 +534,7 @@ impl VamanaGraphHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
     #[test]
     fn test_vamana_node() {
@@ -557,20 +558,24 @@ mod tests {
     }
 
     #[test]
-    fn test_vamana_graph_basic() {
+    fn test_vamana_graph_basic() -> Result<()> {
         let mut graph = VamanaGraph::new(3, PruningStrategy::Alpha, 1.2);
         assert_eq!(graph.num_nodes(), 0);
 
-        let node0 = graph.add_node("vec0".to_string()).unwrap();
-        let node1 = graph.add_node("vec1".to_string()).unwrap();
+        let node0 = graph.add_node("vec0".to_string())?;
+        let node1 = graph.add_node("vec1".to_string())?;
         assert_eq!(graph.num_nodes(), 2);
 
-        assert!(graph.add_edge(node0, node1).unwrap());
-        assert!(!graph.add_edge(node0, node0).unwrap()); // Self-loop
+        let __val = graph.add_edge(node0, node1)?;
+        assert!(__val);
+        assert!(!graph.add_edge(node0, node0).expect("test value")); // Self-loop
 
-        let neighbors = graph.get_neighbors(node0).unwrap();
+        let neighbors = graph
+            .get_neighbors(node0)
+            .expect("node0 should have neighbors");
         assert_eq!(neighbors.len(), 1);
         assert_eq!(neighbors[0], node1);
+        Ok(())
     }
 
     #[test]
@@ -598,74 +603,76 @@ mod tests {
     }
 
     #[test]
-    fn test_entry_points() {
+    fn test_entry_points() -> Result<()> {
         let mut graph = VamanaGraph::new(3, PruningStrategy::Alpha, 1.2);
-        let _node0 = graph.add_node("vec0".to_string()).unwrap();
-        let node1 = graph.add_node("vec1".to_string()).unwrap();
+        let _node0 = graph.add_node("vec0".to_string())?;
+        let node1 = graph.add_node("vec1".to_string())?;
 
         assert_eq!(graph.entry_points().len(), 1); // First node is entry point
 
-        graph.add_entry_point(node1).unwrap();
+        graph.add_entry_point(node1)?;
         assert_eq!(graph.entry_points().len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_graph_validation() {
+    fn test_graph_validation() -> Result<()> {
         let mut graph = VamanaGraph::new(3, PruningStrategy::Alpha, 1.2);
-        let node0 = graph.add_node("vec0".to_string()).unwrap();
-        let node1 = graph.add_node("vec1".to_string()).unwrap();
+        let node0 = graph.add_node("vec0".to_string())?;
+        let node1 = graph.add_node("vec1".to_string())?;
 
-        graph.add_edge(node0, node1).unwrap();
+        graph.add_edge(node0, node1)?;
         assert!(graph.validate().is_ok());
 
         // Remove node1 but leave edge - should fail validation
         graph.nodes.remove(&node1);
         assert!(graph.validate().is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_graph_stats() {
+    fn test_graph_stats() -> Result<()> {
         let mut graph = VamanaGraph::new(3, PruningStrategy::Alpha, 1.2);
-        let node0 = graph.add_node("vec0".to_string()).unwrap();
-        let node1 = graph.add_node("vec1".to_string()).unwrap();
-        let node2 = graph.add_node("vec2".to_string()).unwrap();
+        let node0 = graph.add_node("vec0".to_string())?;
+        let node1 = graph.add_node("vec1".to_string())?;
+        let node2 = graph.add_node("vec2".to_string())?;
 
-        graph.add_edge(node0, node1).unwrap();
-        graph.add_edge(node0, node2).unwrap();
-        graph.add_edge(node1, node2).unwrap();
+        graph.add_edge(node0, node1)?;
+        graph.add_edge(node0, node2)?;
+        graph.add_edge(node1, node2)?;
 
         let stats = graph.stats();
         assert_eq!(stats.num_nodes, 3);
         assert_eq!(stats.num_edges, 3);
         assert!(stats.avg_degree > 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_remove_node() {
+    fn test_remove_node() -> Result<()> {
         let mut graph = VamanaGraph::new(3, PruningStrategy::Alpha, 1.2);
-        let node0 = graph.add_node("vec0".to_string()).unwrap();
-        let node1 = graph.add_node("vec1".to_string()).unwrap();
+        let node0 = graph.add_node("vec0".to_string())?;
+        let node1 = graph.add_node("vec1".to_string())?;
 
-        graph.add_edge(node0, node1).unwrap();
+        graph.add_edge(node0, node1)?;
         assert_eq!(graph.num_nodes(), 2);
 
-        graph.remove_node(node1).unwrap();
+        graph.remove_node(node1)?;
         assert_eq!(graph.num_nodes(), 1);
-        assert!(graph.get_neighbors(node0).unwrap().is_empty());
+        assert!(graph.get_neighbors(node0).expect("test value").is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_thread_safe_handle() {
+    fn test_thread_safe_handle() -> Result<()> {
         let graph = VamanaGraph::new(3, PruningStrategy::Alpha, 1.2);
         let handle = VamanaGraphHandle::new(graph);
 
-        let node_id = handle
-            .write(|g| g.add_node("vec0".to_string()))
-            .unwrap()
-            .unwrap();
-        let count = handle.read(|g| g.num_nodes()).unwrap();
+        let node_id = handle.write(|g| g.add_node("vec0".to_string()))??;
+        let count = handle.read(|g| g.num_nodes())?;
 
         assert_eq!(count, 1);
         assert_eq!(node_id, 0);
+        Ok(())
     }
 }

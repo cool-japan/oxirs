@@ -37,10 +37,10 @@
 //! ];
 //!
 //! // Learn relational patterns
-//! srl.fit(&facts).unwrap();
+//! srl.fit(&facts).expect("should succeed");
 //!
 //! // Extract features for prediction
-//! let features = srl.extract_features(&facts).unwrap();
+//! let features = srl.extract_features(&facts).expect("should succeed");
 //! println!("Extracted {} relational features", features.len());
 //! # Ok::<(), anyhow::Error>(())
 //! ```
@@ -647,93 +647,100 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_discovery() {
+    fn test_schema_discovery() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = StatisticalRelationalLearner::new();
         let data = create_test_data();
 
-        learner.fit(&data).unwrap();
+        learner.fit(&data)?;
 
         // Should discover 'friend' and 'rdf:type' predicates
         let stats = learner.get_predicate_stats();
         assert!(stats.contains_key("friend"));
         assert!(stats.contains_key("rdf:type"));
+        Ok(())
     }
 
     #[test]
-    fn test_structure_learning() {
+    fn test_structure_learning() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = StatisticalRelationalLearner::new();
         let data = create_test_data();
 
-        learner.fit(&data).unwrap();
+        learner.fit(&data)?;
 
         // Should learn some rules
         let model = learner.get_model();
         assert!(!model.weighted_rules.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_parameter_learning() {
+    fn test_parameter_learning() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = StatisticalRelationalLearner::new();
         let data = create_test_data();
 
-        learner.fit(&data).unwrap();
+        learner.fit(&data)?;
 
         // Should learn class priors
         let model = learner.get_model();
         assert!(!model.class_priors.is_empty());
         assert!(model.class_priors.contains_key("Person"));
+        Ok(())
     }
 
     #[test]
-    fn test_feature_extraction() {
+    fn test_feature_extraction() -> Result<(), Box<dyn std::error::Error>> {
         let learner = StatisticalRelationalLearner::new();
         let data = create_test_data();
 
-        let features = learner.extract_features(&data).unwrap();
+        let features = learner.extract_features(&data)?;
 
         // Should extract some features
         assert!(!features.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_link_prediction() {
+    fn test_link_prediction() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = StatisticalRelationalLearner::new();
         let data = create_test_data();
 
-        learner.fit(&data).unwrap();
+        learner.fit(&data)?;
 
         let prob = learner.predict_link("alice", "charlie", "friend");
 
         // Should return a probability in [0, 1]
         assert!((0.0..=1.0).contains(&prob));
+        Ok(())
     }
 
     #[test]
-    fn test_entity_classification() {
+    fn test_entity_classification() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = StatisticalRelationalLearner::new();
         let data = create_test_data();
 
-        learner.fit(&data).unwrap();
+        learner.fit(&data)?;
 
-        let classification = learner.classify_entity("alice", &data).unwrap();
+        let classification = learner.classify_entity("alice", &data)?;
 
         // alice should be classified (has rdf:type in data)
         assert!(classification.is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_collective_classification() {
+    fn test_collective_classification() -> Result<(), Box<dyn std::error::Error>> {
         let mut classifier = CollectiveClassifier::new(10, 0.01);
         let data = create_test_data();
 
-        classifier.fit(&data).unwrap();
+        classifier.fit(&data)?;
 
         let entities = vec!["alice".to_string(), "bob".to_string()];
-        let classifications = classifier.classify_collectively(&entities, &data).unwrap();
+        let classifications = classifier.classify_collectively(&entities, &data)?;
 
         // Should classify both entities
         assert!(classifications.contains_key("alice"));
         assert!(classifications.contains_key("bob"));
+        Ok(())
     }
 
     #[test]

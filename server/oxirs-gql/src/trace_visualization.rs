@@ -552,7 +552,13 @@ mod tests {
         let hierarchy = visualizer.build_hierarchy(&spans);
 
         assert!(hierarchy.contains_key(&spans[0].span_id));
-        assert_eq!(hierarchy.get(&spans[0].span_id).unwrap().len(), 2);
+        assert_eq!(
+            hierarchy
+                .get(&spans[0].span_id)
+                .expect("should succeed")
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -573,7 +579,9 @@ mod tests {
         let visualizer = TraceVisualizer::new();
         let spans = create_test_spans();
 
-        let entries = visualizer.build_timeline_entries(&spans).unwrap();
+        let entries = visualizer
+            .build_timeline_entries(&spans)
+            .expect("should succeed");
 
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].depth, 0);
@@ -587,7 +595,7 @@ mod tests {
         let result = visualizer.generate_timeline(&spans, VisualizationFormat::JSON);
 
         assert!(result.is_ok());
-        let json = result.unwrap();
+        let json = result.expect("should succeed");
         assert!(json.contains("span_id"));
     }
 
@@ -599,7 +607,7 @@ mod tests {
         let result = visualizer.generate_timeline(&spans, VisualizationFormat::HTML);
 
         assert!(result.is_ok());
-        let html = result.unwrap();
+        let html = result.expect("should succeed");
         assert!(html.contains("<html>"));
         assert!(html.contains("timeline"));
     }
@@ -612,7 +620,7 @@ mod tests {
         let result = visualizer.generate_timeline(&spans, VisualizationFormat::ASCII);
 
         assert!(result.is_ok());
-        let ascii = result.unwrap();
+        let ascii = result.expect("should succeed");
         assert!(ascii.contains("├─"));
     }
 
@@ -624,7 +632,7 @@ mod tests {
         let result = visualizer.generate_timeline(&spans, VisualizationFormat::Mermaid);
 
         assert!(result.is_ok());
-        let mermaid = result.unwrap();
+        let mermaid = result.expect("should succeed");
         assert!(mermaid.contains("gantt"));
     }
 
@@ -646,7 +654,7 @@ mod tests {
         let result = visualizer.generate_flame_graph(&spans);
 
         assert!(result.is_ok());
-        let root = result.unwrap();
+        let root = result.expect("should succeed");
         assert_eq!(root.name, "root");
         assert_eq!(root.children.len(), 2);
     }
@@ -681,7 +689,7 @@ mod tests {
         let result = visualizer.find_critical_path(&spans);
 
         assert!(result.is_ok());
-        let path = result.unwrap();
+        let path = result.expect("should succeed");
         assert!(!path.is_empty());
         assert_eq!(path[0].name, "root");
     }

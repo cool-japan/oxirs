@@ -48,11 +48,11 @@ impl ClusterId {
 /// use oxirs_geosparql::geometry::Geometry;
 ///
 /// let geoms = vec![
-///     Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap(),
-///     Geometry::from_wkt("POLYGON ((0.5 0.5, 1.5 0.5, 1.5 1.5, 0.5 1.5, 0.5 0.5))").unwrap(),
+///     Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed"),
+///     Geometry::from_wkt("POLYGON ((0.5 0.5, 1.5 0.5, 1.5 1.5, 0.5 1.5, 0.5 0.5))").expect("should succeed"),
 /// ];
 ///
-/// let union = spatial_union(&geoms).unwrap();
+/// let union = spatial_union(&geoms).expect("should succeed");
 /// // Result is a single polygon covering the combined area
 /// ```
 pub fn spatial_union(geometries: &[Geometry]) -> Result<Geometry> {
@@ -111,14 +111,14 @@ fn union_two(geom1: &Geometry, geom2: &Geometry) -> Result<Geometry> {
 /// use oxirs_geosparql::geometry::Geometry;
 ///
 /// let points = vec![
-///     Geometry::from_wkt("POINT (0 0)").unwrap(),
-///     Geometry::from_wkt("POINT (1 0)").unwrap(),
-///     Geometry::from_wkt("POINT (1 1)").unwrap(),
-///     Geometry::from_wkt("POINT (0 1)").unwrap(),
-///     Geometry::from_wkt("POINT (0.5 0.5)").unwrap(),
+///     Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+///     Geometry::from_wkt("POINT (1 0)").expect("should succeed"),
+///     Geometry::from_wkt("POINT (1 1)").expect("should succeed"),
+///     Geometry::from_wkt("POINT (0 1)").expect("should succeed"),
+///     Geometry::from_wkt("POINT (0.5 0.5)").expect("should succeed"),
 /// ];
 ///
-/// let hull = spatial_convex_hull(&points).unwrap();
+/// let hull = spatial_convex_hull(&points).expect("should succeed");
 /// // Result is a polygon with vertices (0,0), (1,0), (1,1), (0,1)
 /// ```
 pub fn spatial_convex_hull(geometries: &[Geometry]) -> Result<Geometry> {
@@ -287,13 +287,13 @@ pub fn spatial_envelope(geometries: &[Geometry]) -> Result<Geometry> {
 /// use oxirs_geosparql::geometry::Geometry;
 ///
 /// let points = vec![
-///     Geometry::from_wkt("POINT (0 0)").unwrap(),
-///     Geometry::from_wkt("POINT (1 0)").unwrap(),
-///     Geometry::from_wkt("POINT (0 1)").unwrap(),
-///     Geometry::from_wkt("POINT (100 100)").unwrap(), // Outlier
+///     Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+///     Geometry::from_wkt("POINT (1 0)").expect("should succeed"),
+///     Geometry::from_wkt("POINT (0 1)").expect("should succeed"),
+///     Geometry::from_wkt("POINT (100 100)").expect("should succeed"), // Outlier
 /// ];
 ///
-/// let clusters = spatial_dbscan(&points, 2.0, 2).unwrap();
+/// let clusters = spatial_dbscan(&points, 2.0, 2).expect("should succeed");
 /// // First 3 points should be in cluster 0, last point is noise (-1)
 /// assert_eq!(clusters[0].0, 0);
 /// assert_eq!(clusters[3].0, -1);
@@ -434,8 +434,9 @@ mod tests {
     #[test]
     fn test_spatial_union_basic() {
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((0.5 0.5, 1.5 0.5, 1.5 1.5, 0.5 1.5, 0.5 0.5))").unwrap(),
+            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((0.5 0.5, 1.5 0.5, 1.5 1.5, 0.5 1.5, 0.5 0.5))")
+                .expect("should succeed"),
         ];
 
         let union = spatial_union(&geoms);
@@ -445,14 +446,14 @@ mod tests {
     #[test]
     fn test_spatial_convex_hull() {
         let points = vec![
-            Geometry::from_wkt("POINT (0 0)").unwrap(),
-            Geometry::from_wkt("POINT (1 0)").unwrap(),
-            Geometry::from_wkt("POINT (1 1)").unwrap(),
-            Geometry::from_wkt("POINT (0 1)").unwrap(),
-            Geometry::from_wkt("POINT (0.5 0.5)").unwrap(), // Interior point
+            Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (1 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (1 1)").expect("should succeed"),
+            Geometry::from_wkt("POINT (0 1)").expect("should succeed"),
+            Geometry::from_wkt("POINT (0.5 0.5)").expect("should succeed"), // Interior point
         ];
 
-        let hull = spatial_convex_hull(&points).unwrap();
+        let hull = spatial_convex_hull(&points).expect("should succeed");
 
         match hull.geom {
             geo_types::Geometry::Polygon(poly) => {
@@ -466,13 +467,13 @@ mod tests {
     #[test]
     fn test_spatial_centroid() {
         let points = vec![
-            Geometry::from_wkt("POINT (0 0)").unwrap(),
-            Geometry::from_wkt("POINT (2 0)").unwrap(),
-            Geometry::from_wkt("POINT (2 2)").unwrap(),
-            Geometry::from_wkt("POINT (0 2)").unwrap(),
+            Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (2 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (2 2)").expect("should succeed"),
+            Geometry::from_wkt("POINT (0 2)").expect("should succeed"),
         ];
 
-        let centroid = spatial_centroid(&points).unwrap();
+        let centroid = spatial_centroid(&points).expect("should succeed");
         assert!((centroid.x() - 1.0).abs() < 1e-10);
         assert!((centroid.y() - 1.0).abs() < 1e-10);
     }
@@ -480,17 +481,17 @@ mod tests {
     #[test]
     fn test_spatial_envelope() {
         let geoms = vec![
-            Geometry::from_wkt("POINT (1 1)").unwrap(),
-            Geometry::from_wkt("POINT (3 2)").unwrap(),
-            Geometry::from_wkt("POINT (2 4)").unwrap(),
+            Geometry::from_wkt("POINT (1 1)").expect("should succeed"),
+            Geometry::from_wkt("POINT (3 2)").expect("should succeed"),
+            Geometry::from_wkt("POINT (2 4)").expect("should succeed"),
         ];
 
-        let envelope = spatial_envelope(&geoms).unwrap();
+        let envelope = spatial_envelope(&geoms).expect("should succeed");
 
         match envelope.geom {
             geo_types::Geometry::Polygon(poly) => {
                 use geo::BoundingRect;
-                let rect = poly.bounding_rect().unwrap();
+                let rect = poly.bounding_rect().expect("geometry has bounding rect");
                 assert_eq!(rect.min().x, 1.0);
                 assert_eq!(rect.min().y, 1.0);
                 assert_eq!(rect.max().x, 3.0);
@@ -503,13 +504,13 @@ mod tests {
     #[test]
     fn test_spatial_dbscan() {
         let points = vec![
-            Geometry::from_wkt("POINT (0 0)").unwrap(),
-            Geometry::from_wkt("POINT (1 0)").unwrap(),
-            Geometry::from_wkt("POINT (0 1)").unwrap(),
-            Geometry::from_wkt("POINT (100 100)").unwrap(), // Outlier
+            Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (1 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (0 1)").expect("should succeed"),
+            Geometry::from_wkt("POINT (100 100)").expect("should succeed"), // Outlier
         ];
 
-        let clusters = spatial_dbscan(&points, 2.0, 2).unwrap();
+        let clusters = spatial_dbscan(&points, 2.0, 2).expect("should succeed");
         assert_eq!(clusters.len(), 4);
 
         // First 3 points should be in same cluster
@@ -523,8 +524,8 @@ mod tests {
     #[test]
     fn test_aggregate_functions() {
         let geoms = vec![
-            Geometry::from_wkt("POINT (0 0)").unwrap(),
-            Geometry::from_wkt("POINT (1 1)").unwrap(),
+            Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (1 1)").expect("should succeed"),
         ];
 
         assert!(aggregate_union(&geoms).is_ok());

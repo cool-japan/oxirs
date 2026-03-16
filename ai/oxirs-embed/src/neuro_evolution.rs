@@ -1302,7 +1302,7 @@ mod tests {
         let mut rng = Random::default();
         let arch = NeuralArchitecture::random(&config, &mut rng);
 
-        let metrics = evaluator.evaluate(&arch).await.unwrap();
+        let metrics = evaluator.evaluate(&arch).await.expect("should succeed");
         assert!(metrics.accuracy >= 0.0 && metrics.accuracy <= 1.0);
         assert!(metrics.inference_time_ms > 0.0);
     }
@@ -1332,7 +1332,7 @@ mod tests {
         };
 
         let mut system = NeuroEvolutionSystem::new(config);
-        let best_arch = system.evolve().await.unwrap();
+        let best_arch = system.evolve().await.expect("should succeed");
 
         assert!(!best_arch.layers.is_empty());
         assert!(system.evolution_history.len() <= 2);

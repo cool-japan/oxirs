@@ -1771,6 +1771,7 @@ impl HyperparameterTuner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn test_advanced_benchmark_config() {
@@ -1783,7 +1784,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dataset_analysis() {
+    fn test_dataset_analysis() -> Result<()> {
         let config = AdvancedBenchmarkConfig::new();
         let suite = AdvancedBenchmarkSuite::new(config);
 
@@ -1793,14 +1794,15 @@ mod tests {
             Vector::new(vec![0.0, 0.0, 1.0]),
         ];
 
-        let stats = suite.compute_dataset_statistics(&vectors).unwrap();
+        let stats = suite.compute_dataset_statistics(&vectors)?;
         assert_eq!(stats.vector_count, 3);
         assert_eq!(stats.dimensions, 3);
         assert!(stats.mean_magnitude > 0.0);
+        Ok(())
     }
 
     #[test]
-    fn test_statistical_analyzer() {
+    fn test_statistical_analyzer() -> Result<()> {
         let analyzer = StatisticalAnalyzer::new(0.95, 10, 2.0);
 
         let latency = LatencyMetrics {
@@ -1838,8 +1840,9 @@ mod tests {
             },
         };
 
-        let stats = analyzer.analyze_metrics(&performance).unwrap();
+        let stats = analyzer.analyze_metrics(&performance)?;
         assert_eq!(stats.sample_size, 11);
         assert!(stats.confidence_intervals.contains_key("mean_latency_ms"));
+        Ok(())
     }
 }

@@ -555,7 +555,7 @@ impl ErrorRecoveryManager {
 
     /// Get error statistics
     pub async fn get_error_statistics(&self) -> ErrorStatistics {
-        let history = self.error_history.lock().expect("lock should not be poisoned");
+        let history = self.error_history.lock().unwrap_or_else(|e| e.into_inner());
 
         let total_errors = history.len();
         let successful_recoveries = history.iter()
@@ -595,7 +595,7 @@ impl ErrorRecoveryManager {
 
     /// Clear error history
     pub async fn clear_error_history(&self) {
-        let mut history = self.error_history.lock().expect("lock should not be poisoned");
+        let mut history = self.error_history.lock().unwrap_or_else(|e| e.into_inner());
         history.clear();
     }
 

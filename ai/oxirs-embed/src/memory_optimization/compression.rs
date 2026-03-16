@@ -161,10 +161,10 @@ mod tests {
         let compressor = Compressor::new(CompressionAlgorithm::Zstd);
         let data = vec![42u8; 1000];
 
-        let compressed = compressor.compress(&data).unwrap();
+        let compressed = compressor.compress(&data).expect("should succeed");
         assert!(compressed.len() < data.len());
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed).expect("should succeed");
         assert_eq!(decompressed, data);
     }
 
@@ -173,10 +173,10 @@ mod tests {
         let compressor = Compressor::new(CompressionAlgorithm::Lz4);
         let data = vec![42u8; 1000];
 
-        let compressed = compressor.compress(&data).unwrap();
+        let compressed = compressor.compress(&data).expect("should succeed");
         assert!(compressed.len() < data.len());
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed).expect("should succeed");
         assert_eq!(decompressed, data);
     }
 
@@ -185,19 +185,19 @@ mod tests {
         let compressor = Compressor::new(CompressionAlgorithm::Gzip);
         let data = vec![42u8; 1000];
 
-        let compressed = compressor.compress(&data).unwrap();
+        let compressed = compressor.compress(&data).expect("should succeed");
         assert!(compressed.len() < data.len());
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed).expect("should succeed");
         assert_eq!(decompressed, data);
     }
 
     #[test]
     fn test_compressed_embedding() {
         let embeddings = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
-        let compressed = CompressedEmbedding::from_embeddings(&embeddings, CompressionAlgorithm::Zstd).unwrap();
+        let compressed = CompressedEmbedding::from_embeddings(&embeddings, CompressionAlgorithm::Zstd).expect("should succeed");
 
-        let decompressed = compressed.to_embeddings().unwrap();
+        let decompressed = compressed.to_embeddings().expect("should succeed");
         assert_eq!(decompressed.len(), embeddings.len());
 
         for (a, b) in embeddings.iter().zip(decompressed.iter()) {
@@ -210,7 +210,7 @@ mod tests {
         let compressor = Compressor::new(CompressionAlgorithm::Zstd);
         let data = vec![42u8; 1000];
 
-        let compressed = compressor.compress(&data).unwrap();
+        let compressed = compressor.compress(&data).expect("should succeed");
         let ratio = compressor.compression_ratio(&data, &compressed);
 
         assert!(ratio > 1.0); // Should have some compression
@@ -221,10 +221,10 @@ mod tests {
         let compressor = Compressor::new(CompressionAlgorithm::None);
         let data = vec![1, 2, 3, 4, 5];
 
-        let compressed = compressor.compress(&data).unwrap();
+        let compressed = compressor.compress(&data).expect("should succeed");
         assert_eq!(compressed, data);
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed).expect("should succeed");
         assert_eq!(decompressed, data);
     }
 }

@@ -31,12 +31,12 @@
 //! let manager = EdgeDeploymentManager::new();
 //!
 //! // Profile the target device
-//! let device = EdgeDevice::detect_current_device().unwrap();
-//! let profile = manager.profile_device(&device).unwrap();
+//! let device = EdgeDevice::detect_current_device().expect("should succeed");
+//! let profile = manager.profile_device(&device).expect("should succeed");
 //!
 //! // Optimize and deploy model
 //! let config = DeploymentConfig::for_device(&profile);
-//! manager.deploy_model("shacl_validator", &config).unwrap();
+//! manager.deploy_model("shacl_validator", &config).expect("should succeed");
 //! ```
 
 use chrono::{DateTime, Utc};
@@ -713,7 +713,7 @@ mod tests {
 
     #[test]
     fn test_device_detection() {
-        let device = EdgeDevice::detect_current_device().unwrap();
+        let device = EdgeDevice::detect_current_device().expect("should succeed");
         assert!(!device.id.is_empty());
         assert!(device.cpu_cores > 0);
     }
@@ -721,9 +721,9 @@ mod tests {
     #[test]
     fn test_device_profiling() {
         let mut manager = EdgeDeploymentManager::new();
-        let device = EdgeDevice::detect_current_device().unwrap();
+        let device = EdgeDevice::detect_current_device().expect("should succeed");
 
-        let profile = manager.profile_device(&device).unwrap();
+        let profile = manager.profile_device(&device).expect("should succeed");
         assert!(profile.max_model_size > 0);
         assert!(profile.estimated_throughput > 0.0);
         assert!(!profile.supported_quantization.is_empty());
@@ -732,11 +732,15 @@ mod tests {
     #[test]
     fn test_model_optimization() {
         let manager = EdgeDeploymentManager::new();
-        let device = EdgeDevice::detect_current_device().unwrap();
+        let device = EdgeDevice::detect_current_device().expect("should succeed");
         let mut temp_manager = EdgeDeploymentManager::new();
-        let profile = temp_manager.profile_device(&device).unwrap();
+        let profile = temp_manager
+            .profile_device(&device)
+            .expect("should succeed");
 
-        let result = manager.optimize_model("test_model", &profile).unwrap();
+        let result = manager
+            .optimize_model("test_model", &profile)
+            .expect("should succeed");
         assert!(result.size_reduction_ratio > 0.0);
         assert!(result.optimized_size < result.original_size);
         assert!(!result.optimizations.is_empty());
@@ -745,26 +749,35 @@ mod tests {
     #[test]
     fn test_model_deployment() {
         let mut manager = EdgeDeploymentManager::new();
-        let device = EdgeDevice::detect_current_device().unwrap();
+        let device = EdgeDevice::detect_current_device().expect("should succeed");
 
-        let package = manager.deploy_model("test_model", &device).unwrap();
+        let package = manager
+            .deploy_model("test_model", &device)
+            .expect("should succeed");
         assert_eq!(package.model_id, "test_model");
         assert!(package.package_size > 0);
 
         // Verify deployment was created
         let deployment = manager.get_deployment(&device.id);
         assert!(deployment.is_some());
-        assert_eq!(deployment.unwrap().status, DeploymentStatus::Deployed);
+        assert_eq!(
+            deployment.expect("should succeed").status,
+            DeploymentStatus::Deployed
+        );
     }
 
     #[test]
     fn test_resource_monitoring() {
         let mut manager = EdgeDeploymentManager::new();
-        let device = EdgeDevice::detect_current_device().unwrap();
+        let device = EdgeDevice::detect_current_device().expect("should succeed");
 
-        manager.deploy_model("test_model", &device).unwrap();
+        manager
+            .deploy_model("test_model", &device)
+            .expect("should succeed");
 
-        let usage = manager.monitor_resources(&device.id).unwrap();
+        let usage = manager
+            .monitor_resources(&device.id)
+            .expect("should succeed");
         assert!(usage.memory_bytes > 0);
         assert!(usage.cpu_percent >= 0.0);
     }
@@ -772,9 +785,11 @@ mod tests {
     #[test]
     fn test_deployment_update() {
         let mut manager = EdgeDeploymentManager::new();
-        let device = EdgeDevice::detect_current_device().unwrap();
+        let device = EdgeDevice::detect_current_device().expect("should succeed");
 
-        let package = manager.deploy_model("test_model", &device).unwrap();
+        let package = manager
+            .deploy_model("test_model", &device)
+            .expect("should succeed");
 
         // Create updated package
         let mut updated_package = package.clone();
@@ -782,32 +797,38 @@ mod tests {
 
         manager
             .update_deployment(&device.id, updated_package)
-            .unwrap();
+            .expect("should succeed");
 
-        let deployment = manager.get_deployment(&device.id).unwrap();
+        let deployment = manager.get_deployment(&device.id).expect("should succeed");
         assert_eq!(deployment.package.package_version, "2.0.0");
     }
 
     #[test]
     fn test_health_check() {
         let mut manager = EdgeDeploymentManager::new();
-        let device = EdgeDevice::detect_current_device().unwrap();
+        let device = EdgeDevice::detect_current_device().expect("should succeed");
 
-        manager.deploy_model("test_model", &device).unwrap();
+        manager
+            .deploy_model("test_model", &device)
+            .expect("should succeed");
 
-        let is_healthy = manager.health_check(&device.id).unwrap();
+        let is_healthy = manager.health_check(&device.id).expect("should succeed");
         assert!(is_healthy);
     }
 
     #[test]
     fn test_list_deployments() {
         let mut manager = EdgeDeploymentManager::new();
-        let device1 = EdgeDevice::detect_current_device().unwrap();
+        let device1 = EdgeDevice::detect_current_device().expect("should succeed");
         let mut device2 = device1.clone();
         device2.id = Uuid::new_v4().to_string();
 
-        manager.deploy_model("model1", &device1).unwrap();
-        manager.deploy_model("model2", &device2).unwrap();
+        manager
+            .deploy_model("model1", &device1)
+            .expect("should succeed");
+        manager
+            .deploy_model("model2", &device2)
+            .expect("should succeed");
 
         let deployments = manager.list_deployments();
         assert_eq!(deployments.len(), 2);
@@ -816,12 +837,16 @@ mod tests {
     #[test]
     fn test_remove_deployment() {
         let mut manager = EdgeDeploymentManager::new();
-        let device = EdgeDevice::detect_current_device().unwrap();
+        let device = EdgeDevice::detect_current_device().expect("should succeed");
 
-        manager.deploy_model("test_model", &device).unwrap();
+        manager
+            .deploy_model("test_model", &device)
+            .expect("should succeed");
         assert!(manager.get_deployment(&device.id).is_some());
 
-        manager.remove_deployment(&device.id).unwrap();
+        manager
+            .remove_deployment(&device.id)
+            .expect("should succeed");
         assert!(manager.get_deployment(&device.id).is_none());
     }
 }

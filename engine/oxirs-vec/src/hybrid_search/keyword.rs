@@ -276,39 +276,38 @@ impl KeywordSearcher for TfidfScorer {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
-    fn test_bm25_basic() {
+    fn test_bm25_basic() -> Result<()> {
         let mut bm25 = Bm25Scorer::new();
 
-        bm25.add_document("doc1", "the quick brown fox").unwrap();
-        bm25.add_document("doc2", "the lazy dog").unwrap();
-        bm25.add_document("doc3", "quick brown dogs").unwrap();
+        bm25.add_document("doc1", "the quick brown fox")?;
+        bm25.add_document("doc2", "the lazy dog")?;
+        bm25.add_document("doc3", "quick brown dogs")?;
 
-        let results = bm25.search("quick brown", 2).unwrap();
+        let results = bm25.search("quick brown", 2)?;
         assert!(!results.is_empty());
         // doc3 should rank higher as it has both terms without common words
         assert!(results[0].doc_id == "doc3" || results[0].doc_id == "doc1");
         assert_eq!(results.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_tfidf_basic() {
+    fn test_tfidf_basic() -> Result<()> {
         let mut tfidf = TfidfScorer::new();
 
-        tfidf.add_document("doc1", "machine learning").unwrap();
-        tfidf
-            .add_document("doc2", "deep learning networks")
-            .unwrap();
-        tfidf
-            .add_document("doc3", "natural language processing")
-            .unwrap();
+        tfidf.add_document("doc1", "machine learning")?;
+        tfidf.add_document("doc2", "deep learning networks")?;
+        tfidf.add_document("doc3", "natural language processing")?;
 
-        let results = tfidf.search("machine learning", 2).unwrap();
+        let results = tfidf.search("machine learning", 2)?;
         assert!(!results.is_empty());
         // doc1 should have the highest score for exact match
         assert_eq!(results[0].doc_id, "doc1");
+        Ok(())
     }
 
     #[test]
@@ -319,11 +318,12 @@ mod tests {
     }
 
     #[test]
-    fn test_no_matches() {
+    fn test_no_matches() -> Result<()> {
         let mut bm25 = Bm25Scorer::new();
-        bm25.add_document("doc1", "foo bar baz").unwrap();
+        bm25.add_document("doc1", "foo bar baz")?;
 
-        let results = bm25.search("xyz", 10).unwrap();
+        let results = bm25.search("xyz", 10)?;
         assert!(results.is_empty());
+        Ok(())
     }
 }

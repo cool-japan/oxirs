@@ -601,14 +601,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_namespace_management() {
+    fn test_namespace_management() -> Result<(), Box<dyn std::error::Error>> {
         let mut ns = NamespaceManager::new();
         ns.add_prefix("ex".to_string(), "http://example.org/".to_string());
 
         // Test expansion
-        assert_eq!(ns.expand("ex:Person").unwrap(), "http://example.org/Person");
+        assert_eq!(ns.expand("ex:Person")?, "http://example.org/Person");
         assert_eq!(
-            ns.expand("rdf:type").unwrap(),
+            ns.expand("rdf:type")?,
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
         );
 
@@ -618,30 +618,32 @@ mod tests {
             ns.compact("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
             "rdf:type"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_term_conversion() {
+    fn test_term_conversion() -> Result<(), Box<dyn std::error::Error>> {
         let ns = NamespaceManager::new();
 
         // Test variable conversion
         let var_term = RuleTerm::Variable("x".to_string());
-        let rdf_var = convert_term(&var_term, &ns).unwrap();
+        let rdf_var = convert_term(&var_term, &ns)?;
         assert!(matches!(rdf_var, RdfTerm::Variable(_)));
 
         // Test IRI conversion
         let iri_term = RuleTerm::Constant("http://example.org/Person".to_string());
-        let rdf_iri = convert_term(&iri_term, &ns).unwrap();
+        let rdf_iri = convert_term(&iri_term, &ns)?;
         assert!(matches!(rdf_iri, RdfTerm::NamedNode(_)));
 
         // Test literal conversion
         let lit_term = RuleTerm::Literal("42^^xsd:integer".to_string());
-        let rdf_lit = convert_term(&lit_term, &ns).unwrap();
+        let rdf_lit = convert_term(&lit_term, &ns)?;
         assert!(matches!(rdf_lit, RdfTerm::Literal(_)));
+        Ok(())
     }
 
     #[test]
-    fn test_rule_atom_conversion() {
+    fn test_rule_atom_conversion() -> Result<(), Box<dyn std::error::Error>> {
         let ns = NamespaceManager::new();
 
         let atom = RuleAtom::Triple {
@@ -650,7 +652,7 @@ mod tests {
             object: RuleTerm::Constant("foaf:Person".to_string()),
         };
 
-        let rdf_atom = convert_rule_atom(&atom, &ns).unwrap();
+        let rdf_atom = convert_rule_atom(&atom, &ns)?;
 
         match rdf_atom {
             RdfRuleAtom::Triple {
@@ -664,18 +666,20 @@ mod tests {
             }
             _ => panic!("Expected triple atom"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_datatype_validation() {
+    fn test_datatype_validation() -> Result<(), Box<dyn std::error::Error>> {
         use datatype::*;
 
         // Test integer validation
-        let int_lit = typed_literal(42, XSD_INTEGER).unwrap();
-        assert_eq!(validate_integer(&int_lit).unwrap(), 42);
+        let int_lit = typed_literal(42, XSD_INTEGER)?;
+        assert_eq!(validate_integer(&int_lit)?, 42);
 
         // Test boolean validation
-        let bool_lit = typed_literal("true", XSD_BOOLEAN).unwrap();
-        assert!(validate_boolean(&bool_lit).unwrap());
+        let bool_lit = typed_literal("true", XSD_BOOLEAN)?;
+        assert!(validate_boolean(&bool_lit)?);
+        Ok(())
     }
 }

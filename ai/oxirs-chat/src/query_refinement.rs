@@ -589,7 +589,9 @@ mod tests {
     #[test]
     fn test_query_analysis() {
         let refiner = QueryRefiner::new(RefinementConfig::default());
-        let analysis = refiner.analyze_query("show me all things").unwrap();
+        let analysis = refiner
+            .analyze_query("show me all things")
+            .expect("should succeed");
 
         assert!(!analysis.performance_issues.is_empty());
         assert!(!analysis.ambiguities.is_empty());
@@ -598,7 +600,9 @@ mod tests {
     #[test]
     fn test_limit_suggestion() {
         let refiner = QueryRefiner::new(RefinementConfig::default());
-        let suggestions = refiner.refine("SELECT * WHERE { ?s ?p ?o }").unwrap();
+        let suggestions = refiner
+            .refine("SELECT * WHERE { ?s ?p ?o }")
+            .expect("should succeed");
 
         assert!(suggestions
             .iter()
@@ -619,7 +623,7 @@ mod tests {
 
         let refined = refiner
             .apply_suggestion("SELECT * WHERE { ?s ?p ?o }", &suggestion)
-            .unwrap();
+            .expect("should succeed");
         assert!(refined.contains("LIMIT"));
     }
 

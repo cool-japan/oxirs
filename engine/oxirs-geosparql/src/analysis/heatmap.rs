@@ -20,16 +20,16 @@
 //!
 //! // Generate heatmap from points
 //! let points = vec![
-//!     Geometry::from_wkt("POINT(0 0)").unwrap(),
-//!     Geometry::from_wkt("POINT(1 1)").unwrap(),
-//!     Geometry::from_wkt("POINT(0.5 0.5)").unwrap(),
+//!     Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+//!     Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
+//!     Geometry::from_wkt("POINT(0.5 0.5)").expect("should succeed"),
 //! ];
 //!
 //! let config = HeatmapConfig::default()
 //!     .with_grid_size(100, 100)
 //!     .with_radius(2.0);
 //!
-//! let heatmap = generate_heatmap(&points, &config).unwrap();
+//! let heatmap = generate_heatmap(&points, &config).expect("should succeed");
 //! ```
 
 use crate::error::{GeoSparqlError, Result};
@@ -289,12 +289,12 @@ impl Heatmap {
 /// use oxirs_geosparql::analysis::heatmap::{generate_heatmap, HeatmapConfig};
 ///
 /// let points = vec![
-///     Geometry::from_wkt("POINT(0 0)").unwrap(),
-///     Geometry::from_wkt("POINT(1 1)").unwrap(),
+///     Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+///     Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
 /// ];
 ///
 /// let config = HeatmapConfig::default();
-/// let heatmap = generate_heatmap(&points, &config).unwrap();
+/// let heatmap = generate_heatmap(&points, &config).expect("should succeed");
 /// ```
 pub fn generate_heatmap(points: &[Geometry], config: &HeatmapConfig) -> Result<Heatmap> {
     if points.is_empty() {
@@ -482,16 +482,16 @@ mod tests {
     #[test]
     fn test_generate_heatmap_basic() {
         let points = vec![
-            Geometry::from_wkt("POINT(0 0)").unwrap(),
-            Geometry::from_wkt("POINT(1 1)").unwrap(),
-            Geometry::from_wkt("POINT(0.5 0.5)").unwrap(),
+            Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
+            Geometry::from_wkt("POINT(0.5 0.5)").expect("should succeed"),
         ];
 
         let config = HeatmapConfig::default()
             .with_grid_size(10, 10)
             .with_radius(2.0);
 
-        let heatmap = generate_heatmap(&points, &config).unwrap();
+        let heatmap = generate_heatmap(&points, &config).expect("should succeed");
 
         assert_eq!(heatmap.grid.nrows(), 10);
         assert_eq!(heatmap.grid.ncols(), 10);
@@ -501,8 +501,8 @@ mod tests {
     #[test]
     fn test_heatmap_with_weights() {
         let points = vec![
-            Geometry::from_wkt("POINT(0 0)").unwrap(),
-            Geometry::from_wkt("POINT(1 1)").unwrap(),
+            Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
         ];
 
         let weights = vec![1.0, 10.0]; // Second point has 10x weight
@@ -511,7 +511,7 @@ mod tests {
             .with_grid_size(10, 10)
             .with_weights(weights);
 
-        let heatmap = generate_heatmap(&points, &config).unwrap();
+        let heatmap = generate_heatmap(&points, &config).expect("should succeed");
 
         // The cell near (1, 1) should have higher density
         assert!(heatmap.max_value > heatmap.min_value);
@@ -519,14 +519,14 @@ mod tests {
 
     #[test]
     fn test_coord_to_grid_conversion() {
-        let points = vec![Geometry::from_wkt("POINT(0 0)").unwrap()];
+        let points = vec![Geometry::from_wkt("POINT(0 0)").expect("should succeed")];
 
         let config = HeatmapConfig::default().with_grid_size(10, 10);
 
-        let heatmap = generate_heatmap(&points, &config).unwrap();
+        let heatmap = generate_heatmap(&points, &config).expect("should succeed");
 
         let coord = Coord { x: 0.0, y: 0.0 };
-        let (x, y) = heatmap.coord_to_grid(&coord).unwrap();
+        let (x, y) = heatmap.coord_to_grid(&coord).expect("should succeed");
 
         assert!(x < 10);
         assert!(y < 10);
@@ -535,17 +535,17 @@ mod tests {
     #[test]
     fn test_find_hotspots() {
         let points = vec![
-            Geometry::from_wkt("POINT(0 0)").unwrap(),
-            Geometry::from_wkt("POINT(0.1 0.1)").unwrap(),
-            Geometry::from_wkt("POINT(0.2 0.2)").unwrap(),
-            Geometry::from_wkt("POINT(5 5)").unwrap(),
+            Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT(0.1 0.1)").expect("should succeed"),
+            Geometry::from_wkt("POINT(0.2 0.2)").expect("should succeed"),
+            Geometry::from_wkt("POINT(5 5)").expect("should succeed"),
         ];
 
         let config = HeatmapConfig::default()
             .with_grid_size(20, 20)
             .with_radius(1.0);
 
-        let heatmap = generate_heatmap(&points, &config).unwrap();
+        let heatmap = generate_heatmap(&points, &config).expect("should succeed");
 
         let hotspots = heatmap.find_hotspots(0.8); // Top 20%
 
@@ -569,15 +569,15 @@ mod tests {
     #[test]
     fn test_normalized_output() {
         let points = vec![
-            Geometry::from_wkt("POINT(0 0)").unwrap(),
-            Geometry::from_wkt("POINT(1 1)").unwrap(),
+            Geometry::from_wkt("POINT(0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT(1 1)").expect("should succeed"),
         ];
 
         let config = HeatmapConfig::default()
             .with_grid_size(10, 10)
             .with_normalization(true);
 
-        let heatmap = generate_heatmap(&points, &config).unwrap();
+        let heatmap = generate_heatmap(&points, &config).expect("should succeed");
 
         let normalized = heatmap.to_normalized();
 

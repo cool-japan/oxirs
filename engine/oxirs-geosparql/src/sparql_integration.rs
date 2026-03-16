@@ -386,7 +386,10 @@ mod tests {
         assert_eq!(functions.len(), 7);
 
         // Check dimension function
-        let dim_func = functions.iter().find(|f| f.name == "dimension").unwrap();
+        let dim_func = functions
+            .iter()
+            .find(|f| f.name == "dimension")
+            .expect("should succeed");
         assert_eq!(dim_func.arity, 1);
         assert_eq!(dim_func.category, FunctionCategory::Property);
     }

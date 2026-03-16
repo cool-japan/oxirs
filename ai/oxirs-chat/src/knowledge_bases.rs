@@ -477,7 +477,7 @@ mod tests {
     async fn test_knowledge_base_manager() {
         let manager = KnowledgeBaseManager::new()
             .with_wikipedia(Some("en".to_string()))
-            .unwrap();
+            .expect("should succeed");
 
         assert!(manager.wikipedia.is_some());
     }

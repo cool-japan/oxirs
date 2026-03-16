@@ -1064,6 +1064,7 @@ impl ClusterSimulator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     fn make_vector_entry(id: &str, vec: Vec<f32>) -> VectorEntry {
         VectorEntry {
@@ -1117,7 +1118,7 @@ mod tests {
     }
 
     #[test]
-    fn test_single_node_leader_force_commit() {
+    fn test_single_node_leader_force_commit() -> Result<()> {
         let config = RaftConfig::single_node(1);
         let node = RaftIndexNode::new(config);
 
@@ -1137,11 +1138,12 @@ mod tests {
         }
 
         let entry = make_vector_entry("v1", vec![1.0, 2.0, 3.0]);
-        node.propose(IndexCommand::Upsert(entry), None).unwrap();
+        node.propose(IndexCommand::Upsert(entry), None)?;
         node.force_commit_single_node();
 
         assert_eq!(node.vector_count(), 1);
         assert!(node.get_vector("v1").is_some());
+        Ok(())
     }
 
     #[test]
@@ -1261,28 +1263,31 @@ mod tests {
 
     #[test]
     #[ignore = "slow network simulation test - run explicitly with cargo test -- --ignored"]
-    fn test_cluster_simulator_election() {
-        let sim = ClusterSimulator::new(3).unwrap();
+    fn test_cluster_simulator_election() -> Result<()> {
+        let sim = ClusterSimulator::new(3)?;
         sim.elect_leader(0);
 
         // At least one node should be leader
         let leaders: Vec<_> = sim.nodes.iter().filter(|n| n.is_leader()).collect();
         assert!(!leaders.is_empty(), "At least one node should be leader");
+        Ok(())
     }
 
     #[test]
     #[ignore = "slow network simulation test - run explicitly with cargo test -- --ignored"]
-    fn test_cluster_simulator_replication() {
-        let sim = ClusterSimulator::new(3).unwrap();
+    fn test_cluster_simulator_replication() -> Result<()> {
+        let sim = ClusterSimulator::new(3)?;
         sim.elect_leader(0);
 
-        let leader_idx = sim.nodes.iter().position(|n| n.is_leader()).unwrap();
+        let leader_idx = sim
+            .nodes
+            .iter()
+            .position(|n| n.is_leader())
+            .expect("no leader found");
         let entry = make_vector_entry("v1", vec![1.0, 0.0, 0.0]);
-        sim.nodes[leader_idx]
-            .propose(IndexCommand::Upsert(entry), None)
-            .unwrap();
+        sim.nodes[leader_idx].propose(IndexCommand::Upsert(entry), None)?;
 
-        sim.replicate_all().unwrap();
+        sim.replicate_all()?;
 
         // All nodes should eventually have the entry committed
         let leader = &sim.nodes[leader_idx];
@@ -1290,10 +1295,11 @@ mod tests {
         // Leader should have the vector
         let vec = leader.get_vector("v1");
         assert!(vec.is_some() || leader.log_length() > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_delete_command() {
+    fn test_delete_command() -> Result<()> {
         let config = RaftConfig::single_node(1);
         let node = RaftIndexNode::new(config);
 
@@ -1312,7 +1318,7 @@ mod tests {
 
         // Insert then delete
         let entry = make_vector_entry("v1", vec![1.0]);
-        node.propose(IndexCommand::Upsert(entry), None).unwrap();
+        node.propose(IndexCommand::Upsert(entry), None)?;
         node.force_commit_single_node();
         assert_eq!(node.vector_count(), 1);
 
@@ -1321,14 +1327,14 @@ mod tests {
                 vector_id: "v1".to_string(),
             },
             None,
-        )
-        .unwrap();
+        )?;
         node.force_commit_single_node();
         assert_eq!(node.vector_count(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_update_metadata_command() {
+    fn test_update_metadata_command() -> Result<()> {
         let config = RaftConfig::single_node(1);
         let node = RaftIndexNode::new(config);
 
@@ -1336,7 +1342,7 @@ mod tests {
         *node.current_leader.lock() = Some(1);
 
         let entry = make_vector_entry("v1", vec![1.0, 2.0]);
-        node.propose(IndexCommand::Upsert(entry), None).unwrap();
+        node.propose(IndexCommand::Upsert(entry), None)?;
 
         let mut new_meta = HashMap::new();
         new_meta.insert("tag".to_string(), "important".to_string());
@@ -1346,16 +1352,16 @@ mod tests {
                 metadata: new_meta,
             },
             None,
-        )
-        .unwrap();
+        )?;
         node.force_commit_single_node();
 
-        let stored = node.get_vector("v1").unwrap();
+        let stored = node.get_vector("v1").expect("v1 not found");
         assert_eq!(stored.metadata.get("tag"), Some(&"important".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_search_similar() {
+    fn test_search_similar() -> Result<()> {
         let config = RaftConfig::single_node(1);
         let node = RaftIndexNode::new(config);
 
@@ -1365,18 +1371,15 @@ mod tests {
         node.propose(
             IndexCommand::Upsert(make_vector_entry("v1", vec![1.0, 0.0, 0.0])),
             None,
-        )
-        .unwrap();
+        )?;
         node.propose(
             IndexCommand::Upsert(make_vector_entry("v2", vec![0.0, 1.0, 0.0])),
             None,
-        )
-        .unwrap();
+        )?;
         node.propose(
             IndexCommand::Upsert(make_vector_entry("v3", vec![0.0, 0.0, 1.0])),
             None,
-        )
-        .unwrap();
+        )?;
         node.force_commit_single_node();
 
         let results = node.search_similar(&[1.0, 0.0, 0.0], 2);
@@ -1384,25 +1387,27 @@ mod tests {
         // First result should be v1 with similarity ~1.0
         assert_eq!(results[0].0, "v1");
         assert!((results[0].1 - 1.0).abs() < 1e-5);
+        Ok(())
     }
 
     #[test]
-    fn test_stats_populated() {
+    fn test_stats_populated() -> Result<()> {
         let config = RaftConfig::single_node(1);
         let node = RaftIndexNode::new(config);
 
         *node.role.lock() = NodeRole::Leader;
         *node.current_leader.lock() = Some(1);
-        node.propose(IndexCommand::NoOp, None).unwrap();
+        node.propose(IndexCommand::NoOp, None)?;
         node.force_commit_single_node();
 
         let stats = node.get_stats();
         assert_eq!(stats.role, "Leader");
         assert!(stats.log_length > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_raft_log_length_increases() {
+    fn test_raft_log_length_increases() -> Result<()> {
         let config = RaftConfig::single_node(1);
         let node = RaftIndexNode::new(config);
 
@@ -1411,11 +1416,12 @@ mod tests {
 
         assert_eq!(node.log_length(), 0);
 
-        node.propose(IndexCommand::NoOp, None).unwrap();
+        node.propose(IndexCommand::NoOp, None)?;
         assert_eq!(node.log_length(), 1);
 
-        node.propose(IndexCommand::Rebuild, None).unwrap();
+        node.propose(IndexCommand::Rebuild, None)?;
         assert_eq!(node.log_length(), 2);
+        Ok(())
     }
 
     #[test]

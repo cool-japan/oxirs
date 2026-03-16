@@ -591,7 +591,7 @@ mod tests {
     #[test]
     fn test_traceparent_parse() {
         let header = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
-        let ctx = TraceContext::from_traceparent(header).unwrap();
+        let ctx = TraceContext::from_traceparent(header).expect("should succeed");
 
         assert_eq!(ctx.trace_id, "0af7651916cd43dd8448eb211c80319c");
         assert_eq!(ctx.span_id, "b7ad6b7169203331");
@@ -675,7 +675,7 @@ mod tests {
         let span = tracer
             .start_trace(&ctx, "test_query".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(span.name, "test_query");
         assert_eq!(span.kind, SpanKind::Server);
@@ -690,7 +690,10 @@ mod tests {
         let tracer = DistributedTracer::new(config);
 
         let ctx = TraceContext::new();
-        tracer.start_trace(&ctx, "root".to_string()).await.unwrap();
+        tracer
+            .start_trace(&ctx, "root".to_string())
+            .await
+            .expect("should succeed");
 
         let child_ctx = ctx.create_child();
         let child_span = tracer
@@ -701,7 +704,7 @@ mod tests {
                 Some("subgraph1".to_string()),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(child_span.name, "child_query");
         assert_eq!(child_span.subgraph_name, Some("subgraph1".to_string()));
@@ -714,20 +717,26 @@ mod tests {
         let tracer = DistributedTracer::new(config);
 
         let ctx = TraceContext::new();
-        tracer.start_trace(&ctx, "root".to_string()).await.unwrap();
+        tracer
+            .start_trace(&ctx, "root".to_string())
+            .await
+            .expect("should succeed");
 
         let child_ctx = ctx.create_child();
         tracer
             .start_span(&child_ctx, "child".to_string(), SpanKind::Client, None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         tracer
             .end_span(&ctx.trace_id, &child_ctx.span_id, SpanStatus::Ok)
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let trace = tracer.get_trace(&ctx.trace_id).await.unwrap();
+        let trace = tracer
+            .get_trace(&ctx.trace_id)
+            .await
+            .expect("should succeed");
         assert_eq!(trace.spans.len(), 1);
     }
 
@@ -737,9 +746,15 @@ mod tests {
         let tracer = DistributedTracer::new(config);
 
         let ctx = TraceContext::new();
-        tracer.start_trace(&ctx, "root".to_string()).await.unwrap();
+        tracer
+            .start_trace(&ctx, "root".to_string())
+            .await
+            .expect("should succeed");
 
-        tracer.end_trace(&ctx.trace_id).await.unwrap();
+        tracer
+            .end_trace(&ctx.trace_id)
+            .await
+            .expect("should succeed");
 
         // Should now be in completed traces
         let completed = tracer.get_completed_traces().await;
@@ -756,7 +771,10 @@ mod tests {
         let tracer = DistributedTracer::new(config);
 
         let ctx = TraceContext::new();
-        let span = tracer.start_trace(&ctx, "test".to_string()).await.unwrap();
+        let span = tracer
+            .start_trace(&ctx, "test".to_string())
+            .await
+            .expect("should succeed");
 
         // Should still return a span, but not track it
         assert_eq!(span.name, "test");
@@ -774,15 +792,18 @@ mod tests {
         tracer
             .start_trace(&ctx1, "trace1".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let ctx2 = TraceContext::new();
         tracer
             .start_trace(&ctx2, "trace2".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        tracer.end_trace(&ctx1.trace_id).await.unwrap();
+        tracer
+            .end_trace(&ctx1.trace_id)
+            .await
+            .expect("should succeed");
 
         let stats = tracer.get_stats().await;
         assert_eq!(stats.active_traces, 1);

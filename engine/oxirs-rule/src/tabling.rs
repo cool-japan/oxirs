@@ -833,22 +833,24 @@ mod tests {
     }
 
     #[test]
-    fn test_call_variant_creation() {
+    fn test_call_variant_creation() -> Result<(), Box<dyn std::error::Error>> {
         let atom = triple("john", "parent", "mary");
-        let variant = CallVariant::from_atom(&atom).unwrap();
+        let variant = CallVariant::from_atom(&atom).ok_or("expected Some value")?;
 
         assert_eq!(variant.predicate, "parent");
         assert_eq!(variant.arity(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_call_variant_with_variables() {
+    fn test_call_variant_with_variables() -> Result<(), Box<dyn std::error::Error>> {
         let atom = triple("?X", "parent", "?Y");
-        let variant = CallVariant::from_atom(&atom).unwrap();
+        let variant = CallVariant::from_atom(&atom).ok_or("expected Some value")?;
 
         assert_eq!(variant.predicate, "parent");
         // Variables should be None in binding pattern
         assert!(variant.binding_pattern.iter().all(|p| p.is_none()));
+        Ok(())
     }
 
     #[test]
@@ -883,7 +885,7 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_query() {
+    fn test_simple_query() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = TablingEngine::default();
 
         // Add fact
@@ -891,13 +893,14 @@ mod tests {
 
         // Query
         let goal = triple("john", "parent", "mary");
-        let results = engine.query(&goal).unwrap();
+        let results = engine.query(&goal)?;
 
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_rule_application() {
+    fn test_rule_application() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = TablingEngine::default();
 
         // Add rule: ancestor(X,Y) :- parent(X,Y)
@@ -912,14 +915,15 @@ mod tests {
 
         // Query
         let goal = triple("?X", "ancestor", "?Y");
-        let results = engine.query(&goal).unwrap();
+        let results = engine.query(&goal)?;
 
         // Should derive ancestor relationship
         assert!(!results.is_empty() || engine.fact_count() > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_tabling_caching() {
+    fn test_tabling_caching() -> Result<(), Box<dyn std::error::Error>> {
         let config = TablingConfig::default().with_subsumption(true);
         let mut engine = TablingEngine::new(config);
 
@@ -928,17 +932,18 @@ mod tests {
 
         // First query
         let goal = triple("a", "test", "b");
-        let _ = engine.query(&goal).unwrap();
+        let _ = engine.query(&goal)?;
 
         // Second query should hit cache
-        let _ = engine.query(&goal).unwrap();
+        let _ = engine.query(&goal)?;
 
         let stats = engine.statistics_snapshot();
         assert!(stats.hits > 0 || stats.calls > 1);
+        Ok(())
     }
 
     #[test]
-    fn test_loop_detection_fail() {
+    fn test_loop_detection_fail() -> Result<(), Box<dyn std::error::Error>> {
         let config = TablingConfig::default();
         let mut engine = TablingEngine::new(config);
 
@@ -957,20 +962,22 @@ mod tests {
 
         // Depending on strategy, should either fail or return partial
         assert!(result.is_ok() || result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_statistics() {
+    fn test_statistics() -> Result<(), Box<dyn std::error::Error>> {
         let config = TablingConfig::default();
         let mut engine = TablingEngine::new(config);
 
         engine.add_fact(triple("a", "test", "b"));
 
         let goal = triple("a", "test", "b");
-        let _ = engine.query(&goal).unwrap();
+        let _ = engine.query(&goal)?;
 
         let stats = engine.statistics_snapshot();
         assert!(stats.calls > 0);
+        Ok(())
     }
 
     #[test]
@@ -1043,15 +1050,16 @@ mod tests {
     }
 
     #[test]
-    fn test_unification() {
+    fn test_unification() -> Result<(), Box<dyn std::error::Error>> {
         let atom1 = triple("?X", "parent", "mary");
         let atom2 = triple("john", "parent", "mary");
 
         let subst = TablingEngine::unify(&atom1, &atom2);
 
         assert!(subst.is_some());
-        let subst = subst.unwrap();
+        let subst = subst.ok_or("expected Some value")?;
         assert!(matches!(subst.get("X"), Some(Term::Constant(c)) if c == "john"));
+        Ok(())
     }
 
     #[test]

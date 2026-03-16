@@ -46,9 +46,9 @@ use std::hash::{Hash, Hasher};
 /// use oxirs_core::model::triple_term::TripleTerm;
 ///
 /// let tt = TripleTerm::new(
-///     NamedNode::new("http://example.org/alice").unwrap(),
-///     NamedNode::new("http://example.org/knows").unwrap(),
-///     NamedNode::new("http://example.org/bob").unwrap(),
+///     NamedNode::new("http://example.org/alice").expect("valid IRI"),
+///     NamedNode::new("http://example.org/knows").expect("valid IRI"),
+///     NamedNode::new("http://example.org/bob").expect("valid IRI"),
 /// );
 ///
 /// assert_eq!(tt.to_string(), "<< <http://example.org/alice> <http://example.org/knows> <http://example.org/bob> >>");

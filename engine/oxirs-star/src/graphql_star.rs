@@ -386,10 +386,7 @@ impl GraphQLStarEngine {
 
         // Update statistics
         let elapsed = start.elapsed().as_micros() as u64;
-        let mut stats = self
-            .stats
-            .write()
-            .expect("write lock should not be poisoned");
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.total_queries += 1;
         let new_avg = if stats.total_queries == 1 {
             elapsed
@@ -486,7 +483,7 @@ impl GraphQLStarEngine {
         offset: usize,
         max_depth: Option<usize>,
     ) -> StarResult<GraphQLResult> {
-        let store = self.store.read().expect("read lock should not be poisoned");
+        let store = self.store.read().unwrap_or_else(|e| e.into_inner());
         let mut triples = store.query(None, None, None)?;
         let original_count = triples.len();
 
@@ -519,7 +516,7 @@ impl GraphQLStarEngine {
 
     /// Resolve tripleCount query
     fn resolve_triple_count(&self) -> StarResult<GraphQLResult> {
-        let store = self.store.read().expect("read lock should not be poisoned");
+        let store = self.store.read().unwrap_or_else(|e| e.into_inner());
         let count = store.len();
 
         Ok(GraphQLResult {
@@ -574,16 +571,13 @@ impl GraphQLStarEngine {
     pub fn get_schema(&self) -> GraphQLSchema {
         self.schema
             .read()
-            .expect("read lock should not be poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
 
     /// Get statistics
     pub fn get_statistics(&self) -> GraphQLStats {
-        self.stats
-            .read()
-            .expect("read lock should not be poisoned")
-            .clone()
+        self.stats.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 

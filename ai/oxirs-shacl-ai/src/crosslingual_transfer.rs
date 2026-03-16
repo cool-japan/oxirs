@@ -777,24 +777,35 @@ mod tests {
         let transfer = CrosslingualShapeTransfer::new();
 
         assert_eq!(
-            transfer.detect_language("Hello world").unwrap(),
+            transfer
+                .detect_language("Hello world")
+                .expect("should succeed"),
             Language::English
         );
         assert_eq!(
-            transfer.detect_language("你好世界").unwrap(),
+            transfer
+                .detect_language("你好世界")
+                .expect("should succeed"),
             Language::Chinese
         );
         assert_eq!(
-            transfer.detect_language("こんにちは").unwrap(),
+            transfer
+                .detect_language("こんにちは")
+                .expect("should succeed"),
             Language::Japanese
         );
         assert_eq!(
-            transfer.detect_language("안녕하세요").unwrap(),
+            transfer
+                .detect_language("안녕하세요")
+                .expect("should succeed"),
             Language::Korean
         );
-        assert_eq!(transfer.detect_language("مرحبا").unwrap(), Language::Arabic);
         assert_eq!(
-            transfer.detect_language("Привет").unwrap(),
+            transfer.detect_language("مرحبا").expect("should succeed"),
+            Language::Arabic
+        );
+        assert_eq!(
+            transfer.detect_language("Привет").expect("should succeed"),
             Language::Russian
         );
     }
@@ -816,7 +827,9 @@ mod tests {
     fn test_multilingual_embedding() {
         let embedding_model = MultilingualEmbedding::new(768);
         let texts = vec!["Hello".to_string(), "World".to_string()];
-        let embeddings = embedding_model.encode_batch(&texts).unwrap();
+        let embeddings = embedding_model
+            .encode_batch(&texts)
+            .expect("should succeed");
 
         assert_eq!(embeddings.len(), 2);
         assert_eq!(embeddings[0].len(), 768);
@@ -835,14 +848,14 @@ mod tests {
         // First call - cache miss
         let _ = transfer
             .translate_texts(&texts, Language::English, Language::Spanish)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(transfer.stats.cache_misses, 1);
         assert_eq!(transfer.stats.cache_hits, 0);
 
         // Second call - cache hit
         let _ = transfer
             .translate_texts(&texts, Language::English, Language::Spanish)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(transfer.stats.cache_hits, 1);
     }
 

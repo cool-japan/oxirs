@@ -1123,7 +1123,9 @@ mod tests {
             })],
         };
 
-        let complexity = planner.calculate_query_complexity(&selection_set).unwrap();
+        let complexity = planner
+            .calculate_query_complexity(&selection_set)
+            .expect("should succeed");
         assert!(complexity > 0.0);
     }
 

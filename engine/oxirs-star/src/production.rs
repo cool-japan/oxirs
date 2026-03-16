@@ -91,14 +91,17 @@ impl CircuitBreaker {
 
     /// Check if a request is allowed
     pub fn allow_request(&self) -> bool {
-        let mut state = self.state.lock().expect("lock poisoned");
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
 
         match *state {
             CircuitBreakerState::Closed => true,
 
             CircuitBreakerState::Open => {
                 // Check if timeout has elapsed
-                let last_failure = self.last_failure_time.lock().expect("lock poisoned");
+                let last_failure = self
+                    .last_failure_time
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
 
                 if let Some(last_time) = *last_failure {
                     if last_time.elapsed() >= self.timeout {
@@ -118,20 +121,22 @@ impl CircuitBreaker {
 
     /// Record a successful request
     pub fn record_success(&self) {
-        let mut state = self.state.lock().expect("lock poisoned");
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
 
         match *state {
             CircuitBreakerState::HalfOpen => {
                 // Success in half-open state -> close the circuit
                 *state = CircuitBreakerState::Closed;
-                let mut failure_count = self.failure_count.lock().expect("lock poisoned");
+                let mut failure_count =
+                    self.failure_count.lock().unwrap_or_else(|e| e.into_inner());
                 *failure_count = 0;
                 info!("Circuit breaker closed after successful test");
             }
 
             CircuitBreakerState::Closed => {
                 // Reset failure count on success
-                let mut failure_count = self.failure_count.lock().expect("lock poisoned");
+                let mut failure_count =
+                    self.failure_count.lock().unwrap_or_else(|e| e.into_inner());
                 *failure_count = 0;
             }
 
@@ -141,8 +146,8 @@ impl CircuitBreaker {
 
     /// Record a failed request
     pub fn record_failure(&self) {
-        let mut state = self.state.lock().expect("lock poisoned");
-        let mut failure_count = self.failure_count.lock().expect("lock poisoned");
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut failure_count = self.failure_count.lock().unwrap_or_else(|e| e.into_inner());
 
         *failure_count += 1;
 
@@ -150,7 +155,10 @@ impl CircuitBreaker {
             CircuitBreakerState::HalfOpen => {
                 // Failure in half-open state -> reopen the circuit
                 *state = CircuitBreakerState::Open;
-                let mut last_failure = self.last_failure_time.lock().expect("lock poisoned");
+                let mut last_failure = self
+                    .last_failure_time
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 *last_failure = Some(Instant::now());
                 warn!("Circuit breaker reopened after failed test");
             }
@@ -159,7 +167,10 @@ impl CircuitBreaker {
                 if *failure_count >= self.failure_threshold {
                     // Too many failures -> open the circuit
                     *state = CircuitBreakerState::Open;
-                    let mut last_failure = self.last_failure_time.lock().expect("lock poisoned");
+                    let mut last_failure = self
+                        .last_failure_time
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
                     *last_failure = Some(Instant::now());
                     error!("Circuit breaker opened due to {} failures", *failure_count);
                 }
@@ -171,7 +182,7 @@ impl CircuitBreaker {
 
     /// Get current state
     pub fn get_state(&self) -> CircuitBreakerState {
-        *self.state.lock().expect("lock poisoned")
+        *self.state.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -210,7 +221,7 @@ impl RateLimiter {
     pub fn allow_request(&mut self) -> bool {
         self.refill_tokens();
 
-        let mut tokens = self.tokens.lock().expect("lock poisoned");
+        let mut tokens = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
 
         if *tokens > 0 {
             *tokens -= 1;
@@ -222,11 +233,11 @@ impl RateLimiter {
 
     /// Refill tokens based on elapsed time
     fn refill_tokens(&self) {
-        let mut last_refill = self.last_refill.lock().expect("lock poisoned");
+        let mut last_refill = self.last_refill.lock().unwrap_or_else(|e| e.into_inner());
         let elapsed = last_refill.elapsed();
 
         if elapsed >= self.refill_period {
-            let mut tokens = self.tokens.lock().expect("lock poisoned");
+            let mut tokens = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
             *tokens = self.max_tokens;
             *last_refill = Instant::now();
         }
@@ -234,7 +245,7 @@ impl RateLimiter {
 
     /// Get current token count
     pub fn available_tokens(&self) -> usize {
-        *self.tokens.lock().expect("lock poisoned")
+        *self.tokens.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -297,13 +308,13 @@ impl HealthCheck {
 
     /// Register a health check component
     pub fn register(&mut self, component: Box<dyn HealthCheckComponent + Send + Sync>) {
-        let mut checks = self.checks.write().expect("lock poisoned");
+        let mut checks = self.checks.write().unwrap_or_else(|e| e.into_inner());
         checks.push(component);
     }
 
     /// Check all components
     pub fn check_all(&self) -> StarResult<HealthStatus> {
-        let checks = self.checks.read().expect("lock poisoned");
+        let checks = self.checks.read().unwrap_or_else(|e| e.into_inner());
         let mut components = HashMap::new();
         let mut overall_status = Status::Healthy;
 
@@ -459,7 +470,10 @@ impl ShutdownManager {
     /// Register a shutdown signal
     pub fn register_shutdown_signal(&self) -> tokio::sync::oneshot::Receiver<()> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let mut signals = self.shutdown_signals.lock().expect("lock poisoned");
+        let mut signals = self
+            .shutdown_signals
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         signals.push(tx);
         rx
     }
@@ -468,7 +482,10 @@ impl ShutdownManager {
     pub fn shutdown(&self) {
         info!("Initiating graceful shutdown");
 
-        let mut signals = self.shutdown_signals.lock().expect("lock poisoned");
+        let mut signals = self
+            .shutdown_signals
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
 
         for signal in signals.drain(..) {
             let _ = signal.send(());
@@ -523,7 +540,10 @@ impl RequestTracer {
 
     /// Start a new trace
     pub fn start_trace(&self, operation: impl Into<String>) -> u64 {
-        let mut counter = self.trace_id_counter.lock().expect("lock poisoned");
+        let mut counter = self
+            .trace_id_counter
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         *counter += 1;
         let trace_id = *counter;
 
@@ -535,7 +555,10 @@ impl RequestTracer {
             spans: Vec::new(),
         };
 
-        let mut traces = self.active_traces.write().expect("lock poisoned");
+        let mut traces = self
+            .active_traces
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         traces.insert(trace_id, trace);
 
         trace_id
@@ -543,7 +566,10 @@ impl RequestTracer {
 
     /// End a trace
     pub fn end_trace(&self, trace_id: u64) {
-        let mut traces = self.active_traces.write().expect("lock poisoned");
+        let mut traces = self
+            .active_traces
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         if let Some(trace) = traces.remove(&trace_id) {
             let duration = trace.start_time.elapsed();
@@ -558,7 +584,7 @@ impl RequestTracer {
 
     /// Get trace info
     pub fn get_trace(&self, trace_id: u64) -> Option<TraceInfo> {
-        let traces = self.active_traces.read().expect("lock poisoned");
+        let traces = self.active_traces.read().unwrap_or_else(|e| e.into_inner());
         traces.get(&trace_id).cloned()
     }
 }

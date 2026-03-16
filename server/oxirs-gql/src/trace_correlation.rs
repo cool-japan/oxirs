@@ -509,10 +509,13 @@ mod tests {
     #[test]
     fn test_trace_context_from_traceparent() {
         let traceparent = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
-        let ctx = TraceContext::from_traceparent(traceparent).unwrap();
+        let ctx = TraceContext::from_traceparent(traceparent).expect("should succeed");
 
         assert_eq!(ctx.trace_id, "0af7651916cd43dd8448eb211c80319c");
-        assert_eq!(ctx.parent_span_id.as_ref().unwrap(), "00f067aa0ba902b7");
+        assert_eq!(
+            ctx.parent_span_id.as_ref().expect("should succeed"),
+            "00f067aa0ba902b7"
+        );
         assert_eq!(ctx.trace_flags, 1);
         assert!(ctx.is_sampled());
     }
@@ -569,7 +572,7 @@ mod tests {
         span.set_attribute("key3".to_string(), AttributeValue::Bool(true));
 
         assert_eq!(span.attributes.len(), 3);
-        match span.attributes.get("key2").unwrap() {
+        match span.attributes.get("key2").expect("should succeed") {
             AttributeValue::Int(v) => assert_eq!(*v, 42),
             _ => panic!("Wrong attribute type"),
         }
@@ -626,7 +629,7 @@ mod tests {
 
         let retrieved = correlator.get_span(&span_id).await;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().name, "test-span");
+        assert_eq!(retrieved.expect("should succeed").name, "test-span");
     }
 
     #[tokio::test]
@@ -643,7 +646,7 @@ mod tests {
             })
             .await;
 
-        let updated = correlator.get_span(&span_id).await.unwrap();
+        let updated = correlator.get_span(&span_id).await.expect("should succeed");
         assert_eq!(updated.attributes.len(), 1);
     }
 

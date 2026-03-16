@@ -889,7 +889,8 @@ mod tests {
     fn test_int64_column_roundtrip() {
         let col = ArrowColumn::Int64(vec![1, -2, 1_000_000, i64::MAX]);
         let bytes = col.body_bytes();
-        let decoded = ArrowColumn::from_bytes(&bytes, &ArrowDataType::Int64, 4).unwrap();
+        let decoded =
+            ArrowColumn::from_bytes(&bytes, &ArrowDataType::Int64, 4).expect("should succeed");
         assert_eq!(col, decoded);
     }
 
@@ -897,7 +898,8 @@ mod tests {
     fn test_float64_column_roundtrip() {
         let col = ArrowColumn::Float64(vec![1.5, -std::f64::consts::PI, f64::NAN, f64::INFINITY]);
         let bytes = col.body_bytes();
-        let decoded = ArrowColumn::from_bytes(&bytes, &ArrowDataType::Float64, 4).unwrap();
+        let decoded =
+            ArrowColumn::from_bytes(&bytes, &ArrowDataType::Float64, 4).expect("should succeed");
         // NaN != NaN so compare element-by-element.
         if let (ArrowColumn::Float64(orig), ArrowColumn::Float64(dec)) = (&col, &decoded) {
             assert_eq!(orig.len(), dec.len());
@@ -912,7 +914,8 @@ mod tests {
     fn test_utf8_column_roundtrip() {
         let col = ArrowColumn::Utf8(vec!["hello".into(), "world".into(), "".into()]);
         let bytes = col.body_bytes();
-        let decoded = ArrowColumn::from_bytes(&bytes, &ArrowDataType::Utf8, 3).unwrap();
+        let decoded =
+            ArrowColumn::from_bytes(&bytes, &ArrowDataType::Utf8, 3).expect("should succeed");
         assert_eq!(col, decoded);
     }
 
@@ -922,7 +925,7 @@ mod tests {
         let bytes = col.body_bytes();
         let decoded =
             ArrowColumn::from_bytes(&bytes, &ArrowDataType::Timestamp(TimeUnit::Millisecond), 3)
-                .unwrap();
+                .expect("should succeed");
         assert_eq!(col, decoded);
     }
 
@@ -930,7 +933,8 @@ mod tests {
     fn test_boolean_column_roundtrip() {
         let col = ArrowColumn::Boolean(vec![true, false, true, true, false]);
         let bytes = col.body_bytes();
-        let decoded = ArrowColumn::from_bytes(&bytes, &ArrowDataType::Boolean, 5).unwrap();
+        let decoded =
+            ArrowColumn::from_bytes(&bytes, &ArrowDataType::Boolean, 5).expect("should succeed");
         assert_eq!(col, decoded);
     }
 
@@ -948,18 +952,18 @@ mod tests {
                 ArrowColumn::Float64(vec![10.0, 20.0, 30.0]),
             ],
         )
-        .unwrap()
+        .expect("should succeed")
     }
 
     #[test]
     fn test_write_read_single_batch() {
         let mut writer = ArrowIpcWriter::new();
         let batch = make_batch();
-        let mut stream = writer.write_schema(&batch.schema).unwrap();
-        stream.extend(writer.write_batch(&batch).unwrap());
-        stream.extend(writer.write_footer().unwrap());
+        let mut stream = writer.write_schema(&batch.schema).expect("should succeed");
+        stream.extend(writer.write_batch(&batch).expect("should succeed"));
+        stream.extend(writer.write_footer().expect("should succeed"));
 
-        let batches = ArrowIpcReader::read_batches(&stream).unwrap();
+        let batches = ArrowIpcReader::read_batches(&stream).expect("should succeed");
         assert_eq!(batches.len(), 1);
         assert_eq!(batches[0].num_rows(), 3);
         assert_eq!(batches[0].columns[0], batch.columns[0]);
@@ -970,12 +974,12 @@ mod tests {
     fn test_write_read_multiple_batches() {
         let mut writer = ArrowIpcWriter::new();
         let batch = make_batch();
-        let mut stream = writer.write_schema(&batch.schema).unwrap();
-        stream.extend(writer.write_batch(&batch).unwrap());
-        stream.extend(writer.write_batch(&batch).unwrap());
-        stream.extend(writer.write_footer().unwrap());
+        let mut stream = writer.write_schema(&batch.schema).expect("should succeed");
+        stream.extend(writer.write_batch(&batch).expect("should succeed"));
+        stream.extend(writer.write_batch(&batch).expect("should succeed"));
+        stream.extend(writer.write_footer().expect("should succeed"));
 
-        let batches = ArrowIpcReader::read_batches(&stream).unwrap();
+        let batches = ArrowIpcReader::read_batches(&stream).expect("should succeed");
         assert_eq!(batches.len(), 2);
     }
 
@@ -983,7 +987,7 @@ mod tests {
     fn test_write_schema_twice_error() {
         let mut writer = ArrowIpcWriter::new();
         let schema = ArrowSchema::new(vec![ArrowField::new("x", ArrowDataType::Int64, false)]);
-        writer.write_schema(&schema).unwrap();
+        writer.write_schema(&schema).expect("should succeed");
         let result = writer.write_schema(&schema);
         assert!(result.is_err());
     }
@@ -1042,7 +1046,7 @@ mod tests {
             std::f64::consts::PI,
             [("host".into(), "srv1".into())].iter().cloned().collect(),
         )];
-        let batch = time_series_with_tags_to_batch(&points).unwrap();
+        let batch = time_series_with_tags_to_batch(&points).expect("should succeed");
         assert_eq!(batch.schema.fields.len(), 3);
         assert_eq!(batch.schema.fields[2].name, "tags_json");
     }
@@ -1052,7 +1056,7 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("env".to_owned(), "prod".to_owned());
         let points = vec![TaggedDataPoint::new(0, 1.0, tags)];
-        let batch = time_series_with_tags_to_batch(&points).unwrap();
+        let batch = time_series_with_tags_to_batch(&points).expect("should succeed");
         if let ArrowColumn::Utf8(json_cols) = &batch.columns[2] {
             assert!(json_cols[0].contains("env"), "expected env in tags_json");
         } else {
@@ -1103,14 +1107,14 @@ mod tests {
                 ArrowColumn::Int64(vec![1, 2, 3]),
             ],
         )
-        .unwrap();
+        .expect("should succeed");
 
         let mut writer = ArrowIpcWriter::new();
-        let mut stream = writer.write_schema(&schema).unwrap();
-        stream.extend(writer.write_batch(&batch).unwrap());
-        stream.extend(writer.write_footer().unwrap());
+        let mut stream = writer.write_schema(&schema).expect("should succeed");
+        stream.extend(writer.write_batch(&batch).expect("should succeed"));
+        stream.extend(writer.write_footer().expect("should succeed"));
 
-        let batches = ArrowIpcReader::read_batches(&stream).unwrap();
+        let batches = ArrowIpcReader::read_batches(&stream).expect("should succeed");
         assert_eq!(batches.len(), 1);
         assert_eq!(
             batches[0].columns[0],

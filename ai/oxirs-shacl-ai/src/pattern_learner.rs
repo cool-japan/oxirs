@@ -552,7 +552,7 @@ mod tests {
         assert_eq!(pat.class_iri, PERSON_CLASS);
         let name_freq = pat.property_frequencies.iter().find(|f| f.property == NAME);
         assert!(name_freq.is_some());
-        assert!((name_freq.unwrap().frequency - 1.0).abs() < 1e-9);
+        assert!((name_freq.expect("should succeed").frequency - 1.0).abs() < 1e-9);
     }
 
     #[test]
@@ -570,7 +570,7 @@ mod tests {
             .property_frequencies
             .iter()
             .find(|f| f.property == AGE)
-            .unwrap();
+            .expect("should succeed");
         assert!((age_freq.frequency - 1.0 / 3.0).abs() < 0.01);
     }
 
@@ -740,9 +740,13 @@ mod tests {
             .property_frequencies
             .iter()
             .find(|f| f.property == NAME)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(name_freq.count, 8);
-        let (min_c, max_c) = merged.cardinality_estimates.get(NAME).copied().unwrap();
+        let (min_c, max_c) = merged
+            .cardinality_estimates
+            .get(NAME)
+            .copied()
+            .expect("should succeed");
         assert_eq!(min_c, 1);
         assert_eq!(max_c, 2);
     }

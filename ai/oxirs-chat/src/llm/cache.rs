@@ -312,7 +312,10 @@ mod tests {
         // Retrieve response
         let cached = cache.get(&request).await;
         assert!(cached.is_some());
-        assert_eq!(cached.as_ref().unwrap().content, response.content);
+        assert_eq!(
+            cached.as_ref().expect("should succeed").content,
+            response.content
+        );
 
         // Check metrics
         let metrics = cache.get_metrics().await;

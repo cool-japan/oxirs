@@ -441,7 +441,7 @@ mod tests {
             None,
         );
 
-        let recording = replay.get_recording(&id).unwrap();
+        let recording = replay.get_recording(&id).expect("should succeed");
         assert_eq!(recording.query_text, "query");
         assert_eq!(recording.duration_ms, 5.0);
     }
@@ -557,7 +557,7 @@ mod tests {
 
         let result = replay
             .replay_query(&id, &ReplayConfig::default(), &mut executor)
-            .unwrap();
+            .expect("should succeed");
 
         assert!(result.results_match);
         assert_eq!(result.original_duration_ms, 10.0);
@@ -586,7 +586,7 @@ mod tests {
 
         let result = replay
             .replay_query(&id, &ReplayConfig::default(), &mut executor)
-            .unwrap();
+            .expect("should succeed");
 
         assert!(!result.results_match);
         assert!(result.diff.is_some());

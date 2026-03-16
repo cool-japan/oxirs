@@ -782,7 +782,7 @@ mod tests {
 
     #[test]
     fn test_version_parsing() {
-        let version: Version = "1.2.3".parse().unwrap();
+        let version: Version = "1.2.3".parse().expect("should succeed");
         assert_eq!(version.major, 1);
         assert_eq!(version.minor, 2);
         assert_eq!(version.patch, 3);
@@ -805,14 +805,14 @@ mod tests {
     #[test]
     fn test_model_registry_creation() {
         let config = RegistryConfig::default();
-        let registry = ModelRegistry::new(config).unwrap();
+        let registry = ModelRegistry::new(config).expect("should succeed");
         assert!(registry.config.auto_versioning);
     }
 
     #[test]
     fn test_model_registration() {
         let config = RegistryConfig::default();
-        let registry = ModelRegistry::new(config).unwrap();
+        let registry = ModelRegistry::new(config).expect("should succeed");
 
         let builder =
             ModelRegistrationBuilder::new("test_model".to_string(), ModelType::ShapeLearner)
@@ -834,7 +834,7 @@ mod tests {
                 .with_author("Test Author".to_string())
                 .with_tags(vec!["test".to_string()]);
 
-        let model = registry.register_model(builder).unwrap();
+        let model = registry.register_model(builder).expect("should succeed");
 
         assert_eq!(model.name, "test_model");
         assert_eq!(model.version, Version::new(1, 0, 0));

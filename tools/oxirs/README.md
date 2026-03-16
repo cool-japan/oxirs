@@ -1,10 +1,10 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: v0.2.1 - Released March 10, 2026
+**Status**: v0.2.2 - Released March 16, 2026
 
 ⚡ **Production-Ready**: APIs are stable and tested. Ready for production use with comprehensive documentation.
 

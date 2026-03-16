@@ -1094,7 +1094,11 @@ mod tests {
         );
         assert!(relation.qualifier.is_some());
         assert_eq!(
-            relation.qualifier.as_ref().unwrap().as_str(),
+            relation
+                .qualifier
+                .as_ref()
+                .expect("operation should succeed")
+                .as_str(),
             "http://example.org/qual1"
         );
     }

@@ -1076,7 +1076,10 @@ mod tests {
         let config = CanaryConfig::default();
         let controller = CanaryController::new(config);
 
-        let release_id = controller.start_canary("v2.0.0").await.unwrap();
+        let release_id = controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
         assert!(!release_id.is_empty());
         assert!(controller.is_active().await);
     }
@@ -1086,7 +1089,10 @@ mod tests {
         let config = CanaryConfig::default();
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
         let result = controller.start_canary("v3.0.0").await;
         assert!(result.is_err());
     }
@@ -1099,7 +1105,10 @@ mod tests {
         };
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
 
         // With 50% canary, roughly half should route to canary
         let mut canary_count = 0;
@@ -1119,7 +1128,10 @@ mod tests {
         let config = CanaryConfig::default();
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
 
         // Record some metrics
         for _ in 0..100 {
@@ -1127,7 +1139,7 @@ mod tests {
             controller.record_metric(false, 45, false).await;
         }
 
-        let status = controller.get_status().await.unwrap();
+        let status = controller.get_status().await.expect("should succeed");
         assert_eq!(status.canary_metrics.request_count, 100);
         assert_eq!(status.baseline_metrics.request_count, 100);
     }
@@ -1143,14 +1155,17 @@ mod tests {
         };
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
 
         // Record less than min_request_count
         for _ in 0..50 {
             controller.record_metric(true, 50, false).await;
         }
 
-        let analysis = controller.analyze().await.unwrap();
+        let analysis = controller.analyze().await.expect("should succeed");
         assert_eq!(
             analysis.recommendation,
             AnalysisRecommendation::InsufficientData
@@ -1170,14 +1185,17 @@ mod tests {
         };
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
 
         // Record good metrics
         for _ in 0..100 {
             controller.record_metric(true, 50, false).await;
         }
 
-        let analysis = controller.analyze().await.unwrap();
+        let analysis = controller.analyze().await.expect("should succeed");
         assert!(analysis.passed);
         assert_eq!(analysis.recommendation, AnalysisRecommendation::Promote);
     }
@@ -1194,14 +1212,17 @@ mod tests {
         };
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
 
-        let status = controller.get_status().await.unwrap();
+        let status = controller.get_status().await.expect("should succeed");
         assert_eq!(status.traffic_percentage, 5);
 
-        controller.promote().await.unwrap();
+        controller.promote().await.expect("should succeed");
 
-        let status = controller.get_status().await.unwrap();
+        let status = controller.get_status().await.expect("should succeed");
         assert_eq!(status.traffic_percentage, 10);
     }
 
@@ -1210,14 +1231,17 @@ mod tests {
         let config = CanaryConfig::default();
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
 
-        controller.pause("Testing").await.unwrap();
-        let status = controller.get_status().await.unwrap();
+        controller.pause("Testing").await.expect("should succeed");
+        let status = controller.get_status().await.expect("should succeed");
         assert_eq!(status.state, CanaryState::Paused);
 
-        controller.resume().await.unwrap();
-        let status = controller.get_status().await.unwrap();
+        controller.resume().await.expect("should succeed");
+        let status = controller.get_status().await.expect("should succeed");
         assert_eq!(status.state, CanaryState::Active);
     }
 
@@ -1226,8 +1250,14 @@ mod tests {
         let config = CanaryConfig::default();
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
-        controller.rollback("Test rollback").await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
+        controller
+            .rollback("Test rollback")
+            .await
+            .expect("should succeed");
 
         assert!(!controller.is_active().await);
 
@@ -1241,8 +1271,11 @@ mod tests {
         let config = CanaryConfig::default();
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
-        controller.complete().await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
+        controller.complete().await.expect("should succeed");
 
         assert!(!controller.is_active().await);
 
@@ -1257,8 +1290,11 @@ mod tests {
         let controller = CanaryController::new(config);
 
         controller.set_baseline_version("v1.0.0").await;
-        controller.start_canary("v2.0.0").await.unwrap();
-        controller.complete().await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
+        controller.complete().await.expect("should succeed");
 
         let baseline = controller.baseline_version.read().await;
         assert_eq!(*baseline, "v2.0.0");
@@ -1269,9 +1305,12 @@ mod tests {
         let config = CanaryConfig::default();
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
-        controller.pause("Testing").await.unwrap();
-        controller.resume().await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
+        controller.pause("Testing").await.expect("should succeed");
+        controller.resume().await.expect("should succeed");
 
         let events = controller.get_recent_events(10).await;
         assert!(events.len() >= 3);
@@ -1288,7 +1327,10 @@ mod tests {
         };
         let controller = CanaryController::new(config);
 
-        controller.start_canary("v2.0.0").await.unwrap();
+        controller
+            .start_canary("v2.0.0")
+            .await
+            .expect("should succeed");
 
         // Same request ID should always route to the same target
         let decision1 = controller.route_request("user-123").await;

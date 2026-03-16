@@ -238,7 +238,7 @@ mod tests {
     #[test]
     fn test_input_validation() {
         let config = SecurityConfig::default();
-        let manager = SecurityManager::new(config).unwrap();
+        let manager = SecurityManager::new(config).expect("should succeed");
 
         let result = manager.validate_input("SELECT * FROM users", "test_user");
         assert!(result.is_ok());
@@ -247,23 +247,23 @@ mod tests {
     #[test]
     fn test_rate_limiting() {
         let config = SecurityConfig::default();
-        let manager = SecurityManager::new(config).unwrap();
+        let manager = SecurityManager::new(config).expect("should succeed");
 
         // First request should be allowed
         let result = manager.check_rate_limit("test_user", 100);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("should succeed"));
     }
 
     #[test]
     fn test_memory_check() {
         let config = SecurityConfig::default();
-        let manager = SecurityManager::new(config).unwrap();
+        let manager = SecurityManager::new(config).expect("should succeed");
 
         // Small allocation should be allowed
         let result = manager.check_memory_usage(1024);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("should succeed"));
     }
 
     #[test]
@@ -272,13 +272,13 @@ mod tests {
             ip_whitelist: vec!["127.0.0.1".to_string()],
             ..Default::default()
         };
-        let manager = SecurityManager::new(config).unwrap();
+        let manager = SecurityManager::new(config).expect("should succeed");
 
         // Whitelisted IP should be allowed
-        assert!(manager.check_ip("127.0.0.1").unwrap());
+        assert!(manager.check_ip("127.0.0.1").expect("should succeed"));
 
         // Non-whitelisted IP should be blocked
-        assert!(!manager.check_ip("192.168.1.1").unwrap());
+        assert!(!manager.check_ip("192.168.1.1").expect("should succeed"));
     }
 
     #[test]
@@ -287,12 +287,12 @@ mod tests {
             ip_blacklist: vec!["10.0.0.1".to_string()],
             ..Default::default()
         };
-        let manager = SecurityManager::new(config).unwrap();
+        let manager = SecurityManager::new(config).expect("should succeed");
 
         // Blacklisted IP should be blocked
-        assert!(!manager.check_ip("10.0.0.1").unwrap());
+        assert!(!manager.check_ip("10.0.0.1").expect("should succeed"));
 
         // Non-blacklisted IP should be allowed
-        assert!(manager.check_ip("127.0.0.1").unwrap());
+        assert!(manager.check_ip("127.0.0.1").expect("should succeed"));
     }
 }

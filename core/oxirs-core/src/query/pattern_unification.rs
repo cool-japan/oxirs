@@ -387,8 +387,10 @@ mod tests {
     fn test_unified_pattern_conversion() {
         // Create an algebra pattern
         let algebra_pattern = AlgebraTriplePattern::new(
-            AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/pred").unwrap()),
+            AlgebraTermPattern::Variable(Variable::new("s").expect("valid variable name")),
+            AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/pred").expect("valid IRI"),
+            ),
             AlgebraTermPattern::Literal(Literal::new("test")),
         );
 
@@ -396,7 +398,9 @@ mod tests {
         let unified = UnifiedTriplePattern::from_algebra_pattern(&algebra_pattern);
 
         // Convert back to algebra pattern
-        let converted_back = unified.to_algebra_pattern().unwrap();
+        let converted_back = unified
+            .to_algebra_pattern()
+            .expect("operation should succeed");
 
         assert_eq!(algebra_pattern, converted_back);
     }
@@ -405,14 +409,18 @@ mod tests {
     fn test_pattern_selectivity() {
         let patterns = [
             UnifiedTriplePattern::new(
-                UnifiedTermPattern::Variable(Variable::new("s").unwrap()),
-                UnifiedTermPattern::Variable(Variable::new("p").unwrap()),
-                UnifiedTermPattern::Variable(Variable::new("o").unwrap()),
+                UnifiedTermPattern::Variable(Variable::new("s").expect("valid variable name")),
+                UnifiedTermPattern::Variable(Variable::new("p").expect("valid variable name")),
+                UnifiedTermPattern::Variable(Variable::new("o").expect("valid variable name")),
             ),
             UnifiedTriplePattern::new(
-                UnifiedTermPattern::NamedNode(NamedNode::new("http://example.org/s").unwrap()),
-                UnifiedTermPattern::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
-                UnifiedTermPattern::Variable(Variable::new("o").unwrap()),
+                UnifiedTermPattern::NamedNode(
+                    NamedNode::new("http://example.org/s").expect("valid IRI"),
+                ),
+                UnifiedTermPattern::NamedNode(
+                    NamedNode::new("http://example.org/p").expect("valid IRI"),
+                ),
+                UnifiedTermPattern::Variable(Variable::new("o").expect("valid variable name")),
             ),
         ];
 
@@ -424,14 +432,18 @@ mod tests {
     fn test_pattern_optimization() {
         let patterns = vec![
             UnifiedTriplePattern::new(
-                UnifiedTermPattern::Variable(Variable::new("s").unwrap()),
-                UnifiedTermPattern::Variable(Variable::new("p").unwrap()),
-                UnifiedTermPattern::Variable(Variable::new("o").unwrap()),
+                UnifiedTermPattern::Variable(Variable::new("s").expect("valid variable name")),
+                UnifiedTermPattern::Variable(Variable::new("p").expect("valid variable name")),
+                UnifiedTermPattern::Variable(Variable::new("o").expect("valid variable name")),
             ),
             UnifiedTriplePattern::new(
-                UnifiedTermPattern::NamedNode(NamedNode::new("http://example.org/s").unwrap()),
-                UnifiedTermPattern::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
-                UnifiedTermPattern::Variable(Variable::new("o").unwrap()),
+                UnifiedTermPattern::NamedNode(
+                    NamedNode::new("http://example.org/s").expect("valid IRI"),
+                ),
+                UnifiedTermPattern::NamedNode(
+                    NamedNode::new("http://example.org/p").expect("valid IRI"),
+                ),
+                UnifiedTermPattern::Variable(Variable::new("o").expect("valid variable name")),
             ),
         ];
 

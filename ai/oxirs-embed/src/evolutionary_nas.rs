@@ -1549,7 +1549,7 @@ mod tests {
             population_size: 10,
             ..Default::default()
         };
-        let mut nas = EvolutionaryNAS::new(config).unwrap();
+        let mut nas = EvolutionaryNAS::new(config).expect("should succeed");
         
         let result = nas.initialize_population().await;
         assert!(result.is_ok());
@@ -1561,20 +1561,20 @@ mod tests {
     #[tokio::test]
     async fn test_genome_distance_calculation() {
         let config = EvolutionaryConfig::default();
-        let mut nas = EvolutionaryNAS::new(config).unwrap();
+        let mut nas = EvolutionaryNAS::new(config).expect("should succeed");
         
-        let candidate1 = nas.generate_random_candidate(0).unwrap();
-        let candidate2 = nas.generate_random_candidate(1).unwrap();
+        let candidate1 = nas.generate_random_candidate(0).expect("should succeed");
+        let candidate2 = nas.generate_random_candidate(1).expect("should succeed");
         
         let distance = nas.calculate_genome_distance(&candidate1.genome, &candidate2.genome);
         assert!(distance.is_ok());
-        assert!(distance.unwrap() >= 0.0);
+        assert!(distance.expect("should succeed") >= 0.0);
     }
 
     #[tokio::test]
     async fn test_fitness_calculation() {
         let config = EvolutionaryConfig::default();
-        let nas = EvolutionaryNAS::new(config).unwrap();
+        let nas = EvolutionaryNAS::new(config).expect("should succeed");
         
         let mut candidate = ArchitectureCandidate {
             id: Uuid::new_v4(),
@@ -1604,13 +1604,13 @@ mod tests {
         
         let fitness = nas.calculate_fitness_scores(&candidate);
         assert!(fitness.is_ok());
-        assert!(fitness.unwrap().overall_fitness > 0.0);
+        assert!(fitness.expect("should succeed").overall_fitness > 0.0);
     }
 
     #[tokio::test]
     async fn test_tournament_selection() {
         let config = EvolutionaryConfig::default();
-        let nas = EvolutionaryNAS::new(config).unwrap();
+        let nas = EvolutionaryNAS::new(config).expect("should succeed");
         
         let mut population = Vec::new();
         for i in 0..10 {
@@ -1637,6 +1637,6 @@ mod tests {
         
         let selected = nas.tournament_selection(&population);
         assert!(selected.is_ok());
-        assert!(selected.unwrap() < population.len());
+        assert!(selected.expect("should succeed") < population.len());
     }
 }

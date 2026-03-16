@@ -155,9 +155,9 @@ fn directed_hausdorff(a: &GeoGeometry<f64>, b: &GeoGeometry<f64>) -> f64 {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::extended_ogc::hausdorff_distance;
 ///
-/// let a = Geometry::from_wkt("LINESTRING(0 0, 1 0, 1 1)").unwrap();
-/// let b = Geometry::from_wkt("LINESTRING(0 1, 1 1, 1 0)").unwrap();
-/// let d = hausdorff_distance(&a, &b).unwrap();
+/// let a = Geometry::from_wkt("LINESTRING(0 0, 1 0, 1 1)").expect("should succeed");
+/// let b = Geometry::from_wkt("LINESTRING(0 1, 1 1, 1 0)").expect("should succeed");
+/// let d = hausdorff_distance(&a, &b).expect("should succeed");
 /// assert!(d >= 0.0);
 /// ```
 pub fn hausdorff_distance(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
@@ -234,9 +234,9 @@ fn discrete_frechet_dp(a: &[(f64, f64)], b: &[(f64, f64)]) -> f64 {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::extended_ogc::frechet_distance;
 ///
-/// let a = Geometry::from_wkt("LINESTRING(0 0, 1 0, 2 0)").unwrap();
-/// let b = Geometry::from_wkt("LINESTRING(0 1, 1 1, 2 1)").unwrap();
-/// let d = frechet_distance(&a, &b).unwrap();
+/// let a = Geometry::from_wkt("LINESTRING(0 0, 1 0, 2 0)").expect("should succeed");
+/// let b = Geometry::from_wkt("LINESTRING(0 1, 1 1, 2 1)").expect("should succeed");
+/// let d = frechet_distance(&a, &b).expect("should succeed");
 /// assert!((d - 1.0).abs() < 1e-10);
 /// ```
 pub fn frechet_distance(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
@@ -372,8 +372,8 @@ fn circle_to_polygon(cx: f64, cy: f64, radius: f64, segments: usize) -> Polygon<
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::extended_ogc::minimum_bounding_circle;
 ///
-/// let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-/// let mbc = minimum_bounding_circle(&poly).unwrap();
+/// let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+/// let mbc = minimum_bounding_circle(&poly).expect("should succeed");
 /// assert_eq!(mbc.geometry_type(), "Polygon");
 /// ```
 pub fn minimum_bounding_circle(geom: &Geometry) -> Result<Geometry> {
@@ -423,8 +423,8 @@ pub fn minimum_bounding_circle(geom: &Geometry) -> Result<Geometry> {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::functions::extended_ogc::convex_hull_geom;
 ///
-/// let pts = Geometry::from_wkt("MULTIPOINT((0 0),(1 0),(0 1),(1 1),(0.5 0.5))").unwrap();
-/// let hull = convex_hull_geom(&pts).unwrap();
+/// let pts = Geometry::from_wkt("MULTIPOINT((0 0),(1 0),(0 1),(1 1),(0.5 0.5))").expect("should succeed");
+/// let hull = convex_hull_geom(&pts).expect("should succeed");
 /// assert_eq!(hull.geometry_type(), "Polygon");
 /// ```
 pub fn convex_hull_geom(geom: &Geometry) -> Result<Geometry> {
@@ -758,8 +758,8 @@ fn voronoi_cells_from_delaunay(
 ///
 /// let pts = Geometry::from_wkt(
 ///     "MULTIPOINT((0 0),(4 0),(2 3),(0 4),(4 4))"
-/// ).unwrap();
-/// let diagram = voronoi_diagram(&pts).unwrap();
+/// ).expect("should succeed");
+/// let diagram = voronoi_diagram(&pts).expect("should succeed");
 /// assert_eq!(diagram.geometry_type(), "GeometryCollection");
 /// ```
 pub fn voronoi_diagram(geom: &Geometry) -> Result<Geometry> {
@@ -873,7 +873,7 @@ mod tests {
     fn test_hausdorff_identical_points() {
         let a = pt("POINT(1 2)");
         let b = pt("POINT(1 2)");
-        let d = hausdorff_distance(&a, &b).unwrap();
+        let d = hausdorff_distance(&a, &b).expect("should succeed");
         assert!(d.abs() < 1e-10, "identical points: d={d}");
     }
 
@@ -881,7 +881,7 @@ mod tests {
     fn test_hausdorff_two_points() {
         let a = pt("POINT(0 0)");
         let b = pt("POINT(3 4)");
-        let d = hausdorff_distance(&a, &b).unwrap();
+        let d = hausdorff_distance(&a, &b).expect("should succeed");
         assert!((d - 5.0).abs() < 1e-10, "d={d}");
     }
 
@@ -889,8 +889,8 @@ mod tests {
     fn test_hausdorff_symmetric() {
         let a = pt("LINESTRING(0 0, 2 0, 2 2)");
         let b = pt("LINESTRING(0 1, 2 1, 2 3)");
-        let d_ab = hausdorff_distance(&a, &b).unwrap();
-        let d_ba = hausdorff_distance(&b, &a).unwrap();
+        let d_ab = hausdorff_distance(&a, &b).expect("should succeed");
+        let d_ba = hausdorff_distance(&b, &a).expect("should succeed");
         assert!((d_ab - d_ba).abs() < 1e-10, "d_ab={d_ab}, d_ba={d_ba}");
     }
 
@@ -898,7 +898,7 @@ mod tests {
     fn test_hausdorff_linestring() {
         let a = pt("LINESTRING(0 0, 10 0)");
         let b = pt("LINESTRING(0 5, 10 5)");
-        let d = hausdorff_distance(&a, &b).unwrap();
+        let d = hausdorff_distance(&a, &b).expect("should succeed");
         // All A-vertices are distance 5 from B, all B-vertices are distance 5 from A
         assert!((d - 5.0).abs() < 1e-10, "d={d}");
     }
@@ -907,7 +907,7 @@ mod tests {
     fn test_hausdorff_multipoint() {
         let a = pt("MULTIPOINT((0 0),(1 0),(2 0))");
         let b = pt("MULTIPOINT((0 3),(1 3),(2 3))");
-        let d = hausdorff_distance(&a, &b).unwrap();
+        let d = hausdorff_distance(&a, &b).expect("should succeed");
         assert!((d - 3.0).abs() < 1e-10, "d={d}");
     }
 
@@ -915,7 +915,7 @@ mod tests {
     fn test_hausdorff_polygon_vs_point() {
         let poly = pt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))");
         let p = pt("POINT(2 2)");
-        let d = hausdorff_distance(&poly, &p).unwrap();
+        let d = hausdorff_distance(&poly, &p).expect("should succeed");
         // Max dist from polygon vertices to center (2,2) = sqrt(8) ≈ 2.83
         // Max dist from point to polygon vertices = sqrt(8)
         assert!(d > 2.0, "d={d}");
@@ -936,7 +936,7 @@ mod tests {
     fn test_frechet_identical_linestring() {
         let a = pt("LINESTRING(0 0, 1 0, 2 0)");
         let b = pt("LINESTRING(0 0, 1 0, 2 0)");
-        let d = frechet_distance(&a, &b).unwrap();
+        let d = frechet_distance(&a, &b).expect("should succeed");
         assert!(d.abs() < 1e-10, "identical: d={d}");
     }
 
@@ -944,7 +944,7 @@ mod tests {
     fn test_frechet_parallel_lines() {
         let a = pt("LINESTRING(0 0, 1 0, 2 0)");
         let b = pt("LINESTRING(0 1, 1 1, 2 1)");
-        let d = frechet_distance(&a, &b).unwrap();
+        let d = frechet_distance(&a, &b).expect("should succeed");
         // All pairs have distance 1 → discrete Fréchet = 1
         assert!((d - 1.0).abs() < 1e-10, "d={d}");
     }
@@ -954,8 +954,8 @@ mod tests {
         // Fréchet is order-sensitive; reversed curves may have larger distance
         let a = pt("LINESTRING(0 0, 1 0, 2 0)");
         let b = pt("LINESTRING(2 1, 1 1, 0 1)"); // reversed
-        let df = frechet_distance(&a, &b).unwrap();
-        let dh = hausdorff_distance(&a, &b).unwrap();
+        let df = frechet_distance(&a, &b).expect("should succeed");
+        let dh = hausdorff_distance(&a, &b).expect("should succeed");
         // Fréchet >= Hausdorff for ordered curves
         assert!(df >= dh - 1e-9, "frechet={df} hausdorff={dh}");
     }
@@ -964,7 +964,7 @@ mod tests {
     fn test_frechet_two_points() {
         let a = pt("LINESTRING(0 0, 1 0)");
         let b = pt("LINESTRING(0 1, 1 1)");
-        let d = frechet_distance(&a, &b).unwrap();
+        let d = frechet_distance(&a, &b).expect("should succeed");
         assert!((d - 1.0).abs() < 1e-10, "d={d}");
     }
 
@@ -973,7 +973,7 @@ mod tests {
         // For polygon input, falls back to vertex-based computation
         let a = pt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
         let b = pt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let d = frechet_distance(&a, &b).unwrap();
+        let d = frechet_distance(&a, &b).expect("should succeed");
         assert!(d.abs() < 1e-10, "same polygon: d={d}");
     }
 
@@ -991,7 +991,7 @@ mod tests {
     #[test]
     fn test_mbc_single_point() {
         let g = pt("POINT(3 4)");
-        let mbc = minimum_bounding_circle(&g).unwrap();
+        let mbc = minimum_bounding_circle(&g).expect("should succeed");
         assert_eq!(mbc.geometry_type(), "Polygon");
     }
 
@@ -999,7 +999,7 @@ mod tests {
     fn test_mbc_two_points_diameter() {
         // Circle should have diameter = distance between the two points
         let g = pt("MULTIPOINT((0 0),(4 0))");
-        let mbc = minimum_bounding_circle(&g).unwrap();
+        let mbc = minimum_bounding_circle(&g).expect("should succeed");
         assert_eq!(mbc.geometry_type(), "Polygon");
         // Center should be (2, 0), radius = 2
         // Check by verifying all original points are within the circle
@@ -1010,7 +1010,7 @@ mod tests {
     #[test]
     fn test_mbc_unit_square() {
         let g = pt("POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-        let mbc = minimum_bounding_circle(&g).unwrap();
+        let mbc = minimum_bounding_circle(&g).expect("should succeed");
         assert_eq!(mbc.geometry_type(), "Polygon");
         // The MBC of a unit square has radius = sqrt(2)/2 ≈ 0.707
         // and center at (0.5, 0.5)
@@ -1021,7 +1021,7 @@ mod tests {
     #[test]
     fn test_mbc_contains_all_vertices() {
         let g = pt("MULTIPOINT((0 0),(5 0),(0 3),(5 3))");
-        let mbc = minimum_bounding_circle(&g).unwrap();
+        let mbc = minimum_bounding_circle(&g).expect("should succeed");
 
         // Compute center of MBC polygon (centroid of its vertices)
         let verts = extract_vertices(&mbc.geom);
@@ -1054,7 +1054,7 @@ mod tests {
     #[test]
     fn test_convex_hull_triangle() {
         let g = pt("MULTIPOINT((0 0),(4 0),(2 4))");
-        let hull = convex_hull_geom(&g).unwrap();
+        let hull = convex_hull_geom(&g).expect("should succeed");
         assert_eq!(hull.geometry_type(), "Polygon");
     }
 
@@ -1062,7 +1062,7 @@ mod tests {
     fn test_convex_hull_removes_interior_points() {
         // Interior point (2,2) should not be on the hull
         let g = pt("MULTIPOINT((0 0),(4 0),(4 4),(0 4),(2 2))");
-        let hull = convex_hull_geom(&g).unwrap();
+        let hull = convex_hull_geom(&g).expect("should succeed");
         assert_eq!(hull.geometry_type(), "Polygon");
         // Hull should be the outer 4 points (approximately a square)
         let verts = extract_vertices(&hull.geom);
@@ -1073,14 +1073,14 @@ mod tests {
     #[test]
     fn test_convex_hull_polygon() {
         let g = pt("POLYGON((0 0, 3 0, 3 3, 0 3, 0 0))");
-        let hull = convex_hull_geom(&g).unwrap();
+        let hull = convex_hull_geom(&g).expect("should succeed");
         assert_eq!(hull.geometry_type(), "Polygon");
     }
 
     #[test]
     fn test_convex_hull_linestring() {
         let g = pt("LINESTRING(0 0, 2 2, 4 0, 2 -2)");
-        let hull = convex_hull_geom(&g).unwrap();
+        let hull = convex_hull_geom(&g).expect("should succeed");
         assert_eq!(hull.geometry_type(), "Polygon");
     }
 
@@ -1105,21 +1105,21 @@ mod tests {
     #[test]
     fn test_voronoi_basic_triangle() {
         let g = pt("MULTIPOINT((0 0),(4 0),(2 4))");
-        let v = voronoi_diagram(&g).unwrap();
+        let v = voronoi_diagram(&g).expect("should succeed");
         assert_eq!(v.geometry_type(), "GeometryCollection");
     }
 
     #[test]
     fn test_voronoi_returns_geometry_collection() {
         let g = pt("MULTIPOINT((0 0),(4 0),(2 3),(0 4),(4 4))");
-        let v = voronoi_diagram(&g).unwrap();
+        let v = voronoi_diagram(&g).expect("should succeed");
         assert_eq!(v.geometry_type(), "GeometryCollection");
     }
 
     #[test]
     fn test_voronoi_cells_count() {
         let g = pt("MULTIPOINT((0 0),(4 0),(2 3))");
-        let v = voronoi_diagram(&g).unwrap();
+        let v = voronoi_diagram(&g).expect("should succeed");
         // Should produce 3 cells (one per input point)
         if let GeoGeometry::GeometryCollection(gc) = &v.geom {
             assert!(!gc.is_empty(), "Voronoi must have at least one cell");
@@ -1143,7 +1143,7 @@ mod tests {
     #[test]
     fn test_voronoi_five_points() {
         let g = pt("MULTIPOINT((0 0),(10 0),(10 10),(0 10),(5 5))");
-        let v = voronoi_diagram(&g).unwrap();
+        let v = voronoi_diagram(&g).expect("should succeed");
         assert_eq!(v.geometry_type(), "GeometryCollection");
         if let GeoGeometry::GeometryCollection(gc) = &v.geom {
             assert!(!gc.is_empty());

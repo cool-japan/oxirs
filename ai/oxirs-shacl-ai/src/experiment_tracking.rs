@@ -25,13 +25,13 @@
 //! let experiment_id = tracker.create_experiment(
 //!     "SHACL Shape Learning",
 //!     "Learning shapes from RDF data with GNN"
-//! ).unwrap();
+//! ).expect("should succeed");
 //!
 //! // Log parameters
 //! tracker.log_parameter(&experiment_id, Parameter::Float {
 //!     name: "learning_rate".to_string(),
 //!     value: 0.001,
-//! }).unwrap();
+//! }).expect("should succeed");
 //!
 //! // Log metrics
 //! tracker.log_metric(&experiment_id, Metric {
@@ -39,7 +39,7 @@
 //!     value: 0.95,
 //!     step: Some(100),
 //!     timestamp: chrono::Utc::now(),
-//! }).unwrap();
+//! }).expect("should succeed");
 //! ```
 
 use chrono::{DateTime, Utc};
@@ -709,7 +709,7 @@ mod tests {
     #[test]
     fn test_tracker_creation() {
         let tracker = ExperimentTracker::new();
-        let metrics = tracker.get_metrics().unwrap();
+        let metrics = tracker.get_metrics().expect("should succeed");
         assert_eq!(metrics.total_experiments, 0);
         assert_eq!(metrics.total_runs, 0);
     }
@@ -719,13 +719,13 @@ mod tests {
         let tracker = ExperimentTracker::new();
         let experiment_id = tracker
             .create_experiment("Test Experiment", "Testing experiment tracking")
-            .unwrap();
+            .expect("should succeed");
 
         let experiment = tracker.get_experiment(&experiment_id);
         assert!(experiment.is_some());
-        assert_eq!(experiment.unwrap().name, "Test Experiment");
+        assert_eq!(experiment.expect("should succeed").name, "Test Experiment");
 
-        let metrics = tracker.get_metrics().unwrap();
+        let metrics = tracker.get_metrics().expect("should succeed");
         assert_eq!(metrics.total_experiments, 1);
     }
 
@@ -734,14 +734,16 @@ mod tests {
         let tracker = ExperimentTracker::new();
         let experiment_id = tracker
             .create_experiment("Test Experiment", "Testing")
-            .unwrap();
-        let run_id = tracker.start_run(&experiment_id, "Run 1").unwrap();
+            .expect("should succeed");
+        let run_id = tracker
+            .start_run(&experiment_id, "Run 1")
+            .expect("should succeed");
 
         let run = tracker.get_run(&run_id);
         assert!(run.is_some());
-        assert_eq!(run.unwrap().name, "Run 1");
+        assert_eq!(run.expect("should succeed").name, "Run 1");
 
-        let metrics = tracker.get_metrics().unwrap();
+        let metrics = tracker.get_metrics().expect("should succeed");
         assert_eq!(metrics.total_runs, 1);
         assert_eq!(metrics.running_experiments, 1);
     }
@@ -749,8 +751,12 @@ mod tests {
     #[test]
     fn test_log_parameter() {
         let tracker = ExperimentTracker::new();
-        let experiment_id = tracker.create_experiment("Test", "Test").unwrap();
-        let run_id = tracker.start_run(&experiment_id, "Run 1").unwrap();
+        let experiment_id = tracker
+            .create_experiment("Test", "Test")
+            .expect("should succeed");
+        let run_id = tracker
+            .start_run(&experiment_id, "Run 1")
+            .expect("should succeed");
 
         let parameter = Parameter {
             name: "learning_rate".to_string(),
@@ -758,9 +764,11 @@ mod tests {
             description: Some("Learning rate for optimizer".to_string()),
         };
 
-        tracker.log_parameter(&run_id, parameter).unwrap();
+        tracker
+            .log_parameter(&run_id, parameter)
+            .expect("should succeed");
 
-        let run = tracker.get_run(&run_id).unwrap();
+        let run = tracker.get_run(&run_id).expect("should succeed");
         assert_eq!(run.parameters.len(), 1);
         assert!(run.parameters.contains_key("learning_rate"));
     }
@@ -768,8 +776,12 @@ mod tests {
     #[test]
     fn test_log_metric() {
         let tracker = ExperimentTracker::new();
-        let experiment_id = tracker.create_experiment("Test", "Test").unwrap();
-        let run_id = tracker.start_run(&experiment_id, "Run 1").unwrap();
+        let experiment_id = tracker
+            .create_experiment("Test", "Test")
+            .expect("should succeed");
+        let run_id = tracker
+            .start_run(&experiment_id, "Run 1")
+            .expect("should succeed");
 
         let metric = Metric {
             name: "accuracy".to_string(),
@@ -779,30 +791,37 @@ mod tests {
             metric_type: MetricType::Validation,
         };
 
-        tracker.log_metric(&run_id, metric).unwrap();
+        tracker.log_metric(&run_id, metric).expect("should succeed");
 
-        let run = tracker.get_run(&run_id).unwrap();
+        let run = tracker.get_run(&run_id).expect("should succeed");
         assert_eq!(run.metrics.len(), 1);
         assert!(run.metrics.contains_key("accuracy"));
-        assert_eq!(run.metrics.get("accuracy").unwrap().len(), 1);
+        assert_eq!(
+            run.metrics.get("accuracy").expect("should succeed").len(),
+            1
+        );
     }
 
     #[test]
     fn test_end_run() {
         let tracker = ExperimentTracker::new();
-        let experiment_id = tracker.create_experiment("Test", "Test").unwrap();
-        let run_id = tracker.start_run(&experiment_id, "Run 1").unwrap();
+        let experiment_id = tracker
+            .create_experiment("Test", "Test")
+            .expect("should succeed");
+        let run_id = tracker
+            .start_run(&experiment_id, "Run 1")
+            .expect("should succeed");
 
         tracker
             .end_run(&run_id, ExperimentStatus::Completed)
-            .unwrap();
+            .expect("should succeed");
 
-        let run = tracker.get_run(&run_id).unwrap();
+        let run = tracker.get_run(&run_id).expect("should succeed");
         assert_eq!(run.status, ExperimentStatus::Completed);
         assert!(run.ended_at.is_some());
         assert!(run.duration_seconds.is_some());
 
-        let metrics = tracker.get_metrics().unwrap();
+        let metrics = tracker.get_metrics().expect("should succeed");
         assert_eq!(metrics.running_experiments, 0);
         assert_eq!(metrics.completed_experiments, 1);
     }
@@ -812,13 +831,13 @@ mod tests {
         let tracker = ExperimentTracker::new();
         tracker
             .create_experiment("SHACL Shape Learning", "Learning shapes")
-            .unwrap();
+            .expect("should succeed");
         tracker
             .create_experiment("RDF Validation", "Validating RDF")
-            .unwrap();
+            .expect("should succeed");
         tracker
             .create_experiment("Graph Neural Network", "GNN training")
-            .unwrap();
+            .expect("should succeed");
 
         let results = tracker.search_experiments("shape");
         assert_eq!(results.len(), 1);
@@ -831,11 +850,19 @@ mod tests {
     #[test]
     fn test_list_runs() {
         let tracker = ExperimentTracker::new();
-        let experiment_id = tracker.create_experiment("Test", "Test").unwrap();
+        let experiment_id = tracker
+            .create_experiment("Test", "Test")
+            .expect("should succeed");
 
-        tracker.start_run(&experiment_id, "Run 1").unwrap();
-        tracker.start_run(&experiment_id, "Run 2").unwrap();
-        tracker.start_run(&experiment_id, "Run 3").unwrap();
+        tracker
+            .start_run(&experiment_id, "Run 1")
+            .expect("should succeed");
+        tracker
+            .start_run(&experiment_id, "Run 2")
+            .expect("should succeed");
+        tracker
+            .start_run(&experiment_id, "Run 3")
+            .expect("should succeed");
 
         let runs = tracker.list_runs(&experiment_id);
         assert_eq!(runs.len(), 3);
@@ -844,10 +871,16 @@ mod tests {
     #[test]
     fn test_delete_experiment() {
         let tracker = ExperimentTracker::new();
-        let experiment_id = tracker.create_experiment("Test", "Test").unwrap();
-        tracker.start_run(&experiment_id, "Run 1").unwrap();
+        let experiment_id = tracker
+            .create_experiment("Test", "Test")
+            .expect("should succeed");
+        tracker
+            .start_run(&experiment_id, "Run 1")
+            .expect("should succeed");
 
-        tracker.delete_experiment(&experiment_id).unwrap();
+        tracker
+            .delete_experiment(&experiment_id)
+            .expect("should succeed");
 
         assert!(tracker.get_experiment(&experiment_id).is_none());
         assert_eq!(tracker.list_runs(&experiment_id).len(), 0);
@@ -856,16 +889,20 @@ mod tests {
     #[test]
     fn test_active_run() {
         let tracker = ExperimentTracker::new();
-        let experiment_id = tracker.create_experiment("Test", "Test").unwrap();
-        let run_id = tracker.start_run(&experiment_id, "Run 1").unwrap();
+        let experiment_id = tracker
+            .create_experiment("Test", "Test")
+            .expect("should succeed");
+        let run_id = tracker
+            .start_run(&experiment_id, "Run 1")
+            .expect("should succeed");
 
         let active = tracker.get_active_run();
         assert!(active.is_some());
-        assert_eq!(active.unwrap(), run_id);
+        assert_eq!(active.expect("should succeed"), run_id);
 
         tracker
             .end_run(&run_id, ExperimentStatus::Completed)
-            .unwrap();
+            .expect("should succeed");
 
         let active = tracker.get_active_run();
         assert!(active.is_none());

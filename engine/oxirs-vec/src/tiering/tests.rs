@@ -2,6 +2,7 @@
 
 #[cfg(test)]
 mod integration_tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use crate::tiering::types::{
         AccessPattern, AccessStatistics, IndexMetadata, IndexType, LatencyPercentiles,
         PerformanceMetrics,
@@ -16,6 +17,7 @@ mod integration_tests {
     /// Create a test config with unique temp directory to avoid race conditions
     fn create_test_config() -> (TieringConfig, PathBuf) {
         use std::sync::atomic::{AtomicU64, Ordering};
+        type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let unique_id = COUNTER.fetch_add(1, Ordering::Relaxed);
 
@@ -73,39 +75,27 @@ mod integration_tests {
     }
 
     #[test]
-    fn test_end_to_end_tiering() {
+    fn test_end_to_end_tiering() -> Result<()> {
         let (config, temp_dir) = create_test_config();
-        let manager = TieringManager::new(config).unwrap();
+        let manager = TieringManager::new(config)?;
 
         // Register indices with different access patterns
         let hot_index = create_test_metadata("hot_index", StorageTier::Warm, 20.0, 10);
         let warm_index = create_test_metadata("warm_index", StorageTier::Cold, 5.0, 50);
         let cold_index = create_test_metadata("cold_index", StorageTier::Warm, 0.1, 100);
 
-        manager
-            .register_index("hot_index".to_string(), hot_index)
-            .unwrap();
-        manager
-            .register_index("warm_index".to_string(), warm_index)
-            .unwrap();
-        manager
-            .register_index("cold_index".to_string(), cold_index)
-            .unwrap();
+        manager.register_index("hot_index".to_string(), hot_index)?;
+        manager.register_index("warm_index".to_string(), warm_index)?;
+        manager.register_index("cold_index".to_string(), cold_index)?;
 
         // Store data
         let data = vec![42u8; 1024];
-        manager
-            .store_index("hot_index", &data, StorageTier::Warm)
-            .unwrap();
-        manager
-            .store_index("warm_index", &data, StorageTier::Cold)
-            .unwrap();
-        manager
-            .store_index("cold_index", &data, StorageTier::Warm)
-            .unwrap();
+        manager.store_index("hot_index", &data, StorageTier::Warm)?;
+        manager.store_index("warm_index", &data, StorageTier::Cold)?;
+        manager.store_index("cold_index", &data, StorageTier::Warm)?;
 
         // Get optimization recommendations
-        let recommendations = manager.optimize_tiers().unwrap();
+        let recommendations = manager.optimize_tiers()?;
 
         // Verify that we got some recommendations
         assert!(
@@ -132,10 +122,11 @@ mod integration_tests {
         }
 
         cleanup_test_dir(&temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_tier_transition_with_different_policies() {
+    fn test_tier_transition_with_different_policies() -> Result<()> {
         for policy in &[
             TieringPolicy::Lru,
             TieringPolicy::Lfu,
@@ -150,17 +141,13 @@ mod integration_tests {
                 ..base_config
             };
 
-            let manager = TieringManager::new(config).unwrap();
+            let manager = TieringManager::new(config)?;
 
             let metadata = create_test_metadata("test_index", StorageTier::Warm, 15.0, 10);
-            manager
-                .register_index("test_index".to_string(), metadata)
-                .unwrap();
+            manager.register_index("test_index".to_string(), metadata)?;
 
             let data = vec![1u8; 1024];
-            manager
-                .store_index("test_index", &data, StorageTier::Warm)
-                .unwrap();
+            manager.store_index("test_index", &data, StorageTier::Warm)?;
 
             // Transition to hot tier
             let result = manager.transition_index(
@@ -171,31 +158,30 @@ mod integration_tests {
 
             assert!(result.is_ok(), "Policy {:?} failed transition", policy);
 
-            let metadata = manager.get_index_metadata("test_index").unwrap();
+            let metadata = manager
+                .get_index_metadata("test_index")
+                .expect("test_index metadata should exist");
             assert_eq!(metadata.current_tier, StorageTier::Hot);
 
             cleanup_test_dir(&temp_dir);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_metrics_collection() {
+    fn test_metrics_collection() -> Result<()> {
         let (config, temp_dir) = create_test_config();
-        let manager = TieringManager::new(config).unwrap();
+        let manager = TieringManager::new(config)?;
 
         let metadata = create_test_metadata("test_index", StorageTier::Hot, 10.0, 10);
-        manager
-            .register_index("test_index".to_string(), metadata)
-            .unwrap();
+        manager.register_index("test_index".to_string(), metadata)?;
 
         let data = vec![1u8; 1024];
-        manager
-            .store_index("test_index", &data, StorageTier::Hot)
-            .unwrap();
+        manager.store_index("test_index", &data, StorageTier::Hot)?;
 
         // Load multiple times to generate metrics
         for _ in 0..10 {
-            manager.load_index("test_index").unwrap();
+            manager.load_index("test_index")?;
         }
 
         let metrics = manager.get_metrics();
@@ -206,79 +192,72 @@ mod integration_tests {
         assert!(hot_stats.bytes_written > 0);
 
         cleanup_test_dir(&temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_capacity_management() {
+    fn test_capacity_management() -> Result<()> {
         let (config, temp_dir) = create_test_config();
-        let manager = TieringManager::new(config).unwrap();
+        let manager = TieringManager::new(config)?;
 
         let stats = manager.get_tier_statistics();
 
         // Check that capacities are set correctly
-        let hot_stats = stats.get(&StorageTier::Hot).unwrap();
+        let hot_stats = stats
+            .get(&StorageTier::Hot)
+            .expect("Hot tier stats should exist");
         assert!(hot_stats.capacity_bytes > 0);
         assert_eq!(hot_stats.utilization(), 0.0); // Initially empty
 
         // Add some data
         let metadata = create_test_metadata("test_index", StorageTier::Hot, 10.0, 10);
-        manager
-            .register_index("test_index".to_string(), metadata)
-            .unwrap();
+        manager.register_index("test_index".to_string(), metadata)?;
 
         let data = vec![1u8; 10 * 1024 * 1024]; // 10 MB
-        manager
-            .store_index("test_index", &data, StorageTier::Hot)
-            .unwrap();
+        manager.store_index("test_index", &data, StorageTier::Hot)?;
 
         // Update metrics
-        manager.apply_optimizations(Some(0)).unwrap();
+        manager.apply_optimizations(Some(0))?;
 
         // Note: In a real scenario, utilization would be > 0 after metrics update
 
         cleanup_test_dir(&temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_auto_optimization() {
+    fn test_auto_optimization() -> Result<()> {
         let (base_config, temp_dir) = create_test_config();
         let config = TieringConfig {
             auto_tier_management: true,
             ..base_config
         };
 
-        let manager = TieringManager::new(config).unwrap();
+        let manager = TieringManager::new(config)?;
 
         // Create indices with clear tier preferences
         let hot_metadata = create_test_metadata("hot_index", StorageTier::Cold, 100.0, 1);
         let cold_metadata = create_test_metadata("cold_index", StorageTier::Hot, 0.01, 100);
 
-        manager
-            .register_index("hot_index".to_string(), hot_metadata)
-            .unwrap();
-        manager
-            .register_index("cold_index".to_string(), cold_metadata)
-            .unwrap();
+        manager.register_index("hot_index".to_string(), hot_metadata)?;
+        manager.register_index("cold_index".to_string(), cold_metadata)?;
 
         let data = vec![1u8; 1024];
-        manager
-            .store_index("hot_index", &data, StorageTier::Cold)
-            .unwrap();
-        manager
-            .store_index("cold_index", &data, StorageTier::Hot)
-            .unwrap();
+        manager.store_index("hot_index", &data, StorageTier::Cold)?;
+        manager.store_index("cold_index", &data, StorageTier::Hot)?;
 
         // Apply optimizations
-        let applied = manager.apply_optimizations(Some(10)).unwrap();
+        let applied = manager.apply_optimizations(Some(10))?;
 
         // Should have made some transitions or already be optimal
         assert!(!applied.is_empty() || applied.is_empty()); // Either optimized or already optimal
 
         cleanup_test_dir(&temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_gradual_transition() {
+    fn test_gradual_transition() -> Result<()> {
         let (base_config, temp_dir) = create_test_config();
         let config = TieringConfig {
             gradual_transition: super::super::types::GradualTransitionConfig {
@@ -289,17 +268,13 @@ mod integration_tests {
             ..base_config
         };
 
-        let manager = TieringManager::new(config).unwrap();
+        let manager = TieringManager::new(config)?;
 
         let metadata = create_test_metadata("test_index", StorageTier::Hot, 5.0, 10);
-        manager
-            .register_index("test_index".to_string(), metadata)
-            .unwrap();
+        manager.register_index("test_index".to_string(), metadata)?;
 
         let data = vec![1u8; 1024];
-        manager
-            .store_index("test_index", &data, StorageTier::Hot)
-            .unwrap();
+        manager.store_index("test_index", &data, StorageTier::Hot)?;
 
         // Transition with gradual config
         let result = manager.transition_index(
@@ -311,12 +286,13 @@ mod integration_tests {
         assert!(result.is_ok());
 
         cleanup_test_dir(&temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_tier_statistics() {
+    fn test_tier_statistics() -> Result<()> {
         let (config, temp_dir) = create_test_config();
-        let manager = TieringManager::new(config).unwrap();
+        let manager = TieringManager::new(config)?;
 
         let stats = manager.get_tier_statistics();
 
@@ -331,59 +307,57 @@ mod integration_tests {
         }
 
         cleanup_test_dir(&temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_transitions() {
+    fn test_multiple_transitions() -> Result<()> {
         let (config, temp_dir) = create_test_config();
-        let manager = TieringManager::new(config).unwrap();
+        let manager = TieringManager::new(config)?;
 
         let metadata = create_test_metadata("test_index", StorageTier::Cold, 10.0, 10);
-        manager
-            .register_index("test_index".to_string(), metadata)
-            .unwrap();
+        manager.register_index("test_index".to_string(), metadata)?;
 
         let data = vec![1u8; 1024];
-        manager
-            .store_index("test_index", &data, StorageTier::Cold)
-            .unwrap();
+        manager.store_index("test_index", &data, StorageTier::Cold)?;
 
         // Cold -> Warm
-        manager
-            .transition_index(
-                "test_index",
-                StorageTier::Warm,
-                TierTransitionReason::CostOptimization,
-            )
-            .unwrap();
+        manager.transition_index(
+            "test_index",
+            StorageTier::Warm,
+            TierTransitionReason::CostOptimization,
+        )?;
 
-        let meta = manager.get_index_metadata("test_index").unwrap();
+        let meta = manager
+            .get_index_metadata("test_index")
+            .expect("test_index metadata should exist");
         assert_eq!(meta.current_tier, StorageTier::Warm);
 
         // Warm -> Hot
-        manager
-            .transition_index(
-                "test_index",
-                StorageTier::Hot,
-                TierTransitionReason::HighAccessFrequency,
-            )
-            .unwrap();
+        manager.transition_index(
+            "test_index",
+            StorageTier::Hot,
+            TierTransitionReason::HighAccessFrequency,
+        )?;
 
-        let meta = manager.get_index_metadata("test_index").unwrap();
+        let meta = manager
+            .get_index_metadata("test_index")
+            .expect("test_index metadata should exist");
         assert_eq!(meta.current_tier, StorageTier::Hot);
 
         // Hot -> Cold
-        manager
-            .transition_index(
-                "test_index",
-                StorageTier::Cold,
-                TierTransitionReason::LowAccessFrequency,
-            )
-            .unwrap();
+        manager.transition_index(
+            "test_index",
+            StorageTier::Cold,
+            TierTransitionReason::LowAccessFrequency,
+        )?;
 
-        let meta = manager.get_index_metadata("test_index").unwrap();
+        let meta = manager
+            .get_index_metadata("test_index")
+            .expect("test_index metadata should exist");
         assert_eq!(meta.current_tier, StorageTier::Cold);
 
         cleanup_test_dir(&temp_dir);
+        Ok(())
     }
 }

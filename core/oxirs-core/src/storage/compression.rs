@@ -379,10 +379,14 @@ mod tests {
         let data = b"<http://example.org/s> <http://example.org/p> <http://example.org/o> .";
         let mut compressor = Compressor::new(Algorithm::Lz4 { level: 1 });
 
-        let result = compressor.compress(data).unwrap();
+        let result = compressor
+            .compress(data)
+            .expect("compression should succeed");
         assert!(result.compressed_size < result.original_size);
 
-        let decompressed = compressor.decompress(&result.data).unwrap();
+        let decompressed = compressor
+            .decompress(&result.data)
+            .expect("decompression should succeed");
         assert_eq!(decompressed, data);
     }
 

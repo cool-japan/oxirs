@@ -509,7 +509,7 @@ mod tests {
     fn test_polymerase_complement_synthesis() {
         let polymerase = DnaPolymerase::new();
         let adenine = NucleotideData::Adenine(Term::NamedNode(
-            NamedNode::new("http://example.org/test").unwrap(),
+            NamedNode::new("http://example.org/test").expect("valid IRI"),
         ));
 
         if let Ok(NucleotideData::Thymine(_)) = polymerase.synthesize_complement(&adenine) {
@@ -523,14 +523,16 @@ mod tests {
     fn test_mismatch_detection() {
         let detector = MismatchDetector::new();
         let adenine = NucleotideData::Adenine(Term::NamedNode(
-            NamedNode::new("http://example.org/test1").unwrap(),
+            NamedNode::new("http://example.org/test1").expect("valid IRI"),
         ));
         let thymine = NucleotideData::Thymine(Term::NamedNode(
-            NamedNode::new("http://example.org/test2").unwrap(),
+            NamedNode::new("http://example.org/test2").expect("valid IRI"),
         ));
 
         // This should generally not be detected as a mismatch (valid pair)
-        let result = detector.detect_mismatch(&adenine, &thymine).unwrap();
+        let result = detector
+            .detect_mismatch(&adenine, &thymine)
+            .expect("operation should succeed");
         // Due to false positive rate, we can't assert exact result, but it should be boolean
         // Result is already boolean type, no need for tautology assertion
         let _ = result; // Confirm result is used

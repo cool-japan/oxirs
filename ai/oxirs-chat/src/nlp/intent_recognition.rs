@@ -604,11 +604,12 @@ mod tests {
 
     #[test]
     fn test_intent_recognition_query() {
-        let recognizer = IntentRecognizer::new(IntentRecognitionConfig::default()).unwrap();
+        let recognizer =
+            IntentRecognizer::new(IntentRecognitionConfig::default()).expect("should succeed");
         // "Show me" is an exploration pattern, more specific than just "show"
         let result = recognizer
             .recognize("Show me all movies from 2023")
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(result.primary_intent, IntentType::Exploration);
         assert!(result.confidence > 0.0);
@@ -616,11 +617,12 @@ mod tests {
 
     #[test]
     fn test_intent_recognition_specific_query() {
-        let recognizer = IntentRecognizer::new(IntentRecognitionConfig::default()).unwrap();
+        let recognizer =
+            IntentRecognizer::new(IntentRecognitionConfig::default()).expect("should succeed");
         // "Find" is a query pattern
         let result = recognizer
             .recognize("Find movies directed by Christopher Nolan")
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(result.primary_intent, IntentType::Query);
         assert!(result.confidence > 0.0);
@@ -628,26 +630,33 @@ mod tests {
 
     #[test]
     fn test_intent_recognition_explanation() {
-        let recognizer = IntentRecognizer::new(IntentRecognitionConfig::default()).unwrap();
-        let result = recognizer.recognize("Explain how SPARQL works").unwrap();
+        let recognizer =
+            IntentRecognizer::new(IntentRecognitionConfig::default()).expect("should succeed");
+        let result = recognizer
+            .recognize("Explain how SPARQL works")
+            .expect("should succeed");
 
         assert_eq!(result.primary_intent, IntentType::Explanation);
     }
 
     #[test]
     fn test_intent_recognition_analytics() {
-        let recognizer = IntentRecognizer::new(IntentRecognitionConfig::default()).unwrap();
+        let recognizer =
+            IntentRecognizer::new(IntentRecognitionConfig::default()).expect("should succeed");
         let result = recognizer
             .recognize("Count the total number of users")
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(result.primary_intent, IntentType::Analytics);
     }
 
     #[test]
     fn test_parameter_extraction() {
-        let recognizer = IntentRecognizer::new(IntentRecognitionConfig::default()).unwrap();
-        let result = recognizer.recognize("Show me the top 10 movies").unwrap();
+        let recognizer =
+            IntentRecognizer::new(IntentRecognitionConfig::default()).expect("should succeed");
+        let result = recognizer
+            .recognize("Show me the top 10 movies")
+            .expect("should succeed");
 
         assert_eq!(result.parameters.get("limit"), Some(&"10".to_string()));
     }

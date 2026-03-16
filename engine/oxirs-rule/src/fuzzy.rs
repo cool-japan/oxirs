@@ -39,7 +39,7 @@
 //! });
 //!
 //! // Perform inference
-//! let result = system.infer(&[("height".to_string(), 175.0)]).unwrap();
+//! let result = system.infer(&[("height".to_string(), 175.0)]).expect("should succeed");
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
@@ -680,71 +680,63 @@ mod tests {
     }
 
     #[test]
-    fn test_mamdani_fuzzy_system() {
+    fn test_mamdani_fuzzy_system() -> Result<(), Box<dyn std::error::Error>> {
         let mut system = MamdaniFuzzySystem::new();
 
         // Add input variable "temperature" with range 0-40
         system.add_input_variable("temperature".to_string(), 0.0, 40.0);
 
         // Add fuzzy sets for temperature
-        system
-            .add_input_fuzzy_set(
-                "temperature",
-                FuzzySet::new(
-                    "cold".to_string(),
-                    MembershipFunction::Triangular {
-                        a: 0.0,
-                        b: 0.0,
-                        c: 20.0,
-                    },
-                ),
-            )
-            .unwrap();
+        system.add_input_fuzzy_set(
+            "temperature",
+            FuzzySet::new(
+                "cold".to_string(),
+                MembershipFunction::Triangular {
+                    a: 0.0,
+                    b: 0.0,
+                    c: 20.0,
+                },
+            ),
+        )?;
 
-        system
-            .add_input_fuzzy_set(
-                "temperature",
-                FuzzySet::new(
-                    "hot".to_string(),
-                    MembershipFunction::Triangular {
-                        a: 20.0,
-                        b: 40.0,
-                        c: 40.0,
-                    },
-                ),
-            )
-            .unwrap();
+        system.add_input_fuzzy_set(
+            "temperature",
+            FuzzySet::new(
+                "hot".to_string(),
+                MembershipFunction::Triangular {
+                    a: 20.0,
+                    b: 40.0,
+                    c: 40.0,
+                },
+            ),
+        )?;
 
         // Add output variable "fan_speed" with range 0-100
         system.add_output_variable("fan_speed".to_string(), 0.0, 100.0);
 
-        system
-            .add_output_fuzzy_set(
-                "fan_speed",
-                FuzzySet::new(
-                    "low".to_string(),
-                    MembershipFunction::Triangular {
-                        a: 0.0,
-                        b: 0.0,
-                        c: 50.0,
-                    },
-                ),
-            )
-            .unwrap();
+        system.add_output_fuzzy_set(
+            "fan_speed",
+            FuzzySet::new(
+                "low".to_string(),
+                MembershipFunction::Triangular {
+                    a: 0.0,
+                    b: 0.0,
+                    c: 50.0,
+                },
+            ),
+        )?;
 
-        system
-            .add_output_fuzzy_set(
-                "fan_speed",
-                FuzzySet::new(
-                    "high".to_string(),
-                    MembershipFunction::Triangular {
-                        a: 50.0,
-                        b: 100.0,
-                        c: 100.0,
-                    },
-                ),
-            )
-            .unwrap();
+        system.add_output_fuzzy_set(
+            "fan_speed",
+            FuzzySet::new(
+                "high".to_string(),
+                MembershipFunction::Triangular {
+                    a: 50.0,
+                    b: 100.0,
+                    c: 100.0,
+                },
+            ),
+        )?;
 
         // Add rules
         system.add_rule(FuzzyRule {
@@ -760,15 +752,16 @@ mod tests {
         });
 
         // Test inference
-        let result = system.infer(&[("temperature".to_string(), 30.0)]).unwrap();
+        let result = system.infer(&[("temperature".to_string(), 30.0)])?;
 
         assert!(result.contains_key("fan_speed"));
         let fan_speed = result["fan_speed"];
         assert!((0.0..=100.0).contains(&fan_speed));
+        Ok(())
     }
 
     #[test]
-    fn test_fuzzy_rule_engine() {
+    fn test_fuzzy_rule_engine() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = FuzzyRuleEngine::new();
 
         // Setup input variable
@@ -776,40 +769,34 @@ mod tests {
             .fuzzy_system_mut()
             .add_input_variable("age".to_string(), 0.0, 100.0);
 
-        engine
-            .fuzzy_system_mut()
-            .add_input_fuzzy_set(
-                "age",
-                FuzzySet::new(
-                    "young".to_string(),
-                    MembershipFunction::Triangular {
-                        a: 0.0,
-                        b: 0.0,
-                        c: 30.0,
-                    },
-                ),
-            )
-            .unwrap();
+        engine.fuzzy_system_mut().add_input_fuzzy_set(
+            "age",
+            FuzzySet::new(
+                "young".to_string(),
+                MembershipFunction::Triangular {
+                    a: 0.0,
+                    b: 0.0,
+                    c: 30.0,
+                },
+            ),
+        )?;
 
         // Setup output variable
         engine
             .fuzzy_system_mut()
             .add_output_variable("category".to_string(), 0.0, 10.0);
 
-        engine
-            .fuzzy_system_mut()
-            .add_output_fuzzy_set(
-                "category",
-                FuzzySet::new(
-                    "student".to_string(),
-                    MembershipFunction::Triangular {
-                        a: 0.0,
-                        b: 5.0,
-                        c: 10.0,
-                    },
-                ),
-            )
-            .unwrap();
+        engine.fuzzy_system_mut().add_output_fuzzy_set(
+            "category",
+            FuzzySet::new(
+                "student".to_string(),
+                MembershipFunction::Triangular {
+                    a: 0.0,
+                    b: 5.0,
+                    c: 10.0,
+                },
+            ),
+        )?;
 
         // Add fuzzy rule
         let rule = Rule {
@@ -827,7 +814,8 @@ mod tests {
         engine.add_fuzzy_rule(rule, fuzzy_rule);
 
         // Test inference
-        let result = engine.fuzzy_infer(&[("age".to_string(), 20.0)]).unwrap();
+        let result = engine.fuzzy_infer(&[("age".to_string(), 20.0)])?;
         assert!(result.contains_key("category"));
+        Ok(())
     }
 }

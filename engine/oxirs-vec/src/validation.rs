@@ -647,12 +647,10 @@ mod tests {
     }
 
     #[test]
-    fn test_metadata_validation() {
+    fn test_metadata_validation() -> Result<()> {
         let mut validator = MetadataValidator::new();
         validator.require_field("category");
-        validator
-            .require_pattern("status", r"^(active|inactive)$")
-            .unwrap();
+        validator.require_pattern("status", r"^(active|inactive)$")?;
 
         let mut valid_metadata = HashMap::new();
         valid_metadata.insert("category".to_string(), "news".to_string());
@@ -667,6 +665,7 @@ mod tests {
         let result2 = validator.validate(&invalid_metadata);
         assert!(!result2.passed);
         assert_eq!(result2.error_count(), 2);
+        Ok(())
     }
 
     #[test]

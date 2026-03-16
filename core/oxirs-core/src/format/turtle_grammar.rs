@@ -389,7 +389,9 @@ mod tests {
         let context = TurtleContext::new();
 
         // Test standard prefix resolution
-        let resolved = context.resolve_prefixed_name(Some("rdf"), "type").unwrap();
+        let resolved = context
+            .resolve_prefixed_name(Some("rdf"), "type")
+            .expect("prefix resolution should succeed");
         assert_eq!(resolved, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
 
         // Test undefined prefix
@@ -404,11 +406,15 @@ mod tests {
         context.base_iri = Some("http://example.org/".to_string());
 
         // Test absolute IRI (should remain unchanged)
-        let resolved = context.resolve_iri("http://other.org/test").unwrap();
+        let resolved = context
+            .resolve_iri("http://other.org/test")
+            .expect("operation should succeed");
         assert_eq!(resolved, "http://other.org/test");
 
         // Test relative IRI resolution
-        let resolved = context.resolve_iri("relative").unwrap();
+        let resolved = context
+            .resolve_iri("relative")
+            .expect("operation should succeed");
         assert_eq!(resolved, "http://example.org/relative");
 
         // Test relative IRI without base (should error)

@@ -846,12 +846,14 @@ mod tests {
 
     #[test]
     fn test_term_serialization() {
-        let term = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
+        let term = Term::NamedNode(NamedNode::new("http://example.org/test").expect("valid IRI"));
 
         let mut buf = Vec::new();
-        term.serialize_to(&mut buf).unwrap();
+        term.serialize_to(&mut buf)
+            .expect("operation should succeed");
 
-        let (deserialized, rest) = ZeroCopyTerm::deserialize_from(&buf).unwrap();
+        let (deserialized, rest) =
+            ZeroCopyTerm::deserialize_from(&buf).expect("construction should succeed");
         assert!(rest.is_empty());
 
         match deserialized {
@@ -865,15 +867,18 @@ mod tests {
     #[test]
     fn test_triple_serialization() {
         let triple = Triple::new(
-            NamedNode::new("http://example.org/subject").unwrap(),
-            NamedNode::new("http://example.org/predicate").unwrap(),
+            NamedNode::new("http://example.org/subject").expect("valid IRI"),
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
             Literal::new("Object"),
         );
 
         let mut buf = Vec::new();
-        triple.serialize_to(&mut buf).unwrap();
+        triple
+            .serialize_to(&mut buf)
+            .expect("operation should succeed");
 
-        let (deserialized, rest) = ZeroCopyTriple::deserialize_from(&buf).unwrap();
+        let (deserialized, rest) =
+            ZeroCopyTriple::deserialize_from(&buf).expect("construction should succeed");
         assert!(rest.is_empty());
 
         match &deserialized.subject {
@@ -904,7 +909,8 @@ mod tests {
         term.serialize_to_bytes(&mut buf);
 
         let mut bytes = buf.freeze();
-        let deserialized = ZeroCopyTerm::deserialize_from_bytes(&mut bytes).unwrap();
+        let deserialized =
+            ZeroCopyTerm::deserialize_from_bytes(&mut bytes).expect("construction should succeed");
 
         match deserialized {
             ZeroCopyTerm::Literal(lit) => {

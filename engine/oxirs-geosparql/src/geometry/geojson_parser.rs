@@ -17,10 +17,10 @@
 //!
 //! // Parse from GeoJSON
 //! let geojson = r#"{"type":"Point","coordinates":[1.0,2.0]}"#;
-//! let geom = Geometry::from_geojson(geojson).unwrap();
+//! let geom = Geometry::from_geojson(geojson).expect("should succeed");
 //!
 //! // Serialize to GeoJSON
-//! let geojson_output = geom.to_geojson().unwrap();
+//! let geojson_output = geom.to_geojson().expect("should succeed");
 //! ```
 
 use crate::error::{GeoSparqlError, Result};
@@ -45,7 +45,7 @@ use geo_types::{
 /// use oxirs_geosparql::geometry::geojson_parser::parse_geojson;
 ///
 /// let geojson = r#"{"type":"Point","coordinates":[1.0,2.0]}"#;
-/// let geom = parse_geojson(geojson).unwrap();
+/// let geom = parse_geojson(geojson).expect("should succeed");
 /// ```
 pub fn parse_geojson(geojson: &str) -> Result<Geometry> {
     use geojson::GeoJson;
@@ -100,7 +100,7 @@ pub fn parse_geojson(geojson: &str) -> Result<Geometry> {
 ///     {"type": "Feature", "geometry": {"type":"Point","coordinates":[3.0,4.0]}}
 ///   ]
 /// }"#;
-/// let geoms = parse_geojson_feature_collection(geojson).unwrap();
+/// let geoms = parse_geojson_feature_collection(geojson).expect("should succeed");
 /// assert_eq!(geoms.len(), 2);
 /// ```
 pub fn parse_geojson_feature_collection(geojson: &str) -> Result<Vec<Geometry>> {
@@ -143,7 +143,7 @@ pub fn parse_geojson_feature_collection(geojson: &str) -> Result<Vec<Geometry>> 
 /// use geo_types::{Point, Geometry as GeoGeometry};
 ///
 /// let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-/// let geojson = geom.to_geojson().unwrap();
+/// let geojson = geom.to_geojson().expect("should succeed");
 /// assert!(geojson.contains("\"type\":\"Point\""));
 /// ```
 pub fn geometry_to_geojson(geometry: &Geometry) -> Result<String> {
@@ -240,7 +240,7 @@ pub fn geometry_to_geojson(geometry: &Geometry) -> Result<String> {
 ///
 /// let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
 /// let props = json!({"name": "Test Point"});
-/// let feature = geometry_to_geojson_feature(&geom, Some(&props)).unwrap();
+/// let feature = geometry_to_geojson_feature(&geom, Some(&props)).expect("should succeed");
 /// assert!(feature.contains("\"type\":\"Feature\""));
 /// ```
 pub fn geometry_to_geojson_feature(

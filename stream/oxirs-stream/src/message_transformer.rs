@@ -183,8 +183,9 @@ impl std::error::Error for TransformError {}
 /// let mut fields = HashMap::new();
 /// fields.insert("name".to_string(), "alice".to_string());
 /// let payload = MessagePayload::new(fields, MessageFormat::Json);
-/// let result = transformer.transform("upper", payload).unwrap();
+/// let result = transformer.transform("upper", payload)?;
 /// assert_eq!(result.fields["NAME"], "ALICE");
+/// # Ok::<(), TransformError>(())
 /// ```
 #[derive(Debug, Default)]
 pub struct MessageTransformer {

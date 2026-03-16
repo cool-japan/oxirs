@@ -105,6 +105,7 @@ impl RecursiveModelIndex {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
@@ -127,16 +128,17 @@ mod tests {
     }
 
     #[test]
-    fn test_rmi_prediction() {
+    fn test_rmi_prediction() -> Result<()> {
         let mut rmi = RecursiveModelIndex::new(vec![1, 10]);
         let examples = (0..100)
             .map(|i| TrainingExample::new(vec![i as f32 / 100.0], i))
             .collect();
 
-        rmi.train(examples).unwrap();
+        rmi.train(examples)?;
 
         let key = vec![0.5];
-        let position = rmi.predict(&key).unwrap();
+        let position = rmi.predict(&key)?;
         assert!(position < 100);
+        Ok(())
     }
 }

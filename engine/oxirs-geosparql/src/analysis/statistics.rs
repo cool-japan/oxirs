@@ -122,7 +122,7 @@ pub enum HotSpotClassification {
 /// let values = vec![10.0, 12.0, 50.0, 48.0];
 ///
 /// let weights_type = WeightsMatrixType::InverseDistance { power: 1.0 };
-/// let result = morans_i(&points, &values, weights_type).unwrap();
+/// let result = morans_i(&points, &values, weights_type).expect("should succeed");
 ///
 /// // Should show positive spatial autocorrelation
 /// assert!(result.morans_i > 0.0);
@@ -232,7 +232,7 @@ pub fn morans_i(
 /// let values = vec![100.0, 95.0, 105.0, 10.0];
 ///
 /// let weights_type = WeightsMatrixType::InverseDistance { power: 1.0 };
-/// let result = getis_ord_gi_star(&points, &values, weights_type).unwrap();
+/// let result = getis_ord_gi_star(&points, &values, weights_type).expect("should succeed");
 ///
 /// // First three points should be hot spots
 /// assert!(result.z_scores[0] > 0.0);
@@ -533,7 +533,7 @@ mod tests {
         let values = vec![1.0, 2.0, 1.5, 2.5, 100.0, 98.0, 102.0, 99.0];
 
         let weights_type = WeightsMatrixType::InverseDistance { power: 2.0 };
-        let result = morans_i(&points, &values, weights_type).unwrap();
+        let result = morans_i(&points, &values, weights_type).expect("should succeed");
 
         // Should show positive spatial autocorrelation (Moran's I > expected)
         assert!(
@@ -554,7 +554,7 @@ mod tests {
         let values = vec![10.0, 20.0, 15.0, 25.0];
 
         let weights_type = WeightsMatrixType::InverseDistance { power: 1.0 };
-        let result = morans_i(&points, &values, weights_type).unwrap();
+        let result = morans_i(&points, &values, weights_type).expect("should succeed");
 
         // P-value should be high (not significant)
         assert!(
@@ -575,7 +575,7 @@ mod tests {
         let values = vec![100.0, 95.0, 105.0, 10.0];
 
         let weights_type = WeightsMatrixType::InverseDistance { power: 1.0 };
-        let result = getis_ord_gi_star(&points, &values, weights_type).unwrap();
+        let result = getis_ord_gi_star(&points, &values, weights_type).expect("should succeed");
 
         // First three should have positive z-scores (hot spots)
         assert!(result.z_scores[0] > 0.0);
@@ -595,7 +595,7 @@ mod tests {
         ];
 
         let weights_type = WeightsMatrixType::InverseDistance { power: 1.0 };
-        let weights = build_weights_matrix(&points, weights_type).unwrap();
+        let weights = build_weights_matrix(&points, weights_type).expect("should succeed");
 
         // Matrix should be row-standardized
         for i in 0..3 {
@@ -618,7 +618,7 @@ mod tests {
         ];
 
         let weights_type = WeightsMatrixType::BinaryThreshold { threshold: 1.0 };
-        let weights = build_weights_matrix(&points, weights_type).unwrap();
+        let weights = build_weights_matrix(&points, weights_type).expect("should succeed");
 
         // Points 0 and 1 are within threshold
         assert!(weights[[0, 1]] > 0.0);
@@ -636,7 +636,7 @@ mod tests {
         ];
 
         let weights_type = WeightsMatrixType::KNearestNeighbors { k: 2 };
-        let weights = build_weights_matrix(&points, weights_type).unwrap();
+        let weights = build_weights_matrix(&points, weights_type).expect("should succeed");
 
         // Each row should have exactly k non-zero entries
         for i in 0..4 {

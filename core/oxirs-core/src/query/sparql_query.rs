@@ -735,12 +735,12 @@ mod tests {
 
     #[test]
     fn test_query_creation() {
-        let var = Variable::new("s").unwrap();
+        let var = Variable::new("s").expect("valid variable name");
         let pattern = GraphPattern::Bgp {
             patterns: vec![TriplePattern::new(
                 TermPattern::Variable(var.clone()),
-                TermPattern::Variable(Variable::new("p").unwrap()),
-                TermPattern::Variable(Variable::new("o").unwrap()),
+                TermPattern::Variable(Variable::new("p").expect("valid variable name")),
+                TermPattern::Variable(Variable::new("o").expect("valid variable name")),
             )],
         };
 
@@ -756,22 +756,29 @@ mod tests {
         let mut dataset = QueryDataset::new();
         assert!(dataset.is_empty());
 
-        let graph = NamedNode::new("http://example.org/graph").unwrap();
+        let graph = NamedNode::new("http://example.org/graph").expect("valid IRI");
         dataset.add_default_graph(graph.clone());
         dataset.add_named_graph(graph);
 
         assert!(!dataset.is_empty());
         assert_eq!(dataset.default.len(), 1);
-        assert_eq!(dataset.named.as_ref().unwrap().len(), 1);
+        assert_eq!(
+            dataset
+                .named
+                .as_ref()
+                .expect("operation should succeed")
+                .len(),
+            1
+        );
     }
 
     #[test]
     fn test_query_display() {
         let pattern = GraphPattern::Bgp {
             patterns: vec![TriplePattern::new(
-                TermPattern::Variable(Variable::new("s").unwrap()),
-                TermPattern::Variable(Variable::new("p").unwrap()),
-                TermPattern::Variable(Variable::new("o").unwrap()),
+                TermPattern::Variable(Variable::new("s").expect("valid variable name")),
+                TermPattern::Variable(Variable::new("p").expect("valid variable name")),
+                TermPattern::Variable(Variable::new("o").expect("valid variable name")),
             )],
         };
 

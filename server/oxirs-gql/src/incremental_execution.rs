@@ -783,7 +783,10 @@ mod tests {
         plan.add_deferred_fragment(fragment2);
 
         assert!(plan.dependencies.contains_key(&id1));
-        assert_eq!(plan.dependencies.get(&id1).unwrap(), &vec![id2]);
+        assert_eq!(
+            plan.dependencies.get(&id1).expect("should succeed"),
+            &vec![id2]
+        );
     }
 
     #[test]
@@ -873,11 +876,14 @@ mod tests {
 
         let initial_data = serde_json::json!({ "id": 1, "name": "Test" });
 
-        let mut stream = executor.execute(plan, initial_data).await.unwrap();
+        let mut stream = executor
+            .execute(plan, initial_data)
+            .await
+            .expect("should succeed");
 
         let mut event_count = 0;
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 IncrementalEvent::Initial(result) => {
                     event_count += 1;
                     assert!(!result.has_next);
@@ -907,13 +913,16 @@ mod tests {
 
         let initial_data = serde_json::json!({ "id": 1 });
 
-        let mut stream = executor.execute(plan, initial_data).await.unwrap();
+        let mut stream = executor
+            .execute(plan, initial_data)
+            .await
+            .expect("should succeed");
 
         let mut received_initial = false;
         let mut received_deferred = false;
 
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 IncrementalEvent::Initial(result) => {
                     received_initial = true;
                     assert!(result.has_next);
@@ -944,13 +953,16 @@ mod tests {
 
         let initial_data = serde_json::json!({ "id": 1 });
 
-        let mut stream = executor.execute(plan, initial_data).await.unwrap();
+        let mut stream = executor
+            .execute(plan, initial_data)
+            .await
+            .expect("should succeed");
 
         let mut received_initial = false;
         let mut stream_chunks = 0;
 
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 IncrementalEvent::Initial(result) => {
                     received_initial = true;
                     assert!(result.has_next);
@@ -985,11 +997,14 @@ mod tests {
 
         let initial_data = serde_json::json!({ "id": 1 });
 
-        let mut stream = executor.execute(plan, initial_data).await.unwrap();
+        let mut stream = executor
+            .execute(plan, initial_data)
+            .await
+            .expect("should succeed");
 
         let mut deferred_count = 0;
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 IncrementalEvent::Deferred(_) => {
                     deferred_count += 1;
                 }
@@ -1016,11 +1031,14 @@ mod tests {
 
         let initial_data = serde_json::json!({ "id": 1 });
 
-        let mut stream = executor.execute(plan, initial_data).await.unwrap();
+        let mut stream = executor
+            .execute(plan, initial_data)
+            .await
+            .expect("should succeed");
 
         let mut deferred_count = 0;
         while let Some(event) = stream.next().await {
-            match event.unwrap() {
+            match event.expect("should succeed") {
                 IncrementalEvent::Deferred(_) => {
                     deferred_count += 1;
                 }
@@ -1045,10 +1063,13 @@ mod tests {
 
         let initial_data = serde_json::json!({ "id": 1 });
 
-        let mut stream = executor.execute(plan, initial_data).await.unwrap();
+        let mut stream = executor
+            .execute(plan, initial_data)
+            .await
+            .expect("should succeed");
 
         while let Some(event) = stream.next().await {
-            if matches!(event.unwrap(), IncrementalEvent::Complete) {
+            if matches!(event.expect("should succeed"), IncrementalEvent::Complete) {
                 break;
             }
         }

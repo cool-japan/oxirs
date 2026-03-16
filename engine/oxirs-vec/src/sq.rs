@@ -433,6 +433,7 @@ impl SqIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn test_quantization_params() {
@@ -474,7 +475,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sq_add_and_search() {
+    fn test_sq_add_and_search() -> Result<()> {
         let config = SqConfig::default();
         let mut index = SqIndex::new(config, 4);
 
@@ -484,27 +485,22 @@ mod tests {
             vec![2.0, 2.0, 2.0, 2.0],
         ];
 
-        index.train(&training_data).unwrap();
+        index.train(&training_data)?;
 
-        index
-            .add("vec1".to_string(), vec![0.1, 0.1, 0.1, 0.1])
-            .unwrap();
-        index
-            .add("vec2".to_string(), vec![0.9, 0.9, 0.9, 0.9])
-            .unwrap();
-        index
-            .add("vec3".to_string(), vec![1.8, 1.8, 1.8, 1.8])
-            .unwrap();
+        index.add("vec1".to_string(), vec![0.1, 0.1, 0.1, 0.1])?;
+        index.add("vec2".to_string(), vec![0.9, 0.9, 0.9, 0.9])?;
+        index.add("vec3".to_string(), vec![1.8, 1.8, 1.8, 1.8])?;
 
         let query = vec![0.0, 0.0, 0.0, 0.0];
-        let results = index.search(&query, 2).unwrap();
+        let results = index.search(&query, 2)?;
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].0, "vec1");
+        Ok(())
     }
 
     #[test]
-    fn test_sq_stats() {
+    fn test_sq_stats() -> Result<()> {
         let config = SqConfig {
             bits: 4,
             ..Default::default()
@@ -514,10 +510,10 @@ mod tests {
         let training_data: Vec<Vec<f32>> =
             (0..100).map(|_| (0..128).map(|_| 0.5).collect()).collect();
 
-        index.train(&training_data).unwrap();
+        index.train(&training_data)?;
 
         for i in 0..10 {
-            index.add(format!("vec{}", i), vec![0.5; 128]).unwrap();
+            index.add(format!("vec{}", i), vec![0.5; 128])?;
         }
 
         let stats = index.stats();
@@ -525,6 +521,7 @@ mod tests {
         assert_eq!(stats.dimensions, 128);
         assert_eq!(stats.bits, 4);
         assert!(stats.compression_ratio > 1.0);
+        Ok(())
     }
 
     #[test]

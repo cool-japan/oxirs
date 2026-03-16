@@ -743,7 +743,7 @@ mod tests {
         manager
             .create_transformer_architecture("test_training".to_string(), 2, 4, 128, 256)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let training_data = TrainingData {
             inputs: vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]],

@@ -481,9 +481,15 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
-            Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
-            Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
+            Subject::NamedNode(
+                NamedNode::new(format!("http://subject/{id}")).expect("valid IRI from format"),
+            ),
+            Predicate::NamedNode(
+                NamedNode::new(format!("http://predicate/{id}")).expect("valid IRI from format"),
+            ),
+            Object::NamedNode(
+                NamedNode::new(format!("http://object/{id}")).expect("valid IRI from format"),
+            ),
         )
     }
 
@@ -497,7 +503,9 @@ mod tests {
             .map(|i| BatchOperation::insert(vec![create_test_triple(i)]))
             .collect();
 
-        processor.submit_batch(operations).unwrap();
+        processor
+            .submit_batch(operations)
+            .expect("operation should succeed");
 
         // Process with a simple executor
         let results = processor
@@ -507,7 +515,7 @@ mod tests {
                     _ => Ok(0),
                 }
             })
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(results.len(), 1000);
         assert_eq!(results.iter().sum::<usize>(), 1000);
@@ -533,7 +541,7 @@ mod tests {
         for i in 0..100 {
             processor
                 .submit(BatchOperation::insert(vec![create_test_triple(i)]))
-                .unwrap();
+                .expect("operation should succeed");
         }
 
         // Process and verify work is distributed
@@ -546,7 +554,7 @@ mod tests {
                     _ => Ok(0),
                 }
             })
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(results.len(), 100);
         let stats = processor.stats();
@@ -562,7 +570,7 @@ mod tests {
         for i in 0..10 {
             processor
                 .submit(BatchOperation::insert(vec![create_test_triple(i)]))
-                .unwrap();
+                .expect("operation should succeed");
         }
 
         // Process with failing executor
@@ -585,7 +593,7 @@ mod tests {
         for i in 0..1000 {
             processor
                 .submit(BatchOperation::insert(vec![create_test_triple(i)]))
-                .unwrap();
+                .expect("operation should succeed");
         }
 
         // Start processing in a thread
@@ -607,7 +615,7 @@ mod tests {
         processor.cancel();
 
         // Wait for completion
-        let _result = handle.join().unwrap();
+        let _result = handle.join().expect("thread should not panic");
 
         // Should have processed some but not all
         let stats = processor.stats();
@@ -632,7 +640,7 @@ mod tests {
         for i in 0..500 {
             processor
                 .submit(BatchOperation::insert(vec![create_test_triple(i)]))
-                .unwrap();
+                .expect("operation should succeed");
         }
 
         // Process
@@ -643,7 +651,7 @@ mod tests {
                     _ => Ok(()),
                 }
             })
-            .unwrap();
+            .expect("operation should succeed");
 
         // Should have received progress updates
         assert!(progress_count.load(Ordering::Relaxed) > 0);

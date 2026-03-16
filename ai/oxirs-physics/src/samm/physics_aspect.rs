@@ -832,27 +832,27 @@ mod tests {
     #[test]
     fn test_simulation_status_from_str_valid() {
         assert_eq!(
-            SimulationStatus::parse("pending").unwrap(),
+            SimulationStatus::parse("pending").expect("should succeed"),
             SimulationStatus::Pending
         );
         assert_eq!(
-            SimulationStatus::parse("Running").unwrap(),
+            SimulationStatus::parse("Running").expect("should succeed"),
             SimulationStatus::Running
         );
         assert_eq!(
-            SimulationStatus::parse("Completed").unwrap(),
+            SimulationStatus::parse("Completed").expect("should succeed"),
             SimulationStatus::Completed
         );
         assert_eq!(
-            SimulationStatus::parse("done").unwrap(),
+            SimulationStatus::parse("done").expect("should succeed"),
             SimulationStatus::Completed
         );
         assert_eq!(
-            SimulationStatus::parse("failed").unwrap(),
+            SimulationStatus::parse("failed").expect("should succeed"),
             SimulationStatus::Failed
         );
         assert_eq!(
-            SimulationStatus::parse("error").unwrap(),
+            SimulationStatus::parse("error").expect("should succeed"),
             SimulationStatus::Failed
         );
     }
@@ -881,24 +881,27 @@ mod tests {
     #[test]
     fn test_physical_domain_from_str_valid() {
         assert_eq!(
-            PhysicalDomain::parse("thermal").unwrap(),
+            PhysicalDomain::parse("thermal").expect("should succeed"),
             PhysicalDomain::Thermal
         );
         assert_eq!(
-            PhysicalDomain::parse("heat").unwrap(),
+            PhysicalDomain::parse("heat").expect("should succeed"),
             PhysicalDomain::Thermal
         );
-        assert_eq!(PhysicalDomain::parse("cfd").unwrap(), PhysicalDomain::Fluid);
         assert_eq!(
-            PhysicalDomain::parse("fem").unwrap(),
+            PhysicalDomain::parse("cfd").expect("should succeed"),
+            PhysicalDomain::Fluid
+        );
+        assert_eq!(
+            PhysicalDomain::parse("fem").expect("should succeed"),
             PhysicalDomain::Structural
         );
         assert_eq!(
-            PhysicalDomain::parse("em").unwrap(),
+            PhysicalDomain::parse("em").expect("should succeed"),
             PhysicalDomain::Electromagnetic
         );
         assert_eq!(
-            PhysicalDomain::parse("coupled").unwrap(),
+            PhysicalDomain::parse("coupled").expect("should succeed"),
             PhysicalDomain::Multiphysics
         );
     }
@@ -966,7 +969,7 @@ mod tests {
     #[test]
     fn test_aspect_start_when_not_pending_fails() {
         let mut aspect = PhysicsAspect::new("s1", "M1", PhysicalDomain::Thermal, "urn:ex:1");
-        aspect.start().unwrap();
+        aspect.start().expect("should succeed");
         // Cannot start again while Running
         assert!(aspect.start().is_err());
     }
@@ -974,7 +977,7 @@ mod tests {
     #[test]
     fn test_aspect_fail() {
         let mut aspect = PhysicsAspect::new("s1", "M1", PhysicalDomain::Thermal, "urn:ex:1");
-        aspect.start().unwrap();
+        aspect.start().expect("should succeed");
         assert!(aspect.fail("solver diverged").is_ok());
         assert_eq!(aspect.status, SimulationStatus::Failed);
         assert_eq!(
@@ -988,7 +991,7 @@ mod tests {
         let aspect = make_completed_aspect();
         let param = aspect.parameter("inletTemp");
         assert!(param.is_some());
-        assert!((param.unwrap().value - 300.0).abs() < 1e-10);
+        assert!((param.expect("should succeed").value - 300.0).abs() < 1e-10);
     }
 
     #[test]
@@ -996,7 +999,7 @@ mod tests {
         let aspect = make_completed_aspect();
         let res = aspect.result_value("maxTemperature");
         assert!(res.is_some());
-        assert!((res.unwrap().value - 450.0).abs() < 1e-10);
+        assert!((res.expect("should succeed").value - 450.0).abs() < 1e-10);
     }
 
     // ── SammPhysicsMapper ─────────────────────────────────────────────────────
@@ -1138,7 +1141,7 @@ mod tests {
         let submodel = PhysicsAasSubmodel::from_aspect(&aspect);
         let params_elem = submodel.find_element("Parameters");
         assert!(params_elem.is_some(), "expected Parameters collection");
-        let coll = params_elem.unwrap();
+        let coll = params_elem.expect("should succeed");
         assert_eq!(coll.children.len(), 2, "expected 2 parameter children");
     }
 
@@ -1148,7 +1151,7 @@ mod tests {
         let submodel = PhysicsAasSubmodel::from_aspect(&aspect);
         let results_elem = submodel.find_element("Results");
         assert!(results_elem.is_some(), "expected Results collection");
-        let coll = results_elem.unwrap();
+        let coll = results_elem.expect("should succeed");
         assert_eq!(coll.children.len(), 2, "expected 2 result children");
     }
 
@@ -1189,8 +1192,14 @@ mod tests {
         .with_parameter(SimulationParameter::new("pressure", 101325.0, "PA"));
 
         assert_eq!(aspect.parameters.len(), 2);
-        assert_eq!(aspect.parameter("temp").unwrap().value, 300.0);
-        assert_eq!(aspect.parameter("pressure").unwrap().unit, "PA");
+        assert_eq!(
+            aspect.parameter("temp").expect("should succeed").value,
+            300.0
+        );
+        assert_eq!(
+            aspect.parameter("pressure").expect("should succeed").unit,
+            "PA"
+        );
     }
 
     #[test]
@@ -1205,7 +1214,13 @@ mod tests {
         .with_result(SimulationResultValue::new("pressure_drop", 500.0, "PA"));
 
         assert_eq!(aspect.results.len(), 2);
-        assert_eq!(aspect.result_value("max_velocity").unwrap().value, 5.0);
+        assert_eq!(
+            aspect
+                .result_value("max_velocity")
+                .expect("should succeed")
+                .value,
+            5.0
+        );
     }
 
     #[test]
@@ -1234,7 +1249,7 @@ mod tests {
             PhysicalDomain::Electromagnetic,
             "urn:example:asset:400",
         );
-        aspect.start().unwrap();
+        aspect.start().expect("should succeed");
 
         assert!(aspect.fail("diverged at step 42").is_ok());
         assert_eq!(aspect.status, SimulationStatus::Failed);
@@ -1257,8 +1272,8 @@ mod tests {
             PhysicalDomain::Thermal,
             "urn:example:asset:500",
         );
-        aspect.start().unwrap();
-        aspect.complete(true, 0).unwrap();
+        aspect.start().expect("should succeed");
+        aspect.complete(true, 0).expect("should succeed");
         assert!(
             aspect.validate().is_ok(),
             "completed aspect with non-empty ID must validate"
@@ -1288,8 +1303,8 @@ mod tests {
             PhysicalDomain::Thermal,
             "urn:example:asset:rt-001",
         );
-        aspect.start().unwrap();
-        aspect.complete(true, 500).unwrap();
+        aspect.start().expect("should succeed");
+        aspect.complete(true, 500).expect("should succeed");
         let aspect = aspect
             .with_parameter(SimulationParameter::new("inletTemp", 400.0, "K"))
             .with_result(SimulationResultValue::new("maxTemp", 450.0, "K"));
@@ -1311,7 +1326,7 @@ mod tests {
             PhysicalDomain::Fluid,
             "urn:example:asset:str-001",
         );
-        aspect.start().unwrap();
+        aspect.start().expect("should succeed");
         let json = SammPhysicsMapper::to_samm_json(&aspect).expect("to_samm_json");
         let s = serde_json::to_string(&json).expect("to_string");
         let restored = SammPhysicsMapper::from_samm_json_str(&s).expect("from_samm_json_str");
@@ -1359,8 +1374,8 @@ mod tests {
             PhysicalDomain::Thermal,
             "urn:example:asset:ttl-001",
         );
-        aspect.start().unwrap();
-        aspect.complete(true, 0).unwrap();
+        aspect.start().expect("should succeed");
+        aspect.complete(true, 0).expect("should succeed");
         let ttl = SammPhysicsMapper::to_samm_ttl_snippet(&aspect);
         assert!(
             ttl.contains("samm:Aspect"),
@@ -1446,8 +1461,8 @@ mod tests {
             PhysicalDomain::Fluid,
             "urn:example:asset:semid-001",
         );
-        aspect.start().unwrap();
-        aspect.complete(true, 0).unwrap();
+        aspect.start().expect("should succeed");
+        aspect.complete(true, 0).expect("should succeed");
         let submodel = PhysicsAasSubmodel::from_aspect(&aspect);
         let sem_id = submodel.semantic_id.as_deref().unwrap_or("");
         assert!(

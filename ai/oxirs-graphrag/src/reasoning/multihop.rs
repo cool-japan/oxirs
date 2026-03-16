@@ -539,7 +539,7 @@ mod tests {
     fn test_reason_empty_seeds() {
         let engine = MultiHopEngine::default();
         let triples = vec![make_triple("http://a", "http://rel", "http://b")];
-        let result = engine.reason(&[], &triples, &[]).unwrap();
+        let result = engine.reason(&[], &triples, &[]).expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -547,7 +547,7 @@ mod tests {
     fn test_reason_empty_subgraph() {
         let engine = MultiHopEngine::default();
         let seeds = vec![make_seed("http://a", 0.9)];
-        let result = engine.reason(&seeds, &[], &[]).unwrap();
+        let result = engine.reason(&seeds, &[], &[]).expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -560,7 +560,9 @@ mod tests {
             make_triple("http://b", "http://p/rel", "http://c"),
             make_triple("http://x", "http://p/other", "http://y"),
         ];
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         assert!(!paths.is_empty());
         // All paths should start from http://a
         for p in &paths {
@@ -584,7 +586,9 @@ mod tests {
             make_triple("http://a", "http://p", "http://b"),
             make_triple("http://b", "http://p", "http://c"),
         ];
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         for p in &paths {
             assert!(
                 p.hop_count() <= 1,
@@ -605,7 +609,9 @@ mod tests {
         let triples: Vec<Triple> = (0..20)
             .map(|i| make_triple("http://a", "http://p", &format!("http://n{i}")))
             .collect();
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         assert!(paths.len() <= 2);
     }
 
@@ -625,7 +631,9 @@ mod tests {
             make_triple("http://b", "http://subClassOf", "http://c"),
         ];
         let rules = vec![transitivity_rule("http://subClassOf")];
-        let paths = engine.reason(&seeds, &triples, &rules).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &rules)
+            .expect("should succeed");
         assert!(!paths.is_empty());
         // At least some paths should have inferred hops
         let has_inferred = paths.iter().any(|p| p.has_inferred_hop());
@@ -648,7 +656,9 @@ mod tests {
             make_triple("http://b", "http://subClassOf", "http://c"),
         ];
         let rules = vec![transitivity_rule("http://subClassOf")];
-        let paths = engine.reason(&seeds, &triples, &rules).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &rules)
+            .expect("should succeed");
         for p in &paths {
             assert_eq!(
                 p.inferred_hops, 0,
@@ -718,7 +728,9 @@ mod tests {
             make_triple("http://a", "http://p/allowed", "http://b"),
             make_triple("http://a", "http://p/blocked", "http://c"),
         ];
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         // No path should traverse the blocked predicate
         for p in &paths {
             for e in &p.edges {
@@ -742,7 +754,9 @@ mod tests {
             make_triple("http://a", "http://p/allowed", "http://b"),
             make_triple("http://a", "http://p/other", "http://c"),
         ];
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         for p in &paths {
             for e in &p.edges {
                 assert_eq!(e.predicate, "http://p/allowed");
@@ -757,7 +771,9 @@ mod tests {
         let engine = MultiHopEngine::default();
         let seeds = vec![make_seed("http://a", 0.8)];
         let triples = vec![make_triple("http://a", "http://p", "http://b")];
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         assert!(!paths.is_empty());
         let path = &paths[0];
         assert_eq!(path.start, "http://a");
@@ -775,7 +791,9 @@ mod tests {
         let engine = MultiHopEngine::new(config);
         let seeds = vec![make_seed("http://a", 0.9)];
         let triples = vec![make_triple("http://a", "http://p", "http://b")];
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         assert!(paths.is_empty());
     }
 
@@ -792,9 +810,9 @@ mod tests {
             object,
         } = &atoms[0]
         {
-            assert_eq!(term_to_str(subject).unwrap(), "http://s");
-            assert_eq!(term_to_str(predicate).unwrap(), "http://p");
-            assert_eq!(term_to_str(object).unwrap(), "http://o");
+            assert_eq!(term_to_str(subject).expect("should succeed"), "http://s");
+            assert_eq!(term_to_str(predicate).expect("should succeed"), "http://p");
+            assert_eq!(term_to_str(object).expect("should succeed"), "http://o");
         } else {
             panic!("Expected Triple atom");
         }
@@ -818,7 +836,9 @@ mod tests {
             "http://locatedIn",
             "http://indirectlyIn",
         )];
-        let paths = engine.reason(&seeds, &triples, &rules).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &rules)
+            .expect("should succeed");
         assert!(!paths.is_empty());
     }
 }
@@ -883,13 +903,16 @@ mod additional_tests {
     fn test_property_chain_rule_body_predicates() {
         let rule = property_chain_rule("http://partOf", "http://locatedIn", "http://indirectlyIn");
         if let RuleAtom::Triple { predicate: p1, .. } = &rule.body[0] {
-            assert_eq!(term_to_str(p1).unwrap(), "http://partOf");
+            assert_eq!(term_to_str(p1).expect("should succeed"), "http://partOf");
         }
         if let RuleAtom::Triple { predicate: p2, .. } = &rule.body[1] {
-            assert_eq!(term_to_str(p2).unwrap(), "http://locatedIn");
+            assert_eq!(term_to_str(p2).expect("should succeed"), "http://locatedIn");
         }
         if let RuleAtom::Triple { predicate: ph, .. } = &rule.head[0] {
-            assert_eq!(term_to_str(ph).unwrap(), "http://indirectlyIn");
+            assert_eq!(
+                term_to_str(ph).expect("should succeed"),
+                "http://indirectlyIn"
+            );
         }
     }
 
@@ -898,13 +921,16 @@ mod additional_tests {
     #[test]
     fn test_term_to_str_constant() {
         let t = Term::Constant("http://example.org/x".to_string());
-        assert_eq!(term_to_str(&t).unwrap(), "http://example.org/x");
+        assert_eq!(
+            term_to_str(&t).expect("should succeed"),
+            "http://example.org/x"
+        );
     }
 
     #[test]
     fn test_term_to_str_literal() {
         let t = Term::Literal("hello world".to_string());
-        assert_eq!(term_to_str(&t).unwrap(), "hello world");
+        assert_eq!(term_to_str(&t).expect("should succeed"), "hello world");
     }
 
     #[test]
@@ -1006,7 +1032,7 @@ mod additional_tests {
         let paths = engine.reason(&seeds, &triples, &[]);
         assert!(paths.is_ok(), "Should not error on cyclic graphs");
         // Should return some paths without hanging
-        let paths = paths.unwrap();
+        let paths = paths.expect("should succeed");
         assert!(paths.len() < 1000, "Cycle guard should bound path count");
     }
 
@@ -1057,7 +1083,9 @@ mod additional_tests {
             make_triple("http://a", "http://p", "http://b"),
             make_triple("http://x", "http://q", "http://y"),
         ];
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         let from_a = paths.iter().any(|p| p.start == "http://a");
         let from_x = paths.iter().any(|p| p.start == "http://x");
         assert!(from_a, "Expected paths from http://a");
@@ -1077,7 +1105,9 @@ mod additional_tests {
         let seeds = vec![make_seed("http://b", 0.9)];
         let triples = vec![make_triple("http://a", "http://sameAs", "http://b")];
         let rules = vec![symmetry_rule("http://sameAs")];
-        let paths = engine.reason(&seeds, &triples, &rules).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &rules)
+            .expect("should succeed");
         // Should find path from http://b via the inferred reverse edge
         let has_inferred = paths.iter().any(|p| p.has_inferred_hop());
         assert!(has_inferred, "Symmetry rule should create inferred edges");
@@ -1099,7 +1129,9 @@ mod additional_tests {
         let triples: Vec<Triple> = (0..100)
             .map(|i| make_triple("http://a", "http://p", &format!("http://n{i}")))
             .collect();
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         // Budget=5 should stop after at most a few paths
         assert!(paths.len() < 100, "Budget guard should limit path count");
     }
@@ -1115,7 +1147,9 @@ mod additional_tests {
             make_triple("http://b", "http://p", "http://c"),
             make_triple("http://c", "http://p", "http://d"),
         ];
-        let paths = engine.reason(&seeds, &triples, &[]).unwrap();
+        let paths = engine
+            .reason(&seeds, &triples, &[])
+            .expect("should succeed");
         for i in 1..paths.len() {
             assert!(
                 paths[i - 1].score >= paths[i].score,

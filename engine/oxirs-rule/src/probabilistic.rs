@@ -26,16 +26,16 @@
 //! bn.add_variable("WetGrass".to_string(), vec!["true".to_string(), "false".to_string()]);
 //!
 //! // Add dependencies
-//! bn.add_edge("Rain".to_string(), "WetGrass".to_string()).unwrap();
-//! bn.add_edge("Sprinkler".to_string(), "WetGrass".to_string()).unwrap();
+//! bn.add_edge("Rain".to_string(), "WetGrass".to_string()).expect("should succeed");
+//! bn.add_edge("Sprinkler".to_string(), "WetGrass".to_string()).expect("should succeed");
 //!
 //! // Add conditional probability tables (CPTs)
 //! // P(Rain) = 0.2
-//! bn.set_prior("Rain".to_string(), vec![0.2, 0.8]).unwrap();
+//! bn.set_prior("Rain".to_string(), vec![0.2, 0.8]).expect("should succeed");
 //!
 //! // Query the network
 //! let evidence = vec![("WetGrass".to_string(), "true".to_string())];
-//! let prob = bn.query("Rain".to_string(), "true".to_string(), &evidence).unwrap();
+//! let prob = bn.query("Rain".to_string(), "true".to_string(), &evidence).expect("should succeed");
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
@@ -906,7 +906,7 @@ mod tests {
     }
 
     #[test]
-    fn test_probabilistic_rule_engine() {
+    fn test_probabilistic_rule_engine() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ProbabilisticRuleEngine::new();
 
         let rule = Rule {
@@ -931,36 +931,47 @@ mod tests {
             object: Term::Constant("b".to_string()),
         }];
 
-        let result = engine.probabilistic_forward_chain(&facts).unwrap();
+        let result = engine.probabilistic_forward_chain(&facts)?;
         assert!(!result.is_empty());
 
         // Check confidence is reasonable
         for (_, confidence) in result {
             assert!(confidence > 0.0 && confidence <= 1.0);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_topological_sort() {
+    fn test_topological_sort() -> Result<(), Box<dyn std::error::Error>> {
         let mut bn = BayesianNetwork::new();
 
         bn.add_variable("A".to_string(), vec!["T".to_string(), "F".to_string()]);
         bn.add_variable("B".to_string(), vec!["T".to_string(), "F".to_string()]);
         bn.add_variable("C".to_string(), vec!["T".to_string(), "F".to_string()]);
 
-        bn.add_edge("A".to_string(), "B".to_string()).unwrap();
-        bn.add_edge("B".to_string(), "C".to_string()).unwrap();
+        bn.add_edge("A".to_string(), "B".to_string())?;
+        bn.add_edge("B".to_string(), "C".to_string())?;
 
-        let topo_order = bn.topological_sort().unwrap();
+        let topo_order = bn.topological_sort()?;
         assert_eq!(topo_order.len(), 3);
 
         // A should come before B, and B before C
-        let a_idx = topo_order.iter().position(|x| x == "A").unwrap();
-        let b_idx = topo_order.iter().position(|x| x == "B").unwrap();
-        let c_idx = topo_order.iter().position(|x| x == "C").unwrap();
+        let a_idx = topo_order
+            .iter()
+            .position(|x| x == "A")
+            .ok_or("expected Some value")?;
+        let b_idx = topo_order
+            .iter()
+            .position(|x| x == "B")
+            .ok_or("expected Some value")?;
+        let c_idx = topo_order
+            .iter()
+            .position(|x| x == "C")
+            .ok_or("expected Some value")?;
 
         assert!(a_idx < b_idx);
         assert!(b_idx < c_idx);
+        Ok(())
     }
 
     // ---- Extended tests ----
@@ -1064,36 +1075,39 @@ mod tests {
     }
 
     #[test]
-    fn test_bn_topological_sort_single_node() {
+    fn test_bn_topological_sort_single_node() -> Result<(), Box<dyn std::error::Error>> {
         let mut bn = BayesianNetwork::new();
         bn.add_variable("Alone".to_string(), vec!["T".to_string(), "F".to_string()]);
-        let topo = bn.topological_sort().unwrap();
+        let topo = bn.topological_sort()?;
         assert_eq!(topo.len(), 1);
         assert_eq!(topo[0], "Alone");
+        Ok(())
     }
 
     #[test]
-    fn test_bn_topological_sort_no_edges() {
+    fn test_bn_topological_sort_no_edges() -> Result<(), Box<dyn std::error::Error>> {
         let mut bn = BayesianNetwork::new();
         bn.add_variable("P".to_string(), vec!["T".to_string(), "F".to_string()]);
         bn.add_variable("Q".to_string(), vec!["T".to_string(), "F".to_string()]);
         bn.add_variable("R".to_string(), vec!["T".to_string(), "F".to_string()]);
-        let topo = bn.topological_sort().unwrap();
+        let topo = bn.topological_sort()?;
         assert_eq!(topo.len(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_bn_query_returns_probability() {
+    fn test_bn_query_returns_probability() -> Result<(), Box<dyn std::error::Error>> {
         let mut bn = BayesianNetwork::new();
         bn.add_variable("Rain".to_string(), vec!["T".to_string(), "F".to_string()]);
-        bn.set_prior("Rain".to_string(), vec![0.3, 0.7]).unwrap();
+        bn.set_prior("Rain".to_string(), vec![0.3, 0.7])?;
         let result = bn.query("Rain".to_string(), "T".to_string(), &[]);
         assert!(result.is_ok(), "query should succeed");
-        let prob = result.unwrap();
+        let prob = result?;
         assert!(
             (0.0..=1.0).contains(&prob),
             "probability should be in [0,1]"
         );
+        Ok(())
     }
 
     #[test]
@@ -1131,17 +1145,18 @@ mod tests {
     }
 
     #[test]
-    fn test_prob_engine_with_no_rules_empty_facts() {
+    fn test_prob_engine_with_no_rules_empty_facts() -> Result<(), Box<dyn std::error::Error>> {
         let engine = ProbabilisticRuleEngine::new();
-        let result = engine.probabilistic_forward_chain(&[]).unwrap();
+        let result = engine.probabilistic_forward_chain(&[])?;
         assert!(
             result.is_empty(),
             "No rules and empty facts => empty result"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_prob_engine_confidence_in_range() {
+    fn test_prob_engine_confidence_in_range() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ProbabilisticRuleEngine::new();
         let rule = Rule {
             name: "range_test".to_string(),
@@ -1162,7 +1177,7 @@ mod tests {
             predicate: Term::Constant("likes".to_string()),
             object: Term::Constant("bob".to_string()),
         }];
-        let result = engine.probabilistic_forward_chain(&facts).unwrap();
+        let result = engine.probabilistic_forward_chain(&facts)?;
         for (_, confidence) in &result {
             assert!(
                 *confidence >= 0.0 && *confidence <= 1.0,
@@ -1170,10 +1185,11 @@ mod tests {
                 confidence
             );
         }
+        Ok(())
     }
 
     #[test]
-    fn test_prob_engine_multiple_facts_has_results() {
+    fn test_prob_engine_multiple_facts_has_results() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = ProbabilisticRuleEngine::new();
         let rule = Rule {
             name: "multi".to_string(),
@@ -1201,12 +1217,13 @@ mod tests {
                 object: Term::Constant("d".to_string()),
             },
         ];
-        let result = engine.probabilistic_forward_chain(&facts).unwrap();
+        let result = engine.probabilistic_forward_chain(&facts)?;
         // Should get at least one result (rule application)
         assert!(
             !result.is_empty(),
             "Should get at least one result from rule application"
         );
+        Ok(())
     }
 
     #[test]

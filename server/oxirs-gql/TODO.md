@@ -1,10 +1,10 @@
 # OxiRS GraphQL - TODO
 
-*Version: 0.1.0 | Last Updated: 2026-01-06*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS GraphQL v0.1.0 is production-ready, providing a modern GraphQL interface for RDF data with automatic schema generation and AI-powered capabilities.
+OxiRS GraphQL v0.2.2 is production-ready, providing a modern GraphQL interface for RDF data with automatic schema generation and AI-powered capabilities.
 
 ### Production Features
 - ✅ **GraphQL Server** - Full GraphQL specification compliance
@@ -20,21 +20,29 @@ OxiRS GraphQL v0.1.0 is production-ready, providing a modern GraphQL interface f
 - ✅ **Live Queries** - Automatic re-execution on data changes
 - ✅ **Schema Documentation** - Markdown, HTML, JSON, OpenAPI output
 - ✅ **Production Features** - CORS, JWT, OpenTelemetry, connection pooling
-- ✅ **1,213 tests passing** with zero warnings
+- ✅ **Enum Resolver** - Dynamic enum resolution for RDF types
+- ✅ **Field Resolver Cache** - TTL+LRU caching for field resolution
+- ✅ **Batch Resolver** - Optimized DataLoader-style batching
+- ✅ **2081 tests passing** with zero warnings
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Enhanced Features (Q1 2026 - Expanded)
-- [ ] GraphQL caching improvements
-- [ ] Advanced federation capabilities
-- [ ] Enhanced subscription features
-- [ ] Performance optimization
-- [ ] Multi-tenant support
-- [ ] Advanced security features
-- [ ] Enhanced monitoring
-- [ ] Production deployment templates
+### v0.1.0 - Released (January 7, 2026)
+- ✅ Full GraphQL specification, automatic schema, subscriptions, federation, 1213 tests
 
-### v1.0.0 - LTS Release (Q2 2026)
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ GraphQL caching improvements (field resolver cache TTL+LRU)
+- ✅ Advanced federation capabilities
+- ✅ Enhanced subscription features (ChangeTracker, SubscriptionManager, Broadcaster)
+- ✅ Performance optimization (DataLoader batching, parallel field resolution)
+- ✅ Multi-tenant support
+- ✅ Advanced security features
+- ✅ Enhanced monitoring (OpenTelemetry, custom metrics)
+- ✅ Production deployment templates
+- ✅ Enum resolver, endpoint router, argument coercer
+- ✅ 2081 tests passing
+
+### v0.3.0 - Planned (Q2 2026)
 - [ ] Long-term support guarantees
 - [ ] Complete GraphQL specification compliance
 - [ ] Enterprise support
@@ -46,4 +54,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GraphQL v0.1.0 - Modern GraphQL interface for RDF*
+*OxiRS GraphQL v0.2.2 - Modern GraphQL interface for RDF*

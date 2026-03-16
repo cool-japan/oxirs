@@ -315,24 +315,34 @@ mod tests {
     #[test]
     fn test_upsert_new_returns_true() {
         let mut store = VectorStore::new();
-        let is_new = store.upsert(entry("e1", "ns", vec![1.0, 0.0])).unwrap();
+        let is_new = store
+            .upsert(entry("e1", "ns", vec![1.0, 0.0]))
+            .expect("should succeed");
         assert!(is_new);
     }
 
     #[test]
     fn test_upsert_update_returns_false() {
         let mut store = VectorStore::new();
-        store.upsert(entry("e1", "ns", vec![1.0, 0.0])).unwrap();
-        let is_new = store.upsert(entry("e1", "ns", vec![0.0, 1.0])).unwrap();
+        store
+            .upsert(entry("e1", "ns", vec![1.0, 0.0]))
+            .expect("should succeed");
+        let is_new = store
+            .upsert(entry("e1", "ns", vec![0.0, 1.0]))
+            .expect("should succeed");
         assert!(!is_new);
     }
 
     #[test]
     fn test_upsert_update_replaces_vector() {
         let mut store = VectorStore::new();
-        store.upsert(entry("e1", "ns", vec![1.0, 0.0])).unwrap();
-        store.upsert(entry("e1", "ns", vec![0.0, 1.0])).unwrap();
-        let got = store.get("ns", "e1").unwrap();
+        store
+            .upsert(entry("e1", "ns", vec![1.0, 0.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("e1", "ns", vec![0.0, 1.0]))
+            .expect("should succeed");
+        let got = store.get("ns", "e1").expect("should succeed");
         assert_eq!(got.vector, vec![0.0, 1.0]);
     }
 
@@ -367,7 +377,9 @@ mod tests {
     #[test]
     fn test_delete_existing() {
         let mut store = VectorStore::new();
-        store.upsert(entry("e1", "ns", vec![1.0])).unwrap();
+        store
+            .upsert(entry("e1", "ns", vec![1.0]))
+            .expect("should succeed");
         assert!(store.delete("ns", "e1"));
         assert!(store.get("ns", "e1").is_none());
     }
@@ -383,7 +395,9 @@ mod tests {
     #[test]
     fn test_get_existing() {
         let mut store = VectorStore::new();
-        store.upsert(entry("e1", "ns", vec![1.0, 2.0])).unwrap();
+        store
+            .upsert(entry("e1", "ns", vec![1.0, 2.0]))
+            .expect("should succeed");
         assert!(store.get("ns", "e1").is_some());
     }
 
@@ -398,7 +412,9 @@ mod tests {
     #[test]
     fn test_contains_true() {
         let mut store = VectorStore::new();
-        store.upsert(entry("x", "ns", vec![1.0])).unwrap();
+        store
+            .upsert(entry("x", "ns", vec![1.0]))
+            .expect("should succeed");
         assert!(store.contains("ns", "x"));
     }
 
@@ -414,9 +430,13 @@ mod tests {
     fn test_search_sorted_by_score_descending() {
         let mut store = VectorStore::new();
         // e1 aligned with query [1,0,0]
-        store.upsert(entry("e1", "ns", unit_vec(3, 0))).unwrap();
+        store
+            .upsert(entry("e1", "ns", unit_vec(3, 0)))
+            .expect("should succeed");
         // e2 aligned with [0,1,0] — low similarity to query
-        store.upsert(entry("e2", "ns", unit_vec(3, 1))).unwrap();
+        store
+            .upsert(entry("e2", "ns", unit_vec(3, 1)))
+            .expect("should succeed");
         let query = unit_vec(3, 0);
         let results = store.search("ns", &query, 2);
         assert_eq!(results.len(), 2);
@@ -430,7 +450,7 @@ mod tests {
         for i in 0..10 {
             store
                 .upsert(entry(&i.to_string(), "ns", vec![i as f32]))
-                .unwrap();
+                .expect("should succeed");
         }
         let results = store.search("ns", &[5.0_f32], 3);
         assert_eq!(results.len(), 3);
@@ -440,7 +460,9 @@ mod tests {
     fn test_search_same_vector_max_score() {
         let mut store = VectorStore::new();
         let v = vec![1.0_f32, 1.0, 1.0];
-        store.upsert(entry("e", "ns", v.clone())).unwrap();
+        store
+            .upsert(entry("e", "ns", v.clone()))
+            .expect("should succeed");
         let results = store.search("ns", &v, 1);
         assert_eq!(results.len(), 1);
         assert!((results[0].score - 1.0).abs() < 1e-6);
@@ -458,8 +480,12 @@ mod tests {
     #[test]
     fn test_search_all_namespaces_cross_namespace() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns1", vec![1.0_f32, 0.0])).unwrap();
-        store.upsert(entry("b", "ns2", vec![0.0_f32, 1.0])).unwrap();
+        store
+            .upsert(entry("a", "ns1", vec![1.0_f32, 0.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns2", vec![0.0_f32, 1.0]))
+            .expect("should succeed");
         let results = store.search_all_namespaces(&[1.0_f32, 0.0], 2);
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].id, "a"); // aligned with query
@@ -471,7 +497,7 @@ mod tests {
         for i in 0..5 {
             store
                 .upsert(entry(&format!("e{i}"), &format!("ns{i}"), vec![i as f32]))
-                .unwrap();
+                .expect("should succeed");
         }
         let results = store.search_all_namespaces(&[2.0_f32], 2);
         assert_eq!(results.len(), 2);
@@ -482,8 +508,12 @@ mod tests {
     #[test]
     fn test_list_all_in_namespace() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns", vec![1.0])).unwrap();
-        store.upsert(entry("b", "ns", vec![2.0])).unwrap();
+        store
+            .upsert(entry("a", "ns", vec![1.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns", vec![2.0]))
+            .expect("should succeed");
         let listed = store.list("ns");
         assert_eq!(listed.len(), 2);
     }
@@ -499,8 +529,12 @@ mod tests {
     #[test]
     fn test_delete_namespace_returns_count() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns", vec![1.0])).unwrap();
-        store.upsert(entry("b", "ns", vec![2.0])).unwrap();
+        store
+            .upsert(entry("a", "ns", vec![1.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns", vec![2.0]))
+            .expect("should succeed");
         assert_eq!(store.delete_namespace("ns"), 2);
     }
 
@@ -513,7 +547,9 @@ mod tests {
     #[test]
     fn test_delete_namespace_removes_entries() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns", vec![1.0])).unwrap();
+        store
+            .upsert(entry("a", "ns", vec![1.0]))
+            .expect("should succeed");
         store.delete_namespace("ns");
         assert!(store.list("ns").is_empty());
     }
@@ -532,9 +568,15 @@ mod tests {
     #[test]
     fn test_stats_counts_correctly() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns1", vec![1.0, 2.0])).unwrap();
-        store.upsert(entry("b", "ns1", vec![3.0, 4.0])).unwrap();
-        store.upsert(entry("c", "ns2", vec![5.0, 6.0])).unwrap();
+        store
+            .upsert(entry("a", "ns1", vec![1.0, 2.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns1", vec![3.0, 4.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("c", "ns2", vec![5.0, 6.0]))
+            .expect("should succeed");
         let s = store.stats();
         assert_eq!(s.total_vectors, 3);
         assert_eq!(s.namespace_count, 2);
@@ -553,8 +595,12 @@ mod tests {
     #[test]
     fn test_upsert_multiple_namespaces() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns1", vec![1.0])).unwrap();
-        store.upsert(entry("b", "ns2", vec![2.0])).unwrap();
+        store
+            .upsert(entry("a", "ns1", vec![1.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns2", vec![2.0]))
+            .expect("should succeed");
         assert!(store.contains("ns1", "a"));
         assert!(store.contains("ns2", "b"));
     }
@@ -562,7 +608,9 @@ mod tests {
     #[test]
     fn test_delete_from_wrong_namespace() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns1", vec![1.0])).unwrap();
+        store
+            .upsert(entry("a", "ns1", vec![1.0]))
+            .expect("should succeed");
         assert!(!store.delete("ns2", "a")); // wrong namespace
         assert!(store.contains("ns1", "a")); // still exists
     }
@@ -570,7 +618,9 @@ mod tests {
     #[test]
     fn test_search_returns_correct_namespace() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns1", vec![1.0_f32, 0.0])).unwrap();
+        store
+            .upsert(entry("a", "ns1", vec![1.0_f32, 0.0]))
+            .expect("should succeed");
         let results = store.search("ns1", &[1.0_f32, 0.0], 1);
         assert_eq!(results[0].namespace, "ns1");
     }
@@ -588,8 +638,8 @@ mod tests {
         meta.insert("source".into(), "test".into());
         let mut e = entry("e1", "ns", vec![1.0]);
         e.metadata = meta;
-        store.upsert(e).unwrap();
-        let got = store.get("ns", "e1").unwrap();
+        store.upsert(e).expect("should succeed");
+        let got = store.get("ns", "e1").expect("should succeed");
         assert_eq!(got.metadata.get("source").map(|s| s.as_str()), Some("test"));
     }
 
@@ -598,8 +648,11 @@ mod tests {
         let mut store = VectorStore::new();
         let mut e = entry("e1", "ns", vec![1.0]);
         e.created_at = 12345678;
-        store.upsert(e).unwrap();
-        assert_eq!(store.get("ns", "e1").unwrap().created_at, 12345678);
+        store.upsert(e).expect("should succeed");
+        assert_eq!(
+            store.get("ns", "e1").expect("should succeed").created_at,
+            12345678
+        );
     }
 
     #[test]
@@ -621,8 +674,12 @@ mod tests {
     #[test]
     fn test_stats_namespace_count_after_delete() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns1", vec![1.0])).unwrap();
-        store.upsert(entry("b", "ns2", vec![1.0])).unwrap();
+        store
+            .upsert(entry("a", "ns1", vec![1.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns2", vec![1.0]))
+            .expect("should succeed");
         store.delete_namespace("ns1");
         let s = store.stats();
         assert_eq!(s.namespace_count, 1);
@@ -631,8 +688,12 @@ mod tests {
     #[test]
     fn test_search_scores_in_range() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns", vec![1.0_f32, 0.0])).unwrap();
-        store.upsert(entry("b", "ns", vec![0.0_f32, 1.0])).unwrap();
+        store
+            .upsert(entry("a", "ns", vec![1.0_f32, 0.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns", vec![0.0_f32, 1.0]))
+            .expect("should succeed");
         let results = store.search("ns", &[0.7_f32, 0.7], 2);
         for r in &results {
             assert!(r.score >= -1.0 && r.score <= 1.0);
@@ -644,7 +705,7 @@ mod tests {
         let mut store = VectorStore::new();
         let mut e = entry("e1", "ns", vec![1.0_f32, 0.0]);
         e.metadata.insert("key".into(), "val".into());
-        store.upsert(e).unwrap();
+        store.upsert(e).expect("should succeed");
         let results = store.search("ns", &[1.0_f32, 0.0], 1);
         assert_eq!(
             results[0].metadata.get("key").map(|s| s.as_str()),
@@ -655,17 +716,27 @@ mod tests {
     #[test]
     fn test_upsert_different_ids_same_namespace() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns", vec![1.0])).unwrap();
-        store.upsert(entry("b", "ns", vec![2.0])).unwrap();
-        store.upsert(entry("c", "ns", vec![3.0])).unwrap();
+        store
+            .upsert(entry("a", "ns", vec![1.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns", vec![2.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("c", "ns", vec![3.0]))
+            .expect("should succeed");
         assert_eq!(store.list("ns").len(), 3);
     }
 
     #[test]
     fn test_delete_reduces_list_count() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns", vec![1.0])).unwrap();
-        store.upsert(entry("b", "ns", vec![2.0])).unwrap();
+        store
+            .upsert(entry("a", "ns", vec![1.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns", vec![2.0]))
+            .expect("should succeed");
         store.delete("ns", "a");
         assert_eq!(store.list("ns").len(), 1);
     }
@@ -675,10 +746,10 @@ mod tests {
         let mut store = VectorStore::new();
         store
             .upsert(entry("best", "ns1", vec![1.0_f32, 0.0]))
-            .unwrap();
+            .expect("should succeed");
         store
             .upsert(entry("other", "ns2", vec![0.0_f32, 1.0]))
-            .unwrap();
+            .expect("should succeed");
         let results = store.search_all_namespaces(&[1.0_f32, 0.0], 1);
         assert_eq!(results[0].id, "best");
     }
@@ -686,8 +757,12 @@ mod tests {
     #[test]
     fn test_cosine_similarity_opposite_vectors() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns", vec![1.0_f32, 0.0])).unwrap();
-        store.upsert(entry("b", "ns", vec![-1.0_f32, 0.0])).unwrap();
+        store
+            .upsert(entry("a", "ns", vec![1.0_f32, 0.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("b", "ns", vec![-1.0_f32, 0.0]))
+            .expect("should succeed");
         let results = store.search("ns", &[1.0_f32, 0.0], 2);
         // "a" should score higher than "b"
         assert_eq!(results[0].id, "a");
@@ -710,8 +785,12 @@ mod tests {
     #[test]
     fn test_upsert_returns_new_flag_consistently() {
         let mut store = VectorStore::new();
-        let r1 = store.upsert(entry("e", "ns", vec![1.0])).unwrap();
-        let r2 = store.upsert(entry("e", "ns", vec![2.0])).unwrap();
+        let r1 = store
+            .upsert(entry("e", "ns", vec![1.0]))
+            .expect("should succeed");
+        let r2 = store
+            .upsert(entry("e", "ns", vec![2.0]))
+            .expect("should succeed");
         assert!(r1); // new
         assert!(!r2); // update
     }
@@ -722,7 +801,7 @@ mod tests {
         for i in 0..5 {
             store
                 .upsert(entry(&i.to_string(), &format!("ns{i}"), vec![i as f32]))
-                .unwrap();
+                .expect("should succeed");
         }
         assert_eq!(store.stats().total_vectors, 5);
     }
@@ -730,16 +809,22 @@ mod tests {
     #[test]
     fn test_get_after_update_returns_new_vector() {
         let mut store = VectorStore::new();
-        store.upsert(entry("e", "ns", vec![1.0, 0.0])).unwrap();
-        store.upsert(entry("e", "ns", vec![0.0, 1.0])).unwrap();
-        let got = store.get("ns", "e").unwrap();
+        store
+            .upsert(entry("e", "ns", vec![1.0, 0.0]))
+            .expect("should succeed");
+        store
+            .upsert(entry("e", "ns", vec![0.0, 1.0]))
+            .expect("should succeed");
+        let got = store.get("ns", "e").expect("should succeed");
         assert_eq!(got.vector, vec![0.0_f32, 1.0]);
     }
 
     #[test]
     fn test_search_zero_top_k() {
         let mut store = VectorStore::new();
-        store.upsert(entry("a", "ns", vec![1.0_f32])).unwrap();
+        store
+            .upsert(entry("a", "ns", vec![1.0_f32]))
+            .expect("should succeed");
         let results = store.search("ns", &[1.0_f32], 0);
         assert!(results.is_empty());
     }

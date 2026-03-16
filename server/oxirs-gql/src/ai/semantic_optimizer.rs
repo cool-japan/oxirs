@@ -278,7 +278,7 @@ mod tests {
         let optimizer = SemanticQueryOptimizer::new();
         let query = "query { users { id name } }".to_string();
 
-        let result = optimizer.optimize(query).await.unwrap();
+        let result = optimizer.optimize(query).await.expect("should succeed");
         assert!(!result.optimized.is_empty());
     }
 
@@ -292,7 +292,7 @@ mod tests {
             impact: 0.5,
         };
 
-        optimizer.add_rule(rule).await.unwrap();
+        optimizer.add_rule(rule).await.expect("should succeed");
     }
 
     #[tokio::test]
@@ -301,7 +301,7 @@ mod tests {
         optimizer
             .add_semantic_equivalence("pattern1".to_string(), "pattern2".to_string())
             .await
-            .unwrap();
+            .expect("should succeed");
     }
 
     #[test]

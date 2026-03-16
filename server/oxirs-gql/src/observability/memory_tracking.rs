@@ -560,12 +560,15 @@ mod tests {
         tracker
             .start_tracking("query-1".to_string(), Some("GetUser".to_string()))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let snapshot = tracker.get_snapshot("query-1").await;
         assert!(snapshot.is_some());
 
-        let allocation = tracker.stop_tracking("query-1").await.unwrap();
+        let allocation = tracker
+            .stop_tracking("query-1")
+            .await
+            .expect("should succeed");
         assert_eq!(allocation.query_id, "query-1");
 
         let snapshot = tracker.get_snapshot("query-1").await;
@@ -579,12 +582,21 @@ mod tests {
         tracker
             .start_tracking("query-1".to_string(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        tracker.record_allocation("query-1", 500).await.unwrap();
-        tracker.record_allocation("query-1", 300).await.unwrap();
+        tracker
+            .record_allocation("query-1", 500)
+            .await
+            .expect("should succeed");
+        tracker
+            .record_allocation("query-1", 300)
+            .await
+            .expect("should succeed");
 
-        let snapshot = tracker.get_snapshot("query-1").await.unwrap();
+        let snapshot = tracker
+            .get_snapshot("query-1")
+            .await
+            .expect("should succeed");
         assert_eq!(snapshot.allocation_count, 2);
         assert_eq!(snapshot.total_allocated, 800);
     }
@@ -596,12 +608,21 @@ mod tests {
         tracker
             .start_tracking("query-1".to_string(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        tracker.record_allocation("query-1", 500).await.unwrap();
-        tracker.record_deallocation("query-1", 200).await.unwrap();
+        tracker
+            .record_allocation("query-1", 500)
+            .await
+            .expect("should succeed");
+        tracker
+            .record_deallocation("query-1", 200)
+            .await
+            .expect("should succeed");
 
-        let snapshot = tracker.get_snapshot("query-1").await.unwrap();
+        let snapshot = tracker
+            .get_snapshot("query-1")
+            .await
+            .expect("should succeed");
         assert_eq!(snapshot.deallocation_count, 1);
         assert_eq!(snapshot.total_deallocated, 200);
     }
@@ -613,9 +634,15 @@ mod tests {
         tracker
             .start_tracking("query-1".to_string(), None)
             .await
-            .unwrap();
-        tracker.record_allocation("query-1", 500).await.unwrap();
-        tracker.stop_tracking("query-1").await.unwrap();
+            .expect("should succeed");
+        tracker
+            .record_allocation("query-1", 500)
+            .await
+            .expect("should succeed");
+        tracker
+            .stop_tracking("query-1")
+            .await
+            .expect("should succeed");
 
         let completed = tracker.get_completed_allocations().await;
         assert_eq!(completed.len(), 1);
@@ -629,16 +656,28 @@ mod tests {
         tracker
             .start_tracking("query-1".to_string(), Some("GetUser".to_string()))
             .await
-            .unwrap();
-        tracker.record_allocation("query-1", 500).await.unwrap();
-        tracker.stop_tracking("query-1").await.unwrap();
+            .expect("should succeed");
+        tracker
+            .record_allocation("query-1", 500)
+            .await
+            .expect("should succeed");
+        tracker
+            .stop_tracking("query-1")
+            .await
+            .expect("should succeed");
 
         tracker
             .start_tracking("query-2".to_string(), Some("GetPosts".to_string()))
             .await
-            .unwrap();
-        tracker.record_allocation("query-2", 300).await.unwrap();
-        tracker.stop_tracking("query-2").await.unwrap();
+            .expect("should succeed");
+        tracker
+            .record_allocation("query-2", 300)
+            .await
+            .expect("should succeed");
+        tracker
+            .stop_tracking("query-2")
+            .await
+            .expect("should succeed");
 
         let allocations = tracker.get_allocations_by_operation("GetUser").await;
         assert_eq!(allocations.len(), 1);
@@ -653,19 +692,37 @@ mod tests {
         tracker
             .start_tracking("query-1".to_string(), None)
             .await
-            .unwrap();
-        tracker.record_allocation("query-1", 1000).await.unwrap();
-        tracker.record_deallocation("query-1", 800).await.unwrap();
-        tracker.stop_tracking("query-1").await.unwrap();
+            .expect("should succeed");
+        tracker
+            .record_allocation("query-1", 1000)
+            .await
+            .expect("should succeed");
+        tracker
+            .record_deallocation("query-1", 800)
+            .await
+            .expect("should succeed");
+        tracker
+            .stop_tracking("query-1")
+            .await
+            .expect("should succeed");
 
         // Query without leak
         tracker
             .start_tracking("query-2".to_string(), None)
             .await
-            .unwrap();
-        tracker.record_allocation("query-2", 500).await.unwrap();
-        tracker.record_deallocation("query-2", 500).await.unwrap();
-        tracker.stop_tracking("query-2").await.unwrap();
+            .expect("should succeed");
+        tracker
+            .record_allocation("query-2", 500)
+            .await
+            .expect("should succeed");
+        tracker
+            .record_deallocation("query-2", 500)
+            .await
+            .expect("should succeed");
+        tracker
+            .stop_tracking("query-2")
+            .await
+            .expect("should succeed");
 
         let stats = tracker.get_leak_statistics().await;
         assert_eq!(stats.total_queries, 2);
@@ -681,23 +738,41 @@ mod tests {
         tracker
             .start_tracking("query-1".to_string(), None)
             .await
-            .unwrap();
-        tracker.record_allocation("query-1", 1000).await.unwrap();
-        tracker.stop_tracking("query-1").await.unwrap();
+            .expect("should succeed");
+        tracker
+            .record_allocation("query-1", 1000)
+            .await
+            .expect("should succeed");
+        tracker
+            .stop_tracking("query-1")
+            .await
+            .expect("should succeed");
 
         tracker
             .start_tracking("query-2".to_string(), None)
             .await
-            .unwrap();
-        tracker.record_allocation("query-2", 2000).await.unwrap();
-        tracker.stop_tracking("query-2").await.unwrap();
+            .expect("should succeed");
+        tracker
+            .record_allocation("query-2", 2000)
+            .await
+            .expect("should succeed");
+        tracker
+            .stop_tracking("query-2")
+            .await
+            .expect("should succeed");
 
         tracker
             .start_tracking("query-3".to_string(), None)
             .await
-            .unwrap();
-        tracker.record_allocation("query-3", 500).await.unwrap();
-        tracker.stop_tracking("query-3").await.unwrap();
+            .expect("should succeed");
+        tracker
+            .record_allocation("query-3", 500)
+            .await
+            .expect("should succeed");
+        tracker
+            .stop_tracking("query-3")
+            .await
+            .expect("should succeed");
 
         let top = tracker.get_top_consumers(2).await;
         assert_eq!(top.len(), 2);
@@ -736,14 +811,20 @@ mod tests {
         tracker
             .start_tracking("query-1".to_string(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
         tracker
             .start_tracking("query-2".to_string(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        tracker.record_allocation("query-1", 500).await.unwrap();
-        tracker.stop_tracking("query-1").await.unwrap();
+        tracker
+            .record_allocation("query-1", 500)
+            .await
+            .expect("should succeed");
+        tracker
+            .stop_tracking("query-1")
+            .await
+            .expect("should succeed");
 
         let stats = tracker.get_statistics().await;
         assert_eq!(stats.active_queries, 1); // query-2 still active

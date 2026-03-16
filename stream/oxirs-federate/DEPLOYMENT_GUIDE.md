@@ -1,6 +1,6 @@
 # OxiRS Federate - Deployment Guide
 
-**Version**: 0.2.1
+**Version**: 0.2.2
 **Last Updated**: 2026-03-05
 **Status**: Production-Ready
 
@@ -29,7 +29,7 @@ This comprehensive guide covers deploying oxirs-federate in production environme
 ```bash
 # 1. Add dependency to Cargo.toml
 [dependencies]
-oxirs-federate = { version = "0.2.1", features = ["default"] }
+oxirs-federate = { version = "0.2.2", features = ["default"] }
 
 # 2. Basic server setup
 use oxirs_federate::FederationEngine;
@@ -82,7 +82,7 @@ cargo build --release --all-features
 - **Network**: 10 Gbps
 - **OS**: Ubuntu 22.04 LTS (Kernel 5.15+)
 
-### Optional Accelerators (v0.2.1 Features)
+### Optional Accelerators (v0.2.2 Features)
 
 - **GPU**: NVIDIA (CUDA 11+), AMD (ROCm 5+), or Apple Silicon (Metal)
 - **GPU RAM**: 8+ GB VRAM for ML models
@@ -252,7 +252,7 @@ metrics_endpoint = "/metrics"
 otlp_endpoint = "http://localhost:4317"
 ```
 
-### Advanced Configuration (v0.2.1 Features)
+### Advanced Configuration (v0.2.2 Features)
 
 ```toml
 [gpu_acceleration]
@@ -519,7 +519,7 @@ curl http://localhost:8080/health
 
 # Readiness probe
 curl http://localhost:8080/ready
-# Response: {"ready": true, "version": "0.2.1-0.1.0"}
+# Response: {"ready": true, "version": "0.2.2-0.1.0"}
 ```
 
 ---
@@ -763,4 +763,4 @@ For production support inquiries:
 ---
 
 **Last Updated**: 2026-01-06
-**Version**: 0.2.1-0.1.0
+**Version**: 0.2.2-0.1.0

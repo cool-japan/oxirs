@@ -412,79 +412,84 @@ mod tests {
     }
 
     #[test]
-    fn test_compression_mode_none() {
+    fn test_compression_mode_none() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::None);
         let rules = vec![
             create_test_rule("rule1", 2, 1),
             create_test_rule("rule2", 3, 2),
         ];
 
-        let compressed = compressor.compress(&rules).unwrap();
+        let compressed = compressor.compress(&rules)?;
         assert_eq!(compressed.mode, CompressionMode::None);
         assert_eq!(compressed.rule_count, 2);
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed)?;
         assert_eq!(decompressed.len(), 2);
         assert_eq!(decompressed[0].name, "rule1");
         assert_eq!(decompressed[1].name, "rule2");
+        Ok(())
     }
 
     #[test]
-    fn test_compression_mode_fast() {
+    fn test_compression_mode_fast() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Fast);
         let rules: Vec<_> = (0..10)
             .map(|i| create_test_rule(&format!("rule{}", i), 2, 1))
             .collect();
 
-        let compressed = compressor.compress(&rules).unwrap();
+        let compressed = compressor.compress(&rules)?;
         assert_eq!(compressed.mode, CompressionMode::Fast);
         assert!(compressed.compression_ratio() <= 1.0);
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed)?;
         assert_eq!(decompressed.len(), 10);
+        Ok(())
     }
 
     #[test]
-    fn test_compression_mode_balanced() {
+    fn test_compression_mode_balanced() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Balanced);
         let rules: Vec<_> = (0..20)
             .map(|i| create_test_rule(&format!("rule{}", i), 3, 2))
             .collect();
 
-        let compressed = compressor.compress(&rules).unwrap();
+        let compressed = compressor.compress(&rules)?;
         assert_eq!(compressed.mode, CompressionMode::Balanced);
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed)?;
         assert_eq!(decompressed.len(), 20);
+        Ok(())
     }
 
     #[test]
-    fn test_compression_mode_best() {
+    fn test_compression_mode_best() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Best);
         let rules: Vec<_> = (0..15)
             .map(|i| create_test_rule(&format!("rule{}", i), 2, 1))
             .collect();
 
-        let compressed = compressor.compress(&rules).unwrap();
+        let compressed = compressor.compress(&rules)?;
         assert_eq!(compressed.mode, CompressionMode::Best);
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed)?;
         assert_eq!(decompressed.len(), 15);
+        Ok(())
     }
 
     #[test]
-    fn test_compression_mode_adaptive() {
+    fn test_compression_mode_adaptive() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Adaptive);
         let rules: Vec<_> = (0..5)
             .map(|i| create_test_rule(&format!("rule{}", i), 3, 2))
             .collect();
 
-        let compressed = compressor.compress(&rules).unwrap();
+        let compressed = compressor.compress(&rules)?;
         // Adaptive should select one of the concrete modes
         assert_ne!(compressed.mode, CompressionMode::Adaptive);
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed)?;
         assert_eq!(decompressed.len(), 5);
+        Ok(())
     }
 
     #[test]
@@ -504,80 +509,86 @@ mod tests {
     }
 
     #[test]
-    fn test_lz4_style_compression() {
+    fn test_lz4_style_compression() -> Result<(), Box<dyn std::error::Error>> {
         let compressor = RuleCompressor::new(CompressionMode::Fast);
 
         // Data with repetition
         let data = b"abcabcabcabc";
-        let compressed = compressor.lz4_style_compress(data).unwrap();
-        let decompressed = compressor.lz4_style_decompress(&compressed).unwrap();
+        let compressed = compressor.lz4_style_compress(data)?;
+        let decompressed = compressor.lz4_style_decompress(&compressed)?;
 
         assert_eq!(&decompressed, data);
+        Ok(())
     }
 
     #[test]
-    fn test_deflate_compression() {
+    fn test_deflate_compression() -> Result<(), Box<dyn std::error::Error>> {
         let compressor = RuleCompressor::new(CompressionMode::Best);
 
         // Data with runs
         let data = b"aaaabbbbccccdddd";
-        let compressed = compressor.deflate_compress(data).unwrap();
-        let decompressed = compressor.deflate_decompress(&compressed).unwrap();
+        let compressed = compressor.deflate_compress(data)?;
+        let decompressed = compressor.deflate_decompress(&compressed)?;
 
         assert_eq!(&decompressed, data);
+        Ok(())
     }
 
     #[test]
-    fn test_find_match() {
+    fn test_find_match() -> Result<(), Box<dyn std::error::Error>> {
         let compressor = RuleCompressor::new(CompressionMode::Fast);
         let data = b"abcdefabcdef";
 
         let match_result = compressor.find_match(data, 6);
         assert!(match_result.is_some());
 
-        let (match_pos, match_len) = match_result.unwrap();
+        let (match_pos, match_len) = match_result.ok_or("expected Some value")?;
         assert_eq!(match_pos, 0);
         assert_eq!(match_len, 6);
+        Ok(())
     }
 
     #[test]
-    fn test_empty_rule_set() {
+    fn test_empty_rule_set() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Fast);
         let rules: Vec<Rule> = vec![];
 
-        let compressed = compressor.compress(&rules).unwrap();
+        let compressed = compressor.compress(&rules)?;
         assert_eq!(compressed.rule_count, 0);
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed)?;
         assert_eq!(decompressed.len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_single_rule() {
+    fn test_single_rule() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Balanced);
         let rules = vec![create_test_rule("single", 1, 1)];
 
-        let compressed = compressor.compress(&rules).unwrap();
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let compressed = compressor.compress(&rules)?;
+        let decompressed = compressor.decompress(&compressed)?;
 
         assert_eq!(decompressed.len(), 1);
         assert_eq!(decompressed[0].name, "single");
         assert_eq!(decompressed[0].body.len(), 1);
         assert_eq!(decompressed[0].head.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_large_rule_set() {
+    fn test_large_rule_set() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Fast);
         let rules: Vec<_> = (0..100)
             .map(|i| create_test_rule(&format!("rule{}", i), i % 5 + 1, 1))
             .collect();
 
-        let compressed = compressor.compress(&rules).unwrap();
+        let compressed = compressor.compress(&rules)?;
         assert_eq!(compressed.rule_count, 100);
 
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let decompressed = compressor.decompress(&compressed)?;
         assert_eq!(decompressed.len(), 100);
+        Ok(())
     }
 
     #[test]
@@ -622,40 +633,42 @@ mod tests {
     }
 
     #[test]
-    fn test_get_statistics() {
+    fn test_get_statistics() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Fast);
         let rules: Vec<_> = (0..5)
             .map(|i| create_test_rule(&format!("rule{}", i), 2, 1))
             .collect();
 
-        let _ = compressor.compress(&rules).unwrap();
+        let _ = compressor.compress(&rules)?;
 
         let stats = compressor.get_statistics();
         assert_eq!(stats.compressed_rules_count, 0); // Placeholder
+        Ok(())
     }
 
     #[test]
-    fn test_serialization_round_trip() {
+    fn test_serialization_round_trip() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Fast);
         let rules: Vec<_> = (0..10)
             .map(|i| create_test_rule(&format!("rule{}", i), 3, 2))
             .collect();
 
-        let compressed = compressor.compress(&rules).unwrap();
+        let compressed = compressor.compress(&rules)?;
 
         // Serialize and deserialize
-        let serialized = serde_json::to_string(&compressed).unwrap();
-        let deserialized: CompressedRuleSet = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&compressed)?;
+        let deserialized: CompressedRuleSet = serde_json::from_str(&serialized)?;
 
         assert_eq!(deserialized.rule_count, compressed.rule_count);
         assert_eq!(deserialized.mode, compressed.mode);
 
-        let decompressed = compressor.decompress(&deserialized).unwrap();
+        let decompressed = compressor.decompress(&deserialized)?;
         assert_eq!(decompressed.len(), 10);
+        Ok(())
     }
 
     #[test]
-    fn test_compression_with_different_atom_types() {
+    fn test_compression_with_different_atom_types() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Fast);
 
         let rules = vec![Rule {
@@ -681,27 +694,29 @@ mod tests {
             }],
         }];
 
-        let compressed = compressor.compress(&rules).unwrap();
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let compressed = compressor.compress(&rules)?;
+        let decompressed = compressor.decompress(&compressed)?;
 
         assert_eq!(decompressed.len(), 1);
         assert_eq!(decompressed[0].body.len(), 2);
         assert_eq!(decompressed[0].head.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_compression_preserves_rule_structure() {
+    fn test_compression_preserves_rule_structure() -> Result<(), Box<dyn std::error::Error>> {
         let mut compressor = RuleCompressor::new(CompressionMode::Balanced);
 
         let original_rule = create_test_rule("complex", 5, 3);
         let rules = vec![original_rule.clone()];
 
-        let compressed = compressor.compress(&rules).unwrap();
-        let decompressed = compressor.decompress(&compressed).unwrap();
+        let compressed = compressor.compress(&rules)?;
+        let decompressed = compressor.decompress(&compressed)?;
 
         assert_eq!(decompressed[0].name, original_rule.name);
         assert_eq!(decompressed[0].body.len(), original_rule.body.len());
         assert_eq!(decompressed[0].head.len(), original_rule.head.len());
+        Ok(())
     }
 
     #[test]

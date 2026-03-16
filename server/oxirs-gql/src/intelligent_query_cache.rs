@@ -1081,7 +1081,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_statistics() {
         let cache = IntelligentQueryCache::new(IntelligentCacheConfig::default());
-        let stats = cache.get_statistics().await.unwrap();
+        let stats = cache.get_statistics().await.expect("should succeed");
 
         assert!(stats.contains_key("cache_size"));
         assert!(stats.contains_key("pattern_history_size"));

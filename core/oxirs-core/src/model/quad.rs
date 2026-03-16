@@ -377,10 +377,10 @@ mod tests {
 
     #[test]
     fn test_quad_creation() {
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("object");
-        let graph = NamedNode::new("http://example.org/graph").unwrap();
+        let graph = NamedNode::new("http://example.org/graph").expect("valid IRI");
 
         let quad = Quad::new(
             subject.clone(),
@@ -396,8 +396,8 @@ mod tests {
 
     #[test]
     fn test_quad_default_graph() {
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("object");
 
         let quad = Quad::new_default_graph(subject, predicate, object);
@@ -408,8 +408,8 @@ mod tests {
 
     #[test]
     fn test_quad_from_triple() {
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("object");
 
         let triple = Triple::new(subject.clone(), predicate.clone(), object.clone());
@@ -423,10 +423,10 @@ mod tests {
 
     #[test]
     fn test_quad_with_variable() {
-        let subject = Variable::new("x").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = Variable::new("x").expect("valid variable name");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("object");
-        let graph = Variable::new("g").unwrap();
+        let graph = Variable::new("g").expect("valid variable name");
 
         let quad = Quad::new(subject, predicate, object, graph);
 
@@ -436,10 +436,10 @@ mod tests {
 
     #[test]
     fn test_quad_ref() {
-        let subject = NamedNode::new("http://example.org/s").unwrap();
-        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let subject = NamedNode::new("http://example.org/s").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/p").expect("valid IRI");
         let object = Literal::new("o");
-        let graph = NamedNode::new("http://example.org/g").unwrap();
+        let graph = NamedNode::new("http://example.org/g").expect("valid IRI");
 
         let quad = Quad::new(subject, predicate, object, graph);
         let quad_ref = QuadRef::from(&quad);

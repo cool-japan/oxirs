@@ -468,11 +468,11 @@ mod tests {
             ..Default::default()
         };
 
-        let linker = EntityLinker::new(config, embeddings).unwrap();
+        let linker = EntityLinker::new(config, embeddings).expect("should succeed");
 
         // Query similar to entity1
         let query = array![0.9, 0.1, 0.0];
-        let results = linker.link_entity(&query, None).unwrap();
+        let results = linker.link_entity(&query, None).expect("should succeed");
 
         assert!(!results.is_empty());
         assert_eq!(results[0].entity_id, "entity1");
@@ -500,11 +500,13 @@ mod tests {
         embeddings.insert("entity2".to_string(), array![0.0, 1.0, 0.0]);
 
         let config = EntityLinkerConfig::default();
-        let linker = EntityLinker::new(config, embeddings).unwrap();
+        let linker = EntityLinker::new(config, embeddings).expect("should succeed");
 
         let queries = vec![array![0.9, 0.1, 0.0], array![0.1, 0.9, 0.0]];
 
-        let results = linker.link_entities_batch(&queries).unwrap();
+        let results = linker
+            .link_entities_batch(&queries)
+            .expect("should succeed");
         assert_eq!(results.len(), 2);
     }
 }

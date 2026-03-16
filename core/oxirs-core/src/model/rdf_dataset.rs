@@ -413,7 +413,7 @@ mod tests {
         let mut ds = RdfDataset::new();
         ds.add_graph(Some("http://example.org/g1".into()));
         {
-            let g = ds.get_graph_mut(Some("http://example.org/g1")).unwrap();
+            let g = ds.get_graph_mut(Some("http://example.org/g1")).expect("graph should exist");
             g.add("s".into(), "p".into(), "o".into());
         }
         assert_eq!(ds.triple_count_in(Some("http://example.org/g1")), 1);

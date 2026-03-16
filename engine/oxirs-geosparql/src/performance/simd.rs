@@ -20,11 +20,11 @@
 //! let p2 = Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0)));
 //!
 //! // SIMD-optimized Euclidean distance
-//! let dist = euclidean_distance(&p1, &p2).unwrap();
+//! let dist = euclidean_distance(&p1, &p2).expect("should succeed");
 //! assert!((dist - 5.0).abs() < 1e-10);
 //!
 //! // SIMD-optimized squared distance (faster, no sqrt)
-//! let dist_sq = euclidean_distance_squared(&p1, &p2).unwrap();
+//! let dist_sq = euclidean_distance_squared(&p1, &p2).expect("should succeed");
 //! assert!((dist_sq - 25.0).abs() < 1e-10);
 //! ```
 
@@ -58,7 +58,7 @@ use crate::geometry::Geometry;
 /// let p1 = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
 /// let p2 = Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0)));
 ///
-/// let distance = euclidean_distance(&p1, &p2).unwrap();
+/// let distance = euclidean_distance(&p1, &p2).expect("should succeed");
 /// assert!((distance - 5.0).abs() < 1e-10);
 /// ```
 pub fn euclidean_distance(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
@@ -93,7 +93,7 @@ pub fn euclidean_distance(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
 /// let p1 = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
 /// let p2 = Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0)));
 ///
-/// let dist_sq = euclidean_distance_squared(&p1, &p2).unwrap();
+/// let dist_sq = euclidean_distance_squared(&p1, &p2).expect("should succeed");
 /// assert!((dist_sq - 25.0).abs() < 1e-10);
 /// ```
 pub fn euclidean_distance_squared(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
@@ -131,7 +131,7 @@ pub fn euclidean_distance_squared(geom1: &Geometry, geom2: &Geometry) -> Result<
 ///     Geometry::new(GeoGeometry::Point(Point::new(1.0, 1.0))),
 /// ];
 ///
-/// let distances = batch_euclidean_distance(&query, &targets).unwrap();
+/// let distances = batch_euclidean_distance(&query, &targets).expect("should succeed");
 /// assert_eq!(distances.len(), 3);
 /// assert!((distances[0] - 1.0).abs() < 1e-10);
 /// ```
@@ -188,7 +188,7 @@ pub fn batch_euclidean_distance(query: &Geometry, targets: &[Geometry]) -> Resul
 ///     Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0))),
 /// ];
 ///
-/// let distances = pairwise_euclidean_distance(&set1, &set2).unwrap();
+/// let distances = pairwise_euclidean_distance(&set1, &set2).expect("should succeed");
 /// assert_eq!(distances.len(), 2);
 /// ```
 pub fn pairwise_euclidean_distance(set1: &[Geometry], set2: &[Geometry]) -> Result<Vec<f64>> {
@@ -330,7 +330,7 @@ mod tests {
         let p1 = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
         let p2 = Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0)));
 
-        let distance = euclidean_distance(&p1, &p2).unwrap();
+        let distance = euclidean_distance(&p1, &p2).expect("should succeed");
         assert!((distance - 5.0).abs() < 1e-10);
     }
 
@@ -339,7 +339,7 @@ mod tests {
         let p1 = Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0)));
         let p2 = Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0)));
 
-        let dist_sq = euclidean_distance_squared(&p1, &p2).unwrap();
+        let dist_sq = euclidean_distance_squared(&p1, &p2).expect("should succeed");
         assert!((dist_sq - 25.0).abs() < 1e-10);
     }
 
@@ -352,7 +352,7 @@ mod tests {
             Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0))),
         ];
 
-        let distances = batch_euclidean_distance(&query, &targets).unwrap();
+        let distances = batch_euclidean_distance(&query, &targets).expect("should succeed");
 
         assert_eq!(distances.len(), 3);
         assert!((distances[0] - 1.0).abs() < 1e-10);
@@ -372,7 +372,7 @@ mod tests {
             Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0))),
         ];
 
-        let distances = pairwise_euclidean_distance(&set1, &set2).unwrap();
+        let distances = pairwise_euclidean_distance(&set1, &set2).expect("should succeed");
 
         assert_eq!(distances.len(), 2);
         assert!((distances[0] - 1.0).abs() < 1e-10);
@@ -407,7 +407,7 @@ mod tests {
     fn test_extract_representative_point() {
         // Point geometry
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        let (x, y) = extract_representative_point(&point).unwrap();
+        let (x, y) = extract_representative_point(&point).expect("should succeed");
         assert!((x - 1.0).abs() < 1e-10);
         assert!((y - 2.0).abs() < 1e-10);
 
@@ -417,7 +417,7 @@ mod tests {
             Coord { x: 0.0, y: 0.0 },
             Coord { x: 2.0, y: 0.0 },
         ])));
-        let (x, y) = extract_representative_point(&ls).unwrap();
+        let (x, y) = extract_representative_point(&ls).expect("should succeed");
         assert!((x - 1.0).abs() < 1e-10);
         assert!((y - 0.0).abs() < 1e-10);
     }

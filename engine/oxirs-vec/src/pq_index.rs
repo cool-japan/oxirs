@@ -25,7 +25,7 @@
 //!     training_iterations: 5,
 //!     ..Default::default()
 //! };
-//! let mut pq = ProductQuantizationIndex::new(config).unwrap();
+//! let mut pq = ProductQuantizationIndex::new(config).expect("should succeed");
 //!
 //! // Train on some data
 //! let training_data = vec![
@@ -34,14 +34,14 @@
 //!     vec![8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
 //!     vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0],
 //! ];
-//! pq.train(&training_data).unwrap();
+//! pq.train(&training_data).expect("should succeed");
 //!
 //! // Add vectors
-//! pq.add(0, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).unwrap();
-//! pq.add(1, &[8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]).unwrap();
+//! pq.add(0, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).expect("should succeed");
+//! pq.add(1, &[8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]).expect("should succeed");
 //!
 //! // Search
-//! let results = pq.search(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 1).unwrap();
+//! let results = pq.search(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 1).expect("should succeed");
 //! assert_eq!(results[0].0, 0); // ID of closest vector
 //! ```
 

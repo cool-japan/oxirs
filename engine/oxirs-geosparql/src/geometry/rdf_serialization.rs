@@ -34,8 +34,8 @@
 //! use oxirs_geosparql::geometry::Geometry;
 //! use oxirs_geosparql::geometry::rdf_serialization::to_turtle;
 //!
-//! let point = Geometry::from_wkt("POINT(1.0 2.0)").unwrap();
-//! let turtle = to_turtle(&point, ":feature1_geometry").unwrap();
+//! let point = Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed");
+//! let turtle = to_turtle(&point, ":feature1_geometry").expect("should succeed");
 //!
 //! assert!(turtle.contains("geo:asWKT"));
 //! assert!(turtle.contains("POINT(1.0 2.0)"));
@@ -73,8 +73,8 @@ pub enum RdfFormat {
 /// use oxirs_geosparql::geometry::Geometry;
 /// use oxirs_geosparql::geometry::rdf_serialization::to_turtle;
 ///
-/// let point = Geometry::from_wkt("POINT(1.0 2.0)").unwrap();
-/// let turtle = to_turtle(&point, ":myPoint").unwrap();
+/// let point = Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed");
+/// let turtle = to_turtle(&point, ":myPoint").expect("should succeed");
 ///
 /// assert!(turtle.contains("geo:asWKT"));
 /// assert!(turtle.contains("sf:Point"));
@@ -304,7 +304,7 @@ fn geometry_type_to_sf_uri(geom: &Geometry) -> &'static str {
 /// ```rust,ignore
 /// use oxirs_geosparql::geometry::rdf_serialization::from_wkt_literal;
 ///
-/// let geom = from_wkt_literal("POINT(1.0 2.0)", None).unwrap();
+/// let geom = from_wkt_literal("POINT(1.0 2.0)", None).expect("should succeed");
 /// assert!(!geom.is_empty());
 /// ```
 pub fn from_wkt_literal(wkt_literal: &str, crs_uri: Option<String>) -> Result<Geometry> {
@@ -332,8 +332,8 @@ mod tests {
 
     #[test]
     fn test_to_turtle_point() {
-        let point = Geometry::from_wkt("POINT(1.0 2.0)").unwrap();
-        let turtle = to_turtle(&point, ":myPoint").unwrap();
+        let point = Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed");
+        let turtle = to_turtle(&point, ":myPoint").expect("should succeed");
 
         assert!(turtle.contains("@prefix geo:"));
         assert!(turtle.contains("@prefix sf:"));
@@ -349,8 +349,8 @@ mod tests {
 
     #[test]
     fn test_to_turtle_linestring() {
-        let line = Geometry::from_wkt("LINESTRING(0 0, 1 1, 2 2)").unwrap();
-        let turtle = to_turtle(&line, ":myLine").unwrap();
+        let line = Geometry::from_wkt("LINESTRING(0 0, 1 1, 2 2)").expect("should succeed");
+        let turtle = to_turtle(&line, ":myLine").expect("should succeed");
 
         assert!(turtle.contains("sf:LineString"));
         assert!(turtle.contains("LINESTRING(0 0, 1 1, 2 2)"));
@@ -359,8 +359,9 @@ mod tests {
 
     #[test]
     fn test_to_turtle_polygon() {
-        let poly = Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").unwrap();
-        let turtle = to_turtle(&poly, ":myPolygon").unwrap();
+        let poly =
+            Geometry::from_wkt("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))").expect("should succeed");
+        let turtle = to_turtle(&poly, ":myPolygon").expect("should succeed");
 
         assert!(turtle.contains("sf:Polygon"));
         assert!(turtle.contains("POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))"));
@@ -369,8 +370,8 @@ mod tests {
 
     #[test]
     fn test_to_ntriples_point() {
-        let point = Geometry::from_wkt("POINT(1.0 2.0)").unwrap();
-        let ntriples = to_ntriples(&point, "http://example.org/geometry1").unwrap();
+        let point = Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed");
+        let ntriples = to_ntriples(&point, "http://example.org/geometry1").expect("should succeed");
 
         assert!(ntriples.contains("<http://example.org/geometry1>"));
         assert!(ntriples.contains("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
@@ -385,13 +386,13 @@ mod tests {
 
     #[test]
     fn test_to_nquads() {
-        let point = Geometry::from_wkt("POINT(1.0 2.0)").unwrap();
+        let point = Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed");
         let nquads = to_nquads(
             &point,
             "http://example.org/geometry1",
             Some("http://example.org/graph1"),
         )
-        .unwrap();
+        .expect("should succeed");
 
         assert!(nquads.contains("<http://example.org/geometry1>"));
         assert!(nquads.contains("<http://example.org/graph1>"));
@@ -406,8 +407,9 @@ mod tests {
 
     #[test]
     fn test_to_nquads_default_graph() {
-        let point = Geometry::from_wkt("POINT(1.0 2.0)").unwrap();
-        let nquads = to_nquads(&point, "http://example.org/geometry1", None).unwrap();
+        let point = Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed");
+        let nquads =
+            to_nquads(&point, "http://example.org/geometry1", None).expect("should succeed");
 
         // Default graph - no graph URI at the end
         for line in nquads.lines().filter(|l| !l.is_empty()) {
@@ -417,7 +419,7 @@ mod tests {
 
     #[test]
     fn test_from_wkt_literal() {
-        let geom = from_wkt_literal("POINT(1.0 2.0)", None).unwrap();
+        let geom = from_wkt_literal("POINT(1.0 2.0)", None).expect("should succeed");
         assert!(!geom.is_empty());
         assert_eq!(geom.spatial_dimension(), 0); // Point dimension
     }
@@ -428,31 +430,33 @@ mod tests {
             "POINT(1.0 2.0)",
             Some("http://www.opengis.net/def/crs/EPSG/0/4326".to_string()),
         )
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(geom.crs.uri, "http://www.opengis.net/def/crs/EPSG/0/4326");
     }
 
     #[test]
     fn test_to_rdf_formats() {
-        let point = Geometry::from_wkt("POINT(1.0 2.0)").unwrap();
+        let point = Geometry::from_wkt("POINT(1.0 2.0)").expect("should succeed");
 
         // Test Turtle format
-        let turtle = to_rdf(&point, ":myPoint", RdfFormat::Turtle).unwrap();
+        let turtle = to_rdf(&point, ":myPoint", RdfFormat::Turtle).expect("should succeed");
         assert!(turtle.contains("@prefix geo:"));
 
         // Test N-Triples format
-        let ntriples = to_rdf(&point, "http://example.org/geom1", RdfFormat::NTriples).unwrap();
+        let ntriples = to_rdf(&point, "http://example.org/geom1", RdfFormat::NTriples)
+            .expect("should succeed");
         assert!(ntriples.contains("<http://example.org/geom1>"));
 
         // Test N-Quads format
-        let nquads = to_rdf(&point, "http://example.org/geom1", RdfFormat::NQuads).unwrap();
+        let nquads =
+            to_rdf(&point, "http://example.org/geom1", RdfFormat::NQuads).expect("should succeed");
         assert!(nquads.contains("<http://example.org/geom1>"));
     }
 
     #[test]
     fn test_multipoint_serialization() {
-        let mp = Geometry::from_wkt("MULTIPOINT((1 1), (2 2), (3 3))").unwrap();
-        let turtle = to_turtle(&mp, ":myMultiPoint").unwrap();
+        let mp = Geometry::from_wkt("MULTIPOINT((1 1), (2 2), (3 3))").expect("should succeed");
+        let turtle = to_turtle(&mp, ":myMultiPoint").expect("should succeed");
 
         assert!(turtle.contains("sf:MultiPoint"));
         assert!(turtle.contains("MULTIPOINT((1 1), (2 2), (3 3))"));
@@ -463,8 +467,8 @@ mod tests {
         let mp = Geometry::from_wkt(
             "MULTIPOLYGON(((0 0, 1 0, 1 1, 0 1, 0 0)), ((2 2, 3 2, 3 3, 2 3, 2 2)))",
         )
-        .unwrap();
-        let turtle = to_turtle(&mp, ":myMultiPoly").unwrap();
+        .expect("should succeed");
+        let turtle = to_turtle(&mp, ":myMultiPoly").expect("should succeed");
 
         assert!(turtle.contains("sf:MultiPolygon"));
         assert!(turtle.contains("geo:dimension 2"));
@@ -472,15 +476,17 @@ mod tests {
 
     #[test]
     fn test_round_trip() {
-        let original = Geometry::from_wkt("LINESTRING(0 0, 1 1, 2 2)").unwrap();
-        let turtle = to_turtle(&original, ":myLine").unwrap();
+        let original = Geometry::from_wkt("LINESTRING(0 0, 1 1, 2 2)").expect("should succeed");
+        let turtle = to_turtle(&original, ":myLine").expect("should succeed");
 
         // Extract WKT from turtle (simple parsing for test)
-        let wkt_start = turtle.find("geo:asWKT \"").unwrap() + 11;
-        let wkt_end = turtle[wkt_start..].find("\"^^geo:wktLiteral").unwrap();
+        let wkt_start = turtle.find("geo:asWKT \"").expect("should succeed") + 11;
+        let wkt_end = turtle[wkt_start..]
+            .find("\"^^geo:wktLiteral")
+            .expect("should succeed");
         let wkt = &turtle[wkt_start..wkt_start + wkt_end];
 
-        let parsed = from_wkt_literal(wkt, None).unwrap();
+        let parsed = from_wkt_literal(wkt, None).expect("should succeed");
         assert_eq!(original.to_wkt(), parsed.to_wkt());
     }
 }

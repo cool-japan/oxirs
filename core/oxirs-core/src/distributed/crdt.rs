@@ -821,40 +821,54 @@ mod tests {
             delta_config: DeltaConfig::default(),
         };
 
-        let mut crdt = RdfCrdt::new(config).await.unwrap();
+        let mut crdt = RdfCrdt::new(config)
+            .await
+            .expect("async operation should succeed");
 
         // Add triples
         let triple1 = Triple::new(
-            NamedNode::new("http://example.org/s1").unwrap(),
-            NamedNode::new("http://example.org/p1").unwrap(),
+            NamedNode::new("http://example.org/s1").expect("valid IRI"),
+            NamedNode::new("http://example.org/p1").expect("valid IRI"),
             Object::Literal(Literal::new("value1")),
         );
 
         let triple2 = Triple::new(
-            NamedNode::new("http://example.org/s1").unwrap(),
-            NamedNode::new("http://example.org/p2").unwrap(),
+            NamedNode::new("http://example.org/s1").expect("valid IRI"),
+            NamedNode::new("http://example.org/p2").expect("valid IRI"),
             Object::Literal(Literal::new("value2")),
         );
 
-        crdt.add_triple(triple1.clone()).await.unwrap();
-        crdt.add_triple(triple2.clone()).await.unwrap();
+        crdt.add_triple(triple1.clone())
+            .await
+            .expect("async operation should succeed");
+        crdt.add_triple(triple2.clone())
+            .await
+            .expect("async operation should succeed");
 
         // Query by subject
         let pattern = TriplePattern::new(
             Some(crate::model::SubjectPattern::NamedNode(
-                NamedNode::new("http://example.org/s1").unwrap(),
+                NamedNode::new("http://example.org/s1").expect("valid IRI"),
             )),
             None,
             None,
         );
 
-        let results = crdt.query(&pattern).await.unwrap();
+        let results = crdt
+            .query(&pattern)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(results.len(), 2);
 
         // Remove triple
-        crdt.remove_triple(&triple1).await.unwrap();
+        crdt.remove_triple(&triple1)
+            .await
+            .expect("async operation should succeed");
 
-        let results = crdt.query(&pattern).await.unwrap();
+        let results = crdt
+            .query(&pattern)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], triple2);
     }
@@ -875,31 +889,47 @@ mod tests {
             delta_config: DeltaConfig::default(),
         };
 
-        let mut crdt1 = RdfCrdt::new(config1).await.unwrap();
-        let mut crdt2 = RdfCrdt::new(config2).await.unwrap();
+        let mut crdt1 = RdfCrdt::new(config1)
+            .await
+            .expect("async operation should succeed");
+        let mut crdt2 = RdfCrdt::new(config2)
+            .await
+            .expect("async operation should succeed");
 
         // Add different triples to each
         let triple1 = Triple::new(
-            NamedNode::new("http://example.org/s1").unwrap(),
-            NamedNode::new("http://example.org/p1").unwrap(),
+            NamedNode::new("http://example.org/s1").expect("valid IRI"),
+            NamedNode::new("http://example.org/p1").expect("valid IRI"),
             Object::Literal(Literal::new("value1")),
         );
 
         let triple2 = Triple::new(
-            NamedNode::new("http://example.org/s2").unwrap(),
-            NamedNode::new("http://example.org/p2").unwrap(),
+            NamedNode::new("http://example.org/s2").expect("valid IRI"),
+            NamedNode::new("http://example.org/p2").expect("valid IRI"),
             Object::Literal(Literal::new("value2")),
         );
 
-        crdt1.add_triple(triple1.clone()).await.unwrap();
-        crdt2.add_triple(triple2.clone()).await.unwrap();
+        crdt1
+            .add_triple(triple1.clone())
+            .await
+            .expect("async operation should succeed");
+        crdt2
+            .add_triple(triple2.clone())
+            .await
+            .expect("async operation should succeed");
 
         // Merge
-        crdt1.merge(&crdt2).await.unwrap();
+        crdt1
+            .merge(&crdt2)
+            .await
+            .expect("async operation should succeed");
 
         // Both triples should be in crdt1
         let pattern = TriplePattern::new(None, None, None);
-        let results = crdt1.query(&pattern).await.unwrap();
+        let results = crdt1
+            .query(&pattern)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(results.len(), 2);
     }
 }

@@ -270,11 +270,11 @@ mod tests {
         let a = Integer::from(10);
         let b = Integer::from(3);
 
-        assert_eq!(a.checked_add(b).unwrap(), Integer::from(13));
-        assert_eq!(a.checked_sub(b).unwrap(), Integer::from(7));
-        assert_eq!(a.checked_mul(b).unwrap(), Integer::from(30));
-        assert_eq!(a.checked_div(b).unwrap(), Integer::from(3));
-        assert_eq!(a.checked_rem(b).unwrap(), Integer::from(1));
+        assert_eq!(a.checked_add(b).expect("operation should succeed"), Integer::from(13));
+        assert_eq!(a.checked_sub(b).expect("operation should succeed"), Integer::from(7));
+        assert_eq!(a.checked_mul(b).expect("operation should succeed"), Integer::from(30));
+        assert_eq!(a.checked_div(b).expect("operation should succeed"), Integer::from(3));
+        assert_eq!(a.checked_rem(b).expect("operation should succeed"), Integer::from(1));
     }
 
     #[test]

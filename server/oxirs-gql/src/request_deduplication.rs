@@ -143,7 +143,7 @@ mod tests {
         }
 
         for handle in handles {
-            let _ = handle.await.unwrap();
+            let _ = handle.await.expect("should succeed");
         }
 
         // Counter should be 1 because all requests were coalesced

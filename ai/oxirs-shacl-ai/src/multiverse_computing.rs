@@ -1003,7 +1003,7 @@ mod tests {
         let result = engine.process_multiverse_validation("test query", Some(10)).await;
         assert!(result.is_ok());
         
-        let validation_result = result.unwrap();
+        let validation_result = result.expect("should succeed");
         assert_eq!(validation_result.universes_processed, 10);
         assert!(validation_result.confidence >= 0.0 && validation_result.confidence <= 1.0);
     }
@@ -1011,8 +1011,8 @@ mod tests {
     #[test]
     fn test_universe_generation() {
         let engine = MultiverseComputingEngine::new();
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let universes = rt.block_on(engine.generate_universes(5)).unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("should succeed");
+        let universes = rt.block_on(engine.generate_universes(5)).expect("should succeed");
         assert_eq!(universes.len(), 5);
         
         // Verify each universe has unique ID

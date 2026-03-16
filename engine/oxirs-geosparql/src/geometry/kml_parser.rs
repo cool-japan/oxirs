@@ -32,7 +32,7 @@ use std::io::Cursor;
 ///   </Point>
 /// "#;
 ///
-/// let geometry = parse_kml(kml).unwrap();
+/// let geometry = parse_kml(kml).expect("should succeed");
 /// # }
 /// ```
 #[cfg(feature = "kml-support")]
@@ -296,7 +296,7 @@ fn parse_kml_polygon(
 ///
 /// let point = Point::new(-122.0822035425683, 37.42228990140251);
 /// let geometry = Geometry::new(GeoGeometry::Point(point));
-/// let kml = geometry_to_kml(&geometry).unwrap();
+/// let kml = geometry_to_kml(&geometry).expect("should succeed");
 /// # }
 /// ```
 #[cfg(feature = "kml-support")]
@@ -553,7 +553,7 @@ mod tests {
             </Point>
         "#;
 
-        let geometry = parse_kml(kml).unwrap();
+        let geometry = parse_kml(kml).expect("should succeed");
         match &geometry.geom {
             GeoGeometry::Point(point) => {
                 assert_relative_eq!(point.x(), -122.0822035425683, epsilon = 1e-9);
@@ -573,7 +573,7 @@ mod tests {
             </LineString>
         "#;
 
-        let geometry = parse_kml(kml).unwrap();
+        let geometry = parse_kml(kml).expect("should succeed");
         match &geometry.geom {
             GeoGeometry::LineString(linestring) => {
                 assert_eq!(linestring.coords().count(), 3);
@@ -596,7 +596,7 @@ mod tests {
             </Polygon>
         "#;
 
-        let geometry = parse_kml(kml).unwrap();
+        let geometry = parse_kml(kml).expect("should succeed");
         match &geometry.geom {
             GeoGeometry::Polygon(polygon) => {
                 assert_eq!(polygon.exterior().coords().count(), 5);
@@ -622,7 +622,7 @@ mod tests {
             </Polygon>
         "#;
 
-        let geometry = parse_kml(kml).unwrap();
+        let geometry = parse_kml(kml).expect("should succeed");
         match &geometry.geom {
             GeoGeometry::Polygon(polygon) => {
                 assert_eq!(polygon.exterior().coords().count(), 5);
@@ -637,7 +637,7 @@ mod tests {
     fn test_geometry_to_kml_point() {
         let point = Point::new(-122.0822035425683, 37.42228990140251);
         let geometry = Geometry::new(GeoGeometry::Point(point));
-        let kml = geometry_to_kml(&geometry).unwrap();
+        let kml = geometry_to_kml(&geometry).expect("should succeed");
 
         assert!(kml.contains("<Point>"));
         assert!(kml.contains("<coordinates>"));
@@ -652,7 +652,7 @@ mod tests {
             (-122.08244, 37.42292),
         ]);
         let geometry = Geometry::new(GeoGeometry::LineString(linestring));
-        let kml = geometry_to_kml(&geometry).unwrap();
+        let kml = geometry_to_kml(&geometry).expect("should succeed");
 
         assert!(kml.contains("<LineString>"));
         assert!(kml.contains("<coordinates>"));
@@ -671,7 +671,7 @@ mod tests {
             vec![],
         );
         let geometry = Geometry::new(GeoGeometry::Polygon(polygon));
-        let kml = geometry_to_kml(&geometry).unwrap();
+        let kml = geometry_to_kml(&geometry).expect("should succeed");
 
         assert!(kml.contains("<Polygon>"));
         assert!(kml.contains("<outerBoundaryIs>"));
@@ -682,8 +682,8 @@ mod tests {
     fn test_roundtrip_point() {
         let point = Point::new(-122.0822035425683, 37.42228990140251);
         let geometry = Geometry::new(GeoGeometry::Point(point));
-        let kml = geometry_to_kml(&geometry).unwrap();
-        let parsed = parse_kml(&kml).unwrap();
+        let kml = geometry_to_kml(&geometry).expect("should succeed");
+        let parsed = parse_kml(&kml).expect("should succeed");
 
         match &parsed.geom {
             GeoGeometry::Point(p) => {
@@ -702,8 +702,8 @@ mod tests {
             (-122.08244, 37.42292),
         ]);
         let geometry = Geometry::new(GeoGeometry::LineString(linestring.clone()));
-        let kml = geometry_to_kml(&geometry).unwrap();
-        let parsed = parse_kml(&kml).unwrap();
+        let kml = geometry_to_kml(&geometry).expect("should succeed");
+        let parsed = parse_kml(&kml).expect("should succeed");
 
         match &parsed.geom {
             GeoGeometry::LineString(ls) => {
@@ -726,8 +726,8 @@ mod tests {
             vec![],
         );
         let geometry = Geometry::new(GeoGeometry::Polygon(polygon.clone()));
-        let kml = geometry_to_kml(&geometry).unwrap();
-        let parsed = parse_kml(&kml).unwrap();
+        let kml = geometry_to_kml(&geometry).expect("should succeed");
+        let parsed = parse_kml(&kml).expect("should succeed");
 
         match &parsed.geom {
             GeoGeometry::Polygon(p) => {
@@ -749,7 +749,7 @@ mod tests {
             </MultiGeometry>
         "#;
 
-        let geometry = parse_kml(kml).unwrap();
+        let geometry = parse_kml(kml).expect("should succeed");
         match &geometry.geom {
             GeoGeometry::MultiPoint(mp) => {
                 assert_eq!(mp.0.len(), 2);
@@ -773,7 +773,7 @@ mod tests {
             </Point>
         "#;
 
-        let geometry = parse_kml(kml).unwrap();
+        let geometry = parse_kml(kml).expect("should succeed");
         // KML is always WGS84
         assert_eq!(
             geometry.crs.uri,

@@ -1,10 +1,10 @@
 # OxiRS Core
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Zero-dependency, Rust-native RDF data model and SPARQL engine for the OxiRS semantic web platform**
 
-**Status**: v0.2.1 - Released March 10, 2026
+**Status**: v0.2.2 - Released March 16, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -55,17 +55,17 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.2.1"
+oxirs-core = "0.2.2"
 
 # Optional: Enable async streaming support
-oxirs-core = { version = "0.2.1", features = ["async"] }
+oxirs-core = { version = "0.2.2", features = ["async"] }
 ```
 
 For maximum performance in production:
 
 ```toml
 [dependencies]
-oxirs-core = { version = "0.2.1", features = ["async"] }
+oxirs-core = { version = "0.2.2", features = ["async"] }
 
 [profile.release]
 lto = "fat"                    # Maximum link-time optimization
@@ -367,7 +367,7 @@ let solutions = executor.execute(&plan)?;
 - **Concurrent Throughput**: 10,000+ operations/second under load
 - **Scalability**: 100M+ triples with <8GB RAM (50% better than target)
 - **Parse Throughput**: 1M+ triples/second with async streaming
-- **Test Coverage**: 99.1% success rate (112/113 tests passing)
+- **Test Coverage**: 2,332 tests passing
 
 ### 📊 Detailed Performance Analysis
 
@@ -453,7 +453,7 @@ pipeline.execute().await?;
 ```bash
 cd core/oxirs-core
 cargo test --release
-# Current status: 112/113 tests passing (99.1% success rate)
+# Current status: 2,332 tests passing
 ```
 
 ### Performance Testing
@@ -543,7 +543,7 @@ Licensed under:
 - **Streaming Pipelines**: ✅ **Expanded** – Multi-format import/export/migrate with configurable parallel ingestion
 - **Federation Support**: ✅ **Integrated** – Core algebra updated for `SERVICE` clause execution and robust result merging
 - **Instrumentation**: ✅ **Hardened** – SciRS2 metrics, slow-query tracing, and structured logging wired through the execution engine
-- **Testing Depth**: 3,750+ unit/integration tests covering persistence, streaming, and federation paths
+- **Testing Depth**: 2,332 unit/integration tests covering persistence, streaming, and federation paths
 
 ### 🏆 Key Features
 - **Zero External Dependencies**: Complete RDF/SPARQL implementation without external crates
@@ -561,7 +561,7 @@ Licensed under:
 
 ### 🎯 Next Phase Priorities (Q1-Q2 2026)
 
-#### 🚀 Phase 2: v0.2.1 (Q1 2026)
+#### 🚀 Phase 2: v0.2.2 (Q1 2026)
 - **Query Optimization**: 10x performance improvements
 - **AI Production Hardening**: Production-ready AI features
 - **Multi-Region Clustering**: Distributed deployment support

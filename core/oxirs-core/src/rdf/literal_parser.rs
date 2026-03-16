@@ -760,22 +760,22 @@ mod tests {
 
     #[test]
     fn test_normalize_boolean_true() {
-        assert_eq!(LiteralParser::normalize_boolean("true").unwrap(), "true");
+        assert_eq!(LiteralParser::normalize_boolean("true").expect("normalization should succeed"), "true");
     }
 
     #[test]
     fn test_normalize_boolean_false() {
-        assert_eq!(LiteralParser::normalize_boolean("false").unwrap(), "false");
+        assert_eq!(LiteralParser::normalize_boolean("false").expect("normalization should succeed"), "false");
     }
 
     #[test]
     fn test_normalize_boolean_one() {
-        assert_eq!(LiteralParser::normalize_boolean("1").unwrap(), "true");
+        assert_eq!(LiteralParser::normalize_boolean("1").expect("normalization should succeed"), "true");
     }
 
     #[test]
     fn test_normalize_boolean_zero() {
-        assert_eq!(LiteralParser::normalize_boolean("0").unwrap(), "false");
+        assert_eq!(LiteralParser::normalize_boolean("0").expect("normalization should succeed"), "false");
     }
 
     #[test]
@@ -789,32 +789,32 @@ mod tests {
 
     #[test]
     fn test_normalize_integer_simple() {
-        assert_eq!(LiteralParser::normalize_integer("42").unwrap(), "42");
+        assert_eq!(LiteralParser::normalize_integer("42").expect("normalization should succeed"), "42");
     }
 
     #[test]
     fn test_normalize_integer_leading_zeros() {
-        assert_eq!(LiteralParser::normalize_integer("007").unwrap(), "7");
+        assert_eq!(LiteralParser::normalize_integer("007").expect("normalization should succeed"), "7");
     }
 
     #[test]
     fn test_normalize_integer_negative() {
-        assert_eq!(LiteralParser::normalize_integer("-5").unwrap(), "-5");
+        assert_eq!(LiteralParser::normalize_integer("-5").expect("normalization should succeed"), "-5");
     }
 
     #[test]
     fn test_normalize_integer_plus_sign() {
-        assert_eq!(LiteralParser::normalize_integer("+10").unwrap(), "10");
+        assert_eq!(LiteralParser::normalize_integer("+10").expect("normalization should succeed"), "10");
     }
 
     #[test]
     fn test_normalize_integer_zero() {
-        assert_eq!(LiteralParser::normalize_integer("0").unwrap(), "0");
+        assert_eq!(LiteralParser::normalize_integer("0").expect("normalization should succeed"), "0");
     }
 
     #[test]
     fn test_normalize_integer_negative_leading_zeros() {
-        assert_eq!(LiteralParser::normalize_integer("-007").unwrap(), "-7");
+        assert_eq!(LiteralParser::normalize_integer("-007").expect("normalization should succeed"), "-7");
     }
 
     #[test]
@@ -828,13 +828,13 @@ mod tests {
 
     #[test]
     fn test_normalize_decimal_simple() {
-        assert_eq!(LiteralParser::normalize_decimal("3.14").unwrap(), "3.14");
+        assert_eq!(LiteralParser::normalize_decimal("3.14").expect("normalization should succeed"), "3.14");
     }
 
     #[test]
     fn test_normalize_decimal_trailing_zeros() {
         assert_eq!(
-            LiteralParser::normalize_decimal("3.1400").unwrap(),
+            LiteralParser::normalize_decimal("3.1400").expect("normalization should succeed"),
             "3.14"
         );
     }
@@ -842,20 +842,20 @@ mod tests {
     #[test]
     fn test_normalize_decimal_leading_zeros() {
         assert_eq!(
-            LiteralParser::normalize_decimal("003.14").unwrap(),
+            LiteralParser::normalize_decimal("003.14").expect("normalization should succeed"),
             "3.14"
         );
     }
 
     #[test]
     fn test_normalize_decimal_zero() {
-        assert_eq!(LiteralParser::normalize_decimal("0.0").unwrap(), "0.0");
+        assert_eq!(LiteralParser::normalize_decimal("0.0").expect("normalization should succeed"), "0.0");
     }
 
     #[test]
     fn test_normalize_decimal_negative() {
         assert_eq!(
-            LiteralParser::normalize_decimal("-1.5").unwrap(),
+            LiteralParser::normalize_decimal("-1.5").expect("normalization should succeed"),
             "-1.5"
         );
     }
@@ -870,30 +870,30 @@ mod tests {
 
     #[test]
     fn test_normalize_double_simple() {
-        let result = LiteralParser::normalize_double("1.5E2").unwrap();
+        let result = LiteralParser::normalize_double("1.5E2").expect("normalization should succeed");
         // Should be scientific notation
         assert!(result.contains('E'));
     }
 
     #[test]
     fn test_normalize_double_plain() {
-        let result = LiteralParser::normalize_double("150.0").unwrap();
+        let result = LiteralParser::normalize_double("150.0").expect("normalization should succeed");
         assert!(result.contains('E') || result.contains('e') || result == "150");
     }
 
     #[test]
     fn test_normalize_double_nan() {
-        assert_eq!(LiteralParser::normalize_double("NaN").unwrap(), "NaN");
+        assert_eq!(LiteralParser::normalize_double("NaN").expect("normalization should succeed"), "NaN");
     }
 
     #[test]
     fn test_normalize_double_inf() {
-        assert_eq!(LiteralParser::normalize_double("inf").unwrap(), "INF");
+        assert_eq!(LiteralParser::normalize_double("inf").expect("normalization should succeed"), "INF");
     }
 
     #[test]
     fn test_normalize_double_negative_inf() {
-        assert_eq!(LiteralParser::normalize_double("-inf").unwrap(), "-INF");
+        assert_eq!(LiteralParser::normalize_double("-inf").expect("normalization should succeed"), "-INF");
     }
 
     #[test]
@@ -906,7 +906,7 @@ mod tests {
     #[test]
     fn test_normalize_date_valid() {
         assert_eq!(
-            LiteralParser::normalize_date("2024-01-15").unwrap(),
+            LiteralParser::normalize_date("2024-01-15").expect("normalization should succeed"),
             "2024-01-15"
         );
     }
@@ -914,7 +914,7 @@ mod tests {
     #[test]
     fn test_normalize_date_with_timezone_z() {
         assert_eq!(
-            LiteralParser::normalize_date("2024-01-15Z").unwrap(),
+            LiteralParser::normalize_date("2024-01-15Z").expect("normalization should succeed"),
             "2024-01-15Z"
         );
     }
@@ -948,25 +948,25 @@ mod tests {
 
     #[test]
     fn test_normalize_datetime_valid() {
-        let result = LiteralParser::normalize_datetime("2024-01-15T10:30:00").unwrap();
+        let result = LiteralParser::normalize_datetime("2024-01-15T10:30:00").expect("normalization should succeed");
         assert_eq!(result, "2024-01-15T10:30:00");
     }
 
     #[test]
     fn test_normalize_datetime_with_z() {
-        let result = LiteralParser::normalize_datetime("2024-01-15T10:30:00Z").unwrap();
+        let result = LiteralParser::normalize_datetime("2024-01-15T10:30:00Z").expect("normalization should succeed");
         assert_eq!(result, "2024-01-15T10:30:00Z");
     }
 
     #[test]
     fn test_normalize_datetime_with_offset() {
-        let result = LiteralParser::normalize_datetime("2024-01-15T10:30:00+09:00").unwrap();
+        let result = LiteralParser::normalize_datetime("2024-01-15T10:30:00+09:00").expect("normalization should succeed");
         assert_eq!(result, "2024-01-15T10:30:00+09:00");
     }
 
     #[test]
     fn test_normalize_datetime_with_fractional() {
-        let result = LiteralParser::normalize_datetime("2024-01-15T10:30:00.500Z").unwrap();
+        let result = LiteralParser::normalize_datetime("2024-01-15T10:30:00.500Z").expect("normalization should succeed");
         assert_eq!(result, "2024-01-15T10:30:00.500Z");
     }
 
@@ -990,7 +990,7 @@ mod tests {
     #[test]
     fn test_validate_hex_binary_valid() {
         assert_eq!(
-            LiteralParser::validate_hex_binary("deadbeef").unwrap(),
+            LiteralParser::validate_hex_binary("deadbeef").expect("construction should succeed"),
             "DEADBEEF"
         );
     }
@@ -998,14 +998,14 @@ mod tests {
     #[test]
     fn test_validate_hex_binary_uppercase() {
         assert_eq!(
-            LiteralParser::validate_hex_binary("DEADBEEF").unwrap(),
+            LiteralParser::validate_hex_binary("DEADBEEF").expect("construction should succeed"),
             "DEADBEEF"
         );
     }
 
     #[test]
     fn test_validate_hex_binary_empty() {
-        assert_eq!(LiteralParser::validate_hex_binary("").unwrap(), "");
+        assert_eq!(LiteralParser::validate_hex_binary("").expect("construction should succeed"), "");
     }
 
     #[test]
@@ -1084,7 +1084,7 @@ mod tests {
     fn test_parse_integer_with_iri() {
         let result = LiteralParser::parse("042", "http://www.w3.org/2001/XMLSchema#integer");
         assert!(result.is_ok());
-        let parsed = result.unwrap();
+        let parsed = result.expect("should have value");
         assert_eq!(parsed.normalized, "42");
         assert_eq!(parsed.datatype, XsdType::Integer);
     }
@@ -1100,7 +1100,7 @@ mod tests {
     fn test_parse_boolean_with_iri() {
         let result = LiteralParser::parse("1", "http://www.w3.org/2001/XMLSchema#boolean");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().normalized, "true");
+        assert_eq!(result.expect("should have value").normalized, "true");
     }
 
     // --- NonNegativeInteger and PositiveInteger ---
@@ -1108,7 +1108,7 @@ mod tests {
     #[test]
     fn test_normalize_nonnegative_integer_zero() {
         assert_eq!(
-            LiteralParser::normalize_non_negative_integer("0").unwrap(),
+            LiteralParser::normalize_non_negative_integer("0").expect("normalization should succeed"),
             "0"
         );
     }
@@ -1116,7 +1116,7 @@ mod tests {
     #[test]
     fn test_normalize_nonnegative_integer_positive() {
         assert_eq!(
-            LiteralParser::normalize_non_negative_integer("42").unwrap(),
+            LiteralParser::normalize_non_negative_integer("42").expect("normalization should succeed"),
             "42"
         );
     }
@@ -1129,7 +1129,7 @@ mod tests {
     #[test]
     fn test_normalize_positive_integer_one() {
         assert_eq!(
-            LiteralParser::normalize_positive_integer("1").unwrap(),
+            LiteralParser::normalize_positive_integer("1").expect("normalization should succeed"),
             "1"
         );
     }
@@ -1149,7 +1149,7 @@ mod tests {
     #[test]
     fn test_normalize_duration_years() {
         assert_eq!(
-            LiteralParser::normalize_duration("P1Y").unwrap(),
+            LiteralParser::normalize_duration("P1Y").expect("normalization should succeed"),
             "P1Y"
         );
     }
@@ -1157,7 +1157,7 @@ mod tests {
     #[test]
     fn test_normalize_duration_complex() {
         assert_eq!(
-            LiteralParser::normalize_duration("P1Y2M3DT4H5M6S").unwrap(),
+            LiteralParser::normalize_duration("P1Y2M3DT4H5M6S").expect("normalization should succeed"),
             "P1Y2M3DT4H5M6S"
         );
     }
@@ -1165,7 +1165,7 @@ mod tests {
     #[test]
     fn test_normalize_duration_negative() {
         assert_eq!(
-            LiteralParser::normalize_duration("-P1Y").unwrap(),
+            LiteralParser::normalize_duration("-P1Y").expect("normalization should succeed"),
             "-P1Y"
         );
     }

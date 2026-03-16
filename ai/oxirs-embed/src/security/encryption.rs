@@ -135,24 +135,24 @@ mod tests {
 
     #[test]
     fn test_encryption_decryption() {
-        let encryptor = Encryptor::new().unwrap();
+        let encryptor = Encryptor::new().expect("should succeed");
         let plaintext = b"sensitive API key: sk-test-123";
 
-        let encrypted = encryptor.encrypt(plaintext).unwrap();
+        let encrypted = encryptor.encrypt(plaintext).expect("should succeed");
         assert_ne!(&encrypted[12..], plaintext); // Ensure it's actually encrypted
 
-        let decrypted = encryptor.decrypt(&encrypted).unwrap();
+        let decrypted = encryptor.decrypt(&encrypted).expect("should succeed");
         assert_eq!(decrypted, plaintext);
     }
 
     #[test]
     fn test_different_keys_produce_different_ciphertext() {
-        let encryptor1 = Encryptor::new().unwrap();
-        let encryptor2 = Encryptor::new().unwrap();
+        let encryptor1 = Encryptor::new().expect("should succeed");
+        let encryptor2 = Encryptor::new().expect("should succeed");
 
         let plaintext = b"test data";
-        let encrypted1 = encryptor1.encrypt(plaintext).unwrap();
-        let encrypted2 = encryptor2.encrypt(plaintext).unwrap();
+        let encrypted1 = encryptor1.encrypt(plaintext).expect("should succeed");
+        let encrypted2 = encryptor2.encrypt(plaintext).expect("should succeed");
 
         // Different keys should produce different ciphertexts
         assert_ne!(encrypted1, encrypted2);
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_decrypt_invalid_data() {
-        let encryptor = Encryptor::new().unwrap();
+        let encryptor = Encryptor::new().expect("should succeed");
         let result = encryptor.decrypt(&[0; 5]);
         assert!(result.is_err());
     }

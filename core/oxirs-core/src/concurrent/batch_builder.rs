@@ -474,9 +474,15 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
-            Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
-            Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
+            Subject::NamedNode(
+                NamedNode::new(format!("http://subject/{id}")).expect("valid IRI from format"),
+            ),
+            Predicate::NamedNode(
+                NamedNode::new(format!("http://predicate/{id}")).expect("valid IRI from format"),
+            ),
+            Object::NamedNode(
+                NamedNode::new(format!("http://object/{id}")).expect("valid IRI from format"),
+            ),
         )
     }
 
@@ -492,13 +498,15 @@ mod tests {
 
         // Add operations
         for i in 0..25 {
-            builder.insert(create_test_triple(i)).unwrap();
+            builder
+                .insert(create_test_triple(i))
+                .expect("builder insert should succeed");
         }
 
         assert_eq!(builder.pending_operations(), 25);
 
         // Flush and check batches
-        let batches = builder.flush().unwrap();
+        let batches = builder.flush().expect("flush should succeed");
         assert_eq!(batches.len(), 3); // 10 + 10 + 5
         assert_eq!(builder.pending_operations(), 0);
     }
@@ -516,7 +524,9 @@ mod tests {
         // Add duplicate triples
         let triple = create_test_triple(1);
         for _ in 0..5 {
-            builder.insert(triple.clone()).unwrap();
+            builder
+                .insert(triple.clone())
+                .expect("builder insert should succeed");
         }
 
         assert_eq!(builder.pending_operations(), 1);
@@ -535,11 +545,13 @@ mod tests {
 
         // Add insert then remove same triple
         let triple = create_test_triple(1);
-        builder.insert(triple.clone()).unwrap();
-        builder.remove(triple).unwrap();
+        builder
+            .insert(triple.clone())
+            .expect("builder insert should succeed");
+        builder.remove(triple).expect("remove should succeed");
 
         // After merge, both should be eliminated
-        let batches = builder.flush().unwrap();
+        let batches = builder.flush().expect("flush should succeed");
         assert_eq!(batches.len(), 0);
         assert_eq!(builder.stats().coalesced_operations, 1);
     }
@@ -562,7 +574,9 @@ mod tests {
 
         // Add operations that trigger auto-flush
         for i in 0..12 {
-            builder.insert(create_test_triple(i)).unwrap();
+            builder
+                .insert(create_test_triple(i))
+                .expect("builder insert should succeed");
         }
 
         // Should have auto-flushed twice
@@ -581,11 +595,17 @@ mod tests {
         let mut builder = BatchBuilder::new(config);
 
         // Add different operation types
-        builder.insert(create_test_triple(1)).unwrap();
-        builder.remove(create_test_triple(2)).unwrap();
-        builder.query(None, None, None).unwrap();
+        builder
+            .insert(create_test_triple(1))
+            .expect("builder insert should succeed");
+        builder
+            .remove(create_test_triple(2))
+            .expect("builder remove should succeed");
+        builder
+            .query(None, None, None)
+            .expect("query should succeed");
 
-        let batches = builder.flush().unwrap();
+        let batches = builder.flush().expect("flush should succeed");
 
         // Should have 3 batches (one per type)
         assert_eq!(batches.len(), 3);
@@ -604,7 +624,9 @@ mod tests {
         // Add operations until memory limit
         let mut added = 0;
         for i in 0..100 {
-            builder.insert(create_test_triple(i)).unwrap();
+            builder
+                .insert(create_test_triple(i))
+                .expect("builder insert should succeed");
             added += 1;
             if builder.pending_operations() == 0 {
                 // Auto-flushed due to memory

@@ -601,6 +601,7 @@ impl CustomVectorFunction for AverageSimilarityFunction {
 mod tests {
     use super::*;
     use crate::Vector;
+    use anyhow::Result;
 
     #[test]
     fn test_function_registration() {
@@ -624,7 +625,7 @@ mod tests {
     }
 
     #[test]
-    fn test_custom_function_execution() {
+    fn test_custom_function_execution() -> Result<()> {
         let func = CosineSimilarityFunction;
 
         let vector1 = Vector::new(vec![1.0, 0.0, 0.0]);
@@ -635,7 +636,7 @@ mod tests {
             VectorServiceArg::Vector(vector2),
         ];
 
-        let result = func.execute(&args).unwrap();
+        let result = func.execute(&args)?;
 
         match result {
             VectorServiceResult::Number(similarity) => {
@@ -643,17 +644,21 @@ mod tests {
             }
             _ => panic!("Expected number result"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_function_documentation() {
+    fn test_function_documentation() -> Result<()> {
         let functions = SparqlVectorFunctions::new();
 
-        let doc = functions.get_function_documentation("similarity").unwrap();
+        let doc = functions
+            .get_function_documentation("similarity")
+            .expect("similarity documentation should be present");
         assert!(doc.contains("similarity"));
         assert!(doc.contains("Calculate similarity"));
         assert!(doc.contains("resource1"));
         assert!(doc.contains("resource2"));
+        Ok(())
     }
 
     #[test]
@@ -668,7 +673,7 @@ mod tests {
     }
 
     #[test]
-    fn test_average_similarity_function() {
+    fn test_average_similarity_function() -> Result<()> {
         let func = AverageSimilarityFunction;
 
         let args = vec![
@@ -677,7 +682,7 @@ mod tests {
             VectorServiceArg::Number(0.7),
         ];
 
-        let result = func.execute(&args).unwrap();
+        let result = func.execute(&args)?;
 
         match result {
             VectorServiceResult::Number(average) => {
@@ -685,5 +690,6 @@ mod tests {
             }
             _ => panic!("Expected number result"),
         }
+        Ok(())
     }
 }

@@ -772,7 +772,7 @@ mod tests {
 
         let result = loader.load_one("Product", r#"{"id":1}"#, None).await;
         assert!(result.is_ok());
-        assert!(result.unwrap().is_some());
+        assert!(result.expect("should succeed").is_some());
     }
 
     #[tokio::test]
@@ -791,7 +791,7 @@ mod tests {
 
         // Second call should be a cache hit (no additional resolver call needed)
         let result = loader.load_one("Product", r#"{"id":42}"#, None).await;
-        assert!(result.unwrap().is_some());
+        assert!(result.expect("should succeed").is_some());
     }
 
     #[tokio::test]
@@ -812,7 +812,7 @@ mod tests {
 
         let results = loader.load_many("Product", keys.clone(), None).await;
         assert!(results.is_ok());
-        let map = results.unwrap();
+        let map = results.expect("should succeed");
         assert_eq!(map.len(), 3);
         for key in &keys {
             assert!(map.contains_key(key.as_str()));
@@ -854,7 +854,7 @@ mod tests {
         let keys: Vec<String> = (1..=5).map(|i| format!(r#"{{"id":{i}}}"#)).collect();
         let results = loader.load_many("Product", keys, None).await;
         assert!(results.is_ok());
-        assert_eq!(results.unwrap().len(), 5);
+        assert_eq!(results.expect("should succeed").len(), 5);
     }
 
     #[test]

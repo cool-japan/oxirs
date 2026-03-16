@@ -541,13 +541,15 @@ mod tests {
 
         debugger.start_query("query-1".to_string(), "query".to_string(), HashMap::new());
 
-        let step_id = debugger.add_step("query-1", StepType::Parse).unwrap();
+        let step_id = debugger
+            .add_step("query-1", StepType::Parse)
+            .expect("should succeed");
         debugger.start_step("query-1", step_id);
         debugger.complete_step("query-1", step_id, Some("parsed".to_string()));
 
         debugger.finalize_query("query-1");
 
-        let plan = debugger.get_plan("query-1").unwrap();
+        let plan = debugger.get_plan("query-1").expect("should succeed");
         assert_eq!(plan.steps[0].status, StepStatus::Completed);
         assert!(plan.total_duration.is_some());
     }
@@ -558,10 +560,12 @@ mod tests {
 
         debugger.start_query("query-1".to_string(), "query".to_string(), HashMap::new());
 
-        let step_id = debugger.add_step("query-1", StepType::Parse).unwrap();
+        let step_id = debugger
+            .add_step("query-1", StepType::Parse)
+            .expect("should succeed");
         debugger.complete_step("query-1", step_id, None);
 
-        let summary = debugger.get_summary("query-1").unwrap();
+        let summary = debugger.get_summary("query-1").expect("should succeed");
         assert_eq!(summary.completed_steps, 1);
     }
 

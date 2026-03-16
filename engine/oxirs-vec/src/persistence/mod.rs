@@ -447,17 +447,18 @@ mod tests {
     use super::*;
     use crate::hnsw::HnswConfig;
     use crate::Vector;
+    use anyhow::Result;
     use std::env::temp_dir;
 
     #[test]
-    fn test_save_and_load_index() {
+    fn test_save_and_load_index() -> Result<()> {
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         // Add some vectors
         for i in 0..10 {
             let vec = Vector::new(vec![i as f32, (i * 2) as f32, (i * 3) as f32]);
-            index.add_vector(format!("vec_{}", i), vec).unwrap();
+            index.add_vector(format!("vec_{}", i), vec)?;
         }
 
         // Save index
@@ -467,27 +468,28 @@ mod tests {
         let persistence_config = PersistenceConfig::default();
         let manager = PersistenceManager::new(persistence_config);
 
-        manager.save_index(&index, &temp_path).unwrap();
+        manager.save_index(&index, &temp_path)?;
 
         // Load index
-        let loaded_index = manager.load_index(&temp_path).unwrap();
+        let loaded_index = manager.load_index(&temp_path)?;
 
         assert_eq!(loaded_index.len(), 10);
         assert_eq!(loaded_index.uri_to_id().len(), 10);
 
         // Cleanup
         std::fs::remove_file(temp_path).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_compression() {
+    fn test_compression() -> Result<()> {
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         // Add vectors
         for i in 0..50 {
             let vec = Vector::new(vec![i as f32; 128]);
-            index.add_vector(format!("vec_{}", i), vec).unwrap();
+            index.add_vector(format!("vec_{}", i), vec)?;
         }
 
         let mut temp_path = temp_dir();
@@ -499,9 +501,9 @@ mod tests {
             ..Default::default()
         };
         let compressed_manager = PersistenceManager::new(compressed_config);
-        compressed_manager.save_index(&index, &temp_path).unwrap();
+        compressed_manager.save_index(&index, &temp_path)?;
 
-        let compressed_size = std::fs::metadata(&temp_path).unwrap().len();
+        let compressed_size = std::fs::metadata(&temp_path)?.len();
 
         // Test without compression
         let uncompressed_config = PersistenceConfig {
@@ -512,11 +514,9 @@ mod tests {
 
         let mut temp_path2 = temp_dir();
         temp_path2.push("test_uncompressed_index.bin");
-        uncompressed_manager
-            .save_index(&index, &temp_path2)
-            .unwrap();
+        uncompressed_manager.save_index(&index, &temp_path2)?;
 
-        let uncompressed_size = std::fs::metadata(&temp_path2).unwrap().len();
+        let uncompressed_size = std::fs::metadata(&temp_path2)?.len();
 
         // Compressed should be smaller
         assert!(compressed_size < uncompressed_size);
@@ -524,16 +524,17 @@ mod tests {
         // Cleanup
         std::fs::remove_file(temp_path).ok();
         std::fs::remove_file(temp_path2).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_validation() {
+    fn test_validation() -> Result<()> {
         let config = HnswConfig::default();
-        let mut index = HnswIndex::new(config).unwrap();
+        let mut index = HnswIndex::new(config)?;
 
         for i in 0..5 {
             let vec = Vector::new(vec![i as f32, 0.0, 0.0]);
-            index.add_vector(format!("vec_{}", i), vec).unwrap();
+            index.add_vector(format!("vec_{}", i), vec)?;
         }
 
         let persistence_config = PersistenceConfig {
@@ -543,7 +544,8 @@ mod tests {
         let manager = PersistenceManager::new(persistence_config);
 
         // Validation should pass
-        manager.validate_index(&index).unwrap();
+        manager.validate_index(&index)?;
+        Ok(())
     }
 }
 

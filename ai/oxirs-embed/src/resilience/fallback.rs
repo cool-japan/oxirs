@@ -206,7 +206,7 @@ mod tests {
         )
         .await;
 
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
     }
 
     #[tokio::test]
@@ -217,7 +217,7 @@ mod tests {
         )
         .await;
 
-        assert_eq!(result.unwrap(), 99);
+        assert_eq!(result.expect("should succeed"), 99);
     }
 
     #[test]
@@ -229,7 +229,7 @@ mod tests {
 
         let result = degradation.execute();
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
         assert!(degradation.is_degraded());
         assert_eq!(degradation.current_strategy(), 2);
     }
@@ -239,10 +239,10 @@ mod tests {
         let cache = CachedFallback::new(std::time::Duration::from_secs(60));
 
         let result = cache.execute_with_cache(|| Ok::<_, anyhow::Error>(42));
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
 
         // Should return cached value
-        let cached = cache.get().unwrap();
+        let cached = cache.get().expect("should succeed");
         assert_eq!(cached, Some(42));
     }
 
@@ -250,12 +250,12 @@ mod tests {
     fn test_cached_fallback_expired() {
         let cache = CachedFallback::new(std::time::Duration::from_millis(10));
 
-        cache.update(42).unwrap();
+        cache.update(42).expect("should succeed");
 
         // Wait for cache to expire
         std::thread::sleep(std::time::Duration::from_millis(20));
 
-        let cached = cache.get().unwrap();
+        let cached = cache.get().expect("should succeed");
         assert_eq!(cached, None);
     }
 
@@ -265,11 +265,11 @@ mod tests {
 
         // First call succeeds and caches
         let result = cache.execute_with_cache(|| Ok::<_, anyhow::Error>(42));
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
 
         // Second call fails but returns cached value
         let result = cache.execute_with_cache(|| Err::<i32, _>(anyhow!("Failed")));
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
     }
 
     #[test]
@@ -282,6 +282,6 @@ mod tests {
 
         let result = chain.execute();
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "Third succeeds");
+        assert_eq!(result.expect("should succeed"), "Third succeeds");
     }
 }

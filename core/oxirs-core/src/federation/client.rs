@@ -224,7 +224,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_silent_mode_on_error() {
-        let client = FederationClient::new().unwrap();
+        let client = FederationClient::new().expect("construction should succeed");
 
         // Non-existent endpoint should return empty results in silent mode
         let result = client
@@ -236,7 +236,7 @@ mod tests {
             .await;
 
         assert!(result.is_ok());
-        let body = result.unwrap();
+        let body = result.expect("should have value");
         assert!(body.contains("bindings"));
     }
 }

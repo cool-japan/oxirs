@@ -1742,7 +1742,10 @@ mod tests {
         };
         let integrator = BiologicalNeuralIntegrator::new(config);
 
-        let result = integrator.initialize_biological_system().await.unwrap();
+        let result = integrator
+            .initialize_biological_system()
+            .await
+            .expect("should succeed");
 
         assert!(result.biological_interfaces_active);
         assert!(result.signal_processing_calibrated);
@@ -1784,7 +1787,10 @@ mod tests {
         let config = BiologicalIntegrationConfig::default();
         let integrator = BiologicalNeuralIntegrator::new(config);
 
-        let stats = integrator.get_biological_statistics().await.unwrap();
+        let stats = integrator
+            .get_biological_statistics()
+            .await
+            .expect("should succeed");
 
         assert_eq!(stats.total_biological_validations, 0);
         assert_eq!(stats.total_culture_clusters, 0);

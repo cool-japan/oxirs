@@ -1,6 +1,6 @@
 # OxiRS Vec - GPU Acceleration Guide
 
-**Version**: v0.2.1
+**Version**: v0.2.2
 **Last Updated**: 2026-01-06
 
 ## Table of Contents
@@ -723,5 +723,5 @@ fn benchmark_gpu() -> anyhow::Result<()> {
 ---
 
 **Document Version**: 1.0
-**OxiRS Vec Version**: v0.2.1
+**OxiRS Vec Version**: v0.2.2
 **Last Updated**: 2026-01-06

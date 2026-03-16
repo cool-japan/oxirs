@@ -756,6 +756,6 @@ mod tests {
 
         let retrieved = context.get_fragment("TestFragment");
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().name, "TestFragment");
+        assert_eq!(retrieved.expect("should succeed").name, "TestFragment");
     }
 }

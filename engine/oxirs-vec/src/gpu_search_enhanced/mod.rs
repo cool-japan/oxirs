@@ -383,6 +383,7 @@ impl Default for SearchMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     // ------------------------------------------------------------------
     // Helpers
@@ -410,7 +411,8 @@ mod tests {
         let mut idx = SimdVectorSearch::new(16);
         for i in 0..n {
             let v = random_vec(dim, i as u64 + 1);
-            idx.insert(format!("v{}", i), v).unwrap();
+            idx.insert(format!("v{}", i), v)
+                .expect("insert should succeed");
         }
         idx
     }
@@ -420,95 +422,104 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_simd_search_basic_knn() {
+    fn test_simd_search_basic_knn() -> Result<()> {
         let mut idx = SimdVectorSearch::new(4);
-        idx.insert("a".into(), vec![1.0, 0.0, 0.0]).unwrap();
-        idx.insert("b".into(), vec![0.0, 1.0, 0.0]).unwrap();
-        idx.insert("c".into(), vec![0.9, 0.1, 0.0]).unwrap();
+        idx.insert("a".into(), vec![1.0, 0.0, 0.0])?;
+        idx.insert("b".into(), vec![0.0, 1.0, 0.0])?;
+        idx.insert("c".into(), vec![0.9, 0.1, 0.0])?;
 
         let query = vec![1.0, 0.0, 0.0];
-        let results = idx.search(&query, 2).unwrap();
+        let results = idx.search(&query, 2)?;
         assert_eq!(results.len(), 2);
         // "a" (identical) must be first
         assert_eq!(results[0].0, "a");
         assert!(results[0].1 < 1e-5);
+        Ok(())
     }
 
     #[test]
-    fn test_simd_search_empty_index() {
+    fn test_simd_search_empty_index() -> Result<()> {
         let idx = SimdVectorSearch::new(16);
-        let results = idx.search(&[1.0, 0.0], 5).unwrap();
+        let results = idx.search(&[1.0, 0.0], 5)?;
         assert!(results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_simd_search_single_entry() {
+    fn test_simd_search_single_entry() -> Result<()> {
         let mut idx = SimdVectorSearch::new(4);
-        idx.insert("only".into(), vec![0.6, 0.8]).unwrap();
-        let results = idx.search(&[0.6, 0.8], 10).unwrap();
+        idx.insert("only".into(), vec![0.6, 0.8])?;
+        let results = idx.search(&[0.6, 0.8], 10)?;
         assert_eq!(results.len(), 1);
         assert!(results[0].1 < 1e-5);
+        Ok(())
     }
 
     #[test]
-    fn test_simd_search_k_larger_than_index() {
+    fn test_simd_search_k_larger_than_index() -> Result<()> {
         let idx = build_index(5, 4);
         let query = random_vec(4, 999);
-        let results = idx.search(&query, 100).unwrap();
+        let results = idx.search(&query, 100)?;
         assert_eq!(results.len(), 5, "should return at most index size");
+        Ok(())
     }
 
     #[test]
-    fn test_simd_search_results_sorted_ascending() {
+    fn test_simd_search_results_sorted_ascending() -> Result<()> {
         let idx = build_index(50, 8);
         let query = random_vec(8, 42);
-        let results = idx.search(&query, 20).unwrap();
+        let results = idx.search(&query, 20)?;
         for w in results.windows(2) {
             assert!(w[0].1 <= w[1].1, "results not sorted: {:?}", w);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_simd_search_parallel_threshold_switch() {
+    fn test_simd_search_parallel_threshold_switch() -> Result<()> {
         // Parallel threshold of 4; index has 8 entries → parallel path
         let mut idx = SimdVectorSearch::new(4);
         for i in 0..8_usize {
-            idx.insert(format!("p{}", i), unit_vec(4, i)).unwrap();
+            idx.insert(format!("p{}", i), unit_vec(4, i))?;
         }
         let query = unit_vec(4, 0);
-        let results = idx.search(&query, 3).unwrap();
+        let results = idx.search(&query, 3)?;
         assert_eq!(results.len(), 3);
         assert_eq!(results[0].0, "p0");
+        Ok(())
     }
 
     #[test]
-    fn test_simd_search_update_existing_id() {
+    fn test_simd_search_update_existing_id() -> Result<()> {
         let mut idx = SimdVectorSearch::new(4);
-        idx.insert("x".into(), vec![1.0, 0.0]).unwrap();
-        idx.insert("x".into(), vec![0.0, 1.0]).unwrap(); // update
+        idx.insert("x".into(), vec![1.0, 0.0])?;
+        idx.insert("x".into(), vec![0.0, 1.0])?; // update
 
         assert_eq!(idx.len(), 1);
-        let results = idx.search(&[0.0, 1.0], 1).unwrap();
+        let results = idx.search(&[0.0, 1.0], 1)?;
         assert_eq!(results[0].0, "x");
         assert!(results[0].1 < 1e-5);
+        Ok(())
     }
 
     #[test]
-    fn test_simd_all_distances_length() {
+    fn test_simd_all_distances_length() -> Result<()> {
         let idx = build_index(10, 4);
         let query = random_vec(4, 7);
-        let all = idx.all_distances(&query).unwrap();
+        let all = idx.all_distances(&query)?;
         assert_eq!(all.len(), 10);
+        Ok(())
     }
 
     #[test]
-    fn test_simd_orthogonal_max_distance() {
+    fn test_simd_orthogonal_max_distance() -> Result<()> {
         let mut idx = SimdVectorSearch::new(4);
-        idx.insert("y".into(), vec![0.0, 1.0]).unwrap();
+        idx.insert("y".into(), vec![0.0, 1.0])?;
 
         let query = vec![1.0, 0.0];
-        let results = idx.search(&query, 1).unwrap();
+        let results = idx.search(&query, 1)?;
         assert!((results[0].1 - 1.0).abs() < 1e-4);
+        Ok(())
     }
 
     // ------------------------------------------------------------------
@@ -516,64 +527,66 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_batch_search_basic() {
+    fn test_batch_search_basic() -> Result<()> {
         let engine = BatchSearchEngine::new(build_index(20, 4));
         let queries: Vec<Vec<f32>> = (0..5).map(|i| random_vec(4, i as u64)).collect();
-        let results = engine.batch_search(&queries, 3).unwrap();
+        let results = engine.batch_search(&queries, 3)?;
         assert_eq!(results.len(), 5);
         for r in &results {
             assert!(r.len() <= 3);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_batch_search_empty_queries() {
+    fn test_batch_search_empty_queries() -> Result<()> {
         let engine = BatchSearchEngine::new(build_index(10, 4));
-        let results = engine.batch_search(&[], 5).unwrap();
+        let results = engine.batch_search(&[], 5)?;
         assert!(results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_batch_search_order_preserved() {
+    fn test_batch_search_order_preserved() -> Result<()> {
         let mut idx = SimdVectorSearch::new(4);
-        idx.insert("origin".into(), vec![0.0, 0.0, 0.0, 0.0])
-            .unwrap();
-        idx.insert("x_axis".into(), vec![1.0, 0.0, 0.0, 0.0])
-            .unwrap();
-        idx.insert("y_axis".into(), vec![0.0, 1.0, 0.0, 0.0])
-            .unwrap();
+        idx.insert("origin".into(), vec![0.0, 0.0, 0.0, 0.0])?;
+        idx.insert("x_axis".into(), vec![1.0, 0.0, 0.0, 0.0])?;
+        idx.insert("y_axis".into(), vec![0.0, 1.0, 0.0, 0.0])?;
 
         let engine = BatchSearchEngine::new(idx);
         let queries = vec![
             vec![1.0_f32, 0.0, 0.0, 0.0], // closest to x_axis
             vec![0.0_f32, 1.0, 0.0, 0.0], // closest to y_axis
         ];
-        let results = engine.batch_search(&queries, 1).unwrap();
+        let results = engine.batch_search(&queries, 1)?;
         assert_eq!(results[0][0].0, "x_axis");
         assert_eq!(results[1][0].0, "y_axis");
+        Ok(())
     }
 
     #[test]
-    fn test_batch_search_large_concurrent() {
+    fn test_batch_search_large_concurrent() -> Result<()> {
         let engine = BatchSearchEngine::new(build_index(200, 16));
         let queries: Vec<Vec<f32>> = (0..50).map(|i| random_vec(16, i as u64 + 100)).collect();
-        let results = engine.batch_search(&queries, 5).unwrap();
+        let results = engine.batch_search(&queries, 5)?;
         assert_eq!(results.len(), 50);
         for r in &results {
             assert!(!r.is_empty());
         }
+        Ok(())
     }
 
     #[test]
-    fn test_batch_timed_search_records_metrics() {
+    fn test_batch_timed_search_records_metrics() -> Result<()> {
         let engine = BatchSearchEngine::new(build_index(30, 8));
         let metrics = SearchMetrics::new();
         let query = random_vec(8, 77);
 
-        let results = engine.timed_search(&query, 3, &metrics).unwrap();
+        let results = engine.timed_search(&query, 3, &metrics)?;
         assert!(!results.is_empty());
         assert_eq!(metrics.total_queries(), 1);
         assert!(metrics.mean_latency_us().is_some());
+        Ok(())
     }
 
     // ------------------------------------------------------------------
@@ -581,37 +594,42 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn test_metrics_basic_recording() {
+    fn test_metrics_basic_recording() -> Result<()> {
         let m = SearchMetrics::new();
         m.record_query(100);
         m.record_query(200);
         m.record_query(300);
 
         assert_eq!(m.total_queries(), 3);
-        let mean = m.mean_latency_us().unwrap();
+        let mean = m.mean_latency_us().expect("mean latency should be Some");
         assert!((mean - 200.0).abs() < 0.01);
+        Ok(())
     }
 
     #[test]
-    fn test_metrics_min_max() {
+    fn test_metrics_min_max() -> Result<()> {
         let m = SearchMetrics::new();
         m.record_query(50);
         m.record_query(150);
         m.record_query(300);
 
-        assert_eq!(m.min_latency_us().unwrap(), 50);
-        assert_eq!(m.max_latency_us().unwrap(), 300);
+        let __val = m.min_latency_us().expect("min latency should be Some");
+        assert_eq!(__val, 50);
+        let __val = m.max_latency_us().expect("max latency should be Some");
+        assert_eq!(__val, 300);
+        Ok(())
     }
 
     #[test]
-    fn test_metrics_percentile_p50() {
+    fn test_metrics_percentile_p50() -> Result<()> {
         let m = SearchMetrics::new();
         for lat in [10_u64, 20, 30, 40, 50] {
             m.record_query(lat);
         }
         // p50 of [10,20,30,40,50] is index 2 → 30
-        let p50 = m.percentile_us(50.0).unwrap();
+        let p50 = m.percentile_us(50.0).expect("p50 should be Some");
         assert_eq!(p50, 30);
+        Ok(())
     }
 
     #[test]
@@ -624,11 +642,12 @@ mod tests {
     }
 
     #[test]
-    fn test_metrics_throughput_qps() {
+    fn test_metrics_throughput_qps() -> Result<()> {
         let m = SearchMetrics::new();
         m.record_query(1_000); // 1 ms = 1 000 µs → 1 000 QPS
-        let qps = m.throughput_qps().unwrap();
+        let qps = m.throughput_qps().expect("throughput_qps should be Some");
         assert!((qps - 1_000.0).abs() < 0.01);
+        Ok(())
     }
 
     #[test]

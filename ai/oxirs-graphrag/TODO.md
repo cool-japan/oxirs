@@ -1,6 +1,6 @@
 # OxiRS GraphRAG - TODO
 
-*Version: 0.2.1 | Last Updated: 2026-01-06*
+*Version: 0.2.2 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -14,33 +14,33 @@
 - Reciprocal Rank Fusion (RRF)
 - Integration with oxirs-embed for embeddings
 
-## Future Roadmap
+## Roadmap
 
-### v0.2.1 - Enhanced Retrieval (Q1 2026 - Expanded)
-- [x] Leiden community detection (better than Louvain) -- implemented in graph/community.rs with full refinement phase
-- [x] Query result caching (LRU with TTL) -- implemented in cache/query_cache.rs with thread-safe Arc<Mutex<LruCache>> + TTL
-- [x] Graph embedding integration (GraphSAGE, Node2Vec) -- Node2Vec standalone impl in embeddings/node2vec.rs with alias sampling
-- [ ] Streaming SPARQL for large subgraphs
-- [ ] Advanced fusion strategies (BM25 + Dense, ColBERT-style)
-- [ ] Multi-hop reasoning with oxirs-rule
-- [ ] Temporal GraphRAG (time-aware retrieval)
-- [ ] Distributed GraphRAG (federated expansion)
+### v0.1.0 - Released (January 7, 2026)
+- ✅ Graph-based retrieval, Louvain community detection, context building, RRF
 
-### v0.4.0 - Production Features (Q3 2026)
+### v0.2.2 - Current Release (March 16, 2026)
+- ✅ Leiden community detection (graph/community.rs with full refinement phase)
+- ✅ Query result caching (LRU with TTL — cache/query_cache.rs)
+- ✅ Graph embedding integration (Node2Vec — embeddings/node2vec.rs with alias sampling)
+- ✅ ColBERT-style reranker (fusion/colbert_reranker.rs)
+- ✅ Hybrid retrieval (fusion/hybrid_retrieval.rs BM25 + dense)
+- ✅ Multi-hop reasoning (reasoning/multihop.rs)
+- ✅ Temporal knowledge graph retrieval (temporal/temporal_retrieval.rs)
+- ✅ Streaming SPARQL for large subgraphs (retrieval/streaming_sparql.rs)
+- ✅ Community detector, triple extractor, knowledge fusion
+- ✅ 935 tests passing
+
+### v0.4.0 - Planned (Q3 2026)
 - [ ] Graph summarization
 - [ ] Interactive refinement with user feedback
 - [ ] Explainability (attention visualization, path explanation)
 - [ ] Benchmark suite against LangChain GraphRAG
 
-### v1.0.0 - Research & Innovation (Q2 2026)
+### v1.0.0 - Planned (Q2 2026)
 - [ ] Hybrid GNN + LLM architecture
 - [ ] Neuro-symbolic fusion with oxirs-physics
 - [ ] Comprehensive documentation and tutorials
-
-## Testing & Quality
-- [ ] Property-based testing with proptest
-- [ ] Memory profiling for large graphs
-- [ ] Concurrency testing
 
 ## Contributing
 
@@ -48,4 +48,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GraphRAG v0.2.1 - Graph-based RAG for knowledge graphs*
+*OxiRS GraphRAG v0.2.2 - Graph-based RAG for knowledge graphs*

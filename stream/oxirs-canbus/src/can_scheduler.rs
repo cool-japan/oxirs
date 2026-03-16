@@ -467,7 +467,7 @@ mod tests {
         let mut q = TxQueue::new();
         q.push(5, std_frame(0x100), "msg");
         assert_eq!(q.len(), 1);
-        let (f, name) = q.pop().unwrap();
+        let (f, name) = q.pop().expect("should succeed");
         assert_eq!(f, std_frame(0x100));
         assert_eq!(name, "msg");
         assert!(q.is_empty());
@@ -479,11 +479,11 @@ mod tests {
         q.push(10, std_frame(0x200), "low");
         q.push(1, std_frame(0x100), "high");
         q.push(5, std_frame(0x150), "mid");
-        let (_, name1) = q.pop().unwrap();
+        let (_, name1) = q.pop().expect("should succeed");
         assert_eq!(name1, "high");
-        let (_, name2) = q.pop().unwrap();
+        let (_, name2) = q.pop().expect("should succeed");
         assert_eq!(name2, "mid");
-        let (_, name3) = q.pop().unwrap();
+        let (_, name3) = q.pop().expect("should succeed");
         assert_eq!(name3, "low");
     }
 
@@ -530,7 +530,7 @@ mod tests {
         let c = [(5u8, &f1, "a"), (5u8, &f2, "b")];
         // Both have the same priority; either index is acceptable but we check
         // that it returns a valid index.
-        let idx = Arbitration::select(&c).unwrap();
+        let idx = Arbitration::select(&c).expect("should succeed");
         assert!(idx < 2);
     }
 

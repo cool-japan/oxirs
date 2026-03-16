@@ -327,12 +327,15 @@ mod tests {
             checker
                 .record_call(&provider_id, true, Duration::from_millis(100))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
         assert!(checker.is_provider_healthy(&provider_id).await);
 
-        let health = checker.get_health_status(&provider_id).await.unwrap();
+        let health = checker
+            .get_health_status(&provider_id)
+            .await
+            .expect("should succeed");
         assert_eq!(health.status, HealthStatus::Healthy);
         assert!((health.avg_latency_ms - 100.0).abs() < 1.0);
         assert_eq!(health.error_rate, 0.0);
@@ -353,10 +356,13 @@ mod tests {
             checker
                 .record_call(&provider_id, true, Duration::from_millis(200))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
-        let health = checker.get_health_status(&provider_id).await.unwrap();
+        let health = checker
+            .get_health_status(&provider_id)
+            .await
+            .expect("should succeed");
         assert_eq!(health.status, HealthStatus::Degraded);
         assert!(health.is_healthy); // Still healthy but degraded
     }
@@ -371,10 +377,13 @@ mod tests {
             checker
                 .record_call(&provider_id, false, Duration::from_millis(100))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
-        let health = checker.get_health_status(&provider_id).await.unwrap();
+        let health = checker
+            .get_health_status(&provider_id)
+            .await
+            .expect("should succeed");
         assert_eq!(health.status, HealthStatus::Unhealthy);
         assert!(!health.is_healthy);
         assert_eq!(health.error_rate, 1.0);
@@ -395,7 +404,7 @@ mod tests {
             checker
                 .record_call(&provider_id, true, Duration::from_millis(100))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
         // Record consecutive failures
@@ -403,10 +412,13 @@ mod tests {
             checker
                 .record_call(&provider_id, false, Duration::from_millis(100))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
-        let health = checker.get_health_status(&provider_id).await.unwrap();
+        let health = checker
+            .get_health_status(&provider_id)
+            .await
+            .expect("should succeed");
         assert!(!health.is_healthy);
         assert_eq!(health.consecutive_failures, 3);
     }
@@ -420,7 +432,7 @@ mod tests {
             checker
                 .record_call(&"provider1".to_string(), true, Duration::from_millis(100))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
         // Provider 2: healthy, high latency
@@ -428,7 +440,7 @@ mod tests {
             checker
                 .record_call(&"provider2".to_string(), true, Duration::from_millis(500))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
         // Provider 3: unhealthy
@@ -436,7 +448,7 @@ mod tests {
             checker
                 .record_call(&"provider3".to_string(), false, Duration::from_millis(100))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
         let healthy = checker.get_healthy_providers().await;
@@ -455,13 +467,16 @@ mod tests {
             checker
                 .record_call(&provider_id, false, Duration::from_millis(100))
                 .await
-                .unwrap();
+                .expect("should succeed");
         }
 
         assert!(!checker.is_provider_healthy(&provider_id).await);
 
         // Reset provider
-        checker.reset_provider(&provider_id).await.unwrap();
+        checker
+            .reset_provider(&provider_id)
+            .await
+            .expect("should succeed");
 
         // Should be healthy again
         assert!(checker.is_provider_healthy(&provider_id).await);

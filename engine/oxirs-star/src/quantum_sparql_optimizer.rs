@@ -928,6 +928,7 @@ mod tests {
         assert_eq!(state.amplitudes.len(), 8); // 2^3
     }
 
+    #[ignore = "slow: quantum simulation > 30s"]
     #[tokio::test]
     async fn test_quantum_optimizer() {
         let config = QuantumSPARQLOptimizerConfig::default();

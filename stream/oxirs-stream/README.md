@@ -1,8 +1,8 @@
 # OxiRS Stream - Real-time RDF Streaming
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.2.1 - Released March 10, 2026
+**Status**: v0.2.2 - Released March 16, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees and comprehensive testing.
 
@@ -35,10 +35,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-stream = "0.2.1"
+oxirs-stream = "0.2.2"
 
 # Enable specific brokers
-oxirs-stream = { version = "0.2.1", features = ["kafka", "nats"] }
+oxirs-stream = { version = "0.2.2", features = ["kafka", "nats"] }
 ```
 
 ## Quick Start
@@ -398,7 +398,7 @@ let processor = StreamProcessor::builder()
 
 ## Status
 
-### Production Release (v0.1.0)
+### Production Release (v0.2.2)
 - ✅ Kafka/NATS integrations with persisted offset checkpoints
 - ✅ Windowing, filtering, and mapping tied into CLI persistence workflows
 - ✅ SPARQL stream federation with `SERVICE` bridging to remote endpoints
@@ -406,7 +406,7 @@ let processor = StreamProcessor::builder()
 - 🚧 Aggregation operators (tumbling/sliding) final polish (in progress)
 - 🚧 Pattern matching DSL and CEP (in progress)
 - ⏳ Exactly-once semantics (planned for future release)
-- ⏳ Distributed stream processing (planned for v0.2.1)
+- ⏳ Distributed stream processing (planned for v0.2.2)
 
 ## Contributing
 

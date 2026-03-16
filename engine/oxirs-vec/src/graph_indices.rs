@@ -1321,7 +1321,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_nsw_graph() {
+    fn test_nsw_graph() -> Result<()> {
         let config = GraphIndexConfig {
             graph_type: GraphType::NSW,
             num_neighbors: 10,
@@ -1333,21 +1333,22 @@ mod tests {
         // Insert test vectors
         for i in 0..50 {
             let vector = Vector::new(vec![i as f32, (i * 2) as f32, (i * 3) as f32]);
-            index.insert(format!("vec_{i}"), vector).unwrap();
+            index.insert(format!("vec_{i}"), vector)?;
         }
 
-        index.build().unwrap();
+        index.build()?;
 
         // Search for nearest neighbors
         let query = Vector::new(vec![25.0, 50.0, 75.0]);
-        let results = index.search_knn(&query, 5).unwrap();
+        let results = index.search_knn(&query, 5)?;
 
         assert_eq!(results.len(), 5);
         assert_eq!(results[0].0, "vec_25"); // Exact match
+        Ok(())
     }
 
     #[test]
-    fn test_onng_graph() {
+    fn test_onng_graph() -> Result<()> {
         let config = GraphIndexConfig {
             graph_type: GraphType::ONNG,
             num_neighbors: 8,
@@ -1360,20 +1361,21 @@ mod tests {
         for i in 0..20 {
             let angle = (i as f32) * 2.0 * std::f32::consts::PI / 20.0;
             let vector = Vector::new(vec![angle.cos(), angle.sin()]);
-            index.insert(format!("vec_{i}"), vector).unwrap();
+            index.insert(format!("vec_{i}"), vector)?;
         }
 
-        index.build().unwrap();
+        index.build()?;
 
         // Search for nearest neighbors
         let query = Vector::new(vec![1.0, 0.0]);
-        let results = index.search_knn(&query, 3).unwrap();
+        let results = index.search_knn(&query, 3)?;
 
         assert_eq!(results.len(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_panng_graph() {
+    fn test_panng_graph() -> Result<()> {
         let config = GraphIndexConfig {
             graph_type: GraphType::PANNG,
             num_neighbors: 5,
@@ -1386,15 +1388,16 @@ mod tests {
         // Insert test vectors
         for i in 0..30 {
             let vector = Vector::new(vec![(i as f32).sin(), (i as f32).cos(), (i as f32) / 10.0]);
-            index.insert(format!("vec_{i}"), vector).unwrap();
+            index.insert(format!("vec_{i}"), vector)?;
         }
 
-        index.build().unwrap();
+        index.build()?;
 
         // Search for nearest neighbors
         let query = Vector::new(vec![0.0, 1.0, 0.0]);
-        let results = index.search_knn(&query, 5).unwrap();
+        let results = index.search_knn(&query, 5)?;
 
         assert_eq!(results.len(), 5);
+        Ok(())
     }
 }

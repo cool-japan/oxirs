@@ -49,11 +49,11 @@ impl From<NamedOrBlankNode> for Term {
 ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
 /// </rdf:RDF>"#;
 ///
-/// let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
-/// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+/// let schema_person = NamedNode::new("http://schema.org/Person").expect("valid IRI");
+/// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
 /// let mut count = 0;
 /// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
-///     let triple = triple.unwrap();
+///     let triple = triple.expect("triple should be valid");
 ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
 ///         count += 1;
 ///     }
@@ -114,11 +114,11 @@ impl RdfXmlParser {
     ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
     /// </rdf:RDF>"#;
     ///
-    /// let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
-    /// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+    /// let schema_person = NamedNode::new("http://schema.org/Person").expect("valid IRI");
+    /// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
     /// let mut count = 0;
     /// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
-    ///     let triple = triple.unwrap();
+    ///     let triple = triple.expect("triple should be valid");
     ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
     ///         count += 1;
     ///     }
@@ -152,12 +152,12 @@ impl RdfXmlParser {
     ///   <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
     /// </rdf:RDF>"#;
     ///
-    /// let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
-    /// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+    /// let schema_person = NamedNode::new("http://schema.org/Person").expect("valid IRI");
+    /// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
     /// let mut count = 0;
     /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
-    ///     let triple = triple.unwrap();
+    ///     let triple = triple.expect("triple should be valid");
     ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
     ///         count += 1;
     ///     }
@@ -195,11 +195,11 @@ impl RdfXmlParser {
     ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
     /// </rdf:RDF>"#;
     ///
-    /// let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
-    /// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+    /// let schema_person = NamedNode::new("http://schema.org/Person").expect("valid IRI");
+    /// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
     /// let mut count = 0;
     /// for triple in RdfXmlParser::new().for_slice(file) {
-    ///     let triple = triple.unwrap();
+    ///     let triple = triple.expect("triple should be valid");
     ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
     ///         count += 1;
     ///     }
@@ -250,11 +250,11 @@ impl RdfXmlParser {
 ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
 /// </rdf:RDF>"#;
 ///
-/// let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
-/// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+/// let schema_person = NamedNode::new("http://schema.org/Person").expect("valid IRI");
+/// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
 /// let mut count = 0;
 /// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
-///     let triple = triple.unwrap();
+///     let triple = triple.expect("triple should be valid");
 ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
 ///         count += 1;
 ///     }
@@ -307,7 +307,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     /// let mut parser = RdfXmlParser::new().for_reader(file.as_ref());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// parser.next().unwrap().unwrap(); // We read the first triple
+    /// parser.next().expect("should have next item").expect("operation should succeed"); // We read the first triple
     /// assert_eq!(
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [
@@ -339,7 +339,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
     /// let mut parser = RdfXmlParser::new().for_reader(file.as_ref());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// parser.next().unwrap().unwrap(); // We read the first triple
+    /// parser.next().expect("should have next item").expect("operation should succeed"); // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// ```
     pub fn base_iri(&self) -> Option<&str> {
@@ -382,12 +382,12 @@ impl<R: Read> ReaderRdfXmlParser<R> {
 ///   <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
 /// </rdf:RDF>"#;
 ///
-/// let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
-/// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+/// let schema_person = NamedNode::new("http://schema.org/Person").expect("valid IRI");
+/// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
 /// let mut count = 0;
 /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
-///     let triple = triple.unwrap();
+///     let triple = triple.expect("triple should be valid");
 ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
 ///         count += 1;
 ///     }
@@ -443,7 +443,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// parser.next().await.unwrap().unwrap(); // We read the first triple
+    /// parser.next().await.expect("async operation should succeed").expect("operation should succeed"); // We read the first triple
     /// assert_eq!(
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [
@@ -480,7 +480,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
     /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// parser.next().await.unwrap().unwrap(); // We read the first triple
+    /// parser.next().await.expect("async operation should succeed").expect("operation should succeed"); // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// # Ok(())
     /// # }
@@ -524,11 +524,11 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
 ///  <schema:Person rdf:about="http://example.com/bar" schema:name="Bar" />
 /// </rdf:RDF>"#;
 ///
-/// let schema_person = NamedNode::new("http://schema.org/Person").unwrap();
-/// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+/// let schema_person = NamedNode::new("http://schema.org/Person").expect("valid IRI");
+/// let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").expect("valid IRI");
 /// let mut count = 0;
 /// for triple in RdfXmlParser::new().for_slice(file) {
-///     let triple = triple.unwrap();
+///     let triple = triple.expect("triple should be valid");
 ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
 ///         count += 1;
 ///     }
@@ -582,7 +582,7 @@ impl SliceRdfXmlParser<'_> {
     /// let mut parser = RdfXmlParser::new().for_slice(file);
     /// assert_eq!(parser.prefixes().collect::<Vec<_>>(), []); // No prefix at the beginning
     ///
-    /// parser.next().unwrap().unwrap(); // We read the first triple
+    /// parser.next().expect("should have next item").expect("operation should succeed"); // We read the first triple
     /// assert_eq!(
     ///     parser.prefixes().collect::<Vec<_>>(),
     ///     [
@@ -614,7 +614,7 @@ impl SliceRdfXmlParser<'_> {
     /// let mut parser = RdfXmlParser::new().for_slice(file);
     /// assert!(parser.base_iri().is_none()); // No base at the beginning because none has been given to the parser.
     ///
-    /// parser.next().unwrap().unwrap(); // We read the first triple
+    /// parser.next().expect("should have next item").expect("operation should succeed"); // We read the first triple
     /// assert_eq!(parser.base_iri(), Some("http://example.com/")); // There is now a base IRI.
     /// ```
     pub fn base_iri(&self) -> Option<&str> {

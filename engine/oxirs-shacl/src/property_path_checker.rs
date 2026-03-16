@@ -525,9 +525,15 @@ mod tests {
         let path = pred("p");
         let results = PropertyPathChecker::evaluate_multi(&path, &["a", "x"], &graph);
         assert_eq!(results.len(), 2);
-        let a_result = results.iter().find(|(s, _)| *s == "a").unwrap();
+        let a_result = results
+            .iter()
+            .find(|(s, _)| *s == "a")
+            .expect("should succeed");
         assert!(a_result.1.reachable.contains(&"b".to_string()));
-        let x_result = results.iter().find(|(s, _)| *s == "x").unwrap();
+        let x_result = results
+            .iter()
+            .find(|(s, _)| *s == "x")
+            .expect("should succeed");
         assert!(x_result.1.reachable.contains(&"y".to_string()));
     }
 

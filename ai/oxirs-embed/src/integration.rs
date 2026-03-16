@@ -940,7 +940,7 @@ mod tests {
         let user_id = "test_user";
 
         // Test user profile creation
-        let profile = engine.get_user_profile(user_id).unwrap();
+        let profile = engine.get_user_profile(user_id).expect("should succeed");
         assert_eq!(profile.user_id, user_id);
 
         // Test interaction update
@@ -951,7 +951,7 @@ mod tests {
                 Some(0.9),
                 InteractionType::Query,
             )
-            .unwrap();
+            .expect("should succeed");
 
         let history = engine.get_recent_interactions(user_id, 5);
         assert_eq!(history.len(), 1);

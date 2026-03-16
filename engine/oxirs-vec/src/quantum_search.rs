@@ -749,7 +749,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_quantum_vector_search() {
+    async fn test_quantum_vector_search() -> Result<()> {
         let quantum_search = QuantumVectorSearch::with_seed(QuantumSearchConfig::default(), 42);
 
         let query_vector = Vector::new(vec![1.0, 0.0, 0.0]);
@@ -761,17 +761,17 @@ mod tests {
 
         let results = quantum_search
             .quantum_similarity_search(&query_vector, &candidates, 2)
-            .await
-            .unwrap();
+            .await?;
 
         assert_eq!(results.len(), 2);
         assert!(results[0].similarity >= results[1].similarity);
         assert!(results[0].quantum_confidence >= 0.0);
         assert!(results[0].quantum_confidence <= 1.0);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_parallel_quantum_vector_search() {
+    async fn test_parallel_quantum_vector_search() -> Result<()> {
         let quantum_search = QuantumVectorSearch::with_seed(QuantumSearchConfig::default(), 42);
 
         let query_vector = Vector::new(vec![1.0, 0.0, 0.0]);
@@ -785,14 +785,14 @@ mod tests {
 
         let results = quantum_search
             .parallel_quantum_similarity_search(&query_vector, &candidates, 3)
-            .await
-            .unwrap();
+            .await?;
 
         assert_eq!(results.len(), 3);
         assert!(results[0].similarity >= results[1].similarity);
         assert!(results[1].similarity >= results[2].similarity);
         assert!(results[0].quantum_confidence >= 0.0);
         assert!(results[0].quantum_confidence <= 1.0);
+        Ok(())
     }
 
     #[test]
@@ -809,7 +809,7 @@ mod tests {
     }
 
     #[test]
-    fn test_quantum_annealing() {
+    fn test_quantum_annealing() -> Result<()> {
         let quantum_search = QuantumVectorSearch::with_default_config();
 
         // Simple quadratic cost function
@@ -825,8 +825,9 @@ mod tests {
         );
         assert!(result.is_ok());
 
-        let optimized_state = result.unwrap();
+        let optimized_state = result?;
         assert_eq!(optimized_state.len(), initial_state.len());
+        Ok(())
     }
 
     #[test]
@@ -862,7 +863,7 @@ mod tests {
     }
 
     #[test]
-    fn test_enhanced_quantum_tunneling() {
+    fn test_enhanced_quantum_tunneling() -> Result<()> {
         let mut quantum_state = QuantumState::new(8);
 
         // Set up initial state
@@ -875,7 +876,7 @@ mod tests {
         let tunneling_result = quantum_state.enhanced_quantum_tunneling(&barrier_profile);
         assert!(tunneling_result.is_ok());
 
-        let tunneling_states = tunneling_result.unwrap();
+        let tunneling_states = tunneling_result?;
 
         // Should return some states that can tunnel (those with lower barriers)
         assert!(!tunneling_states.is_empty());
@@ -884,6 +885,7 @@ mod tests {
         for state in tunneling_states {
             assert!(state < 8);
         }
+        Ok(())
     }
 
     #[test]

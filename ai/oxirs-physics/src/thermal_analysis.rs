@@ -505,7 +505,9 @@ mod tests {
     fn test_conductivity_matrix_size() {
         let mesh = square_mesh(10.0);
         let solver = ThermalSolver::new();
-        let k = solver.assemble_conductivity_matrix(&mesh).unwrap();
+        let k = solver
+            .assemble_conductivity_matrix(&mesh)
+            .expect("should succeed");
         assert_eq!(k.len(), 4);
         assert_eq!(k[0].len(), 4);
     }
@@ -514,7 +516,9 @@ mod tests {
     fn test_conductivity_matrix_symmetric() {
         let mesh = square_mesh(5.0);
         let solver = ThermalSolver::new();
-        let k = solver.assemble_conductivity_matrix(&mesh).unwrap();
+        let k = solver
+            .assemble_conductivity_matrix(&mesh)
+            .expect("should succeed");
         for (i, row_i) in k.iter().enumerate() {
             for (j, &kij) in row_i.iter().enumerate() {
                 let kji = k[j][i];
@@ -530,7 +534,9 @@ mod tests {
     fn test_conductivity_matrix_positive_diagonal() {
         let mesh = square_mesh(1.0);
         let solver = ThermalSolver::new();
-        let k = solver.assemble_conductivity_matrix(&mesh).unwrap();
+        let k = solver
+            .assemble_conductivity_matrix(&mesh)
+            .expect("should succeed");
         for (i, row_i) in k.iter().enumerate() {
             assert!(row_i[i] >= 0.0, "K[{i}][{i}] should be non-negative");
         }
@@ -541,7 +547,9 @@ mod tests {
         // For a pure conductivity matrix (no BCs) the row sums should be 0.
         let mesh = square_mesh(1.0);
         let solver = ThermalSolver::new();
-        let k = solver.assemble_conductivity_matrix(&mesh).unwrap();
+        let k = solver
+            .assemble_conductivity_matrix(&mesh)
+            .expect("should succeed");
         for (i, row) in k.iter().enumerate() {
             let sum: f64 = row.iter().sum();
             assert!(sum.abs() < 1e-10, "Row {i} sum = {sum} should be ~0");
@@ -636,7 +644,7 @@ mod tests {
                 temp: 100.0,
             },
         ];
-        let temps = solver.solve(&mesh, &bcs).unwrap();
+        let temps = solver.solve(&mesh, &bcs).expect("should succeed");
         // Interior node 2 should be ≈ 100°C
         assert!(
             (temps[2] - 100.0).abs() < 1.0,
@@ -667,7 +675,7 @@ mod tests {
                 temp: 100.0,
             },
         ];
-        let temps = solver.solve(&mesh, &bcs).unwrap();
+        let temps = solver.solve(&mesh, &bcs).expect("should succeed");
         assert_eq!(temps.len(), 4);
     }
 
@@ -693,7 +701,7 @@ mod tests {
                 temp: 200.0,
             },
         ];
-        let temps = solver.solve(&mesh, &bcs).unwrap();
+        let temps = solver.solve(&mesh, &bcs).expect("should succeed");
         // Penalty method → very close to prescribed values
         assert!(temps[0].abs() < 1.0, "node 0 ≈ 0: {}", temps[0]);
         assert!(temps[1].abs() < 1.0, "node 1 ≈ 0: {}", temps[1]);
@@ -734,7 +742,7 @@ mod tests {
                 temp: 100.0,
             },
         ];
-        let temps = solver.solve(&mesh, &bcs).unwrap();
+        let temps = solver.solve(&mesh, &bcs).expect("should succeed");
         // Nodes 2,3 are hotter than 0,1
         assert!(temps[2] > temps[0]);
         assert!(temps[3] > temps[1]);
@@ -775,7 +783,7 @@ mod tests {
                 temp: 100.0,
             },
         ];
-        let temps = solver.solve(&mesh, &bcs).unwrap();
+        let temps = solver.solve(&mesh, &bcs).expect("should succeed");
         let (_, qy) = solver.heat_flux_at_element(&mesh, &temps, 0);
         // qy should be negative (heat flows from high T to low T, i.e. downward)
         assert!(qy < 0.0, "qy = {qy} should be < 0");
@@ -817,7 +825,7 @@ mod tests {
                 temp: 80.0,
             },
         ];
-        let result = solver.analyze(&mesh, &bcs).unwrap();
+        let result = solver.analyze(&mesh, &bcs).expect("should succeed");
         assert_eq!(result.temperatures.len(), 4);
         assert!(result.max_temp >= result.min_temp);
         assert_eq!(result.heat_fluxes.len(), 2);
@@ -845,7 +853,7 @@ mod tests {
                 temp: 100.0,
             },
         ];
-        let result = solver.analyze(&mesh, &bcs).unwrap();
+        let result = solver.analyze(&mesh, &bcs).expect("should succeed");
         assert!(result.max_temp >= 90.0);
         assert!(result.min_temp <= 10.0);
     }
@@ -857,7 +865,7 @@ mod tests {
         // 2x - y = 3 ; x + y = 3 → x=2, y=1
         let mut a = vec![vec![2.0_f64, -1.0], vec![1.0, 1.0]];
         let mut b = vec![3.0_f64, 3.0];
-        let x = gaussian_elimination(&mut a, &mut b).unwrap();
+        let x = gaussian_elimination(&mut a, &mut b).expect("should succeed");
         assert!((x[0] - 2.0).abs() < 1e-10);
         assert!((x[1] - 1.0).abs() < 1e-10);
     }
@@ -871,7 +879,7 @@ mod tests {
             vec![2.0, 1.0, -1.0],
         ];
         let mut b = vec![6.0, 2.0, 1.0];
-        let x = gaussian_elimination(&mut a, &mut b).unwrap();
+        let x = gaussian_elimination(&mut a, &mut b).expect("should succeed");
         assert!((x[0] - 1.0).abs() < 1e-9);
         assert!((x[1] - 2.0).abs() < 1e-9);
         assert!((x[2] - 3.0).abs() < 1e-9);
@@ -896,7 +904,7 @@ mod tests {
         }];
         let mesh = ThermalMesh::new(nodes, elements);
         let solver = ThermalSolver::new();
-        let temps = solver.solve(&mesh, &[]).unwrap();
+        let temps = solver.solve(&mesh, &[]).expect("should succeed");
         // Node 1 should converge close to 50°C
         assert!(
             (temps[1] - 50.0).abs() < 5.0,

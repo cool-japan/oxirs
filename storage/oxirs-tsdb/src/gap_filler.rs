@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn test_fill_linear_midpoint() {
         let data = pts(&[(0, 0.0), (1000, 100.0)]);
-        let v = GapFiller::fill_linear(&data, 500).unwrap();
+        let v = GapFiller::fill_linear(&data, 500).expect("should succeed");
         assert!((v - 50.0).abs() < 1e-9);
     }
 
@@ -337,7 +337,7 @@ mod tests {
     #[test]
     fn test_fill_linear_quarter_point() {
         let data = pts(&[(0, 0.0), (1000, 40.0)]);
-        let v = GapFiller::fill_linear(&data, 250).unwrap();
+        let v = GapFiller::fill_linear(&data, 250).expect("should succeed");
         assert!((v - 10.0).abs() < 1e-9);
     }
 
@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn test_interpolate_at_linear() {
         let data = pts(&[(0, 0.0), (1000, 100.0)]);
-        let v = GapFiller::interpolate_at(&data, 500, &InterpolationMethod::Linear).unwrap();
+        let v = GapFiller::interpolate_at(&data, 500, &InterpolationMethod::Linear).expect("should succeed");
         assert!((v - 50.0).abs() < 1e-9);
     }
 
@@ -408,14 +408,14 @@ mod tests {
     fn test_interpolate_at_step_previous() {
         let data = pts(&[(0, 1.0), (1000, 2.0)]);
         let v =
-            GapFiller::interpolate_at(&data, 500, &InterpolationMethod::StepPrevious).unwrap();
+            GapFiller::interpolate_at(&data, 500, &InterpolationMethod::StepPrevious).expect("should succeed");
         assert_eq!(v, 1.0);
     }
 
     #[test]
     fn test_interpolate_at_step_next() {
         let data = pts(&[(0, 1.0), (1000, 2.0)]);
-        let v = GapFiller::interpolate_at(&data, 500, &InterpolationMethod::StepNext).unwrap();
+        let v = GapFiller::interpolate_at(&data, 500, &InterpolationMethod::StepNext).expect("should succeed");
         assert_eq!(v, 2.0);
     }
 
@@ -495,14 +495,14 @@ mod tests {
     #[test]
     fn test_longest_gap_basic() {
         let data = pts(&[(0, 0.0), (1000, 1.0), (5000, 2.0), (6000, 3.0)]);
-        let g = GapFiller::longest_gap(&data).unwrap();
+        let g = GapFiller::longest_gap(&data).expect("should succeed");
         assert_eq!(g.duration_ms, 4000);
     }
 
     #[test]
     fn test_longest_gap_uniform() {
         let data = pts(&[(0, 0.0), (1000, 1.0), (2000, 2.0)]);
-        let g = GapFiller::longest_gap(&data).unwrap();
+        let g = GapFiller::longest_gap(&data).expect("should succeed");
         assert_eq!(g.duration_ms, 1000);
     }
 
@@ -533,7 +533,7 @@ mod tests {
     #[test]
     fn test_spline_fallback_to_linear_few_points() {
         let data = pts(&[(0, 0.0), (1000, 100.0)]);
-        let v = GapFiller::interpolate_at(&data, 500, &InterpolationMethod::Spline).unwrap();
+        let v = GapFiller::interpolate_at(&data, 500, &InterpolationMethod::Spline).expect("should succeed");
         assert!((v - 50.0).abs() < 1e-6);
     }
 

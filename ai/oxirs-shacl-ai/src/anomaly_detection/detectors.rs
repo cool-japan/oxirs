@@ -285,7 +285,7 @@ mod tests {
         let detector = AnomalyDetector::new(config);
         let data = Array1::from_vec(vec![1.0, 2.0, 3.0, 100.0]);
 
-        let result = detector.detect(&data).unwrap();
+        let result = detector.detect(&data).expect("should succeed");
         assert!(result.anomalies.is_empty());
     }
 
@@ -298,7 +298,7 @@ mod tests {
             1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 100.0,
         ]);
 
-        let result = detector.detect(&data).unwrap();
+        let result = detector.detect(&data).expect("should succeed");
 
         assert!(!result.anomalies.is_empty());
         assert!(result.ensemble_result.is_some());
@@ -317,7 +317,7 @@ mod tests {
             1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 100.0,
         ]);
 
-        let result = detector.detect(&data).unwrap();
+        let result = detector.detect(&data).expect("should succeed");
 
         assert!(!result.anomalies.is_empty());
         assert!(result.outlier_result.is_some());
@@ -335,7 +335,7 @@ mod tests {
             1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 100.0,
         ]);
 
-        let result = detector.detect(&data).unwrap();
+        let result = detector.detect(&data).expect("should succeed");
 
         if !result.anomalies.is_empty() {
             assert!(!result.explanations.is_empty());

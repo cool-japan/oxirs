@@ -706,13 +706,19 @@ mod tests {
         let q1 = BatchedQuery::new("{ user { name } }".to_string());
         let q2 = BatchedQuery::new("{ posts { title } }".to_string());
 
-        batcher.add_query(&batch_id, q1).await.unwrap();
-        batcher.add_query(&batch_id, q2).await.unwrap();
+        batcher
+            .add_query(&batch_id, q1)
+            .await
+            .expect("should succeed");
+        batcher
+            .add_query(&batch_id, q2)
+            .await
+            .expect("should succeed");
 
         let result = batcher.execute_batch(&batch_id).await;
         assert!(result.is_ok());
 
-        let batch_result = result.unwrap();
+        let batch_result = result.expect("should succeed");
         assert_eq!(batch_result.results.len(), 2);
         assert_eq!(batch_result.queries_executed, 2);
     }
@@ -726,10 +732,19 @@ mod tests {
         let q1 = BatchedQuery::new("{ user { name } }".to_string());
         let q2 = BatchedQuery::new("{ user { name } }".to_string()); // Duplicate
 
-        batcher.add_query(&batch_id, q1).await.unwrap();
-        batcher.add_query(&batch_id, q2).await.unwrap();
+        batcher
+            .add_query(&batch_id, q1)
+            .await
+            .expect("should succeed");
+        batcher
+            .add_query(&batch_id, q2)
+            .await
+            .expect("should succeed");
 
-        let result = batcher.execute_batch(&batch_id).await.unwrap();
+        let result = batcher
+            .execute_batch(&batch_id)
+            .await
+            .expect("should succeed");
         assert_eq!(result.queries_executed, 1); // Only one unique query
         assert_eq!(result.queries_deduplicated, 1);
         assert_eq!(result.results.len(), 2); // But two results
@@ -744,8 +759,14 @@ mod tests {
         let q1 = BatchedQuery::new("low".to_string()).with_priority(QueryPriority::Low);
         let q2 = BatchedQuery::new("high".to_string()).with_priority(QueryPriority::High);
 
-        batcher.add_query(&batch_id, q1).await.unwrap();
-        batcher.add_query(&batch_id, q2).await.unwrap();
+        batcher
+            .add_query(&batch_id, q1)
+            .await
+            .expect("should succeed");
+        batcher
+            .add_query(&batch_id, q2)
+            .await
+            .expect("should succeed");
 
         let result = batcher.execute_batch(&batch_id).await;
         assert!(result.is_ok());
@@ -758,14 +779,26 @@ mod tests {
 
         let batch1 = batcher.create_batch().await;
         let q1 = BatchedQuery::new("{ user { name } }".to_string());
-        batcher.add_query(&batch1, q1).await.unwrap();
-        batcher.execute_batch(&batch1).await.unwrap();
+        batcher
+            .add_query(&batch1, q1)
+            .await
+            .expect("should succeed");
+        batcher
+            .execute_batch(&batch1)
+            .await
+            .expect("should succeed");
 
         // Second batch with same query should hit cache
         let batch2 = batcher.create_batch().await;
         let q2 = BatchedQuery::new("{ user { name } }".to_string());
-        batcher.add_query(&batch2, q2).await.unwrap();
-        let result = batcher.execute_batch(&batch2).await.unwrap();
+        batcher
+            .add_query(&batch2, q2)
+            .await
+            .expect("should succeed");
+        let result = batcher
+            .execute_batch(&batch2)
+            .await
+            .expect("should succeed");
 
         assert_eq!(result.cache_hits, 1);
     }
@@ -775,8 +808,14 @@ mod tests {
         let batcher = QueryBatcher::new(BatchConfig::default());
         let batch_id = batcher.create_batch().await;
         let q1 = BatchedQuery::new("{ user { name } }".to_string());
-        batcher.add_query(&batch_id, q1).await.unwrap();
-        batcher.execute_batch(&batch_id).await.unwrap();
+        batcher
+            .add_query(&batch_id, q1)
+            .await
+            .expect("should succeed");
+        batcher
+            .execute_batch(&batch_id)
+            .await
+            .expect("should succeed");
 
         assert!(batcher.cache_size().await > 0);
         batcher.clear_cache().await;
@@ -791,15 +830,24 @@ mod tests {
         let q1 = BatchedQuery::new("query1".to_string());
         let q2 = BatchedQuery::new("query2".to_string());
 
-        batcher.add_query(&batch_id, q1).await.unwrap();
-        batcher.add_query(&batch_id, q2).await.unwrap();
+        batcher
+            .add_query(&batch_id, q1)
+            .await
+            .expect("should succeed");
+        batcher
+            .add_query(&batch_id, q2)
+            .await
+            .expect("should succeed");
 
-        batcher.execute_batch(&batch_id).await.unwrap();
+        batcher
+            .execute_batch(&batch_id)
+            .await
+            .expect("should succeed");
 
         let stats = batcher.get_statistics(&batch_id).await;
         assert!(stats.is_some());
 
-        let stats = stats.unwrap();
+        let stats = stats.expect("should succeed");
         assert_eq!(stats.total_queries, 2);
         assert_eq!(stats.executed_queries, 2);
     }

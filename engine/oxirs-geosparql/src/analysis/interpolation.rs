@@ -162,7 +162,7 @@ pub struct InterpolationResult {
 /// ];
 ///
 /// let target = Point::new(0.5, 0.5);
-/// let result = idw_interpolation(&samples, &target, 2.0).unwrap();
+/// let result = idw_interpolation(&samples, &target, 2.0).expect("should succeed");
 ///
 /// // Value should be influenced by all three samples
 /// assert!(result.value > 10.0 && result.value < 20.0);
@@ -248,7 +248,7 @@ pub fn idw_interpolation(
 /// ];
 ///
 /// let target = Point::new(0.5, 0.5);
-/// let result = kriging_interpolation(&samples, &target, 1.0, 10.0, 0.1).unwrap();
+/// let result = kriging_interpolation(&samples, &target, 1.0, 10.0, 0.1).expect("should succeed");
 ///
 /// assert!(result.value > 10.0 && result.value < 25.0);
 /// assert!(result.variance.is_some());
@@ -470,7 +470,7 @@ mod tests {
 
         // Interpolate at a sample location
         let target = Point::new(0.0, 0.0);
-        let result = idw_interpolation(&samples, &target, 2.0).unwrap();
+        let result = idw_interpolation(&samples, &target, 2.0).expect("should succeed");
 
         assert_relative_eq!(result.value, 10.0, epsilon = 1e-10);
     }
@@ -484,7 +484,7 @@ mod tests {
 
         // Interpolate at midpoint
         let target = Point::new(1.0, 0.0);
-        let result = idw_interpolation(&samples, &target, 2.0).unwrap();
+        let result = idw_interpolation(&samples, &target, 2.0).expect("should succeed");
 
         // Should be close to average
         assert_relative_eq!(result.value, 15.0, epsilon = 0.1);
@@ -500,8 +500,8 @@ mod tests {
         let target = Point::new(0.5, 0.0);
 
         // Higher power gives more weight to closer points
-        let result1 = idw_interpolation(&samples, &target, 1.0).unwrap();
-        let result2 = idw_interpolation(&samples, &target, 3.0).unwrap();
+        let result1 = idw_interpolation(&samples, &target, 1.0).expect("should succeed");
+        let result2 = idw_interpolation(&samples, &target, 3.0).expect("should succeed");
 
         // With higher power, should be closer to nearest point (10.0)
         assert!(result2.value < result1.value);
@@ -517,14 +517,15 @@ mod tests {
         ];
 
         let target = Point::new(0.5, 0.5);
-        let result = kriging_interpolation(&samples, &target, 1.0, 10.0, 0.1).unwrap();
+        let result =
+            kriging_interpolation(&samples, &target, 1.0, 10.0, 0.1).expect("should succeed");
 
         // Should be reasonable interpolation
         assert!(result.value > 10.0 && result.value < 25.0);
 
         // Should have variance estimate
         assert!(result.variance.is_some());
-        assert!(result.variance.unwrap() >= 0.0);
+        assert!(result.variance.expect("should succeed") >= 0.0);
     }
 
     #[test]
@@ -536,7 +537,8 @@ mod tests {
         ];
 
         let target = Point::new(0.0, 0.0);
-        let result = kriging_interpolation(&samples, &target, 1.0, 10.0, 0.0).unwrap();
+        let result =
+            kriging_interpolation(&samples, &target, 1.0, 10.0, 0.0).expect("should succeed");
 
         // Should be exact at sample location
         assert_relative_eq!(result.value, 10.0, epsilon = 1e-6);
@@ -572,7 +574,7 @@ mod tests {
         ];
 
         let method = InterpolationMethod::Idw { power: 2.0 };
-        let result = cross_validate_interpolation(&samples, method).unwrap();
+        let result = cross_validate_interpolation(&samples, method).expect("should succeed");
 
         assert!(result.mae >= 0.0);
         assert!(result.rmse >= result.mae);

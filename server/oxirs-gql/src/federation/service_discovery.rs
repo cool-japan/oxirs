@@ -692,7 +692,10 @@ mod tests {
             federation_version: Some("2.0".to_string()),
         };
 
-        discovery.register_service(service.clone()).await.unwrap();
+        discovery
+            .register_service(service.clone())
+            .await
+            .expect("should succeed");
 
         let services = discovery.get_services().await;
         assert_eq!(services.len(), 1);
@@ -732,8 +735,14 @@ mod tests {
             federation_version: Some("2.0".to_string()),
         };
 
-        discovery.register_service(healthy_service).await.unwrap();
-        discovery.register_service(unhealthy_service).await.unwrap();
+        discovery
+            .register_service(healthy_service)
+            .await
+            .expect("should succeed");
+        discovery
+            .register_service(unhealthy_service)
+            .await
+            .expect("should succeed");
 
         let all_services = discovery.get_services().await;
         let healthy_services = discovery.get_healthy_services().await;

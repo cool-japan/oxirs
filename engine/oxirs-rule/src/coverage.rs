@@ -46,7 +46,7 @@
 //!     object: Term::Constant("b".to_string()),
 //! }];
 //!
-//! let _results = engine.forward_chain(&facts).unwrap();
+//! let _results = engine.forward_chain(&facts).expect("should succeed");
 //!
 //! // Record execution
 //! analyzer.record_rule_execution("rule1");
@@ -571,7 +571,7 @@ mod tests {
     }
 
     #[test]
-    fn test_json_export() {
+    fn test_json_export() -> Result<(), Box<dyn std::error::Error>> {
         let mut analyzer = CoverageAnalyzer::new();
 
         analyzer.register_rule(Rule {
@@ -584,9 +584,10 @@ mod tests {
         analyzer.record_rule_execution("rule1");
         analyzer.stop_tracking();
 
-        let json = analyzer.export_to_json().unwrap();
+        let json = analyzer.export_to_json()?;
         assert!(json.contains("rule1"));
         assert!(json.contains("rule_coverage"));
+        Ok(())
     }
 
     #[test]

@@ -427,7 +427,7 @@ mod tests {
         });
         let ok = exp.update_gauge("temp", 23.5, &[("unit_id", "1")]);
         assert!(ok);
-        assert!((exp.get_gauge("temp").unwrap() - 23.5).abs() < 1e-9);
+        assert!((exp.get_gauge("temp").expect("should succeed") - 23.5).abs() < 1e-9);
     }
 
     #[test]
@@ -448,7 +448,7 @@ mod tests {
         exp.update_gauge("g", 2.0, &[("l", "a")]);
         // Only one sample (same labels)
         assert_eq!(exp.samples_for("g").len(), 1);
-        assert!((exp.get_gauge("g").unwrap() - 2.0).abs() < 1e-9);
+        assert!((exp.get_gauge("g").expect("should succeed") - 2.0).abs() < 1e-9);
     }
 
     #[test]
@@ -507,9 +507,9 @@ mod tests {
             });
         }
         let text = exp.render_metrics();
-        let a_pos = text.find("a_metric").unwrap();
-        let m_pos = text.find("m_metric").unwrap();
-        let z_pos = text.find("z_metric").unwrap();
+        let a_pos = text.find("a_metric").expect("should succeed");
+        let m_pos = text.find("m_metric").expect("should succeed");
+        let z_pos = text.find("z_metric").expect("should succeed");
         assert!(a_pos < m_pos, "a should precede m");
         assert!(m_pos < z_pos, "m should precede z");
     }

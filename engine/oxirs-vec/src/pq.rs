@@ -1039,9 +1039,10 @@ pub struct PQStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
-    fn test_pq_basic() {
+    fn test_pq_basic() -> Result<()> {
         let config = PQConfig {
             n_subquantizers: 2,
             n_centroids: 4,
@@ -1061,24 +1062,25 @@ mod tests {
         ];
 
         // Train the index
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
         assert!(index.is_trained);
 
         // Insert vectors
         for (i, vec) in training_vectors.iter().enumerate() {
-            index.insert(format!("vec{i}"), vec.clone()).unwrap();
+            index.insert(format!("vec{i}"), vec.clone())?;
         }
 
         // Search for nearest neighbors
         let query = Vector::new(vec![0.9, 0.1, 0.1, 0.9]);
-        let results = index.search_knn(&query, 3).unwrap();
+        let results = index.search_knn(&query, 3)?;
 
         assert!(!results.is_empty());
         assert!(results.len() <= 3);
+        Ok(())
     }
 
     #[test]
-    fn test_pq_compression() {
+    fn test_pq_compression() -> Result<()> {
         let config = PQConfig {
             n_subquantizers: 4,
             n_centroids: 16,
@@ -1097,7 +1099,7 @@ mod tests {
             .collect();
 
         // Train and check compression ratio
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
 
         let compression_ratio = index.compression_ratio();
         assert_eq!(compression_ratio, 128.0); // 128*4 bytes -> 4 bytes
@@ -1106,10 +1108,11 @@ mod tests {
         assert_eq!(stats.n_subquantizers, 4);
         assert_eq!(stats.n_centroids, 16);
         assert_eq!(stats.dimensions, Some(128));
+        Ok(())
     }
 
     #[test]
-    fn test_pq_reconstruction() {
+    fn test_pq_reconstruction() -> Result<()> {
         let config = PQConfig {
             n_subquantizers: 2,
             n_centroids: 8,
@@ -1126,20 +1129,21 @@ mod tests {
             Vector::new(vec![0.0, -1.0]),
         ];
 
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
 
         // Encode and decode a vector
         let original = Vector::new(vec![0.7, 0.7]);
-        let codes = index.encode_vector(&original).unwrap();
-        let reconstructed = index.decode_codes(&codes).unwrap();
+        let codes = index.encode_vector(&original)?;
+        let reconstructed = index.decode_codes(&codes)?;
 
         // Check that reconstruction is reasonable (not exact due to quantization)
-        let dist = original.euclidean_distance(&reconstructed).unwrap();
+        let dist = original.euclidean_distance(&reconstructed)?;
         assert!(dist < 1.0); // Should be reasonably close
+        Ok(())
     }
 
     #[test]
-    fn test_pq_residual_quantization() {
+    fn test_pq_residual_quantization() -> Result<()> {
         let config = PQConfig::with_residual_quantization(2, 3, 2); // 2 subquantizers, 3 bits, 2 residual levels
         let mut index = PQIndex::new(config);
 
@@ -1154,21 +1158,22 @@ mod tests {
         ];
 
         // Train the index with residual quantization
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
         assert!(index.is_trained());
         assert_eq!(index.residual_quantizers.len(), 2);
 
         // Test enhanced encoding
         let test_vector = Vector::new(vec![0.7, 0.3, 0.3, 0.7]);
-        let enhanced_codes = index.encode_vector_enhanced(&test_vector).unwrap();
+        let enhanced_codes = index.encode_vector_enhanced(&test_vector)?;
 
         assert!(!enhanced_codes.primary.is_empty());
         assert_eq!(enhanced_codes.residual.len(), 2);
         assert!(enhanced_codes.multi_codebook.is_empty()); // Multi-codebook not enabled
+        Ok(())
     }
 
     #[test]
-    fn test_pq_multi_codebook() {
+    fn test_pq_multi_codebook() -> Result<()> {
         let config = PQConfig::with_multi_codebook(2, 3, 3); // 2 subquantizers, 3 bits, 3 codebooks
         let mut index = PQIndex::new(config);
 
@@ -1183,21 +1188,22 @@ mod tests {
         ];
 
         // Train the index with multi-codebook quantization
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
         assert!(index.is_trained());
         assert_eq!(index.multi_codebook_quantizers.len(), 3);
 
         // Test enhanced encoding
         let test_vector = Vector::new(vec![0.7, 0.3, 0.3, 0.7]);
-        let enhanced_codes = index.encode_vector_enhanced(&test_vector).unwrap();
+        let enhanced_codes = index.encode_vector_enhanced(&test_vector)?;
 
         assert!(!enhanced_codes.primary.is_empty());
         assert!(enhanced_codes.residual.is_empty()); // Residual not enabled
         assert_eq!(enhanced_codes.multi_codebook.len(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_pq_symmetric_distance() {
+    fn test_pq_symmetric_distance() -> Result<()> {
         let config = PQConfig {
             enable_symmetric_distance: true,
             n_subquantizers: 2,
@@ -1216,20 +1222,21 @@ mod tests {
         ];
 
         // Train the index
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
         assert!(index.distance_tables.is_some());
 
         // Test symmetric distance computation
         let codes1 = vec![0, 1];
         let codes2 = vec![1, 0];
-        let distance = index.symmetric_distance(&codes1, &codes2).unwrap();
+        let distance = index.symmetric_distance(&codes1, &codes2)?;
 
         assert!(distance >= 0.0);
         assert!(distance.is_finite());
+        Ok(())
     }
 
     #[test]
-    fn test_pq_enhanced_features() {
+    fn test_pq_enhanced_features() -> Result<()> {
         let config = PQConfig::enhanced(2, 3); // All features enabled
         let mut index = PQIndex::new(config);
 
@@ -1244,7 +1251,7 @@ mod tests {
         ];
 
         // Train with all enhanced features
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
         assert!(index.is_trained());
 
         // Verify all features are initialized
@@ -1254,19 +1261,16 @@ mod tests {
 
         // Test enhanced encoding and distance computation
         let test_vector = Vector::new(vec![0.7, 0.3, 0.3, 0.7]);
-        let enhanced_codes = index.encode_vector_enhanced(&test_vector).unwrap();
-        let enhanced_distance = index
-            .enhanced_distance(&test_vector, &enhanced_codes)
-            .unwrap();
+        let enhanced_codes = index.encode_vector_enhanced(&test_vector)?;
+        let enhanced_distance = index.enhanced_distance(&test_vector, &enhanced_codes)?;
 
         assert!(enhanced_distance >= 0.0);
         assert!(enhanced_distance.is_finite());
 
         // Enhanced distance should be more accurate (smaller) than basic asymmetric distance
-        let basic_distance = index
-            .asymmetric_distance(&test_vector, &enhanced_codes.primary)
-            .unwrap();
+        let basic_distance = index.asymmetric_distance(&test_vector, &enhanced_codes.primary)?;
         assert!(enhanced_distance <= basic_distance * 1.1); // Allow some tolerance
+        Ok(())
     }
 
     #[test]

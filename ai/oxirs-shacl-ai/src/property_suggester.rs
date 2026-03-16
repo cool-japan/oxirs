@@ -250,7 +250,9 @@ mod tests {
             class: "Person".to_string(),
             properties: vec![always_pattern("ex:name", 10)],
         };
-        let candidate = s.suggest_for_class("Person", &[np]).unwrap();
+        let candidate = s
+            .suggest_for_class("Person", &[np])
+            .expect("should succeed");
         let prop = &candidate.suggested_properties[0];
         assert!(prop.required);
     }
@@ -262,7 +264,9 @@ mod tests {
             class: "Person".to_string(),
             properties: vec![partial_pattern("ex:nickname", 5, 10)],
         };
-        let candidate = s.suggest_for_class("Person", &[np]).unwrap();
+        let candidate = s
+            .suggest_for_class("Person", &[np])
+            .expect("should succeed");
         let prop = &candidate.suggested_properties[0];
         assert!(!prop.required);
     }
@@ -281,7 +285,9 @@ mod tests {
                 partial_pattern("ex:optProp", 2, 9),
             ],
         };
-        let candidate = s.suggest_for_class("Person", &[np]).unwrap();
+        let candidate = s
+            .suggest_for_class("Person", &[np])
+            .expect("should succeed");
         assert_eq!(candidate.suggested_properties.len(), 1);
         assert_eq!(candidate.suggested_properties[0].predicate, "ex:name");
     }
@@ -293,7 +299,7 @@ mod tests {
             class: "X".to_string(),
             properties: vec![partial_pattern("p1", 1, 10), partial_pattern("p2", 1, 10)],
         };
-        let candidate = s.suggest_for_class("X", &[np]).unwrap();
+        let candidate = s.suggest_for_class("X", &[np]).expect("should succeed");
         assert_eq!(candidate.suggested_properties.len(), 2);
     }
 
@@ -311,7 +317,7 @@ mod tests {
                 always_pattern("ex:common", 10),
             ],
         };
-        let candidate = s.suggest_for_class("Y", &[np]).unwrap();
+        let candidate = s.suggest_for_class("Y", &[np]).expect("should succeed");
         assert_eq!(candidate.suggested_properties.len(), 1);
         assert_eq!(candidate.suggested_properties[0].predicate, "ex:common");
     }
@@ -520,7 +526,7 @@ mod tests {
         };
         let candidate = s
             .suggest_for_class("http://schema.org/Person", &[np])
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(candidate.target_class, "http://schema.org/Person");
     }
 
@@ -533,7 +539,7 @@ mod tests {
             class: "Empty".to_string(),
             properties: Vec::new(),
         };
-        let candidate = s.suggest_for_class("Empty", &[np]).unwrap();
+        let candidate = s.suggest_for_class("Empty", &[np]).expect("should succeed");
         assert!(candidate.suggested_properties.is_empty());
     }
 
@@ -546,7 +552,7 @@ mod tests {
             class: "A".to_string(),
             properties: vec![always_pattern("ex:age", 10)],
         };
-        let candidate = s.suggest_for_class("A", &[np]).unwrap();
+        let candidate = s.suggest_for_class("A", &[np]).expect("should succeed");
         assert_eq!(candidate.suggested_properties[0].predicate, "ex:age");
     }
 
@@ -670,7 +676,9 @@ mod tests {
             class: "Person".to_string(),
             properties: vec![p],
         };
-        let candidate = s.suggest_for_class("Person", &[np]).unwrap();
+        let candidate = s
+            .suggest_for_class("Person", &[np])
+            .expect("should succeed");
         assert_eq!(
             candidate.suggested_properties[0]
                 .inferred_datatype
@@ -686,7 +694,7 @@ mod tests {
             class: "X".to_string(),
             properties: vec![always_pattern("p", 10)],
         };
-        let candidate = s.suggest_for_class("X", &[np]).unwrap();
+        let candidate = s.suggest_for_class("X", &[np]).expect("should succeed");
         let c = candidate.suggested_properties[0].confidence;
         assert!((0.0..=1.0).contains(&c));
     }
@@ -698,7 +706,7 @@ mod tests {
             class: "Y".to_string(),
             properties: vec![always_pattern("p", 10)],
         };
-        let candidate = s.suggest_for_class("Y", &[np]).unwrap();
+        let candidate = s.suggest_for_class("Y", &[np]).expect("should succeed");
         assert_eq!(candidate.suggested_properties[0].min_count, Some(1));
     }
 
@@ -712,7 +720,7 @@ mod tests {
             class: "Z".to_string(),
             properties: vec![p],
         };
-        let candidate = s.suggest_for_class("Z", &[np]).unwrap();
+        let candidate = s.suggest_for_class("Z", &[np]).expect("should succeed");
         if let Some(sp) = candidate.suggested_properties.first() {
             assert!(sp.max_count.is_none());
         }

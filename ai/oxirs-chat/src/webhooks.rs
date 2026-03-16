@@ -416,7 +416,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_webhook_registration() {
-        let manager = WebhookManager::new().unwrap();
+        let manager = WebhookManager::new().expect("should succeed");
 
         let config = WebhookConfig {
             id: "test-webhook".to_string(),
@@ -425,7 +425,7 @@ mod tests {
             ..Default::default()
         };
 
-        manager.register(config).await.unwrap();
+        manager.register(config).await.expect("should succeed");
 
         let webhooks = manager.list_webhooks().await;
         assert_eq!(webhooks.len(), 1);

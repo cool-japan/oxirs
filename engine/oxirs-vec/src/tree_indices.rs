@@ -1459,7 +1459,7 @@ mod tests {
 
     #[test]
     #[ignore = "Tree indices are experimental - see module documentation for alternatives"]
-    fn test_ball_tree() {
+    fn test_ball_tree() -> Result<()> {
         let config = TreeIndexConfig {
             tree_type: TreeType::BallTree,
             max_leaf_size: 10,
@@ -1475,7 +1475,7 @@ mod tests {
         }
 
         // Build and search
-        ball_tree.build().unwrap();
+        ball_tree.build()?;
         assert!(ball_tree.root.is_some());
 
         let query = vec![50.0, 100.0];
@@ -1483,11 +1483,12 @@ mod tests {
 
         assert!(results.len() <= 5);
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
     #[ignore = "Investigating stack overflow with recursive tree construction"]
-    fn test_kd_tree() {
+    fn test_kd_tree() -> Result<()> {
         let config = TreeIndexConfig {
             tree_type: TreeType::KdTree,
             max_leaf_size: 50, // Extremely large leaf size to force leaf nodes
@@ -1499,21 +1500,22 @@ mod tests {
         // Tiny dataset to prevent stack overflow
         for i in 0..3 {
             let vector = Vector::new(vec![i as f32, (3 - i) as f32]);
-            index.insert(format!("vec_{i}"), vector).unwrap();
+            index.insert(format!("vec_{i}"), vector)?;
         }
 
-        index.build().unwrap();
+        index.build()?;
 
         // Search for nearest neighbors
         let query = Vector::new(vec![1.0, 2.0]);
-        let results = index.search_knn(&query, 2).unwrap();
+        let results = index.search_knn(&query, 2)?;
 
         assert_eq!(results.len(), 2);
+        Ok(())
     }
 
     #[test]
     #[ignore = "Investigating stack overflow with recursive tree construction"]
-    fn test_vp_tree() {
+    fn test_vp_tree() -> Result<()> {
         let config = TreeIndexConfig {
             tree_type: TreeType::VpTree,
             random_seed: Some(42),
@@ -1527,15 +1529,16 @@ mod tests {
         for i in 0..3 {
             let angle = (i as f32) * std::f32::consts::PI / 4.0;
             let vector = Vector::new(vec![angle.cos(), angle.sin()]);
-            index.insert(format!("vec_{i}"), vector).unwrap();
+            index.insert(format!("vec_{i}"), vector)?;
         }
 
-        index.build().unwrap();
+        index.build()?;
 
         // Search for nearest neighbors
         let query = Vector::new(vec![1.0, 0.0]);
-        let results = index.search_knn(&query, 2).unwrap();
+        let results = index.search_knn(&query, 2)?;
 
         assert_eq!(results.len(), 2);
+        Ok(())
     }
 }

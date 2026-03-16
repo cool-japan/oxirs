@@ -785,7 +785,7 @@ mod tests {
         let config = ObservabilityConfig::default();
         let system = ObservabilitySystem::new(config);
 
-        let dashboard = system.get_dashboard().await.unwrap();
+        let dashboard = system.get_dashboard().await.expect("should succeed");
         assert_eq!(dashboard.service_info.name, "oxirs-gql");
     }
 
@@ -811,9 +811,12 @@ mod tests {
             client_info: ClientInfo::default(),
         };
 
-        system.record_operation(&metrics).await.unwrap();
+        system
+            .record_operation(&metrics)
+            .await
+            .expect("should succeed");
 
-        let dashboard = system.get_dashboard().await.unwrap();
+        let dashboard = system.get_dashboard().await.expect("should succeed");
         assert!(dashboard.metrics.is_some());
     }
 
@@ -841,9 +844,12 @@ mod tests {
             client_info: ClientInfo::default(),
         };
 
-        system.record_operation(&slow_metrics).await.unwrap();
+        system
+            .record_operation(&slow_metrics)
+            .await
+            .expect("should succeed");
 
-        let dashboard = system.get_dashboard().await.unwrap();
+        let dashboard = system.get_dashboard().await.expect("should succeed");
         if let Some(alerts) = dashboard.alerts {
             assert!(!alerts.is_empty());
         }

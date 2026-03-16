@@ -1278,15 +1278,16 @@ fn bytes_to_vector(data: &[u8], dimensions: usize) -> Result<Vector, VectorError
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
-    fn test_zstd_compression() {
+    fn test_zstd_compression() -> Result<()> {
         let vector = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let compressor = ZstdCompressor::new(3);
 
-        let compressed = compressor.compress(&vector).unwrap();
-        let decompressed = compressor.decompress(&compressed, 5).unwrap();
+        let compressed = compressor.compress(&vector)?;
+        let decompressed = compressor.decompress(&compressed, 5)?;
 
         let orig = vector.as_f32();
         let dec = decompressed.as_f32();
@@ -1294,16 +1295,17 @@ mod tests {
         for (a, b) in orig.iter().zip(dec.iter()) {
             assert!((a - b).abs() < 1e-6);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_scalar_quantization() {
+    fn test_scalar_quantization() -> Result<()> {
         let vector = Vector::new(vec![0.1, 0.5, 0.9, 0.3, 0.7]);
         let mut quantizer = ScalarQuantizer::new(8);
-        quantizer.train(std::slice::from_ref(&vector)).unwrap();
+        quantizer.train(std::slice::from_ref(&vector))?;
 
-        let compressed = quantizer.compress(&vector).unwrap();
-        let decompressed = quantizer.decompress(&compressed, 5).unwrap();
+        let compressed = quantizer.compress(&vector)?;
+        let decompressed = quantizer.decompress(&compressed, 5)?;
 
         // Check compression ratio
         assert!(compressed.len() < 20); // Should be much smaller than original
@@ -1315,10 +1317,11 @@ mod tests {
         for (a, b) in orig.iter().zip(dec.iter()) {
             assert!((a - b).abs() < 0.01);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_pca_compression() {
+    fn test_pca_compression() -> Result<()> {
         let vectors = vec![
             Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]),
             Vector::new(vec![2.0, 3.0, 4.0, 5.0, 6.0]),
@@ -1326,17 +1329,18 @@ mod tests {
         ];
 
         let mut pca = PcaCompressor::new(3);
-        pca.train(&vectors).unwrap();
+        pca.train(&vectors)?;
 
-        let compressed = pca.compress(&vectors[0]).unwrap();
-        let decompressed = pca.decompress(&compressed, 5).unwrap();
+        let compressed = pca.compress(&vectors[0])?;
+        let decompressed = pca.decompress(&compressed, 5)?;
 
         let dec = decompressed.as_f32();
         assert_eq!(dec.len(), 5);
+        Ok(())
     }
 
     #[test]
-    fn test_adaptive_compression_sparse_data() {
+    fn test_adaptive_compression_sparse_data() -> Result<()> {
         // Test with sparse data (should select Zstd with high level)
         let vectors = vec![
             Vector::new(vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0]),
@@ -1345,22 +1349,25 @@ mod tests {
         ];
 
         let mut adaptive = AdaptiveCompressor::with_balanced_quality();
-        adaptive.optimize_for_vectors(&vectors).unwrap();
+        adaptive.optimize_for_vectors(&vectors)?;
 
-        let analysis = adaptive.get_analysis().unwrap();
+        let analysis = adaptive
+            .get_analysis()
+            .ok_or("get_analysis returned None")?;
         assert!(analysis.sparsity > 0.5); // Should detect high sparsity
 
         // Test compression
-        let compressed = adaptive.compress(&vectors[0]).unwrap();
-        let decompressed = adaptive.decompress(&compressed, 10).unwrap();
+        let compressed = adaptive.compress(&vectors[0])?;
+        let decompressed = adaptive.decompress(&compressed, 10)?;
 
         let orig = vectors[0].as_f32();
         let dec = decompressed.as_f32();
         assert_eq!(orig.len(), dec.len());
+        Ok(())
     }
 
     #[test]
-    fn test_adaptive_compression_quantizable_data() {
+    fn test_adaptive_compression_quantizable_data() -> Result<()> {
         // Test with data in small range (should select quantization)
         let vectors = vec![
             Vector::new(vec![0.1, 0.2, 0.3, 0.4, 0.5]),
@@ -1369,14 +1376,16 @@ mod tests {
         ];
 
         let mut adaptive = AdaptiveCompressor::with_balanced_quality();
-        adaptive.optimize_for_vectors(&vectors).unwrap();
+        adaptive.optimize_for_vectors(&vectors)?;
 
-        let analysis = adaptive.get_analysis().unwrap();
+        let analysis = adaptive
+            .get_analysis()
+            .ok_or("get_analysis returned None")?;
         assert!(analysis.range < 1.0); // Should detect small range
 
         // Test compression
-        let compressed = adaptive.compress(&vectors[0]).unwrap();
-        let decompressed = adaptive.decompress(&compressed, 5).unwrap();
+        let compressed = adaptive.compress(&vectors[0])?;
+        let decompressed = adaptive.decompress(&compressed, 5)?;
 
         let orig = vectors[0].as_f32();
         let dec = decompressed.as_f32();
@@ -1384,10 +1393,11 @@ mod tests {
 
         // Check compression ratio
         assert!(adaptive.compression_ratio() < 0.5); // Should achieve good compression
+        Ok(())
     }
 
     #[test]
-    fn test_adaptive_compression_high_dimensional() {
+    fn test_adaptive_compression_high_dimensional() -> Result<()> {
         // Test with high-dimensional data (should consider PCA)
         let mut vectors = Vec::new();
         for i in 0..10 {
@@ -1399,9 +1409,11 @@ mod tests {
         }
 
         let mut adaptive = AdaptiveCompressor::with_best_ratio();
-        adaptive.optimize_for_vectors(&vectors).unwrap();
+        adaptive.optimize_for_vectors(&vectors)?;
 
-        let analysis = adaptive.get_analysis().unwrap();
+        let analysis = adaptive
+            .get_analysis()
+            .ok_or("get_analysis returned None")?;
         // For high-dimensional data with good correlation, should recommend PCA
         match &analysis.recommended_method {
             CompressionMethod::Pca { components } => {
@@ -1424,7 +1436,7 @@ mod tests {
         println!("Original vector length: {}", original.dimensions);
         println!("Recommended method: {:?}", analysis.recommended_method);
 
-        let compressed = adaptive.compress(original).unwrap();
+        let compressed = adaptive.compress(original)?;
         println!("Compressed size: {} bytes", compressed.len());
 
         // Test that compression works and produces reasonable output
@@ -1444,18 +1456,17 @@ mod tests {
             }
             _ => {
                 // For other methods, test full round-trip
-                let decompressed = adaptive
-                    .decompress(&compressed, original.dimensions)
-                    .unwrap();
+                let decompressed = adaptive.decompress(&compressed, original.dimensions)?;
                 let dec = decompressed.as_f32();
                 let orig = original.as_f32();
                 assert_eq!(dec.len(), orig.len());
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_adaptive_compression_method_switching() {
+    fn test_adaptive_compression_method_switching() -> Result<()> {
         let mut adaptive = AdaptiveCompressor::with_fast_quality();
 
         // Start with sparse data
@@ -1463,7 +1474,7 @@ mod tests {
             Vector::new(vec![0.0, 0.0, 1.0, 0.0, 0.0]),
             Vector::new(vec![0.0, 2.0, 0.0, 0.0, 0.0]),
         ];
-        adaptive.optimize_for_vectors(&sparse_vectors).unwrap();
+        adaptive.optimize_for_vectors(&sparse_vectors)?;
         let initial_switches = adaptive.get_metrics().method_switches;
 
         // Switch to dense, quantizable data
@@ -1471,21 +1482,22 @@ mod tests {
             Vector::new(vec![0.1, 0.2, 0.3, 0.4, 0.5]),
             Vector::new(vec![0.2, 0.3, 0.4, 0.5, 0.6]),
         ];
-        adaptive.optimize_for_vectors(&dense_vectors).unwrap();
+        adaptive.optimize_for_vectors(&dense_vectors)?;
 
         // Should have switched methods
         assert!(adaptive.get_metrics().method_switches > initial_switches);
+        Ok(())
     }
 
     #[test]
-    fn test_vector_analysis() {
+    fn test_vector_analysis() -> Result<()> {
         let vectors = vec![
             Vector::new(vec![1.0, 2.0, 3.0]),
             Vector::new(vec![2.0, 3.0, 4.0]),
             Vector::new(vec![3.0, 4.0, 5.0]),
         ];
 
-        let analysis = VectorAnalysis::analyze(&vectors, &AdaptiveQuality::Balanced).unwrap();
+        let analysis = VectorAnalysis::analyze(&vectors, &AdaptiveQuality::Balanced)?;
 
         assert!(analysis.mean > 0.0);
         assert!(analysis.std_dev > 0.0);
@@ -1493,6 +1505,7 @@ mod tests {
         assert!(analysis.entropy >= 0.0);
         assert!(!analysis.dominant_patterns.is_empty());
         assert!(analysis.expected_ratio > 0.0 && analysis.expected_ratio <= 1.0);
+        Ok(())
     }
 
     #[test]
@@ -1531,7 +1544,7 @@ mod tests {
     }
 
     #[test]
-    fn test_product_quantization() {
+    fn test_product_quantization() -> Result<()> {
         // Create test vectors with 8 dimensions (divisible by 4 subvectors)
         let vectors = vec![
             Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
@@ -1544,12 +1557,12 @@ mod tests {
         let mut pq = ProductQuantizer::new(4, 4);
 
         // Train the quantizer
-        pq.train(&vectors).unwrap();
+        pq.train(&vectors)?;
 
         // Test compression and decompression
         let original = &vectors[0];
-        let compressed = pq.compress(original).unwrap();
-        let decompressed = pq.decompress(&compressed, 8).unwrap();
+        let compressed = pq.compress(original)?;
+        let decompressed = pq.decompress(&compressed, 8)?;
 
         // Check that dimensions match
         assert_eq!(decompressed.dimensions, original.dimensions);
@@ -1563,10 +1576,11 @@ mod tests {
 
         // Test that we can compress and decompress all vectors
         for vector in &vectors {
-            let compressed = pq.compress(vector).unwrap();
-            let decompressed = pq.decompress(&compressed, vector.dimensions).unwrap();
+            let compressed = pq.compress(vector)?;
+            let decompressed = pq.decompress(&compressed, vector.dimensions)?;
             assert_eq!(decompressed.dimensions, vector.dimensions);
         }
+        Ok(())
     }
 
     #[test]

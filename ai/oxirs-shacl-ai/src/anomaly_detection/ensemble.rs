@@ -330,7 +330,7 @@ mod tests {
             1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 100.0,
         ]);
 
-        let result = detector.detect_ensemble(&data).unwrap();
+        let result = detector.detect_ensemble(&data).expect("should succeed");
 
         assert!(!result.anomalies.is_empty());
         assert_eq!(result.detector_results.len(), 3);
@@ -348,7 +348,7 @@ mod tests {
             1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 100.0,
         ]);
 
-        let result = detector.detect_ensemble(&data).unwrap();
+        let result = detector.detect_ensemble(&data).expect("should succeed");
         // Unanimous voting is strict, so may have fewer detections
         assert!(result.voting_summary.anomaly_indices.len() <= 1);
     }

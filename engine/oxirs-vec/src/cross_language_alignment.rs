@@ -774,15 +774,16 @@ mod tests {
     }
 
     #[test]
-    fn test_language_detection() {
+    fn test_language_detection() -> Result<()> {
         let detector = SimpleLanguageDetector::new(vec!["en".to_string(), "es".to_string()]);
 
-        let detection = detector.detect_language("Hello world").unwrap();
+        let detection = detector.detect_language("Hello world")?;
         assert_eq!(detection.language, "en");
         assert!(detection.confidence > 0.0);
 
-        let detection = detector.detect_language("Hola mundo").unwrap();
+        let detection = detector.detect_language("Hola mundo")?;
         assert_eq!(detection.language, "en"); // Simple detector defaults to English
+        Ok(())
     }
 
     #[test]
@@ -813,24 +814,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_content_processing() {
+    async fn test_content_processing() -> Result<()> {
         let config = CrossLanguageConfig::default();
         let embedding_generator = Box::new(MockEmbeddingGenerator::new());
 
         let aligner = CrossLanguageAligner::new(config, embedding_generator);
-        let content = aligner
-            .process_content("Hello world", "test_id")
-            .await
-            .unwrap();
+        let content = aligner.process_content("Hello world", "test_id").await?;
 
         assert_eq!(content.id, "test_id");
         assert_eq!(content.text, "Hello world");
         assert!(content.vector.is_some());
         assert!(!content.aligned_vectors.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_vector_combination() {
+    fn test_vector_combination() -> Result<()> {
         let config = CrossLanguageConfig::default();
         let embedding_generator = Box::new(MockEmbeddingGenerator::new());
         let aligner = CrossLanguageAligner::new(config, embedding_generator);
@@ -838,10 +837,11 @@ mod tests {
         let vector1 = Vector::new(vec![1.0, 2.0, 3.0]);
         let vector2 = Vector::new(vec![2.0, 4.0, 6.0]);
 
-        let combined = aligner.combine_vectors(&vector1, &vector2).unwrap();
+        let combined = aligner.combine_vectors(&vector1, &vector2)?;
         let combined_f32 = combined.as_f32();
 
         assert_eq!(combined_f32, vec![1.5, 3.0, 4.5]);
+        Ok(())
     }
 
     #[test]

@@ -256,21 +256,25 @@ mod tests {
 
         let result = state_machine
             .execute(RdfOperation::Insert(triple.clone()))
-            .unwrap();
+            .expect("operation should succeed");
         assert!(matches!(result, OperationResult::Success));
         assert_eq!(state_machine.triple_count(), 1);
         assert_eq!(state_machine.operation_count(), 1);
 
         // Test contains
-        assert!(state_machine.contains_triple(&triple).unwrap());
+        assert!(state_machine
+            .contains_triple(&triple)
+            .expect("contains_triple should succeed"));
 
         // Test remove
         let result = state_machine
             .execute(RdfOperation::Remove(triple.clone()))
-            .unwrap();
+            .expect("operation should succeed");
         assert!(matches!(result, OperationResult::Success));
         assert_eq!(state_machine.triple_count(), 0);
-        assert!(!state_machine.contains_triple(&triple).unwrap());
+        assert!(!state_machine
+            .contains_triple(&triple)
+            .expect("contains_triple should succeed"));
     }
 
     #[test]
@@ -301,14 +305,14 @@ mod tests {
         // Test batch insert
         let result = state_machine
             .execute(RdfOperation::BatchInsert(triples.clone()))
-            .unwrap();
+            .expect("operation should succeed");
         assert!(matches!(result, OperationResult::Success));
         assert_eq!(state_machine.triple_count(), 2);
 
         // Test batch remove
         let result = state_machine
             .execute(RdfOperation::BatchRemove(triples))
-            .unwrap();
+            .expect("operation should succeed");
         assert!(matches!(result, OperationResult::Success));
         assert_eq!(state_machine.triple_count(), 0);
     }
@@ -333,7 +337,7 @@ mod tests {
         // Add triple
         state_machine
             .execute(RdfOperation::Insert(triple.clone()))
-            .unwrap();
+            .expect("operation should succeed");
         let digest2 = state_machine.calculate_digest();
 
         // Digests should be different
@@ -363,7 +367,9 @@ mod tests {
                     language: None,
                 },
             };
-            state_machine.execute(RdfOperation::Insert(triple)).unwrap();
+            state_machine
+                .execute(RdfOperation::Insert(triple))
+                .expect("state machine execution should succeed");
         }
 
         // Test query (should return max 10 results)
@@ -371,7 +377,7 @@ mod tests {
             .execute(RdfOperation::Query(
                 "SELECT * WHERE { ?s ?p ?o }".to_string(),
             ))
-            .unwrap();
+            .expect("operation should succeed");
 
         if let OperationResult::QueryResult(results) = result {
             assert_eq!(results.len(), 10); // Limited to 10 results
@@ -425,16 +431,16 @@ mod tests {
         // Insert all triples
         state_machine
             .execute(RdfOperation::Insert(triple1))
-            .unwrap();
+            .expect("operation should succeed");
         state_machine
             .execute(RdfOperation::Insert(triple2))
-            .unwrap();
+            .expect("operation should succeed");
         state_machine
             .execute(RdfOperation::Insert(triple3))
-            .unwrap();
+            .expect("operation should succeed");
         state_machine
             .execute(RdfOperation::Insert(triple4))
-            .unwrap();
+            .expect("operation should succeed");
 
         assert_eq!(state_machine.triple_count(), 4);
     }

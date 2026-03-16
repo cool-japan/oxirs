@@ -445,8 +445,8 @@ mod tests {
     fn test_simple_fit_constant_series() {
         let data = make_constant(10, 5.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.5 });
-        f.fit(&data).unwrap();
-        let pred = f.predict(1, 9000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let pred = f.predict(1, 9000, 1000).expect("should succeed");
         // For a constant series the forecast should be ≈ 5.0
         let diff = (pred.predictions[0].value - 5.0).abs();
         assert!(
@@ -460,8 +460,8 @@ mod tests {
     fn test_simple_predict_horizon() {
         let data = make_constant(5, 3.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.5 });
-        f.fit(&data).unwrap();
-        let result = f.predict(4, 4000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(4, 4000, 1000).expect("should succeed");
         assert_eq!(result.predictions.len(), 4);
         assert_eq!(result.horizon, 4);
     }
@@ -470,8 +470,8 @@ mod tests {
     fn test_simple_predict_timestamps() {
         let data = make_constant(3, 1.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.3 });
-        f.fit(&data).unwrap();
-        let result = f.predict(3, 10_000, 500).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(3, 10_000, 500).expect("should succeed");
         assert_eq!(result.predictions[0].timestamp, 10_500);
         assert_eq!(result.predictions[1].timestamp, 11_000);
         assert_eq!(result.predictions[2].timestamp, 11_500);
@@ -481,8 +481,8 @@ mod tests {
     fn test_simple_method_name() {
         let data = make_constant(2, 1.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.5 });
-        f.fit(&data).unwrap();
-        let result = f.predict(1, 1000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(1, 1000, 1000).expect("should succeed");
         assert!(result.method.contains("simple"));
     }
 
@@ -528,8 +528,8 @@ mod tests {
             alpha: 0.5,
             beta: 0.3,
         });
-        f.fit(&data).unwrap();
-        let result = f.predict(3, 4000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(3, 4000, 1000).expect("should succeed");
         assert_eq!(result.predictions.len(), 3);
     }
 
@@ -540,8 +540,8 @@ mod tests {
             alpha: 0.8,
             beta: 0.5,
         });
-        f.fit(&data).unwrap();
-        let result = f.predict(3, 9000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(3, 9000, 1000).expect("should succeed");
         // For a strongly increasing series each successive prediction should be ≥ prev.
         let preds = &result.predictions;
         assert!(preds[1].value >= preds[0].value - 0.1);
@@ -578,8 +578,8 @@ mod tests {
             alpha: 0.5,
             beta: 0.3,
         });
-        f.fit(&data).unwrap();
-        let result = f.predict(1, 2000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(1, 2000, 1000).expect("should succeed");
         assert!(result.method.contains("holt"));
     }
 
@@ -598,8 +598,8 @@ mod tests {
     fn test_ma_predict_constant() {
         let data = make_constant(5, 7.0);
         let mut f = Forecaster::new(SmoothingMethod::MovingAverage { window: 3 });
-        f.fit(&data).unwrap();
-        let result = f.predict(2, 4000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(2, 4000, 1000).expect("should succeed");
         for p in &result.predictions {
             let diff = (p.value - 7.0).abs();
             assert!(diff < 1e-9, "Expected 7.0, got {}", p.value);
@@ -610,8 +610,8 @@ mod tests {
     fn test_ma_predict_horizon_length() {
         let data = make_linear(10, 1.0, 0.0);
         let mut f = Forecaster::new(SmoothingMethod::MovingAverage { window: 3 });
-        f.fit(&data).unwrap();
-        let result = f.predict(5, 9000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(5, 9000, 1000).expect("should succeed");
         assert_eq!(result.predictions.len(), 5);
     }
 
@@ -619,8 +619,8 @@ mod tests {
     fn test_ma_window_larger_than_data() {
         let data = make_constant(3, 2.0);
         let mut f = Forecaster::new(SmoothingMethod::MovingAverage { window: 10 });
-        f.fit(&data).unwrap();
-        let result = f.predict(1, 2000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(1, 2000, 1000).expect("should succeed");
         let diff = (result.predictions[0].value - 2.0).abs();
         assert!(diff < 1e-9);
     }
@@ -629,8 +629,8 @@ mod tests {
     fn test_ma_method_name() {
         let data = make_constant(3, 1.0);
         let mut f = Forecaster::new(SmoothingMethod::MovingAverage { window: 2 });
-        f.fit(&data).unwrap();
-        let result = f.predict(1, 2000, 1000).unwrap();
+        f.fit(&data).expect("should succeed");
+        let result = f.predict(1, 2000, 1000).expect("should succeed");
         assert!(result.method.contains("moving_average"));
     }
 
@@ -656,7 +656,7 @@ mod tests {
     fn test_residuals_length() {
         let data = make_constant(5, 3.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.5 });
-        f.fit(&data).unwrap();
+        f.fit(&data).expect("should succeed");
         let res = f.residuals(&data);
         assert_eq!(res.len(), 5);
     }
@@ -665,7 +665,7 @@ mod tests {
     fn test_residuals_constant_series_first_zero() {
         let data = make_constant(5, 10.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.5 });
-        f.fit(&data).unwrap();
+        f.fit(&data).expect("should succeed");
         let res = f.residuals(&data);
         assert!((res[0]).abs() < 1e-9);
     }
@@ -686,7 +686,7 @@ mod tests {
     fn test_mae_constant_is_zero() {
         let data = make_constant(5, 5.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.5 });
-        f.fit(&data).unwrap();
+        f.fit(&data).expect("should succeed");
         let mae = f.mae(&data);
         assert!(
             mae < 1e-9,
@@ -699,7 +699,7 @@ mod tests {
     fn test_rmse_constant_is_zero() {
         let data = make_constant(5, 5.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.5 });
-        f.fit(&data).unwrap();
+        f.fit(&data).expect("should succeed");
         let rmse = f.rmse(&data);
         assert!(rmse < 1e-9);
     }
@@ -708,7 +708,7 @@ mod tests {
     fn test_mae_positive() {
         let data = make_linear(10, 2.0, 0.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.3 });
-        f.fit(&data).unwrap();
+        f.fit(&data).expect("should succeed");
         let mae = f.mae(&data);
         assert!(mae >= 0.0);
     }
@@ -717,7 +717,7 @@ mod tests {
     fn test_rmse_positive() {
         let data = make_linear(10, 2.0, 0.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.3 });
-        f.fit(&data).unwrap();
+        f.fit(&data).expect("should succeed");
         let rmse = f.rmse(&data);
         assert!(rmse >= 0.0);
     }
@@ -727,7 +727,7 @@ mod tests {
         // RMSE ≥ MAE always
         let data = make_linear(10, 3.0, 1.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.4 });
-        f.fit(&data).unwrap();
+        f.fit(&data).expect("should succeed");
         let mae = f.mae(&data);
         let rmse = f.rmse(&data);
         assert!(rmse >= mae - 1e-9);
@@ -784,8 +784,8 @@ mod tests {
     fn test_smoothing_params_simple_returns_alpha() {
         let data = make_constant(3, 1.0);
         let mut f = Forecaster::new(SmoothingMethod::Simple { alpha: 0.4 });
-        f.fit(&data).unwrap();
-        let params = f.smoothing_params().unwrap();
+        f.fit(&data).expect("should succeed");
+        let params = f.smoothing_params().expect("should succeed");
         assert!((params.0 - 0.4).abs() < 1e-12);
         assert!(params.1.is_none());
     }
@@ -797,18 +797,18 @@ mod tests {
             alpha: 0.6,
             beta: 0.2,
         });
-        f.fit(&data).unwrap();
-        let params = f.smoothing_params().unwrap();
+        f.fit(&data).expect("should succeed");
+        let params = f.smoothing_params().expect("should succeed");
         assert!((params.0 - 0.6).abs() < 1e-12);
-        assert!((params.1.unwrap() - 0.2).abs() < 1e-12);
+        assert!((params.1.expect("should succeed") - 0.2).abs() < 1e-12);
     }
 
     #[test]
     fn test_smoothing_params_ma_returns_zero_alpha() {
         let data = make_constant(5, 3.0);
         let mut f = Forecaster::new(SmoothingMethod::MovingAverage { window: 3 });
-        f.fit(&data).unwrap();
-        let params = f.smoothing_params().unwrap();
+        f.fit(&data).expect("should succeed");
+        let params = f.smoothing_params().expect("should succeed");
         assert_eq!(params.0, 0.0);
         assert!(params.1.is_none());
     }

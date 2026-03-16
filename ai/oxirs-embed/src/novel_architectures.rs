@@ -1671,10 +1671,10 @@ mod tests {
         let mut model = NovelArchitectureModel::new(config);
 
         // Initialize quantum state
-        model.initialize_architecture().unwrap();
+        model.initialize_architecture().expect("should succeed");
 
         let input = Array1::from_vec(vec![0.5, 0.3, 0.8]);
-        let output = model.quantum_forward(&input).unwrap();
+        let output = model.quantum_forward(&input).expect("should succeed");
 
         assert_eq!(output.len(), input.len());
 
@@ -1692,13 +1692,13 @@ mod tests {
 
         // Add some test data
         let triple = Triple::new(
-            NamedNode::new("http://example.org/alice").unwrap(),
-            NamedNode::new("http://example.org/knows").unwrap(),
-            NamedNode::new("http://example.org/bob").unwrap(),
+            NamedNode::new("http://example.org/alice").expect("should succeed"),
+            NamedNode::new("http://example.org/knows").expect("should succeed"),
+            NamedNode::new("http://example.org/bob").expect("should succeed"),
         );
-        model.add_triple(triple).unwrap();
+        model.add_triple(triple).expect("should succeed");
 
-        let stats = model.train(Some(5)).await.unwrap();
+        let stats = model.train(Some(5)).await.expect("should succeed");
         assert_eq!(stats.epochs_completed, 5);
         assert!(model.is_trained());
     }
@@ -1708,7 +1708,8 @@ mod tests {
         let config = NovelArchitectureConfig::default();
         let model = NovelArchitectureModel::new(config);
 
-        let input = Array2::from_shape_vec((2, 3), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let input = Array2::from_shape_vec((2, 3), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+            .expect("should succeed");
         let output = model.softmax_2d(&input);
 
         // Check that rows sum to 1
@@ -1727,13 +1728,13 @@ mod tests {
 
         // Add entity first
         let triple = Triple::new(
-            NamedNode::new("http://example.org/alice").unwrap(),
-            NamedNode::new("http://example.org/knows").unwrap(),
-            NamedNode::new("http://example.org/bob").unwrap(),
+            NamedNode::new("http://example.org/alice").expect("should succeed"),
+            NamedNode::new("http://example.org/knows").expect("should succeed"),
+            NamedNode::new("http://example.org/bob").expect("should succeed"),
         );
-        model.add_triple(triple).unwrap();
+        model.add_triple(triple).expect("should succeed");
 
-        model.initialize_architecture().unwrap();
+        model.initialize_architecture().expect("should succeed");
         assert!(model.architecture_state.transformer_state.is_some());
     }
 
@@ -1748,10 +1749,10 @@ mod tests {
             ..Default::default()
         };
         let mut model = NovelArchitectureModel::new(config);
-        model.initialize_architecture().unwrap();
+        model.initialize_architecture().expect("should succeed");
 
         let texts = vec!["hello".to_string(), "world".to_string()];
-        let embeddings = model.encode(&texts).await.unwrap();
+        let embeddings = model.encode(&texts).await.expect("should succeed");
 
         assert_eq!(embeddings.len(), 2);
         assert_eq!(embeddings[0].len(), model.config.base_config.dimensions);

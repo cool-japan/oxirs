@@ -439,8 +439,10 @@ mod tests {
 
     #[test]
     fn test_positive_sentiment() {
-        let analyzer = SentimentAnalyzer::new(SentimentConfig::default()).unwrap();
-        let result = analyzer.analyze("This is great! I love it.").unwrap();
+        let analyzer = SentimentAnalyzer::new(SentimentConfig::default()).expect("should succeed");
+        let result = analyzer
+            .analyze("This is great! I love it.")
+            .expect("should succeed");
 
         assert_eq!(result.polarity, SentimentPolarity::Positive);
         assert!(result.score > 0.0);
@@ -448,8 +450,10 @@ mod tests {
 
     #[test]
     fn test_negative_sentiment() {
-        let analyzer = SentimentAnalyzer::new(SentimentConfig::default()).unwrap();
-        let result = analyzer.analyze("This is terrible and awful.").unwrap();
+        let analyzer = SentimentAnalyzer::new(SentimentConfig::default()).expect("should succeed");
+        let result = analyzer
+            .analyze("This is terrible and awful.")
+            .expect("should succeed");
 
         assert_eq!(result.polarity, SentimentPolarity::Negative);
         assert!(result.score < 0.0);
@@ -457,18 +461,20 @@ mod tests {
 
     #[test]
     fn test_neutral_sentiment() {
-        let analyzer = SentimentAnalyzer::new(SentimentConfig::default()).unwrap();
+        let analyzer = SentimentAnalyzer::new(SentimentConfig::default()).expect("should succeed");
         let result = analyzer
             .analyze("The data is stored in the database.")
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(result.polarity, SentimentPolarity::Neutral);
     }
 
     #[test]
     fn test_emotion_detection() {
-        let analyzer = SentimentAnalyzer::new(SentimentConfig::default()).unwrap();
-        let result = analyzer.analyze("I'm so happy and excited!").unwrap();
+        let analyzer = SentimentAnalyzer::new(SentimentConfig::default()).expect("should succeed");
+        let result = analyzer
+            .analyze("I'm so happy and excited!")
+            .expect("should succeed");
 
         assert!(result.emotions.contains_key(&Emotion::Joy));
     }

@@ -34,7 +34,7 @@ use std::io::Cursor;
 ///   </wpt>
 /// "#;
 ///
-/// let geometry = parse_gpx(gpx).unwrap();
+/// let geometry = parse_gpx(gpx).expect("should succeed");
 /// # }
 /// ```
 #[cfg(feature = "gpx-support")]
@@ -170,7 +170,7 @@ fn parse_gpx_point(element: &BytesStart) -> Option<geo_types::Point<f64>> {
 ///
 /// let point = Point::new(-122.084, 37.422);
 /// let geometry = Geometry::new(GeoGeometry::Point(point));
-/// let gpx = geometry_to_gpx(&geometry, Some("My Location")).unwrap();
+/// let gpx = geometry_to_gpx(&geometry, Some("My Location")).expect("should succeed");
 /// # }
 /// ```
 #[cfg(feature = "gpx-support")]
@@ -307,7 +307,7 @@ mod tests {
             </wpt>
         "#;
 
-        let geometry = parse_gpx(gpx).unwrap();
+        let geometry = parse_gpx(gpx).expect("should succeed");
         match &geometry.geom {
             GeoGeometry::Point(point) => {
                 assert_relative_eq!(point.x(), -122.084, epsilon = 1e-6);
@@ -330,7 +330,7 @@ mod tests {
             </trk>
         "#;
 
-        let geometry = parse_gpx(gpx).unwrap();
+        let geometry = parse_gpx(gpx).expect("should succeed");
         match &geometry.geom {
             GeoGeometry::LineString(linestring) => {
                 assert_eq!(linestring.coords().count(), 3);
@@ -352,7 +352,7 @@ mod tests {
             </rte>
         "#;
 
-        let geometry = parse_gpx(gpx).unwrap();
+        let geometry = parse_gpx(gpx).expect("should succeed");
         match &geometry.geom {
             GeoGeometry::LineString(linestring) => {
                 assert_eq!(linestring.coords().count(), 2);
@@ -365,7 +365,7 @@ mod tests {
     fn test_geometry_to_gpx_waypoint() {
         let point = Point::new(-122.084, 37.422);
         let geometry = Geometry::new(GeoGeometry::Point(point));
-        let gpx = geometry_to_gpx(&geometry, Some("Test Point")).unwrap();
+        let gpx = geometry_to_gpx(&geometry, Some("Test Point")).expect("should succeed");
 
         assert!(gpx.contains("<gpx"));
         assert!(gpx.contains("<wpt"));
@@ -382,7 +382,7 @@ mod tests {
             (-122.086, 37.424),
         ]);
         let geometry = Geometry::new(GeoGeometry::LineString(linestring));
-        let gpx = geometry_to_gpx(&geometry, Some("Test Track")).unwrap();
+        let gpx = geometry_to_gpx(&geometry, Some("Test Track")).expect("should succeed");
 
         assert!(gpx.contains("<trk>"));
         assert!(gpx.contains("<trkseg>"));
@@ -394,8 +394,8 @@ mod tests {
     fn test_roundtrip_waypoint() {
         let point = Point::new(-122.084, 37.422);
         let geometry = Geometry::new(GeoGeometry::Point(point));
-        let gpx = geometry_to_gpx(&geometry, None).unwrap();
-        let parsed = parse_gpx(&gpx).unwrap();
+        let gpx = geometry_to_gpx(&geometry, None).expect("should succeed");
+        let parsed = parse_gpx(&gpx).expect("should succeed");
 
         match &parsed.geom {
             GeoGeometry::Point(p) => {
@@ -414,8 +414,8 @@ mod tests {
             (-122.086, 37.424),
         ]);
         let geometry = Geometry::new(GeoGeometry::LineString(linestring.clone()));
-        let gpx = geometry_to_gpx(&geometry, None).unwrap();
-        let parsed = parse_gpx(&gpx).unwrap();
+        let gpx = geometry_to_gpx(&geometry, None).expect("should succeed");
+        let parsed = parse_gpx(&gpx).expect("should succeed");
 
         match &parsed.geom {
             GeoGeometry::LineString(ls) => {
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn test_crs_always_wgs84() {
         let gpx = r#"<wpt lat="37.422" lon="-122.084"/>"#;
-        let geometry = parse_gpx(gpx).unwrap();
+        let geometry = parse_gpx(gpx).expect("should succeed");
         assert_eq!(
             geometry.crs.uri,
             "http://www.opengis.net/def/crs/EPSG/0/4326"

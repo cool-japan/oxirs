@@ -649,7 +649,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(v1_sdl());
         let sv2 = reg.register(v2_sdl());
-        let latest = reg.latest().unwrap();
+        let latest = reg.latest().expect("should succeed");
         assert_eq!(latest.version, sv2.version);
     }
 
@@ -664,7 +664,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(v1_sdl());
         reg.register(v2_sdl());
-        let v = reg.get("1.0.0").unwrap();
+        let v = reg.get("1.0.0").expect("should succeed");
         assert_eq!(v.id, 1);
         assert_eq!(v.schema_sdl, v1_sdl());
     }
@@ -680,7 +680,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(v1_sdl());
         reg.register(v2_sdl());
-        let sv = reg.get_by_id(1).unwrap();
+        let sv = reg.get_by_id(1).expect("should succeed");
         assert_eq!(sv.version, "1.0.0");
     }
 
@@ -706,7 +706,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(v1_sdl()); // has "hello"
         reg.register(v2_sdl()); // has "hello" + "world"
-        let diff = reg.diff("1.0.0", "1.0.1").unwrap();
+        let diff = reg.diff("1.0.0", "1.0.1").expect("should succeed");
         // "world" should be in added_fields for "Query"
         let added = diff.added_fields.get("Query").cloned().unwrap_or_default();
         assert!(added.contains(&"world".to_owned()));
@@ -717,7 +717,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(v2_sdl()); // has "hello" + "world"
         reg.register(v3_sdl()); // has only "world"
-        let diff = reg.diff("1.0.0", "1.0.1").unwrap();
+        let diff = reg.diff("1.0.0", "1.0.1").expect("should succeed");
         let removed = diff
             .removed_fields
             .get("Query")
@@ -733,7 +733,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(sdl_old);
         reg.register(sdl_new);
-        let diff = reg.diff("1.0.0", "1.0.1").unwrap();
+        let diff = reg.diff("1.0.0", "1.0.1").expect("should succeed");
         assert!(diff.added_types.contains(&"Mutation".to_owned()));
     }
 
@@ -744,7 +744,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(sdl_old);
         reg.register(sdl_new);
-        let diff = reg.diff("1.0.0", "1.0.1").unwrap();
+        let diff = reg.diff("1.0.0", "1.0.1").expect("should succeed");
         assert!(diff.removed_types.contains(&"Mutation".to_owned()));
     }
 
@@ -761,7 +761,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(v1_sdl());
         reg.register(v1_sdl()); // identical SDL
-        let diff = reg.diff("1.0.0", "1.0.1").unwrap();
+        let diff = reg.diff("1.0.0", "1.0.1").expect("should succeed");
         assert!(diff.is_empty());
     }
 
@@ -772,7 +772,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(v1_sdl());
         reg.register(v2_sdl());
-        let diff = reg.diff("1.0.0", "1.0.1").unwrap();
+        let diff = reg.diff("1.0.0", "1.0.1").expect("should succeed");
         assert!(!reg.is_breaking_change(&diff));
     }
 
@@ -781,7 +781,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(v2_sdl());
         reg.register(v3_sdl());
-        let diff = reg.diff("1.0.0", "1.0.1").unwrap();
+        let diff = reg.diff("1.0.0", "1.0.1").expect("should succeed");
         assert!(reg.is_breaking_change(&diff));
     }
 
@@ -792,7 +792,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(sdl_old);
         reg.register(sdl_new);
-        let diff = reg.diff("1.0.0", "1.0.1").unwrap();
+        let diff = reg.diff("1.0.0", "1.0.1").expect("should succeed");
         assert!(reg.is_breaking_change(&diff));
     }
 
@@ -803,7 +803,7 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(sdl_old);
         reg.register(sdl_new);
-        let diff = reg.diff("1.0.0", "1.0.1").unwrap();
+        let diff = reg.diff("1.0.0", "1.0.1").expect("should succeed");
         assert!(!reg.is_breaking_change(&diff));
     }
 
@@ -878,8 +878,8 @@ mod tests {
         let mut reg = SchemaRegistry::new();
         reg.register(v1_sdl());
         reg.register(v2_sdl());
-        let json = serde_json::to_string(&reg).unwrap();
-        let restored: SchemaRegistry = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&reg).expect("should succeed");
+        let restored: SchemaRegistry = serde_json::from_str(&json).expect("should succeed");
         assert_eq!(restored.len(), 2);
     }
 

@@ -1139,6 +1139,7 @@ impl KGEmbeddingModel for GraphSAGEAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     fn create_test_triples() -> Vec<Triple> {
         vec![
@@ -1163,7 +1164,7 @@ mod tests {
     }
 
     #[test]
-    fn test_transe() {
+    fn test_transe() -> Result<()> {
         let config = KGEmbeddingConfig {
             model: KGEmbeddingModelType::TransE,
             dimensions: 50,
@@ -1174,7 +1175,7 @@ mod tests {
         let mut model = KGEmbedding::new(config);
         let triples = create_test_triples();
 
-        model.train(&triples).unwrap();
+        model.train(&triples)?;
 
         // Test embeddings exist
         assert!(model.get_entity_embedding("Alice").is_some());
@@ -1187,10 +1188,11 @@ mod tests {
         // Test prediction
         let predictions = model.predict_tail("Alice", "knows", 2);
         assert!(!predictions.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_complex() {
+    fn test_complex() -> Result<()> {
         let config = KGEmbeddingConfig {
             model: KGEmbeddingModelType::ComplEx,
             dimensions: 50,
@@ -1201,16 +1203,19 @@ mod tests {
         let mut model = KGEmbedding::new(config);
         let triples = create_test_triples();
 
-        model.train(&triples).unwrap();
+        model.train(&triples)?;
 
         // Test embeddings exist
         assert!(model.get_entity_embedding("Bob").is_some());
-        let emb = model.get_entity_embedding("Bob").unwrap();
+        let emb = model
+            .get_entity_embedding("Bob")
+            .expect("Bob embedding should exist");
         assert_eq!(emb.dimensions, 100); // Real + imaginary parts
+        Ok(())
     }
 
     #[test]
-    fn test_rotate() {
+    fn test_rotate() -> Result<()> {
         let config = KGEmbeddingConfig {
             model: KGEmbeddingModelType::RotatE,
             dimensions: 50,
@@ -1221,14 +1226,17 @@ mod tests {
         let mut model = KGEmbedding::new(config);
         let triples = create_test_triples();
 
-        model.train(&triples).unwrap();
+        model.train(&triples)?;
 
         // Test embeddings exist
         assert!(model.get_entity_embedding("Charlie").is_some());
         assert!(model.get_relation_embedding("likes").is_some());
 
         // Test relation embedding is phase angles
-        let rel_emb = model.get_relation_embedding("likes").unwrap();
+        let rel_emb = model
+            .get_relation_embedding("likes")
+            .expect("likes relation embedding should exist");
         assert_eq!(rel_emb.dimensions, 50);
+        Ok(())
     }
 }

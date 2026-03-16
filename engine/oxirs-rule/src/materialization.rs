@@ -470,7 +470,7 @@ mod tests {
     use crate::Term;
 
     #[test]
-    fn test_eager_strategy() {
+    fn test_eager_strategy() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = RuleEngine::new();
         let strategy = EagerStrategy::new();
 
@@ -480,12 +480,13 @@ mod tests {
             object: Term::Constant("b".to_string()),
         }];
 
-        let result = strategy.materialize(&mut engine, &facts).unwrap();
+        let result = strategy.materialize(&mut engine, &facts)?;
         assert!(!result.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_lazy_strategy() {
+    fn test_lazy_strategy() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = RuleEngine::new();
         let strategy = LazyStrategy::new();
 
@@ -495,13 +496,14 @@ mod tests {
             object: Term::Constant("b".to_string()),
         }];
 
-        let result = strategy.materialize(&mut engine, &facts).unwrap();
+        let result = strategy.materialize(&mut engine, &facts)?;
         // Lazy strategy only stores initial facts
         assert_eq!(result.len(), facts.len());
+        Ok(())
     }
 
     #[test]
-    fn test_materialization_manager() {
+    fn test_materialization_manager() -> Result<(), Box<dyn std::error::Error>> {
         let mut manager = MaterializationManager::new();
 
         // Check default strategies are registered
@@ -509,7 +511,8 @@ mod tests {
         assert!(strategies.len() >= 4);
 
         // Set active strategy
-        manager.set_active_strategy("eager").unwrap();
+        manager.set_active_strategy("eager")?;
         assert_eq!(manager.active_strategy, "eager");
+        Ok(())
     }
 }

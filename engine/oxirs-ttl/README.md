@@ -1,12 +1,12 @@
 # OxiRS TTL - RDF Turtle Family Parser & Serializer
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
-[![Tests](https://img.shields.io/badge/tests-461%20passing-green)](https://github.com/cool-japan/oxirs)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Tests](https://img.shields.io/badge/tests-1%2C726%20passing-green)](https://github.com/cool-japan/oxirs)
 [![Compliance](https://img.shields.io/badge/W3C-97%25%20compliant-brightgreen)](https://www.w3.org/TR/turtle/)
 
-**Status**: Production Release (v0.2.1) - March 2026
+**Status**: Production Release (v0.2.2) - March 2026
 
-✨ **Production-Ready**: API-stable with comprehensive testing (461 tests), W3C compliance, and performance optimizations.
+✨ **Production-Ready**: API-stable with comprehensive testing (1,726 tests), W3C compliance, and performance optimizations.
 
 High-performance parsers and serializers for RDF formats in the Turtle family including Turtle, N-Triples, TriG, N-Quads, and N3. Ported from Oxigraph's oxttl crate with extensive enhancements for OxiRS.
 
@@ -44,7 +44,7 @@ ex:greeting "مرحبا"@ar--rtl .  # Right-to-left
 Enable with feature flag:
 ```toml
 [dependencies]
-oxirs-ttl = { version = "0.2.1", features = ["rdf-12"] }
+oxirs-ttl = { version = "0.2.2", features = ["rdf-12"] }
 ```
 
 ### Advanced Features
@@ -65,10 +65,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = "0.2.1"
+oxirs-ttl = "0.2.2"
 
 # With all features
-oxirs-ttl = { version = "0.2.1", features = ["async-tokio", "parallel", "rdf-12"] }
+oxirs-ttl = { version = "0.2.2", features = ["async-tokio", "parallel", "rdf-12"] }
 ```
 
 ## Quick Start
@@ -428,7 +428,7 @@ Measured on Apple M1 with typical RDF datasets:
 
 ### Test Coverage
 
-- **461 tests passing** (437 integration + 24 doc tests)
+- **1,726 tests passing** (437 integration + 24 doc tests)
 - **Property-based testing** with proptest
 - **Memory leak tests** for production safety
 - **Performance regression tests** for baseline tracking
@@ -512,7 +512,7 @@ let config = SerializationConfig::default()
 
 ## Status
 
-### v0.2.1 Release (March 2026) ✅
+### v0.2.2 Release (March 2026) ✅
 
 **Core Features** (100% Complete):
 - ✅ Turtle, TriG, N-Triples, N-Quads parsing & serialization
@@ -528,7 +528,7 @@ let config = SerializationConfig::default()
 - ✅ Memory leak testing
 - ✅ Comprehensive documentation (24 doc tests)
 
-**Advanced Features** (v0.2.1):
+**Advanced Features** (v0.2.2):
 - ✅ RFC 3987 IRI validation
 - ✅ RFC 3986 IRI resolution
 - ✅ N3 types & built-in registry (40+ predicates)

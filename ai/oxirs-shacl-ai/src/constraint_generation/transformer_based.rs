@@ -706,7 +706,7 @@ mod tests {
     #[test]
     fn test_transformer_constraint_generator_creation() {
         let config = TransformerConstraintConfig::default();
-        let generator = TransformerConstraintGenerator::new(config).unwrap();
+        let generator = TransformerConstraintGenerator::new(config).expect("should succeed");
 
         assert_eq!(generator.stats.total_constraints_generated, 0);
         assert!(generator.config.enable_pretraining);
@@ -724,7 +724,7 @@ mod tests {
             examples: Vec::new(),
         };
 
-        let embedding = encoder.encode_single(&pattern).unwrap();
+        let embedding = encoder.encode_single(&pattern).expect("should succeed");
         assert_eq!(embedding.len(), 512);
     }
 

@@ -309,9 +309,10 @@ mod tests {
     #[test]
     fn test_add_prefix_and_resolve_curie() {
         let mut r = PrefixResolver::new();
-        r.add_prefix("ex", "http://example.org/", 1).unwrap();
+        r.add_prefix("ex", "http://example.org/", 1)
+            .expect("should succeed");
         assert_eq!(
-            r.resolve_curie("ex:Person").unwrap(),
+            r.resolve_curie("ex:Person").expect("should succeed"),
             "http://example.org/Person"
         );
     }
@@ -334,9 +335,9 @@ mod tests {
     fn test_resolve_curie_empty_local() {
         let mut r = PrefixResolver::new();
         r.add_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#", 1)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(
-            r.resolve_curie("rdf:").unwrap(),
+            r.resolve_curie("rdf:").expect("should succeed"),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
         );
     }
@@ -346,7 +347,7 @@ mod tests {
     #[test]
     fn test_resolve_absolute_iri_passthrough() {
         let r = PrefixResolver::new();
-        let result = r.resolve("http://example.org/foo").unwrap();
+        let result = r.resolve("http://example.org/foo").expect("should succeed");
         assert_eq!(result.iri, "http://example.org/foo");
         assert_eq!(result.source, ResolveSource::Absolute);
     }
@@ -354,8 +355,9 @@ mod tests {
     #[test]
     fn test_resolve_curie_via_resolve() {
         let mut r = PrefixResolver::new();
-        r.add_prefix("ex", "http://example.org/", 1).unwrap();
-        let result = r.resolve("ex:Cat").unwrap();
+        r.add_prefix("ex", "http://example.org/", 1)
+            .expect("should succeed");
+        let result = r.resolve("ex:Cat").expect("should succeed");
         assert_eq!(result.iri, "http://example.org/Cat");
         assert!(matches!(result.source, ResolveSource::Prefix(_)));
     }
@@ -363,7 +365,7 @@ mod tests {
     #[test]
     fn test_resolve_relative_via_resolve() {
         let r = PrefixResolver::with_base("http://example.org/doc/page.ttl");
-        let result = r.resolve("other.ttl").unwrap();
+        let result = r.resolve("other.ttl").expect("should succeed");
         assert_eq!(result.iri, "http://example.org/doc/other.ttl");
         assert_eq!(result.source, ResolveSource::Base);
     }
@@ -373,7 +375,7 @@ mod tests {
     #[test]
     fn test_resolve_relative_simple() {
         let r = PrefixResolver::with_base("http://example.org/base/");
-        let iri = r.resolve_relative("foo").unwrap();
+        let iri = r.resolve_relative("foo").expect("should succeed");
         assert_eq!(iri, "http://example.org/base/foo");
     }
 
@@ -387,14 +389,14 @@ mod tests {
     #[test]
     fn test_resolve_relative_fragment() {
         let r = PrefixResolver::with_base("http://example.org/ont");
-        let iri = r.resolve_relative("#Alice").unwrap();
+        let iri = r.resolve_relative("#Alice").expect("should succeed");
         assert_eq!(iri, "http://example.org/ont#Alice");
     }
 
     #[test]
     fn test_resolve_relative_empty_string_returns_base() {
         let r = PrefixResolver::with_base("http://example.org/doc");
-        let iri = r.resolve_relative("").unwrap();
+        let iri = r.resolve_relative("").expect("should succeed");
         assert_eq!(iri, "http://example.org/doc");
     }
 
@@ -405,7 +407,7 @@ mod tests {
         let mut r = PrefixResolver::new();
         r.set_base("http://first.org/");
         r.set_base("http://second.org/");
-        let iri = r.resolve_relative("x").unwrap();
+        let iri = r.resolve_relative("x").expect("should succeed");
         assert!(iri.contains("second.org"));
     }
 
@@ -426,7 +428,8 @@ mod tests {
     #[test]
     fn test_abbreviate_success() {
         let mut r = PrefixResolver::new();
-        r.add_prefix("ex", "http://example.org/", 1).unwrap();
+        r.add_prefix("ex", "http://example.org/", 1)
+            .expect("should succeed");
         let abbrev = r.abbreviate("http://example.org/Person");
         assert_eq!(abbrev.as_deref(), Some("ex:Person"));
     }
@@ -440,9 +443,13 @@ mod tests {
     #[test]
     fn test_abbreviate_prefers_longest_prefix() {
         let mut r = PrefixResolver::new();
-        r.add_prefix("ex", "http://example.org/", 1).unwrap();
-        r.add_prefix("exv", "http://example.org/vocab/", 2).unwrap();
-        let abbrev = r.abbreviate("http://example.org/vocab/Foo").unwrap();
+        r.add_prefix("ex", "http://example.org/", 1)
+            .expect("should succeed");
+        r.add_prefix("exv", "http://example.org/vocab/", 2)
+            .expect("should succeed");
+        let abbrev = r
+            .abbreviate("http://example.org/vocab/Foo")
+            .expect("should succeed");
         assert_eq!(abbrev, "exv:Foo");
     }
 
@@ -457,17 +464,20 @@ mod tests {
     #[test]
     fn test_prefix_count_after_adds() {
         let mut r = PrefixResolver::new();
-        r.add_prefix("ex", "http://example.org/", 1).unwrap();
+        r.add_prefix("ex", "http://example.org/", 1)
+            .expect("should succeed");
         r.add_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#", 2)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(r.prefix_count(), 2);
     }
 
     #[test]
     fn test_prefix_count_redeclaration_same() {
         let mut r = PrefixResolver::new();
-        r.add_prefix("ex", "http://a.org/", 1).unwrap();
-        r.add_prefix("ex", "http://b.org/", 2).unwrap();
+        r.add_prefix("ex", "http://a.org/", 1)
+            .expect("should succeed");
+        r.add_prefix("ex", "http://b.org/", 2)
+            .expect("should succeed");
         // HashMap replaces; count stays 1
         assert_eq!(r.prefix_count(), 1);
     }
@@ -477,7 +487,8 @@ mod tests {
     #[test]
     fn test_declarations_list() {
         let mut r = PrefixResolver::new();
-        r.add_prefix("ex", "http://example.org/", 5).unwrap();
+        r.add_prefix("ex", "http://example.org/", 5)
+            .expect("should succeed");
         let decls = r.declarations();
         assert_eq!(decls.len(), 1);
         assert_eq!(decls[0].prefix, "ex");
@@ -487,9 +498,12 @@ mod tests {
     #[test]
     fn test_declarations_order() {
         let mut r = PrefixResolver::new();
-        r.add_prefix("a", "http://a.org/", 1).unwrap();
-        r.add_prefix("b", "http://b.org/", 2).unwrap();
-        r.add_prefix("c", "http://c.org/", 3).unwrap();
+        r.add_prefix("a", "http://a.org/", 1)
+            .expect("should succeed");
+        r.add_prefix("b", "http://b.org/", 2)
+            .expect("should succeed");
+        r.add_prefix("c", "http://c.org/", 3)
+            .expect("should succeed");
         assert_eq!(r.declarations().len(), 3);
         assert_eq!(r.declarations()[0].prefix, "a");
         assert_eq!(r.declarations()[2].prefix, "c");
@@ -527,22 +541,23 @@ mod tests {
     #[test]
     fn test_resolve_source_absolute_variant() {
         let r = PrefixResolver::new();
-        let result = r.resolve("http://x.org/").unwrap();
+        let result = r.resolve("http://x.org/").expect("should succeed");
         assert_eq!(result.source, ResolveSource::Absolute);
     }
 
     #[test]
     fn test_resolve_source_prefix_variant() {
         let mut r = PrefixResolver::new();
-        r.add_prefix("x", "http://x.org/", 1).unwrap();
-        let result = r.resolve("x:Foo").unwrap();
+        r.add_prefix("x", "http://x.org/", 1)
+            .expect("should succeed");
+        let result = r.resolve("x:Foo").expect("should succeed");
         assert!(matches!(result.source, ResolveSource::Prefix(_)));
     }
 
     #[test]
     fn test_resolve_source_base_variant() {
         let r = PrefixResolver::with_base("http://base.org/");
-        let result = r.resolve("relative").unwrap();
+        let result = r.resolve("relative").expect("should succeed");
         assert_eq!(result.source, ResolveSource::Base);
     }
 

@@ -248,7 +248,7 @@ mod tests {
         router.cache_route("SELECT *", vec![ep("ep1")]);
         let result = router.cached_route("SELECT *");
         assert!(result.is_some());
-        assert_eq!(result.unwrap().len(), 1);
+        assert_eq!(result.expect("should succeed").len(), 1);
     }
 
     #[test]

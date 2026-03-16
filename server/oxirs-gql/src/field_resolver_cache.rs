@@ -425,7 +425,7 @@ mod tests {
         cache.get(&k, 100);
         cache.get(&k, 200);
         let key_str = k.cache_key_str();
-        let entry = cache.entries.get(&key_str).unwrap();
+        let entry = cache.entries.get(&key_str).expect("should succeed");
         assert_eq!(entry.hit_count, 2);
     }
 

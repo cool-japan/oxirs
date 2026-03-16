@@ -17,20 +17,20 @@
 //! use oxirs_vec::{Vector, VectorIndex};
 //!
 //! let config = IndexSelectorConfig::default();
-//! let mut selector = DynamicIndexSelector::new(config).unwrap();
+//! let mut selector = DynamicIndexSelector::new(config).expect("should succeed");
 //!
 //! // Add vectors - they'll be indexed in all configured indices
 //! for i in 0..1000 {
 //!     let vec = Vector::new(vec![i as f32, (i * 2) as f32]);
-//!     selector.add(format!("vec_{}", i), vec).unwrap();
+//!     selector.add(format!("vec_{}", i), vec).expect("should succeed");
 //! }
 //!
 //! // Build all indices
-//! selector.build().unwrap();
+//! selector.build().expect("should succeed");
 //!
 //! // Search - automatically selects best index
 //! let query = Vector::new(vec![500.0, 1000.0]);
-//! let results = selector.search_knn(&query, 10).unwrap();
+//! let results = selector.search_knn(&query, 10).expect("should succeed");
 //! ```
 
 use crate::query_planning::*;
@@ -436,20 +436,21 @@ mod tests {
     }
 
     #[test]
-    fn test_add_vectors() {
+    fn test_add_vectors() -> Result<()> {
         let config = IndexSelectorConfig::default();
-        let mut selector = DynamicIndexSelector::new(config).unwrap();
+        let mut selector = DynamicIndexSelector::new(config)?;
 
         for i in 0..10 {
             let vec = Vector::new(vec![i as f32, (i * 2) as f32]);
-            selector.add(format!("vec_{}", i), vec).unwrap();
+            selector.add(format!("vec_{}", i), vec)?;
         }
 
         assert_eq!(selector.len(), 10);
+        Ok(())
     }
 
     #[test]
-    fn test_build_and_search() {
+    fn test_build_and_search() -> Result<()> {
         let config = IndexSelectorConfig {
             enable_hnsw: true,
             enable_nsg: true,
@@ -457,31 +458,32 @@ mod tests {
             enable_lsh: false,
             ..Default::default()
         };
-        let mut selector = DynamicIndexSelector::new(config).unwrap();
+        let mut selector = DynamicIndexSelector::new(config)?;
 
         // Add test vectors
         for i in 0..50 {
             let vec = Vector::new(vec![i as f32, (i * 2) as f32, (i * 3) as f32]);
-            selector.add(format!("vec_{}", i), vec).unwrap();
+            selector.add(format!("vec_{}", i), vec)?;
         }
 
         // Build indices
-        selector.build().unwrap();
+        selector.build()?;
         assert!(selector.is_built());
 
         // Search
         let query = Vector::new(vec![25.0, 50.0, 75.0]);
-        let results = selector.search_knn(&query, 5).unwrap();
+        let results = selector.search_knn(&query, 5)?;
 
         assert_eq!(results.len(), 5);
         // Results should be sorted by similarity
         for i in 1..results.len() {
             assert!(results[i - 1].1 >= results[i].1);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_performance_learning() {
+    fn test_performance_learning() -> Result<()> {
         let config = IndexSelectorConfig {
             enable_hnsw: true,
             enable_nsg: true,
@@ -490,15 +492,15 @@ mod tests {
             enable_learning: true,
             ..Default::default()
         };
-        let mut selector = DynamicIndexSelector::new(config).unwrap();
+        let mut selector = DynamicIndexSelector::new(config)?;
 
         // Add vectors
         for i in 0..30 {
             let vec = Vector::new(vec![i as f32, (i * 2) as f32]);
-            selector.add(format!("vec_{}", i), vec).unwrap();
+            selector.add(format!("vec_{}", i), vec)?;
         }
 
-        selector.build().unwrap();
+        selector.build()?;
 
         // Perform multiple searches to build up statistics
         for _ in 0..5 {
@@ -509,7 +511,11 @@ mod tests {
         // Check that statistics were recorded
         let stats = selector.get_stats();
         assert!(stats.contains_key("total_queries"));
-        let total_queries: usize = stats.get("total_queries").unwrap().parse().unwrap();
+        let total_queries: usize = stats
+            .get("total_queries")
+            .expect("total_queries key missing")
+            .parse()?;
         assert!(total_queries >= 5);
+        Ok(())
     }
 }

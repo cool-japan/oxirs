@@ -1093,33 +1093,33 @@ mod tests {
 
     #[test]
     fn test_parse_header_id() {
-        let patch = PatchParser::parse("H id <urn:uuid:1234>\n").unwrap();
+        let patch = PatchParser::parse("H id <urn:uuid:1234>\n").expect("should succeed");
         assert_eq!(patch.headers.len(), 1);
         assert_eq!(patch.id(), Some("urn:uuid:1234"));
     }
 
     #[test]
     fn test_parse_header_prev() {
-        let patch = PatchParser::parse("H prev <urn:uuid:abcd>\n").unwrap();
+        let patch = PatchParser::parse("H prev <urn:uuid:abcd>\n").expect("should succeed");
         assert_eq!(patch.previous(), Some("urn:uuid:abcd"));
     }
 
     #[test]
     fn test_parse_header_version() {
-        let patch = PatchParser::parse("H version 1\n").unwrap();
+        let patch = PatchParser::parse("H version 1\n").expect("should succeed");
         matches!(&patch.headers[0], PatchHeader::Version(v) if v == "1");
     }
 
     #[test]
     fn test_parse_header_unknown() {
-        let patch = PatchParser::parse("H custom myval\n").unwrap();
+        let patch = PatchParser::parse("H custom myval\n").expect("should succeed");
         assert!(matches!(&patch.headers[0], PatchHeader::Unknown { key, .. } if key == "custom"));
     }
 
     #[test]
     fn test_parse_multiple_headers() {
         let input = "H id <urn:1>\nH prev <urn:0>\nH version 2\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         assert_eq!(patch.headers.len(), 3);
     }
 
@@ -1127,7 +1127,7 @@ mod tests {
 
     #[test]
     fn test_parse_tx_tc() {
-        let patch = PatchParser::parse("TX\nTC\n").unwrap();
+        let patch = PatchParser::parse("TX\nTC\n").expect("should succeed");
         assert_eq!(patch.changes.len(), 2);
         assert!(matches!(patch.changes[0], PatchChange::TransactionBegin));
         assert!(matches!(patch.changes[1], PatchChange::TransactionCommit));
@@ -1135,7 +1135,7 @@ mod tests {
 
     #[test]
     fn test_parse_ta() {
-        let patch = PatchParser::parse("TX\nTA\n").unwrap();
+        let patch = PatchParser::parse("TX\nTA\n").expect("should succeed");
         assert!(matches!(patch.changes[1], PatchChange::TransactionAbort));
     }
 
@@ -1150,7 +1150,7 @@ mod tests {
 
     #[test]
     fn test_parse_prefix_add() {
-        let patch = PatchParser::parse("PA ex <http://example.org/>\n").unwrap();
+        let patch = PatchParser::parse("PA ex <http://example.org/>\n").expect("should succeed");
         assert_eq!(patch.changes.len(), 1);
         match &patch.changes[0] {
             PatchChange::AddPrefix { prefix, iri } => {
@@ -1163,7 +1163,7 @@ mod tests {
 
     #[test]
     fn test_parse_prefix_delete() {
-        let patch = PatchParser::parse("PD ex <http://example.org/>\n").unwrap();
+        let patch = PatchParser::parse("PD ex <http://example.org/>\n").expect("should succeed");
         assert!(
             matches!(&patch.changes[0], PatchChange::DeletePrefix { prefix, .. } if prefix == "ex")
         );
@@ -1172,7 +1172,7 @@ mod tests {
     #[test]
     fn test_prefix_resolution_in_triple() {
         let input = "PA ex <http://example.org/>\nA ex:s ex:p ex:o .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         assert_eq!(patch.changes.len(), 2);
         if let PatchChange::AddTriple(t) = &patch.changes[1] {
             assert_eq!(t.subject.value(), "http://example.org/s");
@@ -1186,21 +1186,21 @@ mod tests {
     #[test]
     fn test_parse_add_triple() {
         let input = "A <http://s> <http://p> <http://o> .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         assert!(matches!(&patch.changes[0], PatchChange::AddTriple(_)));
     }
 
     #[test]
     fn test_parse_delete_triple() {
         let input = "D <http://s> <http://p> <http://o> .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         assert!(matches!(&patch.changes[0], PatchChange::DeleteTriple(_)));
     }
 
     #[test]
     fn test_parse_triple_with_literal() {
         let input = "A <http://s> <http://p> \"hello\" .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         if let PatchChange::AddTriple(t) = &patch.changes[0] {
             assert!(
                 t.object.0.term_type
@@ -1218,7 +1218,7 @@ mod tests {
     #[test]
     fn test_parse_literal_with_language() {
         let input = "A <http://s> <http://p> \"hello\"@en .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         if let PatchChange::AddTriple(t) = &patch.changes[0] {
             assert!(matches!(
                 &t.object.0.term_type,
@@ -1233,7 +1233,7 @@ mod tests {
     fn test_parse_literal_with_datatype() {
         let input =
             "A <http://s> <http://p> \"42\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         if let PatchChange::AddTriple(t) = &patch.changes[0] {
             assert!(matches!(
                 &t.object.0.term_type,
@@ -1248,7 +1248,7 @@ mod tests {
     #[test]
     fn test_parse_triple_blank_node() {
         let input = "A _:b0 <http://p> <http://o> .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         if let PatchChange::AddTriple(t) = &patch.changes[0] {
             assert!(t.subject.is_blank_node());
             assert_eq!(t.subject.value(), "b0");
@@ -1262,21 +1262,21 @@ mod tests {
     #[test]
     fn test_parse_add_quad() {
         let input = "A <http://s> <http://p> <http://o> <http://g> .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         assert!(matches!(&patch.changes[0], PatchChange::AddQuad(_)));
     }
 
     #[test]
     fn test_parse_delete_quad() {
         let input = "D <http://s> <http://p> <http://o> <http://g> .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         assert!(matches!(&patch.changes[0], PatchChange::DeleteQuad(_)));
     }
 
     #[test]
     fn test_quad_graph_term() {
         let input = "A <http://s> <http://p> <http://o> <http://graph1> .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         if let PatchChange::AddQuad(q) = &patch.changes[0] {
             assert_eq!(q.graph.value(), "http://graph1");
         } else {
@@ -1367,7 +1367,7 @@ mod tests {
                 "http://s", "http://p", "http://o",
             ))],
         };
-        let stats = apply_patch(&mut graph, &patch).unwrap();
+        let stats = apply_patch(&mut graph, &patch).expect("should succeed");
         assert_eq!(stats.triples_added, 1);
         assert_eq!(graph.len(), 1);
     }
@@ -1381,7 +1381,7 @@ mod tests {
             headers: vec![],
             changes: vec![PatchChange::DeleteTriple(t)],
         };
-        let stats = apply_patch(&mut graph, &patch).unwrap();
+        let stats = apply_patch(&mut graph, &patch).expect("should succeed");
         assert_eq!(stats.triples_deleted, 1);
         assert_eq!(graph.len(), 0);
     }
@@ -1395,7 +1395,7 @@ mod tests {
             headers: vec![],
             changes: vec![PatchChange::AddTriple(t)],
         };
-        let stats = apply_patch(&mut graph, &patch).unwrap();
+        let stats = apply_patch(&mut graph, &patch).expect("should succeed");
         // Should not double-count
         assert_eq!(stats.triples_added, 0);
         assert_eq!(graph.len(), 1);
@@ -1411,7 +1411,7 @@ mod tests {
                 iri: "http://example.org/".to_string(),
             }],
         };
-        let stats = apply_patch(&mut graph, &patch).unwrap();
+        let stats = apply_patch(&mut graph, &patch).expect("should succeed");
         assert_eq!(stats.prefixes_added, 1);
         assert_eq!(
             graph.prefixes.get("ex").map(String::as_str),
@@ -1430,7 +1430,7 @@ mod tests {
                 PatchChange::TransactionCommit,
             ],
         };
-        let stats = apply_patch(&mut graph, &patch).unwrap();
+        let stats = apply_patch(&mut graph, &patch).expect("should succeed");
         assert_eq!(stats.triples_added, 1);
         assert_eq!(stats.transactions, 1);
         assert_eq!(graph.len(), 1);
@@ -1447,7 +1447,7 @@ mod tests {
                 PatchChange::TransactionAbort,
             ],
         };
-        let stats = apply_patch(&mut graph, &patch).unwrap();
+        let stats = apply_patch(&mut graph, &patch).expect("should succeed");
         assert_eq!(stats.aborts, 1);
         // Graph must remain empty — abort rolls back staged changes
         assert_eq!(graph.len(), 0);
@@ -1466,7 +1466,7 @@ mod tests {
                 PatchChange::DeleteTriple(t1),
             ],
         };
-        let stats = apply_patch(&mut graph, &patch).unwrap();
+        let stats = apply_patch(&mut graph, &patch).expect("should succeed");
         assert_eq!(stats.triples_added, 2);
         assert_eq!(stats.triples_deleted, 1);
         assert_eq!(graph.len(), 1);
@@ -1535,9 +1535,9 @@ mod tests {
     #[test]
     fn test_round_trip_simple() {
         let input = "H id <urn:1>\nA <http://s> <http://p> <http://o> .\nD <http://s> <http://p> <http://old> .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         let serialized = PatchSerializer::serialize(&patch);
-        let reparsed = PatchParser::parse(&serialized).unwrap();
+        let reparsed = PatchParser::parse(&serialized).expect("should succeed");
         assert_eq!(reparsed.headers.len(), patch.headers.len());
         assert_eq!(reparsed.changes.len(), patch.changes.len());
     }
@@ -1545,21 +1545,21 @@ mod tests {
     #[test]
     fn test_round_trip_with_prefixes() {
         let input = "PA ex <http://example.org/>\nA ex:s ex:p ex:o .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         let serialized = PatchSerializer::serialize(&patch);
         // After serialisation ex:s becomes <http://example.org/s>
         assert!(serialized.contains("<http://example.org/s>"));
         // Re-parse the serialised form
-        let reparsed = PatchParser::parse(&serialized).unwrap();
+        let reparsed = PatchParser::parse(&serialized).expect("should succeed");
         assert_eq!(reparsed.changes.len(), 2);
     }
 
     #[test]
     fn test_round_trip_transaction() {
         let input = "TX\nA <http://s> <http://p> <http://o> .\nTC\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         let serialized = PatchSerializer::serialize(&patch);
-        let reparsed = PatchParser::parse(&serialized).unwrap();
+        let reparsed = PatchParser::parse(&serialized).expect("should succeed");
         assert_eq!(reparsed.changes.len(), 3);
         assert!(matches!(reparsed.changes[0], PatchChange::TransactionBegin));
         assert!(matches!(
@@ -1571,9 +1571,9 @@ mod tests {
     #[test]
     fn test_round_trip_with_blank_nodes() {
         let input = "A _:b0 <http://p> <http://o> .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         let s = PatchSerializer::serialize(&patch);
-        let reparsed = PatchParser::parse(&s).unwrap();
+        let reparsed = PatchParser::parse(&s).expect("should succeed");
         if let PatchChange::AddTriple(t) = &reparsed.changes[0] {
             assert!(t.subject.is_blank_node());
         } else {
@@ -1584,9 +1584,9 @@ mod tests {
     #[test]
     fn test_round_trip_literal_with_lang() {
         let input = "A <http://s> <http://p> \"bonjour\"@fr .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         let s = PatchSerializer::serialize(&patch);
-        let reparsed = PatchParser::parse(&s).unwrap();
+        let reparsed = PatchParser::parse(&s).expect("should succeed");
         if let PatchChange::AddTriple(t) = &reparsed.changes[0] {
             assert!(matches!(
                 &t.object.0.term_type,
@@ -1601,9 +1601,9 @@ mod tests {
     fn test_round_trip_literal_with_datatype() {
         let dt = "http://www.w3.org/2001/XMLSchema#integer";
         let input = format!("A <http://s> <http://p> \"42\"^^<{dt}> .\n");
-        let patch = PatchParser::parse(&input).unwrap();
+        let patch = PatchParser::parse(&input).expect("should succeed");
         let s = PatchSerializer::serialize(&patch);
-        let reparsed = PatchParser::parse(&s).unwrap();
+        let reparsed = PatchParser::parse(&s).expect("should succeed");
         if let PatchChange::AddTriple(t) = &reparsed.changes[0] {
             assert!(matches!(
                 &t.object.0.term_type,
@@ -1640,7 +1640,7 @@ mod tests {
         let input = "PA ex <http://example.org/>\nA ex:s ex:p ex:o .\n";
         let changes: Vec<_> = PatchParser::parse_streaming(input.as_bytes())
             .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(changes.len(), 2);
     }
 
@@ -1649,7 +1649,7 @@ mod tests {
         let input = "A <http://s1> <http://p> <http://o1> .\nA <http://s2> <http://p> <http://o2> .\nD <http://s1> <http://p> <http://o1> .\n";
         let changes: Vec<_> = PatchParser::parse_streaming(input.as_bytes())
             .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(changes.len(), 3);
     }
 
@@ -1657,7 +1657,7 @@ mod tests {
 
     #[test]
     fn test_empty_patch() {
-        let patch = PatchParser::parse("").unwrap();
+        let patch = PatchParser::parse("").expect("should succeed");
         assert!(patch.is_empty());
     }
 
@@ -1665,14 +1665,14 @@ mod tests {
     fn test_comments_ignored() {
         let input =
             "# This is a comment\nA <http://s> <http://p> <http://o> .\n# Another comment\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         assert_eq!(patch.changes.len(), 1);
     }
 
     #[test]
     fn test_blank_lines_ignored() {
         let input = "\n\nA <http://s> <http://p> <http://o> .\n\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         assert_eq!(patch.changes.len(), 1);
     }
 
@@ -1721,9 +1721,9 @@ mod tests {
     fn test_apply_patch_from_parsed_text() {
         let input =
             "PA ex <http://example.org/>\nTX\nA ex:alice <http://type> <http://Person> .\nTC\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         let mut graph = Graph::new();
-        let stats = apply_patch(&mut graph, &patch).unwrap();
+        let stats = apply_patch(&mut graph, &patch).expect("should succeed");
         assert_eq!(stats.triples_added, 1);
         assert_eq!(stats.transactions, 1);
     }
@@ -1759,7 +1759,7 @@ mod tests {
         let patch = diff_to_patch(&old, &new_graph);
         // Apply patch to old to get new
         let mut result = old.clone();
-        apply_patch(&mut result, &patch).unwrap();
+        apply_patch(&mut result, &patch).expect("should succeed");
 
         assert_eq!(result.len(), new_graph.len());
         for t in new_graph.iter() {
@@ -1789,7 +1789,7 @@ mod tests {
         patch.changes.push(PatchChange::TransactionCommit);
 
         let serialized = PatchSerializer::serialize(&patch);
-        let reparsed = PatchParser::parse(&serialized).unwrap();
+        let reparsed = PatchParser::parse(&serialized).expect("should succeed");
 
         assert_eq!(reparsed.id(), Some("urn:test:42"));
         assert_eq!(reparsed.previous(), Some("urn:test:41"));
@@ -1809,14 +1809,14 @@ mod tests {
             headers: vec![],
             changes: vec![PatchChange::AddQuad(q)],
         };
-        let stats = apply_patch(&mut graph, &patch).unwrap();
+        let stats = apply_patch(&mut graph, &patch).expect("should succeed");
         assert_eq!(stats.triples_added, 1);
     }
 
     #[test]
     fn test_escaped_literal() {
         let input = "A <http://s> <http://p> \"say \\\"hello\\\"\" .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         if let PatchChange::AddTriple(t) = &patch.changes[0] {
             assert_eq!(t.object.value(), "say \"hello\"");
         } else {
@@ -1827,7 +1827,7 @@ mod tests {
     #[test]
     fn test_newline_in_literal_escape() {
         let input = "A <http://s> <http://p> \"line1\\nline2\" .\n";
-        let patch = PatchParser::parse(input).unwrap();
+        let patch = PatchParser::parse(input).expect("should succeed");
         if let PatchChange::AddTriple(t) = &patch.changes[0] {
             assert!(t.object.value().contains('\n'));
         } else {

@@ -604,7 +604,7 @@ mod tests {
         let result = generator.generate(&schema, DocFormat::Markdown);
         assert!(result.is_ok());
 
-        let md = result.unwrap();
+        let md = result.expect("should succeed");
         assert!(md.contains("GraphQL API Documentation"));
     }
 
@@ -617,7 +617,7 @@ mod tests {
         let result = generator.generate(&schema, DocFormat::Html);
         assert!(result.is_ok());
 
-        let html = result.unwrap();
+        let html = result.expect("should succeed");
         assert!(html.contains("<!DOCTYPE html>"));
         assert!(html.contains("GraphQL API"));
     }
@@ -631,7 +631,7 @@ mod tests {
         let result = generator.generate(&schema, DocFormat::Json);
         assert!(result.is_ok());
 
-        let json = result.unwrap();
+        let json = result.expect("should succeed");
         assert!(json.contains("GraphQL API"));
     }
 
@@ -644,7 +644,7 @@ mod tests {
         let result = generator.generate(&schema, DocFormat::OpenAPI);
         assert!(result.is_ok());
 
-        let openapi = result.unwrap();
+        let openapi = result.expect("should succeed");
         assert!(openapi.contains("openapi"));
         assert!(openapi.contains("3.0.0"));
     }
@@ -702,7 +702,9 @@ mod tests {
         let generator = SchemaDocsGenerator::new(config.clone());
         let schema = Schema::new();
 
-        let md = generator.generate(&schema, DocFormat::Markdown).unwrap();
+        let md = generator
+            .generate(&schema, DocFormat::Markdown)
+            .expect("should succeed");
         assert!(md.contains("My API"));
         assert!(md.contains("2.0.0"));
     }

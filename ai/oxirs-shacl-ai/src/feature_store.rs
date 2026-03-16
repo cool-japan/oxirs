@@ -764,7 +764,7 @@ mod tests {
     #[test]
     fn test_feature_store_creation() {
         let store = FeatureStore::new();
-        let metrics = store.get_metrics().unwrap();
+        let metrics = store.get_metrics().expect("should succeed");
         assert_eq!(metrics.total_features, 0);
         assert_eq!(metrics.total_feature_groups, 0);
     }
@@ -794,9 +794,9 @@ mod tests {
 
         let retrieved = store.get_metadata("shape_embedding");
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().name, "Shape Embedding");
+        assert_eq!(retrieved.expect("should succeed").name, "Shape Embedding");
 
-        let metrics = store.get_metrics().unwrap();
+        let metrics = store.get_metrics().expect("should succeed");
         assert_eq!(metrics.total_features, 1);
     }
 
@@ -822,9 +822,9 @@ mod tests {
 
         let retrieved = store.get_feature_group("shacl_features");
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().name, "SHACL Features");
+        assert_eq!(retrieved.expect("should succeed").name, "SHACL Features");
 
-        let metrics = store.get_metrics().unwrap();
+        let metrics = store.get_metrics().expect("should succeed");
         assert_eq!(metrics.total_feature_groups, 1);
     }
 
@@ -850,7 +850,7 @@ mod tests {
             statistics: FeatureStatistics::default(),
         };
 
-        store.register_feature(metadata).unwrap();
+        store.register_feature(metadata).expect("should succeed");
 
         // Query features
         let query = FeatureQuery {
@@ -862,7 +862,7 @@ mod tests {
 
         let result = store.get_features(&query);
         assert!(result.is_ok());
-        let features = result.unwrap();
+        let features = result.expect("should succeed");
         assert_eq!(features.len(), 1);
         assert!(features.contains_key("entity_1"));
     }
@@ -879,15 +879,28 @@ mod tests {
         let features1 = vec![1.0, 2.0, 3.0];
         let features2 = vec![4.0, 5.0, 6.0];
 
-        store.store_in_cache("entity_1", &features1).unwrap();
-        store.store_in_cache("entity_2", &features2).unwrap();
+        store
+            .store_in_cache("entity_1", &features1)
+            .expect("should succeed");
+        store
+            .store_in_cache("entity_2", &features2)
+            .expect("should succeed");
 
         // Both should be in cache
-        assert!(store.get_from_cache("entity_1").unwrap().is_some());
-        assert!(store.get_from_cache("entity_2").unwrap().is_some());
+        assert!(store
+            .get_from_cache("entity_1")
+            .expect("should succeed")
+            .is_some());
+        assert!(store
+            .get_from_cache("entity_2")
+            .expect("should succeed")
+            .is_some());
 
         // Test cache retrieval
-        let cached = store.get_from_cache("entity_1").unwrap().unwrap();
+        let cached = store
+            .get_from_cache("entity_1")
+            .expect("should succeed")
+            .expect("should succeed");
         assert_eq!(cached, features1);
     }
 
@@ -904,12 +917,14 @@ mod tests {
             created_at: Utc::now(),
         };
 
-        store.track_lineage(lineage.clone()).unwrap();
+        store
+            .track_lineage(lineage.clone())
+            .expect("should succeed");
 
         let retrieved = store.get_lineage("test_feature");
         assert!(retrieved.is_some());
         assert_eq!(
-            retrieved.unwrap().source_datasets,
+            retrieved.expect("should succeed").source_datasets,
             vec!["rdf_graph".to_string()]
         );
     }
@@ -961,7 +976,7 @@ mod tests {
             statistics: FeatureStatistics::default(),
         };
 
-        store.register_feature(metadata).unwrap();
+        store.register_feature(metadata).expect("should succeed");
 
         let query = FeatureQuery {
             entity_ids: vec!["entity_1".to_string()],
@@ -970,9 +985,9 @@ mod tests {
             feature_group: None,
         };
 
-        store.get_features(&query).unwrap();
+        store.get_features(&query).expect("should succeed");
 
-        let metrics = store.get_metrics().unwrap();
+        let metrics = store.get_metrics().expect("should succeed");
         assert_eq!(metrics.total_features, 1);
         assert_eq!(metrics.total_queries, 1);
         assert!(metrics.cache_misses > 0);

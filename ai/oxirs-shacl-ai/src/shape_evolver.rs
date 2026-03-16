@@ -406,7 +406,7 @@ mod tests {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:name", 1), Some("ex:Person".into()));
         assert_eq!(ev.version_count(), 1);
-        let v = ev.current().unwrap();
+        let v = ev.current().expect("should succeed");
         assert_eq!(v.version, 1);
     }
 
@@ -414,7 +414,7 @@ mod tests {
     fn test_init_sets_properties() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:name", 1), None);
-        let v = ev.current().unwrap();
+        let v = ev.current().expect("should succeed");
         assert!(v.properties.contains_key("ex:name"));
     }
 
@@ -422,7 +422,7 @@ mod tests {
     fn test_init_no_changes_from_prev() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:age", 0), None);
-        let v = ev.current().unwrap();
+        let v = ev.current().expect("should succeed");
         assert!(v.changes_from_prev.is_empty());
     }
 
@@ -431,7 +431,10 @@ mod tests {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), Some("ex:Entity".into()));
         assert_eq!(
-            ev.current().unwrap().target_class.as_deref(),
+            ev.current()
+                .expect("should succeed")
+                .target_class
+                .as_deref(),
             Some("ex:Entity")
         );
     }
@@ -442,7 +445,7 @@ mod tests {
         ev.init(single("ex:a", 1), None);
         ev.init(single("ex:b", 1), None); // should be ignored
         assert_eq!(ev.version_count(), 1);
-        let v = ev.current().unwrap();
+        let v = ev.current().expect("should succeed");
         assert!(v.properties.contains_key("ex:a"));
         assert!(!v.properties.contains_key("ex:b"));
     }
@@ -453,7 +456,9 @@ mod tests {
     fn test_evolve_increments_version() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:name", 1), None);
-        let v = ev.evolve(single("ex:name", 1), None).unwrap();
+        let v = ev
+            .evolve(single("ex:name", 1), None)
+            .expect("should succeed");
         assert_eq!(v, 2);
         assert_eq!(ev.version_count(), 2);
     }
@@ -464,8 +469,8 @@ mod tests {
         ev.init(single("ex:name", 1), None);
         let mut new_props = single("ex:name", 1);
         new_props.insert("ex:age".to_string(), prop(0, None));
-        ev.evolve(new_props, None).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(new_props, None).expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         let added: Vec<_> = v2
             .changes_from_prev
             .iter()
@@ -488,8 +493,9 @@ mod tests {
         let mut init_props = single("ex:name", 1);
         init_props.insert("ex:age".to_string(), prop(0, None));
         ev.init(init_props, None);
-        ev.evolve(single("ex:name", 1), None).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(single("ex:name", 1), None)
+            .expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         let removed: Vec<_> = v2
             .changes_from_prev
             .iter()
@@ -509,8 +515,8 @@ mod tests {
     fn test_evolve_multiple_versions() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        ev.evolve(single("ex:p", 1), None).unwrap();
-        ev.evolve(single("ex:p", 1), None).unwrap();
+        ev.evolve(single("ex:p", 1), None).expect("should succeed");
+        ev.evolve(single("ex:p", 1), None).expect("should succeed");
         assert_eq!(ev.version_count(), 3);
     }
 
@@ -520,8 +526,9 @@ mod tests {
     fn test_diff_detects_tighten() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:name", 0), None);
-        ev.evolve(single("ex:name", 1), None).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(single("ex:name", 1), None)
+            .expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         let tightened: Vec<_> = v2
             .changes_from_prev
             .iter()
@@ -548,8 +555,8 @@ mod tests {
         ev.init(init_props, None);
         let mut new_props = HashMap::new();
         new_props.insert("ex:p".to_string(), prop(0, None));
-        ev.evolve(new_props, None).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(new_props, None).expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         assert!(v2
             .changes_from_prev
             .iter()
@@ -564,8 +571,8 @@ mod tests {
         ev.init(init_props, None);
         let mut new_props = HashMap::new();
         new_props.insert("ex:p".to_string(), typed_prop(0, "xsd:integer"));
-        ev.evolve(new_props, None).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(new_props, None).expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         let type_changes: Vec<_> = v2
             .changes_from_prev
             .iter()
@@ -585,8 +592,9 @@ mod tests {
     fn test_diff_class_added() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        ev.evolve(single("ex:p", 0), Some("ex:Foo".into())).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(single("ex:p", 0), Some("ex:Foo".into()))
+            .expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         assert!(v2
             .changes_from_prev
             .iter()
@@ -597,8 +605,8 @@ mod tests {
     fn test_diff_class_removed() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), Some("ex:Bar".into()));
-        ev.evolve(single("ex:p", 0), None).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(single("ex:p", 0), None).expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         assert!(v2
             .changes_from_prev
             .iter()
@@ -609,8 +617,9 @@ mod tests {
     fn test_diff_no_changes_when_identical() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 1), Some("ex:C".into()));
-        ev.evolve(single("ex:p", 1), Some("ex:C".into())).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(single("ex:p", 1), Some("ex:C".into()))
+            .expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         assert!(v2.changes_from_prev.is_empty());
     }
 
@@ -620,8 +629,8 @@ mod tests {
     fn test_get_version_returns_correct_version() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        ev.evolve(single("ex:p", 1), None).unwrap();
-        let v1 = ev.get_version(1).unwrap();
+        ev.evolve(single("ex:p", 1), None).expect("should succeed");
+        let v1 = ev.get_version(1).expect("should succeed");
         assert_eq!(v1.version, 1);
         assert_eq!(v1.properties["ex:p"].min_count, 0);
     }
@@ -642,8 +651,8 @@ mod tests {
     fn test_history_tracks_all_versions() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        ev.evolve(single("ex:p", 1), None).unwrap();
-        ev.evolve(single("ex:p", 2), None).unwrap();
+        ev.evolve(single("ex:p", 1), None).expect("should succeed");
+        ev.evolve(single("ex:p", 2), None).expect("should succeed");
         assert_eq!(ev.history().len(), 3);
     }
 
@@ -652,7 +661,7 @@ mod tests {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
         for _ in 0..4 {
-            ev.evolve(single("ex:p", 0), None).unwrap();
+            ev.evolve(single("ex:p", 0), None).expect("should succeed");
         }
         for (i, sv) in ev.history().iter().enumerate() {
             assert_eq!(sv.version, (i + 1) as u32);
@@ -665,8 +674,8 @@ mod tests {
     fn test_rollback_creates_new_version() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        ev.evolve(single("ex:p", 1), None).unwrap();
-        let v = ev.rollback(1).unwrap();
+        ev.evolve(single("ex:p", 1), None).expect("should succeed");
+        let v = ev.rollback(1).expect("should succeed");
         assert_eq!(v, 3);
         assert_eq!(ev.version_count(), 3);
     }
@@ -675,9 +684,9 @@ mod tests {
     fn test_rollback_restores_properties() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        ev.evolve(single("ex:p", 1), None).unwrap();
-        ev.rollback(1).unwrap();
-        let current = ev.current().unwrap();
+        ev.evolve(single("ex:p", 1), None).expect("should succeed");
+        ev.rollback(1).expect("should succeed");
+        let current = ev.current().expect("should succeed");
         assert_eq!(current.properties["ex:p"].min_count, 0);
     }
 
@@ -703,7 +712,7 @@ mod tests {
     fn test_backward_compatible_add_optional_property() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 1), None);
-        let current = ev.current().unwrap();
+        let current = ev.current().expect("should succeed");
         let mut new_props = single("ex:p", 1);
         new_props.insert("ex:optional".to_string(), prop(0, None)); // min=0 → optional
         assert!(ShapeEvolver::is_backward_compatible(current, &new_props));
@@ -713,7 +722,7 @@ mod tests {
     fn test_not_backward_compatible_add_required_property() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 1), None);
-        let current = ev.current().unwrap();
+        let current = ev.current().expect("should succeed");
         let mut new_props = single("ex:p", 1);
         new_props.insert("ex:required".to_string(), prop(1, None)); // min=1 → required
         assert!(!ShapeEvolver::is_backward_compatible(current, &new_props));
@@ -723,7 +732,7 @@ mod tests {
     fn test_not_backward_compatible_increase_min_count() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        let current = ev.current().unwrap();
+        let current = ev.current().expect("should succeed");
         assert!(!ShapeEvolver::is_backward_compatible(
             current,
             &single("ex:p", 1)
@@ -734,7 +743,7 @@ mod tests {
     fn test_backward_compatible_decrease_min_count() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 2), None);
-        let current = ev.current().unwrap();
+        let current = ev.current().expect("should succeed");
         assert!(ShapeEvolver::is_backward_compatible(
             current,
             &single("ex:p", 1)
@@ -747,7 +756,7 @@ mod tests {
         let mut init_props = single("ex:a", 1);
         init_props.insert("ex:b".to_string(), prop(0, None));
         ev.init(init_props, None);
-        let current = ev.current().unwrap();
+        let current = ev.current().expect("should succeed");
         assert!(!ShapeEvolver::is_backward_compatible(
             current,
             &single("ex:a", 1)
@@ -760,7 +769,7 @@ mod tests {
         let mut init_props = HashMap::new();
         init_props.insert("ex:p".to_string(), prop(0, Some(3)));
         ev.init(init_props, None);
-        let current = ev.current().unwrap();
+        let current = ev.current().expect("should succeed");
         let mut new_props = HashMap::new();
         new_props.insert("ex:p".to_string(), prop(0, None));
         assert!(ShapeEvolver::is_backward_compatible(current, &new_props));
@@ -772,7 +781,7 @@ mod tests {
         let mut init_props = HashMap::new();
         init_props.insert("ex:p".to_string(), prop(0, Some(5)));
         ev.init(init_props, None);
-        let current = ev.current().unwrap();
+        let current = ev.current().expect("should succeed");
         let mut new_props = HashMap::new();
         new_props.insert("ex:p".to_string(), prop(0, Some(2)));
         assert!(!ShapeEvolver::is_backward_compatible(current, &new_props));
@@ -810,8 +819,8 @@ mod tests {
     fn test_version_numbers_increment_correctly() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        let v2 = ev.evolve(single("ex:p", 0), None).unwrap();
-        let v3 = ev.evolve(single("ex:p", 0), None).unwrap();
+        let v2 = ev.evolve(single("ex:p", 0), None).expect("should succeed");
+        let v3 = ev.evolve(single("ex:p", 0), None).expect("should succeed");
         assert_eq!(v2, 2);
         assert_eq!(v3, 3);
     }
@@ -824,8 +833,8 @@ mod tests {
         ev.init(single("ex:a", 0), None);
         let mut new_props = single("ex:a", 0);
         new_props.insert("ex:b".to_string(), prop(0, None));
-        ev.evolve(new_props, None).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(new_props, None).expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         assert!(!v2.changes_from_prev.is_empty());
     }
 
@@ -847,8 +856,8 @@ mod tests {
         ev.init(init_props, None);
         let mut new_props = HashMap::new();
         new_props.insert("ex:p".to_string(), typed_prop(0, "xsd:string"));
-        ev.evolve(new_props, None).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(new_props, None).expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         assert!(v2
             .changes_from_prev
             .iter()
@@ -875,8 +884,8 @@ mod tests {
         ev.init(single("ex:a", 0), None);
         let mut new_props = HashMap::new();
         new_props.insert("ex:b".to_string(), prop(1, Some(5)));
-        ev.evolve(new_props, None).unwrap();
-        let current = ev.current().unwrap();
+        ev.evolve(new_props, None).expect("should succeed");
+        let current = ev.current().expect("should succeed");
         assert!(current.properties.contains_key("ex:b"));
         assert!(!current.properties.contains_key("ex:a"));
     }
@@ -885,9 +894,9 @@ mod tests {
     fn test_version_numbers_survive_rollback() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        ev.evolve(single("ex:p", 1), None).unwrap(); // v2
-        ev.evolve(single("ex:p", 2), None).unwrap(); // v3
-        let rolled = ev.rollback(1).unwrap(); // v4
+        ev.evolve(single("ex:p", 1), None).expect("should succeed"); // v2
+        ev.evolve(single("ex:p", 2), None).expect("should succeed"); // v3
+        let rolled = ev.rollback(1).expect("should succeed"); // v4
         assert_eq!(rolled, 4);
         assert_eq!(ev.version_count(), 4);
     }
@@ -896,7 +905,7 @@ mod tests {
     fn test_backward_compatible_identical_shape() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 1), Some("ex:C".into()));
-        let current = ev.current().unwrap();
+        let current = ev.current().expect("should succeed");
         // Identical props → always compatible.
         assert!(ShapeEvolver::is_backward_compatible(
             current,
@@ -908,7 +917,7 @@ mod tests {
     fn test_init_without_target_class() {
         let mut ev = ShapeEvolver::new();
         ev.init(single("ex:p", 0), None);
-        assert!(ev.current().unwrap().target_class.is_none());
+        assert!(ev.current().expect("should succeed").target_class.is_none());
     }
 
     #[test]
@@ -926,8 +935,8 @@ mod tests {
         ev.init(init_props, None);
         let mut new_props = HashMap::new();
         new_props.insert("ex:p".to_string(), prop(0, Some(5)));
-        ev.evolve(new_props, None).unwrap();
-        let v2 = ev.current().unwrap();
+        ev.evolve(new_props, None).expect("should succeed");
+        let v2 = ev.current().expect("should succeed");
         assert!(v2
             .changes_from_prev
             .iter()

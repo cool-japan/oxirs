@@ -660,9 +660,9 @@ mod tests {
         let mut binding = VariableBinding::new();
 
         // Set up test data
-        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
-        let knows = Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap());
-        let bob = Term::NamedNode(NamedNode::new("http://example.org/bob").unwrap());
+        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
+        let knows = Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI"));
+        let bob = Term::NamedNode(NamedNode::new("http://example.org/bob").expect("valid IRI"));
 
         binding.bind("s".to_string(), alice.clone());
         binding.bind("p".to_string(), knows.clone());
@@ -684,11 +684,13 @@ mod tests {
         if let Ok(Term::QuotedTriple(qt)) = result {
             assert_eq!(
                 qt.subject(),
-                &Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap())
+                &Subject::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"))
             );
             assert_eq!(
                 qt.predicate(),
-                &Predicate::NamedNode(NamedNode::new("http://example.org/knows").unwrap())
+                &Predicate::NamedNode(
+                    NamedNode::new("http://example.org/knows").expect("valid IRI")
+                )
             );
         } else {
             panic!("Expected QuotedTriple");
@@ -701,8 +703,10 @@ mod tests {
         let mut binding = VariableBinding::new();
 
         // Create a quoted triple
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
-        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
+        let predicate =
+            Predicate::NamedNode(NamedNode::new("http://example.org/age").expect("valid IRI"));
         let object = Object::Literal(Literal::new("30"));
 
         let triple = Triple::new(subject, predicate, object);
@@ -732,8 +736,10 @@ mod tests {
         let mut binding = VariableBinding::new();
 
         // Create a quoted triple
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
-        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
+        let predicate =
+            Predicate::NamedNode(NamedNode::new("http://example.org/age").expect("valid IRI"));
         let object = Object::Literal(Literal::new("30"));
 
         let triple = Triple::new(subject, predicate, object);
@@ -763,8 +769,10 @@ mod tests {
         let mut binding = VariableBinding::new();
 
         // Create a quoted triple
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
-        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
+        let predicate =
+            Predicate::NamedNode(NamedNode::new("http://example.org/age").expect("valid IRI"));
         let object = Object::Literal(Literal::new("30"));
 
         let triple = Triple::new(subject, predicate, object);
@@ -794,8 +802,10 @@ mod tests {
         let mut binding = VariableBinding::new();
 
         // Create a quoted triple
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
-        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
+        let predicate =
+            Predicate::NamedNode(NamedNode::new("http://example.org/age").expect("valid IRI"));
         let object = Object::Literal(Literal::new("30"));
 
         let triple = Triple::new(subject, predicate, object);
@@ -824,7 +834,7 @@ mod tests {
         // Test isTRIPLE() function - returns false for non-quoted triple
         let mut binding = VariableBinding::new();
 
-        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
         binding.bind("n".to_string(), alice);
 
         // Create isTRIPLE(?n) expression
@@ -848,10 +858,11 @@ mod tests {
         // Test nested quoted triples: TRIPLE(TRIPLE(?s, ?p, ?o), ?p2, ?o2)
         let mut binding = VariableBinding::new();
 
-        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
-        let age = Term::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
+        let age = Term::NamedNode(NamedNode::new("http://example.org/age").expect("valid IRI"));
         let thirty = Term::Literal(Literal::new("30"));
-        let confidence = Term::NamedNode(NamedNode::new("http://example.org/confidence").unwrap());
+        let confidence =
+            Term::NamedNode(NamedNode::new("http://example.org/confidence").expect("valid IRI"));
         let high = Term::Literal(Literal::new("high"));
 
         binding.bind("s".to_string(), alice);
@@ -896,9 +907,9 @@ mod tests {
         // Test: Create a triple, then extract its parts
         let mut binding = VariableBinding::new();
 
-        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
-        let knows = Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap());
-        let bob = Term::NamedNode(NamedNode::new("http://example.org/bob").unwrap());
+        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
+        let knows = Term::NamedNode(NamedNode::new("http://example.org/knows").expect("valid IRI"));
+        let bob = Term::NamedNode(NamedNode::new("http://example.org/bob").expect("valid IRI"));
 
         binding.bind("s".to_string(), alice.clone());
         binding.bind("p".to_string(), knows.clone());
@@ -914,7 +925,8 @@ mod tests {
             ],
         };
 
-        let quoted_triple = evaluate_expression(&triple_expr, &binding).unwrap();
+        let quoted_triple = evaluate_expression(&triple_expr, &binding)
+            .expect("expression evaluation should succeed");
         binding.bind("qt".to_string(), quoted_triple);
 
         // Extract subject
@@ -922,7 +934,8 @@ mod tests {
             name: "SUBJECT".to_string(),
             args: vec![Expression::Variable("?qt".to_string())],
         };
-        let extracted_subject = evaluate_expression(&subject_expr, &binding).unwrap();
+        let extracted_subject = evaluate_expression(&subject_expr, &binding)
+            .expect("expression evaluation should succeed");
 
         // Verify subject matches original
         assert_eq!(extracted_subject, alice);
@@ -932,7 +945,8 @@ mod tests {
             name: "PREDICATE".to_string(),
             args: vec![Expression::Variable("?qt".to_string())],
         };
-        let extracted_predicate = evaluate_expression(&predicate_expr, &binding).unwrap();
+        let extracted_predicate = evaluate_expression(&predicate_expr, &binding)
+            .expect("expression evaluation should succeed");
 
         // Verify predicate matches original
         assert_eq!(extracted_predicate, knows);
@@ -942,7 +956,8 @@ mod tests {
             name: "OBJECT".to_string(),
             args: vec![Expression::Variable("?qt".to_string())],
         };
-        let extracted_object = evaluate_expression(&object_expr, &binding).unwrap();
+        let extracted_object = evaluate_expression(&object_expr, &binding)
+            .expect("expression evaluation should succeed");
 
         // Verify object matches original
         assert_eq!(extracted_object, bob);

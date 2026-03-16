@@ -316,6 +316,7 @@ impl Default for DiversityReranker {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     fn create_test_candidates() -> Vec<ScoredCandidate> {
@@ -336,11 +337,11 @@ mod tests {
     }
 
     #[test]
-    fn test_mmr_rerank() {
+    fn test_mmr_rerank() -> Result<()> {
         let reranker = DiversityReranker::new(0.5);
         let candidates = create_test_candidates();
 
-        let result = reranker.mmr_rerank(&candidates).unwrap();
+        let result = reranker.mmr_rerank(&candidates)?;
 
         // Should have all candidates
         assert_eq!(result.len(), candidates.len());
@@ -355,25 +356,27 @@ mod tests {
             .iter()
             .all(|id| id.starts_with("doc1") || id.starts_with("doc2"));
         assert!(!all_ml, "MMR should diversify results");
+        Ok(())
     }
 
     #[test]
-    fn test_cluster_based_rerank() {
+    fn test_cluster_based_rerank() -> Result<()> {
         let reranker = DiversityReranker::with_strategy(0.5, DiversityStrategy::ClusterBased);
         let candidates = create_test_candidates();
 
-        let result = reranker.cluster_based_rerank(&candidates).unwrap();
+        let result = reranker.cluster_based_rerank(&candidates)?;
 
         assert!(!result.is_empty());
         assert!(result.len() <= candidates.len());
+        Ok(())
     }
 
     #[test]
-    fn test_topic_based_rerank() {
+    fn test_topic_based_rerank() -> Result<()> {
         let reranker = DiversityReranker::with_strategy(0.6, DiversityStrategy::TopicBased);
         let candidates = create_test_candidates();
 
-        let result = reranker.topic_based_rerank(&candidates).unwrap();
+        let result = reranker.topic_based_rerank(&candidates)?;
 
         assert_eq!(result.len(), candidates.len());
 
@@ -386,20 +389,22 @@ mod tests {
             similarity < 0.8,
             "Topic-based reranking should increase diversity"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_no_diversity() {
+    fn test_no_diversity() -> Result<()> {
         let reranker = DiversityReranker::new(0.0); // No diversity
         let candidates = create_test_candidates();
 
-        let result = reranker.apply_diversity(&candidates).unwrap();
+        let result = reranker.apply_diversity(&candidates)?;
 
         // Should return unchanged
         assert_eq!(result.len(), candidates.len());
         for (orig, res) in candidates.iter().zip(result.iter()) {
             assert_eq!(orig.id, res.id);
         }
+        Ok(())
     }
 
     #[test]
@@ -438,23 +443,25 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_candidates() {
+    fn test_empty_candidates() -> Result<()> {
         let reranker = DiversityReranker::new(0.5);
         let candidates = vec![];
 
-        let result = reranker.apply_diversity(&candidates).unwrap();
+        let result = reranker.apply_diversity(&candidates)?;
         assert!(result.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_single_candidate() {
+    fn test_single_candidate() -> Result<()> {
         let reranker = DiversityReranker::new(0.5);
         let candidates = vec![ScoredCandidate::new("doc1", 0.8, 0)
             .with_content("test")
             .with_reranking_score(0.85)];
 
-        let result = reranker.apply_diversity(&candidates).unwrap();
+        let result = reranker.apply_diversity(&candidates)?;
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].id, "doc1");
+        Ok(())
     }
 }

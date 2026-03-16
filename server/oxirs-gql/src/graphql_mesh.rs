@@ -642,7 +642,7 @@ mod tests {
             "https://api.example.com/graphql",
         );
 
-        mesh.add_source(source).await.unwrap();
+        mesh.add_source(source).await.expect("should succeed");
 
         let sources = mesh.get_sources().await;
         assert_eq!(sources.len(), 1);
@@ -666,7 +666,7 @@ mod tests {
             "https://api2.example.com",
         );
 
-        mesh.add_source(source1).await.unwrap();
+        mesh.add_source(source1).await.expect("should succeed");
         let result = mesh.add_source(source2).await;
 
         assert!(result.is_err());
@@ -682,9 +682,9 @@ mod tests {
             SourceType::GraphQL,
             "https://api.example.com",
         );
-        mesh.add_source(source).await.unwrap();
+        mesh.add_source(source).await.expect("should succeed");
 
-        mesh.remove_source("users").await.unwrap();
+        mesh.remove_source("users").await.expect("should succeed");
 
         let sources = mesh.get_sources().await;
         assert!(sources.is_empty());
@@ -695,11 +695,11 @@ mod tests {
         let mesh = GraphQLMesh::new(MeshConfig::default());
 
         let source = DataSource::new("api", "API", SourceType::GraphQL, "https://api.example.com");
-        mesh.add_source(source).await.unwrap();
+        mesh.add_source(source).await.expect("should succeed");
 
         mesh.update_source_health("api", true, None, 50).await;
 
-        let health = mesh.get_source_health("api").await.unwrap();
+        let health = mesh.get_source_health("api").await.expect("should succeed");
         assert!(health.healthy);
         assert_eq!(health.latency_ms, 50);
     }
@@ -718,9 +718,9 @@ mod tests {
             value: "Users_".to_string(),
         });
 
-        mesh.add_source(source).await.unwrap();
+        mesh.add_source(source).await.expect("should succeed");
 
-        let schema = mesh.build_schema().await.unwrap();
+        let schema = mesh.build_schema().await.expect("should succeed");
         assert!(schema.contains("type Query"));
         assert!(schema.contains("users_health"));
     }

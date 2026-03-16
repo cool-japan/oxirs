@@ -602,7 +602,7 @@ mod tests {
         let g = triangle_graph();
         let n = g.get_node("B");
         assert!(n.is_some());
-        assert_eq!(n.unwrap().label, "Beta");
+        assert_eq!(n.expect("should succeed").label, "Beta");
     }
 
     #[test]
@@ -817,7 +817,7 @@ mod tests {
         let g = triangle_graph();
         let path = PathRanker::shortest_path_dijkstra(&g, "A", "B");
         assert!(path.is_some());
-        let p = path.unwrap();
+        let p = path.expect("should succeed");
         assert_eq!(p.nodes, vec!["A", "B"]);
     }
 
@@ -826,7 +826,7 @@ mod tests {
         let g = triangle_graph();
         let path = PathRanker::shortest_path_dijkstra(&g, "A", "A");
         assert!(path.is_some());
-        let p = path.unwrap();
+        let p = path.expect("should succeed");
         assert_eq!(p.nodes, vec!["A"]);
         assert_eq!(p.hop_count, 0);
     }
@@ -872,7 +872,7 @@ mod tests {
             weight: 2.0,
             confidence: 1.0,
         });
-        let path = PathRanker::shortest_path_dijkstra(&g, "A", "C").unwrap();
+        let path = PathRanker::shortest_path_dijkstra(&g, "A", "C").expect("should succeed");
         // dist(direct) = 1/2 = 0.5
         // dist(via B)  = 1/1 + 1/10 = 1.1
         // shortest = direct

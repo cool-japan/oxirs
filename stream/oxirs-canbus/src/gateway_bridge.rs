@@ -393,14 +393,16 @@ mod tests {
     #[test]
     fn test_add_rule_increases_count() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
         assert_eq!(b.rule_count(), 1);
     }
 
     #[test]
     fn test_add_rule_duplicate_id_error() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
         let result = b.add_rule(raw_rule("r1", 0xFFFF, 0x200));
         assert!(matches!(result, Err(BridgeError::DuplicateRuleId(_))));
     }
@@ -410,8 +412,9 @@ mod tests {
     #[test]
     fn test_remove_rule_decreases_count() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
-        b.remove_rule("r1").unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
+        b.remove_rule("r1").expect("should succeed");
         assert_eq!(b.rule_count(), 0);
     }
 
@@ -429,19 +432,25 @@ mod tests {
     #[test]
     fn test_disable_rule_stops_matching() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
-        b.disable_rule("r1").unwrap();
-        let msgs = b.process_frame(&frame(0x100, vec![1, 2])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
+        b.disable_rule("r1").expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x100, vec![1, 2]))
+            .expect("should succeed");
         assert!(msgs.is_empty());
     }
 
     #[test]
     fn test_enable_rule_resumes_matching() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
-        b.disable_rule("r1").unwrap();
-        b.enable_rule("r1").unwrap();
-        let msgs = b.process_frame(&frame(0x100, vec![1])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
+        b.disable_rule("r1").expect("should succeed");
+        b.enable_rule("r1").expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x100, vec![1]))
+            .expect("should succeed");
         assert_eq!(msgs.len(), 1);
     }
 
@@ -468,8 +477,11 @@ mod tests {
     #[test]
     fn test_process_frame_single_matching_rule() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x200)).unwrap();
-        let msgs = b.process_frame(&frame(0x200, vec![0xAB])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x200))
+            .expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x200, vec![0xAB]))
+            .expect("should succeed");
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].rule_id, "r1");
     }
@@ -477,17 +489,24 @@ mod tests {
     #[test]
     fn test_process_frame_multiple_matching_rules() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x300)).unwrap();
-        b.add_rule(raw_rule("r2", 0xFFFF, 0x300)).unwrap();
-        let msgs = b.process_frame(&frame(0x300, vec![1])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x300))
+            .expect("should succeed");
+        b.add_rule(raw_rule("r2", 0xFFFF, 0x300))
+            .expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x300, vec![1]))
+            .expect("should succeed");
         assert_eq!(msgs.len(), 2);
     }
 
     #[test]
     fn test_process_frame_no_matching_rules() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
-        let msgs = b.process_frame(&frame(0x200, vec![1])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x200, vec![1]))
+            .expect("should succeed");
         assert!(msgs.is_empty());
     }
 
@@ -497,27 +516,50 @@ mod tests {
     fn test_mask_filter_exact_match() {
         let mut b = GatewayBridge::new();
         // mask=0xFFFF → exact match on lower 16 bits.
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
-        assert_eq!(b.process_frame(&frame(0x100, vec![])).unwrap().len(), 1);
-        assert_eq!(b.process_frame(&frame(0x101, vec![])).unwrap().len(), 0);
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
+        assert_eq!(
+            b.process_frame(&frame(0x100, vec![]))
+                .expect("should succeed")
+                .len(),
+            1
+        );
+        assert_eq!(
+            b.process_frame(&frame(0x101, vec![]))
+                .expect("should succeed")
+                .len(),
+            0
+        );
     }
 
     #[test]
     fn test_mask_filter_group_match() {
         let mut b = GatewayBridge::new();
         // mask=0xFF00 → match any frame with upper byte = 0x01.
-        b.add_rule(raw_rule("r1", 0xFF00, 0x0100)).unwrap();
-        assert_eq!(b.process_frame(&frame(0x0142, vec![])).unwrap().len(), 1);
-        assert_eq!(b.process_frame(&frame(0x0200, vec![])).unwrap().len(), 0);
+        b.add_rule(raw_rule("r1", 0xFF00, 0x0100))
+            .expect("should succeed");
+        assert_eq!(
+            b.process_frame(&frame(0x0142, vec![]))
+                .expect("should succeed")
+                .len(),
+            1
+        );
+        assert_eq!(
+            b.process_frame(&frame(0x0200, vec![]))
+                .expect("should succeed")
+                .len(),
+            0
+        );
     }
 
     #[test]
     fn test_mask_zero_matches_all() {
         let mut b = GatewayBridge::new();
         // mask=0 → (frame.id & 0) == 0 is always true.
-        b.add_rule(raw_rule("catch_all", 0, 0)).unwrap();
+        b.add_rule(raw_rule("catch_all", 0, 0))
+            .expect("should succeed");
         for id in [0x000, 0x100, 0x7FF, 0x1FFF_FFFF] {
-            let msgs = b.process_frame(&frame(id, vec![])).unwrap();
+            let msgs = b.process_frame(&frame(id, vec![])).expect("should succeed");
             assert_eq!(msgs.len(), 1, "frame ID {id:#X} should match catch-all");
         }
     }
@@ -527,18 +569,24 @@ mod tests {
     #[test]
     fn test_frames_processed_counter() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
-        b.process_frame(&frame(0x100, vec![])).unwrap();
-        b.process_frame(&frame(0x200, vec![])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
+        b.process_frame(&frame(0x100, vec![]))
+            .expect("should succeed");
+        b.process_frame(&frame(0x200, vec![]))
+            .expect("should succeed");
         assert_eq!(b.frames_processed(), 2);
     }
 
     #[test]
     fn test_messages_forwarded_counter() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
-        b.add_rule(raw_rule("r2", 0xFFFF, 0x100)).unwrap();
-        b.process_frame(&frame(0x100, vec![])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
+        b.add_rule(raw_rule("r2", 0xFFFF, 0x100))
+            .expect("should succeed");
+        b.process_frame(&frame(0x100, vec![]))
+            .expect("should succeed");
         assert_eq!(b.messages_forwarded(), 2);
     }
 
@@ -547,18 +595,22 @@ mod tests {
     #[test]
     fn test_raw_transform_hex_output() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x10)).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x10))
+            .expect("should succeed");
         let msgs = b
             .process_frame(&frame(0x10, vec![0x0A, 0x1B, 0x2C]))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(msgs[0].payload, "0A 1B 2C");
     }
 
     #[test]
     fn test_raw_transform_empty_data() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x10)).unwrap();
-        let msgs = b.process_frame(&frame(0x10, vec![])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x10))
+            .expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x10, vec![]))
+            .expect("should succeed");
         assert_eq!(msgs[0].payload, "");
     }
 
@@ -580,9 +632,11 @@ mod tests {
             },
             enabled: true,
         };
-        b.add_rule(rule).unwrap();
+        b.add_rule(rule).expect("should succeed");
         // Raw bytes [0x01, 0xF4] = 500 decimal → 500 * 0.1 - 40 = 10.0
-        let msgs = b.process_frame(&frame(0x0A0, vec![0x01, 0xF4])).unwrap();
+        let msgs = b
+            .process_frame(&frame(0x0A0, vec![0x01, 0xF4]))
+            .expect("should succeed");
         let value: f64 = msgs[0].payload.parse().expect("should be float string");
         assert!((value - 10.0).abs() < 1e-9);
     }
@@ -609,7 +663,7 @@ mod tests {
         let op = TransformOp::Json { field_map: fields };
         // [0x0E, 0x10] = 3600 decimal
         let f = frame(0, vec![0x0E, 0x10]);
-        let result = GatewayBridge::apply_transform(&f, &op).unwrap();
+        let result = GatewayBridge::apply_transform(&f, &op).expect("should succeed");
         assert!(result.contains("3600"), "expected 3600 in {result}");
     }
 
@@ -620,7 +674,7 @@ mod tests {
         fields.insert("b".to_string(), (1usize, 1usize));
         let op = TransformOp::Json { field_map: fields };
         let f = frame(0, vec![0x01, 0x02]);
-        let result = GatewayBridge::apply_transform(&f, &op).unwrap();
+        let result = GatewayBridge::apply_transform(&f, &op).expect("should succeed");
         // JSON object with both keys.
         assert!(result.contains("\"a\""));
         assert!(result.contains("\"b\""));
@@ -641,7 +695,7 @@ mod tests {
     fn test_template_transform_replaces_placeholders() {
         let op = TransformOp::Template("{byte_0} and {byte_1}".to_string());
         let f = frame(0, vec![10, 20]);
-        let result = GatewayBridge::apply_transform(&f, &op).unwrap();
+        let result = GatewayBridge::apply_transform(&f, &op).expect("should succeed");
         assert_eq!(result, "10 and 20");
     }
 
@@ -649,7 +703,7 @@ mod tests {
     fn test_template_transform_no_placeholders() {
         let op = TransformOp::Template("static payload".to_string());
         let f = frame(0, vec![1, 2, 3]);
-        let result = GatewayBridge::apply_transform(&f, &op).unwrap();
+        let result = GatewayBridge::apply_transform(&f, &op).expect("should succeed");
         assert_eq!(result, "static payload");
     }
 
@@ -658,16 +712,20 @@ mod tests {
     #[test]
     fn test_message_log_records_messages() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x10)).unwrap();
-        b.process_frame(&frame(0x10, vec![0xFF])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x10))
+            .expect("should succeed");
+        b.process_frame(&frame(0x10, vec![0xFF]))
+            .expect("should succeed");
         assert_eq!(b.message_log().len(), 1);
     }
 
     #[test]
     fn test_clear_log() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x10)).unwrap();
-        b.process_frame(&frame(0x10, vec![])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x10))
+            .expect("should succeed");
+        b.process_frame(&frame(0x10, vec![]))
+            .expect("should succeed");
         b.clear_log();
         assert!(b.message_log().is_empty());
     }
@@ -675,10 +733,10 @@ mod tests {
     #[test]
     fn test_log_overflow_drops_oldest() {
         let mut b = GatewayBridge::with_max_log(2);
-        b.add_rule(raw_rule("r1", 0, 0)).unwrap();
-        b.process_frame(&frame(1, vec![])).unwrap(); // log: [m1]
-        b.process_frame(&frame(2, vec![])).unwrap(); // log: [m1, m2]
-        b.process_frame(&frame(3, vec![])).unwrap(); // log: [m2, m3] — m1 dropped
+        b.add_rule(raw_rule("r1", 0, 0)).expect("should succeed");
+        b.process_frame(&frame(1, vec![])).expect("should succeed"); // log: [m1]
+        b.process_frame(&frame(2, vec![])).expect("should succeed"); // log: [m1, m2]
+        b.process_frame(&frame(3, vec![])).expect("should succeed"); // log: [m2, m3] — m1 dropped
         assert_eq!(b.message_log().len(), 2);
         assert_eq!(b.message_log()[0].source_frame_id, 2);
         assert_eq!(b.message_log()[1].source_frame_id, 3);
@@ -689,8 +747,11 @@ mod tests {
     #[test]
     fn test_message_contains_source_frame_id() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x42)).unwrap();
-        let msgs = b.process_frame(&frame(0x42, vec![])).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x42))
+            .expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x42, vec![]))
+            .expect("should succeed");
         assert_eq!(msgs[0].source_frame_id, 0x42);
     }
 
@@ -707,8 +768,10 @@ mod tests {
             transform: TransformOp::Raw,
             enabled: true,
         };
-        b.add_rule(rule).unwrap();
-        let msgs = b.process_frame(&frame(0x10, vec![])).unwrap();
+        b.add_rule(rule).expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x10, vec![]))
+            .expect("should succeed");
         assert_eq!(msgs[0].target, mqtt_target("can/raw"));
     }
 
@@ -782,8 +845,10 @@ mod tests {
         let mut b = GatewayBridge::new();
         let mut rule = raw_rule("r1", 0xFFFF, 0x55);
         rule.enabled = false;
-        b.add_rule(rule).unwrap();
-        let msgs = b.process_frame(&frame(0x55, vec![])).unwrap();
+        b.add_rule(rule).expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x55, vec![]))
+            .expect("should succeed");
         assert!(msgs.is_empty());
     }
 
@@ -803,8 +868,10 @@ mod tests {
             transform: TransformOp::Raw,
             enabled: true,
         };
-        b.add_rule(rule).unwrap();
-        let msgs = b.process_frame(&frame(0xAA, vec![0x01])).unwrap();
+        b.add_rule(rule).expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0xAA, vec![0x01]))
+            .expect("should succeed");
         assert_eq!(msgs.len(), 1);
         assert!(matches!(msgs[0].target, BridgeTarget::Http { .. }));
     }
@@ -815,7 +882,7 @@ mod tests {
     fn test_extended_id_frame_matched() {
         let mut b = GatewayBridge::new();
         b.add_rule(raw_rule("ext", 0x1FFF_FFFF, 0x1234_5678))
-            .unwrap();
+            .expect("should succeed");
         let ext_frame = CanFrame {
             id: 0x1234_5678,
             data: vec![],
@@ -823,14 +890,15 @@ mod tests {
             is_remote: false,
             timestamp_ms: 0,
         };
-        let msgs = b.process_frame(&ext_frame).unwrap();
+        let msgs = b.process_frame(&ext_frame).expect("should succeed");
         assert_eq!(msgs.len(), 1);
     }
 
     #[test]
     fn test_remote_frame_processed() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
         let remote = CanFrame {
             id: 0x100,
             data: vec![],
@@ -838,7 +906,7 @@ mod tests {
             is_extended: false,
             timestamp_ms: 42,
         };
-        let msgs = b.process_frame(&remote).unwrap();
+        let msgs = b.process_frame(&remote).expect("should succeed");
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].timestamp_ms, 42);
     }
@@ -849,8 +917,10 @@ mod tests {
     fn test_message_rule_id_matches() {
         let mut b = GatewayBridge::new();
         b.add_rule(raw_rule("unique-rule-id", 0xFFFF, 0x77))
-            .unwrap();
-        let msgs = b.process_frame(&frame(0x77, vec![])).unwrap();
+            .expect("should succeed");
+        let msgs = b
+            .process_frame(&frame(0x77, vec![]))
+            .expect("should succeed");
         assert_eq!(msgs[0].rule_id, "unique-rule-id");
     }
 
@@ -859,18 +929,32 @@ mod tests {
     #[test]
     fn test_multiple_rules_different_filters_both_match() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0xFFFF, 0x100)).unwrap();
-        b.add_rule(raw_rule("r2", 0xFFFF, 0x200)).unwrap();
-        assert_eq!(b.process_frame(&frame(0x100, vec![])).unwrap().len(), 1);
-        assert_eq!(b.process_frame(&frame(0x200, vec![])).unwrap().len(), 1);
+        b.add_rule(raw_rule("r1", 0xFFFF, 0x100))
+            .expect("should succeed");
+        b.add_rule(raw_rule("r2", 0xFFFF, 0x200))
+            .expect("should succeed");
+        assert_eq!(
+            b.process_frame(&frame(0x100, vec![]))
+                .expect("should succeed")
+                .len(),
+            1
+        );
+        assert_eq!(
+            b.process_frame(&frame(0x200, vec![]))
+                .expect("should succeed")
+                .len(),
+            1
+        );
     }
 
     #[test]
     fn test_messages_cleared_on_clear_log() {
         let mut b = GatewayBridge::new();
-        b.add_rule(raw_rule("r1", 0, 0)).unwrap();
-        b.process_frame(&frame(0x1, vec![])).unwrap();
-        b.process_frame(&frame(0x2, vec![])).unwrap();
+        b.add_rule(raw_rule("r1", 0, 0)).expect("should succeed");
+        b.process_frame(&frame(0x1, vec![]))
+            .expect("should succeed");
+        b.process_frame(&frame(0x2, vec![]))
+            .expect("should succeed");
         assert_eq!(b.message_log().len(), 2);
         b.clear_log();
         assert_eq!(b.message_log().len(), 0);

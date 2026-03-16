@@ -1152,7 +1152,9 @@ mod tests {
     fn test_extract_boundary_conditions_basic() {
         let parser = RdfToPhysics::new();
         let triples = make_bc_triples();
-        let bcs = parser.extract_boundary_conditions(&triples).unwrap();
+        let bcs = parser
+            .extract_boundary_conditions(&triples)
+            .expect("should succeed");
         assert_eq!(bcs.len(), 1);
         let bc = &bcs[0];
         assert_eq!(bc.condition_type, "inlet");
@@ -1165,7 +1167,9 @@ mod tests {
     fn test_extract_material_properties() {
         let parser = RdfToPhysics::new();
         let triples = make_material_triples();
-        let mats = parser.extract_material_properties(&triples).unwrap();
+        let mats = parser
+            .extract_material_properties(&triples)
+            .expect("should succeed");
         assert_eq!(mats.len(), 1);
         let mat = &mats[0];
         assert_eq!(mat.name, "Steel");
@@ -1180,7 +1184,9 @@ mod tests {
             ..RdfToPhysics::default()
         };
         let triples = vec![Triple::new("<ex:foo>", "<ex:bar>", "<ex:baz>")];
-        let bcs = parser.extract_boundary_conditions(&triples).unwrap();
+        let bcs = parser
+            .extract_boundary_conditions(&triples)
+            .expect("should succeed");
         assert!(bcs.is_empty());
     }
 
@@ -1227,7 +1233,7 @@ mod tests {
         let query = SparqlPhysicsQuery::from_result(&make_result());
         let max_temp = query.get_max_temperature();
         assert!(max_temp.is_some());
-        let max = max_temp.unwrap();
+        let max = max_temp.expect("should succeed");
         assert!((max - 400.0).abs() < 1e-6, "expected 400.0, got {max}");
     }
 
@@ -1236,7 +1242,7 @@ mod tests {
         let query = SparqlPhysicsQuery::from_result(&make_result());
         let min_temp = query.get_min_for_property("temperature");
         assert!(min_temp.is_some());
-        let min = min_temp.unwrap();
+        let min = min_temp.expect("should succeed");
         assert!((min - 300.0).abs() < 1e-6, "expected 300.0, got {min}");
     }
 
@@ -1246,7 +1252,7 @@ mod tests {
         let mean = query.get_mean_for_property("temperature");
         assert!(mean.is_some());
         // Mean of 300, 350, 400 = 350
-        let m = mean.unwrap();
+        let m = mean.expect("should succeed");
         assert!((m - 350.0).abs() < 1e-6, "expected 350.0, got {m}");
     }
 
@@ -1452,7 +1458,9 @@ mod tests {
     fn test_rdf_to_physics_bc_type_and_value() {
         let parser = RdfToPhysics::new();
         let triples = make_bc_triples();
-        let bcs = parser.extract_boundary_conditions(&triples).unwrap();
+        let bcs = parser
+            .extract_boundary_conditions(&triples)
+            .expect("should succeed");
         assert_eq!(bcs.len(), 1);
         assert_eq!(bcs[0].condition_type, "inlet");
         assert_eq!(bcs[0].property, "velocity");
@@ -1464,7 +1472,9 @@ mod tests {
     fn test_rdf_to_physics_material_property_extraction() {
         let parser = RdfToPhysics::new();
         let triples = make_material_triples();
-        let mats = parser.extract_material_properties(&triples).unwrap();
+        let mats = parser
+            .extract_material_properties(&triples)
+            .expect("should succeed");
         assert!(!mats.is_empty(), "expected at least one material property");
         assert_eq!(mats[0].unit, "W-PER-M-K");
         assert!((mats[0].value - 50.2).abs() < 1e-6);
@@ -1489,7 +1499,7 @@ mod tests {
         let query = SparqlPhysicsQuery::from_result(&make_result());
         let max = query.get_max_temperature();
         assert!(max.is_some());
-        let v = max.unwrap();
+        let v = max.expect("should succeed");
         assert!((v - 400.0).abs() < 1e-6, "expected max temp 400.0, got {v}");
     }
 
@@ -1498,7 +1508,7 @@ mod tests {
         let query = SparqlPhysicsQuery::from_result(&make_result());
         let min = query.get_min_for_property("temperature");
         assert!(min.is_some());
-        let v = min.unwrap();
+        let v = min.expect("should succeed");
         assert!((v - 300.0).abs() < 1e-6, "expected min temp 300.0, got {v}");
     }
 
@@ -1508,7 +1518,7 @@ mod tests {
         let mean = query.get_mean_for_property("pressure");
         assert!(mean.is_some());
         // pressure values: 101325, 101325, 102000 → mean ≈ 101550
-        let m = mean.unwrap();
+        let m = mean.expect("should succeed");
         assert!(m > 101000.0 && m < 103000.0, "unexpected mean pressure {m}");
     }
 
@@ -1544,7 +1554,9 @@ mod tests {
     fn test_rdf_bc_iri_preserved() {
         let parser = RdfToPhysics::new();
         let triples = make_bc_triples();
-        let bcs = parser.extract_boundary_conditions(&triples).unwrap();
+        let bcs = parser
+            .extract_boundary_conditions(&triples)
+            .expect("should succeed");
         assert!(!bcs[0].iri.is_empty(), "BC IRI should be non-empty");
         assert!(
             bcs[0].iri.contains("bc_inlet"),
@@ -1621,7 +1633,9 @@ mod tests {
     fn test_rdf_material_empty_ok() {
         let parser = RdfToPhysics::new();
         let triples: Vec<Triple> = vec![];
-        let mats = parser.extract_material_properties(&triples).unwrap();
+        let mats = parser
+            .extract_material_properties(&triples)
+            .expect("should succeed");
         assert!(mats.is_empty(), "empty triples -> empty material list");
     }
 }

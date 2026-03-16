@@ -592,28 +592,31 @@ impl TieredStorage {
 
         // Insert into hot tier
         let evicted = {
-            let mut hot = self.hot_tier.write().expect("lock poisoned");
+            let mut hot = self.hot_tier.write().unwrap_or_else(|e| e.into_inner());
             hot.insert(key, annotation.clone())
         };
 
         // Handle eviction to warm tier
         if let Some((evict_key, evict_annotation)) = evicted {
             debug!("Evicting key {} to warm tier", evict_key);
-            let mut warm = self.warm_tier.write().expect("lock poisoned");
+            let mut warm = self.warm_tier.write().unwrap_or_else(|e| e.into_inner());
             warm.insert(evict_key, &evict_annotation)?;
 
             // Update metadata
-            let mut metadata = self.metadata.write().expect("lock poisoned");
+            let mut metadata = self.metadata.write().unwrap_or_else(|e| e.into_inner());
             if let Some(meta) = metadata.get_mut(&evict_key) {
                 meta.tier = StorageTier::Warm;
             }
 
-            self.stats.write().expect("lock poisoned").migrations_down += 1;
+            self.stats
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .migrations_down += 1;
         }
 
         // Update metadata
         {
-            let mut metadata = self.metadata.write().expect("lock poisoned");
+            let mut metadata = self.metadata.write().unwrap_or_else(|e| e.into_inner());
             metadata.insert(
                 key,
                 AnnotationMetadata {
@@ -626,7 +629,10 @@ impl TieredStorage {
             );
         }
 
-        self.stats.write().expect("lock poisoned").total_writes += 1;
+        self.stats
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .total_writes += 1;
 
         Ok(())
     }
@@ -636,13 +642,19 @@ impl TieredStorage {
         let span = span!(Level::DEBUG, "tiered_get");
         let _enter = span.enter();
 
-        self.stats.write().expect("lock poisoned").total_reads += 1;
+        self.stats
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .total_reads += 1;
 
         // Try hot tier
         {
-            let mut hot = self.hot_tier.write().expect("lock poisoned");
+            let mut hot = self.hot_tier.write().unwrap_or_else(|e| e.into_inner());
             if let Some(annotation) = hot.get(key) {
-                self.stats.write().expect("lock poisoned").hot_hits += 1;
+                self.stats
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .hot_hits += 1;
                 self.update_metadata_access(key);
                 return Ok(Some(annotation.clone()));
             }
@@ -650,12 +662,15 @@ impl TieredStorage {
 
         // Try warm tier
         let warm_annotation = {
-            let warm = self.warm_tier.read().expect("lock poisoned");
+            let warm = self.warm_tier.read().unwrap_or_else(|e| e.into_inner());
             warm.get(key)?
         };
 
         if let Some(annotation) = warm_annotation {
-            self.stats.write().expect("lock poisoned").warm_hits += 1;
+            self.stats
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .warm_hits += 1;
             self.update_metadata_access(key);
 
             // Promote to hot tier if frequently accessed
@@ -666,12 +681,15 @@ impl TieredStorage {
 
         // Try cold tier
         let cold_annotation = {
-            let cold = self.cold_tier.read().expect("lock poisoned");
+            let cold = self.cold_tier.read().unwrap_or_else(|e| e.into_inner());
             cold.get(key)?
         };
 
         if let Some(annotation) = cold_annotation {
-            self.stats.write().expect("lock poisoned").cold_hits += 1;
+            self.stats
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .cold_hits += 1;
             self.update_metadata_access(key);
 
             // Promote to warm tier
@@ -684,7 +702,7 @@ impl TieredStorage {
     }
 
     fn update_metadata_access(&self, key: u64) {
-        let mut metadata = self.metadata.write().expect("lock poisoned");
+        let mut metadata = self.metadata.write().unwrap_or_else(|e| e.into_inner());
         if let Some(meta) = metadata.get_mut(&key) {
             meta.access_count += 1;
             meta.last_access = Utc::now();
@@ -693,7 +711,7 @@ impl TieredStorage {
 
     fn maybe_promote_to_hot(&mut self, key: u64, annotation: TripleAnnotation) -> StarResult<()> {
         let should_promote = {
-            let metadata = self.metadata.read().expect("lock poisoned");
+            let metadata = self.metadata.read().unwrap_or_else(|e| e.into_inner());
             metadata.get(&key).is_some_and(|meta| meta.access_count > 5)
         };
 
@@ -702,25 +720,28 @@ impl TieredStorage {
 
             // Remove from warm tier
             {
-                let mut warm = self.warm_tier.write().expect("lock poisoned");
+                let mut warm = self.warm_tier.write().unwrap_or_else(|e| e.into_inner());
                 warm.remove(key)?;
             }
 
             // Insert into hot tier
             {
-                let mut hot = self.hot_tier.write().expect("lock poisoned");
+                let mut hot = self.hot_tier.write().unwrap_or_else(|e| e.into_inner());
                 hot.insert(key, annotation);
             }
 
             // Update metadata
             {
-                let mut metadata = self.metadata.write().expect("lock poisoned");
+                let mut metadata = self.metadata.write().unwrap_or_else(|e| e.into_inner());
                 if let Some(meta) = metadata.get_mut(&key) {
                     meta.tier = StorageTier::Hot;
                 }
             }
 
-            self.stats.write().expect("lock poisoned").migrations_up += 1;
+            self.stats
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .migrations_up += 1;
         }
 
         Ok(())
@@ -731,37 +752,52 @@ impl TieredStorage {
 
         // Insert into warm tier
         {
-            let mut warm = self.warm_tier.write().expect("lock poisoned");
+            let mut warm = self.warm_tier.write().unwrap_or_else(|e| e.into_inner());
             warm.insert(key, &annotation)?;
         }
 
         // Update metadata
         {
-            let mut metadata = self.metadata.write().expect("lock poisoned");
+            let mut metadata = self.metadata.write().unwrap_or_else(|e| e.into_inner());
             if let Some(meta) = metadata.get_mut(&key) {
                 meta.tier = StorageTier::Warm;
             }
         }
 
-        self.stats.write().expect("lock poisoned").migrations_up += 1;
+        self.stats
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .migrations_up += 1;
 
         Ok(())
     }
 
     /// Get statistics
     pub fn statistics(&self) -> TieredStorageStatistics {
-        let mut stats = self.stats.read().expect("lock poisoned").clone();
+        let mut stats = self.stats.read().unwrap_or_else(|e| e.into_inner()).clone();
 
-        stats.hot_tier_bytes = self.hot_tier.read().expect("lock poisoned").size_bytes();
-        stats.warm_tier_bytes = self.warm_tier.read().expect("lock poisoned").size_bytes;
-        stats.cold_tier_bytes = self.cold_tier.read().expect("lock poisoned").size_bytes;
+        stats.hot_tier_bytes = self
+            .hot_tier
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .size_bytes();
+        stats.warm_tier_bytes = self
+            .warm_tier
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .size_bytes;
+        stats.cold_tier_bytes = self
+            .cold_tier
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .size_bytes;
 
         stats
     }
 
     /// Get tier distribution
     pub fn tier_distribution(&self) -> HashMap<StorageTier, usize> {
-        let metadata = self.metadata.read().expect("lock poisoned");
+        let metadata = self.metadata.read().unwrap_or_else(|e| e.into_inner());
 
         let mut distribution = HashMap::new();
         for meta in metadata.values() {

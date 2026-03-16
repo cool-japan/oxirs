@@ -223,8 +223,14 @@ mod tests {
     #[test]
     fn test_check_positive() {
         // Test positive values
-        assert_eq!(check_positive(5, "test").unwrap(), 5);
-        assert_eq!(check_positive(1.5f32, "test").unwrap(), 1.5f32);
+        assert_eq!(
+            check_positive(5, "test").expect("value should be positive"),
+            5
+        );
+        assert_eq!(
+            check_positive(1.5f32, "test").expect("value should be positive"),
+            1.5f32
+        );
 
         // Test zero and negative values
         assert!(check_positive(0, "test").is_err());
@@ -245,9 +251,18 @@ mod tests {
     #[test]
     fn test_check_finite_f32() {
         // Test finite values
-        assert_eq!(check_finite_f32(1.5, "test").unwrap(), 1.5);
-        assert_eq!(check_finite_f32(0.0, "test").unwrap(), 0.0);
-        assert_eq!(check_finite_f32(-1.5, "test").unwrap(), -1.5);
+        assert_eq!(
+            check_finite_f32(1.5, "test").expect("value should be finite f32"),
+            1.5
+        );
+        assert_eq!(
+            check_finite_f32(0.0, "test").expect("value should be finite f32"),
+            0.0
+        );
+        assert_eq!(
+            check_finite_f32(-1.5, "test").expect("value should be finite f32"),
+            -1.5
+        );
 
         // Test non-finite values
         assert!(check_finite_f32(f32::INFINITY, "test").is_err());
@@ -268,9 +283,18 @@ mod tests {
     #[test]
     fn test_check_finite_f64() {
         // Test finite values
-        assert_eq!(check_finite_f64(1.5, "test").unwrap(), 1.5);
-        assert_eq!(check_finite_f64(0.0, "test").unwrap(), 0.0);
-        assert_eq!(check_finite_f64(-1.5, "test").unwrap(), -1.5);
+        assert_eq!(
+            check_finite_f64(1.5, "test").expect("value should be finite f64"),
+            1.5
+        );
+        assert_eq!(
+            check_finite_f64(0.0, "test").expect("value should be finite f64"),
+            0.0
+        );
+        assert_eq!(
+            check_finite_f64(-1.5, "test").expect("value should be finite f64"),
+            -1.5
+        );
 
         // Test non-finite values
         assert!(check_finite_f64(f64::INFINITY, "test").is_err());
@@ -357,10 +381,22 @@ mod tests {
     #[test]
     fn test_check_range() {
         // Test value within range
-        assert_eq!(check_range(5, 1, 10, "test").unwrap(), 5);
-        assert_eq!(check_range(1, 1, 10, "test").unwrap(), 1);
-        assert_eq!(check_range(10, 1, 10, "test").unwrap(), 10);
-        assert_eq!(check_range(2.5f32, 1.0, 5.0, "test").unwrap(), 2.5f32);
+        assert_eq!(
+            check_range(5, 1, 10, "test").expect("value should be in range"),
+            5
+        );
+        assert_eq!(
+            check_range(1, 1, 10, "test").expect("value should be in range"),
+            1
+        );
+        assert_eq!(
+            check_range(10, 1, 10, "test").expect("value should be in range"),
+            10
+        );
+        assert_eq!(
+            check_range(2.5f32, 1.0, 5.0, "test").expect("value should be in range"),
+            2.5f32
+        );
 
         // Test value below range
         let err = check_range(0, 1, 10, "test_param").unwrap_err();

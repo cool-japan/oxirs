@@ -799,8 +799,8 @@ mod tests {
         let ng = make_view("ng1", &[("s2", "p2", "o2"), ("s3", "p3", "o3")]);
         let mv = MergedView::new("m", default_g, vec![ng], false);
         let summary = mv.source_summary();
-        assert_eq!(*summary.get("default").unwrap(), 1);
-        assert_eq!(*summary.get("ng1").unwrap(), 2);
+        assert_eq!(*summary.get("default").expect("key should exist"), 1);
+        assert_eq!(*summary.get("ng1").expect("key should exist"), 2);
     }
 
     #[test]

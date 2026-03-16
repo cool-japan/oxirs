@@ -596,12 +596,12 @@ mod tests {
 
     #[test]
     fn test_small_string() {
-        let small = SmallString::new("test").unwrap();
+        let small = SmallString::new("test").expect("construction should succeed");
         assert_eq!(small.as_str(), "test");
         assert_eq!(small.len(), 4);
         assert!(!small.is_empty());
 
-        let empty = SmallString::new("").unwrap();
+        let empty = SmallString::new("").expect("construction should succeed");
         assert!(empty.is_empty());
 
         // Test too long string
@@ -611,7 +611,7 @@ mod tests {
 
     #[test]
     fn test_encode_named_node() {
-        let node = NamedNode::new("http://example.org/test").unwrap();
+        let node = NamedNode::new("http://example.org/test").expect("valid IRI");
         let encoded = EncodedTerm::encode_named_node(&node);
 
         assert!(encoded.is_named_node());
@@ -621,7 +621,7 @@ mod tests {
 
     #[test]
     fn test_encode_blank_node() {
-        let node = BlankNode::new("test").unwrap();
+        let node = BlankNode::new("test").expect("valid blank node id");
         let encoded = EncodedTerm::encode_blank_node(&node);
 
         assert!(!encoded.is_named_node());
@@ -638,7 +638,7 @@ mod tests {
         assert!(matches!(encoded, EncodedTerm::SmallStringLiteral(_)));
 
         // Language-tagged literal
-        let literal = Literal::new_lang("test", "en").unwrap();
+        let literal = Literal::new_lang("test", "en").expect("construction should succeed");
         let encoded = EncodedTerm::encode_literal(&literal);
         assert!(encoded.is_literal());
         assert!(matches!(
@@ -655,10 +655,12 @@ mod tests {
 
     #[test]
     fn test_encoded_triple() {
-        let subject =
-            EncodedTerm::encode_named_node(&NamedNode::new("http://example.org/s").unwrap());
-        let predicate =
-            EncodedTerm::encode_named_node(&NamedNode::new("http://example.org/p").unwrap());
+        let subject = EncodedTerm::encode_named_node(
+            &NamedNode::new("http://example.org/s").expect("valid IRI"),
+        );
+        let predicate = EncodedTerm::encode_named_node(
+            &NamedNode::new("http://example.org/p").expect("valid IRI"),
+        );
         let object = EncodedTerm::encode_literal(&Literal::new("test"));
 
         let triple = EncodedTriple::new(subject, predicate, object);
@@ -670,8 +672,12 @@ mod tests {
         let named_node = EncodedTerm::NamedNode {
             iri_id: StrHash::new("http://example.org/test"),
         };
-        let blank_node = EncodedTerm::SmallBlankNode(SmallString::new("test").unwrap());
-        let literal = EncodedTerm::SmallStringLiteral(SmallString::new("test").unwrap());
+        let blank_node = EncodedTerm::SmallBlankNode(
+            SmallString::new("test").expect("construction should succeed"),
+        );
+        let literal = EncodedTerm::SmallStringLiteral(
+            SmallString::new("test").expect("construction should succeed"),
+        );
 
         assert_eq!(named_node.type_discriminant(), 1);
         assert_eq!(blank_node.type_discriminant(), 3);

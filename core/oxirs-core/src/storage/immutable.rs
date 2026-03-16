@@ -686,18 +686,22 @@ mod tests {
             ..Default::default()
         };
 
-        let storage = ImmutableStorage::new(config).await.unwrap();
+        let storage = ImmutableStorage::new(config)
+            .await
+            .expect("async operation should succeed");
 
         // Create test triples
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/s1").unwrap(),
-                NamedNode::new("http://example.org/p1").unwrap(),
-                crate::model::Object::NamedNode(NamedNode::new("http://example.org/o1").unwrap()),
+                NamedNode::new("http://example.org/s1").expect("valid IRI"),
+                NamedNode::new("http://example.org/p1").expect("valid IRI"),
+                crate::model::Object::NamedNode(
+                    NamedNode::new("http://example.org/o1").expect("valid IRI"),
+                ),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/s2").unwrap(),
-                NamedNode::new("http://example.org/p2").unwrap(),
+                NamedNode::new("http://example.org/s2").expect("valid IRI"),
+                NamedNode::new("http://example.org/p2").expect("valid IRI"),
                 crate::model::Object::Literal(Literal::new("test")),
             ),
         ];
@@ -706,16 +710,19 @@ mod tests {
         let commit = storage
             .store_triples(&triples, "Initial commit")
             .await
-            .unwrap();
+            .expect("operation should succeed");
 
         // Read back triples
-        let loaded = storage.read_commit(commit.hash).await.unwrap();
+        let loaded = storage
+            .read_commit(commit.hash)
+            .await
+            .expect("async operation should succeed");
         assert_eq!(loaded.len(), 2);
 
         // Query with pattern
         let pattern = TriplePattern::new(
             Some(crate::model::SubjectPattern::NamedNode(
-                NamedNode::new("http://example.org/s1").unwrap(),
+                NamedNode::new("http://example.org/s1").expect("valid IRI"),
             )),
             None,
             None,
@@ -723,7 +730,7 @@ mod tests {
         let results = storage
             .query_triples(&pattern, Some(commit.hash))
             .await
-            .unwrap();
+            .expect("operation should succeed");
         assert_eq!(results.len(), 1);
     }
 
@@ -735,19 +742,24 @@ mod tests {
             ..Default::default()
         };
 
-        let storage = ImmutableStorage::new(config).await.unwrap();
+        let storage = ImmutableStorage::new(config)
+            .await
+            .expect("async operation should succeed");
 
         // Store same triple multiple times
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             crate::model::Object::Literal(Literal::new("value")),
         );
 
         let triples = vec![triple.clone(), triple.clone(), triple.clone()];
 
         // Should deduplicate
-        let _commit = storage.store_triples(&triples, "Dedup test").await.unwrap();
+        let _commit = storage
+            .store_triples(&triples, "Dedup test")
+            .await
+            .expect("async operation should succeed");
 
         let stats = storage.stats.read().await;
         // Should only store one unique block for the triples

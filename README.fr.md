@@ -3,13 +3,13 @@
 > Plateforme modulaire native Rust pour le Web Sémantique, SPARQL 1.2, GraphQL et raisonnement augmenté par IA
 
 [![Licence: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Statut**: v0.2.1 - Publié - 11 mars 2026
+**Statut**: v0.2.2 - Publié - 16 mars 2026
 
 **Prêt pour la Production**: Implémentation complète de SPARQL 1.1/1.2 avec **optimiseur 3,8× plus rapide**, support IoT industriel et fonctionnalités IA. **40 791+ tests réussis**, zéro avertissement sur les 26 crates.
 
-**Points Forts v0.2.1 (11 mars 2026)**: 26 nouveaux modules fonctionnels ajoutés sur 16 rounds de développement. Algèbre SPARQL avancée (EXISTS, MINUS, sous-requêtes, clause SERVICE), stockage renforcé (store six-index, fusion/reconstruction d'index), capacités IA (store vectoriel, inférence de contraintes, historique de conversation) et renforcement de la sécurité (store d'identifiants, validation de chaîne de confiance).
+**Points Forts v0.2.2 (16 mars 2026)**: 26 nouveaux modules fonctionnels ajoutés sur 16 rounds de développement. Algèbre SPARQL avancée (EXISTS, MINUS, sous-requêtes, clause SERVICE), stockage renforcé (store six-index, fusion/reconstruction d'index), capacités IA (store vectoriel, inférence de contraintes, historique de conversation) et renforcement de la sécurité (store d'identifiants, validation de chaîne de confiance).
 
 ## Vision
 
@@ -58,7 +58,7 @@ OxiRS offre un support de premier ordre pour le **Gaia-X Trust Framework** et le
 
 ```bash
 # Installer l'outil CLI
-cargo install oxirs --version 0.2.1
+cargo install oxirs --version 0.2.2
 
 # Compiler depuis les sources
 git clone https://github.com/cool-japan/oxirs.git
@@ -200,11 +200,11 @@ Manufacturing-X Digital Twin:
   Simulation:           Physique temps réel (SciRS2)
 ```
 
-## Nouveautés dans v0.2.1 (11 mars 2026)
+## Nouveautés dans v0.2.2 (16 mars 2026)
 
-**v0.2.1 — Expansion Majeure des Fonctionnalités: 26 Nouveaux Modules sur 16 Rounds**
+**v0.2.2 — Expansion Majeure des Fonctionnalités: 26 Nouveaux Modules sur 16 Rounds**
 
-OxiRS v0.2.1 élargit considérablement la plateforme avec une algèbre SPARQL approfondie, un stockage de production, des capacités IA et un renforcement de la sécurité:
+OxiRS v0.2.2 élargit considérablement la plateforme avec une algèbre SPARQL approfondie, un stockage de production, des capacités IA et un renforcement de la sécurité:
 
 **Fonctionnalités Principales:**
 - **SPARQL 1.1/1.2 Complet** - Conforme W3C avec optimisation de requêtes avancée
@@ -266,7 +266,7 @@ oxirs/                  # Racine Cargo Workspace
     └─ benchmarks/       # SP2Bench, WatDiv, LDBC SGS
 ```
 
-## Matrice de Fonctionnalités (v0.2.1)
+## Matrice de Fonctionnalités (v0.2.2)
 
 | Capacité | Crate(s) OxiRS | Statut | Parité Jena/Fuseki |
 |----------|----------------|--------|--------------------|
@@ -325,7 +325,7 @@ oxirs/                  # Racine Cargo Workspace
 - Prévu: Pas encore implémenté
 - Partiel: Support partiel/plugin dans Jena
 
-**Métriques de Qualité (v0.2.1):**
+**Métriques de Qualité (v0.2.2):**
 - **40 791 tests réussis** (100% de réussite, ~115 ignorés)
 - **Zéro avertissement de compilation** (appliqué avec `-D warnings`)
 - **95%+ de couverture de tests** sur les 26 modules
@@ -334,13 +334,13 @@ oxirs/                  # Racine Cargo Workspace
 - **Audit de sécurité de niveau production effectué**
 - **Support GPU CUDA** pour accélération IA
 - **Optimisation de requêtes 3,8× plus rapide** via détection adaptative de complexité
-- **26 nouveaux modules fonctionnels** ajoutés dans v0.2.1 (16 rounds de développement)
+- **26 nouveaux modules fonctionnels** ajoutés dans v0.2.2 (16 rounds de développement)
 
-## Notes de Version v0.2.1
+## Notes de Version v0.2.2
 
 Les notes complètes se trouvent dans [CHANGELOG.md](CHANGELOG.md).
 
-### Points Forts (11 mars 2026)
+### Points Forts (16 mars 2026)
 - **40 791+ tests réussis** sur les 26 crates
 - **26 nouveaux modules fonctionnels** ajoutés sur les 26 crates en 16 rounds de développement
 - **Algèbre SPARQL avancée**: évaluateur EXISTS, évaluateur MINUS, constructeur de sous-requêtes, gestionnaire de clause SERVICE
@@ -352,7 +352,7 @@ Les notes complètes se trouvent dans [CHANGELOG.md](CHANGELOG.md).
 - **Géospatial**: enveloppe convexe (algorithme de Graham), calculateur de distance, détecteur d'intersections, calculateur de surface
 - **Traitement de flux**: gestionnaire de partitions, groupes de consommateurs, registre de schémas, file de lettres mortes, suivi de filigrane
 
-### Décompte des Tests par Crate (v0.2.1)
+### Décompte des Tests par Crate (v0.2.2)
 
 | Crate | Tests |
 |-------|-------|
@@ -468,12 +468,12 @@ Fonctionnalités optionnelles pour minimiser les dépendances:
 | Version | Date Cible | Jalon | Livrables | Statut |
 |---------|-----------|-------|-----------|--------|
 | **v0.1.0** | **7 jan 2026** | **Production Initiale** | SPARQL 1.1/1.2 complet, IoT industriel, IA, 13 123 tests | Publié |
-| **v0.2.1** | **11 mars 2026** | **Expansion Majeure des Fonctionnalités** | 40 791+ tests, 26 nouveaux modules, optimiseur 3,8×, algèbre SPARQL avancée | Publié (actuel) |
+| **v0.2.2** | **16 mars 2026** | **Expansion Majeure des Fonctionnalités** | 40 791+ tests, 26 nouveaux modules, optimiseur 3,8×, algèbre SPARQL avancée | Publié (actuel) |
 | **v0.3.0** | **T2 2026** | **Recherche Plein Texte & Échelle** | Recherche plein texte (Tantivy), performance 10×, clustering multi-région | Prévu |
 
-### Version Actuelle: v0.2.1 (11 mars 2026)
+### Version Actuelle: v0.2.2 (16 mars 2026)
 
-**Axes de Développement v0.2.1 (16 rounds terminés):**
+**Axes de Développement v0.2.2 (16 rounds terminés):**
 - Algèbre SPARQL avancée: évaluateurs EXISTS/MINUS, constructeur de sous-requêtes, clause SERVICE, jointure LATERAL
 - Renforcement du stockage: store six-index, fusion/reconstruction d'index, compaction B-tree, cache de triples
 - IA prête pour la production: store vectoriel, inférence de contraintes, historique de conversation, cache de réponses
@@ -520,4 +520,4 @@ Voir [LICENSE](LICENSE) pour les détails.
 
 *"Rust rend la sécurité de la mémoire incontournable; OxiRS rend l'ingénierie des graphes de connaissances incontournable."*
 
-**v0.2.1 - Publié (actuel) - 11 mars 2026**
+**v0.2.2 - Publié (actuel) - 16 mars 2026**

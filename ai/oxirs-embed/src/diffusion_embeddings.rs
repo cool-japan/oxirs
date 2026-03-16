@@ -1094,7 +1094,7 @@ mod tests {
     #[test]
     fn test_time_embedding() {
         let time_emb = TimeEmbedding::new(128);
-        let emb = time_emb.forward(100).unwrap();
+        let emb = time_emb.forward(100).expect("should succeed");
         assert_eq!(emb.len(), 128);
     }
 
@@ -1106,12 +1106,12 @@ mod tests {
 
         // Add a triple
         let triple = crate::Triple::new(
-            crate::NamedNode::new("http://example.org/alice").unwrap(),
-            crate::NamedNode::new("http://example.org/knows").unwrap(),
-            crate::NamedNode::new("http://example.org/bob").unwrap(),
+            crate::NamedNode::new("http://example.org/alice").expect("should succeed"),
+            crate::NamedNode::new("http://example.org/knows").expect("should succeed"),
+            crate::NamedNode::new("http://example.org/bob").expect("should succeed"),
         );
 
-        model.add_triple(triple).unwrap();
+        model.add_triple(triple).expect("should succeed");
         assert_eq!(model.get_entities().len(), 2);
         assert_eq!(model.get_relations().len(), 1);
     }
@@ -1142,7 +1142,9 @@ mod tests {
 
         // Use correct conditioning dimension that matches hidden_dim (128)
         let condition = Array2::zeros((1, 128));
-        let embeddings = model.generate_embeddings(Some(&condition), 2, 7.5).unwrap();
+        let embeddings = model
+            .generate_embeddings(Some(&condition), 2, 7.5)
+            .expect("should succeed");
         assert_eq!(embeddings.dim(), (2, 64)); // Updated to match new embedding_dim
     }
 }

@@ -712,28 +712,31 @@ mod tests {
     #[test]
     fn test_union_two_polygons() {
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((1 1, 3 1, 3 3, 1 3, 1 1))").unwrap(),
+            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((1 1, 3 1, 3 3, 1 3, 1 1))").expect("should succeed"),
         ];
-        let result = aggregate_union(&geoms).unwrap();
+        let result = aggregate_union(&geoms).expect("should succeed");
         // Result must be non-empty
         assert!(!result.is_empty());
     }
 
     #[test]
     fn test_union_single_geometry() {
-        let geoms = vec![Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap()];
-        let result = aggregate_union(&geoms).unwrap();
+        let geoms = vec![
+            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed")
+        ];
+        let result = aggregate_union(&geoms).expect("should succeed");
         assert!(!result.is_empty());
     }
 
     #[test]
     fn test_union_disjoint_polygons() {
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((10 10, 11 10, 11 11, 10 11, 10 10))").unwrap(),
+            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((10 10, 11 10, 11 11, 10 11, 10 10))")
+                .expect("should succeed"),
         ];
-        let result = aggregate_union(&geoms).unwrap();
+        let result = aggregate_union(&geoms).expect("should succeed");
         assert!(!result.is_empty());
     }
 
@@ -746,25 +749,25 @@ mod tests {
     #[test]
     fn test_union_points_uses_collection() {
         let geoms = vec![
-            Geometry::from_wkt("POINT (0 0)").unwrap(),
-            Geometry::from_wkt("POINT (1 1)").unwrap(),
+            Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (1 1)").expect("should succeed"),
         ];
-        let result = aggregate_union(&geoms).unwrap();
+        let result = aggregate_union(&geoms).expect("should succeed");
         assert!(!result.is_empty());
     }
 
     #[test]
     fn test_union_accumulator_streaming() {
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((1 0, 2 0, 2 1, 1 1, 1 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((0 1, 1 1, 1 2, 0 2, 0 1))").unwrap(),
+            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((1 0, 2 0, 2 1, 1 1, 1 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((0 1, 1 1, 1 2, 0 2, 0 1))").expect("should succeed"),
         ];
         let mut acc = AggregateUnion::new();
         for g in &geoms {
-            acc.accumulate(g).unwrap();
+            acc.accumulate(g).expect("accumulate should succeed");
         }
-        let result = acc.finalize().unwrap();
+        let result = acc.finalize().expect("finalize should succeed");
         assert!(!result.is_empty());
     }
 
@@ -785,16 +788,16 @@ mod tests {
     #[test]
     fn test_envelope_basic() {
         let geoms = vec![
-            Geometry::from_wkt("POINT (1 2)").unwrap(),
-            Geometry::from_wkt("POINT (5 3)").unwrap(),
-            Geometry::from_wkt("POINT (3 7)").unwrap(),
+            Geometry::from_wkt("POINT (1 2)").expect("should succeed"),
+            Geometry::from_wkt("POINT (5 3)").expect("should succeed"),
+            Geometry::from_wkt("POINT (3 7)").expect("should succeed"),
         ];
-        let result = aggregate_envelope(&geoms).unwrap();
+        let result = aggregate_envelope(&geoms).expect("should succeed");
 
         let rect = match &result.geom {
             GeoGeometry::Polygon(p) => {
                 use geo::BoundingRect;
-                p.bounding_rect().unwrap()
+                p.bounding_rect().expect("geometry has bounding rect")
             }
             other => panic!("Expected Polygon, got {:?}", other),
         };
@@ -808,15 +811,15 @@ mod tests {
     #[test]
     fn test_envelope_polygon_group() {
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((3 3, 5 3, 5 5, 3 5, 3 3))").unwrap(),
+            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((3 3, 5 3, 5 5, 3 5, 3 3))").expect("should succeed"),
         ];
-        let result = aggregate_envelope(&geoms).unwrap();
+        let result = aggregate_envelope(&geoms).expect("should succeed");
 
         let rect = match &result.geom {
             GeoGeometry::Polygon(p) => {
                 use geo::BoundingRect;
-                p.bounding_rect().unwrap()
+                p.bounding_rect().expect("geometry has bounding rect")
             }
             other => panic!("Expected Polygon, got {:?}", other),
         };
@@ -835,7 +838,7 @@ mod tests {
 
     #[test]
     fn test_envelope_single_point() {
-        let geoms = vec![Geometry::from_wkt("POINT (3.0 4.0)").unwrap()];
+        let geoms = vec![Geometry::from_wkt("POINT (3.0 4.0)").expect("should succeed")];
         let result = aggregate_envelope(&geoms);
         // A single point has a degenerate bounding rect — result depends on geo crate
         // We just ensure it doesn't panic or return an unexpected error type
@@ -846,10 +849,10 @@ mod tests {
     fn test_envelope_accumulator_incremental() {
         let mut acc = AggregateEnvelope::new();
         for wkt in &["POINT (0 0)", "POINT (10 5)", "POINT (5 10)"] {
-            let g = Geometry::from_wkt(wkt).unwrap();
-            acc.accumulate(&g).unwrap();
+            let g = Geometry::from_wkt(wkt).expect("valid WKT");
+            acc.accumulate(&g).expect("accumulate should succeed");
         }
-        let result = acc.finalize().unwrap();
+        let result = acc.finalize().expect("finalize should succeed");
         assert!(!result.is_empty());
     }
 
@@ -860,12 +863,12 @@ mod tests {
     #[test]
     fn test_centroid_four_corners() {
         let geoms = vec![
-            Geometry::from_wkt("POINT (0 0)").unwrap(),
-            Geometry::from_wkt("POINT (4 0)").unwrap(),
-            Geometry::from_wkt("POINT (4 4)").unwrap(),
-            Geometry::from_wkt("POINT (0 4)").unwrap(),
+            Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (4 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (4 4)").expect("should succeed"),
+            Geometry::from_wkt("POINT (0 4)").expect("should succeed"),
         ];
-        let result = aggregate_centroid(&geoms).unwrap();
+        let result = aggregate_centroid(&geoms).expect("should succeed");
 
         match &result.geom {
             GeoGeometry::Point(p) => {
@@ -880,10 +883,10 @@ mod tests {
     fn test_centroid_weighted_by_area() {
         // Large polygon should pull centroid toward itself
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap(), // area 100
-            Geometry::from_wkt("POINT (100 100)").unwrap(),                         // weight 1
+            Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed"), // area 100
+            Geometry::from_wkt("POINT (100 100)").expect("should succeed"), // weight 1
         ];
-        let result = aggregate_centroid(&geoms).unwrap();
+        let result = aggregate_centroid(&geoms).expect("should succeed");
         match &result.geom {
             GeoGeometry::Point(p) => {
                 // centroid of big polygon is (5,5), small point is (100,100)
@@ -905,10 +908,10 @@ mod tests {
     fn test_centroid_accumulator_streaming() {
         let mut acc = AggregateCentroid::new();
         for wkt in &["POINT (0 0)", "POINT (2 0)", "POINT (1 2)"] {
-            let g = Geometry::from_wkt(wkt).unwrap();
-            acc.accumulate(&g).unwrap();
+            let g = Geometry::from_wkt(wkt).expect("valid WKT");
+            acc.accumulate(&g).expect("accumulate should succeed");
         }
-        let result = acc.finalize().unwrap();
+        let result = acc.finalize().expect("finalize should succeed");
         match &result.geom {
             GeoGeometry::Point(p) => {
                 assert_abs_diff_eq!(p.x(), 1.0, epsilon = 1e-9);
@@ -949,31 +952,31 @@ mod tests_extended {
             Geometry::from_wkt(
                 "MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((4 4, 6 4, 6 6, 4 6, 4 4)))",
             )
-            .unwrap(),
-            Geometry::from_wkt("POLYGON ((3 0, 5 0, 5 2, 3 2, 3 0))").unwrap(),
+            .expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((3 0, 5 0, 5 2, 3 2, 3 0))").expect("should succeed"),
         ];
-        let result = aggregate_union(&geoms).unwrap();
+        let result = aggregate_union(&geoms).expect("should succeed");
         assert!(!result.is_empty());
     }
 
     #[test]
     fn test_union_lines_use_collection() {
         let geoms = vec![
-            Geometry::from_wkt("LINESTRING (0 0, 5 5)").unwrap(),
-            Geometry::from_wkt("LINESTRING (3 3, 8 8)").unwrap(),
+            Geometry::from_wkt("LINESTRING (0 0, 5 5)").expect("should succeed"),
+            Geometry::from_wkt("LINESTRING (3 3, 8 8)").expect("should succeed"),
         ];
-        let result = aggregate_union(&geoms).unwrap();
+        let result = aggregate_union(&geoms).expect("should succeed");
         assert!(!result.is_empty());
     }
 
     #[test]
     fn test_union_mixed_types_collection() {
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap(),
-            Geometry::from_wkt("POINT (10 10)").unwrap(),
-            Geometry::from_wkt("LINESTRING (0 0, 1 1)").unwrap(),
+            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POINT (10 10)").expect("should succeed"),
+            Geometry::from_wkt("LINESTRING (0 0, 1 1)").expect("should succeed"),
         ];
-        let result = aggregate_union(&geoms).unwrap();
+        let result = aggregate_union(&geoms).expect("should succeed");
         assert!(!result.is_empty());
     }
 
@@ -981,11 +984,11 @@ mod tests_extended {
     fn test_union_three_adjacent_polygons() {
         // Three adjacent squares that should merge into a rectangle
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((1 0, 2 0, 2 1, 1 1, 1 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((2 0, 3 0, 3 1, 2 1, 2 0))").unwrap(),
+            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((1 0, 2 0, 2 1, 1 1, 1 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((2 0, 3 0, 3 1, 2 1, 2 0))").expect("should succeed"),
         ];
-        let result = aggregate_union(&geoms).unwrap();
+        let result = aggregate_union(&geoms).expect("should succeed");
         assert!(!result.is_empty());
     }
 
@@ -1002,10 +1005,10 @@ mod tests_extended {
     fn test_union_identical_polygons() {
         // Two identical polygons should yield the same polygon (or at least non-empty)
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap(),
+            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed"),
         ];
-        let result = aggregate_union(&geoms).unwrap();
+        let result = aggregate_union(&geoms).expect("should succeed");
         assert!(!result.is_empty());
     }
 
@@ -1015,14 +1018,14 @@ mod tests_extended {
     fn test_convex_hull_aggregate_points() {
         // convex hull of 4 corners + interior point = rectangle
         let geoms = vec![
-            Geometry::from_wkt("POINT (0 0)").unwrap(),
-            Geometry::from_wkt("POINT (4 0)").unwrap(),
-            Geometry::from_wkt("POINT (4 4)").unwrap(),
-            Geometry::from_wkt("POINT (0 4)").unwrap(),
-            Geometry::from_wkt("POINT (2 2)").unwrap(), // interior
+            Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (4 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (4 4)").expect("should succeed"),
+            Geometry::from_wkt("POINT (0 4)").expect("should succeed"),
+            Geometry::from_wkt("POINT (2 2)").expect("should succeed"), // interior
         ];
         // Collect all points into a GeometryCollection union, then take convex hull
-        let union_result = aggregate_union(&geoms).unwrap();
+        let union_result = aggregate_union(&geoms).expect("should succeed");
         let hull_geom = match &union_result.geom {
             GeoGeometry::GeometryCollection(gc) => {
                 // Take the convex hull of the centroid points
@@ -1041,14 +1044,14 @@ mod tests_extended {
     #[test]
     fn test_envelope_linestring_group() {
         let geoms = vec![
-            Geometry::from_wkt("LINESTRING (0 0, 3 5)").unwrap(),
-            Geometry::from_wkt("LINESTRING (1 1, 7 2)").unwrap(),
+            Geometry::from_wkt("LINESTRING (0 0, 3 5)").expect("should succeed"),
+            Geometry::from_wkt("LINESTRING (1 1, 7 2)").expect("should succeed"),
         ];
-        let result = aggregate_envelope(&geoms).unwrap();
+        let result = aggregate_envelope(&geoms).expect("should succeed");
         let rect = match &result.geom {
             GeoGeometry::Polygon(p) => {
                 use geo::BoundingRect;
-                p.bounding_rect().unwrap()
+                p.bounding_rect().expect("geometry has bounding rect")
             }
             other => panic!("expected Polygon, got {:?}", other),
         };
@@ -1061,14 +1064,14 @@ mod tests_extended {
     #[test]
     fn test_envelope_negative_coords() {
         let geoms = vec![
-            Geometry::from_wkt("POINT (-10 -5)").unwrap(),
-            Geometry::from_wkt("POINT (10 5)").unwrap(),
+            Geometry::from_wkt("POINT (-10 -5)").expect("should succeed"),
+            Geometry::from_wkt("POINT (10 5)").expect("should succeed"),
         ];
-        let result = aggregate_envelope(&geoms).unwrap();
+        let result = aggregate_envelope(&geoms).expect("should succeed");
         let rect = match &result.geom {
             GeoGeometry::Polygon(p) => {
                 use geo::BoundingRect;
-                p.bounding_rect().unwrap()
+                p.bounding_rect().expect("geometry has bounding rect")
             }
             other => panic!("expected Polygon, got {:?}", other),
         };
@@ -1085,13 +1088,14 @@ mod tests_extended {
             "POLYGON ((-3 -3, -1 -3, -1 -1, -3 -1, -3 -3))",
         ];
         for wkt in &inputs {
-            acc.accumulate(&Geometry::from_wkt(wkt).unwrap()).unwrap();
+            acc.accumulate(&Geometry::from_wkt(wkt).expect("valid WKT"))
+                .expect("should succeed");
         }
-        let result = acc.finalize().unwrap();
+        let result = acc.finalize().expect("finalize should succeed");
         let rect = match &result.geom {
             GeoGeometry::Polygon(p) => {
                 use geo::BoundingRect;
-                p.bounding_rect().unwrap()
+                p.bounding_rect().expect("geometry has bounding rect")
             }
             other => panic!("expected Polygon, got {:?}", other),
         };
@@ -1105,8 +1109,8 @@ mod tests_extended {
 
     #[test]
     fn test_centroid_single_point() {
-        let geoms = vec![Geometry::from_wkt("POINT (3 7)").unwrap()];
-        let result = aggregate_centroid(&geoms).unwrap();
+        let geoms = vec![Geometry::from_wkt("POINT (3 7)").expect("should succeed")];
+        let result = aggregate_centroid(&geoms).expect("should succeed");
         match &result.geom {
             GeoGeometry::Point(p) => {
                 assert_abs_diff_eq!(p.x(), 3.0, epsilon = 1e-10);
@@ -1120,10 +1124,10 @@ mod tests_extended {
     fn test_centroid_two_equal_weight_polygons() {
         // Two equal-area polygons centered at (1,1) and (3,1) → centroid at (2,1)
         let geoms = vec![
-            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap(),
-            Geometry::from_wkt("POLYGON ((2 0, 4 0, 4 2, 2 2, 2 0))").unwrap(),
+            Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed"),
+            Geometry::from_wkt("POLYGON ((2 0, 4 0, 4 2, 2 2, 2 0))").expect("should succeed"),
         ];
-        let result = aggregate_centroid(&geoms).unwrap();
+        let result = aggregate_centroid(&geoms).expect("should succeed");
         match &result.geom {
             GeoGeometry::Point(p) => {
                 assert_abs_diff_eq!(p.x(), 2.0, epsilon = 1e-8);
@@ -1136,10 +1140,10 @@ mod tests_extended {
     #[test]
     fn test_centroid_line_group() {
         let geoms = vec![
-            Geometry::from_wkt("LINESTRING (0 0, 2 0)").unwrap(), // centroid (1,0), len=2
-            Geometry::from_wkt("LINESTRING (0 4, 2 4)").unwrap(), // centroid (1,4), len=2
+            Geometry::from_wkt("LINESTRING (0 0, 2 0)").expect("should succeed"), // centroid (1,0), len=2
+            Geometry::from_wkt("LINESTRING (0 4, 2 4)").expect("should succeed"), // centroid (1,4), len=2
         ];
-        let result = aggregate_centroid(&geoms).unwrap();
+        let result = aggregate_centroid(&geoms).expect("should succeed");
         match &result.geom {
             GeoGeometry::Point(p) => {
                 // equal-weight (same length), centroid at midpoint
@@ -1164,17 +1168,18 @@ mod tests_extended {
     #[test]
     fn test_aggregate_union_accumulate_and_finalize() {
         let mut agg = AggregateUnion::new();
-        let geom = Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap();
-        agg.accumulate(&geom).unwrap();
-        let result = agg.finalize().unwrap();
+        let geom =
+            Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed");
+        agg.accumulate(&geom).expect("accumulate should succeed");
+        let result = agg.finalize().expect("finalize should succeed");
         assert!(!result.is_empty());
     }
 
     #[test]
     fn test_aggregate_envelope_accumulate_and_finalize() {
         let mut agg = AggregateEnvelope::new();
-        let geom = Geometry::from_wkt("POINT (5 5)").unwrap();
-        agg.accumulate(&geom).unwrap();
+        let geom = Geometry::from_wkt("POINT (5 5)").expect("should succeed");
+        agg.accumulate(&geom).expect("accumulate should succeed");
         let _ = agg.finalize(); // degenerate single point - ok or err
     }
 
@@ -1182,9 +1187,10 @@ mod tests_extended {
     fn test_aggregate_centroid_accumulate_and_finalize() {
         let mut agg = AggregateCentroid::new();
         for wkt in &["POINT (0 0)", "POINT (2 0)", "POINT (1 2)"] {
-            agg.accumulate(&Geometry::from_wkt(wkt).unwrap()).unwrap();
+            agg.accumulate(&Geometry::from_wkt(wkt).expect("valid WKT"))
+                .expect("should succeed");
         }
-        let result = agg.finalize().unwrap();
+        let result = agg.finalize().expect("finalize should succeed");
         assert!(!result.is_empty());
     }
 
@@ -1216,9 +1222,9 @@ mod tests_extended {
     #[test]
     fn test_agg_bbox_single_point() {
         let mut acc = AggregateBoundingBox::new();
-        acc.accumulate(&Geometry::from_wkt("POINT (3 7)").unwrap())
-            .unwrap();
-        let bbox = acc.finalize_bbox().unwrap();
+        acc.accumulate(&Geometry::from_wkt("POINT (3 7)").expect("should succeed"))
+            .expect("should succeed");
+        let bbox = acc.finalize_bbox().expect("should succeed");
         assert_abs_diff_eq!(bbox.min_x, 3.0, epsilon = 1e-12);
         assert_abs_diff_eq!(bbox.max_x, 3.0, epsilon = 1e-12);
         assert_abs_diff_eq!(bbox.min_y, 7.0, epsilon = 1e-12);
@@ -1230,9 +1236,10 @@ mod tests_extended {
         let points = ["POINT (-5 -3)", "POINT (10 8)", "POINT (0 0)"];
         let mut acc = AggregateBoundingBox::new();
         for wkt in &points {
-            acc.accumulate(&Geometry::from_wkt(wkt).unwrap()).unwrap();
+            acc.accumulate(&Geometry::from_wkt(wkt).expect("valid WKT"))
+                .expect("should succeed");
         }
-        let bbox = acc.finalize_bbox().unwrap();
+        let bbox = acc.finalize_bbox().expect("should succeed");
         assert_abs_diff_eq!(bbox.min_x, -5.0, epsilon = 1e-12);
         assert_abs_diff_eq!(bbox.max_x, 10.0, epsilon = 1e-12);
         assert_abs_diff_eq!(bbox.min_y, -3.0, epsilon = 1e-12);
@@ -1248,9 +1255,10 @@ mod tests_extended {
         ];
         let mut acc = AggregateBoundingBox::new();
         for wkt in &wkts {
-            acc.accumulate(&Geometry::from_wkt(wkt).unwrap()).unwrap();
+            acc.accumulate(&Geometry::from_wkt(wkt).expect("valid WKT"))
+                .expect("should succeed");
         }
-        let bbox = acc.finalize_bbox().unwrap();
+        let bbox = acc.finalize_bbox().expect("should succeed");
         assert_abs_diff_eq!(bbox.min_x, -3.0, epsilon = 1e-12);
         assert_abs_diff_eq!(bbox.max_x, 8.0, epsilon = 1e-12);
         assert_abs_diff_eq!(bbox.min_y, -3.0, epsilon = 1e-12);
@@ -1265,9 +1273,10 @@ mod tests_extended {
         ];
         let mut acc = AggregateBoundingBox::new();
         for wkt in &wkts {
-            acc.accumulate(&Geometry::from_wkt(wkt).unwrap()).unwrap();
+            acc.accumulate(&Geometry::from_wkt(wkt).expect("valid WKT"))
+                .expect("should succeed");
         }
-        let geom = acc.finalize().unwrap();
+        let geom = acc.finalize().expect("finalize should succeed");
         assert_eq!(geom.geometry_type(), "Polygon");
         assert!(!geom.is_empty());
     }
@@ -1293,7 +1302,7 @@ mod tests_extended {
             Crs::epsg(3857),
         );
         let mut acc = AggregateBoundingBox::new();
-        acc.accumulate(&g1).unwrap();
+        acc.accumulate(&g1).expect("accumulate should succeed");
         assert!(acc.accumulate(&g2).is_err());
     }
 
@@ -1302,7 +1311,8 @@ mod tests_extended {
         let wkts = ["POINT (0 0)", "POINT (10 5)"];
         let mut acc = AggregateBoundingBox::new();
         for wkt in &wkts {
-            acc.accumulate(&Geometry::from_wkt(wkt).unwrap()).unwrap();
+            acc.accumulate(&Geometry::from_wkt(wkt).expect("valid WKT"))
+                .expect("should succeed");
         }
         assert_abs_diff_eq!(acc.width(), 10.0, epsilon = 1e-12);
         assert_abs_diff_eq!(acc.height(), 5.0, epsilon = 1e-12);
@@ -1312,11 +1322,11 @@ mod tests_extended {
     fn test_agg_bbox_count() {
         let mut acc = AggregateBoundingBox::new();
         assert_eq!(acc.count(), 0);
-        acc.accumulate(&Geometry::from_wkt("POINT (0 0)").unwrap())
-            .unwrap();
+        acc.accumulate(&Geometry::from_wkt("POINT (0 0)").expect("should succeed"))
+            .expect("should succeed");
         assert_eq!(acc.count(), 1);
-        acc.accumulate(&Geometry::from_wkt("POINT (1 1)").unwrap())
-            .unwrap();
+        acc.accumulate(&Geometry::from_wkt("POINT (1 1)").expect("should succeed"))
+            .expect("should succeed");
         assert_eq!(acc.count(), 2);
     }
 
@@ -1331,9 +1341,10 @@ mod tests_extended {
         let wkts = ["POINT (0 0)", "POINT (10 10)"];
         let mut acc = AggregateBoundingBox::new();
         for wkt in &wkts {
-            acc.accumulate(&Geometry::from_wkt(wkt).unwrap()).unwrap();
+            acc.accumulate(&Geometry::from_wkt(wkt).expect("valid WKT"))
+                .expect("should succeed");
         }
-        let bbox = acc.finalize_bbox().unwrap();
+        let bbox = acc.finalize_bbox().expect("should succeed");
         let (cx, cy) = bbox.centre();
         assert_abs_diff_eq!(cx, 5.0, epsilon = 1e-12);
         assert_abs_diff_eq!(cy, 5.0, epsilon = 1e-12);
@@ -1344,9 +1355,10 @@ mod tests_extended {
         let wkts = ["POINT (0 0)", "POINT (4 3)"];
         let mut acc = AggregateBoundingBox::new();
         for wkt in &wkts {
-            acc.accumulate(&Geometry::from_wkt(wkt).unwrap()).unwrap();
+            acc.accumulate(&Geometry::from_wkt(wkt).expect("valid WKT"))
+                .expect("should succeed");
         }
-        let bbox = acc.finalize_bbox().unwrap();
+        let bbox = acc.finalize_bbox().expect("should succeed");
         assert_abs_diff_eq!(bbox.area(), 12.0, epsilon = 1e-12); // 4×3
     }
 
@@ -1355,13 +1367,14 @@ mod tests_extended {
         let wkts = ["POINT (-1 -2)", "POINT (3 4)"];
         let mut acc = AggregateBoundingBox::new();
         for wkt in &wkts {
-            acc.accumulate(&Geometry::from_wkt(wkt).unwrap()).unwrap();
+            acc.accumulate(&Geometry::from_wkt(wkt).expect("valid WKT"))
+                .expect("should succeed");
         }
-        let bbox = acc.finalize_bbox().unwrap();
+        let bbox = acc.finalize_bbox().expect("should succeed");
         let geom = bbox.to_geometry();
         if let geo_types::Geometry::Polygon(p) = &geom.geom {
             use geo::BoundingRect;
-            let rect = p.bounding_rect().unwrap();
+            let rect = p.bounding_rect().expect("geometry has bounding rect");
             assert_abs_diff_eq!(rect.min().x, -1.0, epsilon = 1e-12);
             assert_abs_diff_eq!(rect.max().x, 3.0, epsilon = 1e-12);
             assert_abs_diff_eq!(rect.min().y, -2.0, epsilon = 1e-12);
@@ -1374,15 +1387,15 @@ mod tests_extended {
     #[test]
     fn test_aggregate_bounding_box_free_fn() {
         let geoms = vec![
-            Geometry::from_wkt("POINT (0 0)").unwrap(),
-            Geometry::from_wkt("POINT (5 10)").unwrap(),
+            Geometry::from_wkt("POINT (0 0)").expect("should succeed"),
+            Geometry::from_wkt("POINT (5 10)").expect("should succeed"),
         ];
-        let result = aggregate_bounding_box(&geoms).unwrap();
+        let result = aggregate_bounding_box(&geoms).expect("should succeed");
         assert_eq!(result.geometry_type(), "Polygon");
 
         use geo::BoundingRect;
         if let geo_types::Geometry::Polygon(p) = &result.geom {
-            let rect = p.bounding_rect().unwrap();
+            let rect = p.bounding_rect().expect("geometry has bounding rect");
             assert_abs_diff_eq!(rect.min().x, 0.0, epsilon = 1e-12);
             assert_abs_diff_eq!(rect.max().x, 5.0, epsilon = 1e-12);
         } else {
@@ -1397,10 +1410,10 @@ mod tests_extended {
 
     #[test]
     fn test_agg_bbox_linestring() {
-        let ls = Geometry::from_wkt("LINESTRING(0 5, 10 -2)").unwrap();
+        let ls = Geometry::from_wkt("LINESTRING(0 5, 10 -2)").expect("should succeed");
         let mut acc = AggregateBoundingBox::new();
-        acc.accumulate(&ls).unwrap();
-        let bbox = acc.finalize_bbox().unwrap();
+        acc.accumulate(&ls).expect("accumulate should succeed");
+        let bbox = acc.finalize_bbox().expect("should succeed");
         assert_abs_diff_eq!(bbox.min_x, 0.0, epsilon = 1e-12);
         assert_abs_diff_eq!(bbox.max_x, 10.0, epsilon = 1e-12);
         assert_abs_diff_eq!(bbox.min_y, -2.0, epsilon = 1e-12);

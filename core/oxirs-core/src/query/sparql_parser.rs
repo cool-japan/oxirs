@@ -1183,7 +1183,7 @@ mod tests {
     fn test_tokenization() {
         let mut parser = AdvancedSparqlParser::new();
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-        let tokens = parser.tokenize(query).unwrap();
+        let tokens = parser.tokenize(query).expect("tokenization should succeed");
         
         assert!(matches!(tokens[0], Token::Select { .. }));
         assert!(matches!(tokens[1], Token::Variable { .. }));

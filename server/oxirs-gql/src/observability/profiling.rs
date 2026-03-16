@@ -652,11 +652,14 @@ mod tests {
         profiler
             .start_profile("test-1".to_string(), ProfileType::Cpu)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert!(profiler.get_active_profile("test-1").await.is_some());
 
-        let profile = profiler.stop_profile("test-1").await.unwrap();
+        let profile = profiler
+            .stop_profile("test-1")
+            .await
+            .expect("should succeed");
         assert_eq!(profile.id, "test-1");
 
         assert!(profiler.get_active_profile("test-1").await.is_none());
@@ -670,7 +673,7 @@ mod tests {
         profiler
             .start_profile("test".to_string(), ProfileType::Cpu)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let result = profiler
             .start_profile("test".to_string(), ProfileType::Cpu)
@@ -686,14 +689,20 @@ mod tests {
         profiler
             .start_profile("test".to_string(), ProfileType::Cpu)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let trace = StackTrace::new().push_frame(StackFrame::new("test_fn".to_string()));
         let sample = ProfileSample::new(trace);
 
-        profiler.record_sample("test", sample).await.unwrap();
+        profiler
+            .record_sample("test", sample)
+            .await
+            .expect("should succeed");
 
-        let profile = profiler.get_active_profile("test").await.unwrap();
+        let profile = profiler
+            .get_active_profile("test")
+            .await
+            .expect("should succeed");
         assert_eq!(profile.total_samples, 1);
     }
 
@@ -704,11 +713,11 @@ mod tests {
         profiler
             .start_profile("test-1".to_string(), ProfileType::Cpu)
             .await
-            .unwrap();
+            .expect("should succeed");
         profiler
             .start_profile("test-2".to_string(), ProfileType::Memory)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let active = profiler.list_active_profiles().await;
         assert_eq!(active.len(), 2);
@@ -723,13 +732,16 @@ mod tests {
         profiler
             .start_profile("test".to_string(), ProfileType::Cpu)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let trace = StackTrace::new().push_frame(StackFrame::new("test_fn".to_string()));
         let sample = ProfileSample::new(trace);
-        profiler.record_sample("test", sample).await.unwrap();
+        profiler
+            .record_sample("test", sample)
+            .await
+            .expect("should succeed");
 
-        let pprof = profiler.export_pprof("test").await.unwrap();
+        let pprof = profiler.export_pprof("test").await.expect("should succeed");
         assert!(pprof.contains("profile: cpu"));
     }
 
@@ -740,13 +752,19 @@ mod tests {
         profiler
             .start_profile("test".to_string(), ProfileType::Cpu)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let trace = StackTrace::new().push_frame(StackFrame::new("test_fn".to_string()));
         let sample = ProfileSample::new(trace);
-        profiler.record_sample("test", sample).await.unwrap();
+        profiler
+            .record_sample("test", sample)
+            .await
+            .expect("should succeed");
 
-        let flamegraph = profiler.export_flamegraph("test").await.unwrap();
+        let flamegraph = profiler
+            .export_flamegraph("test")
+            .await
+            .expect("should succeed");
         assert!(flamegraph.contains("test_fn"));
     }
 
@@ -757,17 +775,20 @@ mod tests {
         profiler
             .start_profile("test-1".to_string(), ProfileType::Cpu)
             .await
-            .unwrap();
+            .expect("should succeed");
         profiler
             .start_profile("test-2".to_string(), ProfileType::Memory)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let stats = profiler.get_statistics().await;
         assert_eq!(stats.active_profiles, 2);
         assert_eq!(stats.completed_profiles, 0);
 
-        profiler.stop_profile("test-1").await.unwrap();
+        profiler
+            .stop_profile("test-1")
+            .await
+            .expect("should succeed");
 
         let stats = profiler.get_statistics().await;
         assert_eq!(stats.active_profiles, 1);
@@ -817,14 +838,20 @@ mod tests {
         profiler
             .start_profile("test-1".to_string(), ProfileType::Cpu)
             .await
-            .unwrap();
+            .expect("should succeed");
         profiler
             .start_profile("test-2".to_string(), ProfileType::Memory)
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        profiler.stop_profile("test-1").await.unwrap();
-        profiler.stop_profile("test-2").await.unwrap();
+        profiler
+            .stop_profile("test-1")
+            .await
+            .expect("should succeed");
+        profiler
+            .stop_profile("test-2")
+            .await
+            .expect("should succeed");
 
         let completed = profiler.list_completed_profiles().await;
         assert_eq!(completed.len(), 2);

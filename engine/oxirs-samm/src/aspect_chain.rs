@@ -474,7 +474,7 @@ mod tests {
             Aspect::new("root", "Root").with_property(Property::new("name", "xsd:string")),
         );
         let chain = make_chain(&["name"]);
-        let result = ac.resolve_chain("root", &chain).unwrap();
+        let result = ac.resolve_chain("root", &chain).expect("should succeed");
         assert_eq!(result.value_type, "xsd:string");
         assert!(!result.optional_in_chain);
     }
@@ -487,7 +487,7 @@ mod tests {
                 .with_property(Property::new("nickname", "xsd:string").optional()),
         );
         let chain = make_chain(&["nickname"]);
-        let result = ac.resolve_chain("root", &chain).unwrap();
+        let result = ac.resolve_chain("root", &chain).expect("should succeed");
         assert!(result.optional_in_chain);
     }
 
@@ -518,7 +518,7 @@ mod tests {
             Aspect::new("child", "Child").with_property(Property::new("value", "xsd:integer")),
         );
         let chain = make_chain(&["child", "value"]);
-        let result = ac.resolve_chain("root", &chain).unwrap();
+        let result = ac.resolve_chain("root", &chain).expect("should succeed");
         assert_eq!(result.value_type, "xsd:integer");
     }
 
@@ -531,7 +531,7 @@ mod tests {
             Aspect::new("leaf", "Leaf").with_property(Property::new("data", "xsd:float")),
         );
         let chain = make_chain(&["mid", "leaf", "data"]);
-        let result = ac.resolve_chain("root", &chain).unwrap();
+        let result = ac.resolve_chain("root", &chain).expect("should succeed");
         assert_eq!(result.value_type, "xsd:float");
         assert_eq!(result.path.len(), 4); // root, mid, leaf, data
     }
@@ -729,7 +729,9 @@ mod tests {
     fn test_resolved_path_contains_root() {
         let mut ac = AspectChain::new();
         ac.add_aspect(Aspect::new("root", "Root").with_property(Property::new("p", "string")));
-        let result = ac.resolve_chain("root", &make_chain(&["p"])).unwrap();
+        let result = ac
+            .resolve_chain("root", &make_chain(&["p"]))
+            .expect("should succeed");
         assert!(result.path.contains(&"root".to_string()));
     }
 
@@ -740,7 +742,7 @@ mod tests {
         ac.add_aspect(Aspect::new("child", "Child").with_property(Property::new("x", "int")));
         let result = ac
             .resolve_chain("root", &make_chain(&["child", "x"]))
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(result.path, vec!["root", "child", "x"]);
     }
 }

@@ -341,7 +341,7 @@ mod tests {
     #[test]
     fn test_skip_locations() {
         let reg = DirectiveRegistry::new();
-        let skip = reg.get("skip").unwrap();
+        let skip = reg.get("skip").expect("should succeed");
         assert!(skip.locations.contains(&DirectiveLocation::Field));
         assert!(skip.locations.contains(&DirectiveLocation::FragmentSpread));
         assert!(skip.locations.contains(&DirectiveLocation::InlineFragment));
@@ -350,7 +350,7 @@ mod tests {
     #[test]
     fn test_include_has_if_arg() {
         let reg = DirectiveRegistry::new();
-        let include = reg.get("include").unwrap();
+        let include = reg.get("include").expect("should succeed");
         assert_eq!(include.args.len(), 1);
         assert_eq!(include.args[0].name, "if");
         assert_eq!(include.args[0].ty, "Boolean!");
@@ -359,7 +359,7 @@ mod tests {
     #[test]
     fn test_deprecated_has_reason_with_default() {
         let reg = DirectiveRegistry::new();
-        let dep = reg.get("deprecated").unwrap();
+        let dep = reg.get("deprecated").expect("should succeed");
         assert_eq!(dep.args[0].name, "reason");
         assert!(dep.args[0].default_value.is_some());
     }
@@ -367,7 +367,7 @@ mod tests {
     #[test]
     fn test_specified_by_url_arg() {
         let reg = DirectiveRegistry::new();
-        let sb = reg.get("specifiedBy").unwrap();
+        let sb = reg.get("specifiedBy").expect("should succeed");
         assert_eq!(sb.args[0].name, "url");
         assert_eq!(sb.args[0].ty, "String!");
     }
@@ -378,7 +378,7 @@ mod tests {
         let d = DirectiveDef::new("auth")
             .with_location(DirectiveLocation::FieldDefinition)
             .with_arg(DirectiveArg::new("role", "String!"));
-        reg.register(d).unwrap();
+        reg.register(d).expect("should succeed");
         assert!(reg.get("auth").is_some());
     }
 
@@ -387,7 +387,7 @@ mod tests {
         let mut reg = DirectiveRegistry::new();
         let d1 = DirectiveDef::new("auth").with_location(DirectiveLocation::Field);
         let d2 = DirectiveDef::new("auth").with_location(DirectiveLocation::Object);
-        reg.register(d1).unwrap();
+        reg.register(d1).expect("should succeed");
         let err = reg.register(d2).unwrap_err();
         assert_eq!(err, RegistryError::AlreadyRegistered("auth".to_string()));
     }
@@ -456,7 +456,7 @@ mod tests {
     fn test_to_sdl_excludes_builtins() {
         let mut reg = DirectiveRegistry::new();
         let d = DirectiveDef::new("auth").with_location(DirectiveLocation::FieldDefinition);
-        reg.register(d).unwrap();
+        reg.register(d).expect("should succeed");
         let sdl = reg.to_sdl();
         assert!(sdl.contains("@auth"));
         assert!(!sdl.contains("@skip"));
@@ -477,7 +477,7 @@ mod tests {
             .with_location(DirectiveLocation::FieldDefinition)
             .with_arg(DirectiveArg::new("max", "Int!"))
             .with_arg(DirectiveArg::new("window", "String!"));
-        reg.register(d).unwrap();
+        reg.register(d).expect("should succeed");
         let sdl = reg.to_sdl();
         assert!(sdl.contains("max: Int!"));
         assert!(sdl.contains("window: String!"));
@@ -489,7 +489,7 @@ mod tests {
         let d = DirectiveDef::new("tag")
             .with_location(DirectiveLocation::Field)
             .repeatable();
-        reg.register(d).unwrap();
+        reg.register(d).expect("should succeed");
         let sdl = reg.to_sdl();
         assert!(sdl.contains("repeatable"));
     }
@@ -500,7 +500,7 @@ mod tests {
         let d = DirectiveDef::new("cache")
             .with_location(DirectiveLocation::FieldDefinition)
             .with_arg(DirectiveArg::new("maxAge", "Int").with_default("60"));
-        reg.register(d).unwrap();
+        reg.register(d).expect("should succeed");
         let sdl = reg.to_sdl();
         assert!(sdl.contains("= 60"));
     }

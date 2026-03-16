@@ -199,9 +199,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_variable_conversion() {
+    fn test_variable_conversion() -> anyhow::Result<()> {
         let rule_var = RuleTerm::Variable("x".to_string());
-        let rdf_term = rule_term_to_rdf_term(&rule_var).unwrap();
+        let rdf_term = rule_term_to_rdf_term(&rule_var)?;
 
         assert!(matches!(rdf_term, RdfTerm::Variable(_)));
         if let RdfTerm::Variable(v) = rdf_term {
@@ -209,14 +209,15 @@ mod tests {
         }
 
         // Round trip
-        let back = rdf_term_to_rule_term(&RdfTerm::Variable(Variable::new("x").unwrap()));
+        let back = rdf_term_to_rule_term(&RdfTerm::Variable(Variable::new("x")?));
         assert_eq!(back, rule_var);
+        Ok(())
     }
 
     #[test]
-    fn test_iri_conversion() {
+    fn test_iri_conversion() -> anyhow::Result<()> {
         let rule_iri = RuleTerm::Constant("http://example.org/test".to_string());
-        let rdf_term = rule_term_to_rdf_term(&rule_iri).unwrap();
+        let rdf_term = rule_term_to_rdf_term(&rule_iri)?;
 
         assert!(matches!(rdf_term, RdfTerm::NamedNode(_)));
         if let RdfTerm::NamedNode(n) = &rdf_term {
@@ -226,24 +227,26 @@ mod tests {
         // Round trip
         let back = rdf_term_to_rule_term(&rdf_term);
         assert_eq!(back, rule_iri);
+        Ok(())
     }
 
     #[test]
-    fn test_blank_node_conversion() {
+    fn test_blank_node_conversion() -> anyhow::Result<()> {
         let rule_blank = RuleTerm::Constant("_:b1".to_string());
-        let rdf_term = rule_term_to_rdf_term(&rule_blank).unwrap();
+        let rdf_term = rule_term_to_rdf_term(&rule_blank)?;
 
         assert!(matches!(rdf_term, RdfTerm::BlankNode(_)));
         if let RdfTerm::BlankNode(b) = &rdf_term {
             assert_eq!(b.id(), "b1");
         }
+        Ok(())
     }
 
     #[test]
-    fn test_literal_conversion() {
+    fn test_literal_conversion() -> anyhow::Result<()> {
         // Simple literal
         let rule_lit = RuleTerm::Literal("\"hello\"".to_string());
-        let rdf_term = rule_term_to_rdf_term(&rule_lit).unwrap();
+        let rdf_term = rule_term_to_rdf_term(&rule_lit)?;
 
         assert!(matches!(rdf_term, RdfTerm::Literal(_)));
         if let RdfTerm::Literal(l) = &rdf_term {
@@ -252,7 +255,7 @@ mod tests {
 
         // Typed literal
         let typed_lit = RuleTerm::Literal("\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>".to_string());
-        let rdf_typed = rule_term_to_rdf_term(&typed_lit).unwrap();
+        let rdf_typed = rule_term_to_rdf_term(&typed_lit)?;
 
         if let RdfTerm::Literal(l) = &rdf_typed {
             assert_eq!(l.value(), "42");
@@ -261,23 +264,24 @@ mod tests {
 
         // Language-tagged literal
         let lang_lit = RuleTerm::Literal("\"bonjour\"@fr".to_string());
-        let rdf_lang = rule_term_to_rdf_term(&lang_lit).unwrap();
+        let rdf_lang = rule_term_to_rdf_term(&lang_lit)?;
 
         if let RdfTerm::Literal(l) = &rdf_lang {
             assert_eq!(l.value(), "bonjour");
             assert_eq!(l.language(), Some("fr"));
         }
+        Ok(())
     }
 
     #[test]
-    fn test_triple_conversion() {
+    fn test_triple_conversion() -> anyhow::Result<()> {
         let rule_atom = RuleAtom::Triple {
             subject: RuleTerm::Constant("http://example.org/alice".to_string()),
             predicate: RuleTerm::Constant("http://xmlns.com/foaf/0.1/knows".to_string()),
             object: RuleTerm::Constant("http://example.org/bob".to_string()),
         };
 
-        let triple = rule_atom_to_triple(&rule_atom).unwrap();
+        let triple = rule_atom_to_triple(&rule_atom)?;
         assert_eq!(triple.subject().to_string(), "<http://example.org/alice>");
         assert_eq!(triple.predicate().to_string(), "<http://xmlns.com/foaf/0.1/knows>");
         assert_eq!(triple.object().to_string(), "<http://example.org/bob>");
@@ -285,5 +289,6 @@ mod tests {
         // Round trip
         let back = triple_to_rule_atom(&triple);
         assert_eq!(back, rule_atom);
+        Ok(())
     }
 }

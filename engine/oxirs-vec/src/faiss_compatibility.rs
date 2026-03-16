@@ -876,7 +876,7 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_vector_index() {
+    fn test_simple_vector_index() -> Result<()> {
         let vectors = vec![
             Vector::new(vec![1.0, 0.0, 0.0]),
             Vector::new(vec![0.0, 1.0, 0.0]),
@@ -887,10 +887,11 @@ mod tests {
         let index = SimpleVectorIndex::new(vectors, uris);
 
         let query = Vector::new(vec![1.0, 0.0, 0.0]);
-        let results = index.search_knn(&query, 2).unwrap();
+        let results = index.search_knn(&query, 2)?;
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].0, "v1"); // Should be most similar to itself
+        Ok(())
     }
 
     #[test]

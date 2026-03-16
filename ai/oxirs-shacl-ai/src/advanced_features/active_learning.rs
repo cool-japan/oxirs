@@ -603,7 +603,7 @@ mod tests {
     #[test]
     fn test_active_learner_creation() {
         let config = ActiveLearningConfig::default();
-        let learner = ActiveLearner::new(config).unwrap();
+        let learner = ActiveLearner::new(config).expect("should succeed");
         assert_eq!(learner.stats.total_queries, 0);
     }
 
@@ -612,11 +612,11 @@ mod tests {
         let sampler = UncertaintySampling::new(SamplingStrategy::LeastConfident);
 
         // Prediction at decision boundary should have highest uncertainty
-        let uncertainty = sampler.compute_uncertainty(0.5).unwrap();
+        let uncertainty = sampler.compute_uncertainty(0.5).expect("should succeed");
         assert!(uncertainty > 0.9);
 
         // Confident prediction should have low uncertainty
-        let uncertainty = sampler.compute_uncertainty(0.95).unwrap();
+        let uncertainty = sampler.compute_uncertainty(0.95).expect("should succeed");
         assert!(uncertainty < 0.2);
     }
 

@@ -537,17 +537,18 @@ mod tests {
     }
 
     #[test]
-    fn test_pattern_rule_registration() {
+    fn test_pattern_rule_registration() -> Result<(), Box<dyn std::error::Error>> {
         let engine = RuleEngine::new();
         let mut integration = SparqlRuleIntegration::new(engine);
 
         integration.register_pattern_rule("?s rdf:type ?o".to_string(), "typing_rule".to_string());
 
         assert_eq!(integration.pattern_rules.len(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_direct_query() {
+    fn test_direct_query() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = RuleEngine::new();
         engine.add_fact(RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
@@ -564,8 +565,9 @@ mod tests {
             None,
         )];
 
-        let results = integration.query_with_reasoning(&patterns).unwrap();
+        let results = integration.query_with_reasoning(&patterns)?;
         assert_eq!(results.len(), 1);
+        Ok(())
     }
 
     #[test]

@@ -465,7 +465,10 @@ mod tests {
             object_types: HashMap::new(),
         };
 
-        engine.update_rdf_stats(stats).await.unwrap();
+        engine
+            .update_rdf_stats(stats)
+            .await
+            .expect("should succeed");
     }
 
     #[tokio::test]
@@ -477,7 +480,10 @@ mod tests {
             avg_execution_time_ms: 100.0,
         };
 
-        engine.add_query_pattern(pattern).await.unwrap();
+        engine
+            .add_query_pattern(pattern)
+            .await
+            .expect("should succeed");
     }
 
     #[tokio::test]
@@ -488,7 +494,10 @@ mod tests {
         let mut stats = RdfDataStats::default();
         stats.predicate_frequency.insert("email".to_string(), 200);
         stats.triple_count = 1000;
-        engine.update_rdf_stats(stats).await.unwrap();
+        engine
+            .update_rdf_stats(stats)
+            .await
+            .expect("should succeed");
 
         // Add pattern
         let pattern = QueryPattern {
@@ -496,24 +505,27 @@ mod tests {
             frequency: 10,
             avg_execution_time_ms: 100.0,
         };
-        engine.add_query_pattern(pattern).await.unwrap();
+        engine
+            .add_query_pattern(pattern)
+            .await
+            .expect("should succeed");
 
         // Generate suggestions
-        let suggestions = engine.generate_suggestions().await.unwrap();
+        let suggestions = engine.generate_suggestions().await.expect("should succeed");
         assert!(!suggestions.is_empty());
     }
 
     #[tokio::test]
     async fn test_set_min_frequency() {
         let engine = SchemaSuggestionEngine::new();
-        engine.set_min_frequency(10).await.unwrap();
+        engine.set_min_frequency(10).await.expect("should succeed");
     }
 
     #[tokio::test]
     async fn test_train_model() {
         let engine = SchemaSuggestionEngine::new();
         let examples = vec![];
-        engine.train_model(examples).await.unwrap();
+        engine.train_model(examples).await.expect("should succeed");
     }
 
     #[test]
@@ -545,7 +557,7 @@ mod tests {
         suggestions.sort_by(|a, b| {
             let score_a = a.impact_score * a.confidence;
             let score_b = b.impact_score * b.confidence;
-            score_b.partial_cmp(&score_a).unwrap()
+            score_b.partial_cmp(&score_a).expect("should succeed")
         });
 
         assert_eq!(suggestions[0].target_type, "B");

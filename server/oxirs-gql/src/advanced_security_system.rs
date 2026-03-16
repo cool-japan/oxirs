@@ -813,15 +813,24 @@ mod tests {
         let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
         // First request should pass
-        let violation1 = security_system.check_rate_limiting(&ip).await.unwrap();
+        let violation1 = security_system
+            .check_rate_limiting(&ip)
+            .await
+            .expect("should succeed");
         assert!(violation1.is_none());
 
         // Second request should pass
-        let violation2 = security_system.check_rate_limiting(&ip).await.unwrap();
+        let violation2 = security_system
+            .check_rate_limiting(&ip)
+            .await
+            .expect("should succeed");
         assert!(violation2.is_none());
 
         // Third request should be rate limited
-        let violation3 = security_system.check_rate_limiting(&ip).await.unwrap();
+        let violation3 = security_system
+            .check_rate_limiting(&ip)
+            .await
+            .expect("should succeed");
         assert!(violation3.is_some());
 
         if let Some(SecurityViolation::RateLimitExceeded {
@@ -842,7 +851,10 @@ mod tests {
         let security_system = AdvancedSecuritySystem::new(config);
 
         let query = "query { user { name email } }";
-        let analysis = security_system.analyze_query(query).await.unwrap();
+        let analysis = security_system
+            .analyze_query(query)
+            .await
+            .expect("should succeed");
 
         assert!(analysis.depth > 0);
         assert!(analysis.complexity > 0);

@@ -792,7 +792,7 @@ mod tests {
             additional: HashMap::new(),
         };
 
-        let request = purge.to_api_request(&credentials).unwrap();
+        let request = purge.to_api_request(&credentials).expect("should succeed");
         assert!(request.contains("tags"));
         assert!(request.contains("User"));
     }

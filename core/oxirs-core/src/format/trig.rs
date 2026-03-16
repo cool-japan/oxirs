@@ -347,15 +347,17 @@ mod tests {
         let mut writer = Vec::new();
 
         let triple = Triple::new(
-            Subject::NamedNode(NamedNode::new("http://example.org/subject").unwrap()),
-            NamedNode::new("http://example.org/predicate").unwrap(),
-            Object::NamedNode(NamedNode::new("http://example.org/object").unwrap()),
+            Subject::NamedNode(NamedNode::new("http://example.org/subject").expect("valid IRI")),
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
+            Object::NamedNode(NamedNode::new("http://example.org/object").expect("valid IRI")),
         );
 
         let quads = vec![Quad::from(triple)];
-        serializer.serialize_quads(&quads, &mut writer).unwrap();
+        serializer
+            .serialize_quads(&quads, &mut writer)
+            .expect("operation should succeed");
 
-        let output = String::from_utf8(writer).unwrap();
+        let output = String::from_utf8(writer).expect("bytes should be valid UTF-8");
         assert!(output.contains("<http://example.org/subject>"));
         assert!(output.contains("<http://example.org/predicate>"));
         assert!(output.contains("<http://example.org/object>"));
@@ -367,16 +369,18 @@ mod tests {
         let mut writer = Vec::new();
 
         let quad = Quad::new(
-            Subject::NamedNode(NamedNode::new("http://example.org/subject").unwrap()),
-            NamedNode::new("http://example.org/predicate").unwrap(),
-            Object::NamedNode(NamedNode::new("http://example.org/object").unwrap()),
-            GraphName::NamedNode(NamedNode::new("http://example.org/graph").unwrap()),
+            Subject::NamedNode(NamedNode::new("http://example.org/subject").expect("valid IRI")),
+            NamedNode::new("http://example.org/predicate").expect("valid IRI"),
+            Object::NamedNode(NamedNode::new("http://example.org/object").expect("valid IRI")),
+            GraphName::NamedNode(NamedNode::new("http://example.org/graph").expect("valid IRI")),
         );
 
         let quads = vec![quad];
-        serializer.serialize_quads(&quads, &mut writer).unwrap();
+        serializer
+            .serialize_quads(&quads, &mut writer)
+            .expect("operation should succeed");
 
-        let output = String::from_utf8(writer).unwrap();
+        let output = String::from_utf8(writer).expect("bytes should be valid UTF-8");
         assert!(output.contains("<http://example.org/graph>"));
         assert!(output.contains("{"));
         assert!(output.contains("}"));

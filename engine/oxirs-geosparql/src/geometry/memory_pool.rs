@@ -581,7 +581,8 @@ mod tests {
         let pool = GeometryPool::new(config);
 
         // Reserve additional space
-        pool.reserve(GeometryType::Point, 20).unwrap();
+        pool.reserve(GeometryType::Point, 20)
+            .expect("should succeed");
 
         let stats = pool.stats();
         assert_eq!(stats.points_pooled, 30); // 10 initial + 20 reserved
@@ -659,7 +660,7 @@ mod tests {
 
         // Wait for all threads to complete
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().expect("thread should not panic");
         }
 
         let stats = pool.stats();

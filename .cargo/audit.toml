@@ -1,0 +1,37 @@
+# cargo audit configuration for OxiRS workspace
+# See: https://docs.rs/cargo-audit/latest/cargo_audit/config/
+
+[advisories]
+
+# RUSTSEC-2026-0002: lru 0.12.5 IterMut violates Stacked Borrows
+#
+# Status: IGNORED — not exploitable via tantivy's usage pattern
+#
+# Analysis:
+#   - tantivy 0.25.0 (latest) depends on lru ^0.12.0, resolving to lru 0.12.5
+#   - The patched version is lru >= 0.16.3 (breaking API change; tantivy cannot upgrade)
+#   - tantivy only calls LruCache::new() / get() / put() — it NEVER calls iter_mut()
+#     or uses IterMut, which is the sole affected API surface
+#   - The workspace already uses lru 0.16.3 directly (unaffected)
+#   - No upstream tantivy release resolves this transitive dependency
+#
+# Resolution: awaiting tantivy upgrade to lru >= 0.16.3 (requires tantivy 0.26+)
+ignore = [
+  "RUSTSEC-2026-0002",
+
+  # RUSTSEC-2025-0134: rustls-pemfile 2.2.0 — "unmaintained" (no security vulnerability)
+  #
+  # Status: IGNORED — unmaintained advisory only; no CVE, no exploit surface
+  #
+  # Analysis:
+  #   - rustls-pemfile 2.2.0 is a transitive dependency via rustls-native-certs,
+  #     which is pulled in by async-nats, rumqttc, and other TLS-dependent crates
+  #   - The advisory flags the crate as "unmaintained", not as containing a security flaw
+  #   - No upstream fix is available: rustls-native-certs and dependent crates have not
+  #     yet migrated away from rustls-pemfile 2.x
+  #   - OxiRS does not directly depend on rustls-pemfile; it is a transitive-only dep
+  #
+  # Resolution: awaiting upstream crates (async-nats, rumqttc) to migrate to a maintained
+  #             PEM parsing alternative
+  "RUSTSEC-2025-0134",
+]

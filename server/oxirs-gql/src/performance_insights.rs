@@ -1108,7 +1108,7 @@ mod tests {
 
         let retrieved = dashboard.get_trace(&trace_id).await;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().trace_id, trace_id);
+        assert_eq!(retrieved.expect("should succeed").trace_id, trace_id);
     }
 
     #[tokio::test]

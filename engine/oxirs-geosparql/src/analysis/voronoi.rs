@@ -105,7 +105,7 @@ struct Edge {
 /// ];
 ///
 /// let bounds = (Coord { x: -1.0, y: -1.0 }, Coord { x: 2.0, y: 2.0 });
-/// let diagram = voronoi_diagram(&sites, Some(bounds)).unwrap();
+/// let diagram = voronoi_diagram(&sites, Some(bounds)).expect("should succeed");
 ///
 /// assert_eq!(diagram.cells.len(), 3);
 /// ```
@@ -457,7 +457,7 @@ mod tests {
         let sites = vec![Point::new(0.0, 0.0)];
         let bounds = (Coord { x: -1.0, y: -1.0 }, Coord { x: 1.0, y: 1.0 });
 
-        let diagram = voronoi_diagram(&sites, Some(bounds)).unwrap();
+        let diagram = voronoi_diagram(&sites, Some(bounds)).expect("should succeed");
 
         assert_eq!(diagram.cells.len(), 1);
         assert_eq!(diagram.cells[0].site, sites[0]);
@@ -471,7 +471,7 @@ mod tests {
             Point::new(1.0, 2.0),
         ];
 
-        let diagram = voronoi_diagram(&sites, None).unwrap();
+        let diagram = voronoi_diagram(&sites, None).expect("should succeed");
 
         assert_eq!(diagram.cells.len(), 3);
 
@@ -490,7 +490,7 @@ mod tests {
             }
         }
 
-        let diagram = voronoi_diagram(&sites, None).unwrap();
+        let diagram = voronoi_diagram(&sites, None).expect("should succeed");
 
         assert_eq!(diagram.cells.len(), 25);
     }

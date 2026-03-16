@@ -13,7 +13,7 @@ The Java ESMF SDK provides **3 main command groups**:
 
 ### 1.1 Validation & Formatting
 
-| Java ESMF SDK | OxiRS v0.2.1 | Status |
+| Java ESMF SDK | OxiRS v0.2.2 | Status |
 |---------------|---------------|---------|
 | `samm aspect <model> validate` | `oxirs aspect <model> validate` | ✅ **Implemented** |
 | `samm aspect <model> prettyprint` | `oxirs aspect <model> prettyprint` | ✅ **Implemented** |
@@ -30,7 +30,7 @@ The Java ESMF SDK provides **3 main command groups**:
 
 ### 1.2 Code Generation (`to` subcommand)
 
-| Format | Java ESMF SDK | OxiRS v0.2.1 | Status |
+| Format | Java ESMF SDK | OxiRS v0.2.2 | Status |
 |--------|---------------|---------------|---------|
 | HTML Docs | `samm aspect <model> to html` | `oxirs aspect <model> to html` | ✅ **Implemented** |
 | PNG Diagram | `samm aspect <model> to png` | `oxirs aspect <model> to diagram --format png` | ✅ **Implemented** |
@@ -65,7 +65,7 @@ The Java ESMF SDK provides **3 main command groups**:
 
 ### 1.3 Model Editing Commands
 
-| Java ESMF SDK | OxiRS v0.2.1 | Status |
+| Java ESMF SDK | OxiRS v0.2.2 | Status |
 |---------------|---------------|---------|
 | `samm aspect <model> edit move <element> [<namespace>]` | `oxirs aspect edit move <file> <element>` | ✅ **Implemented** |
 | `samm aspect <model> edit newversion [--major\|--minor\|--micro]` | `oxirs aspect edit newversion <file>` | ✅ **Implemented** |
@@ -83,7 +83,7 @@ The Java ESMF SDK provides **3 main command groups**:
 
 ### 1.4 Model Analysis Commands
 
-| Java ESMF SDK | OxiRS v0.2.1 | Status |
+| Java ESMF SDK | OxiRS v0.2.2 | Status |
 |---------------|---------------|---------|
 | `samm aspect <model> usage` | `oxirs aspect usage <input>` | ✅ **Implemented** |
 
@@ -96,7 +96,7 @@ The Java ESMF SDK provides **3 main command groups**:
 
 ## 2. `samm aas` Commands - AAS Integration
 
-| Java ESMF SDK | OxiRS v0.2.1 | Status |
+| Java ESMF SDK | OxiRS v0.2.2 | Status |
 |---------------|---------------|---------|
 | `samm aas <aas file> to aspect` | `oxirs aas <file> to aspect` | ✅ **Implemented** |
 | `samm aas <aas file> list` | `oxirs aas <file> list` | ✅ **Implemented** |
@@ -132,7 +132,7 @@ samm aas AssetAdminShell.aasx list
 
 ## 3. `samm package` Commands - Namespace Package Management
 
-| Java ESMF SDK | OxiRS v0.2.1 | Status |
+| Java ESMF SDK | OxiRS v0.2.2 | Status |
 |---------------|---------------|---------|
 | `samm package <namespace package> import` | `oxirs package import <file> --models-root <path>` | ✅ **Implemented** |
 | `samm package <model or namespace URN> export` | `oxirs package export <input> --output <zip>` | ✅ **Implemented** |
@@ -189,7 +189,7 @@ Java ESMF SDK global options available for all commands:
 
 ## 5. Implementation Gap Analysis
 
-### ✅ Implemented in OxiRS v0.2.1
+### ✅ Implemented in OxiRS v0.2.2
 
 **Full Implementation**:
 - `oxirs aspect validate`
@@ -203,13 +203,13 @@ Java ESMF SDK global options available for all commands:
   - `--package-name` (Java package name) not supported
   - `--language` option not needed (format name specifies target)
 
-### ✅ Implemented (v0.2.1)
+### ✅ Implemented (v0.2.2)
 
 **1. AAS Integration Commands** (Priority: HIGH):
 - `oxirs aas <aas file> to aspect` - AAS → Aspect conversion
 - `oxirs aas <aas file> list` - List submodel templates
 
-### ❌ Not Implemented (v0.2.1)
+### ❌ Not Implemented (v0.2.2)
 
 **2. Model Editing Commands** (Priority: MEDIUM):
 - `oxirs aspect <model> edit move` - Move elements
@@ -226,7 +226,7 @@ Java ESMF SDK global options available for all commands:
 
 ## 6. Recommended Implementation Roadmap
 
-### ✅ v0.2.1 (Current Release) - AAS Integration
+### ✅ v0.2.2 (Current Release) - AAS Integration
 
 1. **AAS Integration** (HIGHEST PRIORITY for Java compatibility):
    ```bash
@@ -240,7 +240,7 @@ Java ESMF SDK global options available for all commands:
    --custom-resolver <path> # Custom resolver
    ```
 
-### v0.2.1 - Package Management
+### v0.2.2 - Package Management
 
 3. **Package Commands** (Ecosystem expansion):
    ```bash
@@ -248,7 +248,7 @@ Java ESMF SDK global options available for all commands:
    oxirs package <urn> export --output <zip>
    ```
 
-### v0.2.1 - Advanced Editing
+### v0.2.2 - Advanced Editing
 
 4. **Edit Commands** (Advanced editing features):
    ```bash
@@ -293,7 +293,7 @@ oxirs aspect <model> to markdown    # Markdown documentation generation
 
 ## 8. Summary Statistics
 
-| Category | Java ESMF SDK | OxiRS v0.2.1 | Coverage |
+| Category | Java ESMF SDK | OxiRS v0.2.2 | Coverage |
 |----------|---------------|---------------|----------|
 | **Main Command Groups** | 3 | 3 | 100% ✅ |
 | **aspect Subcommands** | 15 | 15 | 100% ✅ |
@@ -304,11 +304,11 @@ oxirs aspect <model> to markdown    # Markdown documentation generation
 
 **Overall Assessment**:
 - ✅ **Code Generation**: 100% coverage + 6 exclusive formats
-- ✅ **AAS Integration**: 100% coverage (COMPLETE in v0.2.1)
-- ✅ **Package Management**: 100% coverage (COMPLETE in v0.2.1)
-- ✅ **Model Editing**: 100% coverage (COMPLETE in v0.2.1)
+- ✅ **AAS Integration**: 100% coverage (COMPLETE in v0.2.2)
+- ✅ **Package Management**: 100% coverage (COMPLETE in v0.2.2)
+- ✅ **Model Editing**: 100% coverage (COMPLETE in v0.2.2)
 
-**Achievement**: OxiRS v0.2.1 has reached **100% Java ESMF SDK command coverage with full implementations**! All 19 commands are now fully functional.
+**Achievement**: OxiRS v0.2.2 has reached **100% Java ESMF SDK command coverage with full implementations**! All 19 commands are now fully functional.
 
 ---
 
@@ -368,11 +368,11 @@ oxirs aspect Movement.ttl to aas --format xml
 | `samm aspect <model> to json` | `oxirs aspect <model> to payload` | ⚠️ Name difference |
 | `samm aspect <model> to schema` | `oxirs aspect <model> to jsonschema` | ⚠️ Name difference |
 | `samm aspect <model> to png` | `oxirs aspect <model> to diagram --format png` | ⚠️ Syntax difference |
-| `samm aas <file> to aspect` | `oxirs aas <file> to aspect` | 🚧 Implementing in v0.2.1 |
+| `samm aas <file> to aspect` | `oxirs aas <file> to aspect` | 🚧 Implementing in v0.2.2 |
 
 ### Performance Comparison
 
-| Metric | Java ESMF SDK | OxiRS v0.2.1 | Advantage |
+| Metric | Java ESMF SDK | OxiRS v0.2.2 | Advantage |
 |--------|---------------|---------------|-----------|
 | Startup Time | ~2-3s (JVM) | <100ms | ⚡ **OxiRS 20-30x faster** |
 | Memory Usage | ~200-500MB | ~15-50MB | 💾 **OxiRS 10x more efficient** |
@@ -383,4 +383,4 @@ oxirs aspect Movement.ttl to aas --format xml
 
 ## Conclusion
 
-OxiRS v0.2.1 is implementing **full AAS integration** to provide complete compatibility with the Java ESMF SDK ecosystem, enabling seamless interoperability in Industry 4.0 digital twin workflows. With 16 code generation formats (including 6 exclusive features) and native performance, OxiRS offers a compelling alternative for organizations seeking a lightweight, fast, and JVM-free SAMM toolchain.
+OxiRS v0.2.2 is implementing **full AAS integration** to provide complete compatibility with the Java ESMF SDK ecosystem, enabling seamless interoperability in Industry 4.0 digital twin workflows. With 16 code generation formats (including 6 exclusive features) and native performance, OxiRS offers a compelling alternative for organizations seeking a lightweight, fast, and JVM-free SAMM toolchain.

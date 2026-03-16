@@ -702,7 +702,8 @@ mod tests {
     #[test]
     fn test_code_generator_typescript() {
         let query = "query TestQuery { __typename }";
-        let code = CodeGenerator::generate_typescript(query, Some("TestQuery")).unwrap();
+        let code =
+            CodeGenerator::generate_typescript(query, Some("TestQuery")).expect("should succeed");
 
         assert!(code.contains("TypeScript"));
         assert!(code.contains("TESTQUERY_QUERY"));
@@ -712,7 +713,7 @@ mod tests {
     #[test]
     fn test_code_generator_rust() {
         let query = "query TestQuery { __typename }";
-        let code = CodeGenerator::generate_rust(query, Some("TestQuery")).unwrap();
+        let code = CodeGenerator::generate_rust(query, Some("TestQuery")).expect("should succeed");
 
         assert!(code.contains("Rust"));
         assert!(code.contains("GraphQLQuery"));
@@ -722,7 +723,8 @@ mod tests {
     #[test]
     fn test_code_generator_python() {
         let query = "query TestQuery { __typename }";
-        let code = CodeGenerator::generate_python(query, Some("TestQuery")).unwrap();
+        let code =
+            CodeGenerator::generate_python(query, Some("TestQuery")).expect("should succeed");
 
         assert!(code.contains("Python"));
         assert!(code.contains("gql"));

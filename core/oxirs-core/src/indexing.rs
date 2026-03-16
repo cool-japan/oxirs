@@ -887,20 +887,23 @@ mod tests {
     use std::sync::atomic::Ordering;
 
     fn create_test_quad() -> Quad {
-        let subject = NamedNode::new("http://example.org/subject").unwrap();
-        let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+        let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+        let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
         let object = Literal::new("test object");
-        let graph = NamedNode::new("http://example.org/graph").unwrap();
+        let graph = NamedNode::new("http://example.org/graph").expect("valid IRI");
 
         Quad::new(subject, predicate, object, graph)
     }
 
     #[test]
     fn test_query_pattern_classification() {
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/s").unwrap());
-        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/p").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/s").expect("valid IRI"));
+        let predicate =
+            Predicate::NamedNode(NamedNode::new("http://example.org/p").expect("valid IRI"));
         let object = Object::Literal(Literal::new("o"));
-        let graph = GraphName::NamedNode(NamedNode::new("http://example.org/g").unwrap());
+        let graph =
+            GraphName::NamedNode(NamedNode::new("http://example.org/g").expect("valid IRI"));
 
         assert_eq!(
             QueryPattern::from_query(None, None, None, None),
@@ -952,11 +955,14 @@ mod tests {
 
         // Test insertion
         index.insert(&quad, key.clone());
-        assert_eq!(index.query(&key).unwrap().len(), 1);
+        assert_eq!(index.query(&key).expect("query should succeed").len(), 1);
 
         // Test removal
         index.remove(&quad, &key);
-        assert!(index.query(&key).is_none() || index.query(&key).unwrap().is_empty());
+        assert!(
+            index.query(&key).is_none()
+                || index.query(&key).expect("query should succeed").is_empty()
+        );
     }
 
     #[test]
@@ -981,7 +987,7 @@ mod tests {
         let subject = quad.subject();
         let results = manager.query_optimized(Some(subject), None, None, None);
         assert!(results.is_some());
-        assert_eq!(results.unwrap().len(), 1);
+        assert_eq!(results.expect("query results should be available").len(), 1);
     }
 
     #[test]
@@ -1000,7 +1006,8 @@ mod tests {
         };
 
         let mut manager = IndexManager::new(config);
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/s").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/s").expect("valid IRI"));
 
         // Query multiple times to trigger auto-creation
         for _ in 0..3 {
@@ -1018,14 +1025,15 @@ mod tests {
 
         // Add some quads
         for i in 0..100 {
-            let subject = NamedNode::new(format!("http://example.org/subject{i}")).unwrap();
-            let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+            let subject = NamedNode::new(format!("http://example.org/subject{i}"))
+                .expect("valid IRI from format");
+            let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
             let object = Literal::new(format!("object{i}"));
             let quad = Quad::new(
                 subject,
                 predicate,
                 object,
-                NamedNode::new("http://example.org/graph").unwrap(),
+                NamedNode::new("http://example.org/graph").expect("valid IRI"),
             );
 
             manager.insert_quad(&quad);
@@ -1040,7 +1048,8 @@ mod tests {
         let mut manager = IndexManager::default();
 
         // Perform some queries
-        let subject = Subject::NamedNode(NamedNode::new("http://example.org/s").unwrap());
+        let subject =
+            Subject::NamedNode(NamedNode::new("http://example.org/s").expect("valid IRI"));
         manager.query_optimized(Some(&subject), None, None, None);
         manager.query_optimized(None, None, None, None);
 

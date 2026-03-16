@@ -985,37 +985,35 @@ mod tests {
     }
 
     #[test]
-    fn test_node_registration() {
+    fn test_node_registration() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
         let node = Node::new("node1".to_string(), "localhost:8001".to_string());
-        reasoner.register_node(node).unwrap();
+        reasoner.register_node(node)?;
 
         assert_eq!(reasoner.node_count(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_node_unregistration() {
+    fn test_node_unregistration() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
         let node = Node::new("node1".to_string(), "localhost:8001".to_string());
-        reasoner.register_node(node).unwrap();
+        reasoner.register_node(node)?;
 
         let removed = reasoner.unregister_node("node1");
         assert!(removed.is_some());
         assert_eq!(reasoner.node_count(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_work_partitioning() {
+    fn test_work_partitioning() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
-        reasoner
-            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
-            .unwrap();
-        reasoner
-            .register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))
-            .unwrap();
+        reasoner.register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))?;
+        reasoner.register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))?;
 
         let rules = vec![];
         let facts = vec![
@@ -1031,18 +1029,17 @@ mod tests {
             },
         ];
 
-        let partitions = reasoner.partition_work(&rules, &facts).unwrap();
+        let partitions = reasoner.partition_work(&rules, &facts)?;
 
         assert_eq!(partitions.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_distributed_execution() {
+    fn test_distributed_execution() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
-        reasoner
-            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
-            .unwrap();
+        reasoner.register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))?;
 
         let rule = Rule {
             name: "test_rule".to_string(),
@@ -1056,55 +1053,47 @@ mod tests {
             object: Term::Constant("b".to_string()),
         }];
 
-        let results = reasoner.execute_distributed(&[rule], &facts).unwrap();
+        let results = reasoner.execute_distributed(&[rule], &facts)?;
 
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_leader_election() {
+    fn test_leader_election() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
-        reasoner
-            .register_node(
-                Node::new("node1".to_string(), "localhost:8001".to_string()).with_capacity(100),
-            )
-            .unwrap();
-        reasoner
-            .register_node(
-                Node::new("node2".to_string(), "localhost:8002".to_string()).with_capacity(200),
-            )
-            .unwrap();
-        reasoner
-            .register_node(
-                Node::new("node3".to_string(), "localhost:8003".to_string()).with_capacity(150),
-            )
-            .unwrap();
+        reasoner.register_node(
+            Node::new("node1".to_string(), "localhost:8001".to_string()).with_capacity(100),
+        )?;
+        reasoner.register_node(
+            Node::new("node2".to_string(), "localhost:8002".to_string()).with_capacity(200),
+        )?;
+        reasoner.register_node(
+            Node::new("node3".to_string(), "localhost:8003".to_string()).with_capacity(150),
+        )?;
 
-        let leader_id = reasoner.elect_leader().unwrap();
+        let leader_id = reasoner.elect_leader()?;
 
         // Node with highest capacity should be elected
         assert_eq!(leader_id, "node2");
         assert_eq!(reasoner.current_term, 1);
 
         // Check leader role
-        let leader = reasoner.get_leader().unwrap();
+        let leader = reasoner.get_leader().ok_or("expected Some value")?;
         assert_eq!(leader.role, NodeRole::Leader);
+        Ok(())
     }
 
     #[test]
-    fn test_heartbeat() {
+    fn test_heartbeat() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
-        reasoner
-            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
-            .unwrap();
-        reasoner
-            .register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))
-            .unwrap();
+        reasoner.register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))?;
+        reasoner.register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))?;
 
-        reasoner.elect_leader().unwrap();
-        reasoner.send_heartbeat().unwrap();
+        reasoner.elect_leader()?;
+        reasoner.send_heartbeat()?;
 
         // Check that followers received heartbeat
         for node in reasoner.nodes.values() {
@@ -1112,82 +1101,86 @@ mod tests {
                 assert!(node.last_heartbeat.is_some());
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_node_failure_handling() {
+    fn test_node_failure_handling() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
-        reasoner
-            .register_node(
-                Node::new("node1".to_string(), "localhost:8001".to_string()).with_capacity(100),
-            )
-            .unwrap();
-        reasoner
-            .register_node(
-                Node::new("node2".to_string(), "localhost:8002".to_string()).with_capacity(200),
-            )
-            .unwrap();
+        reasoner.register_node(
+            Node::new("node1".to_string(), "localhost:8001".to_string()).with_capacity(100),
+        )?;
+        reasoner.register_node(
+            Node::new("node2".to_string(), "localhost:8002".to_string()).with_capacity(200),
+        )?;
 
-        let leader_id = reasoner.elect_leader().unwrap();
+        let leader_id = reasoner.elect_leader()?;
 
         // Simulate leader failure
-        reasoner.handle_node_failure(&leader_id).unwrap();
+        reasoner.handle_node_failure(&leader_id)?;
 
         // New leader should be elected
         assert!(reasoner.leader_id.is_some());
-        assert_ne!(reasoner.leader_id.as_ref().unwrap(), &leader_id);
+        assert_ne!(
+            reasoner.leader_id.as_ref().ok_or("expected Some value")?,
+            &leader_id
+        );
+        Ok(())
     }
 
     #[test]
-    fn test_node_recovery() {
+    fn test_node_recovery() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
-        reasoner
-            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
-            .unwrap();
-        reasoner
-            .register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))
-            .unwrap();
+        reasoner.register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))?;
+        reasoner.register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))?;
 
-        reasoner.elect_leader().unwrap();
+        reasoner.elect_leader()?;
 
         // Simulate node1 failure
-        reasoner.handle_node_failure("node1").unwrap();
+        reasoner.handle_node_failure("node1")?;
 
         assert_eq!(
-            reasoner.nodes.get("node1").unwrap().status,
+            reasoner
+                .nodes
+                .get("node1")
+                .ok_or("expected Some value")?
+                .status,
             NodeStatus::Offline
         );
 
         // Recover node1
-        reasoner.recover_node("node1").unwrap();
+        reasoner.recover_node("node1")?;
 
         assert_eq!(
-            reasoner.nodes.get("node1").unwrap().status,
+            reasoner
+                .nodes
+                .get("node1")
+                .ok_or("expected Some value")?
+                .status,
             NodeStatus::Available
         );
         assert_eq!(
-            reasoner.nodes.get("node1").unwrap().role,
+            reasoner
+                .nodes
+                .get("node1")
+                .ok_or("expected Some value")?
+                .role,
             NodeRole::Follower
         );
+        Ok(())
     }
 
     #[test]
-    fn test_cluster_health() {
+    fn test_cluster_health() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
-        reasoner
-            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
-            .unwrap();
-        reasoner
-            .register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))
-            .unwrap();
-        reasoner
-            .register_node(Node::new("node3".to_string(), "localhost:8003".to_string()))
-            .unwrap();
+        reasoner.register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))?;
+        reasoner.register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))?;
+        reasoner.register_node(Node::new("node3".to_string(), "localhost:8003".to_string()))?;
 
-        reasoner.elect_leader().unwrap();
+        reasoner.elect_leader()?;
 
         let health = reasoner.get_cluster_health();
 
@@ -1198,7 +1191,7 @@ mod tests {
         assert!(health.leader_id.is_some());
 
         // Simulate node failure
-        reasoner.handle_node_failure("node1").unwrap();
+        reasoner.handle_node_failure("node1")?;
 
         let health_degraded = reasoner.get_cluster_health();
 
@@ -1206,18 +1199,15 @@ mod tests {
         assert_eq!(health_degraded.status, ClusterHealthStatus::Degraded);
         assert_eq!(health_degraded.available_nodes, 2);
         assert_eq!(health_degraded.offline_nodes, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_distributed_execution_with_consensus() {
+    fn test_distributed_execution_with_consensus() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
-        reasoner
-            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
-            .unwrap();
-        reasoner
-            .register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))
-            .unwrap();
+        reasoner.register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))?;
+        reasoner.register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))?;
 
         let rule = Rule {
             name: "test_rule".to_string(),
@@ -1231,27 +1221,25 @@ mod tests {
             object: Term::Constant("b".to_string()),
         }];
 
-        let results = reasoner
-            .execute_distributed_with_consensus(&[rule], &facts)
-            .unwrap();
+        let results = reasoner.execute_distributed_with_consensus(&[rule], &facts)?;
 
         assert!(!results.is_empty());
         assert!(reasoner.leader_id.is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_heartbeat_timeout() {
+    fn test_heartbeat_timeout() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
 
-        reasoner
-            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
-            .unwrap();
+        reasoner.register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))?;
 
         // Check heartbeat timeout when no leader
-        let election_triggered = reasoner.check_heartbeat_timeout().unwrap();
+        let election_triggered = reasoner.check_heartbeat_timeout()?;
 
         assert!(election_triggered);
         assert!(reasoner.leader_id.is_some());
+        Ok(())
     }
 
     #[test]

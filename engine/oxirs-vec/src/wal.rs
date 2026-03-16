@@ -575,30 +575,32 @@ impl Drop for WalManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
     use tempfile::TempDir;
 
     #[test]
-    fn test_wal_creation() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_wal_creation() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let config = WalConfig {
             wal_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         };
 
-        let wal = WalManager::new(config).unwrap();
+        let wal = WalManager::new(config)?;
         assert_eq!(wal.current_sequence(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_wal_append() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_wal_append() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let config = WalConfig {
             wal_directory: temp_dir.path().to_path_buf(),
             sync_on_write: true,
             ..Default::default()
         };
 
-        let wal = WalManager::new(config).unwrap();
+        let wal = WalManager::new(config)?;
 
         let entry = WalEntry::Insert {
             id: "vec1".to_string(),
@@ -607,13 +609,14 @@ mod tests {
             timestamp: 12345,
         };
 
-        let seq = wal.append(entry).unwrap();
+        let seq = wal.append(entry)?;
         assert_eq!(seq, 0);
+        Ok(())
     }
 
     #[test]
-    fn test_wal_recovery() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_wal_recovery() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let config = WalConfig {
             wal_directory: temp_dir.path().to_path_buf(),
             sync_on_write: true,
@@ -623,7 +626,7 @@ mod tests {
 
         // Write some entries
         {
-            let wal = WalManager::new(config.clone()).unwrap();
+            let wal = WalManager::new(config.clone())?;
 
             for i in 0..5 {
                 let entry = WalEntry::Insert {
@@ -632,10 +635,10 @@ mod tests {
                     metadata: None,
                     timestamp: (i + 1) * 1000, // Use unique timestamps
                 };
-                wal.append(entry).unwrap();
+                wal.append(entry)?;
             }
 
-            wal.flush().unwrap();
+            wal.flush()?;
             // Ensure Drop is called to flush everything
             drop(wal);
         }
@@ -645,8 +648,8 @@ mod tests {
 
         // Recover
         {
-            let wal = WalManager::new(config).unwrap();
-            let recovered = wal.recover().unwrap();
+            let wal = WalManager::new(config)?;
+            let recovered = wal.recover()?;
 
             // Should recover 5 entries
             assert_eq!(
@@ -660,11 +663,12 @@ mod tests {
             let timestamps: Vec<u64> = recovered.iter().map(|e| e.timestamp()).collect();
             assert_eq!(timestamps, vec![1000, 2000, 3000, 4000, 5000]);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_wal_checkpoint() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_wal_checkpoint() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let config = WalConfig {
             wal_directory: temp_dir.path().to_path_buf(),
             sync_on_write: true,
@@ -672,7 +676,7 @@ mod tests {
             ..Default::default()
         };
 
-        let wal = WalManager::new(config).unwrap();
+        let wal = WalManager::new(config)?;
 
         // Write entries (should trigger checkpoint)
         for i in 0..5 {
@@ -682,21 +686,22 @@ mod tests {
                 metadata: None,
                 timestamp: i,
             };
-            wal.append(entry).unwrap();
+            wal.append(entry)?;
         }
 
         assert!(wal.last_checkpoint_sequence() > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_wal_batch_operation() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_wal_batch_operation() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let config = WalConfig {
             wal_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         };
 
-        let wal = WalManager::new(config).unwrap();
+        let wal = WalManager::new(config)?;
 
         let batch = WalEntry::Batch {
             entries: vec![
@@ -716,26 +721,26 @@ mod tests {
             timestamp: 3,
         };
 
-        wal.append(batch).unwrap();
-        wal.flush().unwrap();
+        wal.append(batch)?;
+        wal.flush()?;
+        Ok(())
     }
 
     #[test]
-    fn test_wal_transaction() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_wal_transaction() -> Result<()> {
+        let temp_dir = TempDir::new()?;
         let config = WalConfig {
             wal_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         };
 
-        let wal = WalManager::new(config).unwrap();
+        let wal = WalManager::new(config)?;
 
         // Begin transaction
         wal.append(WalEntry::BeginTransaction {
             transaction_id: 1,
             timestamp: 100,
-        })
-        .unwrap();
+        })?;
 
         // Operations
         wal.append(WalEntry::Insert {
@@ -743,16 +748,15 @@ mod tests {
             vector: vec![1.0],
             metadata: None,
             timestamp: 101,
-        })
-        .unwrap();
+        })?;
 
         // Commit transaction
         wal.append(WalEntry::CommitTransaction {
             transaction_id: 1,
             timestamp: 102,
-        })
-        .unwrap();
+        })?;
 
-        wal.flush().unwrap();
+        wal.flush()?;
+        Ok(())
     }
 }

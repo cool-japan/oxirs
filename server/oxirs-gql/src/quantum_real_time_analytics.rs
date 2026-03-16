@@ -587,13 +587,13 @@ mod tests {
         let analytics =
             QuantumRealTimeAnalyticsEngine::new(config, ai_predictor, quantum_optimizer)
                 .await
-                .unwrap();
+                .expect("should succeed");
 
         let query = "SELECT * FROM users JOIN orders ON users.id = orders.user_id WHERE users.active = true";
         let analysis = analytics.analyze_query(query).await;
 
         assert!(analysis.is_ok());
-        let analysis = analysis.unwrap();
+        let analysis = analysis.expect("should succeed");
         assert!(!analysis.query_superposition_states.is_empty());
         assert!(analysis.entangled_operations.contains_key("SELECT"));
         assert!(analysis.entangled_operations.contains_key("JOIN"));
@@ -611,12 +611,12 @@ mod tests {
         let analytics =
             QuantumRealTimeAnalyticsEngine::new(config, ai_predictor, quantum_optimizer)
                 .await
-                .unwrap();
+                .expect("should succeed");
 
         let insights = analytics.generate_performance_insights().await;
         assert!(insights.is_ok());
 
-        let insights = insights.unwrap();
+        let insights = insights.expect("should succeed");
         assert!(insights.quantum_efficiency_score >= 0.0);
         assert!(!insights.quantum_resource_usage.is_empty());
         assert!(!insights.recommended_quantum_gates.is_empty());

@@ -1585,7 +1585,7 @@ mod tests {
         assert_eq!(arr.len(), 2);
         assert_eq!(arr[0]["metric"], "cpu");
         assert_eq!(arr[0]["timestamp_ms"], 1_000_i64);
-        assert!((arr[0]["value"].as_f64().unwrap() - 42.0).abs() < f64::EPSILON);
+        assert!((arr[0]["value"].as_f64().expect("should succeed") - 42.0).abs() < f64::EPSILON);
         assert_eq!(arr[1]["metric"], "mem");
     }
 

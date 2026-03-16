@@ -88,12 +88,12 @@ impl ContainmentPair {
 /// use oxirs_geosparql::geometry::Geometry;
 ///
 /// // A ⊃ B ⊃ C  →  infer A ⊃ C
-/// let a = Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
-/// let b = Geometry::from_wkt("POLYGON ((2 2, 8 2, 8 8, 2 8, 2 2))").unwrap();
-/// let c = Geometry::from_wkt("POLYGON ((4 4, 6 4, 6 6, 4 6, 4 4))").unwrap();
+/// let a = Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
+/// let b = Geometry::from_wkt("POLYGON ((2 2, 8 2, 8 8, 2 8, 2 2))").expect("should succeed");
+/// let c = Geometry::from_wkt("POLYGON ((4 4, 6 4, 6 6, 4 6, 4 4))").expect("should succeed");
 ///
 /// let geoms = vec![a, b, c];
-/// let closure = transitive_containment_closure(&geoms).unwrap();
+/// let closure = transitive_containment_closure(&geoms).expect("should succeed");
 ///
 /// assert!(closure.contains(&ContainmentPair { container: 0, contained: 1 }));
 /// assert!(closure.contains(&ContainmentPair { container: 1, contained: 2 }));
@@ -321,12 +321,12 @@ const INTERVAL_EPS: f64 = 1e-10;
 /// ```rust
 /// use oxirs_geosparql::reasoning::{Interval, AllenRelation, allen_relation};
 ///
-/// let x = Interval::new(1.0, 3.0).unwrap();
-/// let y = Interval::new(5.0, 8.0).unwrap();
+/// let x = Interval::new(1.0, 3.0).expect("valid interval");
+/// let y = Interval::new(5.0, 8.0).expect("valid interval");
 /// assert_eq!(allen_relation(x, y), AllenRelation::Before);
 ///
-/// let a = Interval::new(1.0, 5.0).unwrap();
-/// let b = Interval::new(1.0, 5.0).unwrap();
+/// let a = Interval::new(1.0, 5.0).expect("valid interval");
+/// let b = Interval::new(1.0, 5.0).expect("valid interval");
 /// assert_eq!(allen_relation(a, b), AllenRelation::Equals);
 /// ```
 pub fn allen_relation(x: Interval, y: Interval) -> AllenRelation {
@@ -500,10 +500,10 @@ pub struct BboxAllenRelation {
 /// use oxirs_geosparql::reasoning::{bbox_allen_relation, AllenRelation};
 /// use oxirs_geosparql::geometry::Geometry;
 ///
-/// let a = Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-/// let b = Geometry::from_wkt("POLYGON ((5 0, 7 0, 7 2, 5 2, 5 0))").unwrap();
+/// let a = Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+/// let b = Geometry::from_wkt("POLYGON ((5 0, 7 0, 7 2, 5 2, 5 0))").expect("should succeed");
 ///
-/// let rel = bbox_allen_relation(&a, &b).unwrap();
+/// let rel = bbox_allen_relation(&a, &b).expect("should succeed");
 /// assert_eq!(rel.x_relation, AllenRelation::Before);
 /// assert_eq!(rel.y_relation, AllenRelation::Equals);
 /// ```
@@ -595,11 +595,11 @@ pub struct IntervalAssertion {
 /// let mut engine = AllenIntervalEngine::new();
 /// engine.add_node(IntervalNode {
 ///     id: "A".to_string(),
-///     interval: Interval::new(0.0, 3.0).unwrap(),
+///     interval: Interval::new(0.0, 3.0).expect("valid interval"),
 /// });
 /// engine.add_node(IntervalNode {
 ///     id: "B".to_string(),
-///     interval: Interval::new(5.0, 8.0).unwrap(),
+///     interval: Interval::new(5.0, 8.0).expect("valid interval"),
 /// });
 /// engine.infer_from_nodes();
 /// let assertions = engine.assertions();
@@ -735,12 +735,13 @@ mod tests {
 
     #[test]
     fn test_three_level_containment() {
-        let a = Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
-        let b = Geometry::from_wkt("POLYGON ((2 2, 8 2, 8 8, 2 8, 2 2))").unwrap();
-        let c = Geometry::from_wkt("POLYGON ((4 4, 6 4, 6 6, 4 6, 4 4))").unwrap();
+        let a =
+            Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
+        let b = Geometry::from_wkt("POLYGON ((2 2, 8 2, 8 8, 2 8, 2 2))").expect("should succeed");
+        let c = Geometry::from_wkt("POLYGON ((4 4, 6 4, 6 6, 4 6, 4 4))").expect("should succeed");
 
         let geoms = vec![a, b, c];
-        let closure = transitive_containment_closure(&geoms).unwrap();
+        let closure = transitive_containment_closure(&geoms).expect("should succeed");
 
         // Direct: A contains B, B contains C
         assert!(closure.contains(&ContainmentPair::new(0, 1)));
@@ -751,25 +752,25 @@ mod tests {
 
     #[test]
     fn test_no_containment() {
-        let a = Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap();
-        let b = Geometry::from_wkt("POLYGON ((5 5, 6 5, 6 6, 5 6, 5 5))").unwrap();
+        let a = Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed");
+        let b = Geometry::from_wkt("POLYGON ((5 5, 6 5, 6 6, 5 6, 5 5))").expect("should succeed");
 
         let geoms = vec![a, b];
-        let closure = transitive_containment_closure(&geoms).unwrap();
+        let closure = transitive_containment_closure(&geoms).expect("should succeed");
 
         assert!(closure.is_empty());
     }
 
     #[test]
     fn test_empty_input() {
-        let closure = transitive_containment_closure(&[]).unwrap();
+        let closure = transitive_containment_closure(&[]).expect("should succeed");
         assert!(closure.is_empty());
     }
 
     #[test]
     fn test_single_geometry() {
-        let a = Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-        let closure = transitive_containment_closure(&[a]).unwrap();
+        let a = Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+        let closure = transitive_containment_closure(&[a]).expect("should succeed");
         assert!(closure.is_empty());
     }
 
@@ -801,55 +802,55 @@ mod tests {
 
     #[test]
     fn test_allen_before() {
-        let x = Interval::new(1.0, 3.0).unwrap();
-        let y = Interval::new(5.0, 8.0).unwrap();
+        let x = Interval::new(1.0, 3.0).expect("valid interval");
+        let y = Interval::new(5.0, 8.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Before);
         assert_eq!(allen_relation(y, x), AllenRelation::After);
     }
 
     #[test]
     fn test_allen_meets() {
-        let x = Interval::new(1.0, 3.0).unwrap();
-        let y = Interval::new(3.0, 6.0).unwrap();
+        let x = Interval::new(1.0, 3.0).expect("valid interval");
+        let y = Interval::new(3.0, 6.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Meets);
         assert_eq!(allen_relation(y, x), AllenRelation::MetBy);
     }
 
     #[test]
     fn test_allen_equals() {
-        let x = Interval::new(2.0, 5.0).unwrap();
-        let y = Interval::new(2.0, 5.0).unwrap();
+        let x = Interval::new(2.0, 5.0).expect("valid interval");
+        let y = Interval::new(2.0, 5.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Equals);
     }
 
     #[test]
     fn test_allen_during() {
-        let x = Interval::new(3.0, 4.0).unwrap();
-        let y = Interval::new(1.0, 6.0).unwrap();
+        let x = Interval::new(3.0, 4.0).expect("valid interval");
+        let y = Interval::new(1.0, 6.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::During);
         assert_eq!(allen_relation(y, x), AllenRelation::Contains);
     }
 
     #[test]
     fn test_allen_starts() {
-        let x = Interval::new(1.0, 3.0).unwrap();
-        let y = Interval::new(1.0, 6.0).unwrap();
+        let x = Interval::new(1.0, 3.0).expect("valid interval");
+        let y = Interval::new(1.0, 6.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Starts);
         assert_eq!(allen_relation(y, x), AllenRelation::StartedBy);
     }
 
     #[test]
     fn test_allen_finishes() {
-        let x = Interval::new(4.0, 6.0).unwrap();
-        let y = Interval::new(1.0, 6.0).unwrap();
+        let x = Interval::new(4.0, 6.0).expect("valid interval");
+        let y = Interval::new(1.0, 6.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Finishes);
         assert_eq!(allen_relation(y, x), AllenRelation::FinishedBy);
     }
 
     #[test]
     fn test_allen_overlaps() {
-        let x = Interval::new(1.0, 4.0).unwrap();
-        let y = Interval::new(3.0, 7.0).unwrap();
+        let x = Interval::new(1.0, 4.0).expect("valid interval");
+        let y = Interval::new(3.0, 7.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Overlaps);
         assert_eq!(allen_relation(y, x), AllenRelation::OverlappedBy);
     }
@@ -931,18 +932,19 @@ mod tests {
 
     #[test]
     fn test_bbox_allen_before_x_equals_y() {
-        let a = Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").unwrap();
-        let b = Geometry::from_wkt("POLYGON ((5 0, 7 0, 7 2, 5 2, 5 0))").unwrap();
-        let rel = bbox_allen_relation(&a, &b).unwrap();
+        let a = Geometry::from_wkt("POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))").expect("should succeed");
+        let b = Geometry::from_wkt("POLYGON ((5 0, 7 0, 7 2, 5 2, 5 0))").expect("should succeed");
+        let rel = bbox_allen_relation(&a, &b).expect("should succeed");
         assert_eq!(rel.x_relation, AllenRelation::Before);
         assert_eq!(rel.y_relation, AllenRelation::Equals);
     }
 
     #[test]
     fn test_bbox_allen_nested() {
-        let a = Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
-        let b = Geometry::from_wkt("POLYGON ((2 2, 8 2, 8 8, 2 8, 2 2))").unwrap();
-        let rel = bbox_allen_relation(&a, &b).unwrap();
+        let a =
+            Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
+        let b = Geometry::from_wkt("POLYGON ((2 2, 8 2, 8 8, 2 8, 2 2))").expect("should succeed");
+        let rel = bbox_allen_relation(&a, &b).expect("should succeed");
         // b is during a on both axes
         assert_eq!(rel.x_relation, AllenRelation::Contains);
         assert_eq!(rel.y_relation, AllenRelation::Contains);
@@ -957,11 +959,11 @@ mod tests {
         let mut engine = AllenIntervalEngine::new();
         engine.add_node(IntervalNode {
             id: "A".to_string(),
-            interval: Interval::new(0.0, 3.0).unwrap(),
+            interval: Interval::new(0.0, 3.0).expect("valid interval"),
         });
         engine.add_node(IntervalNode {
             id: "B".to_string(),
-            interval: Interval::new(5.0, 8.0).unwrap(),
+            interval: Interval::new(5.0, 8.0).expect("valid interval"),
         });
         engine.infer_from_nodes();
 
@@ -973,7 +975,7 @@ mod tests {
             .iter()
             .find(|a| a.from_id == "A" && a.to_id == "B");
         assert!(ab.is_some());
-        assert_eq!(ab.unwrap().relation, AllenRelation::Before);
+        assert_eq!(ab.expect("should succeed").relation, AllenRelation::Before);
     }
 
     #[test]
@@ -1005,11 +1007,14 @@ mod tests_extended {
     #[test]
     fn test_containment_closure_chain_of_three() {
         // A ⊃ B ⊃ C ⟹ infer A ⊃ C
-        let a = Geometry::from_wkt("POLYGON ((0 0, 20 0, 20 20, 0 20, 0 0))").unwrap();
-        let b = Geometry::from_wkt("POLYGON ((2 2, 18 2, 18 18, 2 18, 2 2))").unwrap();
-        let c = Geometry::from_wkt("POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))").unwrap();
+        let a =
+            Geometry::from_wkt("POLYGON ((0 0, 20 0, 20 20, 0 20, 0 0))").expect("should succeed");
+        let b =
+            Geometry::from_wkt("POLYGON ((2 2, 18 2, 18 18, 2 18, 2 2))").expect("should succeed");
+        let c =
+            Geometry::from_wkt("POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))").expect("should succeed");
         let geoms = vec![a, b, c];
-        let closure = transitive_containment_closure(&geoms).unwrap();
+        let closure = transitive_containment_closure(&geoms).expect("should succeed");
         assert!(closure.contains(&ContainmentPair {
             container: 0,
             contained: 1
@@ -1026,22 +1031,24 @@ mod tests_extended {
 
     #[test]
     fn test_containment_closure_empty_input() {
-        let closure = transitive_containment_closure(&[]).unwrap();
+        let closure = transitive_containment_closure(&[]).expect("should succeed");
         assert!(closure.is_empty());
     }
 
     #[test]
     fn test_containment_closure_single_geometry() {
-        let a = Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
-        let closure = transitive_containment_closure(&[a]).unwrap();
+        let a =
+            Geometry::from_wkt("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
+        let closure = transitive_containment_closure(&[a]).expect("should succeed");
         assert!(closure.is_empty()); // single geom, no pairs
     }
 
     #[test]
     fn test_containment_closure_disjoint_geometries() {
-        let a = Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").unwrap();
-        let b = Geometry::from_wkt("POLYGON ((10 10, 11 10, 11 11, 10 11, 10 10))").unwrap();
-        let closure = transitive_containment_closure(&[a, b]).unwrap();
+        let a = Geometry::from_wkt("POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))").expect("should succeed");
+        let b = Geometry::from_wkt("POLYGON ((10 10, 11 10, 11 11, 10 11, 10 10))")
+            .expect("should succeed");
+        let closure = transitive_containment_closure(&[a, b]).expect("should succeed");
         // No containment between disjoint polygons
         assert!(closure.is_empty());
     }
@@ -1087,85 +1094,85 @@ mod tests_extended {
 
     #[test]
     fn test_allen_before_strict() {
-        let x = Interval::new(0.0, 3.0).unwrap();
-        let y = Interval::new(5.0, 8.0).unwrap();
+        let x = Interval::new(0.0, 3.0).expect("valid interval");
+        let y = Interval::new(5.0, 8.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Before);
     }
 
     #[test]
     fn test_allen_after_strict() {
-        let x = Interval::new(5.0, 8.0).unwrap();
-        let y = Interval::new(0.0, 3.0).unwrap();
+        let x = Interval::new(5.0, 8.0).expect("valid interval");
+        let y = Interval::new(0.0, 3.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::After);
     }
 
     #[test]
     fn test_allen_meets() {
-        let x = Interval::new(0.0, 5.0).unwrap();
-        let y = Interval::new(5.0, 10.0).unwrap();
+        let x = Interval::new(0.0, 5.0).expect("valid interval");
+        let y = Interval::new(5.0, 10.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Meets);
     }
 
     #[test]
     fn test_allen_met_by() {
-        let x = Interval::new(5.0, 10.0).unwrap();
-        let y = Interval::new(0.0, 5.0).unwrap();
+        let x = Interval::new(5.0, 10.0).expect("valid interval");
+        let y = Interval::new(0.0, 5.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::MetBy);
     }
 
     #[test]
     fn test_allen_starts() {
-        let x = Interval::new(0.0, 3.0).unwrap();
-        let y = Interval::new(0.0, 7.0).unwrap();
+        let x = Interval::new(0.0, 3.0).expect("valid interval");
+        let y = Interval::new(0.0, 7.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Starts);
     }
 
     #[test]
     fn test_allen_started_by() {
-        let x = Interval::new(0.0, 7.0).unwrap();
-        let y = Interval::new(0.0, 3.0).unwrap();
+        let x = Interval::new(0.0, 7.0).expect("valid interval");
+        let y = Interval::new(0.0, 3.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::StartedBy);
     }
 
     #[test]
     fn test_allen_finishes() {
-        let x = Interval::new(5.0, 10.0).unwrap();
-        let y = Interval::new(2.0, 10.0).unwrap();
+        let x = Interval::new(5.0, 10.0).expect("valid interval");
+        let y = Interval::new(2.0, 10.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Finishes);
     }
 
     #[test]
     fn test_allen_finished_by() {
-        let x = Interval::new(2.0, 10.0).unwrap();
-        let y = Interval::new(5.0, 10.0).unwrap();
+        let x = Interval::new(2.0, 10.0).expect("valid interval");
+        let y = Interval::new(5.0, 10.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::FinishedBy);
     }
 
     #[test]
     fn test_allen_during() {
-        let x = Interval::new(3.0, 7.0).unwrap();
-        let y = Interval::new(1.0, 9.0).unwrap();
+        let x = Interval::new(3.0, 7.0).expect("valid interval");
+        let y = Interval::new(1.0, 9.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::During);
     }
 
     #[test]
     fn test_allen_contains() {
-        let x = Interval::new(1.0, 9.0).unwrap();
-        let y = Interval::new(3.0, 7.0).unwrap();
+        let x = Interval::new(1.0, 9.0).expect("valid interval");
+        let y = Interval::new(3.0, 7.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Contains);
     }
 
     #[test]
     fn test_allen_overlaps() {
-        let x = Interval::new(0.0, 5.0).unwrap();
-        let y = Interval::new(3.0, 8.0).unwrap();
+        let x = Interval::new(0.0, 5.0).expect("valid interval");
+        let y = Interval::new(3.0, 8.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::Overlaps);
     }
 
     #[test]
     fn test_allen_overlapped_by() {
-        let x = Interval::new(3.0, 8.0).unwrap();
-        let y = Interval::new(0.0, 5.0).unwrap();
+        let x = Interval::new(3.0, 8.0).expect("valid interval");
+        let y = Interval::new(0.0, 5.0).expect("valid interval");
         assert_eq!(allen_relation(x, y), AllenRelation::OverlappedBy);
     }
 
@@ -1204,13 +1211,13 @@ mod tests_extended {
 
     #[test]
     fn test_interval_degenerate_point() {
-        let i = Interval::new(3.0, 3.0).unwrap();
+        let i = Interval::new(3.0, 3.0).expect("valid interval");
         assert!((i.length() - 0.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_interval_length() {
-        let i = Interval::new(2.0, 7.0).unwrap();
+        let i = Interval::new(2.0, 7.0).expect("valid interval");
         assert!((i.length() - 5.0).abs() < 1e-10);
     }
 
@@ -1218,9 +1225,9 @@ mod tests_extended {
 
     #[test]
     fn test_bbox_allen_equals_both_axes() {
-        let a = Geometry::from_wkt("POLYGON ((0 0, 5 0, 5 5, 0 5, 0 0))").unwrap();
-        let b = Geometry::from_wkt("POLYGON ((0 0, 5 0, 5 5, 0 5, 0 0))").unwrap();
-        let rel = bbox_allen_relation(&a, &b).unwrap();
+        let a = Geometry::from_wkt("POLYGON ((0 0, 5 0, 5 5, 0 5, 0 0))").expect("should succeed");
+        let b = Geometry::from_wkt("POLYGON ((0 0, 5 0, 5 5, 0 5, 0 0))").expect("should succeed");
+        let rel = bbox_allen_relation(&a, &b).expect("should succeed");
         assert_eq!(rel.x_relation, AllenRelation::Equals);
         assert_eq!(rel.y_relation, AllenRelation::Equals);
     }
@@ -1259,7 +1266,7 @@ mod tests_extended {
         let mut engine = AllenIntervalEngine::new();
         engine.add_node(IntervalNode {
             id: "A".to_string(),
-            interval: Interval::new(0.0, 5.0).unwrap(),
+            interval: Interval::new(0.0, 5.0).expect("valid interval"),
         });
         engine.infer_from_nodes();
         assert!(engine.assertions().is_empty()); // only one node, no pairs
@@ -1293,7 +1300,7 @@ mod tests_extended {
         for (id, start, end) in &[("A", 0.0, 3.0), ("B", 5.0, 8.0), ("C", 10.0, 13.0)] {
             engine.add_node(IntervalNode {
                 id: id.to_string(),
-                interval: Interval::new(*start, *end).unwrap(),
+                interval: Interval::new(*start, *end).expect("valid interval"),
             });
         }
         engine.infer_from_nodes();

@@ -21,7 +21,7 @@ use regex::Regex;
 /// ```
 /// use oxirs_geosparql::geometry::ewkt_parser::parse_ewkt;
 ///
-/// let geom = parse_ewkt("SRID=4326;POINT(1 2)").unwrap();
+/// let geom = parse_ewkt("SRID=4326;POINT(1 2)").expect("should succeed");
 /// assert_eq!(geom.crs.epsg_code(), Some(4326));
 /// ```
 pub fn parse_ewkt(ewkt: &str) -> Result<Geometry> {
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn test_parse_ewkt_point_with_srid() {
         let ewkt = "SRID=4326;POINT(1 2)";
-        let geom = parse_ewkt(ewkt).unwrap();
+        let geom = parse_ewkt(ewkt).expect("should succeed");
 
         assert_eq!(geom.crs.epsg_code(), Some(4326));
         match geom.geom {
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn test_parse_ewkt_point_without_srid() {
         let ewkt = "POINT(1 2)";
-        let geom = parse_ewkt(ewkt).unwrap();
+        let geom = parse_ewkt(ewkt).expect("should succeed");
 
         assert!(geom.crs.is_default());
         match geom.geom {
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn test_parse_ewkt_linestring() {
         let ewkt = "SRID=3857;LINESTRING(0 0, 1 1, 2 0)";
-        let geom = parse_ewkt(ewkt).unwrap();
+        let geom = parse_ewkt(ewkt).expect("should succeed");
 
         assert_eq!(geom.crs.epsg_code(), Some(3857));
         match geom.geom {
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn test_parse_ewkt_polygon() {
         let ewkt = "SRID=4326;POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))";
-        let geom = parse_ewkt(ewkt).unwrap();
+        let geom = parse_ewkt(ewkt).expect("should succeed");
 
         assert_eq!(geom.crs.epsg_code(), Some(4326));
         match geom.geom {
@@ -181,11 +181,11 @@ mod tests {
     #[test]
     fn test_ewkt_round_trip() {
         let original = "SRID=4326;POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))";
-        let geom = parse_ewkt(original).unwrap();
+        let geom = parse_ewkt(original).expect("should succeed");
         let ewkt = geometry_to_ewkt(&geom);
 
         // Parse again to verify
-        let geom2 = parse_ewkt(&ewkt).unwrap();
+        let geom2 = parse_ewkt(&ewkt).expect("should succeed");
         assert_eq!(geom.crs.epsg_code(), geom2.crs.epsg_code());
     }
 
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn test_parse_ewkt_multipoint() {
         let ewkt = "SRID=4326;MULTIPOINT((1 2), (3 4))";
-        let geom = parse_ewkt(ewkt).unwrap();
+        let geom = parse_ewkt(ewkt).expect("should succeed");
 
         assert_eq!(geom.crs.epsg_code(), Some(4326));
         match geom.geom {
@@ -214,7 +214,7 @@ mod tests {
     fn test_parse_ewkt_multipolygon() {
         let ewkt =
             "SRID=4326;MULTIPOLYGON(((0 0, 1 0, 1 1, 0 1, 0 0)), ((2 2, 3 2, 3 3, 2 3, 2 2)))";
-        let geom = parse_ewkt(ewkt).unwrap();
+        let geom = parse_ewkt(ewkt).expect("should succeed");
 
         assert_eq!(geom.crs.epsg_code(), Some(4326));
         match geom.geom {

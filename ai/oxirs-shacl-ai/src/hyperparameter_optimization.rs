@@ -751,7 +751,9 @@ mod tests {
             Ok(-((x - 1.0).powi(2) + (y - 2.0).powi(2)))
         };
 
-        let result = optimizer.optimize(search_space, objective).unwrap();
+        let result = optimizer
+            .optimize(search_space, objective)
+            .expect("should succeed");
 
         assert!(result.total_trials <= 10);
         assert!(result.best_objective <= 0.0);

@@ -49,7 +49,7 @@
 //! tcn.add_constraint("morning".to_string(), "lunch".to_string(), AllenRelation::Meets);
 //!
 //! // Check consistency
-//! assert!(tcn.is_consistent().unwrap());
+//! assert!(tcn.is_consistent().expect("should succeed"));
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
@@ -614,87 +614,95 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_time_interval_creation() {
-        let interval = TimeInterval::new(1.0, 5.0).unwrap();
+    fn test_time_interval_creation() -> Result<(), Box<dyn std::error::Error>> {
+        let interval = TimeInterval::new(1.0, 5.0)?;
         assert_eq!(interval.start, 1.0);
         assert_eq!(interval.end, 5.0);
         assert_eq!(interval.duration(), 4.0);
 
         // Invalid interval
         assert!(TimeInterval::new(5.0, 1.0).is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_allen_before() {
-        let i1 = TimeInterval::new(1.0, 3.0).unwrap();
-        let i2 = TimeInterval::new(5.0, 7.0).unwrap();
+    fn test_allen_before() -> Result<(), Box<dyn std::error::Error>> {
+        let i1 = TimeInterval::new(1.0, 3.0)?;
+        let i2 = TimeInterval::new(5.0, 7.0)?;
 
         assert_eq!(i1.allen_relation(&i2), AllenRelation::Before);
         assert_eq!(i2.allen_relation(&i1), AllenRelation::After);
+        Ok(())
     }
 
     #[test]
-    fn test_allen_meets() {
-        let i1 = TimeInterval::new(1.0, 3.0).unwrap();
-        let i2 = TimeInterval::new(3.0, 5.0).unwrap();
+    fn test_allen_meets() -> Result<(), Box<dyn std::error::Error>> {
+        let i1 = TimeInterval::new(1.0, 3.0)?;
+        let i2 = TimeInterval::new(3.0, 5.0)?;
 
         assert_eq!(i1.allen_relation(&i2), AllenRelation::Meets);
         assert_eq!(i2.allen_relation(&i1), AllenRelation::MetBy);
+        Ok(())
     }
 
     #[test]
-    fn test_allen_overlaps() {
-        let i1 = TimeInterval::new(1.0, 4.0).unwrap();
-        let i2 = TimeInterval::new(3.0, 6.0).unwrap();
+    fn test_allen_overlaps() -> Result<(), Box<dyn std::error::Error>> {
+        let i1 = TimeInterval::new(1.0, 4.0)?;
+        let i2 = TimeInterval::new(3.0, 6.0)?;
 
         assert_eq!(i1.allen_relation(&i2), AllenRelation::Overlaps);
         assert_eq!(i2.allen_relation(&i1), AllenRelation::OverlappedBy);
+        Ok(())
     }
 
     #[test]
-    fn test_allen_during() {
-        let i1 = TimeInterval::new(2.0, 4.0).unwrap();
-        let i2 = TimeInterval::new(1.0, 5.0).unwrap();
+    fn test_allen_during() -> Result<(), Box<dyn std::error::Error>> {
+        let i1 = TimeInterval::new(2.0, 4.0)?;
+        let i2 = TimeInterval::new(1.0, 5.0)?;
 
         assert_eq!(i1.allen_relation(&i2), AllenRelation::During);
         assert_eq!(i2.allen_relation(&i1), AllenRelation::Contains);
+        Ok(())
     }
 
     #[test]
-    fn test_allen_equals() {
-        let i1 = TimeInterval::new(1.0, 5.0).unwrap();
-        let i2 = TimeInterval::new(1.0, 5.0).unwrap();
+    fn test_allen_equals() -> Result<(), Box<dyn std::error::Error>> {
+        let i1 = TimeInterval::new(1.0, 5.0)?;
+        let i2 = TimeInterval::new(1.0, 5.0)?;
 
         assert_eq!(i1.allen_relation(&i2), AllenRelation::Equals);
+        Ok(())
     }
 
     #[test]
-    fn test_interval_intersection() {
-        let i1 = TimeInterval::new(1.0, 5.0).unwrap();
-        let i2 = TimeInterval::new(3.0, 7.0).unwrap();
+    fn test_interval_intersection() -> Result<(), Box<dyn std::error::Error>> {
+        let i1 = TimeInterval::new(1.0, 5.0)?;
+        let i2 = TimeInterval::new(3.0, 7.0)?;
 
-        let intersection = i1.intersection(&i2).unwrap();
+        let intersection = i1.intersection(&i2).ok_or("expected Some value")?;
         assert_eq!(intersection.start, 3.0);
         assert_eq!(intersection.end, 5.0);
+        Ok(())
     }
 
     #[test]
-    fn test_interval_union() {
-        let i1 = TimeInterval::new(1.0, 5.0).unwrap();
-        let i2 = TimeInterval::new(3.0, 7.0).unwrap();
+    fn test_interval_union() -> Result<(), Box<dyn std::error::Error>> {
+        let i1 = TimeInterval::new(1.0, 5.0)?;
+        let i2 = TimeInterval::new(3.0, 7.0)?;
 
-        let union = i1.union(&i2).unwrap();
+        let union = i1.union(&i2).ok_or("expected Some value")?;
         assert_eq!(union.start, 1.0);
         assert_eq!(union.end, 7.0);
+        Ok(())
     }
 
     #[test]
-    fn test_temporal_constraint_network() {
+    fn test_temporal_constraint_network() -> Result<(), Box<dyn std::error::Error>> {
         let mut tcn = TemporalConstraintNetwork::new();
 
-        let morning = TimeInterval::new(8.0, 12.0).unwrap();
-        let lunch = TimeInterval::new(12.0, 13.0).unwrap();
-        let afternoon = TimeInterval::new(13.0, 17.0).unwrap();
+        let morning = TimeInterval::new(8.0, 12.0)?;
+        let lunch = TimeInterval::new(12.0, 13.0)?;
+        let afternoon = TimeInterval::new(13.0, 17.0)?;
 
         tcn.add_interval("morning".to_string(), morning);
         tcn.add_interval("lunch".to_string(), lunch);
@@ -711,11 +719,12 @@ mod tests {
             AllenRelation::Meets,
         );
 
-        assert!(tcn.is_consistent().unwrap());
+        assert!(tcn.is_consistent()?);
+        Ok(())
     }
 
     #[test]
-    fn test_temporal_rule() {
+    fn test_temporal_rule() -> Result<(), Box<dyn std::error::Error>> {
         let rule = Rule {
             name: "test_rule".to_string(),
             body: vec![],
@@ -723,41 +732,39 @@ mod tests {
         };
 
         let mut temporal_rule = TemporalRule::new(rule);
-        let interval = TimeInterval::new(9.0, 17.0).unwrap();
+        let interval = TimeInterval::new(9.0, 17.0)?;
         temporal_rule.add_temporal_constraint("working_hours".to_string(), interval);
 
         assert!(temporal_rule.is_applicable_at(10.0));
         assert!(!temporal_rule.is_applicable_at(20.0));
+        Ok(())
     }
 
     #[test]
-    fn test_temporal_event() {
-        let meeting = TemporalEvent::new(
-            "team_meeting".to_string(),
-            TimeInterval::new(14.0, 15.0).unwrap(),
-        );
+    fn test_temporal_event() -> Result<(), Box<dyn std::error::Error>> {
+        let meeting =
+            TemporalEvent::new("team_meeting".to_string(), TimeInterval::new(14.0, 15.0)?);
 
-        let lunch = TemporalEvent::new(
-            "lunch_break".to_string(),
-            TimeInterval::new(12.0, 13.0).unwrap(),
-        );
+        let lunch = TemporalEvent::new("lunch_break".to_string(), TimeInterval::new(12.0, 13.0)?);
 
         assert_eq!(lunch.relation_with(&meeting), AllenRelation::Before);
+        Ok(())
     }
 
     #[test]
-    fn test_temporal_reasoning_engine() {
+    fn test_temporal_reasoning_engine() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = TemporalReasoningEngine::new();
 
-        let event1 = TemporalEvent::new("event1".to_string(), TimeInterval::new(1.0, 3.0).unwrap());
+        let event1 = TemporalEvent::new("event1".to_string(), TimeInterval::new(1.0, 3.0)?);
 
-        let event2 = TemporalEvent::new("event2".to_string(), TimeInterval::new(2.0, 4.0).unwrap());
+        let event2 = TemporalEvent::new("event2".to_string(), TimeInterval::new(2.0, 4.0)?);
 
         engine.add_event(event1);
         engine.add_event(event2);
 
         let events_at_2_5 = engine.get_events_at(2.5);
         assert_eq!(events_at_2_5.len(), 2);
+        Ok(())
     }
 
     #[test]

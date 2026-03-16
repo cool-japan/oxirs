@@ -1176,7 +1176,7 @@ fn test_inverse_path_used_in_constraint_context() {
         .with_path(path)
         .with_values(vec![make_iri("friend")]);
     assert!(ctx.path.is_some());
-    assert!(!ctx.path.as_ref().unwrap().is_predicate());
+    assert!(!ctx.path.as_ref().expect("should succeed").is_predicate());
 }
 
 #[test]

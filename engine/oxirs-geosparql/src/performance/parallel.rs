@@ -385,7 +385,7 @@ mod tests {
             .map(|i| Geometry::new(GeoGeometry::Point(Point::new(i as f64, 0.0))))
             .collect();
 
-        let distances = parallel_distances(&query, &targets).unwrap();
+        let distances = parallel_distances(&query, &targets).expect("should succeed");
 
         assert_eq!(distances.len(), 10);
         assert!((distances[0] - 0.0).abs() < 1e-10);
@@ -401,7 +401,7 @@ mod tests {
             Geometry::new(GeoGeometry::Point(Point::new(0.0, 1.0))),
         ];
 
-        let matrix = parallel_distance_matrix(&geometries).unwrap();
+        let matrix = parallel_distance_matrix(&geometries).expect("should succeed");
 
         assert_eq!(matrix.len(), 3);
         assert_eq!(matrix[0].len(), 3);
@@ -423,7 +423,7 @@ mod tests {
             Geometry::new(GeoGeometry::Point(Point::new(10.0, 10.0))),
         ];
 
-        let nearest = parallel_nearest_neighbors(&geometries, 2).unwrap();
+        let nearest = parallel_nearest_neighbors(&geometries, 2).expect("should succeed");
 
         assert_eq!(nearest.len(), 4);
         assert_eq!(nearest[0].len(), 2); // Each query has 2 nearest neighbors

@@ -32,17 +32,17 @@ thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
 regex.workspace = true
-lazy_static = "1.5"
+lazy_static.workspace = true
 once_cell.workspace = true
 
 # Ultra performance dependencies
 rayon = { workspace = true, optional = true }
 crossbeam = "0.8"
 crossbeam-epoch = "0.9"
-crossbeam-utils = "0.8"
+crossbeam-utils.workspace = true
 crossbeam-deque = "0.8"
 dashmap.workspace = true
-bumpalo = "3.14"
+bumpalo.workspace = true
 memmap2.workspace = true
 parking_lot.workspace = true
 ahash = "0.8"
@@ -52,9 +52,9 @@ num_cpus.workspace = true
 sys-info = "0.9"
 libc.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-util"] }
-async-trait = "0.1"
+async-trait.workspace = true
 smallvec = "1.15"
-futures = "0.3"
+futures.workspace = true
 
 # HTTP client for federated SPARQL queries
 reqwest = { workspace = true, features = ["stream"] }
@@ -88,8 +88,8 @@ oxiarc-lz4 = { workspace = true }
 oxiarc-zstd.workspace = true
 
 # Cryptographic dependencies
-blake3 = "1.8"
-hex = "0.4"
+blake3.workspace = true
+hex.workspace = true
 
 # BiMap for term interning
 bimap = "0.6"

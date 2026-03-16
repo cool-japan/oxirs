@@ -33,7 +33,7 @@ use memchr::{memchr, memchr2, memchr3};
 ///
 /// // Scan for directive
 /// let directive_end = lexer.scan_until_whitespace(pos);
-/// let directive = std::str::from_utf8(&input.as_bytes()[pos..directive_end]).unwrap();
+/// let directive = std::str::from_utf8(&input.as_bytes()[pos..directive_end]).expect("should succeed");
 /// assert_eq!(directive, "@prefix");
 /// ```
 #[derive(Debug, Clone)]

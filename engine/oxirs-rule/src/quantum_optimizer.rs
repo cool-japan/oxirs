@@ -52,7 +52,7 @@
 //!     &rules,
 //!     OptimizationGoal::MinimizeInferenceTime,
 //!     QuantumAlgorithm::QuantumAnnealing
-//! ).unwrap();
+//! ).expect("should succeed");
 //!
 //! println!("Optimized rule order: {:?}", optimized_order);
 //! # Ok::<(), anyhow::Error>(())
@@ -818,11 +818,10 @@ mod tests {
     }
 
     #[test]
-    fn test_quantum_state_measurement() {
+    fn test_quantum_state_measurement() -> Result<(), Box<dyn std::error::Error>> {
         let state = QuantumState::new(4);
         let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)?
             .as_secs();
         let mut rng = seeded_rng(seed);
 
@@ -831,6 +830,7 @@ mod tests {
             let measurement = state.measure(&mut rng);
             assert!(measurement < 4);
         }
+        Ok(())
     }
 
     #[test]
@@ -842,7 +842,7 @@ mod tests {
     }
 
     #[test]
-    fn test_quantum_annealing() {
+    fn test_quantum_annealing() -> Result<(), Box<dyn std::error::Error>> {
         let mut optimizer = QuantumOptimizer::new()
             .with_max_iterations(100)
             .with_temperature(100.0);
@@ -876,20 +876,19 @@ mod tests {
             },
         ];
 
-        let result = optimizer
-            .optimize_rule_order(
-                &rules,
-                OptimizationGoal::MinimizeInferenceTime,
-                QuantumAlgorithm::QuantumAnnealing,
-            )
-            .unwrap();
+        let result = optimizer.optimize_rule_order(
+            &rules,
+            OptimizationGoal::MinimizeInferenceTime,
+            QuantumAlgorithm::QuantumAnnealing,
+        )?;
 
         assert_eq!(result.len(), rules.len());
         assert!(result.iter().all(|&i| i < rules.len()));
+        Ok(())
     }
 
     #[test]
-    fn test_quantum_genetic() {
+    fn test_quantum_genetic() -> Result<(), Box<dyn std::error::Error>> {
         let mut optimizer = QuantumOptimizer::new().with_max_iterations(50);
 
         let rules = vec![Rule {
@@ -906,19 +905,18 @@ mod tests {
             }],
         }];
 
-        let result = optimizer
-            .optimize_rule_order(
-                &rules,
-                OptimizationGoal::MaximizeDerivations,
-                QuantumAlgorithm::QuantumGenetic,
-            )
-            .unwrap();
+        let result = optimizer.optimize_rule_order(
+            &rules,
+            OptimizationGoal::MaximizeDerivations,
+            QuantumAlgorithm::QuantumGenetic,
+        )?;
 
         assert_eq!(result.len(), rules.len());
+        Ok(())
     }
 
     #[test]
-    fn test_quantum_particle_swarm() {
+    fn test_quantum_particle_swarm() -> Result<(), Box<dyn std::error::Error>> {
         let mut optimizer = QuantumOptimizer::new().with_max_iterations(50);
 
         let rules = vec![Rule {
@@ -931,19 +929,18 @@ mod tests {
             head: vec![],
         }];
 
-        let result = optimizer
-            .optimize_rule_order(
-                &rules,
-                OptimizationGoal::MinimizeMemory,
-                QuantumAlgorithm::QuantumParticleSwarm,
-            )
-            .unwrap();
+        let result = optimizer.optimize_rule_order(
+            &rules,
+            OptimizationGoal::MinimizeMemory,
+            QuantumAlgorithm::QuantumParticleSwarm,
+        )?;
 
         assert_eq!(result.len(), rules.len());
+        Ok(())
     }
 
     #[test]
-    fn test_quantum_walk() {
+    fn test_quantum_walk() -> Result<(), Box<dyn std::error::Error>> {
         let mut optimizer = QuantumOptimizer::new().with_max_iterations(100);
 
         let rules = vec![
@@ -975,19 +972,18 @@ mod tests {
             },
         ];
 
-        let result = optimizer
-            .optimize_rule_order(
-                &rules,
-                OptimizationGoal::Balanced,
-                QuantumAlgorithm::QuantumWalk,
-            )
-            .unwrap();
+        let result = optimizer.optimize_rule_order(
+            &rules,
+            OptimizationGoal::Balanced,
+            QuantumAlgorithm::QuantumWalk,
+        )?;
 
         assert_eq!(result.len(), rules.len());
+        Ok(())
     }
 
     #[test]
-    fn test_grover_search() {
+    fn test_grover_search() -> Result<(), Box<dyn std::error::Error>> {
         let mut optimizer = QuantumOptimizer::new();
 
         let rules = vec![
@@ -1018,15 +1014,14 @@ mod tests {
             },
         ];
 
-        let result = optimizer
-            .optimize_rule_order(
-                &rules,
-                OptimizationGoal::MaximizeDerivations,
-                QuantumAlgorithm::GroverSearch,
-            )
-            .unwrap();
+        let result = optimizer.optimize_rule_order(
+            &rules,
+            OptimizationGoal::MaximizeDerivations,
+            QuantumAlgorithm::GroverSearch,
+        )?;
 
         assert_eq!(result.len(), rules.len());
+        Ok(())
     }
 
     #[test]
@@ -1097,7 +1092,7 @@ mod tests {
     }
 
     #[test]
-    fn test_different_algorithms_produce_valid_results() {
+    fn test_different_algorithms_produce_valid_results() -> Result<(), Box<dyn std::error::Error>> {
         let mut optimizer = QuantumOptimizer::new().with_max_iterations(50);
 
         let rules = vec![
@@ -1137,9 +1132,8 @@ mod tests {
             QuantumAlgorithm::QuantumWalk,
             QuantumAlgorithm::GroverSearch,
         ] {
-            let result = optimizer
-                .optimize_rule_order(&rules, OptimizationGoal::Balanced, *algorithm)
-                .unwrap();
+            let result =
+                optimizer.optimize_rule_order(&rules, OptimizationGoal::Balanced, *algorithm)?;
 
             assert_eq!(result.len(), rules.len());
 
@@ -1148,5 +1142,6 @@ mod tests {
             sorted.sort();
             assert_eq!(sorted, vec![0, 1, 2]);
         }
+        Ok(())
     }
 }

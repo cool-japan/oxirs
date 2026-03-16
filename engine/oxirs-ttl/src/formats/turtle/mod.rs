@@ -31,14 +31,14 @@
 //!
 //! let parser = TurtleParser::new();
 //! for result in parser.for_reader(Cursor::new(turtle_data)) {
-//!     let triple = result.unwrap();
+//!     let triple = result.expect("should succeed");
 //!     println!("{}", triple);
 //! }
 //!
 //! // Serialize to Turtle
 //! let serializer = TurtleSerializer::new();
 //! let mut output: Vec<u8> = Vec::new();
-//! // serializer.serialize(&triples, &mut output).unwrap();
+//! // serializer.serialize(&triples, &mut output).expect("should succeed");
 //! ```
 
 mod parser;

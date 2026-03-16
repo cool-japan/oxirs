@@ -518,9 +518,12 @@ fn solve_linear_system(a: &[Vec<f64>], b: &[f64]) -> Vec<f64> {
 
     for col in 0..n {
         // Partial pivot.
-        if let Some(max_row) =
-            (col..n).max_by(|&i, &j| m[i][col].abs().partial_cmp(&m[j][col].abs()).unwrap())
-        {
+        if let Some(max_row) = (col..n).max_by(|&i, &j| {
+            m[i][col]
+                .abs()
+                .partial_cmp(&m[j][col].abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
             m.swap(col, max_row);
             rhs.swap(col, max_row);
         }
@@ -728,7 +731,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let violations = v.validate(&state).unwrap();
+        let violations = v.validate(&state).expect("should succeed");
         assert!(violations.is_empty());
     }
 
@@ -739,7 +742,7 @@ mod tests {
 
         let state: HashMap<String, f64> = [("temperature".to_string(), 50.0)].into_iter().collect();
 
-        let violations = v.validate(&state).unwrap();
+        let violations = v.validate(&state).expect("should succeed");
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].violation_kind, "below_minimum");
     }
@@ -751,7 +754,7 @@ mod tests {
 
         let state: HashMap<String, f64> = [("speed".to_string(), 400.0)].into_iter().collect();
 
-        let violations = v.validate(&state).unwrap();
+        let violations = v.validate(&state).expect("should succeed");
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].violation_kind, "above_maximum");
     }
@@ -779,7 +782,7 @@ mod tests {
             PhysicalQuantity::new("g_accel", 9.81, "m/s^2", dim(0, 1, -2)),
         ];
 
-        let pis = BuckinghamPiAnalyzer::analyze(&quantities).unwrap();
+        let pis = BuckinghamPiAnalyzer::analyze(&quantities).expect("should succeed");
         assert_eq!(pis.len(), 1, "expected 1 dimensionless group for pendulum");
     }
 
@@ -812,7 +815,7 @@ mod tests {
     fn test_physstate_require_present_ok() {
         let mut s = PhysState::new();
         s.set("pressure", 101325.0);
-        let v = s.require("pressure").unwrap();
+        let v = s.require("pressure").expect("should succeed");
         assert!((v - 101325.0).abs() < 1e-6);
     }
 
@@ -921,7 +924,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let violations = v.validate(&state).unwrap();
+        let violations = v.validate(&state).expect("should succeed");
         assert_eq!(violations.len(), 2, "expected 2 violations");
     }
 
@@ -930,7 +933,7 @@ mod tests {
         let mut v = PhysicalBoundsValidator::new();
         v.add_bound("temperature", 0.0, 1000.0, "K");
         let state: HashMap<String, f64> = HashMap::new();
-        let violations = v.validate(&state).unwrap();
+        let violations = v.validate(&state).expect("should succeed");
         // Missing quantities are not violations (no value present)
         assert!(
             violations.is_empty(),
@@ -960,7 +963,7 @@ mod tests {
             PhysicalQuantity::new("L", 0.1, "m", dim(0, 1, 0)),
             PhysicalQuantity::new("mu", 1e-3, "Pa-s", dim(1, -1, -1)),
         ];
-        let pis = BuckinghamPiAnalyzer::analyze(&quantities).unwrap();
+        let pis = BuckinghamPiAnalyzer::analyze(&quantities).expect("should succeed");
         assert_eq!(pis.len(), 1, "Reynolds number → 1 pi group");
     }
 
@@ -985,7 +988,7 @@ mod tests {
             PhysicalQuantity::new("mu", 1e-3, "Pa-s", dim(1, -1, -1)),
             PhysicalQuantity::new("dp", 100.0, "Pa", dim(1, -1, -2)), // pressure gradient
         ];
-        let pis = BuckinghamPiAnalyzer::analyze(&quantities).unwrap();
+        let pis = BuckinghamPiAnalyzer::analyze(&quantities).expect("should succeed");
         assert_eq!(pis.len(), 2, "5 quantities - rank 3 = 2 pi groups");
     }
 }

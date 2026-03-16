@@ -797,30 +797,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_owl_context_equivalence() {
+    fn test_owl_context_equivalence() -> Result<(), Box<dyn std::error::Error>> {
         let mut context = OwlContext::default();
         context.add_equivalent_classes("Person", "Human");
 
         assert!(context
             .equivalent_classes
             .get("Person")
-            .unwrap()
+            .ok_or("expected Some value")?
             .contains("Human"));
         assert!(context
             .equivalent_classes
             .get("Human")
-            .unwrap()
+            .ok_or("expected Some value")?
             .contains("Person"));
+        Ok(())
     }
 
     #[test]
-    fn test_property_characteristics() {
+    fn test_property_characteristics() -> Result<(), Box<dyn std::error::Error>> {
         let mut context = OwlContext::default();
         context.set_property_characteristic("parentOf", vocabulary::OWL_TRANSITIVE_PROPERTY, true);
 
-        let chars = context.property_characteristics.get("parentOf").unwrap();
+        let chars = context
+            .property_characteristics
+            .get("parentOf")
+            .ok_or("expected Some value")?;
         assert!(chars.is_transitive);
         assert!(!chars.is_symmetric);
+        Ok(())
     }
 
     #[test]
@@ -834,7 +839,7 @@ mod tests {
     }
 
     #[test]
-    fn test_owl_reasoner() {
+    fn test_owl_reasoner() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = OwlReasoner::new();
 
         let facts = vec![
@@ -850,7 +855,7 @@ mod tests {
             },
         ];
 
-        let inferred = reasoner.infer(&facts).unwrap();
+        let inferred = reasoner.infer(&facts)?;
 
         // Should infer that john is also of type Human
         let expected = RuleAtom::Triple {
@@ -860,10 +865,11 @@ mod tests {
         };
 
         assert!(inferred.contains(&expected));
+        Ok(())
     }
 
     #[test]
-    fn test_transitive_property() {
+    fn test_transitive_property() -> Result<(), Box<dyn std::error::Error>> {
         let mut reasoner = OwlReasoner::new();
 
         let facts = vec![
@@ -884,7 +890,7 @@ mod tests {
             },
         ];
 
-        let inferred = reasoner.infer(&facts).unwrap();
+        let inferred = reasoner.infer(&facts)?;
 
         // Should infer transitive relationship
         let expected = RuleAtom::Triple {
@@ -894,5 +900,6 @@ mod tests {
         };
 
         assert!(inferred.contains(&expected));
+        Ok(())
     }
 }

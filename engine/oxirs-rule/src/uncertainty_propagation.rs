@@ -46,7 +46,7 @@
 //!     }],
 //! };
 //!
-//! let inferred = propagator.propagate_through_rule(&rule, 0.8).unwrap();
+//! let inferred = propagator.propagate_through_rule(&rule, 0.8).expect("should succeed");
 //! // Result uncertainty = 0.9 * 0.8 = 0.72
 //! # Ok::<(), anyhow::Error>(())
 //! ```
@@ -580,54 +580,58 @@ mod tests {
     }
 
     #[test]
-    fn test_add_and_get_fact() {
+    fn test_add_and_get_fact() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Probabilistic);
         let fact = create_test_fact("john", "likes", "coffee");
 
         prop.add_fact(fact.clone(), 0.9);
         let uncertainty = prop.get_uncertainty(&fact);
         assert!(uncertainty.is_some());
-        assert!((uncertainty.unwrap().value - 0.9).abs() < 1e-6);
+        assert!((uncertainty.ok_or("expected Some value")?.value - 0.9).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_product_combination() {
+    fn test_product_combination() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Probabilistic);
         prop.set_operator(CombinationOperator::Product);
 
         let uv1 = UncertaintyValue::new(UncertaintyModel::Probabilistic, 0.8);
         let uv2 = UncertaintyValue::new(UncertaintyModel::Probabilistic, 0.9);
 
-        let result = prop.combine_two(&uv1, &uv2).unwrap();
+        let result = prop.combine_two(&uv1, &uv2)?;
         assert!((result.value - 0.72).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_minimum_combination() {
+    fn test_minimum_combination() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Fuzzy);
         prop.set_operator(CombinationOperator::Minimum);
 
         let uv1 = UncertaintyValue::new(UncertaintyModel::Fuzzy, 0.8);
         let uv2 = UncertaintyValue::new(UncertaintyModel::Fuzzy, 0.6);
 
-        let result = prop.combine_two(&uv1, &uv2).unwrap();
+        let result = prop.combine_two(&uv1, &uv2)?;
         assert!((result.value - 0.6).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_maximum_combination() {
+    fn test_maximum_combination() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Fuzzy);
         prop.set_operator(CombinationOperator::Maximum);
 
         let uv1 = UncertaintyValue::new(UncertaintyModel::Fuzzy, 0.8);
         let uv2 = UncertaintyValue::new(UncertaintyModel::Fuzzy, 0.6);
 
-        let result = prop.combine_two(&uv1, &uv2).unwrap();
+        let result = prop.combine_two(&uv1, &uv2)?;
         assert!((result.value - 0.8).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_propagate_through_rule() {
+    fn test_propagate_through_rule() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Probabilistic);
 
         let fact1 = create_test_fact("john", "parent", "mary");
@@ -639,13 +643,14 @@ mod tests {
             head: vec![create_test_fact("john", "ancestor", "mary")],
         };
 
-        let results = prop.propagate_through_rule(&rule, 0.8).unwrap();
+        let results = prop.propagate_through_rule(&rule, 0.8)?;
         assert_eq!(results.len(), 1);
         assert!((results[0].1.value - 0.72).abs() < 1e-6); // 0.9 * 0.8
+        Ok(())
     }
 
     #[test]
-    fn test_propagate_with_multiple_body_atoms() {
+    fn test_propagate_with_multiple_body_atoms() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Probabilistic);
 
         let fact1 = create_test_fact("john", "parent", "mary");
@@ -660,9 +665,10 @@ mod tests {
             head: vec![create_test_fact("john", "grandparent", "sue")],
         };
 
-        let results = prop.propagate_through_rule(&rule, 1.0).unwrap();
+        let results = prop.propagate_through_rule(&rule, 1.0)?;
         assert_eq!(results.len(), 1);
         assert!((results[0].1.value - 0.72).abs() < 1e-6); // 0.9 * 0.8 * 1.0
+        Ok(())
     }
 
     #[test]
@@ -681,7 +687,7 @@ mod tests {
     }
 
     #[test]
-    fn test_monte_carlo_propagation() {
+    fn test_monte_carlo_propagation() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Probabilistic);
 
         let fact1 = create_test_fact("john", "smart", "true");
@@ -693,17 +699,18 @@ mod tests {
             head: vec![create_test_fact("john", "genius", "true")],
         };
 
-        let results = prop.monte_carlo_propagate(&rule, 0.8, 1000).unwrap();
+        let results = prop.monte_carlo_propagate(&rule, 0.8, 1000)?;
         assert_eq!(results.len(), 1);
 
         // Result should be approximately 0.9 * 0.8 = 0.72 with some variance
         let expected = 0.72;
         let actual = results[0].1.value;
         assert!((actual - expected).abs() < 0.1); // Allow 10% variance
+        Ok(())
     }
 
     #[test]
-    fn test_provenance_tracking() {
+    fn test_provenance_tracking() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Probabilistic);
 
         let fact1 = create_test_fact("john", "parent", "mary");
@@ -715,18 +722,19 @@ mod tests {
             head: vec![create_test_fact("john", "ancestor", "mary")],
         };
 
-        prop.propagate_through_rule(&rule, 0.8).unwrap();
+        prop.propagate_through_rule(&rule, 0.8)?;
 
         let head_fact = create_test_fact("john", "ancestor", "mary");
         let provenance = prop.get_provenance(&head_fact);
 
         assert!(provenance.is_some());
-        assert_eq!(provenance.unwrap().len(), 1);
-        assert_eq!(provenance.unwrap()[0], "ancestor_rule");
+        assert_eq!(provenance.ok_or("expected Some value")?.len(), 1);
+        assert_eq!(provenance.ok_or("expected Some value")?[0], "ancestor_rule");
+        Ok(())
     }
 
     #[test]
-    fn test_uncertainty_decay() {
+    fn test_uncertainty_decay() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Probabilistic);
 
         let fact1 = create_test_fact("john", "ancestor", "mary");
@@ -737,13 +745,14 @@ mod tests {
 
         prop.apply_decay(0.95);
 
-        let uncertainty = prop.get_uncertainty(&fact1).unwrap();
+        let uncertainty = prop.get_uncertainty(&fact1).ok_or("expected Some value")?;
         let expected = 0.9 * 0.95_f64.powi(2); // Decay factor^depth
         assert!((uncertainty.value - expected).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_batch_propagation() {
+    fn test_batch_propagation() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Probabilistic);
 
         let fact1 = create_test_fact("john", "parent", "mary");
@@ -767,28 +776,30 @@ mod tests {
 
         let confidences = vec![0.8, 0.9];
 
-        let results = prop.batch_propagate(&rules, &confidences).unwrap();
+        let results = prop.batch_propagate(&rules, &confidences)?;
         assert_eq!(results.len(), 2);
+        Ok(())
     }
 
     #[test]
-    fn test_dempster_combination() {
+    fn test_dempster_combination() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::DempsterShafer);
         prop.set_operator(CombinationOperator::DempsterRule);
 
         let uv1 = UncertaintyValue::new(UncertaintyModel::DempsterShafer, 0.7);
         let uv2 = UncertaintyValue::new(UncertaintyModel::DempsterShafer, 0.8);
 
-        let result = prop.combine_two(&uv1, &uv2).unwrap();
+        let result = prop.combine_two(&uv1, &uv2)?;
 
         // Dempster combination: (0.7 * 0.8) / (1 - conflict)
         // conflict = (1-0.7)*0.8 + 0.7*(1-0.8) = 0.24 + 0.14 = 0.38
         // combined = 0.56 / (1 - 0.38) = 0.56 / 0.62 ≈ 0.903
         assert!((result.value - 0.903).abs() < 0.01);
+        Ok(())
     }
 
     #[test]
-    fn test_possibilistic_conjunction() {
+    fn test_possibilistic_conjunction() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Possibilistic);
         prop.set_operator(CombinationOperator::PossibilisticConjunction);
 
@@ -803,24 +814,26 @@ mod tests {
             0.5, // necessity = 0.5
         );
 
-        let result = prop.combine_two(&uv1, &uv2).unwrap();
+        let result = prop.combine_two(&uv1, &uv2)?;
 
         // Conjunction: N(A ∧ B) = min(N(A), N(B)) = min(0.3, 0.5) = 0.3
         // Result = 1 - 0.3 = 0.7
         assert!((result.value - 0.7).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_weighted_sum_combination() {
+    fn test_weighted_sum_combination() -> Result<(), Box<dyn std::error::Error>> {
         let mut prop = UncertaintyPropagator::new(UncertaintyModel::Hybrid);
         prop.set_operator(CombinationOperator::WeightedSum);
 
         let uv1 = UncertaintyValue::new(UncertaintyModel::Hybrid, 0.6);
         let uv2 = UncertaintyValue::new(UncertaintyModel::Hybrid, 0.8);
 
-        let result = prop.combine_two(&uv1, &uv2).unwrap();
+        let result = prop.combine_two(&uv1, &uv2)?;
 
         // Weighted sum (average): (0.6 + 0.8) / 2 = 0.7
         assert!((result.value - 0.7).abs() < 1e-6);
+        Ok(())
     }
 }

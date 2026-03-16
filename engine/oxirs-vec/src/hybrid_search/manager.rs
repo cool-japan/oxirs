@@ -330,6 +330,7 @@ impl HybridSearchManager {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use crate::hybrid_search::types::SearchWeights;
 
@@ -341,9 +342,9 @@ mod tests {
     }
 
     #[test]
-    fn test_add_document() {
+    fn test_add_document() -> Result<()> {
         let config = HybridSearchConfig::default();
-        let manager = HybridSearchManager::new(config).unwrap();
+        let manager = HybridSearchManager::new(config)?;
 
         let vector = vec![0.1, 0.2, 0.3, 0.4];
         let metadata = HashMap::new();
@@ -351,19 +352,16 @@ mod tests {
         let result = manager.add_document("doc1", "test document", vector, metadata);
         assert!(result.is_ok());
         assert_eq!(manager.document_count(), 1);
+        Ok(())
     }
 
     #[test]
-    fn test_keyword_only_search() {
+    fn test_keyword_only_search() -> Result<()> {
         let config = HybridSearchConfig::keyword_only();
-        let manager = HybridSearchManager::new(config).unwrap();
+        let manager = HybridSearchManager::new(config)?;
 
-        manager
-            .add_document("doc1", "machine learning", vec![0.1; 4], HashMap::new())
-            .unwrap();
-        manager
-            .add_document("doc2", "deep learning", vec![0.2; 4], HashMap::new())
-            .unwrap();
+        manager.add_document("doc1", "machine learning", vec![0.1; 4], HashMap::new())?;
+        manager.add_document("doc2", "deep learning", vec![0.2; 4], HashMap::new())?;
 
         let query = HybridQuery {
             query_text: "machine learning".to_string(),
@@ -373,21 +371,18 @@ mod tests {
             filters: HashMap::new(),
         };
 
-        let results = manager.search(query).unwrap();
+        let results = manager.search(query)?;
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_semantic_only_search() {
+    fn test_semantic_only_search() -> Result<()> {
         let config = HybridSearchConfig::semantic_only();
-        let manager = HybridSearchManager::new(config).unwrap();
+        let manager = HybridSearchManager::new(config)?;
 
-        manager
-            .add_document("doc1", "test1", vec![1.0, 0.0, 0.0, 0.0], HashMap::new())
-            .unwrap();
-        manager
-            .add_document("doc2", "test2", vec![0.0, 1.0, 0.0, 0.0], HashMap::new())
-            .unwrap();
+        manager.add_document("doc1", "test1", vec![1.0, 0.0, 0.0, 0.0], HashMap::new())?;
+        manager.add_document("doc2", "test2", vec![0.0, 1.0, 0.0, 0.0], HashMap::new())?;
 
         let query = HybridQuery {
             query_text: "test".to_string(),
@@ -397,32 +392,29 @@ mod tests {
             filters: HashMap::new(),
         };
 
-        let results = manager.search(query).unwrap();
+        let results = manager.search(query)?;
         assert!(!results.is_empty());
         assert_eq!(results[0].doc_id, "doc1"); // Closest vector
+        Ok(())
     }
 
     #[test]
-    fn test_hybrid_search() {
+    fn test_hybrid_search() -> Result<()> {
         let config = HybridSearchConfig::balanced();
-        let manager = HybridSearchManager::new(config).unwrap();
+        let manager = HybridSearchManager::new(config)?;
 
-        manager
-            .add_document(
-                "doc1",
-                "machine learning",
-                vec![1.0, 0.0, 0.0, 0.0],
-                HashMap::new(),
-            )
-            .unwrap();
-        manager
-            .add_document(
-                "doc2",
-                "deep learning",
-                vec![0.0, 1.0, 0.0, 0.0],
-                HashMap::new(),
-            )
-            .unwrap();
+        manager.add_document(
+            "doc1",
+            "machine learning",
+            vec![1.0, 0.0, 0.0, 0.0],
+            HashMap::new(),
+        )?;
+        manager.add_document(
+            "doc2",
+            "deep learning",
+            vec![0.0, 1.0, 0.0, 0.0],
+            HashMap::new(),
+        )?;
 
         let query = HybridQuery {
             query_text: "machine learning".to_string(),
@@ -436,8 +428,9 @@ mod tests {
             filters: HashMap::new(),
         };
 
-        let results = manager.search(query).unwrap();
+        let results = manager.search(query)?;
         assert!(!results.is_empty());
+        Ok(())
     }
 
     #[test]

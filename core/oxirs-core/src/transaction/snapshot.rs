@@ -268,8 +268,12 @@ mod tests {
 
     fn create_test_quad(id: usize) -> Quad {
         Quad::new(
-            Subject::NamedNode(NamedNode::new(format!("http://s{}", id)).unwrap()),
-            Predicate::NamedNode(NamedNode::new(format!("http://p{}", id)).unwrap()),
+            Subject::NamedNode(
+                NamedNode::new(format!("http://s{}", id)).expect("valid IRI from format"),
+            ),
+            Predicate::NamedNode(
+                NamedNode::new(format!("http://p{}", id)).expect("valid IRI from format"),
+            ),
             Object::Literal(Literal::new(format!("value{}", id))),
             GraphName::DefaultGraph,
         )
@@ -329,7 +333,7 @@ mod tests {
         mgr.add_version(v_quad1);
         mgr.add_version(v_quad2);
 
-        let versions = mgr.get_versions(&quad).unwrap();
+        let versions = mgr.get_versions(&quad).expect("operation should succeed");
         assert_eq!(versions.len(), 2);
     }
 
@@ -351,7 +355,7 @@ mod tests {
         // GC with min timestamp 50 should remove version 1
         mgr.gc_old_versions(50);
 
-        let versions = mgr.get_versions(&quad).unwrap();
+        let versions = mgr.get_versions(&quad).expect("operation should succeed");
         assert_eq!(versions.len(), 1);
         assert_eq!(versions[0].version, 100);
     }

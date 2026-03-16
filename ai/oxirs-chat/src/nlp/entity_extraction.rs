@@ -292,40 +292,44 @@ mod tests {
 
     #[test]
     fn test_url_extraction() {
-        let extractor = EntityExtractor::new(EntityExtractionConfig::default()).unwrap();
+        let extractor =
+            EntityExtractor::new(EntityExtractionConfig::default()).expect("should succeed");
         let entities = extractor
             .extract("Check out https://example.org for more info")
-            .unwrap();
+            .expect("should succeed");
 
         assert!(entities.iter().any(|e| e.entity_type == EntityType::URL));
     }
 
     #[test]
     fn test_email_extraction() {
-        let extractor = EntityExtractor::new(EntityExtractionConfig::default()).unwrap();
+        let extractor =
+            EntityExtractor::new(EntityExtractionConfig::default()).expect("should succeed");
         let entities = extractor
             .extract("Contact us at support@example.com")
-            .unwrap();
+            .expect("should succeed");
 
         assert!(entities.iter().any(|e| e.entity_type == EntityType::Email));
     }
 
     #[test]
     fn test_number_extraction() {
-        let extractor = EntityExtractor::new(EntityExtractionConfig::default()).unwrap();
+        let extractor =
+            EntityExtractor::new(EntityExtractionConfig::default()).expect("should succeed");
         let entities = extractor
             .extract("There are 42 items in the database")
-            .unwrap();
+            .expect("should succeed");
 
         assert!(entities.iter().any(|e| e.entity_type == EntityType::Number));
     }
 
     #[test]
     fn test_rdf_resource_extraction() {
-        let extractor = EntityExtractor::new(EntityExtractionConfig::default()).unwrap();
+        let extractor =
+            EntityExtractor::new(EntityExtractionConfig::default()).expect("should succeed");
         let entities = extractor
             .extract("Query for schema:Person resources")
-            .unwrap();
+            .expect("should succeed");
 
         assert!(entities
             .iter()

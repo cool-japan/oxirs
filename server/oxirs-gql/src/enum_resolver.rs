@@ -326,7 +326,7 @@ mod tests {
         let e = EnumType::new("E").add_value("ACTIVE");
         let v = e.coerce("ACTIVE");
         assert!(v.is_some());
-        assert_eq!(v.unwrap().name, "ACTIVE");
+        assert_eq!(v.expect("should succeed").name, "ACTIVE");
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod tests {
         let e = EnumType::new("E").add_value("ACTIVE");
         let v = e.coerce("active");
         assert!(v.is_some());
-        assert_eq!(v.unwrap().name, "ACTIVE");
+        assert_eq!(v.expect("should succeed").name, "ACTIVE");
     }
 
     #[test]
@@ -355,7 +355,7 @@ mod tests {
         let e = EnumType::new("E").add_value("OLD").deprecate("OLD");
         let v = e.coerce("old");
         assert!(v.is_some());
-        assert!(v.unwrap().is_deprecated);
+        assert!(v.expect("should succeed").is_deprecated);
     }
 
     // --- EnumType: active_values ---
@@ -405,7 +405,7 @@ mod tests {
         r.register(EnumType::new("Status").add_value("ACTIVE"));
         let e = r.get("Status");
         assert!(e.is_some());
-        assert_eq!(e.unwrap().name, "Status");
+        assert_eq!(e.expect("should succeed").name, "Status");
     }
 
     #[test]
@@ -419,7 +419,7 @@ mod tests {
         let mut r = EnumRegistry::new();
         r.register(EnumType::new("E").add_value("A"));
         r.register(EnumType::new("E").add_value("B"));
-        let e = r.get("E").unwrap();
+        let e = r.get("E").expect("should succeed");
         assert_eq!(e.values.len(), 1);
         assert_eq!(e.values[0].name, "B");
     }

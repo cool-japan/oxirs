@@ -267,6 +267,7 @@ impl IndexTrainer {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     fn create_test_examples(n: usize) -> Vec<TrainingExample> {
@@ -283,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn test_training() {
+    fn test_training() -> Result<()> {
         let config = TrainingConfig::speed_optimized();
         let trainer = IndexTrainer::new(config);
 
@@ -294,9 +295,10 @@ mod tests {
         let stats = trainer.train(&mut weights, &mut biases, &examples);
         assert!(stats.is_ok());
 
-        let stats = stats.unwrap();
+        let stats = stats?;
         assert!(stats.epochs_completed > 0);
         assert!(stats.final_loss >= 0.0);
         assert!(stats.final_accuracy >= 0.0 && stats.final_accuracy <= 1.0);
+        Ok(())
     }
 }

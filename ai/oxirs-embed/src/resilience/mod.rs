@@ -277,13 +277,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_resilience_manager_success() {
-        let manager = ResilienceManager::new(ResilienceConfig::default()).unwrap();
+        let manager = ResilienceManager::new(ResilienceConfig::default()).expect("should succeed");
 
         let result = manager.execute(|| Ok::<_, anyhow::Error>(42)).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        assert_eq!(result.expect("should succeed"), 42);
 
-        let metrics = manager.metrics().unwrap();
+        let metrics = manager.metrics().expect("should succeed");
         assert_eq!(metrics.total_requests, 1);
         assert_eq!(metrics.successful_requests, 1);
     }
@@ -294,7 +294,7 @@ mod tests {
             max_retries: 2,
             initial_retry_delay_ms: 10,
             ..Default::default()
-        }).unwrap();
+        }).expect("should succeed");
 
         let mut call_count = 0;
         let result = manager.execute(|| {
@@ -316,7 +316,7 @@ mod tests {
             circuit_breaker_threshold: 2,
             enable_retry: false,
             ..Default::default()
-        }).unwrap();
+        }).expect("should succeed");
 
         // Cause failures to open circuit
         for _ in 0..2 {
@@ -324,7 +324,7 @@ mod tests {
         }
 
         // Circuit should be open now
-        let state = manager.circuit_state().unwrap();
+        let state = manager.circuit_state().expect("should succeed");
         assert_eq!(state, CircuitState::Open);
     }
 }

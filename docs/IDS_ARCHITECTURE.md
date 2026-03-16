@@ -717,7 +717,7 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 
 ## Future Enhancements
 
-### Planned Features (v0.2.1)
+### Planned Features (v0.2.2)
 
 1. **Persistent Storage**
    - PostgreSQL backend for contracts

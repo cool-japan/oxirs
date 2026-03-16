@@ -392,7 +392,7 @@ mod tests {
         let task = sampler.sample_single_task();
         assert!(task.is_ok());
         
-        let task = task.unwrap();
+        let task = task.expect("should succeed");
         assert_eq!(task.support_set.len(), 5); // n_way * k_shot
         assert_eq!(task.query_set.len(), 75); // n_way * n_query
     }

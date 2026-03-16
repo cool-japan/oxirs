@@ -255,7 +255,7 @@ mod tests {
 
         let context = builder
             .build("What is the battery status?", &triples, &communities)
-            .unwrap();
+            .expect("should succeed");
 
         assert!(context.contains("Query"));
         assert!(context.contains("Battery1"));

@@ -476,8 +476,12 @@ mod tests {
     fn test_sparql_results_vars_count() {
         let vars = vec!["s".to_string(), "p".to_string(), "o".to_string()];
         let result = WasmBridge::sparql_results_to_js(&vars, &[]);
-        let head = result.get("head").unwrap();
-        let head_vars = head.get("vars").unwrap().as_array().unwrap();
+        let head = result.get("head").expect("should succeed");
+        let head_vars = head
+            .get("vars")
+            .expect("should succeed")
+            .as_array()
+            .expect("should succeed");
         assert_eq!(head_vars.len(), 3);
     }
 
@@ -487,8 +491,12 @@ mod tests {
         let mut row = HashMap::new();
         row.insert("x".to_string(), "<http://example.org/a>".to_string());
         let result = WasmBridge::sparql_results_to_js(&vars, &[row]);
-        let results = result.get("results").unwrap();
-        let rows = results.get("bindings").unwrap().as_array().unwrap();
+        let results = result.get("results").expect("should succeed");
+        let rows = results
+            .get("bindings")
+            .expect("should succeed")
+            .as_array()
+            .expect("should succeed");
         assert_eq!(rows.len(), 1);
     }
 
@@ -497,7 +505,7 @@ mod tests {
     #[test]
     fn test_js_to_sparql_query_string() {
         let val = JsValue::String("SELECT * WHERE { ?s ?p ?o }".to_string());
-        let q = WasmBridge::js_to_sparql_query(&val).unwrap();
+        let q = WasmBridge::js_to_sparql_query(&val).expect("should succeed");
         assert!(q.contains("SELECT"));
     }
 
@@ -506,7 +514,7 @@ mod tests {
         let mut map = HashMap::new();
         map.insert("query".to_string(), JsValue::String("ASK { }".to_string()));
         let val = JsValue::Object(map);
-        let q = WasmBridge::js_to_sparql_query(&val).unwrap();
+        let q = WasmBridge::js_to_sparql_query(&val).expect("should succeed");
         assert_eq!(q, "ASK { }");
     }
 
@@ -533,30 +541,50 @@ mod tests {
     #[test]
     fn test_rdf_term_iri() {
         let js = WasmBridge::rdf_term_to_js("<http://example.org/a>");
-        let ty = js.get("type").unwrap().as_str().unwrap();
+        let ty = js
+            .get("type")
+            .expect("should succeed")
+            .as_str()
+            .expect("should succeed");
         assert_eq!(ty, "uri");
     }
 
     #[test]
     fn test_rdf_term_blank() {
         let js = WasmBridge::rdf_term_to_js("_:b0");
-        let ty = js.get("type").unwrap().as_str().unwrap();
+        let ty = js
+            .get("type")
+            .expect("should succeed")
+            .as_str()
+            .expect("should succeed");
         assert_eq!(ty, "bnode");
-        let val = js.get("value").unwrap().as_str().unwrap();
+        let val = js
+            .get("value")
+            .expect("should succeed")
+            .as_str()
+            .expect("should succeed");
         assert_eq!(val, "b0");
     }
 
     #[test]
     fn test_rdf_term_literal() {
         let js = WasmBridge::rdf_term_to_js("hello world");
-        let ty = js.get("type").unwrap().as_str().unwrap();
+        let ty = js
+            .get("type")
+            .expect("should succeed")
+            .as_str()
+            .expect("should succeed");
         assert_eq!(ty, "literal");
     }
 
     #[test]
     fn test_rdf_term_iri_strips_brackets() {
         let js = WasmBridge::rdf_term_to_js("<http://x.org/>");
-        let val = js.get("value").unwrap().as_str().unwrap();
+        let val = js
+            .get("value")
+            .expect("should succeed")
+            .as_str()
+            .expect("should succeed");
         assert_eq!(val, "http://x.org/");
     }
 
@@ -568,7 +596,7 @@ mod tests {
             JsValue::String("a".to_string()),
             JsValue::String("b".to_string()),
         ]);
-        let result = WasmBridge::js_array_to_strings(&val).unwrap();
+        let result = WasmBridge::js_array_to_strings(&val).expect("should succeed");
         assert_eq!(result, vec!["a", "b"]);
     }
 
@@ -594,7 +622,7 @@ mod tests {
     fn test_js_array_to_strings_empty() {
         let val = JsValue::Array(vec![]);
         assert_eq!(
-            WasmBridge::js_array_to_strings(&val).unwrap(),
+            WasmBridge::js_array_to_strings(&val).expect("should succeed"),
             Vec::<String>::new()
         );
     }
@@ -606,7 +634,7 @@ mod tests {
         let mut map = HashMap::new();
         map.insert("k".to_string(), JsValue::String("v".to_string()));
         let val = JsValue::Object(map);
-        let result = WasmBridge::js_object_to_map(&val).unwrap();
+        let result = WasmBridge::js_object_to_map(&val).expect("should succeed");
         assert_eq!(result.get("k").map(String::as_str), Some("v"));
     }
 

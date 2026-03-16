@@ -604,7 +604,7 @@ mod tests {
 
         let mut random = Random::default();
         let image = Array3::from_shape_fn((224, 224, 3), |_| random.random::<f32>());
-        let embedding = encoder.encode_image(&image).unwrap();
+        let embedding = encoder.encode_image(&image).expect("should succeed");
 
         assert_eq!(embedding.len(), encoder.config.vision_dim);
     }
@@ -649,7 +649,7 @@ mod tests {
 
         let embedding = encoder
             .encode_graph(&node_features, &edge_features, &adjacency)
-            .unwrap();
+            .expect("should succeed");
 
         assert_eq!(embedding.len(), encoder.config.graph_dim);
     }
@@ -674,7 +674,7 @@ mod tests {
                 Some((&node_features, &edge_features, &adjacency)),
             )
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert!(!unified_embedding.is_empty());
         assert_eq!(model.vision_embeddings.len(), 1);
@@ -735,7 +735,7 @@ mod tests {
 
         let predictions = model
             .few_shot_adapt(&support_examples, &query_examples)
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(predictions.len(), 2);
     }
 
@@ -760,7 +760,7 @@ mod tests {
 
         let adapted_params = meta_learner
             .adapt_to_task(&support_set, &query_set)
-            .unwrap();
+            .expect("should succeed");
         assert!(!adapted_params.is_empty());
     }
 
@@ -782,7 +782,7 @@ mod tests {
         let model = VisionLanguageGraphModel::new(config);
 
         let texts = vec!["hello world".to_string(), "test encoding".to_string()];
-        let embeddings = model.encode(&texts).await.unwrap();
+        let embeddings = model.encode(&texts).await.expect("should succeed");
 
         assert_eq!(embeddings.len(), 2);
         assert_eq!(embeddings[0].len(), expected_dim);

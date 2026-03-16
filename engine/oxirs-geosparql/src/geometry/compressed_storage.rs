@@ -23,13 +23,13 @@
 //! let geom = Geometry::new(GeoGeometry::LineString(LineString::new(coords)));
 //!
 //! // Compress with default settings
-//! let compressed = CompressedGeometry::compress(&geom).unwrap();
+//! let compressed = CompressedGeometry::compress(&geom).expect("should succeed");
 //!
 //! // Memory saved
 //! println!("Memory saved: {} bytes", compressed.compression_ratio());
 //!
 //! // Decompress when needed
-//! let decompressed = compressed.decompress().unwrap();
+//! let decompressed = compressed.decompress().expect("should succeed");
 //! ```
 
 use crate::error::{GeoSparqlError, Result};
@@ -165,7 +165,7 @@ impl CompressedGeometry {
     /// use geo_types::{Geometry as GeoGeometry, Point};
     ///
     /// let geom = Geometry::new(GeoGeometry::Point(Point::new(10.5, 20.3)));
-    /// let compressed = CompressedGeometry::compress(&geom).unwrap();
+    /// let compressed = CompressedGeometry::compress(&geom).expect("should succeed");
     /// ```
     pub fn compress(geometry: &Geometry) -> Result<Self> {
         Self::compress_with_config(geometry, CompressionConfig::default())
@@ -182,7 +182,7 @@ impl CompressedGeometry {
     ///
     /// let geom = Geometry::new(GeoGeometry::Point(Point::new(10.5, 20.3)));
     /// let config = CompressionConfig::high_compression();
-    /// let compressed = CompressedGeometry::compress_with_config(&geom, config).unwrap();
+    /// let compressed = CompressedGeometry::compress_with_config(&geom, config).expect("should succeed");
     /// ```
     pub fn compress_with_config(geometry: &Geometry, config: CompressionConfig) -> Result<Self> {
         // Determine geometry type
@@ -246,8 +246,8 @@ impl CompressedGeometry {
     /// use geo_types::{Geometry as GeoGeometry, Point};
     ///
     /// let original = Geometry::new(GeoGeometry::Point(Point::new(10.5, 20.3)));
-    /// let compressed = CompressedGeometry::compress(&original).unwrap();
-    /// let decompressed = compressed.decompress().unwrap();
+    /// let compressed = CompressedGeometry::compress(&original).expect("should succeed");
+    /// let decompressed = compressed.decompress().expect("should succeed");
     /// ```
     pub fn decompress(&self) -> Result<Geometry> {
         // Decode data
@@ -552,8 +552,8 @@ mod tests {
         let point = Point::new(10.123456, 20.654321);
         let geom = Geometry::new(GeoGeometry::Point(point));
 
-        let compressed = CompressedGeometry::compress(&geom).unwrap();
-        let decompressed = compressed.decompress().unwrap();
+        let compressed = CompressedGeometry::compress(&geom).expect("should succeed");
+        let decompressed = compressed.decompress().expect("should succeed");
 
         if let geo_types::Geometry::Point(pt) = &decompressed.geom {
             assert!((pt.x() - 10.123456).abs() < 0.000001);
@@ -575,8 +575,8 @@ mod tests {
         let linestring = LineString::new(coords);
         let geom = Geometry::new(GeoGeometry::LineString(linestring));
 
-        let compressed = CompressedGeometry::compress(&geom).unwrap();
-        let decompressed = compressed.decompress().unwrap();
+        let compressed = CompressedGeometry::compress(&geom).expect("should succeed");
+        let decompressed = compressed.decompress().expect("should succeed");
 
         // Verify geometry type and coordinate count
         if let geo_types::Geometry::LineString(ls) = &decompressed.geom {
@@ -615,7 +615,8 @@ mod tests {
 
         // Use high compression config to ensure we get compression
         let config = CompressionConfig::high_compression().with_delta_encoding(true);
-        let compressed = CompressedGeometry::compress_with_config(&geom, config).unwrap();
+        let compressed =
+            CompressedGeometry::compress_with_config(&geom, config).expect("should succeed");
 
         // With 1000 points and delta encoding, we should achieve compression
         // Note: Small datasets may not compress well due to overhead
@@ -627,7 +628,7 @@ mod tests {
         );
 
         // Verify the data can be decompressed correctly
-        let decompressed = compressed.decompress().unwrap();
+        let decompressed = compressed.decompress().expect("should succeed");
         if let geo_types::Geometry::LineString(ls) = &decompressed.geom {
             assert_eq!(ls.0.len(), 1000);
         } else {
@@ -658,7 +659,7 @@ mod tests {
     fn test_rle_encoding() {
         let coords = vec![(10, 20), (30, 40), (50, 60)];
         let encoded = rle_encode(&coords);
-        let decoded = rle_decode(&encoded).unwrap();
+        let decoded = rle_decode(&encoded).expect("should succeed");
 
         assert_eq!(coords, decoded);
     }
@@ -678,10 +679,11 @@ mod tests {
         let geom = Geometry::new(GeoGeometry::LineString(linestring));
 
         let config = CompressionConfig::high_compression();
-        let compressed = CompressedGeometry::compress_with_config(&geom, config).unwrap();
+        let compressed =
+            CompressedGeometry::compress_with_config(&geom, config).expect("should succeed");
 
         // Verify decompression works (precision will be reduced)
-        let decompressed = compressed.decompress().unwrap();
+        let decompressed = compressed.decompress().expect("should succeed");
         if let geo_types::Geometry::LineString(ls) = &decompressed.geom {
             assert_eq!(ls.0.len(), 100);
             // With 4 decimal places, precision is ~0.0001
@@ -701,8 +703,9 @@ mod tests {
         let geom = Geometry::new(GeoGeometry::LineString(linestring));
 
         let config = CompressionConfig::high_precision();
-        let compressed = CompressedGeometry::compress_with_config(&geom, config).unwrap();
-        let decompressed = compressed.decompress().unwrap();
+        let compressed =
+            CompressedGeometry::compress_with_config(&geom, config).expect("should succeed");
+        let decompressed = compressed.decompress().expect("should succeed");
 
         // High precision should preserve more decimal places
         if let geo_types::Geometry::LineString(ls) = &decompressed.geom {
@@ -724,8 +727,8 @@ mod tests {
         let multipoint = MultiPoint(points);
         let geom = Geometry::new(GeoGeometry::MultiPoint(multipoint));
 
-        let compressed = CompressedGeometry::compress(&geom).unwrap();
-        let decompressed = compressed.decompress().unwrap();
+        let compressed = CompressedGeometry::compress(&geom).expect("should succeed");
+        let decompressed = compressed.decompress().expect("should succeed");
 
         if let geo_types::Geometry::MultiPoint(mp) = &decompressed.geom {
             assert_eq!(mp.0.len(), 3);

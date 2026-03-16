@@ -195,7 +195,7 @@ impl Geometry {
     /// use oxirs_geosparql::geometry::Geometry;
     ///
     /// let geojson = r#"{"type":"Point","coordinates":[1.0,2.0]}"#;
-    /// let geom = Geometry::from_geojson(geojson).unwrap();
+    /// let geom = Geometry::from_geojson(geojson).expect("should succeed");
     /// # }
     /// ```
     #[cfg(feature = "geojson-support")]
@@ -216,7 +216,7 @@ impl Geometry {
     /// use geo_types::{Point, Geometry as GeoGeometry};
     ///
     /// let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-    /// let geojson = geom.to_geojson().unwrap();
+    /// let geojson = geom.to_geojson().expect("should succeed");
     /// assert!(geojson.contains("\"type\":\"Point\""));
     /// # }
     /// ```
@@ -244,7 +244,7 @@ impl Geometry {
     ///
     /// let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
     /// let props = json!({"name": "Test"});
-    /// let feature = geom.to_geojson_feature(Some(&props)).unwrap();
+    /// let feature = geom.to_geojson_feature(Some(&props)).expect("should succeed");
     /// assert!(feature.contains("\"type\":\"Feature\""));
     /// # }
     /// ```
@@ -265,7 +265,7 @@ impl Geometry {
     /// use oxirs_geosparql::geometry::Geometry;
     ///
     /// let kml = r#"<Point><coordinates>-122.08,37.42,0</coordinates></Point>"#;
-    /// let geom = Geometry::from_kml(kml).unwrap();
+    /// let geom = Geometry::from_kml(kml).expect("should succeed");
     /// # }
     /// ```
     #[cfg(feature = "kml-support")]
@@ -286,7 +286,7 @@ impl Geometry {
     /// use geo_types::{Point, Geometry as GeoGeometry};
     ///
     /// let geom = Geometry::new(GeoGeometry::Point(Point::new(-122.08, 37.42)));
-    /// let kml = geom.to_kml().unwrap();
+    /// let kml = geom.to_kml().expect("should succeed");
     /// assert!(kml.contains("<Point>"));
     /// # }
     /// ```
@@ -307,7 +307,7 @@ impl Geometry {
     /// use oxirs_geosparql::geometry::Geometry;
     ///
     /// let gpx = r#"<wpt lat="37.422" lon="-122.084"/>"#;
-    /// let geom = Geometry::from_gpx(gpx).unwrap();
+    /// let geom = Geometry::from_gpx(gpx).expect("should succeed");
     /// # }
     /// ```
     #[cfg(feature = "gpx-support")]
@@ -332,7 +332,7 @@ impl Geometry {
     /// use geo_types::{Point, Geometry as GeoGeometry};
     ///
     /// let geom = Geometry::new(GeoGeometry::Point(Point::new(-122.084, 37.422)));
-    /// let gpx = geom.to_gpx(Some("My Location")).unwrap();
+    /// let gpx = geom.to_gpx(Some("My Location")).expect("should succeed");
     /// assert!(gpx.contains("<wpt"));
     /// # }
     /// ```
@@ -356,7 +356,7 @@ impl Geometry {
     /// # {
     /// use oxirs_geosparql::geometry::Geometry;
     ///
-    /// let geometries = Geometry::from_shapefile("data/cities.shp").unwrap();
+    /// let geometries = Geometry::from_shapefile("data/cities.shp").expect("should succeed");
     /// println!("Read {} geometries", geometries.len());
     /// # }
     /// ```
@@ -378,7 +378,7 @@ impl Geometry {
     /// let ewkb = vec![0x01, 0x01, 0x00, 0x00, 0x20, 0xe6, 0x10, 0x00, 0x00,
     ///                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x3f,
     ///                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40];
-    /// let geom = Geometry::from_ewkb(&ewkb).unwrap();
+    /// let geom = Geometry::from_ewkb(&ewkb).expect("should succeed");
     /// assert_eq!(geom.crs.epsg_code(), Some(4326));
     /// ```
     pub fn from_ewkb(ewkb: &[u8]) -> Result<Self> {
@@ -399,7 +399,7 @@ impl Geometry {
     ///     GeoGeometry::Point(Point::new(1.0, 2.0)),
     ///     Crs::epsg(4326)
     /// );
-    /// let ewkb = geom.to_ewkb().unwrap();
+    /// let ewkb = geom.to_ewkb().expect("should succeed");
     /// assert!(!ewkb.is_empty());
     /// ```
     pub fn to_ewkb(&self) -> Result<Vec<u8>> {
@@ -416,7 +416,7 @@ impl Geometry {
     /// ```
     /// use oxirs_geosparql::geometry::Geometry;
     ///
-    /// let geom = Geometry::from_ewkt("SRID=4326;POINT(1 2)").unwrap();
+    /// let geom = Geometry::from_ewkt("SRID=4326;POINT(1 2)").expect("should succeed");
     /// assert_eq!(geom.crs.epsg_code(), Some(4326));
     /// ```
     pub fn from_ewkt(ewkt: &str) -> Result<Self> {
@@ -464,9 +464,9 @@ impl Geometry {
     /// use std::fs::File;
     /// use std::io::BufReader;
     ///
-    /// let file = File::open("data.fgb").unwrap();
+    /// let file = File::open("data.fgb").expect("should succeed");
     /// let reader = BufReader::new(file);
-    /// let geometries = Geometry::from_flatgeobuf(reader).unwrap();
+    /// let geometries = Geometry::from_flatgeobuf(reader).expect("should succeed");
     /// # }
     /// ```
     #[cfg(feature = "flatgeobuf-support")]
@@ -495,8 +495,8 @@ impl Geometry {
     /// let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
     /// let geometries = vec![geom];
     ///
-    /// let file = File::create("output.fgb").unwrap();
-    /// Geometry::to_flatgeobuf(&geometries, file).unwrap();
+    /// let file = File::create("output.fgb").expect("should succeed");
+    /// Geometry::to_flatgeobuf(&geometries, file).expect("should succeed");
     /// # }
     /// ```
     #[cfg(feature = "flatgeobuf-support")]
@@ -525,7 +525,7 @@ impl Geometry {
     ///   }
     /// }"#;
     ///
-    /// let geometries = Geometry::from_topojson(topojson).unwrap();
+    /// let geometries = Geometry::from_topojson(topojson).expect("should succeed");
     /// # }
     /// ```
     #[cfg(feature = "topojson-support")]
@@ -552,7 +552,7 @@ impl Geometry {
     /// let geom = Geometry::new(GeoGeometry::Point(Point::new(100.0, 200.0)));
     /// let geometries = vec![geom];
     ///
-    /// let topojson = Geometry::to_topojson(&geometries).unwrap();
+    /// let topojson = Geometry::to_topojson(&geometries).expect("should succeed");
     /// // Pretty-printed JSON has spaces: "type": "Topology"
     /// assert!(topojson.contains("\"type\": \"Topology\""));
     /// # }

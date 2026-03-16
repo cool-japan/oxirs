@@ -28,7 +28,7 @@
 //!     .build();
 //!
 //! let engine = MappingEngine::new();
-//! let triples = engine.execute(&rule).unwrap();
+//! let triples = engine.execute(&rule).expect("should succeed");
 //! assert_eq!(triples.len(), 4); // 2 rows × 2 predicates
 //! ```
 
@@ -198,7 +198,7 @@ impl fmt::Display for Row {
 /// let tpl = Template::new("http://example.org/{id}/profile");
 /// let mut row = Row::new();
 /// row.values.insert("id".to_string(), "42".to_string());
-/// let iri = tpl.render(&row, 0).unwrap();
+/// let iri = tpl.render(&row, 0).expect("should succeed");
 /// assert_eq!(iri, "http://example.org/42/profile");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -965,7 +965,7 @@ mod tests {
         let tpl = Template::new("http://example.org/{id}");
         let mut row = Row::new();
         row.values.insert("id".to_string(), "42".to_string());
-        let result = tpl.render(&row, 0).unwrap();
+        let result = tpl.render(&row, 0).expect("should succeed");
         assert_eq!(result, "http://example.org/42");
     }
 
@@ -975,7 +975,7 @@ mod tests {
         let mut row = Row::new();
         row.values.insert("type".to_string(), "person".to_string());
         row.values.insert("id".to_string(), "7".to_string());
-        let result = tpl.render(&row, 0).unwrap();
+        let result = tpl.render(&row, 0).expect("should succeed");
         assert_eq!(result, "http://example.org/person/7");
     }
 
@@ -985,7 +985,7 @@ mod tests {
         let mut row = Row::new();
         row.values
             .insert("name".to_string(), "hello world".to_string());
-        let result = tpl.render(&row, 0).unwrap();
+        let result = tpl.render(&row, 0).expect("should succeed");
         assert_eq!(result, "http://example.org/hello%20world");
     }
 
@@ -1009,7 +1009,7 @@ mod tests {
     fn test_template_no_placeholders() {
         let tpl = Template::new("http://example.org/constant");
         let row = Row::new();
-        let result = tpl.render(&row, 0).unwrap();
+        let result = tpl.render(&row, 0).expect("should succeed");
         assert_eq!(result, "http://example.org/constant");
     }
 
@@ -1018,7 +1018,7 @@ mod tests {
         let tpl = Template::new("http://example.org/{path}");
         let mut row = Row::new();
         row.values.insert("path".to_string(), "a/b/c".to_string());
-        let result = tpl.render(&row, 0).unwrap();
+        let result = tpl.render(&row, 0).expect("should succeed");
         // '/' is not in RFC 3986 unreserved, should be encoded
         assert_eq!(result, "http://example.org/a%2Fb%2Fc");
     }
@@ -1052,7 +1052,7 @@ mod tests {
     #[test]
     fn test_csv_basic_parse() {
         let csv = "id,name,age\n1,Alice,30\n2,Bob,25";
-        let (headers, rows) = MappingEngine::parse_csv(csv, ',').unwrap();
+        let (headers, rows) = MappingEngine::parse_csv(csv, ',').expect("should succeed");
         assert_eq!(headers, vec!["id", "name", "age"]);
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].get("name"), Some("Alice"));
@@ -1062,7 +1062,7 @@ mod tests {
     #[test]
     fn test_csv_tab_delimiter() {
         let csv = "id\tvalue\n1\thello\n2\tworld";
-        let (_headers, rows) = MappingEngine::parse_csv(csv, '\t').unwrap();
+        let (_headers, rows) = MappingEngine::parse_csv(csv, '\t').expect("should succeed");
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].get("value"), Some("hello"));
     }
@@ -1070,7 +1070,7 @@ mod tests {
     #[test]
     fn test_csv_quoted_fields() {
         let csv = "id,desc\n1,\"hello, world\"\n2,simple";
-        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').unwrap();
+        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').expect("should succeed");
         assert_eq!(rows[0].get("desc"), Some("hello, world"));
         assert_eq!(rows[1].get("desc"), Some("simple"));
     }
@@ -1078,14 +1078,14 @@ mod tests {
     #[test]
     fn test_csv_escaped_quotes() {
         let csv = "id,text\n1,\"say \"\"hi\"\"\"\n";
-        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').unwrap();
+        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').expect("should succeed");
         assert_eq!(rows[0].get("text"), Some("say \"hi\""));
     }
 
     #[test]
     fn test_csv_crlf_endings() {
         let csv = "id,name\r\n1,Alice\r\n2,Bob\r\n";
-        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').unwrap();
+        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').expect("should succeed");
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].get("name"), Some("Alice"));
     }
@@ -1093,14 +1093,14 @@ mod tests {
     #[test]
     fn test_csv_semicolon_delimiter() {
         let csv = "id;value\n1;alpha\n2;beta";
-        let (_headers, rows) = MappingEngine::parse_csv(csv, ';').unwrap();
+        let (_headers, rows) = MappingEngine::parse_csv(csv, ';').expect("should succeed");
         assert_eq!(rows[0].get("value"), Some("alpha"));
         assert_eq!(rows[1].get("value"), Some("beta"));
     }
 
     #[test]
     fn test_csv_empty_content_returns_empty() {
-        let (headers, rows) = MappingEngine::parse_csv("", ',').unwrap();
+        let (headers, rows) = MappingEngine::parse_csv("", ',').expect("should succeed");
         assert!(headers.is_empty());
         assert!(rows.is_empty());
     }
@@ -1115,7 +1115,7 @@ mod tests {
     #[test]
     fn test_csv_trailing_empty_lines_skipped() {
         let csv = "id,name\n1,Alice\n\n\n";
-        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').unwrap();
+        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').expect("should succeed");
         assert_eq!(rows.len(), 1);
     }
 
@@ -1124,7 +1124,7 @@ mod tests {
     #[test]
     fn test_json_flat_objects() {
         let json = r#"[{"id":"1","name":"Alice"},{"id":"2","name":"Bob"}]"#;
-        let rows = MappingEngine::parse_json(json, None).unwrap();
+        let rows = MappingEngine::parse_json(json, None).expect("should succeed");
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].get("name"), Some("Alice"));
         assert_eq!(rows[1].get("id"), Some("2"));
@@ -1133,7 +1133,7 @@ mod tests {
     #[test]
     fn test_json_nested_path() {
         let json = r#"{"data":{"people":[{"id":"1","name":"Alice"}]}}"#;
-        let rows = MappingEngine::parse_json(json, Some("data.people")).unwrap();
+        let rows = MappingEngine::parse_json(json, Some("data.people")).expect("should succeed");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].get("name"), Some("Alice"));
     }
@@ -1141,7 +1141,7 @@ mod tests {
     #[test]
     fn test_json_numeric_values_coerced() {
         let json = r#"[{"id":1,"score":9.5,"active":true}]"#;
-        let rows = MappingEngine::parse_json(json, None).unwrap();
+        let rows = MappingEngine::parse_json(json, None).expect("should succeed");
         assert_eq!(rows[0].get("id"), Some("1"));
         assert_eq!(rows[0].get("score"), Some("9.5"));
         assert_eq!(rows[0].get("active"), Some("true"));
@@ -1150,7 +1150,7 @@ mod tests {
     #[test]
     fn test_json_null_value_becomes_empty() {
         let json = r#"[{"id":"1","name":null}]"#;
-        let rows = MappingEngine::parse_json(json, None).unwrap();
+        let rows = MappingEngine::parse_json(json, None).expect("should succeed");
         assert_eq!(rows[0].get("name"), Some(""));
     }
 
@@ -1177,7 +1177,7 @@ mod tests {
     #[test]
     fn test_json_empty_array() {
         let json = r#"[]"#;
-        let rows = MappingEngine::parse_json(json, None).unwrap();
+        let rows = MappingEngine::parse_json(json, None).expect("should succeed");
         assert!(rows.is_empty());
     }
 
@@ -1191,7 +1191,7 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(foaf("name"), ObjectSpec::Column("name".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let t = &triples[0];
         assert_eq!(t.subject().to_string(), format!("<{}>", ex("1")));
@@ -1208,7 +1208,7 @@ mod tests {
             .map(foaf("name"), ObjectSpec::Column("name".to_string()))
             .map(foaf("age"), ObjectSpec::Column("age".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 4); // 2 rows × 2 predicates
     }
 
@@ -1226,7 +1226,7 @@ mod tests {
                 },
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains("42"), "object should contain 42, got: {obj}");
@@ -1250,7 +1250,7 @@ mod tests {
                 },
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains("1990-01-15"));
@@ -1268,7 +1268,7 @@ mod tests {
                 ObjectSpec::Constant("Person".to_string()),
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 2);
         for t in &triples {
             assert!(t.object().to_string().contains("Person"));
@@ -1287,7 +1287,7 @@ mod tests {
                 ObjectSpec::ConstantIri(person_class.clone()),
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains(&person_class));
@@ -1304,7 +1304,7 @@ mod tests {
                 ObjectSpec::Template(Template::new("http://example.org/dept/{dept}")),
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains("sales"), "got: {obj}");
@@ -1324,7 +1324,7 @@ mod tests {
                 },
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains("Hello"), "got: {obj}");
@@ -1345,7 +1345,7 @@ mod tests {
                 },
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains("Bonjour"), "got: {obj}");
@@ -1366,7 +1366,7 @@ mod tests {
             .build();
         assert_eq!(rule.graph_name.as_deref(), Some(graph));
         // Engine still produces triples (named graph metadata is on rule)
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
     }
 
@@ -1380,7 +1380,7 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(foaf("name"), ObjectSpec::Column("name".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 2);
     }
 
@@ -1392,7 +1392,7 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(ex("val"), ObjectSpec::Column("val".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 2);
     }
 
@@ -1410,7 +1410,7 @@ mod tests {
                 },
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains("42"));
@@ -1427,7 +1427,7 @@ mod tests {
             .map(foaf("age"), ObjectSpec::Column("age".to_string()))
             .map(ex("city"), ObjectSpec::Column("city".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 3);
     }
 
@@ -1446,7 +1446,7 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(foaf("name"), ObjectSpec::Column("name".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 2);
     }
 
@@ -1466,13 +1466,15 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(foaf("name"), ObjectSpec::Column("name".to_string()))
             .build();
-        let triples = engine().execute_all(&[rule1, rule2]).unwrap();
+        let triples = engine()
+            .execute_all(&[rule1, rule2])
+            .expect("should succeed");
         assert_eq!(triples.len(), 2);
     }
 
     #[test]
     fn test_execute_all_empty_rules() {
-        let triples = engine().execute_all(&[]).unwrap();
+        let triples = engine().execute_all(&[]).expect("should succeed");
         assert!(triples.is_empty());
     }
 
@@ -1513,7 +1515,7 @@ mod tests {
             // "score" does not exist; lenient engine should skip those triples
             .map(ex("score"), ObjectSpec::Column("score".to_string()))
             .build();
-        let triples = lenient_engine().execute(&rule).unwrap();
+        let triples = lenient_engine().execute(&rule).expect("should succeed");
         // Both rows fail on the score column; lenient skips them
         assert_eq!(triples.len(), 0);
     }
@@ -1566,7 +1568,7 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(foaf("name"), ObjectSpec::Column("name".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         assert!(triples[0].object().to_string().contains("Alice"));
     }
@@ -1579,7 +1581,7 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(ex("v"), ObjectSpec::Column("v".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         assert!(triples[0].object().to_string().contains("ok"));
     }
@@ -1597,7 +1599,7 @@ mod tests {
                 ObjectSpec::Template(Template::new("http://example.org/item/{related_id}")),
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains("99"), "got: {obj}");
@@ -1611,7 +1613,7 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(ex("self"), ObjectSpec::ConstantIri(ex("x")))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         // Subject should have space encoded as %20
         let subj = triples[0].subject().to_string();
@@ -1634,7 +1636,9 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(ex("label"), ObjectSpec::Column("label".to_string()))
             .build();
-        let triples = engine().execute_all(&[rule_csv, rule_json]).unwrap();
+        let triples = engine()
+            .execute_all(&[rule_csv, rule_json])
+            .expect("should succeed");
         assert_eq!(triples.len(), 2);
     }
 
@@ -1654,7 +1658,7 @@ mod tests {
                 },
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains("3.14"));
@@ -1675,7 +1679,7 @@ mod tests {
                 },
             )
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 1);
         let obj = triples[0].object().to_string();
         assert!(obj.contains("true"));
@@ -1690,7 +1694,7 @@ mod tests {
             .csv_source("")
             .subject_template(ex("{id}"))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert!(triples.is_empty());
     }
 
@@ -1701,7 +1705,7 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(foaf("name"), ObjectSpec::Column("name".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert!(triples.is_empty());
     }
 
@@ -1711,7 +1715,7 @@ mod tests {
             .json_source("[]")
             .subject_template(ex("{id}"))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert!(triples.is_empty());
     }
 
@@ -1722,7 +1726,7 @@ mod tests {
             .csv_source(csv)
             .subject_template(ex("{id}"))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert!(triples.is_empty());
     }
 
@@ -1732,7 +1736,7 @@ mod tests {
         let mut row = Row::new();
         row.values
             .insert("name".to_string(), "こんにちは".to_string());
-        let result = tpl.render(&row, 0).unwrap();
+        let result = tpl.render(&row, 0).expect("should succeed");
         // Should be percent-encoded
         assert!(result.starts_with("http://example.org/%"));
         assert!(!result.contains("こんにちは"));
@@ -1746,7 +1750,7 @@ mod tests {
             .subject_template(ex("{id}"))
             .map(ex("label"), ObjectSpec::Column("label".to_string()))
             .build();
-        let triples = engine().execute(&rule).unwrap();
+        let triples = engine().execute(&rule).expect("should succeed");
         assert_eq!(triples.len(), 3);
     }
 
@@ -1796,7 +1800,7 @@ mod tests {
     #[test]
     fn test_json_deeply_nested_path() {
         let json = r#"{"a":{"b":{"c":[{"id":"1","name":"deep"}]}}}"#;
-        let rows = MappingEngine::parse_json(json, Some("a.b.c")).unwrap();
+        let rows = MappingEngine::parse_json(json, Some("a.b.c")).expect("should succeed");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].get("name"), Some("deep"));
     }
@@ -1804,9 +1808,9 @@ mod tests {
     #[test]
     fn test_csv_quoted_field_with_newline() {
         let csv = "id,desc\n1,\"line1\nline2\"\n2,simple";
-        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').unwrap();
+        let (_headers, rows) = MappingEngine::parse_csv(csv, ',').expect("should succeed");
         assert_eq!(rows.len(), 2);
-        assert!(rows[0].get("desc").unwrap().contains('\n'));
+        assert!(rows[0].get("desc").expect("should succeed").contains('\n'));
         assert_eq!(rows[1].get("desc"), Some("simple"));
     }
 

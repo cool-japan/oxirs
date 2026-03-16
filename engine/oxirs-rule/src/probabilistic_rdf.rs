@@ -1007,7 +1007,7 @@ mod tests {
     }
 
     #[test]
-    fn test_subclass_inference() {
+    fn test_subclass_inference() -> Result<(), Box<dyn std::error::Error>> {
         let mut r = reasoner(0.1);
         r.add_fact("fido", RDF_TYPE, "Dog", 0.9).expect("add fact");
         r.add_rule(make_subclass_rule("r1", "Dog", "Animal", 0.95).expect("rule"));
@@ -1026,11 +1026,12 @@ mod tests {
             fido_animal.is_some(),
             "Expected fido rdf:type Animal to be inferred"
         );
-        assert!(fido_animal.unwrap().probability > 0.5);
+        assert!(fido_animal.ok_or("expected Some value")?.probability > 0.5);
+        Ok(())
     }
 
     #[test]
-    fn test_symmetric_inference() {
+    fn test_symmetric_inference() -> Result<(), Box<dyn std::error::Error>> {
         let knows = "https://example.org/knows";
         let mut r = reasoner(0.1);
         r.add_fact("alice", knows, "bob", 0.9).expect("add fact");
@@ -1041,11 +1042,12 @@ mod tests {
             .iter()
             .find(|t| t.subject == "bob" && t.predicate == knows && t.object == "alice");
         assert!(bob_knows_alice.is_some(), "Expected symmetric inference");
-        assert!(bob_knows_alice.unwrap().probability > 0.5);
+        assert!(bob_knows_alice.ok_or("expected Some value")?.probability > 0.5);
+        Ok(())
     }
 
     #[test]
-    fn test_transitive_inference() {
+    fn test_transitive_inference() -> Result<(), Box<dyn std::error::Error>> {
         let ancestor_of = "https://example.org/ancestorOf";
         let mut r = reasoner(0.1);
         r.add_fact("grandpa", ancestor_of, "parent", 0.99)
@@ -1066,6 +1068,7 @@ mod tests {
                 .map(|t| format!("({},{},{})", t.subject, t.predicate, t.object))
                 .collect::<Vec<_>>()
         );
+        Ok(())
     }
 
     #[test]
@@ -1244,7 +1247,7 @@ mod tests {
     }
 
     #[test]
-    fn test_chained_rules() {
+    fn test_chained_rules() -> Result<(), Box<dyn std::error::Error>> {
         let mut r = reasoner(0.1);
         r.add_fact("fido", RDF_TYPE, "Labrador", 0.95)
             .expect("add fact");
@@ -1265,6 +1268,7 @@ mod tests {
                 .map(|t| t.object.clone())
                 .collect::<Vec<_>>()
         );
+        Ok(())
     }
 
     #[test]

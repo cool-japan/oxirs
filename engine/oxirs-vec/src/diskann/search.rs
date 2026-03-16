@@ -386,6 +386,7 @@ impl Default for BeamSearch {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use crate::diskann::config::PruningStrategy;
     use crate::diskann::graph::VamanaGraph;
@@ -394,84 +395,89 @@ mod tests {
         let mut graph = VamanaGraph::new(3, PruningStrategy::Alpha, 1.2);
 
         // Add nodes
-        let n0 = graph.add_node("v0".to_string()).unwrap();
-        let n1 = graph.add_node("v1".to_string()).unwrap();
-        let n2 = graph.add_node("v2".to_string()).unwrap();
-        let n3 = graph.add_node("v3".to_string()).unwrap();
+        let n0 = graph.add_node("v0".to_string()).expect("add n0");
+        let n1 = graph.add_node("v1".to_string()).expect("add n1");
+        let n2 = graph.add_node("v2".to_string()).expect("add n2");
+        let n3 = graph.add_node("v3".to_string()).expect("add n3");
 
         // Create connections: 0 -> 1 -> 2 -> 3
-        graph.add_edge(n0, n1).unwrap();
-        graph.add_edge(n1, n2).unwrap();
-        graph.add_edge(n2, n3).unwrap();
-        graph.add_edge(n0, n2).unwrap(); // Shortcut
+        graph.add_edge(n0, n1).expect("add edge n0-n1");
+        graph.add_edge(n1, n2).expect("add edge n1-n2");
+        graph.add_edge(n2, n3).expect("add edge n2-n3");
+        graph.add_edge(n0, n2).expect("add edge n0-n2"); // Shortcut
 
         graph
     }
 
     #[test]
-    fn test_beam_search_basic() {
+    fn test_beam_search_basic() -> Result<()> {
         let graph = build_test_graph();
         let beam_search = BeamSearch::new(10);
 
         // Distance function: distance to node 3
         let query_fn = |node_id: NodeId| (3 - node_id as i32).abs() as f32;
 
-        let result = beam_search.search(&graph, &query_fn, 2).unwrap();
+        let result = beam_search.search(&graph, &query_fn, 2)?;
 
         assert!(!result.neighbors.is_empty());
         assert_eq!(result.neighbors[0].0, 3); // Closest should be node 3
         assert!(result.stats.num_comparisons > 0);
         assert!(result.stats.num_hops > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_search_with_max_hops() {
+    fn test_search_with_max_hops() -> Result<()> {
         let graph = build_test_graph();
         let beam_search = BeamSearch::new(10).with_max_hops(1);
 
         let query_fn = |node_id: NodeId| (3 - node_id as i32).abs() as f32;
-        let result = beam_search.search(&graph, &query_fn, 2).unwrap();
+        let result = beam_search.search(&graph, &query_fn, 2)?;
 
         assert_eq!(result.stats.num_hops, 1);
+        Ok(())
     }
 
     #[test]
-    fn test_search_from_specific_nodes() {
+    fn test_search_from_specific_nodes() -> Result<()> {
         let graph = build_test_graph();
         let beam_search = BeamSearch::new(10);
 
         let query_fn = |node_id: NodeId| (3 - node_id as i32).abs() as f32;
-        let result = beam_search.search_from(&graph, &[2], &query_fn, 2).unwrap();
+        let result = beam_search.search_from(&graph, &[2], &query_fn, 2)?;
 
         assert!(!result.neighbors.is_empty());
         // Should find node 3 quickly since we start from node 2
         assert!(result.neighbors.iter().any(|(id, _)| *id == 3));
+        Ok(())
     }
 
     #[test]
-    fn test_top_k_results() {
+    fn test_top_k_results() -> Result<()> {
         let graph = build_test_graph();
         let beam_search = BeamSearch::new(10);
 
         let query_fn = |node_id: NodeId| node_id as f32;
-        let result = beam_search.search(&graph, &query_fn, 4).unwrap();
+        let result = beam_search.search(&graph, &query_fn, 4)?;
 
         let top2 = result.top_k(2);
         assert_eq!(top2.len(), 2);
         assert_eq!(top2[0].0, 0); // Closest
+        Ok(())
     }
 
     #[test]
-    fn test_candidate_ordering() {
+    fn test_candidate_ordering() -> Result<()> {
         let mut heap = BinaryHeap::new();
         heap.push(Candidate::new(0, 3.0));
         heap.push(Candidate::new(1, 1.0));
         heap.push(Candidate::new(2, 2.0));
 
         // Min-heap: should pop in ascending order of distance
-        assert_eq!(heap.pop().unwrap().node_id, 1); // distance 1.0
-        assert_eq!(heap.pop().unwrap().node_id, 2); // distance 2.0
-        assert_eq!(heap.pop().unwrap().node_id, 0); // distance 3.0
+        assert_eq!(heap.pop().expect("test value").node_id, 1); // distance 1.0
+        assert_eq!(heap.pop().expect("test value").node_id, 2); // distance 2.0
+        assert_eq!(heap.pop().expect("test value").node_id, 0); // distance 3.0
+        Ok(())
     }
 
     #[test]
@@ -486,30 +492,32 @@ mod tests {
     }
 
     #[test]
-    fn test_search_stats() {
+    fn test_search_stats() -> Result<()> {
         let graph = build_test_graph();
         let beam_search = BeamSearch::new(10);
 
         let query_fn = |node_id: NodeId| node_id as f32;
-        let result = beam_search.search(&graph, &query_fn, 2).unwrap();
+        let result = beam_search.search(&graph, &query_fn, 2)?;
 
         let stats = &result.stats;
         assert_eq!(stats.beam_width, 10);
         assert!(stats.num_comparisons > 0);
         assert!(stats.num_hops > 0);
         assert!(stats.num_visited > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_beam_width_constraint() {
+    fn test_beam_width_constraint() -> Result<()> {
         let graph = build_test_graph();
         let beam_search = BeamSearch::new(2); // Small beam
 
         let query_fn = |node_id: NodeId| node_id as f32;
-        let result = beam_search.search(&graph, &query_fn, 3).unwrap();
+        let result = beam_search.search(&graph, &query_fn, 3)?;
 
         // Should still work with small beam, just fewer candidates explored
         assert!(!result.neighbors.is_empty());
         assert!(result.stats.num_visited <= 10); // Limited by beam width
+        Ok(())
     }
 }

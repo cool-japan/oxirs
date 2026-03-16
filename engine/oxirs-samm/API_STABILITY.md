@@ -1,6 +1,6 @@
 # OxiRS SAMM - API Stability Guarantees
 
-**Version**: 0.2.1
+**Version**: 0.2.2
 **Status**: Production Release
 **Date**: 2026-01-06
 

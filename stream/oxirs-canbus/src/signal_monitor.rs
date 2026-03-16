@@ -544,7 +544,7 @@ mod tests {
         mon.record("Speed", 10, 100);
         mon.record("Speed", 20, 200);
         assert_eq!(mon.history("Speed").len(), 1);
-        assert_eq!(mon.latest("Speed").unwrap().raw_value, 20);
+        assert_eq!(mon.latest("Speed").expect("should succeed").raw_value, 20);
     }
 
     // --- additional coverage ---
@@ -638,8 +638,8 @@ mod tests {
         mon.record("B", 60, 200);
         assert_eq!(mon.history("A").len(), 1);
         assert_eq!(mon.history("B").len(), 1);
-        assert_eq!(mon.latest("A").unwrap().raw_value, 50);
-        assert_eq!(mon.latest("B").unwrap().raw_value, 60);
+        assert_eq!(mon.latest("A").expect("should succeed").raw_value, 50);
+        assert_eq!(mon.latest("B").expect("should succeed").raw_value, 60);
     }
 
     #[test]
@@ -664,7 +664,7 @@ mod tests {
         let mut mon = SignalMonitor::new(10);
         mon.register_signal(make_def("Fuel", 0.0, 255.0));
         mon.record("Fuel", 128, 9000);
-        assert_eq!(mon.latest("Fuel").unwrap().raw_value, 128);
+        assert_eq!(mon.latest("Fuel").expect("should succeed").raw_value, 128);
     }
 
     #[test]
@@ -708,6 +708,6 @@ mod tests {
             .filter(|a| a.kind == AlertKind::OutOfRange)
             .collect();
         assert!(!oor.is_empty());
-        assert!((oor[0].value.unwrap() - 120.0).abs() < 1e-9);
+        assert!((oor[0].value.expect("should succeed") - 120.0).abs() < 1e-9);
     }
 }

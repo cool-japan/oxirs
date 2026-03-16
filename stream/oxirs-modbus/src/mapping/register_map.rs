@@ -413,12 +413,12 @@ mod tests {
                 .with_name("Status"),
         );
 
-        let toml = map.to_toml_str().unwrap();
+        let toml = map.to_toml_str().expect("should succeed");
         assert!(toml.contains("plc001"));
         assert!(toml.contains("temperature"));
 
         // Round-trip
-        let parsed = RegisterMap::from_toml_str(&toml).unwrap();
+        let parsed = RegisterMap::from_toml_str(&toml).expect("should succeed");
         assert_eq!(parsed.device_id, "plc001");
         assert_eq!(parsed.registers.len(), 2);
     }

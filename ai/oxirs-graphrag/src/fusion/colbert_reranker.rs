@@ -316,8 +316,8 @@ mod tests {
     fn test_colbert_score_same_query_doc() {
         // A query identical to the document should score high
         let enc = make_encoder(8);
-        let q = enc.encode("battery safety").unwrap();
-        let d = enc.encode("battery safety").unwrap();
+        let q = enc.encode("battery safety").expect("should succeed");
+        let d = enc.encode("battery safety").expect("should succeed");
         let score = colbert_score(&q, &d);
         assert!(
             score > 0.8,
@@ -344,8 +344,8 @@ mod tests {
     #[test]
     fn test_mock_encoder_deterministic() {
         let enc = make_encoder(16);
-        let e1 = enc.encode("hello world").unwrap();
-        let e2 = enc.encode("hello world").unwrap();
+        let e1 = enc.encode("hello world").expect("should succeed");
+        let e2 = enc.encode("hello world").expect("should succeed");
         assert_eq!(e1.len(), e2.len());
         for (a, b) in e1.iter().zip(e2.iter()) {
             for (x, y) in a.iter().zip(b.iter()) {
@@ -358,7 +358,7 @@ mod tests {
     fn test_mock_encoder_registered_token() {
         let mut enc = make_encoder(4);
         enc.register_token("special", vec![1.0, 0.0, 0.0, 0.0]);
-        let tokens = enc.encode("special term").unwrap();
+        let tokens = enc.encode("special term").expect("should succeed");
         assert_eq!(tokens.len(), 2);
         // First token should be exactly our registered vector
         assert!((tokens[0][0] - 1.0).abs() < 1e-9);
@@ -367,7 +367,9 @@ mod tests {
     #[test]
     fn test_mock_encoder_unit_length() {
         let enc = make_encoder(32);
-        let tokens = enc.encode("test token normalization").unwrap();
+        let tokens = enc
+            .encode("test token normalization")
+            .expect("should succeed");
         for tok in &tokens {
             let norm: f32 = tok.iter().map(|x| x * x).sum::<f32>().sqrt();
             assert!((norm - 1.0).abs() < 1e-5, "Token not unit length: {norm}");
@@ -393,7 +395,9 @@ mod tests {
 
         let candidates = vec![make_entity("http://a", 0.7), make_entity("http://b", 0.6)];
 
-        let reranked = reranker.rerank("battery safety", candidates).unwrap();
+        let reranked = reranker
+            .rerank("battery safety", candidates)
+            .expect("should succeed");
         assert_eq!(reranked.len(), 2);
         // http://a should score higher (relevant doc)
         assert_eq!(reranked[0].uri, "http://a");
@@ -403,7 +407,7 @@ mod tests {
     fn test_reranker_empty_candidates() {
         let enc = make_encoder(8);
         let reranker = ColbertReranker::new(enc, ColbertRerankerConfig::default());
-        let result = reranker.rerank("query", vec![]).unwrap();
+        let result = reranker.rerank("query", vec![]).expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -412,7 +416,7 @@ mod tests {
         let enc = make_encoder(8);
         let reranker = ColbertReranker::new(enc, ColbertRerankerConfig::default());
         let candidates = vec![make_entity("http://a", 0.5)];
-        let result = reranker.rerank("", candidates).unwrap();
+        let result = reranker.rerank("", candidates).expect("should succeed");
         assert_eq!(result.len(), 1);
     }
 
@@ -427,7 +431,7 @@ mod tests {
         let candidates: Vec<ScoredEntity> = (0..10)
             .map(|i| make_entity(&format!("http://e{i}"), 0.5))
             .collect();
-        let result = reranker.rerank("test", candidates).unwrap();
+        let result = reranker.rerank("test", candidates).expect("should succeed");
         assert!(result.len() <= 2);
     }
 
@@ -441,7 +445,7 @@ mod tests {
         };
         let reranker = ColbertReranker::new(enc, config);
         let candidates = vec![make_entity("http://a", 0.8)];
-        let result = reranker.rerank("test", candidates).unwrap();
+        let result = reranker.rerank("test", candidates).expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -452,7 +456,9 @@ mod tests {
         let reranker = ColbertReranker::new(enc, ColbertRerankerConfig::default());
         let candidates = vec![make_entity("http://a", 0.7), make_entity("http://b", 0.6)];
         // Should not panic and should return some ordering
-        let result = reranker.rerank("some query", candidates).unwrap();
+        let result = reranker
+            .rerank("some query", candidates)
+            .expect("should succeed");
         assert_eq!(result.len(), 2);
     }
 
@@ -470,7 +476,9 @@ mod tests {
             ("http://y".to_string(), "delta epsilon zeta".to_string()),
         ]);
         let candidates = vec![make_entity("http://x", 0.5), make_entity("http://y", 0.5)];
-        let result = reranker.rerank("alpha gamma", candidates).unwrap();
+        let result = reranker
+            .rerank("alpha gamma", candidates)
+            .expect("should succeed");
         // After normalisation + full ColBERT weight, top doc should score ~1.0
         assert!(
             result[0].score <= 1.01,
@@ -489,7 +497,7 @@ mod tests {
             ("id2", "charging electric vehicle"),
             ("id3", "battery cell chemistry"),
         ];
-        let scores = colbert_score_batch(&enc, "battery safety", &docs).unwrap();
+        let scores = colbert_score_batch(&enc, "battery safety", &docs).expect("should succeed");
         assert_eq!(scores.len(), 3);
         for s in &scores {
             assert!(*s >= 0.0, "Score should be non-negative");
@@ -504,16 +512,20 @@ mod tests {
     #[test]
     fn test_batch_scoring_empty_docs() {
         let enc = make_encoder(8);
-        let scores = colbert_score_batch(&enc, "query", &[]).unwrap();
+        let scores = colbert_score_batch(&enc, "query", &[]).expect("should succeed");
         assert!(scores.is_empty());
     }
 
     #[test]
     fn test_colbert_score_partial_overlap() {
         let enc = make_encoder(16);
-        let q = enc.encode("battery cell safety").unwrap();
-        let d_rel = enc.encode("battery cell thermal runaway").unwrap();
-        let d_irrel = enc.encode("aircraft propulsion jet").unwrap();
+        let q = enc.encode("battery cell safety").expect("should succeed");
+        let d_rel = enc
+            .encode("battery cell thermal runaway")
+            .expect("should succeed");
+        let d_irrel = enc
+            .encode("aircraft propulsion jet")
+            .expect("should succeed");
 
         let s_rel = colbert_score(&q, &d_rel);
         let s_irrel = colbert_score(&q, &d_irrel);

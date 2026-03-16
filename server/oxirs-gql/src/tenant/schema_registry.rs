@@ -149,10 +149,10 @@ mod tests {
     fn test_register_increments_version() {
         let reg = TenantSchemaRegistry::new();
         reg.register_schema("t1", "type Query { v1: String }")
-            .unwrap();
+            .expect("should succeed");
         reg.register_schema("t1", "type Query { v2: String }")
-            .unwrap();
-        let schema = reg.get_schema("t1").unwrap();
+            .expect("should succeed");
+        let schema = reg.get_schema("t1").expect("should succeed");
         assert_eq!(schema.version, 2);
         assert!(schema.sdl.contains("v2"));
     }
@@ -160,8 +160,10 @@ mod tests {
     #[test]
     fn test_list_tenants() {
         let reg = TenantSchemaRegistry::new();
-        reg.register_schema("a", sample_sdl()).unwrap();
-        reg.register_schema("b", sample_sdl()).unwrap();
+        reg.register_schema("a", sample_sdl())
+            .expect("should succeed");
+        reg.register_schema("b", sample_sdl())
+            .expect("should succeed");
         let mut tenants = reg.list_tenants();
         tenants.sort();
         assert_eq!(tenants, vec!["a", "b"]);
@@ -170,7 +172,8 @@ mod tests {
     #[test]
     fn test_remove_schema() {
         let reg = TenantSchemaRegistry::new();
-        reg.register_schema("gone", sample_sdl()).unwrap();
+        reg.register_schema("gone", sample_sdl())
+            .expect("should succeed");
         assert!(reg.remove_schema("gone"));
         assert!(reg.get_schema("gone").is_none());
         assert!(!reg.remove_schema("gone")); // already removed
@@ -180,9 +183,11 @@ mod tests {
     fn test_tenant_count() {
         let reg = TenantSchemaRegistry::new();
         assert_eq!(reg.tenant_count(), 0);
-        reg.register_schema("t1", sample_sdl()).unwrap();
+        reg.register_schema("t1", sample_sdl())
+            .expect("should succeed");
         assert_eq!(reg.tenant_count(), 1);
-        reg.register_schema("t2", sample_sdl()).unwrap();
+        reg.register_schema("t2", sample_sdl())
+            .expect("should succeed");
         assert_eq!(reg.tenant_count(), 2);
         reg.remove_schema("t1");
         assert_eq!(reg.tenant_count(), 1);
@@ -192,12 +197,12 @@ mod tests {
     fn test_multiple_tenants_isolated() {
         let reg = TenantSchemaRegistry::new();
         reg.register_schema("tenant_a", "type Query { a: String }")
-            .unwrap();
+            .expect("should succeed");
         reg.register_schema("tenant_b", "type Query { b: String }")
-            .unwrap();
+            .expect("should succeed");
 
-        let a = reg.get_schema("tenant_a").unwrap();
-        let b = reg.get_schema("tenant_b").unwrap();
+        let a = reg.get_schema("tenant_a").expect("should succeed");
+        let b = reg.get_schema("tenant_b").expect("should succeed");
         assert!(a.sdl.contains("a: String"));
         assert!(b.sdl.contains("b: String"));
         assert_ne!(a.sdl, b.sdl);

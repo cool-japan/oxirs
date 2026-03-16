@@ -903,7 +903,7 @@ mod tests {
 
     #[test]
     fn test_basic_punctuation() {
-        let tokens = tokenize_string(". ; , [ ] ( ) { }").unwrap();
+        let tokens = tokenize_string(". ; , [ ] ( ) { }").expect("tokenization should succeed");
         assert_eq!(
             tokens,
             vec![
@@ -922,13 +922,13 @@ mod tests {
 
     #[test]
     fn test_iri() {
-        let tokens = tokenize_string("<http://example.org>").unwrap();
+        let tokens = tokenize_string("<http://example.org>").expect("tokenization should succeed");
         assert_eq!(tokens, vec![N3Token::Iri("http://example.org".to_string())]);
     }
 
     #[test]
     fn test_prefixed_name() {
-        let tokens = tokenize_string("ex:name :name").unwrap();
+        let tokens = tokenize_string("ex:name :name").expect("tokenization should succeed");
         assert_eq!(
             tokens,
             vec![
@@ -946,13 +946,13 @@ mod tests {
 
     #[test]
     fn test_blank_node() {
-        let tokens = tokenize_string("_:blank1").unwrap();
+        let tokens = tokenize_string("_:blank1").expect("tokenization should succeed");
         assert_eq!(tokens, vec![N3Token::BlankNode("blank1".to_string())]);
     }
 
     #[test]
     fn test_string_literal() {
-        let tokens = tokenize_string("\"hello world\"").unwrap();
+        let tokens = tokenize_string("\"hello world\"").expect("tokenization should succeed");
         assert_eq!(
             tokens,
             vec![N3Token::Literal {
@@ -965,7 +965,7 @@ mod tests {
 
     #[test]
     fn test_string_literal_with_language() {
-        let tokens = tokenize_string("\"hello\"@en").unwrap();
+        let tokens = tokenize_string("\"hello\"@en").expect("tokenization should succeed");
         assert_eq!(
             tokens,
             vec![N3Token::Literal {
@@ -978,7 +978,8 @@ mod tests {
 
     #[test]
     fn test_string_literal_with_datatype() {
-        let tokens = tokenize_string("\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>").unwrap();
+        let tokens = tokenize_string("\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>")
+            .expect("tokenization should succeed");
         assert_eq!(
             tokens,
             vec![N3Token::Literal {
@@ -991,7 +992,7 @@ mod tests {
 
     #[test]
     fn test_numeric_literals() {
-        let tokens = tokenize_string("42 3.14 1.5e10").unwrap();
+        let tokens = tokenize_string("42 3.14 1.5e10").expect("tokenization should succeed");
         assert_eq!(
             tokens,
             vec![
@@ -1005,19 +1006,19 @@ mod tests {
 
     #[test]
     fn test_boolean_literals() {
-        let tokens = tokenize_string("true false").unwrap();
+        let tokens = tokenize_string("true false").expect("tokenization should succeed");
         assert_eq!(tokens, vec![N3Token::True, N3Token::False]);
     }
 
     #[test]
     fn test_directives() {
-        let tokens = tokenize_string("@prefix @base").unwrap();
+        let tokens = tokenize_string("@prefix @base").expect("tokenization should succeed");
         assert_eq!(tokens, vec![N3Token::Prefix, N3Token::Base]);
     }
 
     #[test]
     fn test_type_shorthand() {
-        let tokens = tokenize_string("a").unwrap();
+        let tokens = tokenize_string("a").expect("tokenization should succeed");
         assert_eq!(tokens, vec![N3Token::A]);
     }
 
@@ -1030,7 +1031,7 @@ mod tests {
         loop {
             match lexer
                 .recognize_next_token(&mut buffer, &mut TextPosition::start())
-                .unwrap()
+                .expect("operation should succeed")
             {
                 Some(N3Token::Eof) => break,
                 Some(token) => tokens.push(token),

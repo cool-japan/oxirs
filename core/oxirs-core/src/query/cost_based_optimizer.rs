@@ -1224,9 +1224,9 @@ mod tests {
 
         // All variables (least selective)
         let pattern1 = create_test_pattern(
-            TermPattern::Variable(Variable::new("s").unwrap()),
-            TermPattern::Variable(Variable::new("p").unwrap()),
-            TermPattern::Variable(Variable::new("o").unwrap()),
+            TermPattern::Variable(Variable::new("s").expect("valid variable name")),
+            TermPattern::Variable(Variable::new("p").expect("valid variable name")),
+            TermPattern::Variable(Variable::new("o").expect("valid variable name")),
         );
 
         let cost1 = optimizer.estimate_pattern_cost(&pattern1);
@@ -1234,9 +1234,9 @@ mod tests {
 
         // All constants (most selective)
         let pattern2 = create_test_pattern(
-            TermPattern::NamedNode(NamedNode::new("http://example.org/s").unwrap()),
-            TermPattern::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
-            TermPattern::NamedNode(NamedNode::new("http://example.org/o").unwrap()),
+            TermPattern::NamedNode(NamedNode::new("http://example.org/s").expect("valid IRI")),
+            TermPattern::NamedNode(NamedNode::new("http://example.org/p").expect("valid IRI")),
+            TermPattern::NamedNode(NamedNode::new("http://example.org/o").expect("valid IRI")),
         );
 
         let cost2 = optimizer.estimate_pattern_cost(&pattern2);
@@ -1259,18 +1259,18 @@ mod tests {
 
         // Pattern with bound subject
         let pattern1 = create_test_pattern(
-            TermPattern::NamedNode(NamedNode::new("http://example.org/s").unwrap()),
-            TermPattern::Variable(Variable::new("p").unwrap()),
-            TermPattern::Variable(Variable::new("o").unwrap()),
+            TermPattern::NamedNode(NamedNode::new("http://example.org/s").expect("valid IRI")),
+            TermPattern::Variable(Variable::new("p").expect("valid variable name")),
+            TermPattern::Variable(Variable::new("o").expect("valid variable name")),
         );
 
         assert!(optimizer.can_use_index(&pattern1));
 
         // Pattern with all variables
         let pattern2 = create_test_pattern(
-            TermPattern::Variable(Variable::new("s").unwrap()),
-            TermPattern::Variable(Variable::new("p").unwrap()),
-            TermPattern::Variable(Variable::new("o").unwrap()),
+            TermPattern::Variable(Variable::new("s").expect("valid variable name")),
+            TermPattern::Variable(Variable::new("p").expect("valid variable name")),
+            TermPattern::Variable(Variable::new("o").expect("valid variable name")),
         );
 
         assert!(!optimizer.can_use_index(&pattern2));

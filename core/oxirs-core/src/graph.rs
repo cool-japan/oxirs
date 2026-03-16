@@ -502,9 +502,15 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
-            Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
-            Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
+            Subject::NamedNode(
+                NamedNode::new(format!("http://subject/{id}")).expect("valid IRI from format"),
+            ),
+            Predicate::NamedNode(
+                NamedNode::new(format!("http://predicate/{id}")).expect("valid IRI from format"),
+            ),
+            Object::NamedNode(
+                NamedNode::new(format!("http://object/{id}")).expect("valid IRI from format"),
+            ),
         )
     }
 
@@ -518,7 +524,9 @@ mod tests {
         let triples = create_test_triples(10000);
 
         let start = Instant::now();
-        let inserted = graph.par_insert_batch(triples.clone()).unwrap();
+        let inserted = graph
+            .par_insert_batch(triples.clone())
+            .expect("parallel batch insert should succeed");
         let duration = start.elapsed();
 
         println!("Parallel insert of 10000 triples took: {duration:?}");
@@ -538,7 +546,9 @@ mod tests {
         // Add duplicates
         triples.extend(create_test_triples(2500));
 
-        let inserted = graph.par_insert_batch(triples).unwrap();
+        let inserted = graph
+            .par_insert_batch(triples)
+            .expect("graph operation should succeed");
 
         // Should only insert unique triples
         assert_eq!(inserted, 5000);
@@ -555,7 +565,9 @@ mod tests {
         let to_remove: Vec<Triple> = triples.iter().step_by(2).cloned().collect();
 
         let start = Instant::now();
-        let removed = graph.par_remove_batch(to_remove.clone()).unwrap();
+        let removed = graph
+            .par_remove_batch(to_remove.clone())
+            .expect("parallel batch remove should succeed");
         let duration = start.elapsed();
 
         println!("Parallel remove of 5000 triples took: {duration:?}");
@@ -583,7 +595,8 @@ mod tests {
             .map(|i| {
                 (
                     Some(Subject::NamedNode(
-                        NamedNode::new(format!("http://subject/{i}")).unwrap(),
+                        NamedNode::new(format!("http://subject/{i}"))
+                            .expect("valid IRI from format"),
                     )),
                     None,
                     None,
@@ -592,7 +605,9 @@ mod tests {
             .collect();
 
         let start = Instant::now();
-        let results = graph.par_query_batch(queries).unwrap();
+        let results = graph
+            .par_query_batch(queries)
+            .expect("graph operation should succeed");
         let duration = start.elapsed();
 
         println!("Parallel query of 100 patterns took: {duration:?}");
@@ -625,7 +640,8 @@ mod tests {
                             return Some(Triple::new(
                                 triple.subject().clone(),
                                 Predicate::NamedNode(
-                                    NamedNode::new("http://predicate/transformed").unwrap(),
+                                    NamedNode::new("http://predicate/transformed")
+                                        .expect("valid IRI"),
                                 ),
                                 triple.object().clone(),
                             ));
@@ -640,15 +656,18 @@ mod tests {
         };
 
         let start = Instant::now();
-        let (transformed, removed) = graph.par_transform(transform_fn).unwrap();
+        let (transformed, removed) = graph
+            .par_transform(transform_fn)
+            .expect("graph operation should succeed");
         let duration = start.elapsed();
 
         println!("Parallel transform took: {duration:?}");
         println!("Transformed: {transformed}, Removed: {removed}");
 
         // Verify transformations
-        let transformed_predicate =
-            Predicate::NamedNode(NamedNode::new("http://predicate/transformed").unwrap());
+        let transformed_predicate = Predicate::NamedNode(
+            NamedNode::new("http://predicate/transformed").expect("valid IRI"),
+        );
         let transformed_count = graph
             .query_triples(None, Some(&transformed_predicate), None)
             .len();
@@ -663,10 +682,17 @@ mod tests {
         for i in 0..100 {
             for j in 0..10 {
                 let triple = Triple::new(
-                    Subject::NamedNode(NamedNode::new(format!("http://subject/{i}")).unwrap()),
-                    Predicate::NamedNode(NamedNode::new(format!("http://predicate/{j}")).unwrap()),
+                    Subject::NamedNode(
+                        NamedNode::new(format!("http://subject/{i}"))
+                            .expect("valid IRI from format"),
+                    ),
+                    Predicate::NamedNode(
+                        NamedNode::new(format!("http://predicate/{j}"))
+                            .expect("valid IRI from format"),
+                    ),
                     Object::NamedNode(
-                        NamedNode::new(format!("http://object/{}", i * 10 + j)).unwrap(),
+                        NamedNode::new(format!("http://object/{}", i * 10 + j))
+                            .expect("valid IRI from format"),
                     ),
                 );
                 graph.add_triple(triple);
@@ -679,7 +705,8 @@ mod tests {
                 (
                     None,
                     Some(Predicate::NamedNode(
-                        NamedNode::new(format!("http://predicate/{i}")).unwrap(),
+                        NamedNode::new(format!("http://predicate/{i}"))
+                            .expect("valid IRI from format"),
                     )),
                     None,
                 )
@@ -753,7 +780,9 @@ mod tests {
         // Parallel insert
         let mut graph2 = Graph::new();
         let start = Instant::now();
-        graph2.par_insert_batch(triples.clone()).unwrap();
+        graph2
+            .par_insert_batch(triples.clone())
+            .expect("parallel batch insert should succeed");
         let par_duration = start.elapsed();
 
         println!("Performance comparison for {triple_count} triples:");
@@ -772,19 +801,27 @@ mod tests {
         let mut graph = Graph::new();
 
         // Test empty insert
-        let inserted = graph.par_insert_batch(vec![]).unwrap();
+        let inserted = graph
+            .par_insert_batch(vec![])
+            .expect("graph operation should succeed");
         assert_eq!(inserted, 0);
 
         // Test empty remove
-        let removed = graph.par_remove_batch(vec![]).unwrap();
+        let removed = graph
+            .par_remove_batch(vec![])
+            .expect("graph operation should succeed");
         assert_eq!(removed, 0);
 
         // Test empty query
-        let results = graph.par_query_batch(vec![]).unwrap();
+        let results = graph
+            .par_query_batch(vec![])
+            .expect("graph operation should succeed");
         assert!(results.is_empty());
 
         // Test empty transform
-        let (transformed, removed) = graph.par_transform(|t| Some(t.clone())).unwrap();
+        let (transformed, removed) = graph
+            .par_transform(|t| Some(t.clone()))
+            .expect("parallel transform should succeed");
         assert_eq!(transformed, 0);
         assert_eq!(removed, 0);
     }
@@ -1094,8 +1131,8 @@ mod concurrent_tests {
         let graph = ConcurrentGraph::new();
 
         let triple = Triple::new(
-            NamedNode::new("http://example.org/s").unwrap(),
-            NamedNode::new("http://example.org/p").unwrap(),
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
             Literal::new("test"),
         );
 
@@ -1128,8 +1165,9 @@ mod concurrent_tests {
             handles.push(thread::spawn(move || {
                 for j in 0..100 {
                     let triple = Triple::new(
-                        NamedNode::new(format!("http://example.org/s{}", i * 100 + j)).unwrap(),
-                        NamedNode::new("http://example.org/p").unwrap(),
+                        NamedNode::new(format!("http://example.org/s{}", i * 100 + j))
+                            .expect("valid IRI from format"),
+                        NamedNode::new("http://example.org/p").expect("valid IRI"),
                         Literal::new(format!("value{j}")),
                     );
 
@@ -1145,7 +1183,7 @@ mod concurrent_tests {
 
         // Wait for all threads to complete
         for handle in handles {
-            handle.join().unwrap();
+            handle.join().expect("thread should not panic");
         }
 
         // Verify results
@@ -1161,15 +1199,17 @@ mod concurrent_tests {
         // Add different triples to each graph
         for i in 0..100 {
             let triple1 = Triple::new(
-                NamedNode::new(format!("http://example.org/s1_{i}")).unwrap(),
-                NamedNode::new("http://example.org/p").unwrap(),
+                NamedNode::new(format!("http://example.org/s1_{i}"))
+                    .expect("valid IRI from format"),
+                NamedNode::new("http://example.org/p").expect("valid IRI"),
                 Literal::new(format!("value{i}")),
             );
             graph1.add_triple(triple1);
 
             let triple2 = Triple::new(
-                NamedNode::new(format!("http://example.org/s2_{i}")).unwrap(),
-                NamedNode::new("http://example.org/p").unwrap(),
+                NamedNode::new(format!("http://example.org/s2_{i}"))
+                    .expect("valid IRI from format"),
+                NamedNode::new("http://example.org/p").expect("valid IRI"),
                 Literal::new(format!("value{i}")),
             );
             graph2.add_triple(triple2);
@@ -1184,14 +1224,15 @@ mod concurrent_tests {
 
     #[test]
     fn test_graph_thread_pool() {
-        let pool = GraphThreadPool::new().unwrap();
+        let pool = GraphThreadPool::new().expect("thread pool creation should succeed");
 
         // Create test triples
         let triples: Vec<Triple> = (0..1000)
             .map(|i| {
                 Triple::new(
-                    NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
-                    NamedNode::new("http://example.org/p").unwrap(),
+                    NamedNode::new(format!("http://example.org/s{i}"))
+                        .expect("valid IRI from format"),
+                    NamedNode::new("http://example.org/p").expect("valid IRI"),
                     Literal::new(format!("value{i}")),
                 )
             })
@@ -1219,8 +1260,9 @@ mod concurrent_tests {
         graph.with_write(|g| {
             for i in 0..10 {
                 let triple = Triple::new(
-                    NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
-                    NamedNode::new("http://example.org/p").unwrap(),
+                    NamedNode::new(format!("http://example.org/s{i}"))
+                        .expect("valid IRI from format"),
+                    NamedNode::new("http://example.org/p").expect("valid IRI"),
                     Literal::new(format!("value{i}")),
                 );
                 g.add_triple(triple);

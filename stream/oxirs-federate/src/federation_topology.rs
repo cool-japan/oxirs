@@ -373,8 +373,9 @@ impl FederationTopologyManager {
                     .await;
                     // Re-acquire to set status.
                     let mut endpoints = self.endpoints.write().await;
-                    let entry = endpoints.get_mut(endpoint_id).unwrap();
-                    entry.status = EndpointStatus::Healthy;
+                    if let Some(entry) = endpoints.get_mut(endpoint_id) {
+                        entry.status = EndpointStatus::Healthy;
+                    }
                     new_status = EndpointStatus::Healthy;
                     drop(endpoints);
                 } else {
@@ -577,7 +578,7 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
         let eps = mgr.all_endpoints().await;
         assert_eq!(eps.len(), 1);
     }
@@ -587,7 +588,7 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
         let result = mgr
             .register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await;
@@ -610,7 +611,7 @@ mod tests {
         let mut updated = make_endpoint("ep1", "http://a.example/sparql/v2");
         updated.priority = 200;
         mgr.upsert_endpoint(updated).await;
-        let ep = mgr.get_endpoint("ep1").await.unwrap();
+        let ep = mgr.get_endpoint("ep1").await.expect("should succeed");
         assert_eq!(ep.priority, 200);
     }
 
@@ -619,8 +620,8 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
-        mgr.remove_endpoint("ep1").await.unwrap();
+            .expect("should succeed");
+        mgr.remove_endpoint("ep1").await.expect("should succeed");
         assert!(mgr.all_endpoints().await.is_empty());
     }
 
@@ -638,12 +639,14 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         let mut ep = make_endpoint("ep1", "http://a.example/sparql");
         ep.status = EndpointStatus::Healthy;
-        mgr.register_endpoint(ep).await.unwrap();
+        mgr.register_endpoint(ep).await.expect("should succeed");
 
-        mgr.deactivate_endpoint("ep1").await.unwrap();
+        mgr.deactivate_endpoint("ep1")
+            .await
+            .expect("should succeed");
         assert!(mgr.available_endpoints().await.is_empty());
 
-        mgr.activate_endpoint("ep1").await.unwrap();
+        mgr.activate_endpoint("ep1").await.expect("should succeed");
         assert_eq!(mgr.available_endpoints().await.len(), 1);
     }
 
@@ -654,12 +657,14 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let result = HealthCheckResult::success(50.0, HashSet::new());
-        mgr.apply_health_check("ep1", result).await.unwrap();
+        mgr.apply_health_check("ep1", result)
+            .await
+            .expect("should succeed");
 
-        let ep = mgr.get_endpoint("ep1").await.unwrap();
+        let ep = mgr.get_endpoint("ep1").await.expect("should succeed");
         assert_eq!(ep.status, EndpointStatus::Healthy);
         assert_eq!(ep.consecutive_failures, 0);
     }
@@ -669,12 +674,14 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let result = HealthCheckResult::failure("connection refused");
-        mgr.apply_health_check("ep1", result).await.unwrap();
+        mgr.apply_health_check("ep1", result)
+            .await
+            .expect("should succeed");
 
-        let ep = mgr.get_endpoint("ep1").await.unwrap();
+        let ep = mgr.get_endpoint("ep1").await.expect("should succeed");
         assert_eq!(ep.consecutive_failures, 1);
     }
 
@@ -688,23 +695,23 @@ mod tests {
         let mgr = FederationTopologyManager::with_config(config);
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // First failure → degraded threshold reached
         mgr.apply_health_check("ep1", HealthCheckResult::failure("err"))
             .await
-            .unwrap();
-        let ep = mgr.get_endpoint("ep1").await.unwrap();
+            .expect("should succeed");
+        let ep = mgr.get_endpoint("ep1").await.expect("should succeed");
         assert_eq!(ep.status, EndpointStatus::Degraded);
 
         // Second and third failures → unavailable
         mgr.apply_health_check("ep1", HealthCheckResult::failure("err"))
             .await
-            .unwrap();
+            .expect("should succeed");
         mgr.apply_health_check("ep1", HealthCheckResult::failure("err"))
             .await
-            .unwrap();
-        let ep = mgr.get_endpoint("ep1").await.unwrap();
+            .expect("should succeed");
+        let ep = mgr.get_endpoint("ep1").await.expect("should succeed");
         assert_eq!(ep.status, EndpointStatus::Unavailable);
     }
 
@@ -713,16 +720,16 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         mgr.apply_health_check("ep1", HealthCheckResult::failure("err"))
             .await
-            .unwrap();
+            .expect("should succeed");
         mgr.apply_health_check("ep1", HealthCheckResult::success(30.0, HashSet::new()))
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let ep = mgr.get_endpoint("ep1").await.unwrap();
+        let ep = mgr.get_endpoint("ep1").await.expect("should succeed");
         assert_eq!(ep.status, EndpointStatus::Healthy);
         assert_eq!(ep.consecutive_failures, 0);
     }
@@ -734,13 +741,13 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         mgr.set_capabilities("ep1", sparql11_features())
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let ep = mgr.get_endpoint("ep1").await.unwrap();
+        let ep = mgr.get_endpoint("ep1").await.expect("should succeed");
         assert!(ep.supports(&SparqlFeature::Sparql11Query));
         assert!(ep.supports(&SparqlFeature::NamedGraphs));
         assert!(!ep.supports(&SparqlFeature::GeoSparql));
@@ -751,15 +758,15 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let mut features = HashSet::new();
         features.insert(SparqlFeature::GeoSparql);
         mgr.apply_health_check("ep1", HealthCheckResult::success(40.0, features))
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let ep = mgr.get_endpoint("ep1").await.unwrap();
+        let ep = mgr.get_endpoint("ep1").await.expect("should succeed");
         assert!(ep.supports(&SparqlFeature::GeoSparql));
     }
 
@@ -770,12 +777,12 @@ mod tests {
         let mut ep1 = make_endpoint("ep1", "http://a.example/sparql");
         ep1.status = EndpointStatus::Healthy;
         ep1.capabilities.insert(SparqlFeature::GeoSparql);
-        mgr.register_endpoint(ep1).await.unwrap();
+        mgr.register_endpoint(ep1).await.expect("should succeed");
 
         let mut ep2 = make_endpoint("ep2", "http://b.example/sparql");
         ep2.status = EndpointStatus::Healthy;
         ep2.capabilities.insert(SparqlFeature::FullTextSearch);
-        mgr.register_endpoint(ep2).await.unwrap();
+        mgr.register_endpoint(ep2).await.expect("should succeed");
 
         let geo = mgr.endpoints_with_feature(&SparqlFeature::GeoSparql).await;
         assert_eq!(geo.len(), 1);
@@ -794,10 +801,10 @@ mod tests {
 
         let mut good = make_endpoint("good", "http://good.example/sparql");
         good.status = EndpointStatus::Healthy;
-        mgr.register_endpoint(good).await.unwrap();
+        mgr.register_endpoint(good).await.expect("should succeed");
 
         let bad = make_endpoint("bad", "http://bad.example/sparql");
-        mgr.register_endpoint(bad).await.unwrap();
+        mgr.register_endpoint(bad).await.expect("should succeed");
 
         let replacement = mgr.trigger_failover("bad").await;
         assert_eq!(replacement, Some("good".to_string()));
@@ -812,7 +819,7 @@ mod tests {
         let mgr = FederationTopologyManager::with_config(config);
 
         let bad = make_endpoint("only", "http://only.example/sparql");
-        mgr.register_endpoint(bad).await.unwrap();
+        mgr.register_endpoint(bad).await.expect("should succeed");
 
         let replacement = mgr.trigger_failover("only").await;
         assert!(replacement.is_none());
@@ -829,15 +836,15 @@ mod tests {
         let mut low = make_endpoint("low", "http://low.example/sparql");
         low.status = EndpointStatus::Healthy;
         low.priority = 50;
-        mgr.register_endpoint(low).await.unwrap();
+        mgr.register_endpoint(low).await.expect("should succeed");
 
         let mut high = make_endpoint("high", "http://high.example/sparql");
         high.status = EndpointStatus::Healthy;
         high.priority = 200;
-        mgr.register_endpoint(high).await.unwrap();
+        mgr.register_endpoint(high).await.expect("should succeed");
 
         let bad = make_endpoint("bad", "http://bad.example/sparql");
-        mgr.register_endpoint(bad).await.unwrap();
+        mgr.register_endpoint(bad).await.expect("should succeed");
 
         let replacement = mgr.trigger_failover("bad").await;
         assert_eq!(replacement, Some("high".to_string()));
@@ -850,7 +857,7 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
         let events = mgr.events().await;
         assert!(!events.is_empty());
         assert!(matches!(
@@ -864,7 +871,7 @@ mod tests {
         let mgr = FederationTopologyManager::new();
         mgr.register_endpoint(make_endpoint("ep1", "http://a.example/sparql"))
             .await
-            .unwrap();
+            .expect("should succeed");
         mgr.clear_events().await;
         assert!(mgr.events().await.is_empty());
     }

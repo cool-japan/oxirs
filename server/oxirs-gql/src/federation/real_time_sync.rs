@@ -750,7 +750,7 @@ mod tests {
         let conflicts = synchronizer
             .detect_conflicts(&service_schemas)
             .await
-            .unwrap();
+            .expect("should succeed");
         // Should not have conflicts with single service
         assert_eq!(conflicts.len(), 0);
     }

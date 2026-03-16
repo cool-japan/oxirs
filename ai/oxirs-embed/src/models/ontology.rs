@@ -1231,19 +1231,22 @@ mod tests {
         // Create test triples with ontology relationships
         let triples = vec![
             Triple::new(
-                NamedNode::new("http://example.org/Dog").unwrap(),
-                NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").unwrap(),
-                NamedNode::new("http://example.org/Animal").unwrap(),
+                NamedNode::new("http://example.org/Dog").expect("should succeed"),
+                NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf")
+                    .expect("should succeed"),
+                NamedNode::new("http://example.org/Animal").expect("should succeed"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/Cat").unwrap(),
-                NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").unwrap(),
-                NamedNode::new("http://example.org/Animal").unwrap(),
+                NamedNode::new("http://example.org/Cat").expect("should succeed"),
+                NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf")
+                    .expect("should succeed"),
+                NamedNode::new("http://example.org/Animal").expect("should succeed"),
             ),
             Triple::new(
-                NamedNode::new("http://example.org/Canine").unwrap(),
-                NamedNode::new("http://www.w3.org/2002/07/owl#equivalentClass").unwrap(),
-                NamedNode::new("http://example.org/Dog").unwrap(),
+                NamedNode::new("http://example.org/Canine").expect("should succeed"),
+                NamedNode::new("http://www.w3.org/2002/07/owl#equivalentClass")
+                    .expect("should succeed"),
+                NamedNode::new("http://example.org/Dog").expect("should succeed"),
             ),
         ];
 
@@ -1316,19 +1319,21 @@ mod tests {
         // Add triples using the trait method
         model
             .add_triple(Triple::new(
-                NamedNode::new("http://example.org/Dog").unwrap(),
-                NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").unwrap(),
-                NamedNode::new("http://example.org/Animal").unwrap(),
+                NamedNode::new("http://example.org/Dog").expect("should succeed"),
+                NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf")
+                    .expect("should succeed"),
+                NamedNode::new("http://example.org/Animal").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         model
             .add_triple(Triple::new(
-                NamedNode::new("http://example.org/Fido").unwrap(),
-                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
-                NamedNode::new("http://example.org/Dog").unwrap(),
+                NamedNode::new("http://example.org/Fido").expect("should succeed"),
+                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                    .expect("should succeed"),
+                NamedNode::new("http://example.org/Dog").expect("should succeed"),
             ))
-            .unwrap();
+            .expect("should succeed");
 
         let result = model.train(Some(10)).await;
         assert!(result.is_ok());
@@ -1347,7 +1352,7 @@ mod tests {
         // Test embedding retrieval using the trait method
         let dog_embedding = model.get_entity_embedding("http://example.org/Dog");
         assert!(dog_embedding.is_ok());
-        assert_eq!(dog_embedding.unwrap().dimensions, 32);
+        assert_eq!(dog_embedding.expect("should succeed").dimensions, 32);
 
         // Test that model is trained
         assert!(model.is_trained());

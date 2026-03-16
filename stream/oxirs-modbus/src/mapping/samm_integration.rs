@@ -16,11 +16,11 @@
 //! ```no_run
 //! use oxirs_modbus::mapping::{RegisterMap, SammGenerator};
 //!
-//! let register_map = RegisterMap::from_toml("modbus_map.toml").unwrap();
+//! let register_map = RegisterMap::from_toml("modbus_map.toml").expect("should succeed");
 //! let generator = SammGenerator::new("1.0.0", "http://example.org/");
 //!
 //! let ttl = generator.generate_aspect_model(&register_map);
-//! std::fs::write("ModbusDevice.ttl", ttl).unwrap();
+//! std::fs::write("ModbusDevice.ttl", ttl).expect("should succeed");
 //! ```
 
 use super::{ModbusDataType, RegisterMap, RegisterMapping, RegisterType};

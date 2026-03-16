@@ -556,7 +556,7 @@ impl TestGenerator {
 
             code.push_str("        ];\n\n");
 
-            code.push_str("        let results = engine.forward_chain(&input_facts).unwrap();\n\n");
+            code.push_str("        let results = engine.forward_chain(&input_facts).expect(\"should succeed\");\n\n");
 
             match test.test_type {
                 TestType::Positive => {

@@ -507,7 +507,9 @@ mod tests {
     fn test_json_export() {
         let plan = create_sample_plan();
         let visualizer = QueryPlanVisualizer::new();
-        let json = visualizer.export_as_json(&plan).unwrap();
+        let json = visualizer
+            .export_as_json(&plan)
+            .expect("operation should succeed");
 
         assert!(json.contains("\"node_type\": \"Join\""));
         assert!(json.contains("\"estimated_cardinality\": 100"));

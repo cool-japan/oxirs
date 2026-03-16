@@ -394,18 +394,21 @@ mod tests {
         cache
             .put("test query".to_string(), result.clone(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let cached = cache.get("test query").await.unwrap();
+        let cached = cache.get("test query").await.expect("should succeed");
         assert!(cached.is_some());
-        assert_eq!(cached.unwrap().data, "test data");
+        assert_eq!(cached.expect("should succeed").data, "test data");
     }
 
     #[tokio::test]
     async fn test_cache_miss() {
         let cache = SemanticCache::new(SemanticCacheConfig::default());
 
-        let cached = cache.get("nonexistent query").await.unwrap();
+        let cached = cache
+            .get("nonexistent query")
+            .await
+            .expect("should succeed");
         assert!(cached.is_none());
     }
 
@@ -422,11 +425,22 @@ mod tests {
         cache
             .put("test query".to_string(), result, None)
             .await
-            .unwrap();
-        assert!(cache.get("test query").await.unwrap().is_some());
+            .expect("should succeed");
+        assert!(cache
+            .get("test query")
+            .await
+            .expect("should succeed")
+            .is_some());
 
-        cache.invalidate("test query").await.unwrap();
-        assert!(cache.get("test query").await.unwrap().is_none());
+        cache
+            .invalidate("test query")
+            .await
+            .expect("should succeed");
+        assert!(cache
+            .get("test query")
+            .await
+            .expect("should succeed")
+            .is_none());
     }
 
     #[tokio::test]
@@ -442,9 +456,9 @@ mod tests {
         cache
             .put("test query".to_string(), result, None)
             .await
-            .unwrap();
-        cache.get("test query").await.unwrap(); // Hit
-        cache.get("other query").await.unwrap(); // Miss
+            .expect("should succeed");
+        cache.get("test query").await.expect("should succeed"); // Hit
+        cache.get("other query").await.expect("should succeed"); // Miss
 
         let stats = cache.statistics().await;
         assert_eq!(stats.hits, 1);
@@ -471,15 +485,15 @@ mod tests {
         cache
             .put("query1".to_string(), result.clone(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
         cache
             .put("query2".to_string(), result.clone(), None)
             .await
-            .unwrap();
+            .expect("should succeed");
         cache
             .put("query3".to_string(), result.clone(), None)
             .await
-            .unwrap(); // Should evict one
+            .expect("should succeed"); // Should evict one
 
         let stats = cache.statistics().await;
         assert_eq!(stats.current_size, 2);

@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_session_creation() {
-        let store = Arc::new(oxirs_core::ConcreteStore::new().unwrap());
+        let store = Arc::new(oxirs_core::ConcreteStore::new().expect("should succeed"));
         let session = ChatSession::new("test-session".to_string(), store);
         assert_eq!(session.id, "test-session");
         assert_eq!(session.messages.len(), 0);

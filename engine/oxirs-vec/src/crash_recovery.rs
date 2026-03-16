@@ -415,8 +415,8 @@ mod tests {
 
     #[test]
     #[ignore = "WAL recovery across instances needs refinement - functional in production"]
-    fn test_crash_recovery_basic() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_crash_recovery_basic() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = RecoveryConfig {
             wal_config: WalConfig {
@@ -430,33 +430,30 @@ mod tests {
         // Create manager and insert data
         {
             let index = MemoryVectorIndex::new();
-            let manager = CrashRecoveryManager::new(index, config.clone()).unwrap();
+            let manager = CrashRecoveryManager::new(index, config.clone())?;
 
-            manager
-                .insert("vec1".to_string(), Vector::new(vec![1.0, 2.0]), None)
-                .unwrap();
-            manager
-                .insert("vec2".to_string(), Vector::new(vec![3.0, 4.0]), None)
-                .unwrap();
+            manager.insert("vec1".to_string(), Vector::new(vec![1.0, 2.0]), None)?;
+            manager.insert("vec2".to_string(), Vector::new(vec![3.0, 4.0]), None)?;
 
-            manager.flush().unwrap();
+            manager.flush()?;
         }
 
         // Simulate crash and recovery
         {
             let index = MemoryVectorIndex::new();
-            let manager = CrashRecoveryManager::new(index, config).unwrap();
+            let manager = CrashRecoveryManager::new(index, config)?;
 
-            let stats = manager.recover().unwrap();
+            let stats = manager.recover()?;
             assert_eq!(stats.entries_recovered, 2);
             assert_eq!(stats.entries_failed, 0);
         }
+        Ok(())
     }
 
     #[test]
     #[ignore = "WAL recovery across instances needs refinement - functional in production"]
-    fn test_checkpoint_recovery() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_checkpoint_recovery() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = RecoveryConfig {
             wal_config: WalConfig {
@@ -472,36 +469,35 @@ mod tests {
 
         {
             let index = MemoryVectorIndex::new();
-            let manager = CrashRecoveryManager::new(index, config.clone()).unwrap();
+            let manager = CrashRecoveryManager::new(index, config.clone())?;
 
             // Insert 5 vectors (should trigger checkpoints)
             for i in 0..5 {
-                manager
-                    .insert(
-                        format!("vec{}", i),
-                        Vector::new(vec![i as f32, (i * 2) as f32]),
-                        None,
-                    )
-                    .unwrap();
+                manager.insert(
+                    format!("vec{}", i),
+                    Vector::new(vec![i as f32, (i * 2) as f32]),
+                    None,
+                )?;
             }
 
-            manager.flush().unwrap();
+            manager.flush()?;
         }
 
         // Recovery should skip checkpointed entries
         {
             let index = MemoryVectorIndex::new();
-            let manager = CrashRecoveryManager::new(index, config).unwrap();
+            let manager = CrashRecoveryManager::new(index, config)?;
 
-            let stats = manager.recover().unwrap();
+            let stats = manager.recover()?;
             assert!(stats.checkpoints_found > 0);
         }
+        Ok(())
     }
 
     #[test]
     #[ignore = "WAL recovery across instances needs refinement - functional in production"]
-    fn test_transaction_recovery() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_transaction_recovery() -> Result<()> {
+        let temp_dir = TempDir::new()?;
 
         let config = RecoveryConfig {
             wal_config: WalConfig {
@@ -514,44 +510,36 @@ mod tests {
 
         {
             let index = MemoryVectorIndex::new();
-            let manager = CrashRecoveryManager::new(index, config.clone()).unwrap();
+            let manager = CrashRecoveryManager::new(index, config.clone())?;
 
             // Write transaction markers directly to WAL for testing
-            manager
-                .wal
-                .append(WalEntry::BeginTransaction {
-                    transaction_id: 1,
-                    timestamp: 100,
-                })
-                .unwrap();
+            manager.wal.append(WalEntry::BeginTransaction {
+                transaction_id: 1,
+                timestamp: 100,
+            })?;
 
-            manager
-                .wal
-                .append(WalEntry::Insert {
-                    id: "vec1".to_string(),
-                    vector: vec![1.0],
-                    metadata: None,
-                    timestamp: 101,
-                })
-                .unwrap();
+            manager.wal.append(WalEntry::Insert {
+                id: "vec1".to_string(),
+                vector: vec![1.0],
+                metadata: None,
+                timestamp: 101,
+            })?;
 
-            manager
-                .wal
-                .append(WalEntry::CommitTransaction {
-                    transaction_id: 1,
-                    timestamp: 102,
-                })
-                .unwrap();
+            manager.wal.append(WalEntry::CommitTransaction {
+                transaction_id: 1,
+                timestamp: 102,
+            })?;
 
-            manager.flush().unwrap();
+            manager.flush()?;
         }
 
         {
             let index = MemoryVectorIndex::new();
-            let manager = CrashRecoveryManager::new(index, config).unwrap();
+            let manager = CrashRecoveryManager::new(index, config)?;
 
-            let stats = manager.recover().unwrap();
+            let stats = manager.recover()?;
             assert_eq!(stats.transactions_recovered, 1);
         }
+        Ok(())
     }
 }

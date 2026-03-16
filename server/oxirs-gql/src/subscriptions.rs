@@ -920,8 +920,9 @@ mod tests {
             payload: Some(serde_json::json!({"auth": "token"})),
         };
 
-        let serialized = serde_json::to_string(&msg).unwrap();
-        let deserialized: SubscriptionMessage = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&msg).expect("should succeed");
+        let deserialized: SubscriptionMessage =
+            serde_json::from_str(&serialized).expect("should succeed");
 
         matches!(deserialized, SubscriptionMessage::ConnectionInit { .. });
     }

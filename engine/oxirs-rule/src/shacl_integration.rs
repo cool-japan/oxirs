@@ -609,7 +609,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validation_with_reasoning() {
+    fn test_validation_with_reasoning() -> Result<(), Box<dyn std::error::Error>> {
         let mut engine = RuleEngine::new();
         engine.add_fact(RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
@@ -627,11 +627,10 @@ mod tests {
             object: Term::Literal("30".to_string()),
         }];
 
-        let report = integration
-            .validate_with_reasoning(&[constraint], &data)
-            .unwrap();
+        let report = integration.validate_with_reasoning(&[constraint], &data)?;
 
         assert_eq!(report.results.len(), 1);
+        Ok(())
     }
 
     #[test]

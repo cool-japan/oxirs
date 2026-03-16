@@ -462,7 +462,7 @@ mod tests {
             vec!["id".to_string(), "name".to_string()],
         );
         assert_eq!(schema.types.len(), 1);
-        assert_eq!(schema.fields.get("User").unwrap().len(), 2);
+        assert_eq!(schema.fields.get("User").expect("should succeed").len(), 2);
     }
 
     #[test]
@@ -506,7 +506,10 @@ mod tests {
         let mut schema = SchemaInfo::new();
         schema.add_type("User".to_string(), vec!["id".to_string()]);
 
-        generator.register_schema(schema).await.unwrap();
+        generator
+            .register_schema(schema)
+            .await
+            .expect("should succeed");
         let registered = generator.get_schema().await;
         assert_eq!(registered.types.len(), 1);
     }
@@ -521,7 +524,10 @@ mod tests {
             required_entities: vec![],
         };
 
-        generator.add_template(template).await.unwrap();
+        generator
+            .add_template(template)
+            .await
+            .expect("should succeed");
     }
 
     #[tokio::test]
@@ -534,7 +540,10 @@ mod tests {
             "User".to_string(),
             vec!["id".to_string(), "name".to_string()],
         );
-        generator.register_schema(schema).await.unwrap();
+        generator
+            .register_schema(schema)
+            .await
+            .expect("should succeed");
 
         // Add template
         let template = QueryTemplate {
@@ -543,14 +552,17 @@ mod tests {
             template: "query { users { id name } }".to_string(),
             required_entities: vec![],
         };
-        generator.add_template(template).await.unwrap();
+        generator
+            .add_template(template)
+            .await
+            .expect("should succeed");
 
         // Generate query
         let nl_query = NaturalLanguageQuery::new("search for users".to_string());
         let result = generator.generate(nl_query).await;
 
         assert!(result.is_ok());
-        let generated = result.unwrap();
+        let generated = result.expect("should succeed");
         assert!(generated.query.contains("users"));
         assert_eq!(generated.metadata.intent, "search");
     }

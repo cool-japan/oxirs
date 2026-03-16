@@ -114,7 +114,7 @@ mod tests {
 
         let result = state_machine
             .execute(RdfOperation::Insert(triple.clone()))
-            .unwrap();
+            .expect("operation should succeed");
         assert!(matches!(result, OperationResult::Success));
         assert_eq!(state_machine.triple_count(), 1);
 
@@ -124,7 +124,9 @@ mod tests {
         assert_eq!(digest1, digest2); // Cached digest
 
         // Test remove
-        let result = state_machine.execute(RdfOperation::Remove(triple)).unwrap();
+        let result = state_machine
+            .execute(RdfOperation::Remove(triple))
+            .expect("state machine execution should succeed");
         assert!(matches!(result, OperationResult::Success));
         assert_eq!(state_machine.triple_count(), 0);
 

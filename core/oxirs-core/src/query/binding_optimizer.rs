@@ -669,18 +669,18 @@ mod tests {
     #[test]
     fn test_binding_set_basic() {
         let mut bindings = BindingSet::new();
-        let var_x = Variable::new("x").unwrap();
-        let var_y = Variable::new("y").unwrap();
+        let var_x = Variable::new("x").expect("valid variable name");
+        let var_y = Variable::new("y").expect("valid variable name");
 
         // Add variables
         bindings.add_variable(var_x.clone());
         bindings.add_variable(var_y.clone());
 
         // Bind x to a value
-        let term = Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let term = Term::NamedNode(NamedNode::new("http://example.org/alice").expect("valid IRI"));
         bindings
             .bind(var_x.clone(), term.clone(), BindingMetadata::default())
-            .unwrap();
+            .expect("operation should succeed");
 
         // Check binding
         assert_eq!(bindings.get(&var_x), Some(&term));
@@ -695,7 +695,7 @@ mod tests {
     #[test]
     fn test_type_constraints() {
         let mut bindings = BindingSet::new();
-        let var = Variable::new("x").unwrap();
+        let var = Variable::new("x").expect("valid variable name");
 
         // Add type constraint
         bindings.add_constraint(Constraint::TypeConstraint {
@@ -706,7 +706,8 @@ mod tests {
         });
 
         // Try to bind to named node (should fail)
-        let named_node = Term::NamedNode(NamedNode::new("http://example.org/thing").unwrap());
+        let named_node =
+            Term::NamedNode(NamedNode::new("http://example.org/thing").expect("valid IRI"));
         assert!(bindings
             .bind(var.clone(), named_node, BindingMetadata::default())
             .is_err());
@@ -721,7 +722,7 @@ mod tests {
     #[test]
     fn test_value_constraints() {
         let mut bindings = BindingSet::new();
-        let var = Variable::new("age").unwrap();
+        let var = Variable::new("age").expect("valid variable name");
 
         // Add numeric range constraint
         bindings.add_constraint(Constraint::ValueConstraint {
@@ -750,21 +751,21 @@ mod tests {
         let mut bindings1 = BindingSet::new();
         let mut bindings2 = BindingSet::new();
 
-        let var_x = Variable::new("x").unwrap();
-        let var_y = Variable::new("y").unwrap();
+        let var_x = Variable::new("x").expect("valid variable name");
+        let var_y = Variable::new("y").expect("valid variable name");
 
-        let term_x = Term::NamedNode(NamedNode::new("http://example.org/x").unwrap());
-        let term_y = Term::NamedNode(NamedNode::new("http://example.org/y").unwrap());
+        let term_x = Term::NamedNode(NamedNode::new("http://example.org/x").expect("valid IRI"));
+        let term_y = Term::NamedNode(NamedNode::new("http://example.org/y").expect("valid IRI"));
 
         bindings1
             .bind(var_x.clone(), term_x.clone(), BindingMetadata::default())
-            .unwrap();
+            .expect("operation should succeed");
         bindings2
             .bind(var_y.clone(), term_y.clone(), BindingMetadata::default())
-            .unwrap();
+            .expect("operation should succeed");
 
         // Merge
-        bindings1.merge(&bindings2).unwrap();
+        bindings1.merge(&bindings2).expect("merge should succeed");
 
         // Check both bindings exist
         assert_eq!(bindings1.get(&var_x), Some(&term_x));
@@ -775,7 +776,10 @@ mod tests {
     fn test_binding_optimizer() {
         let mut optimizer = BindingOptimizer::new();
 
-        let vars = vec![Variable::new("x").unwrap(), Variable::new("y").unwrap()];
+        let vars = vec![
+            Variable::new("x").expect("valid variable name"),
+            Variable::new("y").expect("valid variable name"),
+        ];
         let constraints = vec![];
 
         // First call should miss cache

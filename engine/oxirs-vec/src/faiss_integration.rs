@@ -929,29 +929,31 @@ impl FaissFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
-    fn test_faiss_index_creation() {
+    fn test_faiss_index_creation() -> Result<()> {
         let config = FaissConfig {
             dimension: 128,
             index_type: FaissIndexType::FlatL2,
             ..Default::default()
         };
 
-        let index = FaissIndex::new(config).unwrap();
+        let index = FaissIndex::new(config)?;
         assert_eq!(index.dimension(), 128);
         assert_eq!(index.size(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_faiss_add_and_search() {
+    fn test_faiss_add_and_search() -> Result<()> {
         let config = FaissConfig {
             dimension: 4,
             index_type: FaissIndexType::FlatL2,
             ..Default::default()
         };
 
-        let index = FaissIndex::new(config).unwrap();
+        let index = FaissIndex::new(config)?;
 
         // Add test vectors
         let vectors = vec![
@@ -961,7 +963,7 @@ mod tests {
         ];
         let ids = vec!["vec1".to_string(), "vec2".to_string(), "vec3".to_string()];
 
-        index.add_vectors(vectors, ids).unwrap();
+        index.add_vectors(vectors, ids)?;
         assert_eq!(index.size(), 3);
 
         // Search for similar vector
@@ -970,14 +972,15 @@ mod tests {
             k: 2,
             ..Default::default()
         };
-        let results = index.search(&query, &params).unwrap();
+        let results = index.search(&query, &params)?;
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].0, "vec1"); // Should be closest to [1,0,0,0]
+        Ok(())
     }
 
     #[test]
-    fn test_faiss_training() {
+    fn test_faiss_training() -> Result<()> {
         let config = FaissConfig {
             dimension: 4,
             index_type: FaissIndexType::IvfFlat,
@@ -986,42 +989,48 @@ mod tests {
             ..Default::default()
         };
 
-        let index = FaissIndex::new(config).unwrap();
+        let index = FaissIndex::new(config)?;
 
         // Generate training data
         let training_vectors: Vec<Vec<f32>> = (0..10)
             .map(|i| vec![i as f32, (i % 2) as f32, 0.0, 0.0])
             .collect();
 
-        index.train(&training_vectors).unwrap();
+        index.train(&training_vectors)?;
 
-        let state = index.training_state.read().unwrap();
+        let state = index
+            .training_state
+            .read()
+            .expect("training_state lock not poisoned");
         assert!(state.is_trained);
         assert_eq!(state.training_progress, 1.0);
+        Ok(())
     }
 
     #[test]
-    fn test_faiss_factory() {
-        let index = FaissFactory::create_optimized_index(64, 1000, false).unwrap();
+    fn test_faiss_factory() -> Result<()> {
+        let index = FaissFactory::create_optimized_index(64, 1000, false)?;
         assert_eq!(index.dimension(), 64);
 
-        let gpu_index = FaissFactory::create_gpu_index(128, vec![0]).unwrap();
+        let gpu_index = FaissFactory::create_gpu_index(128, vec![0])?;
         assert_eq!(gpu_index.dimension(), 128);
         assert!(gpu_index.config.use_gpu);
+        Ok(())
     }
 
     #[test]
-    fn test_faiss_auto_index_selection() {
+    fn test_faiss_auto_index_selection() -> Result<()> {
         let config = FaissConfig {
             dimension: 64,
             index_type: FaissIndexType::Auto,
             ..Default::default()
         };
 
-        let index = FaissIndex::new(config).unwrap();
-        let index_str = index.faiss_index_string().unwrap();
+        let index = FaissIndex::new(config)?;
+        let index_str = index.faiss_index_string()?;
 
         // For empty index, should select flat
         assert_eq!(index_str, "Flat");
+        Ok(())
     }
 }

@@ -410,9 +410,11 @@ impl MaintenanceSchedule {
     pub fn add_task(&mut self, task: MaintenanceTask) {
         self.tasks.push(task);
         self.tasks.sort_by(|a, b| {
-            b.priority
-                .cmp(&a.priority)
-                .then(a.due_in_hours.partial_cmp(&b.due_in_hours).unwrap())
+            b.priority.cmp(&a.priority).then(
+                a.due_in_hours
+                    .partial_cmp(&b.due_in_hours)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
         });
     }
 
@@ -680,7 +682,7 @@ mod tests {
     #[test]
     fn health_indicator_vibration_nominal() {
         let samples = vec![0.1_f64; 100];
-        let hi = HealthIndicator::from_vibration(&samples, 0.5, 2.0).unwrap();
+        let hi = HealthIndicator::from_vibration(&samples, 0.5, 2.0).expect("should succeed");
         // RMS of 0.1 < nominal 0.5 → perfect health.
         assert!((hi.score - 1.0).abs() < 1e-9);
     }
@@ -689,22 +691,22 @@ mod tests {
     fn health_indicator_vibration_degraded() {
         let samples = vec![1.25_f64; 100];
         // nominal=0.5, failure=2.0 → score = 1 - (1.25-0.5)/(2.0-0.5) = 0.5
-        let hi = HealthIndicator::from_vibration(&samples, 0.5, 2.0).unwrap();
+        let hi = HealthIndicator::from_vibration(&samples, 0.5, 2.0).expect("should succeed");
         assert!((hi.score - 0.5).abs() < 1e-6);
     }
 
     #[test]
     fn health_indicator_temperature() {
-        let hi = HealthIndicator::from_temperature(500.0, 400.0, 600.0).unwrap();
+        let hi = HealthIndicator::from_temperature(500.0, 400.0, 600.0).expect("should succeed");
         // score = 1 - (500-400)/(600-400) = 0.5
         assert!((hi.score - 0.5).abs() < 1e-6);
     }
 
     #[test]
     fn health_indicator_aggregate() {
-        let h1 = HealthIndicator::from_temperature(300.0, 400.0, 600.0).unwrap(); // score 1.0
-        let h2 = HealthIndicator::from_temperature(500.0, 400.0, 600.0).unwrap(); // score 0.5
-        let agg = HealthIndicator::aggregate(&[h1, h2]).unwrap();
+        let h1 = HealthIndicator::from_temperature(300.0, 400.0, 600.0).expect("should succeed"); // score 1.0
+        let h2 = HealthIndicator::from_temperature(500.0, 400.0, 600.0).expect("should succeed"); // score 0.5
+        let agg = HealthIndicator::aggregate(&[h1, h2]).expect("should succeed");
         assert!((agg.score - 0.75).abs() < 1e-6);
     }
 
@@ -717,10 +719,10 @@ mod tests {
         let scores: Vec<f64> = times.iter().map(|t| 1.0 - 0.01 * t).collect();
 
         let mut model = LinearDegradationModel::new();
-        model.fit(&times, &scores).unwrap();
+        model.fit(&times, &scores).expect("should succeed");
 
         // At t=50 the health is 0.5; failure threshold 0.0 → failure at t=100.
-        let rul = model.predict_rul(50.0, 0.0).unwrap();
+        let rul = model.predict_rul(50.0, 0.0).expect("should succeed");
         assert!(
             (rul.remaining_time - 50.0).abs() < 0.1,
             "RUL: {}",
@@ -737,10 +739,10 @@ mod tests {
         let scores: Vec<f64> = times.iter().map(|t| (-0.05 * t).exp()).collect();
 
         let mut model = ExponentialDegradationModel::new();
-        model.fit(&times, &scores).unwrap();
+        model.fit(&times, &scores).expect("should succeed");
 
         // At t=0; failure when h=0.05 → t_fail = ln(1/0.05)/0.05 ≈ 59.9.
-        let rul = model.predict_rul(0.0, 0.05).unwrap();
+        let rul = model.predict_rul(0.0, 0.05).expect("should succeed");
         let expected = (1.0_f64 / 0.05).ln() / 0.05;
         assert!(
             (rul.remaining_time - expected).abs() < 1.0,
@@ -782,8 +784,8 @@ mod tests {
 
     #[test]
     fn prognostic_report_healthy() {
-        let hi = HealthIndicator::from_temperature(310.0, 400.0, 600.0).unwrap();
-        let report = PrognosticReport::new(&[hi], None, Vec::new()).unwrap();
+        let hi = HealthIndicator::from_temperature(310.0, 400.0, 600.0).expect("should succeed");
+        let report = PrognosticReport::new(&[hi], None, Vec::new()).expect("should succeed");
         assert!(report.health_score > 0.9);
         assert!(report.is_healthy());
     }

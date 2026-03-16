@@ -40,7 +40,7 @@
 //!     ("doc3".to_string(), 0.80),
 //! ];
 //!
-//! let fused = fusion.fuse(dense_results, sparse_results).unwrap();
+//! let fused = fusion.fuse(dense_results, sparse_results).expect("should succeed");
 //! ```
 
 use anyhow::Result;
@@ -593,7 +593,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_weighted_sum_fusion() {
+    fn test_weighted_sum_fusion() -> Result<()> {
         let config = HybridFusionConfig {
             strategy: HybridFusionStrategy::WeightedSum,
             dense_weight: 0.6,
@@ -608,17 +608,18 @@ mod tests {
 
         let sparse = vec![("doc2".to_string(), 0.7), ("doc3".to_string(), 0.6)];
 
-        let results = fusion.fuse(dense, sparse).unwrap();
+        let results = fusion.fuse(dense, sparse)?;
 
         assert!(!results.is_empty());
         // Results should be sorted by score
         for i in 1..results.len() {
             assert!(results[i - 1].score >= results[i].score);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_rrf_fusion() {
+    fn test_rrf_fusion() -> Result<()> {
         let config = HybridFusionConfig {
             strategy: HybridFusionStrategy::ReciprocalRankFusion,
             rrf_k: 60.0,
@@ -639,12 +640,13 @@ mod tests {
             ("doc4".to_string(), 0.65),
         ];
 
-        let results = fusion.fuse(dense, sparse).unwrap();
+        let results = fusion.fuse(dense, sparse)?;
 
         assert!(!results.is_empty());
         // doc2 and doc3 should rank high (appear in both)
         let top_ids: Vec<_> = results.iter().take(2).map(|r| r.id.as_str()).collect();
         assert!(top_ids.contains(&"doc2") || top_ids.contains(&"doc3"));
+        Ok(())
     }
 
     #[test]
@@ -671,7 +673,7 @@ mod tests {
     }
 
     #[test]
-    fn test_harmonic_mean_fusion() {
+    fn test_harmonic_mean_fusion() -> Result<()> {
         let config = HybridFusionConfig {
             strategy: HybridFusionStrategy::HarmonicMean,
             ..Default::default()
@@ -683,27 +685,29 @@ mod tests {
 
         let sparse = vec![("doc1".to_string(), 0.9), ("doc3".to_string(), 0.7)];
 
-        let results = fusion.fuse(dense, sparse).unwrap();
+        let results = fusion.fuse(dense, sparse)?;
 
         assert!(!results.is_empty());
         // doc1 appears in both, should have high score
         assert_eq!(results[0].id, "doc1");
+        Ok(())
     }
 
     #[test]
-    fn test_statistics() {
+    fn test_statistics() -> Result<()> {
         let config = HybridFusionConfig::default();
         let mut fusion = HybridFusion::new(config);
 
         let dense = vec![("doc1".to_string(), 0.9)];
         let sparse = vec![("doc2".to_string(), 0.8)];
 
-        fusion.fuse(dense.clone(), sparse.clone()).unwrap();
-        fusion.fuse(dense, sparse).unwrap();
+        fusion.fuse(dense.clone(), sparse.clone())?;
+        fusion.fuse(dense, sparse)?;
 
         let stats = fusion.stats();
         assert_eq!(stats.total_fusions, 2);
         assert!(stats.avg_dense_results > 0.0);
         assert!(stats.avg_sparse_results > 0.0);
+        Ok(())
     }
 }

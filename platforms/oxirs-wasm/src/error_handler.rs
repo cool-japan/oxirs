@@ -348,7 +348,7 @@ mod tests {
     fn test_from_code_valid() {
         let e = WasmError::from_code(2, "network failure");
         assert!(e.is_some());
-        let e = e.unwrap();
+        let e = e.expect("should succeed");
         assert_eq!(e.code, ErrorCode::NetworkError);
     }
 

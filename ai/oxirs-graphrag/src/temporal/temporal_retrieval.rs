@@ -464,26 +464,26 @@ mod tests {
 
     #[test]
     fn test_parse_rfc3339() {
-        let ts = parse_timestamp("2024-03-15T10:00:00Z").unwrap();
+        let ts = parse_timestamp("2024-03-15T10:00:00Z").expect("should succeed");
         assert_eq!(ts.year(), 2024);
     }
 
     #[test]
     fn test_parse_date_only() {
-        let ts = parse_timestamp("2023-06-01").unwrap();
+        let ts = parse_timestamp("2023-06-01").expect("should succeed");
         assert_eq!(ts.year(), 2023);
         assert_eq!(ts.month(), 6);
     }
 
     #[test]
     fn test_parse_year_only() {
-        let ts = parse_timestamp("2021").unwrap();
+        let ts = parse_timestamp("2021").expect("should succeed");
         assert_eq!(ts.year(), 2021);
     }
 
     #[test]
     fn test_parse_unix_epoch() {
-        let ts = parse_timestamp("1700000000").unwrap();
+        let ts = parse_timestamp("1700000000").expect("should succeed");
         assert!(ts.year() >= 2023);
     }
 
@@ -591,7 +591,7 @@ mod tests {
         };
         let retriever = TemporalRetriever::new(config);
         let entities = vec![make_entity("http://a", 0.9), make_entity("http://b", 0.7)];
-        let result = retriever.apply(entities, &[]).unwrap();
+        let result = retriever.apply(entities, &[]).expect("should succeed");
         assert_eq!(result.len(), 2);
         // Scores unchanged (alpha=0, decay=1)
         assert!((result[0].score - 0.9).abs() < 1e-9);
@@ -621,7 +621,9 @@ mod tests {
         old.metadata
             .insert("timestamp".to_string(), old_ts.to_rfc3339());
 
-        let result = retriever.apply(vec![recent, old], &[]).unwrap();
+        let result = retriever
+            .apply(vec![recent, old], &[])
+            .expect("should succeed");
         assert_eq!(result.len(), 2);
         // Recent should rank higher
         assert!(result[0].uri == "http://a", "Recent should rank first");
@@ -653,7 +655,7 @@ mod tests {
 
         let result = retriever
             .apply(vec![inside_entity, outside_entity], &[])
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].uri, "http://inside");
     }
@@ -666,7 +668,7 @@ mod tests {
         };
         let retriever = TemporalRetriever::new(config);
         let entities = vec![make_entity("http://notimestamp", 0.7)];
-        let result = retriever.apply(entities, &[]).unwrap();
+        let result = retriever.apply(entities, &[]).expect("should succeed");
         assert_eq!(result.len(), 1);
     }
 
@@ -678,7 +680,7 @@ mod tests {
         };
         let retriever = TemporalRetriever::new(config);
         let entities = vec![make_entity("http://notimestamp", 0.7)];
-        let result = retriever.apply(entities, &[]).unwrap();
+        let result = retriever.apply(entities, &[]).expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -693,7 +695,7 @@ mod tests {
         };
         let retriever = TemporalRetriever::new(config);
         let entities = vec![make_entity("http://notimestamp", 0.8)];
-        let result = retriever.apply(entities, &[]).unwrap();
+        let result = retriever.apply(entities, &[]).expect("should succeed");
         assert_eq!(result.len(), 1);
         assert!((result[0].score - 0.5).abs() < 1e-9);
     }
@@ -716,7 +718,9 @@ mod tests {
             "2023-06-01",
         )];
         let entities = vec![make_entity("http://entity", 0.8)];
-        let result = retriever.apply(entities, &subgraph).unwrap();
+        let result = retriever
+            .apply(entities, &subgraph)
+            .expect("should succeed");
         assert_eq!(result.len(), 1);
     }
 
@@ -730,7 +734,9 @@ mod tests {
             Triple::new("http://s", "http://p", "2023-01-01"),
             Triple::new("http://s", "http://p", "some literal"),
         ];
-        let result = retriever.filter_triples(triples.clone()).unwrap();
+        let result = retriever
+            .filter_triples(triples.clone())
+            .expect("should succeed");
         assert_eq!(result.len(), triples.len());
     }
 
@@ -748,7 +754,7 @@ mod tests {
             Triple::new("http://s", "http://p", "2022-01-01"), // before
             Triple::new("http://s", "http://p", "not-a-date"), // no ts → keep
         ];
-        let result = retriever.filter_triples(triples).unwrap();
+        let result = retriever.filter_triples(triples).expect("should succeed");
         // "inside" + "no ts" kept; "before" discarded
         assert_eq!(result.len(), 2);
     }
@@ -797,7 +803,7 @@ mod tests {
     fn test_extract_timestamp_from_metadata_finds_key() {
         let mut m = HashMap::new();
         m.insert("created".to_string(), "2023-01-15".to_string());
-        let ts = extract_timestamp_from_metadata(&m).unwrap();
+        let ts = extract_timestamp_from_metadata(&m).expect("should succeed");
         assert_eq!(ts.year(), 2023);
     }
 
@@ -820,7 +826,7 @@ mod tests {
         let mut e = make_entity("http://a", 0.75);
         e.metadata
             .insert("timestamp".to_string(), "2023-01-01".to_string());
-        let result = retriever.apply(vec![e], &[]).unwrap();
+        let result = retriever.apply(vec![e], &[]).expect("should succeed");
         assert!((result[0].score - 0.75).abs() < 1e-9);
     }
 
@@ -837,7 +843,7 @@ mod tests {
         let mut e = make_entity("http://a", 0.75);
         e.metadata
             .insert("timestamp".to_string(), "2023-12-31".to_string());
-        let result = retriever.apply(vec![e], &[]).unwrap();
+        let result = retriever.apply(vec![e], &[]).expect("should succeed");
         // decay = None → weight = 1.0, alpha = 1 → score ≈ 1.0
         assert!((result[0].score - 1.0).abs() < 0.01);
     }
@@ -987,7 +993,7 @@ mod additional_tests {
 
     #[test]
     fn test_parse_timestamp_rfc3339() {
-        let ts = parse_timestamp("2024-03-15T10:00:00Z").unwrap();
+        let ts = parse_timestamp("2024-03-15T10:00:00Z").expect("should succeed");
         assert_eq!(ts.year(), 2024);
         assert_eq!(ts.month(), 3);
         assert_eq!(ts.day(), 15);
@@ -995,7 +1001,7 @@ mod additional_tests {
 
     #[test]
     fn test_parse_timestamp_date_only() {
-        let ts = parse_timestamp("2023-07-04").unwrap();
+        let ts = parse_timestamp("2023-07-04").expect("should succeed");
         assert_eq!(ts.year(), 2023);
         assert_eq!(ts.month(), 7);
     }
@@ -1018,7 +1024,7 @@ mod additional_tests {
     fn test_parse_timestamp_unix_epoch() {
         let ts = parse_timestamp("1700000000");
         assert!(ts.is_some());
-        let ts = ts.unwrap();
+        let ts = ts.expect("should succeed");
         assert!(ts.year() >= 2023); // 1700000000 ≈ Nov 2023
     }
 
@@ -1047,7 +1053,7 @@ mod additional_tests {
             make_entity("http://high", 0.9),
             make_entity("http://mid", 0.6),
         ];
-        let result = retriever.apply(entities, &[]).unwrap();
+        let result = retriever.apply(entities, &[]).expect("should succeed");
         // Scores should be descending
         for i in 1..result.len() {
             assert!(
@@ -1061,7 +1067,7 @@ mod additional_tests {
     fn test_apply_empty_entities() {
         let config = TemporalRetrievalConfig::default();
         let retriever = TemporalRetriever::new(config);
-        let result = retriever.apply(vec![], &[]).unwrap();
+        let result = retriever.apply(vec![], &[]).expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -1078,7 +1084,7 @@ mod additional_tests {
         // Timestamp in 2023 – outside the 2020-2021 window
         e.metadata
             .insert("timestamp".to_string(), "2023-01-01".to_string());
-        let result = retriever.apply(vec![e], &[]).unwrap();
+        let result = retriever.apply(vec![e], &[]).expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -1121,7 +1127,9 @@ mod additional_tests {
             "http://someOtherPred",
             "some value",
         )];
-        let result = retriever.filter_triples(triples.clone()).unwrap();
+        let result = retriever
+            .filter_triples(triples.clone())
+            .expect("should succeed");
         assert_eq!(result.len(), 1);
     }
 
@@ -1157,7 +1165,7 @@ mod additional_tests {
         };
         let retriever = TemporalRetriever::new(config);
         let entities = vec![make_entity("http://no_ts", 0.8)];
-        let result = retriever.apply(entities, &[]).unwrap();
+        let result = retriever.apply(entities, &[]).expect("should succeed");
         // alpha=1.0, decay=none → score = unknown_weight = 0.25
         assert_eq!(result.len(), 1);
         assert!((result[0].score - 0.25).abs() < 1e-6);
@@ -1173,7 +1181,7 @@ mod additional_tests {
         };
         let retriever = TemporalRetriever::new(config);
         let entities = vec![make_entity("http://no_ts", 0.75)];
-        let result = retriever.apply(entities, &[]).unwrap();
+        let result = retriever.apply(entities, &[]).expect("should succeed");
         assert_eq!(result.len(), 1);
         assert!((result[0].score - 0.75).abs() < 1e-9);
     }

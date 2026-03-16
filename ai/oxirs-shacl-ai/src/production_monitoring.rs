@@ -29,10 +29,10 @@
 //!     50.0,  // latency_ms
 //!     true,  // success
 //!     0.95   // confidence
-//! ).unwrap();
+//! ).expect("should succeed");
 //!
 //! // Check SLA compliance
-//! let metrics = monitor.get_metrics("model_v1").unwrap();
+//! let metrics = monitor.get_metrics("model_v1").expect("should succeed");
 //! println!("SLA compliance: {}", metrics.sla_compliance);
 //! ```
 
@@ -755,7 +755,9 @@ mod tests {
         let monitor = ProductionMonitor::new();
         let sla = SLA::default();
 
-        monitor.register_model("test_model", sla).unwrap();
+        monitor
+            .register_model("test_model", sla)
+            .expect("should succeed");
 
         let models = monitor.list_models();
         assert_eq!(models.len(), 1);
@@ -767,13 +769,13 @@ mod tests {
         let monitor = ProductionMonitor::new();
         monitor
             .register_model("test_model", SLA::default())
-            .unwrap();
+            .expect("should succeed");
 
         monitor
             .record_inference("test_model", 50.0, true, 0.95)
-            .unwrap();
+            .expect("should succeed");
 
-        let metrics = monitor.get_metrics("test_model").unwrap();
+        let metrics = monitor.get_metrics("test_model").expect("should succeed");
         assert_eq!(metrics.total_requests, 1);
         assert_eq!(metrics.successful_requests, 1);
     }
@@ -783,18 +785,20 @@ mod tests {
         let monitor = ProductionMonitor::new();
         monitor
             .register_model("test_model", SLA::default())
-            .unwrap();
+            .expect("should succeed");
 
         // Record multiple inferences
         for i in 0..100 {
             monitor
                 .record_inference("test_model", 50.0 + i as f64, true, 0.95)
-                .unwrap();
+                .expect("should succeed");
         }
 
-        monitor.aggregate_metrics("test_model").unwrap();
+        monitor
+            .aggregate_metrics("test_model")
+            .expect("should succeed");
 
-        let metrics = monitor.get_metrics("test_model").unwrap();
+        let metrics = monitor.get_metrics("test_model").expect("should succeed");
         assert_eq!(metrics.total_requests, 100);
         assert!(metrics.avg_latency_ms > 0.0);
     }
@@ -810,18 +814,24 @@ mod tests {
             ..Default::default()
         };
 
-        monitor.register_model("test_model", sla).unwrap();
+        monitor
+            .register_model("test_model", sla)
+            .expect("should succeed");
 
         // Record low latency inferences
         for _ in 0..10 {
             monitor
                 .record_inference("test_model", 50.0, true, 0.95)
-                .unwrap();
+                .expect("should succeed");
         }
 
-        monitor.aggregate_metrics("test_model").unwrap();
+        monitor
+            .aggregate_metrics("test_model")
+            .expect("should succeed");
 
-        let compliant = monitor.check_sla_compliance("test_model").unwrap();
+        let compliant = monitor
+            .check_sla_compliance("test_model")
+            .expect("should succeed");
         assert!(compliant);
     }
 
@@ -838,18 +848,22 @@ mod tests {
             ..Default::default()
         };
 
-        monitor.register_model("test_model", sla).unwrap();
+        monitor
+            .register_model("test_model", sla)
+            .expect("should succeed");
 
         // Record failures to trigger alert
         for _ in 0..10 {
             monitor
                 .record_inference("test_model", 50.0, false, 0.5)
-                .unwrap();
+                .expect("should succeed");
         }
 
-        monitor.aggregate_metrics("test_model").unwrap();
+        monitor
+            .aggregate_metrics("test_model")
+            .expect("should succeed");
 
-        let alerts = monitor.get_alerts("test_model").unwrap();
+        let alerts = monitor.get_alerts("test_model").expect("should succeed");
         assert!(!alerts.is_empty());
     }
 
@@ -858,22 +872,26 @@ mod tests {
         let monitor = ProductionMonitor::new();
         monitor
             .register_model("test_model", SLA::default())
-            .unwrap();
+            .expect("should succeed");
 
         // Generate alert by recording failures
         for _ in 0..10 {
             monitor
                 .record_inference("test_model", 50.0, false, 0.5)
-                .unwrap();
+                .expect("should succeed");
         }
 
-        monitor.aggregate_metrics("test_model").unwrap();
+        monitor
+            .aggregate_metrics("test_model")
+            .expect("should succeed");
 
-        let alerts = monitor.get_alerts("test_model").unwrap();
+        let alerts = monitor.get_alerts("test_model").expect("should succeed");
         if let Some(alert) = alerts.first() {
-            monitor.acknowledge_alert("test_model", &alert.id).unwrap();
+            monitor
+                .acknowledge_alert("test_model", &alert.id)
+                .expect("should succeed");
 
-            let updated_alerts = monitor.get_alerts("test_model").unwrap();
+            let updated_alerts = monitor.get_alerts("test_model").expect("should succeed");
             assert!(updated_alerts.iter().any(|a| a.acknowledged));
         }
     }

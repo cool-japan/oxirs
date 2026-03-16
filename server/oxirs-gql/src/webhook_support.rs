@@ -932,7 +932,7 @@ mod tests {
         ];
 
         for t in types {
-            let json = serde_json::to_string(&t).unwrap();
+            let json = serde_json::to_string(&t).expect("should succeed");
             assert!(!json.is_empty());
         }
     }

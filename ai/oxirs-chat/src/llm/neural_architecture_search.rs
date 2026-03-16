@@ -722,7 +722,7 @@ mod tests {
             validation_dataset: "validation_data.json".to_string(),
         };
 
-        let search_id = search.start_search(config).await.unwrap();
+        let search_id = search.start_search(config).await.expect("should succeed");
         assert_eq!(search_id, "test_search");
     }
 
@@ -766,7 +766,7 @@ mod tests {
         let metrics = evaluator
             .evaluate_architecture(&architecture)
             .await
-            .unwrap();
+            .expect("should succeed");
         assert!(metrics.primary_metric > 0.0);
         assert!(metrics.validation_score > 0.0);
     }

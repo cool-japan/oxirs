@@ -156,8 +156,7 @@ impl ElectionCluster {
         }
 
         // Increment the initiator's term and set role to Candidate
-        {
-            let node = self.nodes.get_mut(&initiator_id).unwrap();
+        if let Some(node) = self.nodes.get_mut(&initiator_id) {
             node.term += 1;
             node.role = NodeRole::Candidate;
             node.alive_received = false;
@@ -189,7 +188,9 @@ impl ElectionCluster {
             // Higher nodes respond with Alive and then run their own election
             if self.nodes.contains_key(&higher_id) {
                 messages.push(ElectionMessage::Alive { from_id: higher_id });
-                self.nodes.get_mut(&initiator_id).unwrap().alive_received = true;
+                if let Some(initiator) = self.nodes.get_mut(&initiator_id) {
+                    initiator.alive_received = true;
+                }
             }
         }
 

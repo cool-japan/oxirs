@@ -1560,7 +1560,10 @@ mod tests {
         let coordinator =
             FederatedLearningCoordinator::new(addr, PrivacyLevel::Statistical, config);
 
-        let stats = coordinator.get_federation_stats().await.unwrap();
+        let stats = coordinator
+            .get_federation_stats()
+            .await
+            .expect("should succeed");
         assert_eq!(stats.total_nodes, 0);
         assert_eq!(stats.active_nodes, 0);
     }

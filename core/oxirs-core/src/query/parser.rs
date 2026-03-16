@@ -483,7 +483,7 @@ mod tests {
     fn test_parse_with_prefix() {
         let parser = SparqlParser::new()
             .with_prefix("ex", "http://example.org/")
-            .unwrap();
+            .expect("operation should succeed");
 
         let query = "SELECT ?s WHERE { ex:subject ?p ?o . }";
         let result = parser.parse_query(query);

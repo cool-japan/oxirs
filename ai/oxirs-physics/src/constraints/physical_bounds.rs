@@ -439,7 +439,14 @@ mod tests {
             unit: "K".to_string(),
             uncertainty: None,
         };
-        assert!((validator.convert_to_kelvin(&temp_k).unwrap() - 300.0).abs() < 1e-6);
+        assert!(
+            (validator
+                .convert_to_kelvin(&temp_k)
+                .expect("should succeed")
+                - 300.0)
+                .abs()
+                < 1e-6
+        );
 
         // Celsius
         let temp_c = PhysicalQuantity {
@@ -447,7 +454,14 @@ mod tests {
             unit: "°C".to_string(),
             uncertainty: None,
         };
-        assert!((validator.convert_to_kelvin(&temp_c).unwrap() - 273.15).abs() < 1e-6);
+        assert!(
+            (validator
+                .convert_to_kelvin(&temp_c)
+                .expect("should succeed")
+                - 273.15)
+                .abs()
+                < 1e-6
+        );
 
         // Fahrenheit
         let temp_f = PhysicalQuantity {
@@ -455,6 +469,13 @@ mod tests {
             unit: "°F".to_string(),
             uncertainty: None,
         };
-        assert!((validator.convert_to_kelvin(&temp_f).unwrap() - 273.15).abs() < 1e-6);
+        assert!(
+            (validator
+                .convert_to_kelvin(&temp_f)
+                .expect("should succeed")
+                - 273.15)
+                .abs()
+                < 1e-6
+        );
     }
 }

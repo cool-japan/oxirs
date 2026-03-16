@@ -452,7 +452,7 @@ pub fn interior_ring_n(geom: &Geometry, n: usize) -> Result<Option<Geometry>> {
 /// use oxirs_geosparql::functions::geometric_properties::volume_3d;
 ///
 /// // Volume of a cube: base 10x10 at Z=0, height 10
-/// let cube = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").unwrap();
+/// let cube = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").expect("should succeed");
 /// // This calculates base area * average height
 /// ```
 pub fn volume_3d(geom: &Geometry) -> Result<f64> {
@@ -548,7 +548,7 @@ pub fn volume_3d(geom: &Geometry) -> Result<f64> {
 ///     (0.0, 1.0, 0.0),
 ///     (0.0, 0.0, 1.0),
 /// ];
-/// let vol = volume_convex_hull_3d(&vertices).unwrap();
+/// let vol = volume_convex_hull_3d(&vertices).expect("should succeed");
 /// // Volume should be 1/6 (tetrahedron formula)
 /// ```
 pub fn volume_convex_hull_3d(vertices: &[(f64, f64, f64)]) -> Result<f64> {
@@ -598,8 +598,8 @@ pub fn volume_convex_hull_3d(vertices: &[(f64, f64, f64)]) -> Result<f64> {
 /// use oxirs_geosparql::functions::geometric_properties::surface_area_3d;
 ///
 /// // Inclined square (tilted plane)
-/// let tilted = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 10, 0 10 10, 0 0 0))").unwrap();
-/// let area = surface_area_3d(&tilted).unwrap();
+/// let tilted = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 10, 0 10 10, 0 0 0))").expect("should succeed");
+/// let area = surface_area_3d(&tilted).expect("should succeed");
 /// ```
 pub fn surface_area_3d(geom: &Geometry) -> Result<f64> {
     if !geom.is_3d() {
@@ -690,37 +690,37 @@ mod tests {
     #[test]
     fn test_dimension() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        assert_eq!(dimension(&point).unwrap(), 0);
+        assert_eq!(dimension(&point).expect("should succeed"), 0);
 
         let line = Geometry::new(GeoGeometry::LineString(LineString::new(vec![
             Coord { x: 0.0, y: 0.0 },
             Coord { x: 1.0, y: 1.0 },
         ])));
-        assert_eq!(dimension(&line).unwrap(), 1);
+        assert_eq!(dimension(&line).expect("should succeed"), 1);
     }
 
     #[test]
     fn test_coordinate_dimension() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        assert_eq!(coordinate_dimension(&point).unwrap(), 2);
+        assert_eq!(coordinate_dimension(&point).expect("should succeed"), 2);
     }
 
     #[test]
     fn test_is_empty() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        assert!(!is_empty(&point).unwrap());
+        assert!(!is_empty(&point).expect("should succeed"));
     }
 
     #[test]
     fn test_is_3d() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        assert!(!is_3d(&point).unwrap());
+        assert!(!is_3d(&point).expect("should succeed"));
     }
 
     #[test]
     fn test_is_measured() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        assert!(!is_measured(&point).unwrap());
+        assert!(!is_measured(&point).expect("should succeed"));
     }
 
     #[test]
@@ -729,11 +729,11 @@ mod tests {
 
         let point_with_epsg =
             Geometry::with_crs(GeoGeometry::Point(Point::new(1.0, 2.0)), Crs::epsg(4326));
-        let srid = get_srid(&point_with_epsg).unwrap();
+        let srid = get_srid(&point_with_epsg).expect("should succeed");
         assert_eq!(srid, Some("4326".to_string()));
 
         let point_default = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        let srid_default = get_srid(&point_default).unwrap();
+        let srid_default = get_srid(&point_default).expect("should succeed");
         assert_eq!(srid_default, None);
     }
 
@@ -751,7 +751,7 @@ mod tests {
             vec![],
         )));
 
-        let area_result = area(&square).unwrap();
+        let area_result = area(&square).expect("should succeed");
         assert!((area_result - 100.0).abs() < 1e-10);
     }
 
@@ -777,7 +777,7 @@ mod tests {
         let poly_with_hole =
             Geometry::new(GeoGeometry::Polygon(Polygon::new(exterior, vec![hole])));
 
-        let area_result = area(&poly_with_hole).unwrap();
+        let area_result = area(&poly_with_hole).expect("should succeed");
         // Outer area (100) - hole area (36) = 64
         assert!((area_result - 64.0).abs() < 1e-10);
     }
@@ -785,13 +785,13 @@ mod tests {
     #[test]
     fn test_area_non_polygon() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        assert_eq!(area(&point).unwrap(), 0.0);
+        assert_eq!(area(&point).expect("should succeed"), 0.0);
 
         let line = Geometry::new(GeoGeometry::LineString(LineString::new(vec![
             Coord { x: 0.0, y: 0.0 },
             Coord { x: 1.0, y: 1.0 },
         ])));
-        assert_eq!(area(&line).unwrap(), 0.0);
+        assert_eq!(area(&line).expect("should succeed"), 0.0);
     }
 
     #[test]
@@ -808,7 +808,7 @@ mod tests {
             vec![],
         )));
 
-        let signed = signed_area(&ccw_polygon).unwrap();
+        let signed = signed_area(&ccw_polygon).expect("should succeed");
         assert!(signed > 0.0);
         assert!((signed.abs() - 100.0).abs() < 1e-10);
     }
@@ -822,7 +822,7 @@ mod tests {
             Coord { x: 3.0, y: 4.0 },
         ])));
 
-        let len = length(&line).unwrap();
+        let len = length(&line).expect("should succeed");
         assert!((len - 7.0).abs() < 1e-10); // 3 + 4 = 7
     }
 
@@ -840,7 +840,7 @@ mod tests {
             vec![],
         )));
 
-        let len = length(&square).unwrap();
+        let len = length(&square).expect("should succeed");
         assert!((len - 40.0).abs() < 1e-10);
     }
 
@@ -858,7 +858,9 @@ mod tests {
             vec![],
         )));
 
-        let centroid_geom = centroid(&square).unwrap().unwrap();
+        let centroid_geom = centroid(&square)
+            .expect("should succeed")
+            .expect("should succeed");
         if let GeoGeometry::Point(p) = centroid_geom.geom {
             assert!((p.x() - 5.0).abs() < 1e-10);
             assert!((p.y() - 5.0).abs() < 1e-10);
@@ -870,7 +872,9 @@ mod tests {
     #[test]
     fn test_centroid_point() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0)));
-        let centroid_geom = centroid(&point).unwrap().unwrap();
+        let centroid_geom = centroid(&point)
+            .expect("should succeed")
+            .expect("should succeed");
 
         if let GeoGeometry::Point(p) = centroid_geom.geom {
             assert_eq!(p.x(), 3.0);
@@ -883,7 +887,7 @@ mod tests {
     #[test]
     fn test_point_on_surface_point() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(3.0, 4.0)));
-        let pos = point_on_surface(&point).unwrap();
+        let pos = point_on_surface(&point).expect("should succeed");
 
         if let GeoGeometry::Point(p) = pos.geom {
             assert_eq!(p.x(), 3.0);
@@ -900,7 +904,7 @@ mod tests {
             Coord { x: 10.0, y: 10.0 },
         ])));
 
-        let pos = point_on_surface(&line).unwrap();
+        let pos = point_on_surface(&line).expect("should succeed");
         if let GeoGeometry::Point(p) = pos.geom {
             // Should return the first point
             assert_eq!(p.x(), 0.0);
@@ -923,7 +927,7 @@ mod tests {
             vec![],
         )));
 
-        let pos = point_on_surface(&square).unwrap();
+        let pos = point_on_surface(&square).expect("should succeed");
         if let GeoGeometry::Point(p) = pos.geom {
             // Centroid (5,5) should be inside the square
             assert!((p.x() - 5.0).abs() < 1e-10);
@@ -936,14 +940,14 @@ mod tests {
     #[test]
     fn test_num_geometries() {
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
-        assert_eq!(num_geometries(&point).unwrap(), 1);
+        assert_eq!(num_geometries(&point).expect("should succeed"), 1);
 
         let multipoint = Geometry::new(GeoGeometry::MultiPoint(geo_types::MultiPoint::new(vec![
             Point::new(1.0, 2.0),
             Point::new(3.0, 4.0),
             Point::new(5.0, 6.0),
         ])));
-        assert_eq!(num_geometries(&multipoint).unwrap(), 3);
+        assert_eq!(num_geometries(&multipoint).expect("should succeed"), 3);
     }
 
     #[test]
@@ -954,7 +958,9 @@ mod tests {
             Point::new(5.0, 6.0),
         ])));
 
-        let geom0 = geometry_n(&multipoint, 0).unwrap().unwrap();
+        let geom0 = geometry_n(&multipoint, 0)
+            .expect("should succeed")
+            .expect("should succeed");
         if let GeoGeometry::Point(p) = geom0.geom {
             assert_eq!(p.x(), 1.0);
             assert_eq!(p.y(), 2.0);
@@ -962,7 +968,9 @@ mod tests {
             panic!("Expected Point geometry");
         }
 
-        let geom2 = geometry_n(&multipoint, 2).unwrap().unwrap();
+        let geom2 = geometry_n(&multipoint, 2)
+            .expect("should succeed")
+            .expect("should succeed");
         if let GeoGeometry::Point(p) = geom2.geom {
             assert_eq!(p.x(), 5.0);
             assert_eq!(p.y(), 6.0);
@@ -971,7 +979,9 @@ mod tests {
         }
 
         // Out of bounds
-        assert!(geometry_n(&multipoint, 3).unwrap().is_none());
+        assert!(geometry_n(&multipoint, 3)
+            .expect("should succeed")
+            .is_none());
     }
 
     #[test]
@@ -979,11 +989,13 @@ mod tests {
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
 
         // Index 0 should return the geometry itself
-        let geom0 = geometry_n(&point, 0).unwrap().unwrap();
+        let geom0 = geometry_n(&point, 0)
+            .expect("should succeed")
+            .expect("should succeed");
         assert_eq!(geom0.geometry_type(), "Point");
 
         // Index 1 should be out of bounds
-        assert!(geometry_n(&point, 1).unwrap().is_none());
+        assert!(geometry_n(&point, 1).expect("should succeed").is_none());
     }
 
     #[test]
@@ -994,7 +1006,7 @@ mod tests {
             Coord { x: 5.0, y: 6.0 },
         ])));
 
-        let start = start_point(&line).unwrap();
+        let start = start_point(&line).expect("should succeed");
         if let GeoGeometry::Point(p) = start.geom {
             assert_eq!(p.x(), 1.0);
             assert_eq!(p.y(), 2.0);
@@ -1011,7 +1023,7 @@ mod tests {
             Coord { x: 5.0, y: 6.0 },
         ])));
 
-        let end = end_point(&line).unwrap();
+        let end = end_point(&line).expect("should succeed");
         if let GeoGeometry::Point(p) = end.geom {
             assert_eq!(p.x(), 5.0);
             assert_eq!(p.y(), 6.0);
@@ -1047,7 +1059,7 @@ mod tests {
             vec![],
         )));
 
-        let ring = exterior_ring(&square).unwrap();
+        let ring = exterior_ring(&square).expect("should succeed");
         assert_eq!(ring.geometry_type(), "LineString");
 
         if let GeoGeometry::LineString(ls) = ring.geom {
@@ -1076,7 +1088,7 @@ mod tests {
             ]),
             vec![],
         )));
-        assert_eq!(num_interior_rings(&simple_poly).unwrap(), 0);
+        assert_eq!(num_interior_rings(&simple_poly).expect("should succeed"), 0);
 
         // Polygon with 2 holes
         let hole1 = LineString::new(vec![
@@ -1104,7 +1116,10 @@ mod tests {
             ]),
             vec![hole1, hole2],
         )));
-        assert_eq!(num_interior_rings(&poly_with_holes).unwrap(), 2);
+        assert_eq!(
+            num_interior_rings(&poly_with_holes).expect("should succeed"),
+            2
+        );
     }
 
     #[test]
@@ -1128,11 +1143,15 @@ mod tests {
             vec![hole],
         )));
 
-        let ring0 = interior_ring_n(&poly_with_hole, 0).unwrap().unwrap();
+        let ring0 = interior_ring_n(&poly_with_hole, 0)
+            .expect("should succeed")
+            .expect("should succeed");
         assert_eq!(ring0.geometry_type(), "LineString");
 
         // Out of bounds
-        assert!(interior_ring_n(&poly_with_hole, 1).unwrap().is_none());
+        assert!(interior_ring_n(&poly_with_hole, 1)
+            .expect("should succeed")
+            .is_none());
     }
 
     #[test]
@@ -1147,10 +1166,10 @@ mod tests {
     #[test]
     fn test_volume_3d_cube() {
         // Square base 10x10 at Z=10 (average height)
-        let cube =
-            Geometry::from_wkt("POLYGON Z((0 0 10, 10 0 10, 10 10 10, 0 10 10, 0 0 10))").unwrap();
+        let cube = Geometry::from_wkt("POLYGON Z((0 0 10, 10 0 10, 10 10 10, 0 10 10, 0 0 10))")
+            .expect("should succeed");
 
-        let vol = volume_3d(&cube).unwrap();
+        let vol = volume_3d(&cube).expect("should succeed");
 
         // Base area = 100, average Z = 10, volume = 1000
         assert!((vol - 1000.0).abs() < 0.1);
@@ -1158,7 +1177,8 @@ mod tests {
 
     #[test]
     fn test_volume_3d_reject_2d() {
-        let square = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
+        let square =
+            Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
 
         let result = volume_3d(&square);
         assert!(result.is_err());
@@ -1167,10 +1187,10 @@ mod tests {
     #[test]
     fn test_volume_3d_varying_heights() {
         // Polygon with varying Z coordinates (like a sloped roof)
-        let sloped =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 10, 0 10 10, 0 0 0))").unwrap();
+        let sloped = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 10, 0 10 10, 0 0 0))")
+            .expect("should succeed");
 
-        let vol = volume_3d(&sloped).unwrap();
+        let vol = volume_3d(&sloped).expect("should succeed");
 
         // Base area = 100, average Z = (0+0+10+10+0)/5 = 4, volume = 400
         assert!((vol - 400.0).abs() < 1.0);
@@ -1186,7 +1206,7 @@ mod tests {
             (0.0, 0.0, 1.0),
         ];
 
-        let vol = volume_convex_hull_3d(&vertices).unwrap();
+        let vol = volume_convex_hull_3d(&vertices).expect("should succeed");
 
         // Volume of unit tetrahedron = 1/6
         assert!((vol - 0.16666).abs() < 0.001);
@@ -1202,7 +1222,7 @@ mod tests {
             (0.0, 0.0, 2.0),
         ];
 
-        let vol = volume_convex_hull_3d(&vertices).unwrap();
+        let vol = volume_convex_hull_3d(&vertices).expect("should succeed");
 
         // Volume scales with cube of linear dimension: (2^3) * (1/6) = 8/6 ≈ 1.333
         assert!((vol - 1.333).abs() < 0.01);
@@ -1212,17 +1232,17 @@ mod tests {
     fn test_volume_convex_hull_insufficient_vertices() {
         let vertices = vec![(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)];
 
-        let vol = volume_convex_hull_3d(&vertices).unwrap();
+        let vol = volume_convex_hull_3d(&vertices).expect("should succeed");
         assert_eq!(vol, 0.0);
     }
 
     #[test]
     fn test_surface_area_3d_flat_square() {
         // Flat square at Z=10 (parallel to XY plane)
-        let flat =
-            Geometry::from_wkt("POLYGON Z((0 0 10, 10 0 10, 10 10 10, 0 10 10, 0 0 10))").unwrap();
+        let flat = Geometry::from_wkt("POLYGON Z((0 0 10, 10 0 10, 10 10 10, 0 10 10, 0 0 10))")
+            .expect("should succeed");
 
-        let area = surface_area_3d(&flat).unwrap();
+        let area = surface_area_3d(&flat).expect("should succeed");
 
         // Surface area should be same as 2D area = 100
         assert!((area - 100.0).abs() < 0.1);
@@ -1231,10 +1251,10 @@ mod tests {
     #[test]
     fn test_surface_area_3d_tilted_square() {
         // Tilted square: bottom edge at Z=0, top edge at Z=10
-        let tilted =
-            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 10, 0 10 10, 0 0 0))").unwrap();
+        let tilted = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 10, 0 10 10, 0 0 0))")
+            .expect("should succeed");
 
-        let area = surface_area_3d(&tilted).unwrap();
+        let area = surface_area_3d(&tilted).expect("should succeed");
 
         // Surface area should be larger than 2D projection (100)
         // due to the tilt
@@ -1245,9 +1265,10 @@ mod tests {
     #[test]
     fn test_surface_area_3d_triangle() {
         // Simple 3D triangle
-        let triangle = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 5 5 10, 0 0 0))").unwrap();
+        let triangle = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 5 5 10, 0 0 0))")
+            .expect("should succeed");
 
-        let area = surface_area_3d(&triangle).unwrap();
+        let area = surface_area_3d(&triangle).expect("should succeed");
 
         // Should be > 0
         assert!(area > 0.0);
@@ -1255,7 +1276,8 @@ mod tests {
 
     #[test]
     fn test_surface_area_3d_reject_2d() {
-        let square = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
+        let square =
+            Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").expect("should succeed");
 
         let result = surface_area_3d(&square);
         assert!(result.is_err());

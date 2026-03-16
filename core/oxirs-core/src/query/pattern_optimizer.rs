@@ -954,7 +954,7 @@ mod tests {
         // Pattern with bound subject
         let pattern = ModelTriplePattern::new(
             Some(SubjectPattern::NamedNode(
-                NamedNode::new("http://example.org/s").unwrap(),
+                NamedNode::new("http://example.org/s").expect("valid IRI"),
             )),
             None,
             None,
@@ -972,8 +972,10 @@ mod tests {
         let optimizer = PatternOptimizer::new(stats);
 
         let pattern = AlgebraTriplePattern::new(
-            AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-            AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+            AlgebraTermPattern::Variable(Variable::new("s").expect("valid variable name")),
+            AlgebraTermPattern::NamedNode(
+                NamedNode::new("http://example.org/type").expect("valid IRI"),
+            ),
             AlgebraTermPattern::Literal(Literal::new("test")),
         );
 
@@ -990,18 +992,26 @@ mod tests {
 
         let patterns = vec![
             AlgebraTriplePattern::new(
-                AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-                AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-                AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
+                AlgebraTermPattern::Variable(Variable::new("s").expect("valid variable name")),
+                AlgebraTermPattern::NamedNode(
+                    NamedNode::new("http://example.org/type").expect("valid IRI"),
+                ),
+                AlgebraTermPattern::NamedNode(
+                    NamedNode::new("http://example.org/Person").expect("valid IRI"),
+                ),
             ),
             AlgebraTriplePattern::new(
-                AlgebraTermPattern::Variable(Variable::new("s").unwrap()),
-                AlgebraTermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
-                AlgebraTermPattern::Variable(Variable::new("name").unwrap()),
+                AlgebraTermPattern::Variable(Variable::new("s").expect("valid variable name")),
+                AlgebraTermPattern::NamedNode(
+                    NamedNode::new("http://example.org/name").expect("valid IRI"),
+                ),
+                AlgebraTermPattern::Variable(Variable::new("name").expect("valid variable name")),
             ),
         ];
 
-        let plan = optimizer.optimize_patterns(&patterns).unwrap();
+        let plan = optimizer
+            .optimize_patterns(&patterns)
+            .expect("operation should succeed");
 
         assert_eq!(plan.patterns.len(), 2);
         assert!(plan.total_cost > 0.0);

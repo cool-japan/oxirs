@@ -1344,7 +1344,7 @@ mod tests {
         let config = HealthMonitoringConfig::default();
         let monitor = HealthMonitor::new(config);
 
-        let status = monitor.get_health_status().await.unwrap();
+        let status = monitor.get_health_status().await.expect("should succeed");
         // Should start healthy
         assert_eq!(status, HealthStatus::Healthy);
     }
@@ -1352,7 +1352,7 @@ mod tests {
     #[tokio::test]
     async fn test_system_resource_monitor() {
         let monitor = SystemResourceMonitor::new();
-        let health = monitor.check_health().await.unwrap();
+        let health = monitor.check_health().await.expect("should succeed");
 
         assert_eq!(health.name, "System Resources");
         assert!(health.metrics.availability_percentage > 0.0);
@@ -1402,7 +1402,10 @@ mod tests {
             uptime: Duration::from_secs(3600),
         };
 
-        let alerts = alert_manager.check_for_alerts(&report).await.unwrap();
+        let alerts = alert_manager
+            .check_for_alerts(&report)
+            .await
+            .expect("should succeed");
         assert!(!alerts.is_empty());
         assert_eq!(alerts[0].alert_type, AlertType::ThresholdExceeded);
     }

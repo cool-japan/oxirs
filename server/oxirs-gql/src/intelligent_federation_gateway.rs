@@ -1167,7 +1167,7 @@ mod tests {
         let complexity = gateway
             .calculate_query_complexity(simple_query)
             .await
-            .unwrap();
+            .expect("should succeed");
         assert!(complexity > 0);
 
         // Test complex nested query
@@ -1192,7 +1192,7 @@ mod tests {
         let complex_complexity = gateway
             .calculate_query_complexity(complex_query)
             .await
-            .unwrap();
+            .expect("should succeed");
         assert!(complex_complexity > complexity);
     }
 
@@ -1208,12 +1208,18 @@ mod tests {
         graph.insert("C".to_string(), vec!["D".to_string()]);
         graph.insert("D".to_string(), vec![]);
 
-        let sorted = gateway.topological_sort(&graph).unwrap();
+        let sorted = gateway.topological_sort(&graph).expect("should succeed");
         assert_eq!(sorted.len(), 4);
 
         // Check that dependencies are respected
-        let a_pos = sorted.iter().position(|x| x == "A").unwrap();
-        let d_pos = sorted.iter().position(|x| x == "D").unwrap();
+        let a_pos = sorted
+            .iter()
+            .position(|x| x == "A")
+            .expect("should succeed");
+        let d_pos = sorted
+            .iter()
+            .position(|x| x == "D")
+            .expect("should succeed");
         assert!(a_pos < d_pos); // A should come before D
     }
 
@@ -1249,7 +1255,7 @@ mod tests {
         let strategy = gateway
             .choose_optimization_strategy(&assignments, 50)
             .await
-            .unwrap();
+            .expect("should succeed");
         assert!(matches!(strategy, OptimizationStrategy::Parallel));
 
         // Test high complexity with many services should choose sequential
@@ -1273,7 +1279,7 @@ mod tests {
         let strategy = gateway
             .choose_optimization_strategy(&high_complexity_assignments, 1000)
             .await
-            .unwrap();
+            .expect("should succeed");
         // With high complexity (1000) and many services (7 > 5), should choose Sequential or other strategy
         // The actual strategy depends on system load, so let's check it's one of the valid strategies
         assert!(matches!(
@@ -1305,10 +1311,13 @@ mod tests {
             }),
         );
 
-        let merged = gateway.merge_fragment_results(results).await.unwrap();
+        let merged = gateway
+            .merge_fragment_results(results)
+            .await
+            .expect("should succeed");
 
         assert!(merged.get("data").is_some());
-        let data = merged["data"].as_object().unwrap();
+        let data = merged["data"].as_object().expect("should succeed");
         assert_eq!(data["field1"], "value1");
         assert_eq!(data["field2"], "value2");
     }
@@ -1318,7 +1327,10 @@ mod tests {
         let config = FederationGatewayConfig::default();
         let gateway = IntelligentFederationGateway::new(config);
 
-        let load = gateway.get_current_system_load().await.unwrap();
+        let load = gateway
+            .get_current_system_load()
+            .await
+            .expect("should succeed");
 
         // Load should be between 0.0 and 1.0
         assert!(load >= 0.0);

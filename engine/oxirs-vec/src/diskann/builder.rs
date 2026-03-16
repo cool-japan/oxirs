@@ -387,6 +387,7 @@ impl Default for DiskAnnBuilder {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
     use crate::diskann::storage::DiskStorage;
     use std::env;
@@ -399,34 +400,32 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_basic() {
+    fn test_builder_basic() -> Result<()> {
         let config = DiskAnnConfig::default_config(3);
-        let mut builder = DiskAnnBuilder::new(config).unwrap();
+        let mut builder = DiskAnnBuilder::new(config)?;
 
-        let node0 = builder
-            .add_vector("v0".to_string(), vec![1.0, 0.0, 0.0])
-            .unwrap();
-        let node1 = builder
-            .add_vector("v1".to_string(), vec![0.0, 1.0, 0.0])
-            .unwrap();
+        let node0 = builder.add_vector("v0".to_string(), vec![1.0, 0.0, 0.0])?;
+        let node1 = builder.add_vector("v1".to_string(), vec![0.0, 1.0, 0.0])?;
 
         assert_eq!(builder.num_vectors(), 2);
         assert_ne!(node0, node1);
+        Ok(())
     }
 
     #[test]
-    fn test_builder_dimension_mismatch() {
+    fn test_builder_dimension_mismatch() -> Result<()> {
         let config = DiskAnnConfig::default_config(3);
-        let mut builder = DiskAnnBuilder::new(config).unwrap();
+        let mut builder = DiskAnnBuilder::new(config)?;
 
         let result = builder.add_vector("v0".to_string(), vec![1.0, 2.0]); // Wrong dimension
         assert!(result.is_err());
+        Ok(())
     }
 
     #[test]
-    fn test_builder_batch() {
+    fn test_builder_batch() -> Result<()> {
         let config = DiskAnnConfig::default_config(2);
-        let mut builder = DiskAnnBuilder::new(config).unwrap();
+        let mut builder = DiskAnnBuilder::new(config)?;
 
         let vectors = vec![
             ("v0".to_string(), vec![1.0, 0.0]),
@@ -434,87 +433,71 @@ mod tests {
             ("v2".to_string(), vec![1.0, 1.0]),
         ];
 
-        let node_ids = builder.add_vectors_batch(vectors).unwrap();
+        let node_ids = builder.add_vectors_batch(vectors)?;
         assert_eq!(node_ids.len(), 3);
         assert_eq!(builder.num_vectors(), 3);
+        Ok(())
     }
 
     #[test]
-    fn test_entry_point_selection() {
+    fn test_entry_point_selection() -> Result<()> {
         let config = DiskAnnConfig::default_config(2);
-        let mut builder = DiskAnnBuilder::new(config).unwrap();
+        let mut builder = DiskAnnBuilder::new(config)?;
 
-        builder
-            .add_vector("v0".to_string(), vec![1.0, 0.0])
-            .unwrap();
-        builder
-            .add_vector("v1".to_string(), vec![0.0, 1.0])
-            .unwrap();
-        builder
-            .add_vector("v2".to_string(), vec![0.5, 0.5])
-            .unwrap();
+        builder.add_vector("v0".to_string(), vec![1.0, 0.0])?;
+        builder.add_vector("v1".to_string(), vec![0.0, 1.0])?;
+        builder.add_vector("v2".to_string(), vec![0.5, 0.5])?;
 
-        builder.select_entry_points(1).unwrap();
+        builder.select_entry_points(1)?;
 
         assert_eq!(builder.graph.entry_points().len(), 1);
         // v2 should be closest to centroid [0.5, 0.5]
+        Ok(())
     }
 
     #[test]
-    fn test_builder_with_storage() {
+    fn test_builder_with_storage() -> Result<()> {
         let dir = temp_dir();
         let config = DiskAnnConfig::default_config(3);
-        let storage = Box::new(DiskStorage::new(&dir, 3).unwrap());
+        let storage = Box::new(DiskStorage::new(&dir, 3)?);
 
-        let mut builder = DiskAnnBuilder::new(config).unwrap().with_storage(storage);
+        let mut builder = DiskAnnBuilder::new(config)?.with_storage(storage);
 
-        builder
-            .add_vector("v0".to_string(), vec![1.0, 2.0, 3.0])
-            .unwrap();
-        builder
-            .add_vector("v1".to_string(), vec![4.0, 5.0, 6.0])
-            .unwrap();
+        builder.add_vector("v0".to_string(), vec![1.0, 2.0, 3.0])?;
+        builder.add_vector("v1".to_string(), vec![4.0, 5.0, 6.0])?;
 
-        let graph = builder.finalize().unwrap();
+        let graph = builder.finalize()?;
         assert_eq!(graph.num_nodes(), 2);
 
         // Cleanup
         std::fs::remove_dir_all(dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_finalize_selects_entry_points() {
+    fn test_finalize_selects_entry_points() -> Result<()> {
         let config = DiskAnnConfig {
             num_entry_points: 2,
             ..DiskAnnConfig::default_config(2)
         };
-        let mut builder = DiskAnnBuilder::new(config).unwrap();
+        let mut builder = DiskAnnBuilder::new(config)?;
 
-        builder
-            .add_vector("v0".to_string(), vec![1.0, 0.0])
-            .unwrap();
-        builder
-            .add_vector("v1".to_string(), vec![0.0, 1.0])
-            .unwrap();
-        builder
-            .add_vector("v2".to_string(), vec![1.0, 1.0])
-            .unwrap();
+        builder.add_vector("v0".to_string(), vec![1.0, 0.0])?;
+        builder.add_vector("v1".to_string(), vec![0.0, 1.0])?;
+        builder.add_vector("v2".to_string(), vec![1.0, 1.0])?;
 
-        let graph = builder.finalize().unwrap();
+        let graph = builder.finalize()?;
         assert!(!graph.entry_points().is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_build_statistics() {
+    fn test_build_statistics() -> Result<()> {
         let config = DiskAnnConfig::default_config(2);
-        let mut builder = DiskAnnBuilder::new(config).unwrap();
+        let mut builder = DiskAnnBuilder::new(config)?;
 
-        builder
-            .add_vector("v0".to_string(), vec![1.0, 0.0])
-            .unwrap();
-        builder
-            .add_vector("v1".to_string(), vec![0.0, 1.0])
-            .unwrap();
+        builder.add_vector("v0".to_string(), vec![1.0, 0.0])?;
+        builder.add_vector("v1".to_string(), vec![0.0, 1.0])?;
 
         let stats = builder.stats();
         assert_eq!(stats.num_vectors, 2);
@@ -522,54 +505,48 @@ mod tests {
         // Just verify it's a valid value (type is u64, so always >= 0)
         let _ = stats.build_time_ms; // Acknowledge we checked the field exists
         assert!(stats.total_comparisons > 0);
+        Ok(())
     }
 
     #[test]
-    fn test_centroid_computation() {
+    fn test_centroid_computation() -> Result<()> {
         let config = DiskAnnConfig::default_config(2);
-        let mut builder = DiskAnnBuilder::new(config).unwrap();
+        let mut builder = DiskAnnBuilder::new(config)?;
 
-        builder
-            .add_vector("v0".to_string(), vec![0.0, 0.0])
-            .unwrap();
-        builder
-            .add_vector("v1".to_string(), vec![2.0, 2.0])
-            .unwrap();
+        builder.add_vector("v0".to_string(), vec![0.0, 0.0])?;
+        builder.add_vector("v1".to_string(), vec![2.0, 2.0])?;
 
         let centroid = builder.compute_centroid();
         assert_eq!(centroid, vec![1.0, 1.0]);
+        Ok(())
     }
 
     #[test]
-    fn test_distance_computation() {
+    fn test_distance_computation() -> Result<()> {
         let config = DiskAnnConfig::default_config(3);
-        let builder = DiskAnnBuilder::new(config).unwrap();
+        let builder = DiskAnnBuilder::new(config)?;
 
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![0.0, 1.0, 0.0];
 
         let distance = builder.compute_distance(&a, &b);
         assert!((distance - 2.0f32.sqrt()).abs() < 1e-6);
+        Ok(())
     }
 
     #[test]
-    fn test_graph_connectivity() {
+    fn test_graph_connectivity() -> Result<()> {
         let config = DiskAnnConfig::default_config(2);
-        let mut builder = DiskAnnBuilder::new(config).unwrap();
+        let mut builder = DiskAnnBuilder::new(config)?;
 
-        let n0 = builder
-            .add_vector("v0".to_string(), vec![0.0, 0.0])
-            .unwrap();
-        builder
-            .add_vector("v1".to_string(), vec![1.0, 0.0])
-            .unwrap();
-        builder
-            .add_vector("v2".to_string(), vec![0.0, 1.0])
-            .unwrap();
+        let n0 = builder.add_vector("v0".to_string(), vec![0.0, 0.0])?;
+        builder.add_vector("v1".to_string(), vec![1.0, 0.0])?;
+        builder.add_vector("v2".to_string(), vec![0.0, 1.0])?;
 
         // Check that nodes have neighbors
         let neighbors_0 = builder.graph.get_neighbors(n0);
         assert!(neighbors_0.is_some());
-        assert!(!neighbors_0.unwrap().is_empty());
+        assert!(!neighbors_0.expect("test value").is_empty());
+        Ok(())
     }
 }

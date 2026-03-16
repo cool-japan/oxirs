@@ -880,9 +880,9 @@ mod tests {
         let csv_data = dashboard
             .export_data(ExportFormat::Csv, time_range)
             .await
-            .unwrap();
+            .expect("should succeed");
 
-        let csv_str = String::from_utf8(csv_data).unwrap();
+        let csv_str = String::from_utf8(csv_data).expect("should succeed");
         assert!(csv_str.contains("=== QUERY ANALYTICS ==="));
         assert!(csv_str.contains("Total Queries,1"));
     }
@@ -911,7 +911,7 @@ mod tests {
         let excel_data = dashboard
             .export_data(ExportFormat::Excel, time_range)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         assert!(!excel_data.is_empty());
         assert_eq!(&excel_data[0..2], b"PK"); // Excel/ZIP signature

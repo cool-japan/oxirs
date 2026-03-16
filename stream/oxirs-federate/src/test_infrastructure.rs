@@ -431,7 +431,7 @@ input CreateCommentInput {
             data.insert("default".to_string(), triples);
             debug!(
                 "Generated {} triples for service {}",
-                data.get("default").unwrap().len(),
+                data.get("default").map_or(0, |v| v.len()),
                 service_id
             );
         }
@@ -930,7 +930,7 @@ mod tests {
             ..Default::default()
         };
         let mut infrastructure = TestInfrastructure::new(config);
-        infrastructure.initialize().await.unwrap();
+        infrastructure.initialize().await.expect("should succeed");
 
         let scenario = TestScenario {
             name: "test_query".to_string(),
@@ -945,7 +945,7 @@ mod tests {
         let result = infrastructure.execute_test_scenario(&scenario).await;
         assert!(result.is_ok());
 
-        let test_result = result.unwrap();
+        let test_result = result.expect("should succeed");
         assert_eq!(test_result.test_name, "test_query");
     }
 

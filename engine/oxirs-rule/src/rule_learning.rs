@@ -35,7 +35,7 @@
 //! });
 //!
 //! // Learn rules
-//! let rules = learner.learn_rules().unwrap();
+//! let rules = learner.learn_rules().expect("should succeed");
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
@@ -659,7 +659,7 @@ mod tests {
     }
 
     #[test]
-    fn test_association_rule_miner() {
+    fn test_association_rule_miner() -> Result<(), Box<dyn std::error::Error>> {
         let mut miner = AssociationRuleMiner::new(0.3, 0.5);
 
         // Add transactions
@@ -680,12 +680,13 @@ mod tests {
         miner.add_transaction(t3);
 
         // Mine rules
-        let rules = miner.mine_rules().unwrap();
+        let rules = miner.mine_rules()?;
         assert!(!rules.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_association_rule_metrics() {
+    fn test_association_rule_metrics() -> Result<(), Box<dyn std::error::Error>> {
         let mut miner = AssociationRuleMiner::new(0.5, 0.7);
 
         let mut t1 = HashSet::new();
@@ -698,12 +699,13 @@ mod tests {
         t2.insert("B".to_string());
         miner.add_transaction(t2);
 
-        let rules = miner.mine_rules().unwrap();
+        let rules = miner.mine_rules()?;
 
         for rule in &rules {
             assert!(rule.support >= 0.0 && rule.support <= 1.0);
             assert!(rule.confidence >= 0.0 && rule.confidence <= 1.0);
         }
+        Ok(())
     }
 
     #[test]
@@ -733,7 +735,7 @@ mod tests {
     }
 
     #[test]
-    fn test_foil_learn_rules() {
+    fn test_foil_learn_rules() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = FoilLearner::new();
 
         // Add positive examples
@@ -746,8 +748,9 @@ mod tests {
         }
 
         // Learn rules
-        let rules = learner.learn_rules().unwrap();
+        let rules = learner.learn_rules()?;
         assert!(!rules.is_empty());
         assert!(!rules[0].body.is_empty() || !rules[0].head.is_empty());
+        Ok(())
     }
 }

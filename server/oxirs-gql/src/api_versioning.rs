@@ -655,13 +655,13 @@ mod tests {
 
     #[test]
     fn test_semantic_version_parse() {
-        let v = SemanticVersion::parse("1.2.3").unwrap();
+        let v = SemanticVersion::parse("1.2.3").expect("should succeed");
         assert_eq!(v.major, 1);
         assert_eq!(v.minor, 2);
         assert_eq!(v.patch, 3);
         assert_eq!(v.to_string(), "1.2.3");
 
-        let v = SemanticVersion::parse("1.0.0-beta").unwrap();
+        let v = SemanticVersion::parse("1.0.0-beta").expect("should succeed");
         assert_eq!(v.prerelease, Some("beta".to_string()));
     }
 
@@ -707,7 +707,10 @@ mod tests {
         let version = SemanticVersion::new(1, 0, 0);
         let snapshot = DocumentationSnapshot::new(version.clone());
 
-        manager.add_snapshot(snapshot).await.unwrap();
+        manager
+            .add_snapshot(snapshot)
+            .await
+            .expect("should succeed");
 
         let current = manager.get_current_version().await;
         assert_eq!(current, Some(version));
@@ -731,7 +734,7 @@ mod tests {
             tags: Vec::new(),
             related: Vec::new(),
         });
-        manager.add_snapshot(snap1).await.unwrap();
+        manager.add_snapshot(snap1).await.expect("should succeed");
 
         let v2 = SemanticVersion::new(1, 1, 0);
         let mut snap2 = DocumentationSnapshot::new(v2.clone());
@@ -759,9 +762,12 @@ mod tests {
             tags: Vec::new(),
             related: Vec::new(),
         });
-        manager.add_snapshot(snap2).await.unwrap();
+        manager.add_snapshot(snap2).await.expect("should succeed");
 
-        let diff = manager.compare_versions(&v1, &v2).await.unwrap();
+        let diff = manager
+            .compare_versions(&v1, &v2)
+            .await
+            .expect("should succeed");
 
         assert_eq!(diff.added.len(), 1);
         assert!(diff.added.contains(&"Query.posts".to_string()));
@@ -786,13 +792,16 @@ mod tests {
             tags: Vec::new(),
             related: Vec::new(),
         });
-        manager.add_snapshot(snap1).await.unwrap();
+        manager.add_snapshot(snap1).await.expect("should succeed");
 
         let v2 = SemanticVersion::new(2, 0, 0);
         let snap2 = DocumentationSnapshot::new(v2.clone());
-        manager.add_snapshot(snap2).await.unwrap();
+        manager.add_snapshot(snap2).await.expect("should succeed");
 
-        let guide = manager.generate_migration_guide(&v1, &v2).await.unwrap();
+        let guide = manager
+            .generate_migration_guide(&v1, &v2)
+            .await
+            .expect("should succeed");
 
         assert!(!guide.steps.is_empty());
         assert!(!guide.breaking_changes.is_empty());
@@ -804,7 +813,7 @@ mod tests {
 
         let v1 = SemanticVersion::new(1, 0, 0);
         let snap1 = DocumentationSnapshot::new(v1.clone());
-        manager.add_snapshot(snap1).await.unwrap();
+        manager.add_snapshot(snap1).await.expect("should succeed");
 
         let next_minor = manager.suggest_next_version(false).await;
         assert_eq!(next_minor.to_string(), "1.1.0");
@@ -855,7 +864,7 @@ mod tests {
 
         let v1 = SemanticVersion::new(1, 0, 0);
         let snap1 = DocumentationSnapshot::new(v1);
-        manager.add_snapshot(snap1).await.unwrap();
+        manager.add_snapshot(snap1).await.expect("should succeed");
 
         let index = manager.generate_index().await;
         assert!(index.contains("Version 1.0.0"));

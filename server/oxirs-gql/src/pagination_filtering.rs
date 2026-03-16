@@ -492,7 +492,7 @@ mod tests {
             FilterValue::String("Alice".to_string()),
         );
 
-        let filter = condition.to_sparql_filter("").unwrap();
+        let filter = condition.to_sparql_filter("").expect("should succeed");
         assert!(filter.contains("?name = \"Alice\""));
     }
 
@@ -504,7 +504,7 @@ mod tests {
             FilterValue::String("test".to_string()),
         );
 
-        let filter = condition.to_sparql_filter("").unwrap();
+        let filter = condition.to_sparql_filter("").expect("should succeed");
         assert!(filter.contains("CONTAINS"));
         assert!(filter.contains("?description"));
     }
@@ -520,7 +520,7 @@ mod tests {
             ]),
         );
 
-        let filter = condition.to_sparql_filter("").unwrap();
+        let filter = condition.to_sparql_filter("").expect("should succeed");
         assert!(filter.contains("IN"));
         assert!(filter.contains("\"active\""));
         assert!(filter.contains("\"pending\""));
@@ -541,7 +541,7 @@ mod tests {
             offset: 0,
         });
 
-        let sparql = filter.to_sparql_modifiers().unwrap();
+        let sparql = filter.to_sparql_modifiers().expect("should succeed");
         assert!(sparql.contains("LIMIT 10"));
     }
 
@@ -552,7 +552,7 @@ mod tests {
             offset: 20,
         });
 
-        let sparql = filter.to_sparql_modifiers().unwrap();
+        let sparql = filter.to_sparql_modifiers().expect("should succeed");
         assert!(sparql.contains("LIMIT 10"));
         assert!(sparql.contains("OFFSET 20"));
     }
@@ -564,7 +564,7 @@ mod tests {
             SortField::new("created_at".to_string(), SortDirection::Desc),
         ]);
 
-        let sparql = filter.to_sparql_modifiers().unwrap();
+        let sparql = filter.to_sparql_modifiers().expect("should succeed");
         assert!(sparql.contains("ORDER BY"));
         assert!(sparql.contains("ASC (?name)"));
         assert!(sparql.contains("DESC (?created_at)"));

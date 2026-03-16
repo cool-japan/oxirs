@@ -995,7 +995,7 @@ _:person1 <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> ."#;
         let result = parser.parse_str_to_quads(ntriples_data);
 
         assert!(result.is_ok());
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 3);
 
         // Check that all quads are in the default graph
@@ -1007,23 +1007,24 @@ _:person1 <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> ."#;
         let triples: Vec<_> = quads.into_iter().map(|q| q.to_triple()).collect();
 
         // Check first triple
-        let alice_iri = NamedNode::new("http://example.org/alice").unwrap();
-        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
+        let alice_iri = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI");
         let name_literal = Literal::new("Alice Smith");
         let expected_triple1 = Triple::new(alice_iri.clone(), name_pred, name_literal);
         assert!(triples.contains(&expected_triple1));
 
         // Check typed literal triple
-        let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
-        let integer_type = NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap();
+        let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").expect("valid IRI");
+        let integer_type =
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").expect("valid IRI");
         let age_literal = Literal::new_typed("30", integer_type);
         let expected_triple2 = Triple::new(alice_iri, age_pred, age_literal);
         assert!(triples.contains(&expected_triple2));
 
         // Check blank node triple
-        let blank_node = BlankNode::new("_:person1").unwrap();
-        let knows_pred = NamedNode::new("http://xmlns.com/foaf/0.1/knows").unwrap();
-        let bob_iri = NamedNode::new("http://example.org/bob").unwrap();
+        let blank_node = BlankNode::new("_:person1").expect("valid blank node id");
+        let knows_pred = NamedNode::new("http://xmlns.com/foaf/0.1/knows").expect("valid IRI");
+        let bob_iri = NamedNode::new("http://example.org/bob").expect("valid IRI");
         let expected_triple3 = Triple::new(blank_node, knows_pred, bob_iri);
         assert!(triples.contains(&expected_triple3));
     }
@@ -1037,7 +1038,7 @@ _:person1 <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> ."#;
         let result = parser.parse_str_to_quads(ntriples_data);
 
         assert!(result.is_ok());
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 1);
 
         let triple = quads[0].to_triple();
@@ -1062,7 +1063,7 @@ _:person1 <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> ."#;
         }
         assert!(result.is_ok(), "Parse failed: {result:?}");
 
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 1);
 
         let triple = quads[0].to_triple();
@@ -1088,7 +1089,7 @@ _:person1 <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> ."#;
         let result = parser.parse_str_to_quads(ntriples_data);
 
         assert!(result.is_ok());
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 2);
     }
 
@@ -1112,7 +1113,7 @@ invalid line here
         let parser_tolerant = Parser::new(RdfFormat::NTriples).with_error_tolerance(true);
         let result_tolerant = parser_tolerant.parse_str_to_quads(mixed_data);
         assert!(result_tolerant.is_ok());
-        let quads = result_tolerant.unwrap();
+        let quads = result_tolerant.expect("tolerant parse should succeed");
         assert_eq!(quads.len(), 2); // Should parse the two valid triples
     }
 
@@ -1126,7 +1127,7 @@ _:person1 <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> _:graph1 ."
         let result = parser.parse_str_to_quads(nquads_data);
 
         assert!(result.is_ok());
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 3);
 
         // Check that quads have proper graph names
@@ -1154,7 +1155,7 @@ ex:alice foaf:knows ex:bob ."#;
         let result = parser.parse_str_to_quads(turtle_data);
 
         assert!(result.is_ok());
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 3);
 
         // All quads should be in default graph
@@ -1172,7 +1173,7 @@ foaf:Person a foaf:Person ."#;
         let result = parser.parse_str_to_quads(turtle_data);
 
         assert!(result.is_ok());
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 1);
 
         let triple = quads[0].to_triple();
@@ -1203,7 +1204,7 @@ ex:alice foaf:name "Alice" ;
         let result = parser.parse_str_to_quads(turtle_data);
 
         assert!(result.is_ok());
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 2);
 
         // Both triples should have the same subject
@@ -1223,7 +1224,7 @@ ex:alice foaf:name "Alice" ;
         let result = parser.parse_str_to_quads(turtle_data);
 
         assert!(result.is_ok());
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 1);
 
         let triple = quads[0].to_triple();
@@ -1245,7 +1246,7 @@ ex:alice ex:age "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
         let result = parser.parse_str_to_quads(turtle_data);
 
         assert!(result.is_ok());
-        let quads = result.unwrap();
+        let quads = result.expect("should have value");
         assert_eq!(quads.len(), 2);
 
         // Check for language tag and datatype
@@ -1288,26 +1289,31 @@ ex:alice ex:age "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
         // Create a graph with various types of triples
         let mut original_graph = Graph::new();
 
-        let alice = NamedNode::new("http://example.org/alice").unwrap();
-        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
+        let alice = NamedNode::new("http://example.org/alice").expect("valid IRI");
+        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").expect("valid IRI");
         let name_literal = Literal::new("Alice Smith");
         original_graph.insert(Triple::new(alice.clone(), name_pred, name_literal));
 
-        let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
+        let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").expect("valid IRI");
         let age_literal = Literal::new_typed("30", crate::vocab::xsd::INTEGER.clone());
         original_graph.insert(Triple::new(alice.clone(), age_pred, age_literal));
 
-        let desc_pred = NamedNode::new("http://example.org/description").unwrap();
-        let desc_literal = Literal::new_lang("Une personne", "fr").unwrap();
+        let desc_pred = NamedNode::new("http://example.org/description").expect("valid IRI");
+        let desc_literal =
+            Literal::new_lang("Une personne", "fr").expect("construction should succeed");
         original_graph.insert(Triple::new(alice, desc_pred, desc_literal));
 
         // Serialize to N-Triples
         let serializer = Serializer::new(RdfFormat::NTriples);
-        let ntriples = serializer.serialize_graph(&original_graph).unwrap();
+        let ntriples = serializer
+            .serialize_graph(&original_graph)
+            .expect("operation should succeed");
 
         // Parse back from N-Triples
         let parser = Parser::new(RdfFormat::NTriples);
-        let quads = parser.parse_str_to_quads(&ntriples).unwrap();
+        let quads = parser
+            .parse_str_to_quads(&ntriples)
+            .expect("operation should succeed");
 
         // Convert back to graph
         let parsed_graph = Graph::from_iter(quads.into_iter().map(|q| q.to_triple()));
@@ -1345,7 +1351,9 @@ ex:graph1 {
 "#;
 
         let parser = Parser::new(RdfFormat::TriG);
-        let quads = parser.parse_str_to_quads(trig_data).unwrap();
+        let quads = parser
+            .parse_str_to_quads(trig_data)
+            .expect("operation should succeed");
 
         // Should parse all statements
         assert!(
@@ -1403,7 +1411,9 @@ ex:person1 foaf:name "John Doe" .
 "#;
 
         let parser = Parser::new(RdfFormat::TriG);
-        let quads = parser.parse_str_to_quads(trig_data).unwrap();
+        let quads = parser
+            .parse_str_to_quads(trig_data)
+            .expect("operation should succeed");
 
         assert!(!quads.is_empty(), "Should parse prefixed statements");
 

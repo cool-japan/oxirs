@@ -1100,7 +1100,7 @@ mod tests {
         let region = Region::new("us-east-1", "US East", "https://us-east.example.com")
             .with_location(37.7749, -122.4194);
 
-        manager.add_region(region).await.unwrap();
+        manager.add_region(region).await.expect("should succeed");
 
         let regions = manager.get_regions().await;
         assert_eq!(regions.len(), 1);
@@ -1113,9 +1113,12 @@ mod tests {
         let manager = MultiRegionManager::new(config);
 
         let region = Region::new("us-east-1", "US East", "https://us-east.example.com");
-        manager.add_region(region).await.unwrap();
+        manager.add_region(region).await.expect("should succeed");
 
-        manager.remove_region("us-east-1").await.unwrap();
+        manager
+            .remove_region("us-east-1")
+            .await
+            .expect("should succeed");
 
         let regions = manager.get_regions().await;
         assert!(regions.is_empty());
@@ -1127,13 +1130,16 @@ mod tests {
         let manager = MultiRegionManager::new(config);
 
         let region = Region::new("us-east-1", "US East", "https://us-east.example.com");
-        manager.add_region(region).await.unwrap();
+        manager.add_region(region).await.expect("should succeed");
 
         manager
             .update_health("us-east-1", RegionHealth::Healthy)
             .await;
 
-        let region = manager.get_region("us-east-1").await.unwrap();
+        let region = manager
+            .get_region("us-east-1")
+            .await
+            .expect("should succeed");
         assert_eq!(region.health, RegionHealth::Healthy);
     }
 
@@ -1153,8 +1159,8 @@ mod tests {
         let region2 = Region::new("us-west-1", "US West", "https://us-west.example.com")
             .with_location(37.7749, -122.4194);
 
-        manager.add_region(region1).await.unwrap();
-        manager.add_region(region2).await.unwrap();
+        manager.add_region(region1).await.expect("should succeed");
+        manager.add_region(region2).await.expect("should succeed");
 
         manager
             .update_health("us-east-1", RegionHealth::Healthy)
@@ -1169,7 +1175,10 @@ mod tests {
             longitude: -74.0060,
         };
 
-        let decision = manager.route_request(Some(client_loc)).await.unwrap();
+        let decision = manager
+            .route_request(Some(client_loc))
+            .await
+            .expect("should succeed");
         assert_eq!(decision.region_id, "us-east-1");
     }
 
@@ -1187,8 +1196,8 @@ mod tests {
         let mut region2 = Region::new("us-west-1", "US West", "https://us-west.example.com");
         region2.latency_ms = 50;
 
-        manager.add_region(region1).await.unwrap();
-        manager.add_region(region2).await.unwrap();
+        manager.add_region(region1).await.expect("should succeed");
+        manager.add_region(region2).await.expect("should succeed");
 
         manager
             .update_health("us-east-1", RegionHealth::Healthy)
@@ -1197,7 +1206,7 @@ mod tests {
             .update_health("us-west-1", RegionHealth::Healthy)
             .await;
 
-        let decision = manager.route_request(None).await.unwrap();
+        let decision = manager.route_request(None).await.expect("should succeed");
         assert_eq!(decision.region_id, "us-west-1");
     }
 
@@ -1216,8 +1225,8 @@ mod tests {
         let region1 = Region::new("us-east-1", "US East", "https://us-east.example.com");
         let region2 = Region::new("us-west-1", "US West", "https://us-west.example.com");
 
-        manager.add_region(region1).await.unwrap();
-        manager.add_region(region2).await.unwrap();
+        manager.add_region(region1).await.expect("should succeed");
+        manager.add_region(region2).await.expect("should succeed");
 
         manager
             .update_health("us-east-1", RegionHealth::Healthy)
@@ -1230,7 +1239,7 @@ mod tests {
         let new_primary = manager
             .initiate_failover("us-east-1", "Test")
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(new_primary, "us-west-1");
     }
 
@@ -1245,8 +1254,8 @@ mod tests {
         let region1 = Region::new("region-1", "Region 1", "https://r1.example.com");
         let region2 = Region::new("region-2", "Region 2", "https://r2.example.com");
 
-        manager.add_region(region1).await.unwrap();
-        manager.add_region(region2).await.unwrap();
+        manager.add_region(region1).await.expect("should succeed");
+        manager.add_region(region2).await.expect("should succeed");
 
         manager
             .update_health("region-1", RegionHealth::Healthy)
@@ -1256,8 +1265,8 @@ mod tests {
             .await;
 
         // Should alternate between regions
-        let decision1 = manager.route_request(None).await.unwrap();
-        let decision2 = manager.route_request(None).await.unwrap();
+        let decision1 = manager.route_request(None).await.expect("should succeed");
+        let decision2 = manager.route_request(None).await.expect("should succeed");
 
         assert_ne!(decision1.region_id, decision2.region_id);
     }
@@ -1284,14 +1293,17 @@ mod tests {
         let manager = MultiRegionManager::new(config);
 
         let region = Region::new("us-east-1", "US East", "https://us-east.example.com");
-        manager.add_region(region).await.unwrap();
+        manager.add_region(region).await.expect("should succeed");
 
         // Record latencies
         for i in 1..=10 {
             manager.record_latency("us-east-1", i * 10).await;
         }
 
-        let metrics = manager.get_metrics("us-east-1").await.unwrap();
+        let metrics = manager
+            .get_metrics("us-east-1")
+            .await
+            .expect("should succeed");
         assert!(metrics.avg_latency_ms > 0.0);
     }
 
@@ -1308,8 +1320,8 @@ mod tests {
         let region2 =
             Region::new("region-2", "Region 2", "https://r2.example.com").with_weight(0.1);
 
-        manager.add_region(region1).await.unwrap();
-        manager.add_region(region2).await.unwrap();
+        manager.add_region(region1).await.expect("should succeed");
+        manager.add_region(region2).await.expect("should succeed");
 
         manager
             .update_health("region-1", RegionHealth::Healthy)
@@ -1321,7 +1333,7 @@ mod tests {
         // With 90/10 weighting, most requests should go to region-1
         let mut region1_count = 0;
         for _ in 0..100 {
-            let decision = manager.route_request(None).await.unwrap();
+            let decision = manager.route_request(None).await.expect("should succeed");
             if decision.region_id == "region-1" {
                 region1_count += 1;
             }
@@ -1339,8 +1351,8 @@ mod tests {
         let region1 = Region::new("region-1", "Region 1", "https://r1.example.com");
         let region2 = Region::new("region-2", "Region 2", "https://r2.example.com");
 
-        manager.add_region(region1).await.unwrap();
-        manager.add_region(region2).await.unwrap();
+        manager.add_region(region1).await.expect("should succeed");
+        manager.add_region(region2).await.expect("should succeed");
 
         // Only region-2 is healthy
         manager
@@ -1350,7 +1362,7 @@ mod tests {
             .update_health("region-2", RegionHealth::Healthy)
             .await;
 
-        let decision = manager.route_request(None).await.unwrap();
+        let decision = manager.route_request(None).await.expect("should succeed");
         assert_eq!(decision.region_id, "region-2");
     }
 }

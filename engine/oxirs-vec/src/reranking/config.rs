@@ -226,6 +226,7 @@ impl Default for RerankingConfig {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     #[test]
@@ -256,12 +257,13 @@ mod tests {
     }
 
     #[test]
-    fn test_api_based() {
+    fn test_api_based() -> Result<()> {
         let config = RerankingConfig::api_based("cohere");
         assert_eq!(config.model_backend, "cohere");
-        assert!(config.timeout_ms.unwrap() > 10000); // Longer timeout
+        assert!(config.timeout_ms.expect("test value") > 10000); // Longer timeout
         assert!(config.cache_size > 1000); // Larger cache
         assert!(config.validate().is_ok());
+        Ok(())
     }
 
     #[test]

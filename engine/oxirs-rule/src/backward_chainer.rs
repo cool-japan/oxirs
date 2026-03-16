@@ -447,22 +447,24 @@ mod tests {
     }
 
     #[test]
-    fn test_prove_returns_proof_tree() {
+    fn test_prove_returns_proof_tree() -> Result<(), Box<dyn std::error::Error>> {
         let bc = simple_chainer();
         let goal = Goal::new("parent", "tom", "bob");
         let proof = bc.prove(&goal);
         assert!(proof.is_some());
-        let tree = proof.unwrap();
+        let tree = proof.ok_or("expected Some value")?;
         assert_eq!(tree.goal.predicate, "parent");
+        Ok(())
     }
 
     #[test]
-    fn test_proof_tree_has_correct_goal() {
+    fn test_proof_tree_has_correct_goal() -> Result<(), Box<dyn std::error::Error>> {
         let bc = simple_chainer();
         let goal = Goal::new("ancestor", "tom", "ann");
-        let tree = bc.prove(&goal).unwrap();
+        let tree = bc.prove(&goal).ok_or("expected Some value")?;
         assert_eq!(tree.goal.subject, "tom");
         assert_eq!(tree.goal.object, "ann");
+        Ok(())
     }
 
     // --- clause_count ---
@@ -521,11 +523,12 @@ mod tests {
     }
 
     #[test]
-    fn test_unify_variable_binds() {
+    fn test_unify_variable_binds() -> Result<(), Box<dyn std::error::Error>> {
         let g1 = Goal::new("p", "?X", "b");
         let g2 = Goal::new("p", "a", "b");
-        let sub = BackwardChainer::unify(&g1, &g2).unwrap();
+        let sub = BackwardChainer::unify(&g1, &g2).ok_or("expected Some value")?;
         assert_eq!(sub.get("X"), Some("a"));
+        Ok(())
     }
 
     #[test]
@@ -536,18 +539,19 @@ mod tests {
     }
 
     #[test]
-    fn test_unify_both_variables() {
+    fn test_unify_both_variables() -> Result<(), Box<dyn std::error::Error>> {
         let g1 = Goal::new("p", "?X", "?Y");
         let g2 = Goal::new("p", "tom", "ann");
-        let sub = BackwardChainer::unify(&g1, &g2).unwrap();
+        let sub = BackwardChainer::unify(&g1, &g2).ok_or("expected Some value")?;
         assert_eq!(sub.get("X"), Some("tom"));
         assert_eq!(sub.get("Y"), Some("ann"));
+        Ok(())
     }
 
     // --- apply_substitution ---
 
     #[test]
-    fn test_apply_substitution_binds_variable() {
+    fn test_apply_substitution_binds_variable() -> Result<(), Box<dyn std::error::Error>> {
         let goal = Goal::new("p", "?X", "?Y");
         let mut sub = Substitution::new();
         sub.bind("X".to_string(), "a".to_string());
@@ -555,31 +559,35 @@ mod tests {
         let result = BackwardChainer::apply_substitution(&goal, &sub);
         assert_eq!(result.subject, "a");
         assert_eq!(result.object, "b");
+        Ok(())
     }
 
     #[test]
-    fn test_apply_substitution_keeps_constant() {
+    fn test_apply_substitution_keeps_constant() -> Result<(), Box<dyn std::error::Error>> {
         let goal = Goal::new("p", "const", "?Y");
         let mut sub = Substitution::new();
         sub.bind("Y".to_string(), "val".to_string());
         let result = BackwardChainer::apply_substitution(&goal, &sub);
         assert_eq!(result.subject, "const");
         assert_eq!(result.object, "val");
+        Ok(())
     }
 
     #[test]
-    fn test_apply_substitution_unbound_variable_stays() {
+    fn test_apply_substitution_unbound_variable_stays() -> Result<(), Box<dyn std::error::Error>> {
         let goal = Goal::new("p", "?X", "b");
         let sub = Substitution::new();
         let result = BackwardChainer::apply_substitution(&goal, &sub);
         assert_eq!(result.subject, "?X");
+        Ok(())
     }
 
     // --- Substitution ---
 
     #[test]
-    fn test_substitution_is_variable_true() {
+    fn test_substitution_is_variable_true() -> Result<(), Box<dyn std::error::Error>> {
         assert!(Substitution::is_variable("?X"));
+        Ok(())
     }
 
     #[test]
@@ -614,7 +622,8 @@ mod tests {
     }
 
     #[test]
-    fn test_substitution_compose_resolves_variable_chain() {
+    fn test_substitution_compose_resolves_variable_chain() -> Result<(), Box<dyn std::error::Error>>
+    {
         let mut s1 = Substitution::new();
         s1.bind("X".to_string(), "?Y".to_string());
 
@@ -623,12 +632,13 @@ mod tests {
 
         let composed = s1.compose(&s2);
         assert_eq!(composed.get("X"), Some("val"));
+        Ok(())
     }
 
     // --- prove_all ---
 
     #[test]
-    fn test_prove_all_multiple_solutions() {
+    fn test_prove_all_multiple_solutions() -> Result<(), Box<dyn std::error::Error>> {
         let mut bc = BackwardChainer::new(5);
         bc.add_fact("color", "rose", "red");
         bc.add_fact("color", "sky", "blue");
@@ -637,6 +647,7 @@ mod tests {
         let goal = Goal::new("color", "?X", "?Y");
         let proofs = bc.prove_all(&goal);
         assert_eq!(proofs.len(), 3);
+        Ok(())
     }
 
     #[test]
@@ -650,7 +661,7 @@ mod tests {
     // --- max_depth ---
 
     #[test]
-    fn test_max_depth_limits_recursion() {
+    fn test_max_depth_limits_recursion() -> Result<(), Box<dyn std::error::Error>> {
         // Very deep chain with max_depth=1 should fail
         let mut bc = BackwardChainer::new(1);
         bc.add_fact("parent", "tom", "bob");
@@ -664,21 +675,28 @@ mod tests {
         });
         // Direct parent is ok
         assert!(bc.can_prove(&Goal::new("parent", "tom", "bob")));
+        Ok(())
     }
 
     #[test]
-    fn test_proof_tree_used_clause_none_for_fact() {
+    fn test_proof_tree_used_clause_none_for_fact() -> Result<(), Box<dyn std::error::Error>> {
         let mut bc = BackwardChainer::new(5);
         bc.add_fact("likes", "alice", "bob");
-        let tree = bc.prove(&Goal::new("likes", "alice", "bob")).unwrap();
+        let tree = bc
+            .prove(&Goal::new("likes", "alice", "bob"))
+            .ok_or("expected Some value")?;
         assert!(tree.used_clause.is_none());
+        Ok(())
     }
 
     #[test]
-    fn test_proof_tree_used_clause_some_for_rule() {
+    fn test_proof_tree_used_clause_some_for_rule() -> Result<(), Box<dyn std::error::Error>> {
         let bc = simple_chainer();
-        let tree = bc.prove(&Goal::new("ancestor", "tom", "bob")).unwrap();
+        let tree = bc
+            .prove(&Goal::new("ancestor", "tom", "bob"))
+            .ok_or("expected Some value")?;
         assert!(tree.used_clause.is_some());
+        Ok(())
     }
 
     #[test]
@@ -696,11 +714,14 @@ mod tests {
     }
 
     #[test]
-    fn test_proof_tree_children_for_rule() {
+    fn test_proof_tree_children_for_rule() -> Result<(), Box<dyn std::error::Error>> {
         let bc = simple_chainer();
-        let tree = bc.prove(&Goal::new("ancestor", "tom", "bob")).unwrap();
+        let tree = bc
+            .prove(&Goal::new("ancestor", "tom", "bob"))
+            .ok_or("expected Some value")?;
         // The rule "ancestor :- parent" should have one child
         assert!(!tree.children.is_empty());
+        Ok(())
     }
 
     #[test]

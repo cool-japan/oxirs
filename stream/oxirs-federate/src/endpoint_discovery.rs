@@ -274,7 +274,12 @@ mod tests {
         let mut reg = EndpointRegistry::new(cfg(60_000, 100));
         reg.register(endpoint("http://a.example/sparql", "old", 1000));
         reg.register(endpoint("http://a.example/sparql", "new", 2000));
-        assert_eq!(reg.get("http://a.example/sparql").unwrap().name, "new");
+        assert_eq!(
+            reg.get("http://a.example/sparql")
+                .expect("should succeed")
+                .name,
+            "new"
+        );
     }
 
     #[test]
@@ -638,7 +643,7 @@ mod tests {
         // Registry full — but updating an existing URL should succeed
         let updated = reg.register(endpoint("http://a/s", "A-new", 1000));
         assert!(!updated); // update returns false
-        assert_eq!(reg.get("http://a/s").unwrap().name, "A-new");
+        assert_eq!(reg.get("http://a/s").expect("should succeed").name, "A-new");
         assert_eq!(reg.count(), 2);
     }
 

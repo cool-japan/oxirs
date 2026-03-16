@@ -1161,7 +1161,10 @@ mod tests {
         let reader = Cursor::new(rdfxml_data.as_bytes());
         let sink = MemoryRdfXmlSink::new();
 
-        let stats = parser.stream_parse(reader, sink).await.unwrap();
+        let stats = parser
+            .stream_parse(reader, sink)
+            .await
+            .expect("async operation should succeed");
 
         assert!(stats.elements_processed > 0);
         // Note: actual triple generation depends on proper parsing implementation

@@ -289,63 +289,67 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hot_tier_storage() {
+    fn test_hot_tier_storage() -> Result<()> {
         let mut storage = HotTierStorage::new();
 
         let data = vec![1, 2, 3, 4, 5];
-        storage.save_index("test", &data).unwrap();
+        storage.save_index("test", &data)?;
 
         assert!(storage.exists("test"));
-        assert_eq!(storage.get_size("test").unwrap(), 5);
+        let __val = storage.get_size("test")?;
+        assert_eq!(__val, 5);
 
-        let loaded = storage.load_index("test").unwrap();
+        let loaded = storage.load_index("test")?;
         assert_eq!(loaded, data);
 
-        storage.delete_index("test").unwrap();
+        storage.delete_index("test")?;
         assert!(!storage.exists("test"));
+        Ok(())
     }
 
     #[test]
-    fn test_warm_tier_storage() {
+    fn test_warm_tier_storage() -> Result<()> {
         use std::env;
         let temp_dir = env::temp_dir().join("oxirs_warm_tier_test");
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir)?;
 
-        let mut storage = WarmTierStorage::new(&temp_dir, true, 6).unwrap();
+        let mut storage = WarmTierStorage::new(&temp_dir, true, 6)?;
 
         let data = vec![1, 2, 3, 4, 5];
-        storage.save_index("test", &data).unwrap();
+        storage.save_index("test", &data)?;
 
         assert!(storage.exists("test"));
 
-        let loaded = storage.load_index("test").unwrap();
+        let loaded = storage.load_index("test")?;
         assert_eq!(loaded, data);
 
-        storage.delete_index("test").unwrap();
+        storage.delete_index("test")?;
         assert!(!storage.exists("test"));
 
         std::fs::remove_dir_all(&temp_dir).ok();
+        Ok(())
     }
 
     #[test]
-    fn test_cold_tier_storage() {
+    fn test_cold_tier_storage() -> Result<()> {
         use std::env;
         let temp_dir = env::temp_dir().join("oxirs_cold_tier_test");
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir)?;
 
-        let mut storage = ColdTierStorage::new(&temp_dir, 19).unwrap();
+        let mut storage = ColdTierStorage::new(&temp_dir, 19)?;
 
         let data = vec![1, 2, 3, 4, 5];
-        storage.save_index("test", &data).unwrap();
+        storage.save_index("test", &data)?;
 
         assert!(storage.exists("test"));
 
-        let loaded = storage.load_index("test").unwrap();
+        let loaded = storage.load_index("test")?;
         assert_eq!(loaded, data);
 
-        storage.delete_index("test").unwrap();
+        storage.delete_index("test")?;
         assert!(!storage.exists("test"));
 
         std::fs::remove_dir_all(&temp_dir).ok();
+        Ok(())
     }
 }

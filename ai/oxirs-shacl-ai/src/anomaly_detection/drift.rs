@@ -454,7 +454,7 @@ mod tests {
         detector.update_reference(&reference);
 
         let current = Array1::from_vec((0..50).map(|i| i as f64 + 0.1).collect());
-        let result = detector.detect_drift(&current).unwrap();
+        let result = detector.detect_drift(&current).expect("should succeed");
 
         // Small change should not trigger drift
         assert!(result.drift_score < 1.0);
@@ -467,7 +467,7 @@ mod tests {
         detector.update_reference(&reference);
 
         let current = Array1::from_vec((0..50).map(|i| i as f64 + 50.0).collect());
-        let result = detector.detect_drift(&current).unwrap();
+        let result = detector.detect_drift(&current).expect("should succeed");
 
         // Large shift should trigger drift
         assert!(result.drift_detected);

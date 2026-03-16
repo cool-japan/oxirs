@@ -841,7 +841,7 @@ mod tiered_impl {
                 "/tmp/oxirs_tiered_test_{}",
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("operation should succeed")
                     .as_millis()
             );
 
@@ -851,25 +851,36 @@ mod tiered_impl {
             config.tiers.archive_tier.backend =
                 ArchiveBackend::Local(format!("{}/archive", test_dir));
 
-            let engine = TieredStorageEngine::create(config).await.unwrap();
+            let engine = TieredStorageEngine::create(config)
+                .await
+                .expect("async operation should succeed");
 
             // Create test triple
-            let subject = NamedNode::new("http://example.org/subject").unwrap();
-            let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+            let subject = NamedNode::new("http://example.org/subject").expect("valid IRI");
+            let predicate = NamedNode::new("http://example.org/predicate").expect("valid IRI");
             let object = crate::model::Object::Literal(Literal::new("test"));
             let triple = Triple::new(subject, predicate, object);
 
             // Store triple
-            engine.store_triple(&triple).await.unwrap();
+            engine
+                .store_triple(&triple)
+                .await
+                .expect("async operation should succeed");
 
             // Query triple
             let pattern = TriplePattern::new(None, None, None);
-            let results = engine.query_triples(&pattern).await.unwrap();
+            let results = engine
+                .query_triples(&pattern)
+                .await
+                .expect("async operation should succeed");
             assert_eq!(results.len(), 1);
             assert_eq!(results[0], triple);
 
             // Check stats
-            let stats = engine.stats().await.unwrap();
+            let stats = engine
+                .stats()
+                .await
+                .expect("async operation should succeed");
             assert_eq!(stats.total_triples, 1);
         }
     }

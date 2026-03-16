@@ -770,7 +770,7 @@ mod tests {
     fn test_mf4_version_from_str() {
         let ver = Mf4Version::parse_version("410");
         assert!(ver.is_some());
-        let v = ver.unwrap();
+        let v = ver.expect("should succeed");
         assert_eq!(v.major, 4);
         assert_eq!(v.minor, 10);
     }

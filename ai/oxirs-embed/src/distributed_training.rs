@@ -1266,7 +1266,9 @@ mod tests {
     #[tokio::test]
     async fn test_worker_registration() {
         let config = DistributedTrainingConfig::default();
-        let coordinator = DistributedTrainingCoordinator::new(config).await.unwrap();
+        let coordinator = DistributedTrainingCoordinator::new(config)
+            .await
+            .expect("should succeed");
 
         let worker = WorkerInfo {
             worker_id: 0,
@@ -1278,7 +1280,10 @@ mod tests {
             last_heartbeat: Utc::now(),
         };
 
-        coordinator.register_worker(worker).await.unwrap();
+        coordinator
+            .register_worker(worker)
+            .await
+            .expect("should succeed");
         let stats = coordinator.get_worker_stats().await;
         assert_eq!(stats.len(), 1);
     }
@@ -1298,7 +1303,7 @@ mod tests {
 
         let mut trainer = DistributedEmbeddingTrainer::new(model, config)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Register workers
         for i in 0..2 {
@@ -1311,11 +1316,14 @@ mod tests {
                 memory_gb: 16.0,
                 last_heartbeat: Utc::now(),
             };
-            trainer.register_worker(worker).await.unwrap();
+            trainer
+                .register_worker(worker)
+                .await
+                .expect("should succeed");
         }
 
         // Train for a few epochs
-        let stats = trainer.train(5).await.unwrap();
+        let stats = trainer.train(5).await.expect("should succeed");
 
         assert_eq!(stats.total_epochs, 5);
         assert!(stats.final_loss >= 0.0);
@@ -1325,7 +1333,9 @@ mod tests {
     #[tokio::test]
     async fn test_checkpoint_save_load() {
         let config = DistributedTrainingConfig::default();
-        let coordinator = DistributedTrainingCoordinator::new(config).await.unwrap();
+        let coordinator = DistributedTrainingCoordinator::new(config)
+            .await
+            .expect("should succeed");
 
         let model_config = ModelConfig::default();
         let model = TransE::new(model_config);
@@ -1340,16 +1350,22 @@ mod tests {
             memory_gb: 16.0,
             last_heartbeat: Utc::now(),
         };
-        coordinator.register_worker(worker).await.unwrap();
+        coordinator
+            .register_worker(worker)
+            .await
+            .expect("should succeed");
 
         // Save checkpoint
-        coordinator.save_checkpoint(&model, 10, 0.5).await.unwrap();
+        coordinator
+            .save_checkpoint(&model, 10, 0.5)
+            .await
+            .expect("should succeed");
 
         // Load checkpoint
         let checkpoint = coordinator
             .load_checkpoint("checkpoint_epoch_10")
             .await
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(checkpoint.epoch, 10);
         assert_eq!(checkpoint.loss, 0.5);
     }

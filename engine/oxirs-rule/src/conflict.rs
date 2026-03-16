@@ -429,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn test_conflict_detection() {
+    fn test_conflict_detection() -> Result<(), Box<dyn std::error::Error>> {
         let mut resolver = ConflictResolver::new();
 
         let rules = vec![];
@@ -439,13 +439,14 @@ mod tests {
             object: Term::Literal("30".to_string()),
         }];
 
-        resolver.detect_conflicts(&rules, &facts).unwrap();
+        resolver.detect_conflicts(&rules, &facts)?;
         // Should not detect conflicts for single fact
         assert_eq!(resolver.conflicts.len(), 0);
+        Ok(())
     }
 
     #[test]
-    fn test_confidence_scoring() {
+    fn test_confidence_scoring() -> Result<(), Box<dyn std::error::Error>> {
         let mut resolver = ConflictResolver::new();
 
         let fact = RuleAtom::Triple {
@@ -459,8 +460,9 @@ mod tests {
         let facts = vec![fact];
         resolver.set_strategy(ResolutionStrategy::Confidence);
 
-        let resolved = resolver.resolve_conflicts(&[], &facts).unwrap();
+        let resolved = resolver.resolve_conflicts(&[], &facts)?;
         assert_eq!(resolved.len(), 1);
+        Ok(())
     }
 
     #[test]

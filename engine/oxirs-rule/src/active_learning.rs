@@ -473,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn test_uncertainty_sampling() {
+    fn test_uncertainty_sampling() -> Result<(), Box<dyn std::error::Error>> {
         let mut learner = ActiveLearner::new();
 
         // Add rules with varying confidence
@@ -485,8 +485,9 @@ mod tests {
         assert!(selected.is_some());
 
         // Should select the most uncertain (closest to 0.5)
-        let rule_name = selected.unwrap().name;
+        let rule_name = selected.ok_or("expected Some value")?.name;
         assert_eq!(rule_name, "uncertain");
+        Ok(())
     }
 
     #[test]

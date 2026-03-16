@@ -268,6 +268,7 @@ impl RankFusion {
 
 #[cfg(test)]
 mod tests {
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     use super::*;
 
     fn create_test_results() -> (Vec<DocumentScore>, Vec<DocumentScore>) {
@@ -322,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reciprocal_rank_fusion() {
+    fn test_reciprocal_rank_fusion() -> Result<()> {
         let (keyword, semantic) = create_test_results();
         let fusion = RankFusion::new(RankFusionStrategy::ReciprocalRankFusion);
         let weights = SearchWeights::default();
@@ -331,9 +332,18 @@ mod tests {
         assert!(!results.is_empty());
 
         // doc1 and doc2 appear in both lists, should have higher RRF scores
-        let doc1_score = results.iter().find(|r| r.doc_id == "doc1").unwrap().score;
-        let doc4_score = results.iter().find(|r| r.doc_id == "doc4").unwrap().score;
+        let doc1_score = results
+            .iter()
+            .find(|r| r.doc_id == "doc1")
+            .expect("doc1 should be found")
+            .score;
+        let doc4_score = results
+            .iter()
+            .find(|r| r.doc_id == "doc4")
+            .expect("doc4 should be found")
+            .score;
         assert!(doc1_score > doc4_score);
+        Ok(())
     }
 
     #[test]

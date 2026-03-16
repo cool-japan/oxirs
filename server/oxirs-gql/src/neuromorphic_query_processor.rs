@@ -840,13 +840,13 @@ mod tests {
 
         let processor = NeuromorphicQueryProcessor::new(config, ai_predictor)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let query = "query { user(id: 1) { name email orders { id total } } }";
         let result = processor.process_query(query).await;
 
         assert!(result.is_ok());
-        let result = result.unwrap();
+        let result = result.expect("should succeed");
         assert!(!result.neural_activation_pattern.is_empty());
         assert!(result.confidence_score >= 0.0 && result.confidence_score <= 1.0);
     }
@@ -859,14 +859,14 @@ mod tests {
 
         let processor = NeuromorphicQueryProcessor::new(config, ai_predictor)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         let query = "query getUserOrders($userId: ID!) { user(id: $userId) { orders @include(if: true) { id } } }";
         let features = processor.extract_query_features(query);
 
         assert!(features.contains_key("length"));
         assert!(features.contains_key("has_query"));
-        assert!(features.get("has_query").unwrap() > &0.0);
+        assert!(features.get("has_query").expect("should succeed") > &0.0);
     }
 
     #[tokio::test]
@@ -877,7 +877,7 @@ mod tests {
 
         let processor = NeuromorphicQueryProcessor::new(config, ai_predictor)
             .await
-            .unwrap();
+            .expect("should succeed");
 
         // Process several queries to form memory patterns
         let queries = [
@@ -887,7 +887,10 @@ mod tests {
         ];
 
         for query in &queries {
-            let _ = processor.process_query(query).await.unwrap();
+            let _ = processor
+                .process_query(query)
+                .await
+                .expect("should succeed");
         }
 
         let result = processor.consolidate_memory().await;

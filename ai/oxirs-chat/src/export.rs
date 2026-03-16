@@ -492,7 +492,9 @@ mod tests {
             create_test_message(MessageRole::Assistant, "Hi there!"),
         ];
 
-        let json = exporter.messages_to_json(&messages).unwrap();
+        let json = exporter
+            .messages_to_json(&messages)
+            .expect("should succeed");
         assert!(json.contains("Hello"));
         assert!(json.contains("Hi there"));
     }
@@ -502,7 +504,7 @@ mod tests {
         let exporter = ChatExporter::new(ExportConfig::default());
         let messages = vec![create_test_message(MessageRole::User, "Hello")];
 
-        let csv = exporter.messages_to_csv(&messages).unwrap();
+        let csv = exporter.messages_to_csv(&messages).expect("should succeed");
         assert!(csv.contains("Role,Content"));
         assert!(csv.contains("Hello"));
     }
@@ -512,7 +514,9 @@ mod tests {
         let exporter = ChatExporter::new(ExportConfig::default());
         let messages = vec![create_test_message(MessageRole::User, "Hello")];
 
-        let md = exporter.messages_to_markdown(&messages).unwrap();
+        let md = exporter
+            .messages_to_markdown(&messages)
+            .expect("should succeed");
         assert!(md.contains("# Chat Messages"));
         assert!(md.contains("Hello"));
     }

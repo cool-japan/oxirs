@@ -1147,7 +1147,7 @@ mod tests {
             max_file_size: 1024,
             ..Default::default()
         };
-        let manager = FileUploadManager::new(config).unwrap();
+        let manager = FileUploadManager::new(config).expect("should succeed");
 
         // Should fail - file too large
         let result = manager.validate_file("test.txt", "text/plain", 2048);
@@ -1164,7 +1164,7 @@ mod tests {
             allowed_mime_types: Some(vec!["image/".to_string(), "video/".to_string()]),
             ..Default::default()
         };
-        let manager = FileUploadManager::new(config).unwrap();
+        let manager = FileUploadManager::new(config).expect("should succeed");
 
         // Should succeed
         let result = manager.validate_file("test.jpg", "image/jpeg", 1024);
@@ -1181,7 +1181,7 @@ mod tests {
             allowed_extensions: Some(vec!["jpg".to_string(), "png".to_string()]),
             ..Default::default()
         };
-        let manager = FileUploadManager::new(config).unwrap();
+        let manager = FileUploadManager::new(config).expect("should succeed");
 
         // Should succeed
         let result = manager.validate_file("test.jpg", "image/jpeg", 1024);
@@ -1214,8 +1214,8 @@ mod tests {
             upload_dir: temp_dir.clone(),
             ..Default::default()
         };
-        let manager = FileUploadManager::new(config).unwrap();
-        manager.initialize().await.unwrap();
+        let manager = FileUploadManager::new(config).expect("should succeed");
+        manager.initialize().await.expect("should succeed");
 
         let content = b"Hello, World!".to_vec();
         let result = manager
@@ -1223,14 +1223,17 @@ mod tests {
             .await;
 
         assert!(result.is_ok());
-        let file = result.unwrap();
+        let file = result.expect("should succeed");
         assert_eq!(file.filename, "test.txt");
         assert_eq!(file.mime_type, "text/plain");
         assert_eq!(file.size, 13);
         assert_eq!(file.status, UploadStatus::Completed);
 
         // Cleanup
-        manager.delete_upload(&file.id).await.unwrap();
+        manager
+            .delete_upload(&file.id)
+            .await
+            .expect("should succeed");
         let _ = fs::remove_dir_all(&temp_dir).await;
     }
 
@@ -1240,8 +1243,8 @@ mod tests {
             max_files_per_request: 2,
             ..Default::default()
         };
-        let manager = FileUploadManager::new(config).unwrap();
-        manager.initialize().await.unwrap();
+        let manager = FileUploadManager::new(config).expect("should succeed");
+        manager.initialize().await.expect("should succeed");
 
         let files = vec![
             (
