@@ -776,7 +776,7 @@ impl QueryDebugger {
             .map(|e| (e.operation.clone(), e.duration))
             .collect();
 
-        ops.sort_by(|a, b| b.1.cmp(&a.1));
+        ops.sort_by_key(|b| std::cmp::Reverse(b.1));
         ops.truncate(count);
         ops
     }

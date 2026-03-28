@@ -68,9 +68,9 @@ pub fn parse_gpx(gpx_str: &str) -> Result<Geometry> {
                         in_track_segment = true;
                         current_track_points.clear();
                     }
-                    "trkpt" | "gpx:trkpt" => {
+                    "trkpt" | "gpx:trkpt"
                         // Track point
-                        if in_track_segment {
+                        if in_track_segment => {
                             if let Some(point) = parse_gpx_point(&e) {
                                 current_track_points.push(geo_types::Coord {
                                     x: point.x(),
@@ -78,7 +78,6 @@ pub fn parse_gpx(gpx_str: &str) -> Result<Geometry> {
                                 });
                             }
                         }
-                    }
                     "rtept" | "gpx:rtept" => {
                         // Route point (treat route as linestring)
                         if let Some(point) = parse_gpx_point(&e) {

@@ -1,7 +1,7 @@
 //! Outlier detection algorithms
 
 use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

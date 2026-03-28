@@ -400,14 +400,13 @@ mod tests {
         assert!(score1 > 0.9, "Expected high compressibility score");
 
         // Random data (less compressible)
-        use scirs2_core::random::{Random, RngCore};
+        use scirs2_core::random::Random;
         let mut rng = Random::seed(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
         );
-        let mut random_data = vec![0u8; 1000];
-        rng.fill_bytes(&mut random_data);
+        let random_data: Vec<u8> = (0..1000).map(|_| rng.random_range(0..256) as u8).collect();
         let score2 = strategy.estimate_compressibility(&random_data);
         assert!(
             score2 < 0.2,

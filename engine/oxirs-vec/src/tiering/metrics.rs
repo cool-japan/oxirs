@@ -200,14 +200,11 @@ impl TierMetrics {
         };
 
         // Average latency (weighted by tier)
-        let avg_latency = if total_queries > 0 {
-            (hot_stat.avg_query_latency_us * hot_stat.total_queries
-                + warm_stat.avg_query_latency_us * warm_stat.total_queries
-                + cold_stat.avg_query_latency_us * cold_stat.total_queries)
-                / total_queries
-        } else {
-            0
-        };
+        let avg_latency = (hot_stat.avg_query_latency_us * hot_stat.total_queries
+            + warm_stat.avg_query_latency_us * warm_stat.total_queries
+            + cold_stat.avg_query_latency_us * cold_stat.total_queries)
+            .checked_div(total_queries)
+            .unwrap_or(0);
 
         // Utilization efficiency
         let total_capacity =

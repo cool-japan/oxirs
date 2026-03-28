@@ -8,7 +8,7 @@ use crate::metamodel::{Aspect, CharacteristicKind, ModelElement};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // SciRS2 imports for constraint-aware random generation
-use scirs2_core::random::{rng, Random, Rng};
+use scirs2_core::random::{rng, Random, RngExt};
 
 /// Generate sample JSON payload from SAMM Aspect
 pub fn generate_payload(aspect: &Aspect, _examples: bool) -> Result<String, SammError> {

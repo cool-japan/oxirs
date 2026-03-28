@@ -1,6 +1,6 @@
 # OxiRS Embed - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -19,7 +19,7 @@
 - **Performance Optimization** - Mixed precision, quantization, GPU acceleration
 - **1345 tests passing** with zero warnings
 
-## Recent Accomplishments (v0.2.2)
+## Recent Accomplishments (v0.2.3)
 
 ### Production Hardening
 - ✅ **Model Validation Framework** - Comprehensive validation for embedding model quality and correctness
@@ -57,4 +57,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Embed v0.2.2 - Knowledge graph embeddings with production validation*
+*OxiRS Embed v0.2.3 - Knowledge graph embeddings with production validation*

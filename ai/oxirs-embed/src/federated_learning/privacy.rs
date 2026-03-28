@@ -188,12 +188,12 @@ impl NoiseGenerator {
         let noise = Array2::from_shape_fn(parameters.raw_dim(), |_| {
             // Box-Muller transform for Gaussian noise
             let u1: f32 = {
-                use scirs2_core::random::{Random, Rng};
+                use scirs2_core::random::{Random, RngExt};
                 let mut random = Random::default();
                 random.random::<f32>()
             };
             let u2: f32 = {
-                use scirs2_core::random::{Random, Rng};
+                use scirs2_core::random::{Random, RngExt};
                 let mut random = Random::default();
                 random.random::<f32>()
             };
@@ -207,7 +207,7 @@ impl NoiseGenerator {
     fn add_laplace_noise(&self, parameters: &Array2<f32>) -> Array2<f32> {
         let noise = Array2::from_shape_fn(parameters.raw_dim(), |_| {
             let u: f32 = {
-                use scirs2_core::random::{Random, Rng};
+                use scirs2_core::random::{Random, RngExt};
                 let mut random = Random::default();
                 random.random::<f32>() - 0.5
             };

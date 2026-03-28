@@ -1255,7 +1255,7 @@ impl EnterpriseKnowledgeAnalyzer {
     ) -> Result<Vector> {
         // Placeholder - would compute actual embedding
         let values = {
-            use scirs2_core::random::{Random, Rng};
+            use scirs2_core::random::{Random, RngExt};
             let mut random = Random::default();
             (0..self.config.embedding_dimension)
                 .map(|_| random.random::<f32>())
@@ -1293,7 +1293,7 @@ impl EnterpriseKnowledgeAnalyzer {
     ) -> Result<Vector> {
         // Placeholder - would compute actual embedding
         let values = {
-            use scirs2_core::random::{Random, Rng};
+            use scirs2_core::random::{Random, RngExt};
             let mut random = Random::default();
             (0..self.config.embedding_dimension)
                 .map(|_| random.random::<f32>())
@@ -1337,7 +1337,7 @@ impl EnterpriseKnowledgeAnalyzer {
     ) -> Result<Vector> {
         // Placeholder - would compute actual embedding
         let values = {
-            use scirs2_core::random::{Random, Rng};
+            use scirs2_core::random::{Random, RngExt};
             let mut random = Random::default();
             (0..self.config.embedding_dimension)
                 .map(|_| random.random::<f32>())

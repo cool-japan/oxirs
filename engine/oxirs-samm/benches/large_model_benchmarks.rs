@@ -18,7 +18,7 @@ use oxirs_samm::performance::BatchProcessor;
 use oxirs_samm::query::ModelQuery;
 use oxirs_samm::transformation::ModelTransformation;
 use oxirs_samm::validator::helpers::quick_validate;
-use scirs2_core::random::{rng, Random, Rng};
+use scirs2_core::random::{rng, Random, Rng, RngExt};
 use std::hint::black_box;
 
 /// Generate a large SAMM Aspect with specified number of properties

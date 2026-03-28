@@ -341,38 +341,34 @@ pub fn contains_property_paths(query: &str) -> bool {
     for i in 0..chars.len() {
         match chars[i] {
             // Property path sequence: prop1/prop2
-            '/' => {
+            '/'
                 // Check if it's not a URI scheme (like http://)
                 if i > 0
                     && chars[i - 1].is_alphanumeric()
                     && i + 1 < chars.len()
                     && chars[i + 1].is_alphanumeric()
-                {
+                => {
                     return true;
                 }
-            }
             // Property path alternative: prop1|prop2
-            '|' => {
+            '|'
                 if i > 0
                     && chars[i - 1].is_alphanumeric()
                     && i + 1 < chars.len()
                     && chars[i + 1].is_alphanumeric()
-                {
+                => {
                     return true;
                 }
-            }
             // One or more path: prop+
-            '+' => {
-                if i > 0 && (chars[i - 1].is_alphanumeric() || chars[i - 1] == ':') {
+            '+'
+                if i > 0 && (chars[i - 1].is_alphanumeric() || chars[i - 1] == ':') => {
                     return true;
                 }
-            }
             // Zero or more path: prop*
-            '*' => {
-                if i > 0 && (chars[i - 1].is_alphanumeric() || chars[i - 1] == ':') {
+            '*'
+                if i > 0 && (chars[i - 1].is_alphanumeric() || chars[i - 1] == ':') => {
                     return true;
                 }
-            }
             _ => {}
         }
     }

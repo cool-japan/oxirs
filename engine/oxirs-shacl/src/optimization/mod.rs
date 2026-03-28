@@ -8,7 +8,9 @@ pub mod advanced_batch;
 pub mod advanced_performance;
 pub mod constraint_ordering;
 pub mod core;
+#[cfg(feature = "gpu")]
 pub mod gpu_accelerated;
+#[cfg(feature = "gpu")]
 pub mod gpu_validation;
 pub mod integration;
 pub mod memory;

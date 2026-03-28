@@ -421,7 +421,7 @@ impl QuantumGeneticOptimizer {
     /// Collapse quantum superposition to select optimization strategy
     fn collapse_strategy_superposition(&mut self) -> OptimizationStrategy {
         // Quantum measurement collapse based on amplitude probabilities
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         let mut random = Random::default();
         let random_value: f64 = random.random();
 
@@ -497,7 +497,7 @@ impl QuantumGeneticOptimizer {
         strategy: &OptimizationStrategy,
     ) -> Option<ConsciousnessEvolutionInsight> {
         // Randomly generate insights based on quantum coherence
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         let mut random = Random::default();
 
         if random.random::<f64>() < self.quantum_coherence * 0.1 {

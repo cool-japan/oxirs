@@ -28,6 +28,7 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -394,7 +395,7 @@ impl QueryPrefetcher {
 
         // Limit number of patterns
         if cooccurrences.len() > 1000 {
-            cooccurrences.sort_by(|a, b| b.count.cmp(&a.count));
+            cooccurrences.sort_by_key(|c| Reverse(c.count));
             cooccurrences.truncate(1000);
         }
 
@@ -471,7 +472,7 @@ impl QueryPrefetcher {
         if let Some(patterns) = sequences.get(current_query) {
             // Sort by occurrence count
             let mut sorted_patterns = patterns.clone();
-            sorted_patterns.sort_by(|a, b| b.occurrence_count.cmp(&a.occurrence_count));
+            sorted_patterns.sort_by_key(|p| Reverse(p.occurrence_count));
 
             for pattern in sorted_patterns.iter().take(max_predictions) {
                 if pattern.occurrence_count < self.config.min_pattern_occurrences {
@@ -579,7 +580,7 @@ impl QueryPrefetcher {
 
         // Sort by frequency
         let mut sorted: Vec<_> = frequency.into_iter().collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.sort_by_key(|s| Reverse(s.1));
 
         let predictions = sorted
             .iter()
@@ -670,7 +671,7 @@ impl QueryPrefetcher {
 
         // Sort by priority
         let mut tasks: Vec<_> = queue.drain(..).collect();
-        tasks.sort_by(|a, b| b.priority.cmp(&a.priority));
+        tasks.sort_by_key(|t| Reverse(t.priority));
         queue.extend(tasks);
 
         Ok(())

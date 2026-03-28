@@ -817,7 +817,7 @@ impl NASProcessor {
     /// Generate random architecture
     fn generate_random_architecture(&self) -> Result<Architecture> {
         #[allow(unused_imports)]
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         let mut rng = Random::default();
 
         let num_layers = rng.random_range(2..11); // 2-10 layers
@@ -995,7 +995,7 @@ impl NASProcessor {
     /// Mutate architecture
     fn mutate_architecture(&self, architecture: &mut Architecture) -> Result<()> {
         #[allow(unused_imports)]
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         let mut rng = Random::default();
 
         let mutation_type = rng.random_range(0..4);

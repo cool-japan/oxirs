@@ -12,6 +12,7 @@
 //! - Stack trace fingerprinting
 //! - Error trend analysis
 
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
@@ -215,7 +216,7 @@ impl ErrorAggregator {
     /// Get top error groups by count
     pub fn get_top_errors(&self, limit: usize) -> Vec<&ErrorGroup> {
         let mut groups: Vec<_> = self.groups.values().collect();
-        groups.sort_by(|a, b| b.count.cmp(&a.count));
+        groups.sort_by_key(|g| Reverse(g.count));
         groups.into_iter().take(limit).collect()
     }
 

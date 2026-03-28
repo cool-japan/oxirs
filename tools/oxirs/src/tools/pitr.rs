@@ -218,7 +218,7 @@ impl TransactionLog {
             }
         }
 
-        checkpoints.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        checkpoints.sort_by_key(|item| item.timestamp);
         Ok(checkpoints)
     }
 

@@ -641,8 +641,8 @@ impl PartitionRebalancer {
             }
         }
 
-        overloaded.sort_by(|a, b| b.1.cmp(&a.1)); // most overloaded first
-        underloaded.sort_by(|a, b| a.1.cmp(&b.1)); // most underloaded first
+        overloaded.sort_by_key(|b| std::cmp::Reverse(b.1)); // most overloaded first
+        underloaded.sort_by_key(|a| a.1); // most underloaded first
 
         let mut actions = Vec::new();
         let mut moved_count = 0;

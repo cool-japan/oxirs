@@ -52,14 +52,17 @@
 //! # }
 //! ```
 
-use crate::{StarError, StarResult, StarStore, StarTerm, StarTriple};
+#[cfg(feature = "gpu")]
+use crate::StarError;
+use crate::{StarResult, StarStore, StarTerm, StarTriple};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument, warn};
 
-// SciRS2-Core GPU imports (FULL USE POLICY)
+// SciRS2-Core GPU imports (feature-gated)
+#[cfg(feature = "gpu")]
 use scirs2_core::gpu::{GpuBackend, GpuContext};
 use scirs2_core::metrics::Counter;
 use scirs2_core::profiling::Profiler;
@@ -136,8 +139,11 @@ pub struct GpuStats {
 
 /// GPU accelerator for RDF-star operations
 pub struct GpuAccelerator {
-    /// GPU context
+    /// GPU context (present only when gpu feature is enabled)
+    #[cfg(feature = "gpu")]
     context: Option<Arc<GpuContext>>,
+    #[cfg(not(feature = "gpu"))]
+    context: Option<Arc<std::sync::Mutex<()>>>,
     /// Selected backend
     backend: GpuBackendType,
     /// Configuration (reserved for future use)
@@ -226,6 +232,7 @@ impl GpuAccelerator {
     }
 
     /// Initialize GPU context
+    #[cfg(feature = "gpu")]
     async fn initialize_context(
         backend: GpuBackendType,
         config: &GpuConfig,
@@ -276,6 +283,16 @@ impl GpuAccelerator {
                 Ok(None)
             }
         }
+    }
+
+    /// Initialize GPU context (CPU-only fallback when gpu feature is disabled)
+    #[cfg(not(feature = "gpu"))]
+    async fn initialize_context(
+        _backend: GpuBackendType,
+        _config: &GpuConfig,
+    ) -> StarResult<Option<Arc<std::sync::Mutex<()>>>> {
+        info!("GPU feature not enabled, using CPU fallback");
+        Ok(None)
     }
 
     /// Get the currently active backend

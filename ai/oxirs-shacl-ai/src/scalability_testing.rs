@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::Random;
+use scirs2_core::random::{Random, RngExt};
 use scirs2_core::Rng;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

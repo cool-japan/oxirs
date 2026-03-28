@@ -12,7 +12,7 @@ use oxirs_cluster::compression_strategy::{
     AccessPattern, Algorithm, CompressedData, CompressionConfig, CompressionStrategy,
 };
 use oxirs_cluster::encryption::{EncryptionConfig, EncryptionManager, HsmProvider};
-use scirs2_core::random::{Random, RngCore};
+use scirs2_core::random::Random;
 
 // Test data generators
 fn generate_highly_compressible_data(size: usize) -> Vec<u8> {
@@ -38,8 +38,7 @@ fn generate_random_data(size: usize) -> Vec<u8> {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs()),
     );
-    let mut data = vec![0u8; size];
-    rng.fill_bytes(&mut data);
+    let data: Vec<u8> = (0..size).map(|_| rng.random_range(0..256) as u8).collect();
     data
 }
 

@@ -1,6 +1,6 @@
 # OxiRS GraphRAG - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -19,7 +19,7 @@
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ Graph-based retrieval, Louvain community detection, context building, RRF
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Leiden community detection (graph/community.rs with full refinement phase)
 - ✅ Query result caching (LRU with TTL — cache/query_cache.rs)
 - ✅ Graph embedding integration (Node2Vec — embeddings/node2vec.rs with alias sampling)
@@ -48,4 +48,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GraphRAG v0.2.2 - Graph-based RAG for knowledge graphs*
+*OxiRS GraphRAG v0.2.3 - Graph-based RAG for knowledge graphs*

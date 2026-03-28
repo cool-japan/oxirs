@@ -12,7 +12,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use scirs2_core::ndarray_ext::{s, Array1, Array2, Array3};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -1462,7 +1462,7 @@ impl NovelArchitectureModel {
         let dimensions = self.config.base_config.dimensions;
         let mut random = Random::default();
         let mut new_embeddings =
-            Array2::from_shape_fn((new_size, dimensions), |_| random.gen_range(-1.0..1.0));
+            Array2::from_shape_fn((new_size, dimensions), |_| random.random_range(-1.0..1.0));
 
         let copy_rows = embeddings.nrows().min(new_size);
         if copy_rows > 0 {

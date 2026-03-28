@@ -74,13 +74,13 @@ This guide demonstrates how to integrate all three Phase C features to build a p
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-core = "0.2.2"
-oxirs-fuseki = "0.2.2"
-oxirs-graphrag = "0.2.2"
-oxirs-did = "0.2.2"
-oxirs-vec = "0.2.2"
-oxirs-embed = "0.2.2"
-oxirs-chat = "0.2.2"
+oxirs-core = "0.2.3"
+oxirs-fuseki = "0.2.3"
+oxirs-graphrag = "0.2.3"
+oxirs-did = "0.2.3"
+oxirs-vec = "0.2.3"
+oxirs-embed = "0.2.3"
+oxirs-chat = "0.2.3"
 
 tokio = { version = "1.47", features = ["full"] }
 axum = "0.7"

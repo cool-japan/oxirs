@@ -119,7 +119,7 @@ impl RuleStatisticsCollector {
     /// Returns the top `n` rules by activation count (descending).
     pub fn top_by_activations(&self, n: usize) -> Vec<&RuleStats> {
         let mut sorted: Vec<&RuleStats> = self.stats.values().collect();
-        sorted.sort_by(|a, b| b.activation_count.cmp(&a.activation_count));
+        sorted.sort_by_key(|b| std::cmp::Reverse(b.activation_count));
         sorted.truncate(n);
         sorted
     }
@@ -127,7 +127,7 @@ impl RuleStatisticsCollector {
     /// Returns the top `n` rules by total cumulative duration (descending).
     pub fn top_by_duration(&self, n: usize) -> Vec<&RuleStats> {
         let mut sorted: Vec<&RuleStats> = self.stats.values().collect();
-        sorted.sort_by(|a, b| b.total_duration_us.cmp(&a.total_duration_us));
+        sorted.sort_by_key(|b| std::cmp::Reverse(b.total_duration_us));
         sorted.truncate(n);
         sorted
     }

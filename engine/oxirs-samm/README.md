@@ -1,11 +1,11 @@
 # OxiRS SAMM - Semantic Aspect Meta Model for Rust
 
-[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](../../../LICENSE)
 [![Tests](https://img.shields.io/badge/tests-1%2C409%20passing-brightgreen)](./TODO.md)
 [![Documentation](https://img.shields.io/badge/docs-100%25-brightgreen)](./src/lib.rs)
 
-**Status**: ✅ Production Release (v0.2.2) - Production Ready
+**Status**: ✅ Production Release (v0.2.3) - Production Ready
 ✅ APIs stable. Ready for production use with backward compatibility guarantees.
 
 ## Overview
@@ -47,7 +47,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-samm = "0.2.2"
+oxirs-samm = "0.2.3"
 ```
 
 ### Basic Usage
@@ -403,7 +403,7 @@ oxirs aspect Movement.ttl to aas --format xml
 
 ### AAS Integration - Industry 4.0 Support
 
-OxiRS v0.2.2 includes bidirectional AAS (Asset Administration Shell) integration:
+OxiRS v0.2.3 includes bidirectional AAS (Asset Administration Shell) integration:
 
 ```bash
 # Convert AAS Submodel Templates to SAMM Aspect Models
@@ -420,7 +420,7 @@ oxirs aas file.json to aspect       # JSON format
 oxirs aas file.aasx to aspect       # AASX (default)
 ```
 
-**Implementation Status** (v0.2.2):
+**Implementation Status** (v0.2.3):
 - ✅ CLI command structure and routing
 - ✅ File format detection (XML/JSON/AASX)
 - ✅ Java ESMF SDK compatible syntax
@@ -514,7 +514,7 @@ Robust fuzz testing for parser resilience:
 
 ## Development Status
 
-### ✅ v0.2.2 Production-Ready
+### ✅ v0.2.3 Production-Ready
 
 **All major features complete and tested**:
 - [x] SAMM 2.0.0-2.3.0 full specification support
@@ -533,7 +533,7 @@ Robust fuzz testing for parser resilience:
 - [x] 6 runnable examples
 - [x] Multi-file code generation
 
-### 🎯 Toward GA Release (v0.2.2)
+### 🎯 Toward GA Release (v0.2.3)
 
 Remaining items for General Availability:
 - [ ] Community feedback and API refinement
@@ -541,7 +541,7 @@ Remaining items for General Availability:
 - [ ] Documentation website (docs.rs ready)
 - [ ] Crate publication to crates.io
 
-### 📅 Future Enhancements (v0.2.2+)
+### 📅 Future Enhancements (v0.2.3+)
 
 - [ ] Plugin architecture for custom generators
 - [ ] Visual model editor integration

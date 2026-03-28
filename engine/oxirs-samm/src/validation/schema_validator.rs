@@ -383,63 +383,53 @@ impl SammSchemaValidator {
         errors: &mut Vec<SchemaValidationError>,
     ) {
         match char.kind() {
-            CharacteristicKind::Enumeration { values } => {
-                if values.is_empty() {
-                    errors.push(SchemaValidationError {
-                        element_urn: urn.to_string(),
-                        rule: ValidationRule::EnumerationEmpty,
-                        message: format!(
-                            "Enumeration '{}' must contain at least one value",
-                            char.name()
-                        ),
-                    });
-                }
+            CharacteristicKind::Enumeration { values } if values.is_empty() => {
+                errors.push(SchemaValidationError {
+                    element_urn: urn.to_string(),
+                    rule: ValidationRule::EnumerationEmpty,
+                    message: format!(
+                        "Enumeration '{}' must contain at least one value",
+                        char.name()
+                    ),
+                });
             }
-            CharacteristicKind::State { values, .. } => {
-                if values.is_empty() {
-                    errors.push(SchemaValidationError {
-                        element_urn: urn.to_string(),
-                        rule: ValidationRule::EnumerationEmpty,
-                        message: format!("State '{}' must contain at least one value", char.name()),
-                    });
-                }
+            CharacteristicKind::State { values, .. } if values.is_empty() => {
+                errors.push(SchemaValidationError {
+                    element_urn: urn.to_string(),
+                    rule: ValidationRule::EnumerationEmpty,
+                    message: format!("State '{}' must contain at least one value", char.name()),
+                });
             }
-            CharacteristicKind::Measurement { unit } => {
-                if unit.is_empty() {
-                    errors.push(SchemaValidationError {
-                        element_urn: urn.to_string(),
-                        rule: ValidationRule::MeasurementMissingUnit,
-                        message: format!(
-                            "Measurement '{}' must specify a unit (samm-c:unit)",
-                            char.name()
-                        ),
-                    });
-                }
+            CharacteristicKind::Measurement { unit } if unit.is_empty() => {
+                errors.push(SchemaValidationError {
+                    element_urn: urn.to_string(),
+                    rule: ValidationRule::MeasurementMissingUnit,
+                    message: format!(
+                        "Measurement '{}' must specify a unit (samm-c:unit)",
+                        char.name()
+                    ),
+                });
             }
-            CharacteristicKind::Quantifiable { unit } => {
-                if unit.is_empty() {
-                    errors.push(SchemaValidationError {
-                        element_urn: urn.to_string(),
-                        rule: ValidationRule::QuantifiableMissingUnit,
-                        message: format!(
-                            "Quantifiable '{}' must specify a unit (samm-c:unit)",
-                            char.name()
-                        ),
-                    });
-                }
+            CharacteristicKind::Quantifiable { unit } if unit.is_empty() => {
+                errors.push(SchemaValidationError {
+                    element_urn: urn.to_string(),
+                    rule: ValidationRule::QuantifiableMissingUnit,
+                    message: format!(
+                        "Quantifiable '{}' must specify a unit (samm-c:unit)",
+                        char.name()
+                    ),
+                });
             }
-            CharacteristicKind::Duration { unit } => {
-                if unit.is_empty() || !is_time_unit(unit) {
-                    errors.push(SchemaValidationError {
-                        element_urn: urn.to_string(),
-                        rule: ValidationRule::DurationMissingTimeUnit,
-                        message: format!(
-                            "Duration '{}' must specify a time unit \
+            CharacteristicKind::Duration { unit } if (unit.is_empty() || !is_time_unit(unit)) => {
+                errors.push(SchemaValidationError {
+                    element_urn: urn.to_string(),
+                    rule: ValidationRule::DurationMissingTimeUnit,
+                    message: format!(
+                        "Duration '{}' must specify a time unit \
                             (e.g., unit:second, unit:millisecond)",
-                            char.name()
-                        ),
-                    });
-                }
+                        char.name()
+                    ),
+                });
             }
             CharacteristicKind::Collection {
                 element_characteristic,

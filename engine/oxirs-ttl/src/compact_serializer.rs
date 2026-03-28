@@ -469,7 +469,7 @@ impl CompactSerializer {
         }
 
         let mut sorted: Vec<(String, usize)> = ns_count.into_iter().collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         let mut result = BTreeMap::new();
         for (i, (ns, _)) in sorted.into_iter().take(max_prefixes).enumerate() {

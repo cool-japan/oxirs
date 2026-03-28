@@ -143,25 +143,26 @@ impl RetentionEnforcer {
             let policy = self.find_policy_for_age(age);
 
             match policy {
-                Some(policy) => {
-                    if age_secs > policy.duration.as_secs() {
-                        // Data is older than retention period
-                        if let Some(downsampling) = &policy.downsampling {
-                            // Downsample the chunk
-                            let (success, saved) = self
-                                .downsample_chunk(store, &chunk_entry, downsampling)
-                                .await?;
-                            if success {
-                                downsampled_count += 1;
-                                bytes_freed += saved;
-                            }
-                        } else {
-                            // Delete the chunk
-                            let freed = self.delete_chunk(store, &chunk_entry).await?;
-                            deleted_count += 1;
-                            bytes_freed += freed;
+                Some(policy) if age_secs > policy.duration.as_secs() => {
+                    // Data is older than retention period
+                    if let Some(downsampling) = &policy.downsampling {
+                        // Downsample the chunk
+                        let (success, saved) = self
+                            .downsample_chunk(store, &chunk_entry, downsampling)
+                            .await?;
+                        if success {
+                            downsampled_count += 1;
+                            bytes_freed += saved;
                         }
+                    } else {
+                        // Delete the chunk
+                        let freed = self.delete_chunk(store, &chunk_entry).await?;
+                        deleted_count += 1;
+                        bytes_freed += freed;
                     }
+                }
+                Some(_) => {
+                    // Data is within retention period, keep it
                 }
                 None => {
                     // No policy, keep data

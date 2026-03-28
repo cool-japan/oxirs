@@ -640,7 +640,7 @@ impl JitQueryCompiler {
     pub async fn add_optimization_rule(&self, rule: OptimizationRule) {
         let mut rules = self.optimization_rules.write().await;
         rules.push(rule);
-        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        rules.sort_by_key(|item| std::cmp::Reverse(item.priority));
     }
 
     /// Disable optimization rule

@@ -233,7 +233,7 @@ impl TaskManager {
         }
 
         // Sort by creation time (newest first)
-        task_list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        task_list.sort_by_key(|item| std::cmp::Reverse(item.created_at));
 
         Ok(task_list)
     }

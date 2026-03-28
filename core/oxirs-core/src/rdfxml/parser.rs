@@ -1465,31 +1465,32 @@ impl<R> InternalRdfXmlParser<R> {
                 writer,
                 emit,
                 ..
-            } => {
-                if emit {
-                    let object = writer.into_inner();
-                    if object.is_empty() {
-                        return Err(RdfXmlSyntaxError::msg(format!(
-                            "No value found for rdf:XMLLiteral value of property {iri}"
-                        )));
-                    }
-                    let triple = Triple::new(
-                        crate::model::term::Subject::from(subject),
-                        iri,
-                        Literal::new_typed_literal(
-                            str::from_utf8(&object).map_err(|_| {
-                                RdfXmlSyntaxError::msg(
-                                    "The XML literal is not in valid UTF-8".to_owned(),
-                                )
-                            })?,
-                            NamedNode::new_unchecked(RDF_XML_LITERAL),
-                        ),
-                    );
-                    if let Some(id_attr) = id_attr {
-                        Self::reify(triple.clone(), id_attr, results);
-                    }
-                    results.push(triple);
+            } if emit => {
+                let object = writer.into_inner();
+                if object.is_empty() {
+                    return Err(RdfXmlSyntaxError::msg(format!(
+                        "No value found for rdf:XMLLiteral value of property {iri}"
+                    )));
                 }
+                let triple = Triple::new(
+                    crate::model::term::Subject::from(subject),
+                    iri,
+                    Literal::new_typed_literal(
+                        str::from_utf8(&object).map_err(|_| {
+                            RdfXmlSyntaxError::msg(
+                                "The XML literal is not in valid UTF-8".to_owned(),
+                            )
+                        })?,
+                        NamedNode::new_unchecked(RDF_XML_LITERAL),
+                    ),
+                );
+                if let Some(id_attr) = id_attr {
+                    Self::reify(triple.clone(), id_attr, results);
+                }
+                results.push(triple);
+            }
+            RdfXmlState::ParseTypeLiteralPropertyElt { .. } => {
+                // emit is false, nothing to do
             }
             RdfXmlState::NodeElt { subject, .. } => match self.state.last_mut() {
                 Some(RdfXmlState::PropertyElt { object, .. }) => {

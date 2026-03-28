@@ -307,12 +307,11 @@ impl StreamingAnalyzer {
                     // Always streamable
                     opportunities.streamable_scans.push(op.id());
                 }
-                Operator::Filter(_) => {
+                Operator::Filter(_)
                     // Streamable if input is streamable
-                    if self.is_input_streamable(op, &opportunities) {
+                    if self.is_input_streamable(op, &opportunities) => {
                         opportunities.streamable_filters.push(op.id());
                     }
-                }
                 Operator::Project(_) => {
                     // Streamable projection
                     opportunities.streamable_projects.push(op.id());

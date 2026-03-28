@@ -583,17 +583,15 @@ impl GraphQLFederation {
         // Analyze types
         for type_def in schema.types.values() {
             match &type_def.kind {
-                TypeKind::Scalar => {
-                    if !self.is_builtin_type(&type_def.name) {
+                TypeKind::Scalar
+                    if !self.is_builtin_type(&type_def.name) => {
                         capabilities.scalar_types.push(type_def.name.clone());
                     }
-                }
-                TypeKind::Object { .. } => {
+                TypeKind::Object { .. }
                     // Check if this is an entity type (has @key directive)
-                    if type_def.directives.iter().any(|d| d.name == "key") {
+                    if type_def.directives.iter().any(|d| d.name == "key") => {
                         capabilities.entity_types.push(type_def.name.clone());
                     }
-                }
                 _ => {}
             }
         }

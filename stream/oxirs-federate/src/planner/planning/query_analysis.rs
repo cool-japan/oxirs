@@ -553,13 +553,12 @@ fn extract_variables_from_value(
     used_variables: &mut std::collections::HashSet<String>,
 ) {
     match value {
-        serde_json::Value::String(s) => {
+        serde_json::Value::String(s)
             // Check if string is a variable reference (e.g., "$variableName")
-            if s.starts_with('$') {
+            if s.starts_with('$') => {
                 let var_name = s.trim_start_matches('$');
                 used_variables.insert(var_name.to_string());
             }
-        }
         serde_json::Value::Array(arr) => {
             for item in arr {
                 extract_variables_from_value(item, used_variables);

@@ -16,7 +16,7 @@ use scirs2_core::gpu::{GpuBackend, GpuBuffer, GpuContext, GpuKernel};
 use scirs2_core::memory::BufferPool;
 use scirs2_core::metrics::{Counter, Histogram, Timer};
 use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1, ArrayView2};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 // Note: tensor_cores types removed in rc.3 - using direct GPU operations instead
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -210,7 +210,7 @@ impl GpuEmbeddingGenerator {
 
         for i in 0..num_vectors {
             for j in 0..dim {
-                embeddings[[i, j]] = self.rng.gen_range(-0.1..0.1);
+                embeddings[[i, j]] = self.rng.random_range(-0.1..0.1);
             }
 
             // Normalize
@@ -314,7 +314,7 @@ impl GpuEmbeddingGenerator {
                     let neg_triple = if self.rng.random::<f32>() < 0.5 {
                         // Corrupt head
                         KgTriple {
-                            subject_id: self.rng.gen_range(0..self.entity_embeddings.nrows()),
+                            subject_id: self.rng.random_range(0..self.entity_embeddings.nrows()),
                             predicate_id: triple.predicate_id,
                             object_id: triple.object_id,
                         }
@@ -323,7 +323,7 @@ impl GpuEmbeddingGenerator {
                         KgTriple {
                             subject_id: triple.subject_id,
                             predicate_id: triple.predicate_id,
-                            object_id: self.rng.gen_range(0..self.entity_embeddings.nrows()),
+                            object_id: self.rng.random_range(0..self.entity_embeddings.nrows()),
                         }
                     };
 

@@ -1057,40 +1057,36 @@ impl CepEngine {
     ) -> Result<bool> {
         for predicate in predicates {
             match predicate {
-                FieldPredicate::Equals { field, value } => {
+                FieldPredicate::Equals { field, value } if field == "event_type" => {
                     // Extract field from event (simplified)
-                    if field == "event_type" {
-                        let event_type = match event {
-                            StreamEvent::TripleAdded { .. } => "TripleAdded",
-                            StreamEvent::TripleRemoved { .. } => "TripleRemoved",
-                            StreamEvent::QuadAdded { .. } => "QuadAdded",
-                            StreamEvent::QuadRemoved { .. } => "QuadRemoved",
-                            StreamEvent::GraphCreated { .. } => "GraphCreated",
-                            StreamEvent::GraphCleared { .. } => "GraphCleared",
-                            StreamEvent::GraphDeleted { .. } => "GraphDeleted",
-                            StreamEvent::SparqlUpdate { .. } => "SparqlUpdate",
-                            StreamEvent::TransactionBegin { .. } => "TransactionBegin",
-                            StreamEvent::TransactionCommit { .. } => "TransactionCommit",
-                            StreamEvent::TransactionAbort { .. } => "TransactionAbort",
-                            StreamEvent::SchemaChanged { .. } => "SchemaChanged",
-                            StreamEvent::Heartbeat { .. } => "Heartbeat",
-                            _ => "Other", // Catch-all for other event types
-                        };
-                        if event_type != value {
-                            return Ok(false);
-                        }
+                    let event_type = match event {
+                        StreamEvent::TripleAdded { .. } => "TripleAdded",
+                        StreamEvent::TripleRemoved { .. } => "TripleRemoved",
+                        StreamEvent::QuadAdded { .. } => "QuadAdded",
+                        StreamEvent::QuadRemoved { .. } => "QuadRemoved",
+                        StreamEvent::GraphCreated { .. } => "GraphCreated",
+                        StreamEvent::GraphCleared { .. } => "GraphCleared",
+                        StreamEvent::GraphDeleted { .. } => "GraphDeleted",
+                        StreamEvent::SparqlUpdate { .. } => "SparqlUpdate",
+                        StreamEvent::TransactionBegin { .. } => "TransactionBegin",
+                        StreamEvent::TransactionCommit { .. } => "TransactionCommit",
+                        StreamEvent::TransactionAbort { .. } => "TransactionAbort",
+                        StreamEvent::SchemaChanged { .. } => "SchemaChanged",
+                        StreamEvent::Heartbeat { .. } => "Heartbeat",
+                        _ => "Other", // Catch-all for other event types
+                    };
+                    if event_type != value {
+                        return Ok(false);
                     }
                 }
-                FieldPredicate::Contains { field, substring } => {
+                FieldPredicate::Contains { field, substring } if field == "source" => {
                     // Simplified implementation
-                    if field == "source" {
-                        let source = match event {
-                            StreamEvent::Heartbeat { source, .. } => source,
-                            _ => return Ok(false),
-                        };
-                        if !source.contains(substring) {
-                            return Ok(false);
-                        }
+                    let source = match event {
+                        StreamEvent::Heartbeat { source, .. } => source,
+                        _ => return Ok(false),
+                    };
+                    if !source.contains(substring) {
+                        return Ok(false);
                     }
                 }
                 _ => {

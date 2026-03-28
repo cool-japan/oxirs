@@ -522,7 +522,7 @@ impl crate::EmbeddingModel for MambaEmbedding {
 
             // Initialize with random values
             #[allow(unused_imports)]
-            use scirs2_core::random::{Random, Rng};
+            use scirs2_core::random::{Random, RngExt};
             let mut rng = Random::default();
 
             for i in 0..num_entities {

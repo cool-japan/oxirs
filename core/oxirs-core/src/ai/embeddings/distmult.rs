@@ -5,7 +5,7 @@ use super::{
 use crate::model::Triple;
 use anyhow::{anyhow, Result};
 use scirs2_core::ndarray_ext::Array1;
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;

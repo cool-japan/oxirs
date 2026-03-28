@@ -30,8 +30,7 @@
 
 use crate::error::{Result, TdbError};
 use scirs2_core::metrics::{Counter, Gauge, Histogram, MetricsRegistry};
-use scirs2_core::random::{rngs, Random};
-use scirs2_core::RngCore;
+use scirs2_core::random::{rngs, Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -185,9 +184,7 @@ impl BloomFilter {
         let mut rng = Random::seed(0);
 
         // Generate random seeds for hash functions
-        let hash_seeds: Vec<u64> = (0..num_hash_functions)
-            .map(|_| RngCore::next_u64(&mut rng))
-            .collect();
+        let hash_seeds: Vec<u64> = (0..num_hash_functions).map(|_| rng.next_u64()).collect();
 
         let metrics = if config.enable_metrics {
             Some(BloomFilterMetrics::new("bloom_filter"))
@@ -319,9 +316,7 @@ impl CountingBloomFilter {
 
         let mut rng = Random::seed(0);
 
-        let hash_seeds: Vec<u64> = (0..num_hash_functions)
-            .map(|_| RngCore::next_u64(&mut rng))
-            .collect();
+        let hash_seeds: Vec<u64> = (0..num_hash_functions).map(|_| rng.next_u64()).collect();
 
         let metrics = if config.enable_metrics {
             Some(BloomFilterMetrics::new("counting_bloom_filter"))

@@ -245,7 +245,7 @@ impl CoverageAnalyzer {
             .map(|(name, &count)| (name.clone(), count))
             .collect();
 
-        hot_rules.sort_by(|a, b| b.1.cmp(&a.1));
+        hot_rules.sort_by_key(|b| std::cmp::Reverse(b.1));
         hot_rules
     }
 

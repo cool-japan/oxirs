@@ -262,16 +262,13 @@ impl MemoryTracker {
             .filter(|e| matches!(e.operation, AllocationType::Deallocate))
             .count();
 
-        let avg_allocation_size = if total_allocations > 0 {
-            history
-                .iter()
-                .filter(|e| matches!(e.operation, AllocationType::Allocate))
-                .map(|e| e.size)
-                .sum::<usize>()
-                / total_allocations
-        } else {
-            0
-        };
+        let avg_allocation_size = history
+            .iter()
+            .filter(|e| matches!(e.operation, AllocationType::Allocate))
+            .map(|e| e.size)
+            .sum::<usize>()
+            .checked_div(total_allocations)
+            .unwrap_or(0);
 
         MemoryStats {
             current_usage: self.current_usage(),

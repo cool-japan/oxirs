@@ -9,7 +9,7 @@
 
 use anyhow::{anyhow, Result};
 // MIGRATED: Using scirs2-core instead of direct rand dependency
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::{HashMap, VecDeque};

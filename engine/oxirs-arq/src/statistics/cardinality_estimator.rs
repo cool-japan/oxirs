@@ -243,7 +243,7 @@ impl HyperLogLogSketch {
 }
 
 /// Sampling reservoir for cardinality estimation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ReservoirSample {
     /// Sample size
     sample_size: usize,
@@ -254,6 +254,18 @@ pub struct ReservoirSample {
     /// Random number generator
     #[serde(skip)]
     rng: Option<Random<StdRng>>,
+}
+
+impl Clone for ReservoirSample {
+    fn clone(&self) -> Self {
+        Self {
+            sample_size: self.sample_size,
+            samples: self.samples.clone(),
+            elements_seen: self.elements_seen,
+            // RNG is lazily re-created on use; skip during clone (same as serde skip)
+            rng: None,
+        }
+    }
 }
 
 impl ReservoirSample {

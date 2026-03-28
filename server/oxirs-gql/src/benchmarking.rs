@@ -650,12 +650,8 @@ impl PerformanceBenchmarkSuite {
         // Get cache statistics if available
         let cache_hit_rate = if let Some(cache) = &self.cache {
             match cache.get_stats().await {
-                Ok(stats) => {
-                    if (stats.hits + stats.misses) > 0 {
-                        (stats.hits as f64 / (stats.hits + stats.misses) as f64) * 100.0
-                    } else {
-                        0.0
-                    }
+                Ok(stats) if (stats.hits + stats.misses) > 0 => {
+                    (stats.hits as f64 / (stats.hits + stats.misses) as f64) * 100.0
                 }
                 _ => 0.0,
             }

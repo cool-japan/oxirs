@@ -355,12 +355,10 @@ impl FaissIndex {
 
         // Validate index-specific parameters
         match &config.index_type {
-            FaissIndexType::IvfFlat | FaissIndexType::IvfSq => {
-                if config.num_clusters.is_none() {
-                    return Err(AnyhowError::msg(
-                        "IVF indices require num_clusters to be set",
-                    ));
-                }
+            FaissIndexType::IvfFlat | FaissIndexType::IvfSq if config.num_clusters.is_none() => {
+                return Err(AnyhowError::msg(
+                    "IVF indices require num_clusters to be set",
+                ));
             }
             FaissIndexType::IvfPq => {
                 if config.num_clusters.is_none() {

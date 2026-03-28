@@ -497,7 +497,7 @@ impl TfIdfEmbeddingGenerator {
             }
         }
         let mut word_freq: Vec<(String, usize)> = word_counts.into_iter().collect();
-        word_freq.sort_by(|a, b| b.1.cmp(&a.1));
+        word_freq.sort_by_key(|b| std::cmp::Reverse(b.1));
         self.vocabulary = word_freq
             .into_iter()
             .take(self.config.dimensions)

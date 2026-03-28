@@ -3,13 +3,13 @@
 > A Rust-native, modular platform for Semantic Web, SPARQL 1.2, GraphQL, and AI-augmented reasoning
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.2.2 - Released - March 16, 2026
+**Status**: v0.2.4 - Released - March 28, 2026
 
 **Production Ready**: Complete SPARQL 1.1/1.2 implementation with **3.8x faster optimizer**, industrial IoT support, and AI-powered features. **40,786 tests passing** with zero warnings across all 26 crates.
 
-**v0.2.2 Highlights (March 16, 2026)**: 26 new functional modules added across 16 development rounds. Advanced SPARQL algebra (EXISTS, MINUS, subquery, service clause), production-grade storage (six-index store, index merger/rebuilder), AI capabilities (vector store, constraint inference, conversation history), and security hardening (credential store, trust chain validation). Production unwrap() audit complete (zero violations), cloud_integration.rs refactored into module, and security advisories reviewed.
+**v0.2.4 Highlights (March 28, 2026)**: 26 new functional modules added across 16 development rounds. Advanced SPARQL algebra (EXISTS, MINUS, subquery, service clause), production-grade storage (six-index store, index merger/rebuilder), AI capabilities (vector store, constraint inference, conversation history), and security hardening (credential store, trust chain validation). Production unwrap() audit complete (zero violations), cloud_integration.rs refactored into module, and security advisories reviewed.
 
 ## Vision
 
@@ -34,11 +34,11 @@ cd oxirs
 cargo build --workspace --release
 ```
 
-### What's New in v0.2.2 (March 16, 2026)
+### What's New in v0.2.4 (March 28, 2026)
 
 **Major Feature Release: 26 New Modules Across 16 Development Rounds**
 
-OxiRS v0.2.2 significantly expands the platform with deep SPARQL algebra, production storage, AI capabilities, and security hardening:
+OxiRS v0.2.4 significantly expands the platform with deep SPARQL algebra, production storage, AI capabilities, and security hardening:
 
 **Core Capabilities:**
 - **Complete SPARQL 1.1/1.2** - Full W3C compliance with advanced query optimization
@@ -51,7 +51,7 @@ OxiRS v0.2.2 significantly expands the platform with deep SPARQL algebra, produc
 - **Complete Observability** - Prometheus metrics, OpenTelemetry tracing
 - **Cloud Native** - Kubernetes operator, Terraform modules, Docker support
 
-**Quality Metrics (v0.2.2):**
+**Quality Metrics (v0.2.4):**
 - ✅ **40,786 tests passing** (100% pass rate, ~115 skipped)
 - ✅ **Zero compilation warnings** across all 26 crates
 - ✅ **95%+ test coverage** and documentation coverage
@@ -235,7 +235,7 @@ oxirs/                  # Cargo workspace root
     └─ benchmarks/       # SP2Bench, WatDiv, LDBC SGS
 ```
 
-## Feature Matrix (v0.2.2)
+## Feature Matrix (v0.2.4)
 
 | Capability | Oxirs crate(s) | Status | Jena / Fuseki parity |
 |------------|----------------|--------|----------------------|
@@ -295,7 +295,7 @@ oxirs/                  # Cargo workspace root
 - ⏳ Planned: Not yet implemented
 - 🔸 Partial/plug-in support in Jena
 
-**Quality Metrics (v0.2.2):**
+**Quality Metrics (v0.2.4):**
 - **40,786 tests passing** (100% pass rate, ~115 skipped)
 - **Zero compilation warnings** (enforced with `-D warnings`)
 - **95%+ test coverage** across all 26 modules
@@ -304,7 +304,7 @@ oxirs/                  # Cargo workspace root
 - **Production-grade security audit completed**
 - **CUDA GPU support** for AI acceleration
 - **3.8x faster query optimization** via adaptive complexity detection
-- **26 new functional modules** added in v0.2.2 (16 development rounds)
+- **26 new functional modules** added in v0.2.4 (16 development rounds)
 
 ## Usage Examples
 
@@ -505,12 +505,12 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 | Version | Target Date | Milestone | Deliverables | Status |
 |---------|-------------|-----------|--------------|---------|
 | **v0.1.0** | **✅ Jan 7, 2026** | **Initial Production Release** | Complete SPARQL 1.1/1.2, Industrial IoT, AI features, 13,123 tests | ✅ Released |
-| **v0.2.2** | **✅ Mar 16, 2026** | **Deep Feature Expansion** | 40,786 tests, 26 new modules, 3.8x faster optimizer, advanced SPARQL algebra, AI production-grade | ✅ Released (current) |
+| **v0.2.4** | **✅ Mar 16, 2026** | **Deep Feature Expansion** | 40,786 tests, 26 new modules, 3.8x faster optimizer, advanced SPARQL algebra, AI production-grade | ✅ Released (current) |
 | **v0.3.0** | **Q2 2026** | **Full-text Search & Scale** | Full-text search (Tantivy), 10x performance, multi-region clustering | Planned |
 
-### Current Release: v0.2.2 (March 16, 2026)
+### Current Release: v0.2.4 (March 28, 2026)
 
-**v0.2.2 Focus Areas (16 rounds complete):**
+**v0.2.4 Focus Areas (16 rounds complete):**
 - Advanced SPARQL algebra: EXISTS/MINUS evaluators, subquery builder, service clause, LATERAL join
 - Storage hardening: six-index store, index merger/rebuilder, B-tree compaction, triple cache
 - AI production readiness: vector store, constraint inference, conversation history, response cache
@@ -545,11 +545,11 @@ See [LICENSE](LICENSE) for details.
 - **Issues & RFCs**: https://github.com/cool-japan/oxirs
 - **Maintainer**: @cool-japan (KitaSan)
 
-## Release Notes (v0.2.2)
+## Release Notes (v0.2.4)
 
 Full notes live in [CHANGELOG.md](CHANGELOG.md).
 
-### Highlights (March 16, 2026)
+### Highlights (March 28, 2026)
 - **40,786 tests passing** across all 26 crates
 - **26 new functional modules** added across all 26 crates in 16 development rounds
 - **Advanced SPARQL algebra**: EXISTS evaluator, MINUS evaluator, subquery builder, service clause handler
@@ -561,7 +561,7 @@ Full notes live in [CHANGELOG.md](CHANGELOG.md).
 - **Geospatial**: convex hull (Graham scan), distance calculator, intersection detector, area calculator
 - **Stream processing**: partition manager, consumer groups, schema registry, dead-letter queue, watermark tracking
 
-### Per-Crate Test Counts (v0.2.2)
+### Per-Crate Test Counts (v0.2.4)
 | Crate | Tests |
 |-------|-------|
 | oxirs-arq | 2688 |
@@ -620,4 +620,4 @@ Production Impact (100K QPS):
 
 *"Rust makes memory safety table stakes; OxiRS makes knowledge-graph engineering table stakes."*
 
-**v0.2.2 - Released - March 16, 2026**
+**v0.2.4 - Released - March 28, 2026**

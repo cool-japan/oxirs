@@ -1,7 +1,7 @@
-# OxiRS Fuseki v0.2.2 Release Notes
+# OxiRS Fuseki v0.2.3 Release Notes
 
 **Release Date**: March 5, 2026
-**Status**: Production Release - v0.2.2
+**Status**: Production Release - v0.2.3
 
 ---
 
@@ -545,7 +545,7 @@ cargo fmt --check
 
 ## 🔮 Future Roadmap
 
-### v0.2.2 (Q1 2026)
+### v0.2.3 (Q1 2026)
 
 - SPARQL 1.2 Full Compliance (latest W3C draft)
 - Distributed query federation with partition awareness

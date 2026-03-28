@@ -246,10 +246,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for i in 1..args.len() {
         match args[i].as_str() {
-            "--threshold" => {
-                if i + 1 < args.len() {
-                    threshold = args[i + 1].parse()?;
-                }
+            "--threshold" if i + 1 < args.len() => {
+                threshold = args[i + 1].parse()?;
             }
             "--check-regression" => check_regression = true,
             "--report" => report_mode = true,

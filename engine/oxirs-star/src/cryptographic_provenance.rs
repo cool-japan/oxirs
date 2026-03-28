@@ -7,7 +7,7 @@
 
 use crate::annotations::{ProvenanceRecord, TripleAnnotation};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use scirs2_core::random::{rng, RngCore};
+use scirs2_core::random::{rng, Rng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;

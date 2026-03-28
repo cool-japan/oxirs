@@ -646,12 +646,11 @@ impl VectorQueryOptimizer {
 
         // Strategy-specific adjustments
         match strategy {
-            VectorSearchStrategy::PureVector { k, .. } => {
+            VectorSearchStrategy::PureVector { k, .. }
                 // Prefer indexes optimized for k-NN search
-                if *k <= 100 && matches!(info.index_type, VectorIndexType::Hnsw) {
+                if *k <= 100 && matches!(info.index_type, VectorIndexType::Hnsw) => {
                     score += 0.2;
                 }
-            }
             VectorSearchStrategy::Hybrid { .. } => {
                 // Prefer indexes with good recall for hybrid search
                 score += 0.1;

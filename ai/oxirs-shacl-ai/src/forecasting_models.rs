@@ -5,7 +5,7 @@
 
 use crate::ShaclAiError;
 use chrono::{DateTime, Duration, Utc};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -800,7 +800,7 @@ impl QualityForecastingModel {
 
     /// Xavier weight initialization for neural networks
     fn xavier_initialization(&self) -> f64 {
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, Rng, RngExt};
         let mut random = Random::default();
 
         // Xavier/Glorot initialization: sample from uniform distribution

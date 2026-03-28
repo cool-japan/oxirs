@@ -234,11 +234,9 @@ impl StarNormalizer {
         counter: &mut usize,
     ) {
         match term {
-            NormTerm::Blank(id) => {
-                if !mapping.contains_key(id) {
-                    mapping.insert(id.clone(), format!("c{counter}"));
-                    *counter += 1;
-                }
+            NormTerm::Blank(id) if !mapping.contains_key(id) => {
+                mapping.insert(id.clone(), format!("c{counter}"));
+                *counter += 1;
             }
             NormTerm::Quoted(inner) => {
                 Self::collect_blanks(&inner.subject, mapping, counter);

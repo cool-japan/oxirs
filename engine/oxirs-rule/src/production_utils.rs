@@ -409,7 +409,7 @@ impl ProductionMonitor {
             .iter()
             .map(|(name, times)| (name.clone(), times.len()))
             .collect();
-        rules_by_count.sort_by(|a, b| b.1.cmp(&a.1));
+        rules_by_count.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         // Rules by total time
         let mut rules_by_time: Vec<_> = self

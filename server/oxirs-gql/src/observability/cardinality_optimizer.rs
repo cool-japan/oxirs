@@ -13,6 +13,7 @@
 //! - Cardinality reporting and alerts
 //! - Label normalization strategies
 
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -292,7 +293,7 @@ impl CardinalityOptimizer {
         }
 
         // Sort by cardinality (highest first)
-        label_cardinalities.sort_by(|a, b| b.unique_values.cmp(&a.unique_values));
+        label_cardinalities.sort_by_key(|l| Reverse(l.unique_values));
 
         let exceeds_limit = total_series > self.config.max_cardinality;
 
@@ -464,7 +465,7 @@ impl CardinalityOptimizer {
 
         // Top metrics by cardinality
         let mut sorted_metrics = cardinalities;
-        sorted_metrics.sort_by(|a, b| b.total_series.cmp(&a.total_series));
+        sorted_metrics.sort_by_key(|m| Reverse(m.total_series));
 
         report.push_str("Top 10 Metrics by Cardinality:\n");
         for metric in sorted_metrics.iter().take(10) {

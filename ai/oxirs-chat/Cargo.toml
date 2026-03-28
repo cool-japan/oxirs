@@ -41,7 +41,7 @@ futures-util.workspace = true
 
 # LLM Integration
 reqwest = { workspace = true, features = ["stream"] }
-async-openai = { version = "0.33", features = ["chat-completion", "audio"] }
+async-openai = { version = "0.34", features = ["chat-completion", "audio"] }
 # anthropic-sdk = "0.1" # Add when available
 
 # Storage and Caching

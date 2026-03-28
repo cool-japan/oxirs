@@ -20,7 +20,7 @@ Add OxiRS Core to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.2.2"
+oxirs-core = "0.2.3"
 ```
 
 ### Basic Setup

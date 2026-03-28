@@ -487,7 +487,7 @@ impl HistoricalCostEstimator {
             .collect();
 
         // Sort by timestamp (oldest first)
-        patterns.sort_by(|a, b| a.1.cmp(&b.1));
+        patterns.sort_by_key(|a| a.1);
 
         // Calculate how many to remove
         let to_remove = data.len() - (self.config.max_patterns * 9 / 10);

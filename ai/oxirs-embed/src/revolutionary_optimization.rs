@@ -542,7 +542,7 @@ impl RevolutionaryEmbeddingOptimizer {
 
             // Create quantum phases using random initialization
             let mut rng = Random::default();
-            let phases = Array1::from_shape_fn(amplitudes.len(), |_| rng.gen_range(0.0..2.0 * std::f64::consts::PI));
+            let phases = Array1::from_shape_fn(amplitudes.len(), |_| rng.random_range(0.0..2.0 * std::f64::consts::PI));
 
             // Create entanglement matrix for relationship modeling
             let entanglement = Array2::zeros((amplitudes.len(), amplitudes.len()));
@@ -716,7 +716,7 @@ impl RevolutionaryEmbeddingOptimizer {
         );
 
         let mut rng = Random::default();
-        let phases = Array1::from_shape_fn(amplitudes.len(), |_| rng.gen_range(0.0..2.0 * std::f64::consts::PI));
+        let phases = Array1::from_shape_fn(amplitudes.len(), |_| rng.random_range(0.0..2.0 * std::f64::consts::PI));
         let entanglement = Array2::zeros((amplitudes.len(), amplitudes.len()));
 
         Ok(QuantumEmbeddingState {

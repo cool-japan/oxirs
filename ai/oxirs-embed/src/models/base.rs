@@ -4,7 +4,7 @@ use crate::{ModelConfig, ModelStats, Triple};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 #[allow(unused_imports)]
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
@@ -158,7 +158,7 @@ impl BaseModel {
         rng: &mut Random<R>,
     ) -> Vec<(usize, usize, usize)>
     where
-        R: scirs2_core::random::RngCore,
+        R: scirs2_core::random::Rng,
     {
         let mut negative_samples = Vec::new();
         let num_entities = self.num_entities();

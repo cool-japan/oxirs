@@ -4,7 +4,7 @@
 //! endpoint discovery, parallel execution, and result merging.
 
 use crate::error::FusekiResult;
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -1651,7 +1651,7 @@ impl LoadBalancerV2 {
         }
 
         let mut rng = Random::seed(42);
-        let random_value: f64 = rng.gen_range(0.0..total_weight);
+        let random_value: f64 = rng.random_range(0.0..total_weight);
         let mut current_weight = 0.0;
 
         for endpoint in endpoints {

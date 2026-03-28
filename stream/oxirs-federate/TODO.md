@@ -1,10 +1,10 @@
 # OxiRS Federate - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS Federate v0.2.2 is production-ready, providing SPARQL federation with advanced ML optimization and distributed consensus.
+OxiRS Federate v0.2.3 is production-ready, providing SPARQL federation with advanced ML optimization and distributed consensus.
 
 ### Production Features
 - ✅ **SPARQL Federation** - SERVICE clause execution with 2-phase commit
@@ -27,7 +27,7 @@ OxiRS Federate v0.2.2 is production-ready, providing SPARQL federation with adva
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ SPARQL federation, ML optimization, BFT consensus, 363+ tests
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Advanced query optimization strategies
 - ✅ Enhanced distributed execution
 - ✅ Improved caching mechanisms (multi-level cache coordinator)
@@ -50,4 +50,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Federate v0.2.2 - Advanced SPARQL federation*
+*OxiRS Federate v0.2.3 - Advanced SPARQL federation*

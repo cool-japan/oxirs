@@ -119,27 +119,23 @@ impl ShapeGeneralizer {
         // Relax cardinality constraints
         for (id, constraint) in shape.constraints.iter_mut() {
             match constraint {
-                Constraint::MinCount(min_count) => {
+                Constraint::MinCount(min_count) if min_count.min_count > 0 => {
                     // Decrease minCount (make less restrictive)
-                    if min_count.min_count > 0 {
-                        min_count.min_count = min_count.min_count.saturating_sub(1);
-                        tracing::debug!(
-                            "Widened minCount constraint {} to {}",
-                            id,
-                            min_count.min_count
-                        );
-                    }
+                    min_count.min_count = min_count.min_count.saturating_sub(1);
+                    tracing::debug!(
+                        "Widened minCount constraint {} to {}",
+                        id,
+                        min_count.min_count
+                    );
                 }
-                Constraint::MaxCount(max_count) => {
+                Constraint::MaxCount(max_count) if max_count.max_count < u32::MAX - 10 => {
                     // Increase maxCount (make less restrictive)
-                    if max_count.max_count < u32::MAX - 10 {
-                        max_count.max_count = max_count.max_count.saturating_add(10);
-                        tracing::debug!(
-                            "Widened maxCount constraint {} to {}",
-                            id,
-                            max_count.max_count
-                        );
-                    }
+                    max_count.max_count = max_count.max_count.saturating_add(10);
+                    tracing::debug!(
+                        "Widened maxCount constraint {} to {}",
+                        id,
+                        max_count.max_count
+                    );
                 }
                 Constraint::MinInclusive(min_incl) => {
                     // For numeric literals, decrease the minimum
@@ -267,27 +263,23 @@ impl ShapeSpecializer {
         // Make cardinality constraints more restrictive
         for (id, constraint) in shape.constraints.iter_mut() {
             match constraint {
-                Constraint::MinCount(min_count) => {
+                Constraint::MinCount(min_count) if min_count.min_count < u32::MAX - 1 => {
                     // Increase minCount (make more restrictive)
-                    if min_count.min_count < u32::MAX - 1 {
-                        min_count.min_count = min_count.min_count.saturating_add(1);
-                        tracing::debug!(
-                            "Narrowed minCount constraint {} to {}",
-                            id,
-                            min_count.min_count
-                        );
-                    }
+                    min_count.min_count = min_count.min_count.saturating_add(1);
+                    tracing::debug!(
+                        "Narrowed minCount constraint {} to {}",
+                        id,
+                        min_count.min_count
+                    );
                 }
-                Constraint::MaxCount(max_count) => {
+                Constraint::MaxCount(max_count) if max_count.max_count > 1 => {
                     // Decrease maxCount (make more restrictive)
-                    if max_count.max_count > 1 {
-                        max_count.max_count = max_count.max_count.saturating_sub(1);
-                        tracing::debug!(
-                            "Narrowed maxCount constraint {} to {}",
-                            id,
-                            max_count.max_count
-                        );
-                    }
+                    max_count.max_count = max_count.max_count.saturating_sub(1);
+                    tracing::debug!(
+                        "Narrowed maxCount constraint {} to {}",
+                        id,
+                        max_count.max_count
+                    );
                 }
                 Constraint::MinInclusive(min_incl) => {
                     // For numeric literals, increase the minimum (narrow from below)
@@ -684,7 +676,7 @@ impl ShapeRefactorer {
             }
 
             // Create unique parent shape ID based on pattern
-            use scirs2_core::random::{rng, Rng};
+            use scirs2_core::random::{rng, RngExt};
             let parent_id = ShapeId(format!("common-pattern-{}", rng().random::<u64>()));
 
             // Create parent shape with common constraints

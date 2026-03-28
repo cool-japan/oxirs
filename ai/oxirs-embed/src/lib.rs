@@ -1,9 +1,9 @@
 //! # OxiRS Embed: Advanced Knowledge Graph Embeddings
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed)
 //!
-//! **Status**: Production Release (v0.2.2)
+//! **Status**: Production Release (v0.2.4)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! State-of-the-art knowledge graph embedding methods including TransE, DistMult, ComplEx,
@@ -897,7 +897,7 @@ pub mod quick_start {
         num_relations: usize,
     ) -> Vec<(String, String, String)> {
         #[allow(unused_imports)]
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
 
         let mut random = Random::default();
         let mut triples = Vec::new();

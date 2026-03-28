@@ -49,7 +49,7 @@ pub struct Encryptor {
 impl Encryptor {
     /// Create new encryptor with random key
     pub fn new() -> Result<Self> {
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, Rng, RngExt};
         let mut rng = Random::default();
         let key: Vec<u8> = (0..32).map(|_| rng.random::<u8>()).collect();
 
@@ -72,7 +72,7 @@ impl Encryptor {
 
     /// Encrypt data using stream XOR cipher with 12-byte nonce prepended
     pub fn encrypt(&self, data: &[u8]) -> Result<Vec<u8>> {
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, Rng, RngExt};
         let mut rng = Random::default();
         let nonce: Vec<u8> = (0..12).map(|_| rng.random::<u8>()).collect();
 

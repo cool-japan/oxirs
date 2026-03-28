@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
 
-use scirs2_core::Rng;
+use scirs2_core::random::RngExt;
 
 use crate::error::StreamError;
 

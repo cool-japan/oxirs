@@ -7,7 +7,7 @@ use crate::{Result, ShaclAiError};
 
 use chrono::{DateTime, Utc};
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::Random;
+use scirs2_core::random::{Random, RngExt};
 use scirs2_core::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};

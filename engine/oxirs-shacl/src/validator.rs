@@ -881,22 +881,18 @@ impl Validator {
         for (constraint_id, constraint) in &shape.constraints {
             // Some constraints only make sense for property shapes
             match constraint {
-                Constraint::MinCount(_) | Constraint::MaxCount(_) => {
-                    if shape.is_node_shape() {
-                        tracing::warn!(
-                            "Cardinality constraint '{}' in node shape '{}' has no effect",
-                            constraint_id,
-                            shape.id
-                        );
-                    }
+                Constraint::MinCount(_) | Constraint::MaxCount(_) if shape.is_node_shape() => {
+                    tracing::warn!(
+                        "Cardinality constraint '{}' in node shape '{}' has no effect",
+                        constraint_id,
+                        shape.id
+                    );
                 }
-                Constraint::UniqueLang(_) => {
-                    if shape.is_node_shape() {
-                        tracing::warn!(
-                            "UniqueLang constraint in node shape '{}' may not be meaningful",
-                            shape.id
-                        );
-                    }
+                Constraint::UniqueLang(_) if shape.is_node_shape() => {
+                    tracing::warn!(
+                        "UniqueLang constraint in node shape '{}' may not be meaningful",
+                        shape.id
+                    );
                 }
                 _ => {} // Other constraints are valid for both types
             }
@@ -935,15 +931,14 @@ impl Validator {
                         }
                     }
                 }
-                Constraint::In(in_constraint) => {
+                Constraint::In(in_constraint)
                     // Validate that the list is not empty
-                    if in_constraint.values.is_empty() {
+                    if in_constraint.values.is_empty() => {
                         return Err(ShaclError::ShapeParsing(format!(
                             "sh:in constraint in shape '{}' cannot have empty value list",
                             shape.id
                         )));
                     }
-                }
                 Constraint::QualifiedValueShape(qvs_constraint) => {
                     // Validate qualified cardinality constraints
                     if qvs_constraint.qualified_min_count.is_none()

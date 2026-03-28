@@ -16,7 +16,7 @@
 
 use oxirs_samm::parser::parse_aspect_from_string;
 use proptest::prelude::*;
-use scirs2_core::random::{rng, Random, Rng};
+use scirs2_core::random::{rng, Random, Rng, RngExt};
 
 /// Strategy for generating random URN components
 fn urn_component() -> impl Strategy<Value = String> {

@@ -598,18 +598,15 @@ impl ValidationPredictor {
         // Analyze constraints for potential issues
         for (constraint_id, constraint) in &shape.constraints {
             match constraint {
-                Constraint::MinCount(_) => {
-                    if *features.get("graph_density").unwrap_or(&0.5) < 0.3 {
-                        errors.push(PredictedError {
-                            error_type: PredictedErrorType::ConstraintViolation,
-                            constraint_component: Some(constraint_id.clone()),
-                            description: "Low graph density may cause minCount violations"
-                                .to_string(),
-                            probability: 0.6,
-                            estimated_affected_nodes: 10,
-                            severity: PredictedErrorSeverity::Medium,
-                        });
-                    }
+                Constraint::MinCount(_) if *features.get("graph_density").unwrap_or(&0.5) < 0.3 => {
+                    errors.push(PredictedError {
+                        error_type: PredictedErrorType::ConstraintViolation,
+                        constraint_component: Some(constraint_id.clone()),
+                        description: "Low graph density may cause minCount violations".to_string(),
+                        probability: 0.6,
+                        estimated_affected_nodes: 10,
+                        severity: PredictedErrorSeverity::Medium,
+                    });
                 }
                 Constraint::Pattern(_) => {
                     errors.push(PredictedError {

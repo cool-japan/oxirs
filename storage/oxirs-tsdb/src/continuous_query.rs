@@ -358,11 +358,7 @@ impl ContinuousQueryEngine {
         let bucket_ms = state.query.bucket.as_millis();
         let mut bucket_map: HashMap<u64, Vec<f64>> = HashMap::new();
         for (ts, val) in &new_data {
-            let aligned = if bucket_ms > 0 {
-                (*ts / bucket_ms) * bucket_ms
-            } else {
-                *ts
-            };
+            let aligned = ts.checked_div(bucket_ms).unwrap_or(0) * bucket_ms;
             bucket_map.entry(aligned).or_default().push(*val);
         }
 

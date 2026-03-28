@@ -173,11 +173,10 @@ impl QueryMonitorStats {
     /// Get average query execution time (microseconds)
     pub fn avg_execution_time_us(&self) -> u64 {
         let total = self.total_queries.load(Ordering::Relaxed);
-        if total == 0 {
-            0
-        } else {
-            self.total_execution_time_us.load(Ordering::Relaxed) / total
-        }
+        self.total_execution_time_us
+            .load(Ordering::Relaxed)
+            .checked_div(total)
+            .unwrap_or(0)
     }
 
     /// Get timeout rate (percentage)

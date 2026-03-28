@@ -26,8 +26,7 @@ impl Ed25519Signer {
 
     /// Generate a new random keypair
     pub fn generate() -> Self {
-        use scirs2_core::random::Random;
-        use scirs2_core::Rng;
+        use scirs2_core::random::{Random, RngExt};
         // Use system time as seed for cryptographic key generation
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

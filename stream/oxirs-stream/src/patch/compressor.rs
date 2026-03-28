@@ -95,7 +95,7 @@ impl PatchCompressor {
 
         // Create dictionary of most frequent terms
         let mut freq_words: Vec<_> = word_freq.into_iter().collect();
-        freq_words.sort_by(|a, b| b.1.cmp(&a.1));
+        freq_words.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         let mut dictionary = HashMap::new();
         let mut compressed = patch_str.to_string();

@@ -716,7 +716,7 @@ impl W3cTestSuiteRunner {
 
         let common_issues: Vec<(ComplianceIssueType, usize)> = {
             let mut issues: Vec<_> = issue_counts.into_iter().collect();
-            issues.sort_by(|a, b| b.1.cmp(&a.1));
+            issues.sort_by_key(|b| std::cmp::Reverse(b.1));
             issues
         };
 

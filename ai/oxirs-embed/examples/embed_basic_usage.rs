@@ -3,7 +3,8 @@
 //! This example demonstrates the core functionality of the embedding system.
 
 use oxirs_embed::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::Random;
+use scirs2_core::RngExt;
 use std::collections::HashMap;
 use uuid::Uuid;
 

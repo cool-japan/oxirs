@@ -185,7 +185,7 @@ pub struct ControllerNetwork {
 impl ControllerNetwork {
     pub fn new(input_size: usize, hidden_size: usize, output_size: usize) -> Self {
         {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{RngExt, Random};
             let mut rng = Random::default();
         
         let w_ih = Array2::from_shape_fn((hidden_size, input_size), |_| rng.random_range(-0.1..0.1));
@@ -888,7 +888,7 @@ impl MemoryNetworks {
         let memory_content = Vec::new();
         
         {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{RngExt, Random};
             let mut rng = Random::default();
         
         let input_encoder = Array2::from_shape_fn(
@@ -1205,7 +1205,7 @@ pub struct RelationalAttention {
 impl RelationalAttention {
     pub fn new(embed_dim: usize, num_heads: usize) -> Self {
         {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{RngExt, Random};
             let mut rng = Random::default();
         
         let query_weights = Array2::from_shape_fn((embed_dim, embed_dim), |_| rng.random_range(-0.1..0.1));
@@ -1271,7 +1271,7 @@ impl RelationalMemoryCore {
         
         let mut relation_matrices = Vec::new();
         {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{RngExt, Random};
             let mut rng = Random::default();
         
         for _ in 0..config.num_relation_types {

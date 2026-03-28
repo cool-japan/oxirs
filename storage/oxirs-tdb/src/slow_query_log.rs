@@ -231,7 +231,7 @@ impl SlowQueryLogger {
     /// Get slowest queries
     pub fn get_slowest(&self, limit: usize) -> Vec<SlowQueryEntry> {
         let mut entries = self.get_entries();
-        entries.sort_by(|a, b| b.duration_ms.cmp(&a.duration_ms));
+        entries.sort_by_key(|b| std::cmp::Reverse(b.duration_ms));
         entries.truncate(limit);
         entries
     }
@@ -271,7 +271,7 @@ impl SlowQueryLogger {
 
         // Most common patterns
         let mut common_patterns: Vec<(String, usize)> = pattern_counts.into_iter().collect();
-        common_patterns.sort_by(|a, b| b.1.cmp(&a.1));
+        common_patterns.sort_by_key(|b| std::cmp::Reverse(b.1));
         common_patterns.truncate(10);
 
         // Most expensive patterns (by total time)

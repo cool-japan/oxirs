@@ -342,7 +342,7 @@ pub enum BenchmarkAction {
         #[arg(short, long, default_value = "sp2bench")]
         suite: String,
         /// Number of iterations
-        #[arg(short, long, default_value = "10")]
+        #[arg(short = 'I', long, default_value = "10")]
         iterations: usize,
         /// Output report file
         #[arg(short, long)]
@@ -623,7 +623,7 @@ pub enum TsdbAction {
         #[arg(short, long)]
         timestamp: Option<String>,
         /// Value to insert
-        #[arg(short, long)]
+        #[arg(short = 'V', long)]
         value: f64,
         /// Batch insert from CSV file (columns: timestamp,value)
         #[arg(long)]
@@ -819,7 +819,7 @@ pub enum ModbusAction {
         #[arg(short, long)]
         device: String,
         /// Register mapping configuration file (TOML)
-        #[arg(short, long)]
+        #[arg(short = 'C', long)]
         config: PathBuf,
         /// Output RDF file
         #[arg(short, long)]
@@ -828,7 +828,7 @@ pub enum ModbusAction {
         #[arg(short, long, default_value = "turtle")]
         format: String,
         /// Number of readings to collect
-        #[arg(short, long, default_value = "1")]
+        #[arg(short = 'n', long, default_value = "1")]
         count: usize,
     },
     /// Start Modbus mock server for testing
@@ -837,7 +837,7 @@ pub enum ModbusAction {
         #[arg(short, long, default_value = "5020")]
         port: u16,
         /// Mock data configuration file
-        #[arg(short, long)]
+        #[arg(short = 'C', long)]
         config: Option<PathBuf>,
     },
 }
@@ -848,7 +848,7 @@ pub enum CanbusAction {
     /// Monitor CAN interface
     Monitor {
         /// CAN interface name (e.g., can0, vcan0)
-        #[arg(short, long)]
+        #[arg(short = 'I', long)]
         interface: String,
         /// Filter by CAN ID (decimal or hex with 0x prefix)
         #[arg(long)]
@@ -896,7 +896,7 @@ pub enum CanbusAction {
     /// Send CAN frame
     Send {
         /// CAN interface name (e.g., can0, vcan0)
-        #[arg(short, long)]
+        #[arg(short = 'I', long)]
         interface: String,
         /// CAN ID (decimal or hex with 0x prefix)
         #[arg(long)]
@@ -926,7 +926,7 @@ pub enum CanbusAction {
     /// Generate RDF triples from CAN data
     ToRdf {
         /// CAN interface name
-        #[arg(short, long)]
+        #[arg(short = 'I', long)]
         interface: String,
         /// DBC file for signal mapping
         #[arg(long)]
@@ -938,7 +938,7 @@ pub enum CanbusAction {
         #[arg(short, long, default_value = "turtle")]
         format: String,
         /// Number of frames to collect
-        #[arg(short, long, default_value = "100")]
+        #[arg(short = 'n', long, default_value = "100")]
         count: usize,
     },
     /// Replay CAN log file
@@ -947,7 +947,7 @@ pub enum CanbusAction {
         #[arg(short, long)]
         file: PathBuf,
         /// CAN interface to replay on
-        #[arg(short, long)]
+        #[arg(short = 'I', long)]
         interface: String,
         /// Playback speed multiplier
         #[arg(long, default_value = "1.0")]
@@ -967,13 +967,13 @@ pub enum ProfilerAction {
         #[arg(short, long)]
         dataset: String,
         /// SPARQL query string or file path
-        #[arg(short, long)]
+        #[arg(short = 'Q', long)]
         query: String,
         /// Treat query as a file path
         #[arg(long)]
         file: bool,
         /// Number of profiling iterations
-        #[arg(short, long, default_value = "10")]
+        #[arg(short = 'I', long, default_value = "10")]
         iterations: usize,
         /// Show optimization suggestions
         #[arg(long)]
@@ -982,7 +982,7 @@ pub enum ProfilerAction {
     /// Show optimization suggestions for a query
     Suggest {
         /// SPARQL query string or file path
-        #[arg(short, long)]
+        #[arg(short = 'Q', long)]
         query: String,
         /// Treat query as a file path
         #[arg(long)]
@@ -1031,7 +1031,7 @@ pub enum StreamAction {
         #[arg(short, long)]
         dataset: String,
         /// SPARQL query string or file path
-        #[arg(short, long)]
+        #[arg(short = 'Q', long)]
         query: String,
         /// Treat query as a file path
         #[arg(long)]

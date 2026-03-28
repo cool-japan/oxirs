@@ -480,8 +480,7 @@ impl SerializerBenchmarkSuite {
 
     /// Generate test data of various sizes
     fn generate_test_data() -> Vec<Vec<u8>> {
-        use scirs2_core::random::rng;
-        use scirs2_core::Rng;
+        use scirs2_core::random::{rng, RngExt};
 
         let mut rand_gen = rng();
         let sizes = [100, 1024, 10_240, 102_400]; // 100B, 1KB, 10KB, 100KB

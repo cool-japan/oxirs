@@ -413,7 +413,7 @@ where
                 }
 
                 // Send results to resolvers
-                for (key, resolver) in batch.keys.into_iter().zip(batch.resolvers.into_iter()) {
+                for (key, resolver) in batch.keys.into_iter().zip(batch.resolvers) {
                     let result = loaded_values.get(&key).cloned();
                     let _ = resolver.send(Ok(result));
                 }

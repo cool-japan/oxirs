@@ -499,7 +499,7 @@ impl ShapeVersionControl {
     /// Get version history
     pub fn get_version_history(&self) -> Vec<&ShapeVersionMetadata> {
         let mut history: Vec<&ShapeVersionMetadata> = self.versions.values().collect();
-        history.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        history.sort_by_key(|a| a.timestamp);
         history
     }
 

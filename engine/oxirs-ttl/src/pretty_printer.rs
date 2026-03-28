@@ -211,7 +211,7 @@ impl TurtlePrettyPrinter {
 
         // Sort namespaces by usage (descending)
         let mut sorted_ns: Vec<(String, usize)> = namespace_counts.into_iter().collect();
-        sorted_ns.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted_ns.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         let mut prefix_counter = 0_usize;
 

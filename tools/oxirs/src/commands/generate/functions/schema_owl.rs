@@ -4,7 +4,7 @@
 
 use super::super::types::*;
 use oxirs_core::model::{GraphName, Literal, NamedNode, Quad, Subject, Term};
-use scirs2_core::Rng;
+use scirs2_core::RngExt;
 use std::error::Error;
 
 /// Parse OWL ontology from file (simplified implementation)
@@ -189,7 +189,7 @@ pub(super) fn parse_owl_ontology(
 }
 
 /// Generate RDF data conforming to OWL ontology
-pub(super) fn generate_from_owl_ontology<R: Rng>(
+pub(super) fn generate_from_owl_ontology<R: RngExt>(
     rng: &mut R,
     ontology: &OwlOntology,
     count: usize,
@@ -282,7 +282,7 @@ pub(super) fn get_property_cardinality(
 }
 
 /// Generate a property value based on OWL property characteristics
-pub(super) fn generate_owl_property_value<R: Rng>(
+pub(super) fn generate_owl_property_value<R: RngExt>(
     rng: &mut R,
     property: &OwlProperty,
     generated_instances: &std::collections::HashMap<String, Vec<String>>,
@@ -332,7 +332,7 @@ pub(super) fn generate_owl_property_value<R: Rng>(
 }
 
 /// Generate a datatype value based on range and property hints
-pub(super) fn generate_datatype_value<R: Rng>(
+pub(super) fn generate_datatype_value<R: RngExt>(
     rng: &mut R,
     range_uri: &str,
     property_uri: &str,

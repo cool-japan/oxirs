@@ -211,7 +211,7 @@ impl WriteAheadLog {
         }
 
         // Sort by modification time (newest first)
-        checkpoints.sort_by(|a, b| b.1.cmp(&a.1));
+        checkpoints.sort_by_key(|(_, modified)| std::cmp::Reverse(*modified));
 
         // Delete old checkpoints beyond max_checkpoints
         if checkpoints.len() > self.max_checkpoints {
@@ -334,21 +334,21 @@ impl WalRecovery {
                 .map_err(|e| OxirsError::Parse(format!("Failed to parse WAL entry: {}", e)))?;
 
             match entry {
-                WalEntry::Insert { tx_id, quad } => {
-                    if committed_txs.contains(&tx_id) && !aborted_txs.contains(&tx_id) {
-                        // Apply insert to store via callback
-                        tracing::debug!("Recovering insert for tx {}: {:?}", tx_id, quad);
-                        insert_fn(quad)?;
-                        recovered += 1;
-                    }
+                WalEntry::Insert { tx_id, quad }
+                    if committed_txs.contains(&tx_id) && !aborted_txs.contains(&tx_id) =>
+                {
+                    // Apply insert to store via callback
+                    tracing::debug!("Recovering insert for tx {}: {:?}", tx_id, quad);
+                    insert_fn(quad)?;
+                    recovered += 1;
                 }
-                WalEntry::Delete { tx_id, quad } => {
-                    if committed_txs.contains(&tx_id) && !aborted_txs.contains(&tx_id) {
-                        // Apply delete to store via callback
-                        tracing::debug!("Recovering delete for tx {}: {:?}", tx_id, quad);
-                        delete_fn(&quad)?;
-                        recovered += 1;
-                    }
+                WalEntry::Delete { tx_id, quad }
+                    if committed_txs.contains(&tx_id) && !aborted_txs.contains(&tx_id) =>
+                {
+                    // Apply delete to store via callback
+                    tracing::debug!("Recovering delete for tx {}: {:?}", tx_id, quad);
+                    delete_fn(&quad)?;
+                    recovered += 1;
                 }
                 _ => {}
             }

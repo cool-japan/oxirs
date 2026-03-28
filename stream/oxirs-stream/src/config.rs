@@ -727,10 +727,8 @@ impl ConfigManager {
         // Backend-specific validation
         match &config.backend {
             #[cfg(feature = "kafka")]
-            StreamBackendType::Kafka { brokers, .. } => {
-                if brokers.is_empty() {
-                    return Err(anyhow!("Kafka brokers list cannot be empty"));
-                }
+            StreamBackendType::Kafka { brokers, .. } if brokers.is_empty() => {
+                return Err(anyhow!("Kafka brokers list cannot be empty"));
             }
             _ => {}
         }

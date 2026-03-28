@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use scirs2_core::profiling::Profiler as SciRSProfiler;
-use scirs2_core::random::Rng;
+use scirs2_core::random::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

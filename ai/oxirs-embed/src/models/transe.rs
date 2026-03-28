@@ -11,7 +11,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use scirs2_core::ndarray_ext::{Array1, Array2};
 #[allow(unused_imports)]
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::ops::{AddAssign, SubAssign};
 use std::time::Instant;

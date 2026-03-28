@@ -8,7 +8,7 @@ use crate::model::{BlankNode, Literal, NamedNode, Triple};
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

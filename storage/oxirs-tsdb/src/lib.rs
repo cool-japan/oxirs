@@ -1,6 +1,6 @@
 //! Time-series optimizations for OxiRS
 //!
-//! **Status**: Production Ready (v0.2.2)
+//! **Status**: Production Ready (v0.2.4)
 //!
 //! This crate provides high-performance time-series storage and query
 //! capabilities for IoT-scale RDF data.

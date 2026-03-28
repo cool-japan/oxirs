@@ -8,6 +8,7 @@
 //! - Stack traces for debugging
 
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::fmt;
 
 /// Error category for classification
@@ -279,7 +280,7 @@ impl EnhancedError {
         if !self.suggestions.is_empty() {
             output.push_str("\nSuggestions:\n");
             let mut sorted_suggestions = self.suggestions.clone();
-            sorted_suggestions.sort_by(|a, b| b.priority.cmp(&a.priority));
+            sorted_suggestions.sort_by_key(|s| Reverse(s.priority));
 
             for (idx, suggestion) in sorted_suggestions.iter().enumerate().take(3) {
                 output.push_str(&format!("  {}. {}\n", idx + 1, suggestion.message));

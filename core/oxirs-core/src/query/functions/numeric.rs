@@ -124,7 +124,7 @@ pub(super) fn fn_round(args: &[Term]) -> Result<Term, OxirsError> {
 
 /// RAND - Generate random number [0, 1)
 pub(super) fn fn_rand(_args: &[Term]) -> Result<Term, OxirsError> {
-    use scirs2_core::random::{Random, Rng};
+    use scirs2_core::random::{Random, RngExt};
     let mut random = Random::default();
     let value: f64 = random.random();
     Ok(Term::Literal(Literal::new_typed(

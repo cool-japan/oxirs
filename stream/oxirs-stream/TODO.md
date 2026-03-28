@@ -1,10 +1,10 @@
 # OxiRS Stream - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS Stream v0.2.2 is production-ready, providing enterprise-grade real-time RDF streaming with advanced windowing, backpressure management, and ML integration.
+OxiRS Stream v0.2.3 is production-ready, providing enterprise-grade real-time RDF streaming with advanced windowing, backpressure management, and ML integration.
 
 ### Production Features
 - ✅ **Multiple Backends** - Kafka, NATS, Redis, Kinesis, Pulsar, RabbitMQ support
@@ -26,7 +26,7 @@ OxiRS Stream v0.2.2 is production-ready, providing enterprise-grade real-time RD
 - SIMD-optimized operations
 - Zero-copy processing
 
-## Recent Accomplishments (v0.2.2)
+## Recent Accomplishments (v0.2.3)
 
 ### Streaming Enhancements
 - ✅ **Advanced Windowing Strategies** - Session windows, tumbling windows, and sliding windows implementation
@@ -48,7 +48,7 @@ OxiRS Stream v0.2.2 is production-ready, providing enterprise-grade real-time RD
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ Kafka/NATS/Redis/Kinesis/Pulsar/RabbitMQ backends, 20+ operators, ML integration
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Advanced windowing (session, tumbling, sliding windows)
 - ✅ Backpressure and adaptive load shedding
 - ✅ Stream optimization (operator fusion, parallel processing)
@@ -75,4 +75,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Stream v0.2.2 - Enterprise-grade real-time RDF streaming with advanced windowing*
+*OxiRS Stream v0.2.3 - Enterprise-grade real-time RDF streaming with advanced windowing*

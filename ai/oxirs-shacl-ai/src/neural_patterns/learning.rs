@@ -9,7 +9,7 @@
 
 use scirs2_core::array_protocol::concatenate;
 use scirs2_core::ndarray_ext::{Array1, Array2, Axis};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use std::collections::HashMap;
 use std::time::Instant;
 

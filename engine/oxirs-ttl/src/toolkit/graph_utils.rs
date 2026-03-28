@@ -429,7 +429,7 @@ impl AdvancedGraphStats {
 
         // Get top 10 most common predicates
         let mut predicate_vec: Vec<_> = predicate_counts.into_iter().collect();
-        predicate_vec.sort_by(|a, b| b.1.cmp(&a.1));
+        predicate_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
         let top_predicates = predicate_vec.into_iter().take(10).collect();
 
         Self {

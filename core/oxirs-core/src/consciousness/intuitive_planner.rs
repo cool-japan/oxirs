@@ -6,7 +6,7 @@
 use crate::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
 use crate::query::pattern_optimizer::IndexStats;
 use crate::OxirsError;
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};

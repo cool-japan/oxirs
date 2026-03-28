@@ -900,15 +900,13 @@ impl CircuitBreaker {
         self.last_failure_time = Some(Instant::now());
 
         match self.state {
-            CircuitBreakerState::Closed => {
-                if self.failure_count >= self.failure_threshold {
-                    // Transition to open
-                    self.state = CircuitBreakerState::Open;
-                    warn!(
-                        "Circuit breaker opened after {} failures",
-                        self.failure_count
-                    );
-                }
+            CircuitBreakerState::Closed if self.failure_count >= self.failure_threshold => {
+                // Transition to open
+                self.state = CircuitBreakerState::Open;
+                warn!(
+                    "Circuit breaker opened after {} failures",
+                    self.failure_count
+                );
             }
             CircuitBreakerState::HalfOpen => {
                 // Transition back to open
@@ -935,13 +933,11 @@ pub struct ClientStats {
 impl ClientStats {
     /// Calculate average response time
     pub fn avg_response_time(&self) -> Duration {
-        if self.successful_requests > 0 {
-            let total_millis = self.total_response_time.as_millis() as u64;
-            let avg_millis = total_millis / self.successful_requests;
-            Duration::from_millis(avg_millis)
-        } else {
-            Duration::from_secs(0)
-        }
+        let total_millis = self.total_response_time.as_millis() as u64;
+        let avg_millis = total_millis
+            .checked_div(self.successful_requests)
+            .unwrap_or(0);
+        Duration::from_millis(avg_millis)
     }
 
     /// Calculate success rate

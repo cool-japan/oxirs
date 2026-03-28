@@ -12,7 +12,7 @@
 
 use anyhow::Result;
 #[allow(unused_imports)]
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -562,7 +562,7 @@ impl LayerParameters {
     /// Create random parameters
     pub fn random(layer_type: &LayerType, rng: &mut Random) -> Self {
         let activation = ActivationFunction::random(rng);
-        let dropout = rng.gen_range(0.0..0.5);
+        let dropout = rng.random_range(0.0..0.5);
         let normalization = NormalizationType::random(rng);
         let mut settings = HashMap::new();
 
@@ -600,13 +600,13 @@ impl LayerParameters {
     pub fn mutate(&mut self, rng: &mut Random) {
         match rng.random_range(0..4) {
             0 => self.activation = ActivationFunction::random(rng),
-            1 => self.dropout = rng.gen_range(0.0..0.5),
+            1 => self.dropout = rng.random_range(0.0..0.5),
             2 => self.normalization = NormalizationType::random(rng),
             3 => {
                 // Mutate settings
                 for value in self.settings.values_mut() {
                     if rng.random_bool_with_chance(0.3) {
-                        *value *= rng.gen_range(0.8..1.2);
+                        *value *= rng.random_range(0.8..1.2);
                     }
                 }
             }
@@ -1073,15 +1073,15 @@ impl ArchitectureEvaluator {
         let mut rng = Random::default();
 
         // Simulate based on architecture properties
-        let base_accuracy = 0.7 + rng.gen_range(0.0..0.2);
+        let base_accuracy = 0.7 + rng.random_range(0.0..0.2);
         let complexity_factor = 1.0 / (1.0 + architecture.complexity.parameters as f64 / 1e6);
         let accuracy = (base_accuracy * (0.8 + 0.4 * complexity_factor)).min(1.0);
 
         let inference_time = 10.0 + architecture.complexity.parameters as f64 / 1e5;
         let memory_usage = architecture.complexity.memory_mb as f64;
 
-        let generalization_score = (accuracy * (0.9 + 0.1 * rng.gen_range(0.0..1.0))).min(1.0);
-        let robustness_score = (accuracy * (0.85 + 0.15 * rng.gen_range(0.0..1.0))).min(1.0);
+        let generalization_score = (accuracy * (0.9 + 0.1 * rng.random_range(0.0..1.0))).min(1.0);
+        let robustness_score = (accuracy * (0.85 + 0.15 * rng.random_range(0.0..1.0))).min(1.0);
 
         let metrics = PerformanceMetrics {
             accuracy,

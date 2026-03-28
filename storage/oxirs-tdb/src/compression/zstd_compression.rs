@@ -261,7 +261,8 @@ mod tests {
     fn test_zstd_incompressible_data() {
         let compressor = ZstdCompressor::new();
         // Use scirs2_core::random for random data generation
-        use scirs2_core::random::{rng, Random, Rng};
+        use scirs2_core::random::rng;
+        use scirs2_core::RngExt;
 
         let mut rng = rng();
         let data: Vec<u8> = (0..1000).map(|_| rng.random_range(0..256) as u8).collect();

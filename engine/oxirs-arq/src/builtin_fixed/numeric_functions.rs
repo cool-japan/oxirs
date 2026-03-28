@@ -6,7 +6,7 @@
 use crate::extensions::{CustomFunction, ExecutionContext, Value, ValueType};
 use anyhow::{bail, Result};
 
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{rng, RngExt};
 
 // Numeric Functions
 
@@ -184,7 +184,7 @@ impl CustomFunction for RandFunction {
             bail!("rand() requires no arguments");
         }
 
-        let mut random = Random::default();
+        let mut random = rng();
         Ok(Value::Float(random.random::<f64>()))
     }
 }

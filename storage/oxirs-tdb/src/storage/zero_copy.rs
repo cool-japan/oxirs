@@ -275,11 +275,9 @@ impl ZeroCopyStats {
 
     /// Get average bytes per operation
     pub fn avg_bytes_per_operation(&self) -> u64 {
-        if self.zero_copy_operations == 0 {
-            0
-        } else {
-            self.zero_copy_bytes / self.zero_copy_operations
-        }
+        self.zero_copy_bytes
+            .checked_div(self.zero_copy_operations)
+            .unwrap_or(0)
     }
 }
 

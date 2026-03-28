@@ -295,7 +295,7 @@ impl DataProfiler {
         }
 
         // Sort by triple count descending for determinism.
-        stats.sort_by(|a, b| b.triple_count.cmp(&a.triple_count));
+        stats.sort_by_key(|item| std::cmp::Reverse(item.triple_count));
         stats
     }
 

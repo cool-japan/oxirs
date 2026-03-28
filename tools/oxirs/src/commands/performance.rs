@@ -53,7 +53,7 @@ pub struct MonitorCommand {
     pub duration: Option<u64>,
 
     /// Sampling interval in milliseconds
-    #[arg(short = 'i', long, default_value = "1000")]
+    #[arg(short = 'I', long, default_value = "1000")]
     pub interval: u64,
 
     /// Output format (table, json, csv)
@@ -65,7 +65,7 @@ pub struct MonitorCommand {
     pub save: Option<PathBuf>,
 
     /// Enable continuous monitoring mode
-    #[arg(short, long)]
+    #[arg(short = 'C', long)]
     pub continuous: bool,
 
     /// Monitor specific metrics only
@@ -136,7 +136,7 @@ pub struct CompareCommand {
     pub baseline: PathBuf,
 
     /// Current benchmark file
-    #[arg(short, long)]
+    #[arg(short = 'C', long)]
     pub current: PathBuf,
 
     /// Output format (table, json, report)
@@ -180,7 +180,7 @@ pub struct HealthCommand {
     pub thresholds: Option<PathBuf>,
 
     /// Run continuous health monitoring
-    #[arg(short, long)]
+    #[arg(short = 'C', long)]
     pub continuous: bool,
 
     /// Health check interval in seconds
@@ -258,7 +258,7 @@ pub struct AdvisorCommand {
     pub format: String,
 
     /// Generate verbose report with metrics
-    #[arg(short, long)]
+    #[arg(short = 'V', long)]
     pub verbose: bool,
 
     /// Save analysis report

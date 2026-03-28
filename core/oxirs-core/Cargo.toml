@@ -47,7 +47,7 @@ memmap2.workspace = true
 parking_lot.workspace = true
 ahash = "0.8"
 simd-json = "0.17"
-wide = { version = "1.1", optional = true }
+wide = { version = "1.2", optional = true }
 num_cpus.workspace = true
 sys-info = "0.9"
 libc.workspace = true

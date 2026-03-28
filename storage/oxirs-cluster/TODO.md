@@ -1,6 +1,6 @@
 # OxiRS Cluster - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -79,7 +79,7 @@
 - Spot instance management
 - AWS, GCP, Azure deployment guides
 
-## Recent Accomplishments (v0.2.2)
+## Recent Accomplishments (v0.2.3)
 
 ### Security Enhancements
 - ✅ **Encryption Validation** - Enhanced encryption at rest with integrity verification using Merkle trees
@@ -125,4 +125,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Cluster v0.2.2 - Distributed RDF storage with multi-tenant isolation*
+*OxiRS Cluster v0.2.3 - Distributed RDF storage with multi-tenant isolation*

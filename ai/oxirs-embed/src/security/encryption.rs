@@ -40,7 +40,7 @@ pub struct Encryptor {
 impl Encryptor {
     /// Create new encryptor with random key
     pub fn new() -> Result<Self> {
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
 
         let mut rng = Random::default();
         let key: Vec<u8> = (0..32).map(|_| rng.random::<u8>()).collect();
@@ -74,7 +74,7 @@ impl Encryptor {
             .map_err(|e| anyhow!("Failed to create cipher: {}", e))?;
 
         // Generate random nonce
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         let mut rng = Random::default();
         let nonce_bytes: Vec<u8> = (0..12).map(|_| rng.random::<u8>()).collect();
         let nonce = Nonce::from_slice(&nonce_bytes);

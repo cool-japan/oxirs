@@ -1008,18 +1008,15 @@ impl AdvancedPropertyPathOptimizer {
         Box::pin(async move {
             // This would use actual statistics in production
             Ok(match path {
-                PathPattern::Property(prop) => {
+                PathPattern::Property(prop)
                     // Use lower cardinality for indexed properties
                     if self
                         .can_use_property_index(prop, &TraversalDirection::Forward)
                         .await
                         .unwrap_or(false)
-                    {
+                    => {
                         100 // Much lower cardinality for indexed lookups
-                    } else {
-                        1000
                     }
-                }
                 PathPattern::Sequence(seq) => {
                     // Multiply selectivities
                     let mut cardinality = 10000u64;

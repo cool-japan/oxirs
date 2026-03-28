@@ -845,7 +845,7 @@ impl IndexAdvisor {
     fn evict_old_patterns(&mut self) {
         // Sort by last seen and keep most recent
         let mut sorted: Vec<_> = self.patterns.iter().collect();
-        sorted.sort_by(|a, b| b.1.last_seen.cmp(&a.1.last_seen));
+        sorted.sort_by_key(|b| std::cmp::Reverse(b.1.last_seen));
 
         let to_keep: HashSet<_> = sorted
             .iter()

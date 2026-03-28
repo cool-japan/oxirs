@@ -11,7 +11,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use nalgebra::{DMatrix, DVector};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use std::collections::HashMap;
 
 /// Graph Convolutional Network (GCN) embedding model
@@ -476,7 +476,7 @@ impl GraphSAGE {
                             if sampled.len() < sample_size {
                                 sampled.push(neighbor.clone());
                             } else {
-                                let j = rng.gen_range(0..=i);
+                                let j = rng.random_range(0..=i);
                                 if j < sample_size {
                                     sampled[j] = neighbor.clone();
                                 }
@@ -521,7 +521,7 @@ impl GraphSAGE {
             let degree_cmp = b.1.cmp(&a.1);
             if degree_cmp == std::cmp::Ordering::Equal {
                 // Add randomization for ties
-                if rng.gen_bool(0.5) {
+                if rng.random_bool(0.5) {
                     std::cmp::Ordering::Greater
                 } else {
                     std::cmp::Ordering::Less

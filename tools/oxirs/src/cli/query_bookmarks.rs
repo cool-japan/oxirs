@@ -285,14 +285,14 @@ impl BookmarkManager {
     /// List bookmarks sorted by usage count (most used first)
     pub fn list_by_usage(&self) -> Vec<&QueryBookmark> {
         let mut bookmarks: Vec<&QueryBookmark> = self.bookmarks.values().collect();
-        bookmarks.sort_by(|a, b| b.use_count.cmp(&a.use_count));
+        bookmarks.sort_by_key(|item| std::cmp::Reverse(item.use_count));
         bookmarks
     }
 
     /// List bookmarks sorted by last update (newest first)
     pub fn list_by_updated(&self) -> Vec<&QueryBookmark> {
         let mut bookmarks: Vec<&QueryBookmark> = self.bookmarks.values().collect();
-        bookmarks.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        bookmarks.sort_by_key(|item| std::cmp::Reverse(item.updated_at));
         bookmarks
     }
 

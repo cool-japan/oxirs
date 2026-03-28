@@ -1,10 +1,10 @@
 # OxiRS CLI - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS CLI v0.2.2 is production-ready with comprehensive SPARQL support, interactive REPL, and complete RDF management capabilities.
+OxiRS CLI v0.2.3 is production-ready with comprehensive SPARQL support, interactive REPL, and complete RDF management capabilities.
 
 ### Production Features
 - ✅ Complete SPARQL 1.1/1.2 query execution
@@ -28,7 +28,7 @@ OxiRS CLI v0.2.2 is production-ready with comprehensive SPARQL support, interact
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ SPARQL query execution, REPL, all 7 RDF formats, 532 tests
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Enhanced caching strategies for large datasets
 - ✅ Distributed query execution improvements
 - ✅ Advanced indexing optimizations
@@ -52,4 +52,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines on how to contribute
 
 ---
 
-*OxiRS CLI v0.2.2 - Production-ready semantic web toolkit*
+*OxiRS CLI v0.2.3 - Production-ready semantic web toolkit*

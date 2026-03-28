@@ -160,7 +160,7 @@ impl ObservabilityManager {
         }
 
         // Simple sampling
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         use std::time::SystemTime;
         let seed = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -377,7 +377,7 @@ pub struct TraceSpanId(u64);
 
 impl TraceSpanId {
     fn new() -> Self {
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         use std::time::SystemTime;
         let seed = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)

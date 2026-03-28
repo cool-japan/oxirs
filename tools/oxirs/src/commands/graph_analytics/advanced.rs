@@ -50,7 +50,7 @@ pub fn execute_graph_coloring(rdf_graph: &RdfGraph, config: &AnalyticsConfig) ->
         .map(|node| (node, rdf_graph.out_degree(node) + rdf_graph.in_degree(node)))
         .collect();
 
-    nodes_by_degree.sort_by(|a, b| b.1.cmp(&a.1));
+    nodes_by_degree.sort_by_key(|item| std::cmp::Reverse(item.1));
 
     for (node, _degree) in &nodes_by_degree {
         let neighbors = rdf_graph.neighbors(*node);

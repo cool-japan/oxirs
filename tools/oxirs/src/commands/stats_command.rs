@@ -316,7 +316,7 @@ impl StatsCommand {
             .collect();
 
         // Sort descending by count
-        predicates.sort_by(|a, b| b.1.cmp(&a.1));
+        predicates.sort_by_key(|item| std::cmp::Reverse(item.1));
 
         // Take top_k
         let limit = top_k.min(predicates.len());

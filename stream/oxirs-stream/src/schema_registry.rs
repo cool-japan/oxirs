@@ -385,7 +385,7 @@ impl SchemaRegistry {
 
         if let Some(subject_schemas) = schemas.get(subject) {
             let mut schemas: Vec<SchemaDefinition> = subject_schemas.values().cloned().collect();
-            schemas.sort_by(|a, b| a.version.cmp(&b.version));
+            schemas.sort_by_key(|a| a.version);
             Ok(schemas)
         } else {
             Ok(Vec::new())

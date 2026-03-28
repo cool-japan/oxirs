@@ -321,7 +321,7 @@ impl DashboardAnalytics {
         // Sort by query count and keep top 100
         activity
             .top_users
-            .sort_by(|a, b| b.query_count.cmp(&a.query_count));
+            .sort_by_key(|item| std::cmp::Reverse(item.query_count));
         activity.top_users.truncate(100);
     }
 
@@ -687,11 +687,10 @@ impl DashboardAnalytics {
         worksheet.write_string_with_format(0, 0, "Query Type", &header_format)?;
         worksheet.write_string_with_format(0, 1, "Count", &header_format)?;
 
-        let mut row = 1;
-        for (query_type, count) in &query_analytics.query_type_distribution {
+        for (row, (query_type, count)) in (1..).zip(query_analytics.query_type_distribution.iter())
+        {
             worksheet.write_string(row, 0, format!("{:?}", query_type))?;
             worksheet.write_number(row, 1, *count as f64)?;
-            row += 1;
         }
 
         // Sheet 3: User Analytics
@@ -723,14 +722,12 @@ impl DashboardAnalytics {
         worksheet.write_string_with_format(0, 3, "Total Time (secs)", &header_format)?;
         worksheet.write_string_with_format(0, 4, "Last Active", &header_format)?;
 
-        let mut row = 1;
-        for user in &user_analytics.top_users {
+        for (row, user) in (1..).zip(user_analytics.top_users.iter()) {
             worksheet.write_string(row, 0, &user.user_id)?;
             worksheet.write_number(row, 1, user.query_count as f64)?;
             worksheet.write_number(row, 2, user.session_count as f64)?;
             worksheet.write_number(row, 3, user.total_time_secs as f64)?;
             worksheet.write_string(row, 4, user.last_active.to_rfc3339())?;
-            row += 1;
         }
 
         // Sheet 5: Health Analytics
@@ -770,14 +767,12 @@ impl DashboardAnalytics {
         worksheet.write_string_with_format(0, 3, "Active Connections", &header_format)?;
         worksheet.write_string_with_format(0, 4, "Requests/Second", &header_format)?;
 
-        let mut row = 1;
-        for datapoint in &health_analytics.health_timeline {
+        for (row, datapoint) in (1..).zip(health_analytics.health_timeline.iter()) {
             worksheet.write_string(row, 0, datapoint.timestamp.to_rfc3339())?;
             worksheet.write_number(row, 1, datapoint.cpu_percent)?;
             worksheet.write_number(row, 2, datapoint.memory_mb)?;
             worksheet.write_number(row, 3, datapoint.active_connections as f64)?;
             worksheet.write_number(row, 4, datapoint.requests_per_second)?;
-            row += 1;
         }
 
         // Sheet 7: Activity Timeline
@@ -789,13 +784,11 @@ impl DashboardAnalytics {
         worksheet.write_string_with_format(0, 2, "Queries/Min", &header_format)?;
         worksheet.write_string_with_format(0, 3, "Avg Response Time (ms)", &header_format)?;
 
-        let mut row = 1;
-        for datapoint in &user_analytics.activity_timeline {
+        for (row, datapoint) in (1..).zip(user_analytics.activity_timeline.iter()) {
             worksheet.write_string(row, 0, datapoint.timestamp.to_rfc3339())?;
             worksheet.write_number(row, 1, datapoint.active_users as f64)?;
             worksheet.write_number(row, 2, datapoint.queries_per_minute)?;
             worksheet.write_number(row, 3, datapoint.avg_response_time_ms)?;
-            row += 1;
         }
 
         // Save to bytes

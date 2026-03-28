@@ -288,7 +288,7 @@ impl HyperparameterOptimizer {
     where
         F: FnMut(TrainingConfig) -> f32,
     {
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         let mut best_config = TrainingConfig::default();
         let mut best_score = f32::NEG_INFINITY;
         let mut rng = Random::default();
@@ -361,7 +361,7 @@ impl HyperparameterOptimizer {
     where
         F: FnMut(TrainingConfig) -> f32,
     {
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         let mut best_config = TrainingConfig::default();
         let mut best_score = f32::NEG_INFINITY;
         let mut rng = Random::default();
@@ -421,7 +421,7 @@ impl HyperparameterOptimizer {
     where
         F: FnMut(TrainingConfig) -> f32,
     {
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         let mut best_config = TrainingConfig::default();
         let mut best_score = f32::NEG_INFINITY;
         let mut rng = Random::default();
@@ -438,24 +438,18 @@ impl HyperparameterOptimizer {
             };
             for (param_name, range) in &self.search_space {
                 match range {
-                    ParameterRange::Float { min, max } | ParameterRange::LogFloat { min, max } => {
-                        if trial > 0 {
-                            let current = self.get_parameter_value(&config, param_name)?;
-                            let std_dev = (*max - *min) * step_size * 0.1;
-                            let noise = (rng.random::<f32>() - 0.5) * 2.0 * std_dev;
-                            let new_value = (current + noise).clamp(*min, *max);
-                            self.apply_parameter(
-                                &mut config,
-                                param_name,
-                                ParameterValue::Float(new_value),
-                            )?;
-                        } else {
-                            self.apply_parameter(
-                                &mut config,
-                                param_name,
-                                self.sample_parameter(range, &mut rng)?,
-                            )?;
-                        }
+                    ParameterRange::Float { min, max } | ParameterRange::LogFloat { min, max }
+                        if trial > 0 =>
+                    {
+                        let current = self.get_parameter_value(&config, param_name)?;
+                        let std_dev = (*max - *min) * step_size * 0.1;
+                        let noise = (rng.random::<f32>() - 0.5) * 2.0 * std_dev;
+                        let new_value = (current + noise).clamp(*min, *max);
+                        self.apply_parameter(
+                            &mut config,
+                            param_name,
+                            ParameterValue::Float(new_value),
+                        )?;
                     }
                     _ => {
                         self.apply_parameter(

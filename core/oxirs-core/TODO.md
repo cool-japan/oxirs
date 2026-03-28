@@ -1,10 +1,10 @@
 # OxiRS Core - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS Core v0.2.2 is production-ready, providing the foundation for semantic web operations with complete RDF/SPARQL support.
+OxiRS Core v0.2.3 is production-ready, providing the foundation for semantic web operations with complete RDF/SPARQL support.
 
 ### Production Features
 - ✅ RDF 1.2 data model with 7 format parsers
@@ -23,7 +23,7 @@ OxiRS Core v0.2.2 is production-ready, providing the foundation for semantic web
 - ✅ Federation support with SERVICE clause execution
 - ✅ SciRS2 integration, 850 tests passing
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Cost-based optimizer enhancements
 - ✅ Advanced join ordering strategies
 - ✅ Query result caching with invalidation
@@ -46,4 +46,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Core v0.2.2 - Zero-dependency RDF/SPARQL foundation*
+*OxiRS Core v0.2.3 - Zero-dependency RDF/SPARQL foundation*

@@ -494,14 +494,14 @@ impl PrivacyManager {
         scale: f64,
     ) -> Result<(), PrivacyError> {
         #[allow(unused_imports)]
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
 
         let mut rng = Random::seed(42);
 
         self.apply_noise_recursive(data, &mut |value| {
             if let Some(num) = value.as_f64() {
-                let u1: f64 = rng.gen_range(0.0..1.0);
-                let u2: f64 = rng.gen_range(0.0..1.0);
+                let u1: f64 = rng.random_range(0.0..1.0);
+                let u2: f64 = rng.random_range(0.0..1.0);
                 let noise = scale * (u1 - 0.5).signum() * (1.0 - 2.0 * u2.min(1.0 - u2)).ln();
                 *value = serde_json::Value::Number(
                     serde_json::Number::from_f64(num + noise)
@@ -519,7 +519,7 @@ impl PrivacyManager {
         data: &mut serde_json::Value,
         sigma: f64,
     ) -> Result<(), PrivacyError> {
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
 
         let mut rng = Random::seed(42);
 
@@ -801,7 +801,7 @@ impl PrivacyManager {
                     if let Some(f) = n.as_f64() {
                         // Add small amount of differential privacy noise
                         let noise = ({
-                            use scirs2_core::random::{Random, Rng};
+                            use scirs2_core::random::{Random, RngExt};
                             let mut random = Random::default();
                             random.random::<f64>()
                         } - 0.5)
@@ -814,13 +814,12 @@ impl PrivacyManager {
                         );
                     }
                 }
-                serde_json::Value::String(s) => {
+                serde_json::Value::String(s)
                     // Apply k-anonymity-like protection to string fields
-                    if self.is_quasi_identifier(key) {
+                    if self.is_quasi_identifier(key) => {
                         let generalized = self.generalize_string_value(s);
                         *value = serde_json::Value::String(generalized);
                     }
-                }
                 _ => {} // Leave other types unchanged
             }
         }
@@ -1273,7 +1272,7 @@ fn generalize_number(value: f64) -> String {
 #[allow(dead_code)]
 fn perturb_string(value: &str) -> String {
     #[allow(unused_imports)]
-    use scirs2_core::random::{Random, Rng};
+    use scirs2_core::random::{Random, RngExt};
     let mut random = Random::default();
     let chars: Vec<char> = value.chars().collect();
 
@@ -1309,7 +1308,7 @@ fn substitute_value(value: &str) -> String {
     } else if value.chars().all(|c| c.is_ascii_digit()) {
         // Numeric ID substitution
         #[allow(unused_imports)]
-        use scirs2_core::random::{Random, Rng};
+        use scirs2_core::random::{Random, RngExt};
         let mut random = Random::default();
         let len = value.len();
         (0..len)

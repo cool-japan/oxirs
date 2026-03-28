@@ -208,7 +208,7 @@ impl RuntimeStatsCollector {
     /// `total_time_ms` descending.
     pub fn slowest_queries(&self, n: usize) -> Vec<&QueryExecutionStats> {
         let mut refs: Vec<&QueryExecutionStats> = self.history.iter().collect();
-        refs.sort_by(|a, b| b.total_time_ms.cmp(&a.total_time_ms));
+        refs.sort_by_key(|b| std::cmp::Reverse(b.total_time_ms));
         refs.into_iter().take(n).collect()
     }
 

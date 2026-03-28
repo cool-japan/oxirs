@@ -423,7 +423,7 @@ impl ReadReplicaManager {
             }
             LoadBalancingStrategy::Random => {
                 // Use scirs2_core random for better performance
-                use scirs2_core::random::{rng, Rng};
+                use scirs2_core::random::{rng, RngExt};
                 let index = rng().random_range(0..healthy_replicas.len());
                 Ok(healthy_replicas[index].node_id)
             }

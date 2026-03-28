@@ -1,10 +1,10 @@
 # OxiRS ARQ - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS ARQ v0.2.2 is production-ready, providing a SPARQL 1.1/1.2 query engine with histogram-based optimization and advanced caching.
+OxiRS ARQ v0.2.3 is production-ready, providing a SPARQL 1.1/1.2 query engine with histogram-based optimization and advanced caching.
 
 ### Production Features
 - ✅ **SPARQL 1.1/1.2 Query Engine** - Full W3C compliance
@@ -22,7 +22,7 @@ OxiRS ARQ v0.2.2 is production-ready, providing a SPARQL 1.1/1.2 query engine wi
 - 75% CPU savings at production scale (100K QPS)
 - Zero overhead for complex queries
 
-## Recent Accomplishments (v0.2.2)
+## Recent Accomplishments (v0.2.3)
 
 ### Performance Enhancements
 - ✅ **Histogram-based Statistics** - Cost-based optimizer now uses histogram statistics for accurate cardinality estimation
@@ -56,4 +56,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS ARQ v0.2.2 - High-performance SPARQL query engine with histogram optimization*
+*OxiRS ARQ v0.2.3 - High-performance SPARQL query engine with histogram optimization*

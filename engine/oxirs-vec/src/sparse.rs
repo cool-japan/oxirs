@@ -35,7 +35,7 @@ impl SparseVector {
         }
 
         let mut sparse_values = HashMap::new();
-        for (idx, val) in indices.into_iter().zip(values.into_iter()) {
+        for (idx, val) in indices.into_iter().zip(values) {
             if val != 0.0 {
                 // Only store non-zero values
                 sparse_values.insert(idx, val);

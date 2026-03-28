@@ -163,10 +163,10 @@ impl TripleReifier {
                 continue;
             }
             match &triple.predicate {
-                RdfTerm::Iri(p) if p.as_str() == RDF_TYPE => {
-                    if triple.object == RdfTerm::iri(RDF_STATEMENT) {
-                        has_type = true;
-                    }
+                RdfTerm::Iri(p)
+                    if p.as_str() == RDF_TYPE && triple.object == RdfTerm::iri(RDF_STATEMENT) =>
+                {
+                    has_type = true;
                 }
                 RdfTerm::Iri(p) if p.as_str() == RDF_SUBJECT => {
                     if subject.is_some() {
@@ -212,10 +212,10 @@ impl TripleReifier {
                 continue;
             }
             match &triple.predicate {
-                RdfTerm::Iri(p) if p.as_str() == RDF_TYPE => {
-                    if triple.object == RdfTerm::iri(RDF_STATEMENT) {
-                        has_type = true;
-                    }
+                RdfTerm::Iri(p)
+                    if p.as_str() == RDF_TYPE && triple.object == RdfTerm::iri(RDF_STATEMENT) =>
+                {
+                    has_type = true;
                 }
                 RdfTerm::Iri(p) if p.as_str() == RDF_SUBJECT => has_subject = true,
                 RdfTerm::Iri(p) if p.as_str() == RDF_PREDICATE => has_predicate = true,
@@ -241,10 +241,8 @@ impl TripleReifier {
                             nodes.push(formatted);
                         }
                     }
-                    RdfTerm::Iri(iri) => {
-                        if !nodes.contains(iri) {
-                            nodes.push(iri.clone());
-                        }
+                    RdfTerm::Iri(iri) if !nodes.contains(iri) => {
+                        nodes.push(iri.clone());
                     }
                     _ => {}
                 }

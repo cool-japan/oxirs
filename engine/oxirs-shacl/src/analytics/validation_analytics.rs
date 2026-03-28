@@ -204,7 +204,7 @@ impl ValidationAnalytics {
             })
             .collect();
 
-        shapes.sort_by(|a, b| b.total_violations.cmp(&a.total_violations));
+        shapes.sort_by_key(|b| std::cmp::Reverse(b.total_violations));
         shapes.truncate(limit);
         shapes
     }
@@ -227,7 +227,7 @@ impl ValidationAnalytics {
             })
             .collect();
 
-        constraints.sort_by(|a, b| b.average_evaluation_time.cmp(&a.average_evaluation_time));
+        constraints.sort_by_key(|b| std::cmp::Reverse(b.average_evaluation_time));
         constraints.truncate(limit);
         constraints
     }

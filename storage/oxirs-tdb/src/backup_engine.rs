@@ -137,7 +137,7 @@ impl BackupEngine {
                 }
             }
         }
-        manifests.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
+        manifests.sort_by_key(|b| std::cmp::Reverse(b.created_at_ms));
         manifests
     }
 

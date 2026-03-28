@@ -24,7 +24,7 @@
 use crate::{Shape, ShapeId, ValidationConfig, ValidationReport, ValidationViolation};
 use indexmap::IndexMap;
 use oxirs_core::model::Term;
-use scirs2_core::random::{rng, Rng};
+use scirs2_core::random::{rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

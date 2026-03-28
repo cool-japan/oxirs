@@ -778,7 +778,7 @@ impl EvolutionaryNAS {
                 let connection = ConnectionGene {
                     from_node,
                     to_node,
-                    weight: random.gen_range(-1.0..1.0),
+                    weight: random.random_range(-1.0..1.0),
                     active: true,
                     innovation_number: self.evolution_history.innovation_tracker
                         .get_innovation_number(&format!("conn_{}_{}", from_node, to_node)),
@@ -824,9 +824,9 @@ impl EvolutionaryNAS {
     /// Generate random parameters for an operation
     fn generate_random_parameters(&self, random: &mut Random) -> HashMap<String, f32> {
         let mut params = HashMap::new();
-        params.insert("learning_rate".to_string(), random.gen_range(0.0001..0.01));
-        params.insert("dropout_rate".to_string(), random.gen_range(0.0..0.5));
-        params.insert("weight_decay".to_string(), random.gen_range(0.0..0.01));
+        params.insert("learning_rate".to_string(), random.random_range(0.0001..0.01));
+        params.insert("dropout_rate".to_string(), random.random_range(0.0..0.5));
+        params.insert("weight_decay".to_string(), random.random_range(0.0..0.01));
         params
     }
 
@@ -929,13 +929,13 @@ impl EvolutionaryNAS {
         let mut random = Random::default();
 
         Ok(PerformanceMetrics {
-            training_accuracy: random.gen_range(0.7..0.95),
-            validation_accuracy: random.gen_range(0.65..0.9),
+            training_accuracy: random.random_range(0.7..0.95),
+            validation_accuracy: random.random_range(0.65..0.9),
             test_accuracy: None,
-            training_time: random.gen_range(100.0..1000.0),
-            inference_time_ms: random.gen_range(0.1..10.0),
-            memory_usage_mb: random.gen_range(100.0..2000.0),
-            energy_consumption: Some(random.gen_range(10.0..100.0)),
+            training_time: random.random_range(100.0..1000.0),
+            inference_time_ms: random.random_range(0.1..10.0),
+            memory_usage_mb: random.random_range(100.0..2000.0),
+            energy_consumption: Some(random.random_range(10.0..100.0)),
             model_size: random.random_range(1000000..50000000),
             flops: random.random_range(1000000..100000000),
         })
@@ -1314,7 +1314,7 @@ impl EvolutionaryNAS {
         for node in &mut candidate.genome.nodes {
             if random.random::<f32>() < self.config.mutation_probability {
                 for (_, value) in node.parameters.iter_mut() {
-                    *value *= random.gen_range(0.8..1.2); // ±20% variation
+                    *value *= random.random_range(0.8..1.2); // ±20% variation
                 }
             }
         }
@@ -1322,7 +1322,7 @@ impl EvolutionaryNAS {
         // Connection mutation - modify weights
         for connection in &mut candidate.genome.connections {
             if random.random::<f32>() < self.config.mutation_probability {
-                connection.weight += random.gen_range(-0.1..0.1);
+                connection.weight += random.random_range(-0.1..0.1);
                 connection.weight = connection.weight.clamp(-2.0, 2.0);
             }
         }
@@ -1386,7 +1386,7 @@ impl EvolutionaryNAS {
                 let connection = ConnectionGene {
                     from_node,
                     to_node,
-                    weight: random.gen_range(-1.0..1.0),
+                    weight: random.random_range(-1.0..1.0),
                     active: true,
                     innovation_number: self.evolution_history.innovation_tracker
                         .get_innovation_number(&format!("conn_{}_{}", from_node, to_node)),

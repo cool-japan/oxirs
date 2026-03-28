@@ -285,10 +285,8 @@ pub fn sparql_multimodal_search_from_args(
     // Extract named arguments (simplified parsing)
     for arg in args {
         match arg {
-            VectorServiceArg::String(s) => {
-                if text_query.is_none() {
-                    text_query = Some(s.clone());
-                }
+            VectorServiceArg::String(s) if text_query.is_none() => {
+                text_query = Some(s.clone());
             }
             VectorServiceArg::Number(n) => {
                 limit = *n as usize;

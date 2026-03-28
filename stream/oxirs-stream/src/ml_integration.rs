@@ -32,8 +32,7 @@ use tracing::{debug, info};
 
 // Use SciRS2 for scientific computing (following SCIRS2 POLICY)
 use scirs2_core::ndarray_ext::Array1;
-use scirs2_core::random::rng;
-use scirs2_core::Rng; // For gen_range method
+use scirs2_core::random::{rng, RngExt};
 
 use crate::event::StreamEvent;
 

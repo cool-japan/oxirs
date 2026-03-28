@@ -285,7 +285,7 @@ impl HistoryIndex {
     /// List all entries sorted by updated_at descending
     pub fn list_recent(&self, limit: usize) -> Vec<&HistoryIndexEntry> {
         let mut entries: Vec<&HistoryIndexEntry> = self.entries.values().collect();
-        entries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        entries.sort_by_key(|item| std::cmp::Reverse(item.updated_at));
         entries.into_iter().take(limit).collect()
     }
 }
@@ -600,7 +600,7 @@ impl ConversationHistory {
         let excess = self.index.entries.len() - max;
         let oldest_ids: Vec<String> = {
             let mut entries: Vec<_> = self.index.entries.values().collect();
-            entries.sort_by(|a, b| a.updated_at.cmp(&b.updated_at));
+            entries.sort_by_key(|item| item.updated_at);
             entries
                 .into_iter()
                 .take(excess)
@@ -766,7 +766,7 @@ fn extract_topics(texts: &[String], max_topics: usize) -> Vec<String> {
         .filter(|(_, freq)| *freq >= 2)
         .collect();
 
-    freq_list.sort_by(|a, b| b.1.cmp(&a.1));
+    freq_list.sort_by_key(|item| std::cmp::Reverse(item.1));
     freq_list
         .into_iter()
         .take(max_topics)

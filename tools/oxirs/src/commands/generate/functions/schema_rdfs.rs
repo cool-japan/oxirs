@@ -4,7 +4,7 @@
 
 use super::super::types::*;
 use oxirs_core::model::{GraphName, Literal, NamedNode, Quad, Subject, Term};
-use scirs2_core::Rng;
+use scirs2_core::RngExt;
 use std::error::Error;
 
 /// Parse RDFS schema from file (simplified implementation)
@@ -100,7 +100,7 @@ pub(super) fn parse_rdfs_schema(
 }
 
 /// Generate RDF data conforming to RDFS schema
-pub(super) fn generate_from_rdfs_schema<R: Rng>(
+pub(super) fn generate_from_rdfs_schema<R: RngExt>(
     rng: &mut R,
     schema: &RdfsSchema,
     count: usize,
@@ -147,7 +147,7 @@ pub(super) fn generate_from_rdfs_schema<R: Rng>(
 }
 
 /// Generate a property value based on RDFS range constraints
-pub(super) fn generate_rdfs_property_value<R: Rng>(
+pub(super) fn generate_rdfs_property_value<R: RngExt>(
     rng: &mut R,
     property: &RdfsProperty,
     generated_instances: &std::collections::HashMap<String, Vec<String>>,

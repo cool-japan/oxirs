@@ -138,7 +138,7 @@ impl SecurityEvent {
         event_type: String,
         message: String,
     ) -> Self {
-        use scirs2_core::random::{rng, Rng};
+        use scirs2_core::random::{rng, RngExt};
 
         let mut rng_instance = rng();
         let id = format!("evt_{:016x}", rng_instance.random::<u64>());
@@ -520,7 +520,7 @@ impl SecurityAuditLogger {
         }
 
         let mut top_actors: Vec<_> = actor_counts.into_iter().collect();
-        top_actors.sort_by(|a, b| b.1.cmp(&a.1));
+        top_actors.sort_by_key(|b| std::cmp::Reverse(b.1));
         top_actors.truncate(10);
 
         SecurityReport {

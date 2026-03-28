@@ -1,10 +1,10 @@
 # OxiRS CAN Bus - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
-OxiRS CAN Bus v0.2.2 provides automotive CAN bus integration with J1939 protocol support, DBC file parsing, and RDF mapping for vehicle telematics and industrial automation.
+OxiRS CAN Bus v0.2.3 provides automotive CAN bus integration with J1939 protocol support, DBC file parsing, and RDF mapping for vehicle telematics and industrial automation.
 
 ### Features
 - ✅ SocketCAN integration (Linux)
@@ -31,7 +31,7 @@ OxiRS CAN Bus v0.2.2 provides automotive CAN bus integration with J1939 protocol
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ SocketCAN, J1939, DBC parser, RDF generation, SAMM, 101 tests
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ OBD-II decoder
 - ✅ UDS (Unified Diagnostic Services, ISO 14229)
 - ✅ CANopen support (DS-301 profiles)
@@ -54,4 +54,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS CAN Bus v0.2.2 - Automotive telematics for semantic web*
+*OxiRS CAN Bus v0.2.3 - Automotive telematics for semantic web*

@@ -329,7 +329,7 @@ impl ShapeInheritanceManager {
         }
 
         // Sort by priority (highest first)
-        constraints_by_priority.sort_by(|a, b| b.0.cmp(&a.0));
+        constraints_by_priority.sort_by_key(|b| std::cmp::Reverse(b.0));
 
         let mut resolved_constraints = IndexMap::new();
         for (_, _, constraints) in constraints_by_priority {
@@ -537,7 +537,7 @@ impl ShapeInheritanceManager {
             })
             .collect();
 
-        shape_priorities.sort_by(|a, b| a.1.cmp(&b.1));
+        shape_priorities.sort_by_key(|a| a.1);
         shape_priorities
             .into_iter()
             .map(|(shape_id, _)| shape_id)

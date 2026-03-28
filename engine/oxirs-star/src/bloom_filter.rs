@@ -37,8 +37,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 // SciRS2 imports for high-performance operations (SCIRS2 POLICY)
-use scirs2_core::random::Random;
-use scirs2_core::Rng;
+use scirs2_core::random::{Random, RngExt};
 
 use crate::model::StarTriple;
 use crate::StarResult;

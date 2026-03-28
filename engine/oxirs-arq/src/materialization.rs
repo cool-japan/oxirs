@@ -13,7 +13,7 @@ use std::sync::{Arc, RwLock};
 // Use scirs2-core for advanced features
 use scirs2_core::ndarray_ext::Array1;
 use scirs2_core::profiling::Profiler;
-use scirs2_core::random::{rng, Rng}; // Use scirs2-core for random number generation
+use scirs2_core::random::{rng, RngExt}; // Use scirs2-core for random number generation
 use scirs2_stats::{mean, std};
 
 /// Solution type alias - mapping of variables to terms

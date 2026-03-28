@@ -179,8 +179,8 @@ impl StreamStats {
             }
         }
 
-        if self.total_events > 0 {
-            self.avg_event_size = self.total_bytes / self.total_events;
+        if let Some(avg) = self.total_bytes.checked_div(self.total_events) {
+            self.avg_event_size = avg;
         }
     }
 

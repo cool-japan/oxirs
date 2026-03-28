@@ -913,12 +913,12 @@ impl ValidationReportAnalytics {
 
         // Get top violation types
         let mut top_violation_types: Vec<_> = component_counts.into_iter().collect();
-        top_violation_types.sort_by(|a, b| b.1.cmp(&a.1));
+        top_violation_types.sort_by_key(|b| std::cmp::Reverse(b.1));
         top_violation_types.truncate(10);
 
         // Get most problematic shapes
         let mut problematic_shapes: Vec<_> = shape_counts.into_iter().collect();
-        problematic_shapes.sort_by(|a, b| b.1.cmp(&a.1));
+        problematic_shapes.sort_by_key(|b| std::cmp::Reverse(b.1));
         problematic_shapes.truncate(10);
 
         // Determine quality trend

@@ -126,11 +126,7 @@ impl BatchSizePredictor {
         // Update average processing time
         let total_batches = self.stats.total_batches.load(Ordering::Relaxed);
         let total_time = self.stats.total_processing_time_ms.load(Ordering::Relaxed);
-        let avg_time = if total_batches > 0 {
-            total_time / total_batches
-        } else {
-            0
-        };
+        let avg_time = total_time.checked_div(total_batches).unwrap_or(0);
         self.stats
             .average_processing_time_ms
             .store(avg_time, Ordering::Relaxed);

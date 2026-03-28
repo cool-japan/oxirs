@@ -511,7 +511,7 @@ impl PredictiveMaintenanceScheduler {
     pub async fn schedule_maintenance(&self, task: MaintenanceTask) -> Result<()> {
         let mut tasks = self.tasks.write().await;
         tasks.push(task);
-        tasks.sort_by(|a, b| a.scheduled_time.cmp(&b.scheduled_time));
+        tasks.sort_by_key(|a| a.scheduled_time);
         Ok(())
     }
 

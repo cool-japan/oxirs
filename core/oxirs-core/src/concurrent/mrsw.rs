@@ -329,22 +329,20 @@ impl MrswMetrics {
         let total = self.total_read_time.load(Ordering::Relaxed);
         let samples = self.read_samples.load(Ordering::Relaxed);
 
-        if samples > 0 {
-            Duration::from_nanos(total / samples)
-        } else {
-            Duration::ZERO
-        }
+        total
+            .checked_div(samples)
+            .map(Duration::from_nanos)
+            .unwrap_or(Duration::ZERO)
     }
 
     fn avg_write_time(&self) -> Duration {
         let total = self.total_write_time.load(Ordering::Relaxed);
         let samples = self.write_samples.load(Ordering::Relaxed);
 
-        if samples > 0 {
-            Duration::from_nanos(total / samples)
-        } else {
-            Duration::ZERO
-        }
+        total
+            .checked_div(samples)
+            .map(Duration::from_nanos)
+            .unwrap_or(Duration::ZERO)
     }
 
     fn reset(&self) {

@@ -1,9 +1,9 @@
 //! # OxiRS Core - RDF and SPARQL Foundation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 //!
-//! **Status**: Production Release (v0.2.2)
+//! **Status**: Production Release (v0.2.4)
 //! **Stability**: Public APIs are stabilizing. Production-ready for RDF/SPARQL core operations.
 //!
 //! ## Overview
@@ -252,7 +252,7 @@
 //!
 //! ## API Stability
 //!
-//! As of Beta 1 (v0.2.2):
+//! As of Beta 1 (v0.2.4):
 //! - **Stable APIs**: Core RDF model types (`NamedNode`, `Literal`, `Triple`, `Quad`)
 //! - **Stable APIs**: Store operations (`RdfStore`, `insert`, `query`, `remove`)
 //! - **Stable APIs**: Parser and serializer interfaces

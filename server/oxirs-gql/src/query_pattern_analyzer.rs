@@ -25,6 +25,7 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
@@ -256,7 +257,7 @@ impl PatternAnalyzer {
     /// Get top N patterns by frequency
     pub fn get_top_patterns(&self, n: usize) -> Vec<PatternOccurrence> {
         let mut patterns: Vec<_> = self.patterns.values().cloned().collect();
-        patterns.sort_by(|a, b| b.count.cmp(&a.count));
+        patterns.sort_by_key(|p| Reverse(p.count));
         patterns.into_iter().take(n).collect()
     }
 
@@ -322,7 +323,7 @@ impl PatternAnalyzer {
             })
             .collect();
 
-        combos.sort_by(|a, b| b.count.cmp(&a.count));
+        combos.sort_by_key(|c| Reverse(c.count));
         combos.into_iter().take(n).collect()
     }
 
@@ -393,7 +394,7 @@ impl PatternAnalyzer {
     /// Trim least frequent patterns
     fn trim_patterns(&mut self) {
         let mut patterns: Vec<_> = self.patterns.iter().collect();
-        patterns.sort_by(|a, b| b.1.count.cmp(&a.1.count));
+        patterns.sort_by_key(|p| Reverse(p.1.count));
 
         let to_remove: Vec<_> = patterns
             .into_iter()

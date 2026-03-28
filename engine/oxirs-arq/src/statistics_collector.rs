@@ -294,8 +294,8 @@ impl StatisticsCollector {
                     // (In a real implementation, we'd track the predicate-object relationship)
                     for histogram in self.histograms.values_mut() {
                         if {
-                            use scirs2_core::random::{Random, Rng};
-                            let mut random = Random::default();
+                            use scirs2_core::random::{rng, RngExt};
+                            let mut random = rng();
                             random.random::<f64>()
                         } < self.sample_rate
                         {

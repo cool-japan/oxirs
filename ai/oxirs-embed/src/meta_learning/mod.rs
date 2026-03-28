@@ -223,7 +223,7 @@ impl TaskSampler {
     /// Sample a single task
     pub fn sample_single_task(&mut self) -> Result<Task> {
         use std::time::Instant;
-        use scirs2_core::random::{seq::SliceRandom, thread_rng, Rng};
+        use scirs2_core::random::{seq::SliceRandom, thread_rng, RngExt};
         use uuid::Uuid;
         use scirs2_core::ndarray_ext::Array1;
         
@@ -271,7 +271,7 @@ impl TaskSampler {
     }
 
     fn generate_task(&self, domain: &str, difficulty: f32) -> Result<Task> {
-        use scirs2_core::random::{thread_rng, Rng};
+        use scirs2_core::random::{thread_rng, RngExt};
         use uuid::Uuid;
         use scirs2_core::ndarray_ext::Array1;
         use std::time::Instant;

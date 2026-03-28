@@ -160,7 +160,7 @@ impl HoLE {
             let mut local_rng = Random::default();
             let embedding = Array1::from_vec(
                 (0..self.config.base.dimensions)
-                    .map(|_| local_rng.gen_range(-scale..scale))
+                    .map(|_| local_rng.random_range(-scale..scale))
                     .collect(),
             );
             self.entity_embeddings.insert(entity.to_string(), embedding);
@@ -179,7 +179,7 @@ impl HoLE {
             let mut local_rng = Random::default();
             let embedding = Array1::from_vec(
                 (0..self.config.base.dimensions)
-                    .map(|_| local_rng.gen_range(-scale..scale))
+                    .map(|_| local_rng.random_range(-scale..scale))
                     .collect(),
             );
             self.relation_embeddings
@@ -195,7 +195,7 @@ impl HoLE {
 
         for _ in 0..self.config.num_negatives {
             // Randomly corrupt subject or object
-            if local_rng.gen_range(0.0..1.0) < 0.5 {
+            if local_rng.random_range(0.0..1.0) < 0.5 {
                 // Corrupt subject
                 let random_subject =
                     entity_list[local_rng.random_range(0..entity_list.len())].clone();

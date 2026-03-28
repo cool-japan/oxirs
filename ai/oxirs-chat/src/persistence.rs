@@ -483,7 +483,7 @@ impl SessionPersistenceManager {
             }
         }
 
-        sessions.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+        sessions.sort_by_key(|item| std::cmp::Reverse(item.modified_at));
         Ok(sessions)
     }
 

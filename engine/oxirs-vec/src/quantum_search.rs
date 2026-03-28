@@ -11,8 +11,7 @@ use crate::Vector;
 use anyhow::{anyhow, Result};
 use oxirs_core::parallel::*;
 use oxirs_core::simd::SimdOps;
-use scirs2_core::random::{Random, Rng};
-use scirs2_core::rngs::StdRng;
+use scirs2_core::random::{Random, RngExt, StdRng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -233,7 +232,7 @@ pub struct QuantumVectorSearch {
     quantum_states: Arc<RwLock<HashMap<String, QuantumState>>>,
     search_history: Arc<RwLock<Vec<QuantumSearchResult>>>,
     optimization_cache: Arc<RwLock<HashMap<String, f32>>>,
-    rng: Arc<RwLock<Random<StdRng>>>,
+    rng: Arc<RwLock<StdRng>>,
 }
 
 /// Result of quantum-inspired search with quantum metrics
@@ -690,7 +689,7 @@ impl QuantumVectorSearch {
     fn generate_random(&self) -> f32 {
         // Use proper random number generator
         let mut rng = self.rng.write().expect("rng lock should not be poisoned");
-        rng.gen_range(0.0..1.0)
+        rng.random_range(0.0..1.0)
     }
 }
 

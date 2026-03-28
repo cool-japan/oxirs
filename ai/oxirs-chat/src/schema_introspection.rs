@@ -455,7 +455,7 @@ impl SchemaIntrospector {
 
         // Add most common namespaces
         let mut ns_vec: Vec<_> = namespaces.into_iter().collect();
-        ns_vec.sort_by(|a, b| b.1.cmp(&a.1));
+        ns_vec.sort_by_key(|item| std::cmp::Reverse(item.1));
 
         for (i, (ns, _count)) in ns_vec.iter().take(10).enumerate() {
             let prefix = format!("ns{}", i + 1);

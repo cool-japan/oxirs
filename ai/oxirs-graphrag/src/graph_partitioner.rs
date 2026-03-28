@@ -269,9 +269,8 @@ impl GraphPartitioner {
 
         // We produce up to k partitions by splitting iteratively
         let target_splits = k.saturating_sub(1);
-        let mut current_k = 1usize;
 
-        for _ in 0..target_splits {
+        for (current_k, _) in (1usize..).zip(0..target_splits) {
             if current_k >= k {
                 break;
             }
@@ -296,7 +295,6 @@ impl GraphPartitioner {
             // BFS from the first node; assign second half to new_part
             let half = part_nodes.len() / 2;
             let new_part = current_k;
-            current_k += 1;
 
             let mut bfs_order: Vec<usize> = Vec::with_capacity(part_nodes.len());
             let mut visited = vec![false; n];

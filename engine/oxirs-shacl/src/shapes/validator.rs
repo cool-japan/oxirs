@@ -275,21 +275,21 @@ impl ShapeValidator {
         _depth: usize,
     ) -> Result<()> {
         match constraint {
-            Constraint::Node(node_constraint) => {
-                if !shape_map.contains_key(&node_constraint.shape) {
-                    return Err(ShaclError::ShapeValidation(format!(
-                        "Referenced shape '{}' not found",
-                        node_constraint.shape
-                    )));
-                }
+            Constraint::Node(node_constraint)
+                if !shape_map.contains_key(&node_constraint.shape) =>
+            {
+                return Err(ShaclError::ShapeValidation(format!(
+                    "Referenced shape '{}' not found",
+                    node_constraint.shape
+                )));
             }
-            Constraint::QualifiedValueShape(qvs_constraint) => {
-                if !shape_map.contains_key(&qvs_constraint.shape) {
-                    return Err(ShaclError::ShapeValidation(format!(
-                        "Referenced shape '{}' not found in qualified value shape",
-                        qvs_constraint.shape
-                    )));
-                }
+            Constraint::QualifiedValueShape(qvs_constraint)
+                if !shape_map.contains_key(&qvs_constraint.shape) =>
+            {
+                return Err(ShaclError::ShapeValidation(format!(
+                    "Referenced shape '{}' not found in qualified value shape",
+                    qvs_constraint.shape
+                )));
             }
             Constraint::And(and_constraint) => {
                 for shape_id in &and_constraint.shapes {
@@ -318,13 +318,11 @@ impl ShapeValidator {
                     }
                 }
             }
-            Constraint::Not(not_constraint) => {
-                if !shape_map.contains_key(&not_constraint.shape) {
-                    return Err(ShaclError::ShapeValidation(format!(
-                        "Referenced shape '{}' not found in NOT constraint",
-                        not_constraint.shape
-                    )));
-                }
+            Constraint::Not(not_constraint) if !shape_map.contains_key(&not_constraint.shape) => {
+                return Err(ShaclError::ShapeValidation(format!(
+                    "Referenced shape '{}' not found in NOT constraint",
+                    not_constraint.shape
+                )));
             }
             _ => {
                 // Other constraints don't reference shapes

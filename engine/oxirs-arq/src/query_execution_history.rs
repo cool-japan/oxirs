@@ -868,7 +868,7 @@ impl QueryExecutionHistory {
 
     fn top_by_frequency(&self) -> Vec<QueryGroupStats> {
         let mut groups: Vec<_> = self.groups.values().cloned().collect();
-        groups.sort_by(|a, b| b.execution_count.cmp(&a.execution_count));
+        groups.sort_by_key(|b| std::cmp::Reverse(b.execution_count));
         groups.truncate(self.config.top_queries_count);
         groups
     }

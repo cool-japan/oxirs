@@ -190,7 +190,7 @@ impl<'a> QueryBuilder<'a> {
         let points_processed = points.len();
 
         // Sort by timestamp
-        points.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        points.sort_by_key(|p| p.timestamp);
 
         // Apply window function if specified
         if let Some(spec) = self.window {

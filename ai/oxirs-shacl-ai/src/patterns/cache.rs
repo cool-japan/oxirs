@@ -375,7 +375,7 @@ impl PatternCache {
             .map(|(key, stats)| (key.clone(), stats.access_count))
             .collect();
 
-        access_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        access_pairs.sort_by_key(|item| std::cmp::Reverse(item.1));
         access_pairs.truncate(limit);
         access_pairs
     }
@@ -905,7 +905,7 @@ impl AdaptiveEvictionManager {
             })
             .collect();
 
-        candidates.sort_by(|a, b| a.1.cmp(&b.1)); // Oldest first
+        candidates.sort_by_key(|a| a.1); // Oldest first
         candidates
             .into_iter()
             .take(required_space)
@@ -929,7 +929,7 @@ impl AdaptiveEvictionManager {
             })
             .collect();
 
-        candidates.sort_by(|a, b| a.1.cmp(&b.1)); // Least frequent first
+        candidates.sort_by_key(|a| a.1); // Least frequent first
         candidates
             .into_iter()
             .take(required_space)

@@ -477,7 +477,7 @@ fn extract_owl_ontology(
 }
 
 /// Generate RDF data conforming to OWL ontology
-pub fn generate_from_owl_ontology<R: scirs2_core::RngCore>(
+pub fn generate_from_owl_ontology<R: scirs2_core::RngExt>(
     ontology: &OwlOntology,
     instance_count: usize,
     rng: &mut Random<R>,
@@ -531,7 +531,7 @@ pub fn generate_from_owl_ontology<R: scirs2_core::RngCore>(
 }
 
 /// Generate instances for a specific OWL class
-fn generate_owl_class_instances<R: scirs2_core::RngCore>(
+fn generate_owl_class_instances<R: scirs2_core::RngExt>(
     class_def: &OwlClass,
     count: usize,
     ontology: &OwlOntology,
@@ -619,7 +619,7 @@ fn generate_owl_class_instances<R: scirs2_core::RngCore>(
 }
 
 /// Generate property values for an OWL property
-fn generate_owl_property_values<R: scirs2_core::RngCore>(
+fn generate_owl_property_values<R: scirs2_core::RngExt>(
     subject_uri: &str,
     prop: &OwlProperty,
     ontology: &OwlOntology,
@@ -703,10 +703,7 @@ fn generate_owl_property_values<R: scirs2_core::RngCore>(
 }
 
 /// Generate a literal value for a given XSD datatype
-fn generate_literal_value<R: scirs2_core::RngCore>(
-    datatype_uri: &str,
-    rng: &mut Random<R>,
-) -> Term {
+fn generate_literal_value<R: scirs2_core::RngExt>(datatype_uri: &str, rng: &mut Random<R>) -> Term {
     let value_str = match datatype_uri {
         dt if dt == format!("{}string", XSD_NS) => {
             let len = rng.gen_range(5..30);
@@ -767,7 +764,7 @@ fn generate_literal_value<R: scirs2_core::RngCore>(
 }
 
 /// Generate random string
-fn generate_random_string<R: scirs2_core::RngCore>(rng: &mut Random<R>, length: usize) -> String {
+fn generate_random_string<R: scirs2_core::RngExt>(rng: &mut Random<R>, length: usize) -> String {
     const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
     (0..length)
         .map(|_| {

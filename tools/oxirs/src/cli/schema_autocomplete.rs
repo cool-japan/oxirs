@@ -89,7 +89,7 @@ impl SchemaInfo {
             .collect();
 
         // Sort by frequency (descending)
-        props.sort_by(|a, b| b.1.cmp(&a.1));
+        props.sort_by_key(|item| std::cmp::Reverse(item.1));
         props
     }
 

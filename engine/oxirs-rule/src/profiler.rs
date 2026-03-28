@@ -262,7 +262,7 @@ impl RuleProfiler {
             })
             .collect();
 
-        hotspots.sort_by(|a, b| b.1.cmp(&a.1));
+        hotspots.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         let total_time_micros = self.total_inference_time.as_micros() as f64;
 

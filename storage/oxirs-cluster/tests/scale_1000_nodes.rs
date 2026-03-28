@@ -22,7 +22,8 @@ use oxirs_cluster::raft::{OxirsNodeId, RaftNode, RdfCommand};
 use oxirs_cluster::raft_optimization::{
     BatchConfig, ConnectionPool, ConnectionPoolConfig, RaftOptimizer,
 };
-use scirs2_core::random::{rng, Rng};
+use scirs2_core::random::rng;
+use scirs2_core::RngExt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;

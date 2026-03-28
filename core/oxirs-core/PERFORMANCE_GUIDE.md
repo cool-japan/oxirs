@@ -37,7 +37,7 @@ This guide shows you how to leverage these features for maximum performance.
 ✅ **Enable all performance features:**
 \`\`\`toml
 [dependencies]
-oxirs-core = { version = "0.2.2", features = ["parallel", "simd"] }
+oxirs-core = { version = "0.2.3", features = ["parallel", "simd"] }
 \`\`\`
 
 ✅ **Use zero-copy operations for large datasets:**

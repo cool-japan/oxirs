@@ -476,29 +476,23 @@ impl SammParser {
 
             if let Some(&value) = property_values.get(prop_name) {
                 match &constraint.constraint_type {
-                    ConstraintType::MinValue(min) => {
-                        if value < *min {
-                            return Err(PhysicsError::ConstraintViolation(format!(
-                                "Property {} value {} is less than minimum {}",
-                                prop_name, value, min
-                            )));
-                        }
+                    ConstraintType::MinValue(min) if value < *min => {
+                        return Err(PhysicsError::ConstraintViolation(format!(
+                            "Property {} value {} is less than minimum {}",
+                            prop_name, value, min
+                        )));
                     }
-                    ConstraintType::MaxValue(max) => {
-                        if value > *max {
-                            return Err(PhysicsError::ConstraintViolation(format!(
-                                "Property {} value {} is greater than maximum {}",
-                                prop_name, value, max
-                            )));
-                        }
+                    ConstraintType::MaxValue(max) if value > *max => {
+                        return Err(PhysicsError::ConstraintViolation(format!(
+                            "Property {} value {} is greater than maximum {}",
+                            prop_name, value, max
+                        )));
                     }
-                    ConstraintType::Range(min, max) => {
-                        if value < *min || value > *max {
-                            return Err(PhysicsError::ConstraintViolation(format!(
-                                "Property {} value {} is outside range [{}, {}]",
-                                prop_name, value, min, max
-                            )));
-                        }
+                    ConstraintType::Range(min, max) if (value < *min || value > *max) => {
+                        return Err(PhysicsError::ConstraintViolation(format!(
+                            "Property {} value {} is outside range [{}, {}]",
+                            prop_name, value, min, max
+                        )));
                     }
                     _ => {}
                 }

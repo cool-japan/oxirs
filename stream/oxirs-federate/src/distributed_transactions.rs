@@ -13,8 +13,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use scirs2_core::random::rng;
-use scirs2_core::RngCore;
+use scirs2_core::random::{rng, Rng};
 
 /// Distributed transaction coordinator
 #[derive(Debug, Clone)]

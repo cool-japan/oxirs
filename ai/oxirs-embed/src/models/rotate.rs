@@ -12,7 +12,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use scirs2_core::ndarray_ext::Array2;
 #[allow(unused_imports)]
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;

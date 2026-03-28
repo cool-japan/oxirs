@@ -245,7 +245,7 @@ impl ContextAwareCostAdjuster {
         // Keep only the most useful patterns
         if self.context_patterns.len() > 100 {
             self.context_patterns
-                .sort_by(|a, b| b.usage_count.cmp(&a.usage_count));
+                .sort_by_key(|item| std::cmp::Reverse(item.usage_count));
             self.context_patterns.truncate(100);
         }
 

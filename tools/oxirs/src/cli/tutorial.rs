@@ -313,11 +313,7 @@ impl TutorialManager {
 
         let completed = self.completed_lessons.len();
         let total = self.lessons.len();
-        let percentage = if total > 0 {
-            (completed * 100) / total
-        } else {
-            0
-        };
+        let percentage = (completed * 100).checked_div(total).unwrap_or(0);
 
         println!(
             "\nCompleted: {}/{} lessons ({}%)",

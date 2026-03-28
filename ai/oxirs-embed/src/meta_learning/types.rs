@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
-use scirs2_core::random::{thread_rng, Rng};
+use scirs2_core::random::{thread_rng, RngExt};
 
 /// Configuration for meta-learning systems
 #[derive(Debug, Clone, Serialize, Deserialize)]

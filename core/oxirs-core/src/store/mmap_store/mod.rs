@@ -1376,12 +1376,12 @@ impl MmapStore {
 
         let subject_counts = self.subject_access_counts.read();
         let mut subject_vec: Vec<_> = subject_counts.iter().map(|(&k, &v)| (k, v)).collect();
-        subject_vec.sort_by(|a, b| b.1.cmp(&a.1));
+        subject_vec.sort_by_key(|&(_, count)| std::cmp::Reverse(count));
         stats.hot_subjects = subject_vec.into_iter().take(10).collect();
 
         let predicate_counts = self.predicate_access_counts.read();
         let mut predicate_vec: Vec<_> = predicate_counts.iter().map(|(&k, &v)| (k, v)).collect();
-        predicate_vec.sort_by(|a, b| b.1.cmp(&a.1));
+        predicate_vec.sort_by_key(|&(_, count)| std::cmp::Reverse(count));
         stats.hot_predicates = predicate_vec.into_iter().take(10).collect();
 
         stats

@@ -712,11 +712,11 @@ impl StreamingQueryEngine {
             name: query.registration.name.clone(),
             evaluations: query.metrics.evaluations,
             results_produced: query.metrics.results_produced,
-            avg_latency_us: if query.metrics.evaluations > 0 {
-                query.metrics.total_latency_us / query.metrics.evaluations
-            } else {
-                0
-            },
+            avg_latency_us: query
+                .metrics
+                .total_latency_us
+                .checked_div(query.metrics.evaluations)
+                .unwrap_or(0),
             window_size: query.state.triples.len(),
             subscriber_count: query.subscribers.len(),
             errors: query.metrics.errors,

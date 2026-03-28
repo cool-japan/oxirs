@@ -975,7 +975,7 @@ impl QueryDecomposer {
     pub fn optimize_parallel_join_ordering(&self, plan: ComponentPlan) -> Result<ComponentPlan> {
         // Sort steps by estimated result size (smallest first for efficient joins)
         let mut optimized_steps = plan.steps;
-        optimized_steps.sort_by(|a, b| a.estimated_results.cmp(&b.estimated_results));
+        optimized_steps.sort_by_key(|a| a.estimated_results);
 
         Ok(ComponentPlan {
             strategy: plan.strategy,

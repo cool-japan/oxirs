@@ -96,33 +96,29 @@ pub fn is_complete_turtle_statement(statement: &str) -> bool {
         match ch {
             '\\' if in_string => escape_next = true,
             '"' => in_string = !in_string,
-            '<' if !in_string => {
-                // Check for quoted triple start
-                if chars.peek() == Some(&'<') {
-                    chars.next(); // consume second '<'
-                    quoted_triple_depth += 1;
-                }
+            '<' if !in_string && chars.peek() == Some(&'<') => {
+                // Quoted triple start
+                chars.next(); // consume second '<'
+                quoted_triple_depth += 1;
             }
-            '>' if !in_string && quoted_triple_depth > 0 => {
-                // Check for quoted triple end
-                if chars.peek() == Some(&'>') {
-                    chars.next(); // consume second '>'
-                    quoted_triple_depth = quoted_triple_depth.saturating_sub(1);
-                }
+            '>' if !in_string && quoted_triple_depth > 0 && chars.peek() == Some(&'>') => {
+                // Quoted triple end
+                chars.next(); // consume second '>'
+                quoted_triple_depth = quoted_triple_depth.saturating_sub(1);
             }
-            '{' if !in_string && quoted_triple_depth == 0 => {
-                // Check for annotation block start {|
-                if chars.peek() == Some(&'|') {
-                    chars.next(); // consume '|'
-                    annotation_depth += 1;
-                }
+            '{' if !in_string && quoted_triple_depth == 0 && chars.peek() == Some(&'|') => {
+                // Annotation block start {|
+                chars.next(); // consume '|'
+                annotation_depth += 1;
             }
-            '|' if !in_string && quoted_triple_depth == 0 && annotation_depth > 0 => {
-                // Check for annotation block end |}
-                if chars.peek() == Some(&'}') {
-                    chars.next(); // consume '}'
-                    annotation_depth = annotation_depth.saturating_sub(1);
-                }
+            '|' if !in_string
+                && quoted_triple_depth == 0
+                && annotation_depth > 0
+                && chars.peek() == Some(&'}') =>
+            {
+                // Annotation block end |}
+                chars.next(); // consume '}'
+                annotation_depth = annotation_depth.saturating_sub(1);
             }
             '.' if !in_string && quoted_triple_depth == 0 && annotation_depth == 0 => {
                 // Check if this is a period in a number (e.g., 0.9)
@@ -187,19 +183,15 @@ pub fn is_complete_trig_statement(statement: &str, state: &mut TrigParserState) 
         match ch {
             '\\' if in_string => escape_next = true,
             '"' => in_string = !in_string,
-            '<' if !in_string => {
-                // Check for quoted triple start
-                if chars.peek() == Some(&'<') {
-                    chars.next(); // consume second '<'
-                    quoted_triple_depth += 1;
-                }
+            '<' if !in_string && chars.peek() == Some(&'<') => {
+                // Quoted triple start
+                chars.next(); // consume second '<'
+                quoted_triple_depth += 1;
             }
-            '>' if !in_string && quoted_triple_depth > 0 => {
-                // Check for quoted triple end
-                if chars.peek() == Some(&'>') {
-                    chars.next(); // consume second '>'
-                    quoted_triple_depth = quoted_triple_depth.saturating_sub(1);
-                }
+            '>' if !in_string && quoted_triple_depth > 0 && chars.peek() == Some(&'>') => {
+                // Quoted triple end
+                chars.next(); // consume second '>'
+                quoted_triple_depth = quoted_triple_depth.saturating_sub(1);
             }
             '{' if !in_string && quoted_triple_depth == 0 => {
                 brace_count += 1;

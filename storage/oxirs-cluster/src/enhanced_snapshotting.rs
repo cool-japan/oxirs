@@ -555,7 +555,7 @@ impl EnhancedSnapshotManager {
         }
 
         // Sort by timestamp (newest first)
-        snapshots.sort_by(|a, b| b.base.timestamp.cmp(&a.base.timestamp));
+        snapshots.sort_by_key(|b| std::cmp::Reverse(b.base.timestamp));
 
         Ok(snapshots)
     }

@@ -121,15 +121,11 @@ pub fn validate_geometry(geometry: &Geometry) -> ValidationResult {
 
     // Geometry-specific validation
     match &geometry.geom {
-        GeoGeometry::Point(p) => {
-            if p.x().is_nan() || p.y().is_nan() {
-                result = result.with_error("Point has NaN coordinates".to_string());
-            }
+        GeoGeometry::Point(p) if (p.x().is_nan() || p.y().is_nan()) => {
+            result = result.with_error("Point has NaN coordinates".to_string());
         }
-        GeoGeometry::LineString(ls) => {
-            if ls.0.len() < 2 {
-                result = result.with_error("LineString must have at least 2 points".to_string());
-            }
+        GeoGeometry::LineString(ls) if ls.0.len() < 2 => {
+            result = result.with_error("LineString must have at least 2 points".to_string());
         }
         GeoGeometry::Polygon(poly) => {
             // Check exterior ring
@@ -154,10 +150,8 @@ pub fn validate_geometry(geometry: &Geometry) -> ValidationResult {
                 }
             }
         }
-        GeoGeometry::MultiPoint(mp) => {
-            if mp.0.is_empty() {
-                result = result.with_warning("MultiPoint is empty".to_string());
-            }
+        GeoGeometry::MultiPoint(mp) if mp.0.is_empty() => {
+            result = result.with_warning("MultiPoint is empty".to_string());
         }
         GeoGeometry::MultiLineString(mls) => {
             if mls.0.is_empty() {
@@ -172,10 +166,8 @@ pub fn validate_geometry(geometry: &Geometry) -> ValidationResult {
                 }
             }
         }
-        GeoGeometry::MultiPolygon(mpoly) => {
-            if mpoly.0.is_empty() {
-                result = result.with_warning("MultiPolygon is empty".to_string());
-            }
+        GeoGeometry::MultiPolygon(mpoly) if mpoly.0.is_empty() => {
+            result = result.with_warning("MultiPolygon is empty".to_string());
         }
         _ => {}
     }
@@ -1060,9 +1052,9 @@ pub fn check_ogc_compliance(geometry: &Geometry) -> ValidationResult {
 
     // Add OGC-specific checks
     match &geometry.geom {
-        GeoGeometry::LineString(ls) => {
+        GeoGeometry::LineString(ls)
             // OGC SF: LineString must have at least 2 distinct points
-            if ls.0.len() >= 2 {
+            if ls.0.len() >= 2 => {
                 let first =
                     ls.0.first()
                         .expect("linestring should have at least one point");
@@ -1075,7 +1067,6 @@ pub fn check_ogc_compliance(geometry: &Geometry) -> ValidationResult {
                     );
                 }
             }
-        }
         GeoGeometry::Polygon(poly) => {
             // OGC SF: Polygon boundary must be simple (no self-intersections)
             // OGC SF: Interior rings must be inside exterior ring

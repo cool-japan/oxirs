@@ -1131,11 +1131,11 @@ impl SchemaGenerator {
                 GraphQLType::Object(obj) => {
                     self.write_object_type_sdl(&mut sdl, obj);
                 }
-                GraphQLType::Scalar(scalar) => {
-                    if !["String", "Int", "Float", "Boolean", "ID"].contains(&scalar.name.as_str())
-                    {
-                        self.write_scalar_type_sdl(&mut sdl, scalar);
-                    }
+                GraphQLType::Scalar(scalar)
+                    if !["String", "Int", "Float", "Boolean", "ID"]
+                        .contains(&scalar.name.as_str()) =>
+                {
+                    self.write_scalar_type_sdl(&mut sdl, scalar);
                 }
                 GraphQLType::Enum(enum_type) => {
                     self.write_enum_type_sdl(&mut sdl, enum_type);

@@ -295,7 +295,7 @@ impl ShardRouter {
         // Try prefix matching for more flexible namespace routing
         // Sort by length descending to find the most specific match first
         let mut prefixes: Vec<_> = namespace_mapping.iter().collect();
-        prefixes.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        prefixes.sort_by_key(|b| std::cmp::Reverse(b.0.len()));
 
         for (prefix, &shard_id) in prefixes {
             if clean_iri.starts_with(prefix) {

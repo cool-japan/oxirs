@@ -1169,16 +1169,11 @@ impl TargetSelector {
                 hints
                     .push("# Consider using RDFS reasoning for subclass relationships".to_string());
             }
-            Target::Union(union_target) => {
-                if union_target.targets.len() > 5 {
-                    hints.push("# Large union - consider query rewriting".to_string());
-                }
+            Target::Union(union_target) if union_target.targets.len() > 5 => {
+                hints.push("# Large union - consider query rewriting".to_string());
             }
-            Target::Intersection(intersection_target) => {
-                if intersection_target.targets.len() > 3 {
-                    hints
-                        .push("# Complex intersection - consider selectivity ordering".to_string());
-                }
+            Target::Intersection(intersection_target) if intersection_target.targets.len() > 3 => {
+                hints.push("# Complex intersection - consider selectivity ordering".to_string());
             }
             _ => {}
         }

@@ -509,7 +509,7 @@ impl JitQueryEngine {
     pub async fn hot_queries(&self, limit: usize) -> Vec<QueryPlan> {
         let plan_cache = self.plan_cache.read().await;
         let mut plans: Vec<_> = plan_cache.values().cloned().collect();
-        plans.sort_by(|a, b| b.execution_count.cmp(&a.execution_count));
+        plans.sort_by_key(|b| std::cmp::Reverse(b.execution_count));
         plans.into_iter().take(limit).collect()
     }
 

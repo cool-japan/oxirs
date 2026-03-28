@@ -1133,7 +1133,7 @@ impl CanOpenNode {
             return Err(CanbusError::FrameTooLarge(data.len()));
         }
         Ok(CanMessage::with_bytes(
-            canopen_can_id(base, self.node_id) as u32,
+            canopen_can_id(base, self.node_id),
             data,
         ))
     }

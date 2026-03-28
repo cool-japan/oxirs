@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -342,8 +343,8 @@ impl MemoryTracker {
             }
         }
 
-        if stats.total_queries > 0 {
-            stats.avg_allocation_per_query = stats.total_allocated / stats.total_queries;
+        if let Some(avg) = stats.total_allocated.checked_div(stats.total_queries) {
+            stats.avg_allocation_per_query = avg;
             stats.leak_rate = stats.queries_with_leaks as f64 / stats.total_queries as f64;
         }
 
@@ -357,7 +358,7 @@ impl MemoryTracker {
         let mut sorted = completed.clone();
         // Sort by total_allocated (query's own allocations) rather than peak_memory
         // which includes varying system memory baseline
-        sorted.sort_by(|a, b| b.total_allocated.cmp(&a.total_allocated));
+        sorted.sort_by_key(|s| Reverse(s.total_allocated));
         sorted.truncate(limit);
         sorted
     }

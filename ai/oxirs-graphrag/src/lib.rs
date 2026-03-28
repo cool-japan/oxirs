@@ -1,8 +1,8 @@
 //! # OxiRS GraphRAG
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.2.2)
+//! **Status**: Production Release (v0.2.4)
 //!
 //! GraphRAG (Graph Retrieval-Augmented Generation) combines vector similarity search
 //! with graph topology traversal for enhanced knowledge retrieval.

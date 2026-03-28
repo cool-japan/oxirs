@@ -50,6 +50,7 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -506,7 +507,7 @@ impl QueryBatcher {
         mut queries: Vec<BatchedQuery>,
     ) -> Result<Vec<QueryResult>, String> {
         // Sort by priority (highest first)
-        queries.sort_by(|a, b| b.priority.cmp(&a.priority));
+        queries.sort_by_key(|q| Reverse(q.priority));
         self.execute_parallel(queries).await
     }
 

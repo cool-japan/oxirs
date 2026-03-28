@@ -287,7 +287,7 @@ fn extract_property_shape(property_uri: &str, quads: &[Quad]) -> Option<Property
 }
 
 /// Generate RDF data conforming to SHACL shapes
-pub fn generate_from_shapes<R: scirs2_core::RngCore>(
+pub fn generate_from_shapes<R: scirs2_core::RngExt>(
     shapes: &[ShaclShape],
     instance_count: usize,
     rng: &mut Random<R>,
@@ -338,7 +338,7 @@ pub fn generate_from_shapes<R: scirs2_core::RngCore>(
 }
 
 /// Generate property values conforming to constraints
-fn generate_property_values<R: scirs2_core::RngCore>(
+fn generate_property_values<R: scirs2_core::RngExt>(
     subject_uri: &str,
     prop: &PropertyShape,
     rng: &mut Random<R>,
@@ -404,7 +404,7 @@ fn generate_property_values<R: scirs2_core::RngCore>(
 }
 
 /// Generate typed literal value
-fn generate_typed_literal<R: scirs2_core::RngCore>(
+fn generate_typed_literal<R: scirs2_core::RngExt>(
     datatype: &str,
     prop: &PropertyShape,
     rng: &mut Random<R>,
@@ -477,7 +477,7 @@ fn generate_typed_literal<R: scirs2_core::RngCore>(
 }
 
 /// Generate random string
-fn generate_random_string<R: scirs2_core::RngCore>(rng: &mut Random<R>, length: usize) -> String {
+fn generate_random_string<R: scirs2_core::RngExt>(rng: &mut Random<R>, length: usize) -> String {
     const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
     (0..length)
         .map(|_| {
@@ -488,7 +488,7 @@ fn generate_random_string<R: scirs2_core::RngCore>(rng: &mut Random<R>, length: 
 }
 
 /// Generate string from regex pattern (simplified)
-fn generate_from_pattern<R: scirs2_core::RngCore>(
+fn generate_from_pattern<R: scirs2_core::RngExt>(
     pattern: &str,
     max_length: usize,
     rng: &mut Random<R>,
@@ -506,10 +506,7 @@ fn generate_from_pattern<R: scirs2_core::RngCore>(
     }
 }
 
-fn generate_lowercase_string<R: scirs2_core::RngCore>(
-    rng: &mut Random<R>,
-    length: usize,
-) -> String {
+fn generate_lowercase_string<R: scirs2_core::RngExt>(rng: &mut Random<R>, length: usize) -> String {
     const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
     (0..length)
         .map(|_| {
@@ -519,10 +516,7 @@ fn generate_lowercase_string<R: scirs2_core::RngCore>(
         .collect()
 }
 
-fn generate_uppercase_string<R: scirs2_core::RngCore>(
-    rng: &mut Random<R>,
-    length: usize,
-) -> String {
+fn generate_uppercase_string<R: scirs2_core::RngExt>(rng: &mut Random<R>, length: usize) -> String {
     const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     (0..length)
         .map(|_| {
@@ -532,7 +526,7 @@ fn generate_uppercase_string<R: scirs2_core::RngCore>(
         .collect()
 }
 
-fn generate_numeric_string<R: scirs2_core::RngCore>(rng: &mut Random<R>, length: usize) -> String {
+fn generate_numeric_string<R: scirs2_core::RngExt>(rng: &mut Random<R>, length: usize) -> String {
     const CHARS: &[u8] = b"0123456789";
     (0..length)
         .map(|_| {

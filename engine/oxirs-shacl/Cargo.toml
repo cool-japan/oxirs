@@ -86,6 +86,7 @@ serde = []
 async = ["tokio", "futures", "futures-util", "tokio-stream"]
 parallel = ["rayon"]
 lsp = ["tower-lsp", "tower", "async", "tokio/full"]
+gpu = ["scirs2-core/gpu"]
 
 [[bench]]
 name = "validation_benchmarks"

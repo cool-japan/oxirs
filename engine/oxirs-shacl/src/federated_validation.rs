@@ -1208,11 +1208,9 @@ impl LoadBalancer {
     /// Round-robin endpoint selection
     fn select_round_robin(&self, available: &[Url], count: usize) -> Vec<Url> {
         let mut selected = Vec::new();
-        let mut counter = self.round_robin_counter;
 
-        for _ in 0..count.min(available.len()) {
+        for (counter, _) in (self.round_robin_counter..).zip(0..count.min(available.len())) {
             selected.push(available[counter % available.len()].clone());
-            counter += 1;
         }
 
         selected

@@ -1,6 +1,6 @@
 # OxiRS TSDB - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -46,7 +46,7 @@
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ Gorilla compression, delta-of-delta, columnar storage, WAL, hybrid RDF/TSDB, 128 tests
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ 1M+ writes/sec sustained performance
 - ✅ Memory usage profiling and optimization
 - ✅ Advanced compression (adaptive, dictionary, RLE)
@@ -85,4 +85,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TSDB v0.2.2 - Time-series database for IoT-scale workloads*
+*OxiRS TSDB v0.2.3 - Time-series database for IoT-scale workloads*

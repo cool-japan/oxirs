@@ -1,6 +1,6 @@
 # OxiRS SHACL-AI - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -86,7 +86,7 @@
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ GNNs, Transformer-based constraint generation, RL optimization, federated learning, 555 tests
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Enhanced GPU acceleration across all models
 - ✅ Distributed training support
 - ✅ Advanced model ensembles
@@ -110,4 +110,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS SHACL-AI v0.2.2 - AI-enhanced SHACL validation*
+*OxiRS SHACL-AI v0.2.3 - AI-enhanced SHACL validation*

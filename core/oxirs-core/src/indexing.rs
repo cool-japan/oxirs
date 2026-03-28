@@ -796,25 +796,19 @@ impl IndexManager {
 
         if frequency >= self.config.min_query_frequency {
             match pattern {
-                QueryPattern::SubjectOnly => {
-                    if !self.indexes.contains_key("subject") {
-                        self.create_subject_index();
-                    }
+                QueryPattern::SubjectOnly if !self.indexes.contains_key("subject") => {
+                    self.create_subject_index();
                 }
-                QueryPattern::PredicateOnly => {
-                    if !self.indexes.contains_key("predicate") {
-                        self.create_predicate_index();
-                    }
+                QueryPattern::PredicateOnly if !self.indexes.contains_key("predicate") => {
+                    self.create_predicate_index();
                 }
-                QueryPattern::ObjectOnly => {
-                    if !self.indexes.contains_key("object") {
-                        self.create_object_index();
-                    }
+                QueryPattern::ObjectOnly if !self.indexes.contains_key("object") => {
+                    self.create_object_index();
                 }
-                QueryPattern::SubjectPredicate => {
-                    if !self.indexes.contains_key("subject_predicate") {
-                        self.create_subject_predicate_index();
-                    }
+                QueryPattern::SubjectPredicate
+                    if !self.indexes.contains_key("subject_predicate") =>
+                {
+                    self.create_subject_predicate_index();
                 }
                 _ => {} // Other patterns handled by existing indexes
             }

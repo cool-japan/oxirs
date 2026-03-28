@@ -16,7 +16,7 @@
 //! - Multi-objective optimization with Pareto frontier
 
 use anyhow::{anyhow, Result};
-use scirs2_core::random::{rng, Rng};
+use scirs2_core::random::{rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};

@@ -2,6 +2,8 @@
 //!
 //! Provides efficient time-range queries over time-series data.
 
+use std::cmp::Reverse;
+
 use crate::error::TsdbResult;
 use crate::series::DataPoint;
 use crate::storage::TimeChunk;
@@ -101,9 +103,9 @@ impl RangeQuery {
 
         // Sort by timestamp
         if self.ascending {
-            results.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+            results.sort_by_key(|r| r.timestamp);
         } else {
-            results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            results.sort_by_key(|r| Reverse(r.timestamp));
         }
 
         // Apply limit after sorting

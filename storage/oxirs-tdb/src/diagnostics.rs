@@ -502,9 +502,8 @@ impl DiagnosticCheck for StorageEfficiencyCheck {
         let mut results = Vec::new();
 
         // Calculate storage per triple
-        if context.triple_count > 0 {
-            let bytes_per_triple = context.storage_size_bytes / context.triple_count;
-
+        if let Some(bytes_per_triple) = context.storage_size_bytes.checked_div(context.triple_count)
+        {
             if bytes_per_triple > 500 {
                 results.push(
                     DiagnosticResult::new(self.category(), "Storage Overhead", Severity::Warning)
@@ -921,9 +920,8 @@ impl DiagnosticCheck for CorruptionDetectionCheck {
         }
 
         // Check for unreasonable storage efficiency
-        if context.triple_count > 0 {
-            let bytes_per_triple = context.storage_size_bytes / context.triple_count;
-
+        if let Some(bytes_per_triple) = context.storage_size_bytes.checked_div(context.triple_count)
+        {
             // Triples should not be less than ~50 bytes or more than 10KB each
             if bytes_per_triple < 50 {
                 results.push(

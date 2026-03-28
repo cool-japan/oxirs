@@ -1,6 +1,6 @@
 # OxiRS Physics - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -26,7 +26,7 @@
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ SimulationOrchestrator, thermal simulation (RK4), conservation law checking, provenance tracking
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ SPARQL queries to extract entity properties
 - ✅ RDF literals to Rust types with unit conversion
 - ✅ SPARQL UPDATE queries for simulation results
@@ -65,4 +65,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Physics v0.2.2 - Physics-informed digital twin simulation*
+*OxiRS Physics v0.2.3 - Physics-informed digital twin simulation*

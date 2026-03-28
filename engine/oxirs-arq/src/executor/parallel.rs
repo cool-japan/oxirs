@@ -94,7 +94,7 @@ impl WorkStealingQueue {
         let mut items = self.items.lock().expect("lock poisoned");
         items.push(item);
         // Sort by priority (highest first)
-        items.sort_by(|a, b| b.priority.cmp(&a.priority));
+        items.sort_by_key(|b| std::cmp::Reverse(b.priority));
     }
 
     fn steal_work(&self) -> Option<WorkItem> {

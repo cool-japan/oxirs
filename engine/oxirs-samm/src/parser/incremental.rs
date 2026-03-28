@@ -400,10 +400,8 @@ impl IncrementalParser {
                 ParseEvent::Progress {
                     bytes_parsed,
                     total_bytes,
-                } => {
-                    if !callback(bytes_parsed, total_bytes) {
-                        return Err(SammError::Other("Parsing cancelled by user".to_string()));
-                    }
+                } if !callback(bytes_parsed, total_bytes) => {
+                    return Err(SammError::Other("Parsing cancelled by user".to_string()));
                 }
                 ParseEvent::Completed { aspect } => {
                     result = Some(aspect);

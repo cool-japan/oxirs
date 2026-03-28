@@ -583,8 +583,7 @@ impl QueryPlanner {
             .await;
 
         // Update endpoints with health status
-        for (mut endpoint, health_result) in discovered.into_iter().zip(health_results.into_iter())
-        {
+        for (mut endpoint, health_result) in discovered.into_iter().zip(health_results) {
             if let Ok((_, health)) = health_result {
                 endpoint.health = health;
                 endpoint_map.insert(endpoint.url.to_string(), endpoint);

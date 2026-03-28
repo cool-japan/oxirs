@@ -147,71 +147,9 @@ pub fn parse_geojson_feature_collection(geojson: &str) -> Result<Vec<Geometry>> 
 /// assert!(geojson.contains("\"type\":\"Point\""));
 /// ```
 pub fn geometry_to_geojson(geometry: &Geometry) -> Result<String> {
-    use geojson::{Geometry as GeoJsonGeometry, Value};
+    use geojson::Geometry as GeoJsonGeometry;
 
-    let value = match &geometry.geom {
-        GeoGeometry::Point(p) => Value::Point(vec![p.x(), p.y()]),
-        GeoGeometry::LineString(ls) => {
-            let coords: Vec<Vec<f64>> = ls.coords().map(|c| vec![c.x, c.y]).collect();
-            Value::LineString(coords)
-        }
-        GeoGeometry::Polygon(poly) => {
-            let mut rings = Vec::new();
-
-            // Exterior ring
-            let exterior: Vec<Vec<f64>> =
-                poly.exterior().coords().map(|c| vec![c.x, c.y]).collect();
-            rings.push(exterior);
-
-            // Interior rings (holes)
-            for hole in poly.interiors() {
-                let interior: Vec<Vec<f64>> = hole.coords().map(|c| vec![c.x, c.y]).collect();
-                rings.push(interior);
-            }
-
-            Value::Polygon(rings)
-        }
-        GeoGeometry::MultiPoint(mp) => {
-            let coords: Vec<Vec<f64>> = mp.iter().map(|p| vec![p.x(), p.y()]).collect();
-            Value::MultiPoint(coords)
-        }
-        GeoGeometry::MultiLineString(mls) => {
-            let lines: Vec<Vec<Vec<f64>>> = mls
-                .iter()
-                .map(|ls| ls.coords().map(|c| vec![c.x, c.y]).collect())
-                .collect();
-            Value::MultiLineString(lines)
-        }
-        GeoGeometry::MultiPolygon(mpoly) => {
-            let polygons: Vec<Vec<Vec<Vec<f64>>>> = mpoly
-                .iter()
-                .map(|poly| {
-                    let mut rings = Vec::new();
-
-                    // Exterior ring
-                    let exterior: Vec<Vec<f64>> =
-                        poly.exterior().coords().map(|c| vec![c.x, c.y]).collect();
-                    rings.push(exterior);
-
-                    // Interior rings
-                    for hole in poly.interiors() {
-                        let interior: Vec<Vec<f64>> =
-                            hole.coords().map(|c| vec![c.x, c.y]).collect();
-                        rings.push(interior);
-                    }
-
-                    rings
-                })
-                .collect();
-            Value::MultiPolygon(polygons)
-        }
-        _ => {
-            return Err(GeoSparqlError::UnsupportedOperation(format!(
-                "Geometry type not supported for GeoJSON: {:?}",
-                geometry.geom
-            )))
-        }
-    };
+    let value = geo_to_geometry_value(&geometry.geom)?;
 
     let geojson_geom = GeoJsonGeometry::new(value);
     let json = serde_json::to_string(&geojson_geom).map_err(|e| {
@@ -219,6 +157,72 @@ pub fn geometry_to_geojson(geometry: &Geometry) -> Result<String> {
     })?;
 
     Ok(json)
+}
+
+/// Convert a geo_types Geometry to a geojson GeometryValue
+fn geo_to_geometry_value(geom: &GeoGeometry<f64>) -> Result<geojson::GeometryValue> {
+    use geojson::{GeometryValue, Position};
+
+    match geom {
+        GeoGeometry::Point(p) => Ok(GeometryValue::new_point([p.x(), p.y()])),
+        GeoGeometry::LineString(ls) => {
+            let coords: Vec<Position> = ls.coords().map(|c| Position::from([c.x, c.y])).collect();
+            Ok(GeometryValue::LineString {
+                coordinates: coords,
+            })
+        }
+        GeoGeometry::Polygon(poly) => {
+            let rings = polygon_to_rings(poly);
+            Ok(GeometryValue::Polygon { coordinates: rings })
+        }
+        GeoGeometry::MultiPoint(mp) => {
+            let coords: Vec<Position> = mp.iter().map(|p| Position::from([p.x(), p.y()])).collect();
+            Ok(GeometryValue::MultiPoint {
+                coordinates: coords,
+            })
+        }
+        GeoGeometry::MultiLineString(mls) => {
+            let lines: Vec<Vec<Position>> = mls
+                .iter()
+                .map(|ls| ls.coords().map(|c| Position::from([c.x, c.y])).collect())
+                .collect();
+            Ok(GeometryValue::MultiLineString { coordinates: lines })
+        }
+        GeoGeometry::MultiPolygon(mpoly) => {
+            let polygons: Vec<Vec<Vec<Position>>> = mpoly.iter().map(polygon_to_rings).collect();
+            Ok(GeometryValue::MultiPolygon {
+                coordinates: polygons,
+            })
+        }
+        _ => Err(GeoSparqlError::UnsupportedOperation(format!(
+            "Geometry type not supported for GeoJSON: {:?}",
+            geom
+        ))),
+    }
+}
+
+/// Convert a geo_types Polygon to GeoJSON ring coordinates
+fn polygon_to_rings(poly: &Polygon<f64>) -> Vec<Vec<geojson::Position>> {
+    let mut rings = Vec::new();
+
+    // Exterior ring
+    let exterior: Vec<geojson::Position> = poly
+        .exterior()
+        .coords()
+        .map(|c| geojson::Position::from([c.x, c.y]))
+        .collect();
+    rings.push(exterior);
+
+    // Interior rings (holes)
+    for hole in poly.interiors() {
+        let interior: Vec<geojson::Position> = hole
+            .coords()
+            .map(|c| geojson::Position::from([c.x, c.y]))
+            .collect();
+        rings.push(interior);
+    }
+
+    rings
 }
 
 /// Convert a Geometry to GeoJSON Feature string
@@ -247,65 +251,9 @@ pub fn geometry_to_geojson_feature(
     geometry: &Geometry,
     properties: Option<&serde_json::Value>,
 ) -> Result<String> {
-    use geojson::{Feature, Geometry as GeoJsonGeometry, Value};
+    use geojson::{Feature, Geometry as GeoJsonGeometry};
 
-    let value = match &geometry.geom {
-        GeoGeometry::Point(p) => Value::Point(vec![p.x(), p.y()]),
-        GeoGeometry::LineString(ls) => {
-            let coords: Vec<Vec<f64>> = ls.coords().map(|c| vec![c.x, c.y]).collect();
-            Value::LineString(coords)
-        }
-        GeoGeometry::Polygon(poly) => {
-            let mut rings = Vec::new();
-            let exterior: Vec<Vec<f64>> =
-                poly.exterior().coords().map(|c| vec![c.x, c.y]).collect();
-            rings.push(exterior);
-
-            for hole in poly.interiors() {
-                let interior: Vec<Vec<f64>> = hole.coords().map(|c| vec![c.x, c.y]).collect();
-                rings.push(interior);
-            }
-
-            Value::Polygon(rings)
-        }
-        GeoGeometry::MultiPoint(mp) => {
-            let coords: Vec<Vec<f64>> = mp.iter().map(|p| vec![p.x(), p.y()]).collect();
-            Value::MultiPoint(coords)
-        }
-        GeoGeometry::MultiLineString(mls) => {
-            let lines: Vec<Vec<Vec<f64>>> = mls
-                .iter()
-                .map(|ls| ls.coords().map(|c| vec![c.x, c.y]).collect())
-                .collect();
-            Value::MultiLineString(lines)
-        }
-        GeoGeometry::MultiPolygon(mpoly) => {
-            let polygons: Vec<Vec<Vec<Vec<f64>>>> = mpoly
-                .iter()
-                .map(|poly| {
-                    let mut rings = Vec::new();
-                    let exterior: Vec<Vec<f64>> =
-                        poly.exterior().coords().map(|c| vec![c.x, c.y]).collect();
-                    rings.push(exterior);
-
-                    for hole in poly.interiors() {
-                        let interior: Vec<Vec<f64>> =
-                            hole.coords().map(|c| vec![c.x, c.y]).collect();
-                        rings.push(interior);
-                    }
-
-                    rings
-                })
-                .collect();
-            Value::MultiPolygon(polygons)
-        }
-        _ => {
-            return Err(GeoSparqlError::UnsupportedOperation(format!(
-                "Geometry type not supported for GeoJSON: {:?}",
-                geometry.geom
-            )))
-        }
-    };
+    let value = geo_to_geometry_value(&geometry.geom)?;
 
     let geojson_geom = GeoJsonGeometry::new(value);
 
@@ -329,9 +277,11 @@ pub fn geometry_to_geojson_feature(
 }
 
 /// Parse geometry value from GeoJSON
-fn parse_geometry_value(value: &geojson::Value) -> Result<GeoGeometry<f64>> {
+fn parse_geometry_value(value: &geojson::GeometryValue) -> Result<GeoGeometry<f64>> {
     match value {
-        geojson::Value::Point(coords) => {
+        geojson::GeometryValue::Point {
+            coordinates: coords,
+        } => {
             if coords.len() < 2 {
                 return Err(GeoSparqlError::ParseError(
                     "Point must have at least 2 coordinates".to_string(),
@@ -339,7 +289,9 @@ fn parse_geometry_value(value: &geojson::Value) -> Result<GeoGeometry<f64>> {
             }
             Ok(GeoGeometry::Point(Point::new(coords[0], coords[1])))
         }
-        geojson::Value::LineString(coords) => {
+        geojson::GeometryValue::LineString {
+            coordinates: coords,
+        } => {
             let points: Vec<Coord<f64>> = coords
                 .iter()
                 .map(|c| {
@@ -354,7 +306,7 @@ fn parse_geometry_value(value: &geojson::Value) -> Result<GeoGeometry<f64>> {
                 .collect::<Result<Vec<_>>>()?;
             Ok(GeoGeometry::LineString(LineString::new(points)))
         }
-        geojson::Value::Polygon(rings) => {
+        geojson::GeometryValue::Polygon { coordinates: rings } => {
             if rings.is_empty() {
                 return Err(GeoSparqlError::ParseError(
                     "Polygon must have at least one ring".to_string(),
@@ -369,7 +321,9 @@ fn parse_geometry_value(value: &geojson::Value) -> Result<GeoGeometry<f64>> {
 
             Ok(GeoGeometry::Polygon(Polygon::new(exterior, interiors)))
         }
-        geojson::Value::MultiPoint(coords) => {
+        geojson::GeometryValue::MultiPoint {
+            coordinates: coords,
+        } => {
             let points: Vec<Point<f64>> = coords
                 .iter()
                 .map(|c| {
@@ -384,7 +338,7 @@ fn parse_geometry_value(value: &geojson::Value) -> Result<GeoGeometry<f64>> {
                 .collect::<Result<Vec<_>>>()?;
             Ok(GeoGeometry::MultiPoint(MultiPoint::new(points)))
         }
-        geojson::Value::MultiLineString(lines) => {
+        geojson::GeometryValue::MultiLineString { coordinates: lines } => {
             let linestrings: Vec<LineString<f64>> = lines
                 .iter()
                 .map(|coords| {
@@ -407,7 +361,9 @@ fn parse_geometry_value(value: &geojson::Value) -> Result<GeoGeometry<f64>> {
                 linestrings,
             )))
         }
-        geojson::Value::MultiPolygon(polygons) => {
+        geojson::GeometryValue::MultiPolygon {
+            coordinates: polygons,
+        } => {
             let polys: Vec<Polygon<f64>> = polygons
                 .iter()
                 .map(|rings| {
@@ -428,14 +384,16 @@ fn parse_geometry_value(value: &geojson::Value) -> Result<GeoGeometry<f64>> {
                 .collect::<Result<Vec<_>>>()?;
             Ok(GeoGeometry::MultiPolygon(MultiPolygon::new(polys)))
         }
-        geojson::Value::GeometryCollection(_) => Err(GeoSparqlError::UnsupportedOperation(
-            "GeometryCollection not yet supported".to_string(),
-        )),
+        geojson::GeometryValue::GeometryCollection { geometries: _ } => {
+            Err(GeoSparqlError::UnsupportedOperation(
+                "GeometryCollection not yet supported".to_string(),
+            ))
+        }
     }
 }
 
 /// Parse a ring (closed LineString) from coordinates
-fn parse_ring(coords: &[Vec<f64>]) -> Result<LineString<f64>> {
+fn parse_ring(coords: &[geojson::Position]) -> Result<LineString<f64>> {
     let points: Vec<Coord<f64>> = coords
         .iter()
         .map(|c| {

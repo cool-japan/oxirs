@@ -253,11 +253,7 @@ impl QueryResultCache {
             stats.puts += 1;
             stats.entry_count = entries.len();
             stats.size_bytes += stored_results.len();
-            stats.avg_result_size = if stats.entry_count > 0 {
-                stats.size_bytes / stats.entry_count
-            } else {
-                0
-            };
+            stats.avg_result_size = stats.size_bytes.checked_div(stats.entry_count).unwrap_or(0);
         }
 
         Ok(())

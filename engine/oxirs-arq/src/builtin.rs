@@ -392,8 +392,8 @@ impl CustomFunction for BlankFunction {
                 let id = format!(
                     "_:gen{r}",
                     r = {
-                        use scirs2_core::random::{Random, Rng};
-                        let mut random = Random::default();
+                        use scirs2_core::random::{rng, RngExt};
+                        let mut random = rng();
                         random.random::<u32>()
                     }
                 );
@@ -1115,8 +1115,8 @@ impl CustomFunction for RandFunction {
         }
 
         Ok(Value::Float({
-            use scirs2_core::random::{Random, Rng};
-            let mut random = Random::default();
+            use scirs2_core::random::{rng, RngExt};
+            let mut random = rng();
             random.random::<f64>()
         }))
     }

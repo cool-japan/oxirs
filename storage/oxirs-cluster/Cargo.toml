@@ -40,7 +40,7 @@ rayon.workspace = true  # Parallel processing for SIMD-accelerated operations
 sha2.workspace = true
 hex.workspace = true
 ed25519-dalek.workspace = true
-rand = "0.9"  # Required by ed25519-dalek for key generation
+rand = "0.10"  # Required by ed25519-dalek for key generation
 # Note: For other random functionality, use scirs2_core::random
 
 # MVCC dependencies

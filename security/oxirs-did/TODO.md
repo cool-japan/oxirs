@@ -1,10 +1,10 @@
 # OxiRS DID - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
-OxiRS DID v0.2.2 provides W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) support for secure, decentralized identity management in semantic web applications.
+OxiRS DID v0.2.3 provides W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) support for secure, decentralized identity management in semantic web applications.
 
 ### Features
 - ✅ W3C DID Core specification compliance
@@ -32,7 +32,7 @@ OxiRS DID v0.2.2 provides W3C Decentralized Identifiers (DID) and Verifiable Cre
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ DID Core, did:key/web, Ed25519, VC issuance/verification, 8 core features
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Additional DID methods (did:ethr, did:ion, did:pkh)
 - ✅ JWS signature support (JsonWebSignature2020)
 - ✅ Key rotation mechanism
@@ -54,4 +54,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS DID v0.2.2 - Decentralized identity for semantic web*
+*OxiRS DID v0.2.3 - Decentralized identity for semantic web*

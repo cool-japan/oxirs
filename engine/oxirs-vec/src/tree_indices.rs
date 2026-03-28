@@ -25,7 +25,7 @@
 use crate::{Vector, VectorIndex};
 use anyhow::Result;
 use oxirs_core::simd::SimdOps;
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
@@ -646,7 +646,7 @@ impl VpTree {
 
         // Choose random vantage point - simplified to avoid potential issues
         let vp_idx = if indices.len() > 1 {
-            rng.gen_range(0..indices.len())
+            rng.random_range(0..indices.len())
         } else {
             0
         };
@@ -1014,7 +1014,9 @@ impl RandomProjectionTree {
         }
 
         // Generate random projection vector
-        let projection: Vec<f32> = (0..dimensions).map(|_| rng.gen_range(-1.0..1.0)).collect();
+        let projection: Vec<f32> = (0..dimensions)
+            .map(|_| rng.random_range(-1.0..1.0))
+            .collect();
 
         // Normalize projection vector
         let norm = (projection.iter().map(|&x| x * x).sum::<f32>()).sqrt();

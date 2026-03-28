@@ -318,7 +318,7 @@ impl TripleStatistics {
             .collect();
 
         // Sort by frequency (descending)
-        values.sort_by(|a, b| b.1.cmp(&a.1));
+        values.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         let most_frequent = values.iter().take(10).cloned().collect();
 

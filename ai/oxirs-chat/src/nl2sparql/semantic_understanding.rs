@@ -506,17 +506,16 @@ impl SemanticQueryAnalyzer {
             match entity.entity_type {
                 EntityType::Class => hints.classes.push(entity.text.clone()),
                 EntityType::Property => hints.properties.push(entity.text.clone()),
-                EntityType::RDFResource => {
-                    // Try to determine if it's a class or property
+                EntityType::RDFResource
                     if entity
                         .text
                         .chars()
                         .next()
                         .map(|c| c.is_uppercase())
-                        .unwrap_or(false)
-                    {
-                        hints.classes.push(entity.text.clone());
-                    }
+                        .unwrap_or(false) =>
+                {
+                    // Try to determine if it's a class or property
+                    hints.classes.push(entity.text.clone());
                 }
                 _ => {}
             }

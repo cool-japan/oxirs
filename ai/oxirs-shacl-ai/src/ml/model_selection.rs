@@ -4,7 +4,7 @@
 //! their hyperparameters for shape learning tasks.
 
 use super::{ModelError, ModelMetrics, ModelParams, ShapeLearningModel, ShapeTrainingData};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -506,7 +506,7 @@ impl ModelSelector {
         // Sample continuous parameters
         for (name, cont_param) in &param_space.continuous_params {
             let value = match cont_param.scale {
-                ScaleType::Linear => rng.gen_range(cont_param.min..cont_param.max),
+                ScaleType::Linear => rng.random_range(cont_param.min..cont_param.max),
                 ScaleType::Log => {
                     let log_min = cont_param.min.ln();
                     let log_max = cont_param.max.ln();
@@ -531,7 +531,7 @@ impl ModelSelector {
 
         // Sample discrete parameters
         for (name, disc_param) in &param_space.discrete_params {
-            let value = rng.gen_range(disc_param.min..=disc_param.max);
+            let value = rng.random_range(disc_param.min..=disc_param.max);
 
             match name.as_str() {
                 "batch_size" => params.batch_size = value as usize,
@@ -586,8 +586,8 @@ impl ModelSelector {
             let (model_idx, mut params) = population[idx].clone();
 
             // Simple mutation
-            params.learning_rate *= rng.gen_range(0.8..1.2);
-            params.batch_size = (params.batch_size as f64 * rng.gen_range(0.8..1.2)) as usize;
+            params.learning_rate *= rng.random_range(0.8..1.2);
+            params.batch_size = (params.batch_size as f64 * rng.random_range(0.8..1.2)) as usize;
 
             new_population.push((model_idx, params));
         }
@@ -701,7 +701,7 @@ impl BayesianOptimizer {
         let mut params = ModelParams::default();
 
         for (name, cont_param) in &param_space.continuous_params {
-            let value = rng.gen_range(cont_param.min..cont_param.max);
+            let value = rng.random_range(cont_param.min..cont_param.max);
             match name.as_str() {
                 "learning_rate" => params.learning_rate = value,
                 _ => {

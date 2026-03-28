@@ -185,23 +185,19 @@ impl VehicleState {
             match pgn {
                 // EEC1 (Electronic Engine Controller 1, PGN 61444)
                 // Byte 3-4: Engine Speed = (256*B3 + B4) / 8 RPM
-                J1939_PGN_EEC1 => {
-                    if frame.data.len() >= 5 {
-                        let b3 = frame.data[3] as f64;
-                        let b4 = frame.data[4] as f64;
-                        let rpm = (256.0 * b3 + b4) / 8.0;
-                        self.engine_rpm = Some(rpm);
-                    }
+                J1939_PGN_EEC1 if frame.data.len() >= 5 => {
+                    let b3 = frame.data[3] as f64;
+                    let b4 = frame.data[4] as f64;
+                    let rpm = (256.0 * b3 + b4) / 8.0;
+                    self.engine_rpm = Some(rpm);
                 }
                 // CCVS (Cruise Control/Vehicle Speed, PGN 65265)
                 // Bytes 1-2: Wheel-Based Vehicle Speed = (256*B1 + B0) / 256 km/h
-                J1939_PGN_CCVS => {
-                    if frame.data.len() >= 3 {
-                        let b0 = frame.data[1] as f64;
-                        let b1 = frame.data[2] as f64;
-                        let speed = (256.0 * b1 + b0) / 256.0;
-                        self.speed_kmh = Some(speed);
-                    }
+                J1939_PGN_CCVS if frame.data.len() >= 3 => {
+                    let b0 = frame.data[1] as f64;
+                    let b1 = frame.data[2] as f64;
+                    let speed = (256.0 * b1 + b0) / 256.0;
+                    self.speed_kmh = Some(speed);
                 }
                 _ => {}
             }

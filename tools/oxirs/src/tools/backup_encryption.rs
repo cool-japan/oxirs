@@ -147,7 +147,7 @@ fn derive_key_from_password(
     salt_b64_opt: Option<&str>,
 ) -> Result<(Key<Aes256Gcm>, String), Box<dyn std::error::Error>> {
     use scirs2_core::random::rng;
-    use scirs2_core::Rng;
+    use scirs2_core::RngExt;
 
     // Get or generate salt
     let salt = if let Some(salt_b64) = salt_b64_opt {
@@ -270,7 +270,7 @@ fn verify_encrypted_file(
 /// Generate a new keyfile with random 256-bit key
 pub fn generate_keyfile(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     use scirs2_core::random::rng;
-    use scirs2_core::Rng;
+    use scirs2_core::RngExt;
     let mut rand_gen = rng();
 
     // Generate 32 random bytes (256 bits)

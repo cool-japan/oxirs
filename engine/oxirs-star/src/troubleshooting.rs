@@ -1282,10 +1282,10 @@ impl DiagnosticAnalyzer {
 
         for issue in issues {
             match issue.severity {
-                IssueSeverity::Warning | IssueSeverity::Info => {
-                    if !issue.suggested_fixes.is_empty() {
-                        applied_fixes.push(format!("Applied fix for: {}", issue.message));
-                    }
+                IssueSeverity::Warning | IssueSeverity::Info
+                    if !issue.suggested_fixes.is_empty() =>
+                {
+                    applied_fixes.push(format!("Applied fix for: {}", issue.message));
                 }
                 _ => {
                     // Don't auto-fix critical or error issues

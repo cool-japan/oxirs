@@ -182,11 +182,10 @@ impl Heatmap {
         let mut output = String::from("Performance Heatmap:\n");
 
         for cell in &self.cells {
-            let intensity = if max_count > 0 {
-                (cell.count * 10 / max_count).min(10)
-            } else {
-                0
-            };
+            let intensity = (cell.count * 10)
+                .checked_div(max_count)
+                .unwrap_or(0)
+                .min(10);
 
             let bar = "█".repeat(intensity);
             output.push_str(&format!(

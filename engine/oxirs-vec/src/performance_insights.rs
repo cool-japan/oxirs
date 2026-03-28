@@ -702,7 +702,7 @@ impl PerformanceInsightsAnalyzer {
             });
         }
 
-        actions.sort_by(|a, b| b.priority.cmp(&a.priority));
+        actions.sort_by_key(|b| std::cmp::Reverse(b.priority));
         actions
     }
 

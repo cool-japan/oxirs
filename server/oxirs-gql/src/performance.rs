@@ -6,6 +6,7 @@
 use crate::ast::{Document, OperationType};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
@@ -368,7 +369,7 @@ impl PerformanceTracker {
             )
             .collect();
 
-        expensive_queries.sort_by(|a, b| b.avg_execution_time.cmp(&a.avg_execution_time));
+        expensive_queries.sort_by_key(|q| Reverse(q.avg_execution_time));
         expensive_queries.truncate(10); // Top 10
         expensive_queries
     }
@@ -388,7 +389,7 @@ impl PerformanceTracker {
             })
             .collect();
 
-        slow_fields.sort_by(|a, b| b.avg_resolution_time.cmp(&a.avg_resolution_time));
+        slow_fields.sort_by_key(|f| Reverse(f.avg_resolution_time));
         slow_fields.truncate(10); // Top 10
         slow_fields
     }

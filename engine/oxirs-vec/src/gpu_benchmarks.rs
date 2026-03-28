@@ -7,8 +7,7 @@ use crate::gpu::{GpuConfig, GpuVectorIndex};
 use crate::similarity::SimilarityMetric;
 use crate::Vector;
 use anyhow::Result;
-use scirs2_core::random;
-use scirs2_core::Rng;
+use scirs2_core::random::{self, RngExt};
 use std::time::{Duration, Instant};
 
 /// Benchmark configuration

@@ -231,7 +231,7 @@ impl OptimizationAdvisor {
         }
 
         // Sort by severity (critical first)
-        suggestions.sort_by(|a, b| b.severity.cmp(&a.severity));
+        suggestions.sort_by_key(|b| std::cmp::Reverse(b.severity));
 
         Ok(suggestions)
     }

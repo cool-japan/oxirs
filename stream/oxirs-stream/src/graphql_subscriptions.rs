@@ -629,11 +629,9 @@ impl GraphQLSubscriptionManager {
     async fn check_window_triggers(&self, window: &mut SubscriptionWindow) -> Result<()> {
         for trigger in &window.spec.triggers {
             match trigger {
-                WindowTrigger::EventCount(count) => {
-                    if window.state.event_count >= *count {
-                        // Trigger window emission
-                        debug!("Window trigger fired: event count {}", count);
-                    }
+                WindowTrigger::EventCount(count) if window.state.event_count >= *count => {
+                    // Trigger window emission
+                    debug!("Window trigger fired: event count {}", count);
                 }
                 WindowTrigger::TimeInterval(duration) => {
                     let elapsed = Utc::now() - window.state.start_time;

@@ -21,7 +21,7 @@ use tracing::{debug, info};
 // Parallel processing for candidate evaluation
 use rayon::prelude::*;
 use scirs2_core::metrics::Counter;
-use scirs2_core::random::{rng, Rng};
+use scirs2_core::random::{rng, RngExt};
 
 use crate::error::Result;
 

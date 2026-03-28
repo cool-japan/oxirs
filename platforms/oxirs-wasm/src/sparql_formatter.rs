@@ -766,10 +766,8 @@ impl SparqlFormatter {
                         depth = 0;
                     }
                 }
-                SparqlToken::Punctuation('.') => {
-                    if in_where && depth > 0 {
-                        count += 1;
-                    }
+                SparqlToken::Punctuation('.') if in_where && depth > 0 => {
+                    count += 1;
                 }
                 _ => {}
             }

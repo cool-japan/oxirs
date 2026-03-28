@@ -3,10 +3,10 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use oxirs_core::model::{GraphName, Literal, NamedNode, Quad, Subject, Term};
-use scirs2_core::Rng;
+use scirs2_core::RngExt;
 
 /// Generate semantic web data (classes, properties, instances)
-pub(super) fn generate_semantic_data<R: Rng>(rng: &mut R, count: usize) -> Vec<Quad> {
+pub(super) fn generate_semantic_data<R: RngExt>(rng: &mut R, count: usize) -> Vec<Quad> {
     let mut quads = Vec::with_capacity(count);
     let classes = ["Person", "Organization", "Place", "Event", "Thing"];
     let properties = ["name", "description", "location", "date", "type"];
@@ -56,7 +56,7 @@ pub(super) fn generate_semantic_data<R: Rng>(rng: &mut R, count: usize) -> Vec<Q
 }
 
 /// Generate bibliographic data (books, authors, publishers, citations)
-pub(super) fn generate_bibliographic_data<R: Rng>(rng: &mut R, count: usize) -> Vec<Quad> {
+pub(super) fn generate_bibliographic_data<R: RngExt>(rng: &mut R, count: usize) -> Vec<Quad> {
     let mut quads = Vec::with_capacity(count);
     let first_names = [
         "John", "Jane", "Alice", "Bob", "Carol", "David", "Emma", "Frank",
@@ -174,7 +174,7 @@ pub(super) fn generate_bibliographic_data<R: Rng>(rng: &mut R, count: usize) -> 
 }
 
 /// Generate geographic data (places, coordinates, addresses)
-pub(super) fn generate_geographic_data<R: Rng>(rng: &mut R, count: usize) -> Vec<Quad> {
+pub(super) fn generate_geographic_data<R: RngExt>(rng: &mut R, count: usize) -> Vec<Quad> {
     let mut quads = Vec::with_capacity(count);
     let cities = [
         "New York", "London", "Tokyo", "Paris", "Sydney", "Berlin", "Mumbai", "Toronto",
@@ -253,7 +253,7 @@ pub(super) fn generate_geographic_data<R: Rng>(rng: &mut R, count: usize) -> Vec
 }
 
 /// Generate organizational data (companies, employees, departments)
-pub(super) fn generate_organizational_data<R: Rng>(rng: &mut R, count: usize) -> Vec<Quad> {
+pub(super) fn generate_organizational_data<R: RngExt>(rng: &mut R, count: usize) -> Vec<Quad> {
     let mut quads = Vec::with_capacity(count);
     let first_names = [
         "Alice", "Bob", "Carol", "David", "Emma", "Frank", "Grace", "Henry",

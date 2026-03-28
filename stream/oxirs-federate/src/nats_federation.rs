@@ -701,10 +701,8 @@ impl CircuitBreaker {
         self.last_failure_time = Some(Instant::now());
 
         match self.state {
-            CircuitBreakerState::Closed => {
-                if self.failure_count >= self.config.failure_threshold {
-                    self.state = CircuitBreakerState::Open;
-                }
+            CircuitBreakerState::Closed if self.failure_count >= self.config.failure_threshold => {
+                self.state = CircuitBreakerState::Open;
             }
             CircuitBreakerState::HalfOpen => {
                 self.state = CircuitBreakerState::Open;

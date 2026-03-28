@@ -34,7 +34,7 @@ Add the `async-tokio` feature to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = { version = "0.2.2", features = ["async-tokio"] }
+oxirs-ttl = { version = "0.2.3", features = ["async-tokio"] }
 tokio = { version = "1", features = ["full"] }
 ```
 

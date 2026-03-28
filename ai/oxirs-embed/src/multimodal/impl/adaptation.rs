@@ -131,7 +131,7 @@ impl RealTimeFinetuning {
         for (param_name, param) in &model.text_encoder.parameters {
             // Simplified Fisher information computation
             let fisher = Array2::from_shape_fn(param.dim(), |(_, _)| {
-                use scirs2_core::random::{Random, Rng};
+                use scirs2_core::random::{Random, RngExt};
                 let mut random = Random::default();
                 random.random::<f32>() * 0.01
             });

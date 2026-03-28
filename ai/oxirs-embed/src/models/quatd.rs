@@ -197,11 +197,11 @@ impl QuatD {
 
         // Initialize entity embeddings as quaternions
         self.entity_embeddings =
-            Array2::from_shape_fn((num_entities, 4), |_| rng.gen_range(-0.1..0.1));
+            Array2::from_shape_fn((num_entities, 4), |_| rng.random_range(-0.1..0.1));
 
         // Initialize relation embeddings as quaternions
         self.relation_embeddings =
-            Array2::from_shape_fn((num_relations, 4), |_| rng.gen_range(-0.1..0.1));
+            Array2::from_shape_fn((num_relations, 4), |_| rng.random_range(-0.1..0.1));
 
         // Normalize quaternions to unit length
         self.normalize_all_quaternions();

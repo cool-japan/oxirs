@@ -163,17 +163,15 @@ impl CircuitBreaker {
                 warn!("Circuit breaker reopened after failed test");
             }
 
-            CircuitBreakerState::Closed => {
-                if *failure_count >= self.failure_threshold {
-                    // Too many failures -> open the circuit
-                    *state = CircuitBreakerState::Open;
-                    let mut last_failure = self
-                        .last_failure_time
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
-                    *last_failure = Some(Instant::now());
-                    error!("Circuit breaker opened due to {} failures", *failure_count);
-                }
+            CircuitBreakerState::Closed if *failure_count >= self.failure_threshold => {
+                // Too many failures -> open the circuit
+                *state = CircuitBreakerState::Open;
+                let mut last_failure = self
+                    .last_failure_time
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                *last_failure = Some(Instant::now());
+                error!("Circuit breaker opened due to {} failures", *failure_count);
             }
 
             _ => {}

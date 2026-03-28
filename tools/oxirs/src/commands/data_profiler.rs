@@ -480,7 +480,7 @@ impl DataProfiler {
         let total: usize = ns_counts.values().sum();
 
         let mut entries: Vec<(String, usize)> = ns_counts.into_iter().collect();
-        entries.sort_by(|a, b| b.1.cmp(&a.1));
+        entries.sort_by_key(|item| std::cmp::Reverse(item.1));
         entries.truncate(top_n);
 
         entries
@@ -711,7 +711,7 @@ impl DataProfiler {
             }
         }
 
-        result.sort_by(|a, b| b.terms_used.cmp(&a.terms_used));
+        result.sort_by_key(|item| std::cmp::Reverse(item.terms_used));
         result
     }
 }
@@ -927,7 +927,7 @@ fn frequency_map<'a>(items: impl Iterator<Item = &'a str>) -> HashMap<String, us
 /// Get top N entries sorted by frequency descending.
 fn top_n_entries(freq: &HashMap<String, usize>, n: usize, total: usize) -> Vec<FrequencyEntry> {
     let mut entries: Vec<(String, usize)> = freq.iter().map(|(k, &v)| (k.clone(), v)).collect();
-    entries.sort_by(|a, b| b.1.cmp(&a.1));
+    entries.sort_by_key(|item| std::cmp::Reverse(item.1));
     entries.truncate(n);
 
     entries

@@ -3,7 +3,7 @@
 use super::*;
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Array2, Array3, Array4, Axis};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]

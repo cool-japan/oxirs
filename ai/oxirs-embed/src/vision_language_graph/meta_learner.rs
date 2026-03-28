@@ -3,7 +3,7 @@
 use super::*;
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use std::collections::HashMap;
 #[derive(Debug)]
 pub struct MetaLearner {

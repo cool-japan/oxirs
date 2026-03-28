@@ -496,8 +496,7 @@ impl DistributedTracer {
 
     /// Should sample this trace
     fn should_sample(&self) -> bool {
-        use scirs2_core::random::rng;
-        use scirs2_core::Rng;
+        use scirs2_core::random::{rng, RngExt};
         let mut rng = rng();
         rng.random_range(0.0..1.0) < self.config.sample_rate
     }

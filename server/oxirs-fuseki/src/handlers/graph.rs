@@ -366,13 +366,13 @@ async fn read_rdf_body(body: Body, content_type: &str) -> FusekiResult<String> {
 /// Basic RDF syntax validation
 fn validate_rdf_syntax(rdf_data: &str, content_type: &str) -> FusekiResult<()> {
     match content_type {
-        ct if ct == rdf_content_types::TURTLE || ct == rdf_content_types::N3 => {
+        ct if (ct == rdf_content_types::TURTLE || ct == rdf_content_types::N3)
             // Basic Turtle/N3 validation
-            if !rdf_data.contains('.') && !rdf_data.contains(';') {
-                return Err(FusekiError::bad_request(
-                    "Invalid Turtle syntax: missing statement terminators",
-                ));
-            }
+            && !rdf_data.contains('.') && !rdf_data.contains(';') =>
+        {
+            return Err(FusekiError::bad_request(
+                "Invalid Turtle syntax: missing statement terminators",
+            ));
         }
         ct if ct == rdf_content_types::N_TRIPLES => {
             // Basic N-Triples validation
@@ -385,17 +385,17 @@ fn validate_rdf_syntax(rdf_data: &str, content_type: &str) -> FusekiResult<()> {
                 }
             }
         }
-        ct if ct == rdf_content_types::RDF_XML => {
+        ct if ct == rdf_content_types::RDF_XML
             // Basic XML validation
-            if !rdf_data.trim_start().starts_with("<?xml") && !rdf_data.contains("<rdf:RDF") {
-                return Err(FusekiError::bad_request("Invalid RDF/XML syntax"));
-            }
+            && !rdf_data.trim_start().starts_with("<?xml") && !rdf_data.contains("<rdf:RDF") =>
+        {
+            return Err(FusekiError::bad_request("Invalid RDF/XML syntax"));
         }
-        ct if ct == rdf_content_types::JSON_LD => {
+        ct if ct == rdf_content_types::JSON_LD
             // Basic JSON validation
-            if !rdf_data.trim_start().starts_with('{') && !rdf_data.trim_start().starts_with('[') {
-                return Err(FusekiError::bad_request("Invalid JSON-LD syntax"));
-            }
+            && !rdf_data.trim_start().starts_with('{') && !rdf_data.trim_start().starts_with('[') =>
+        {
+            return Err(FusekiError::bad_request("Invalid JSON-LD syntax"));
         }
         _ => {
             // For other formats, accept without validation

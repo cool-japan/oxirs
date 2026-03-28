@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

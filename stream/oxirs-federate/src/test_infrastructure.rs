@@ -663,7 +663,7 @@ input CreateCommentInput {
 
                 // Simulate error injection
                 if {
-                    use scirs2_core::random::{Random, Rng};
+                    use scirs2_core::random::{Random, RngExt};
                     let mut random = Random::default();
                     random.random::<f64>()
                 } < service.error_rate

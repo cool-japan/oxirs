@@ -5,7 +5,7 @@
 //!
 //! Random number generation uses `scirs2_core::random` (never `rand` directly).
 
-use scirs2_core::random::{Random, Rng, StdRng};
+use scirs2_core::random::{Random, RngExt, StdRng};
 #[cfg(test)]
 use std::collections::HashMap;
 use std::collections::{BinaryHeap, HashSet};

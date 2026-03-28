@@ -43,7 +43,7 @@ use crate::Vector;
 use crate::VectorStore;
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
-use scirs2_core::random::RngCore;
+use scirs2_core::random::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -509,7 +509,7 @@ impl PersonalizedSearchEngine {
 
                 for result in &mut results {
                     // Generate random value between 0.0 and 0.2
-                    let random_val = (rng_instance.next_u64() as f32 / u64::MAX as f32) * 0.2;
+                    let random_val = (rng_instance.random::<u64>() as f32 / u64::MAX as f32) * 0.2;
                     result.score += random_val;
                 }
 
@@ -535,7 +535,8 @@ impl PersonalizedSearchEngine {
 
                 for result in &mut results {
                     if let Some(item_profile) = item_profiles.get(&result.id) {
-                        let random_val = (rng_instance.next_u64() as f32 / u64::MAX as f32) * 0.1;
+                        let random_val =
+                            (rng_instance.random::<u64>() as f32 / u64::MAX as f32) * 0.1;
                         result.score += item_profile.popularity_score * 0.2 + random_val;
                     }
                 }
@@ -790,7 +791,8 @@ impl PersonalizedSearchEngine {
 
             for val in &mut embedding {
                 // Generate random value between -0.1 and 0.1
-                let random_val = (rng_instance.next_u64() as f32 / u64::MAX as f32) * 0.2 - 0.1;
+                let random_val =
+                    (rng_instance.random::<u64>() as f32 / u64::MAX as f32) * 0.2 - 0.1;
                 *val = random_val;
             }
         }

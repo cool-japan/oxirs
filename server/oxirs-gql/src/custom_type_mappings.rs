@@ -11,6 +11,7 @@ use crate::types::{BuiltinScalars, GraphQLType, ScalarType};
 use anyhow::{anyhow, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -265,7 +266,7 @@ impl CustomTypeMapper {
     pub fn add_rule(&mut self, rule: TypeMappingRule) {
         self.rules.push(rule);
         // Sort by priority (descending)
-        self.rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.rules.sort_by_key(|r| Reverse(r.priority));
     }
 
     /// Add multiple rules

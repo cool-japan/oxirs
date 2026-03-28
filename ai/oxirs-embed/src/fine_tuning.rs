@@ -123,7 +123,7 @@ impl AdapterLayer {
         let down_projection = (0..adapter_dim)
             .map(|_| {
                 (0..embed_dim)
-                    .map(|_| rng.gen_range(-scale..scale))
+                    .map(|_| rng.random_range(-scale..scale))
                     .collect()
             })
             .collect();
@@ -131,7 +131,7 @@ impl AdapterLayer {
         let up_projection = (0..embed_dim)
             .map(|_| {
                 (0..adapter_dim)
-                    .map(|_| rng.gen_range(-scale..scale))
+                    .map(|_| rng.random_range(-scale..scale))
                     .collect()
             })
             .collect();

@@ -237,7 +237,7 @@ impl BackupManager {
 
         info!("Creating {:?} backup", backup_type);
 
-        use scirs2_core::random::Rng;
+        use scirs2_core::random::RngExt;
 
         // Generate backup ID
         let mut rng_instance = rng();
@@ -373,7 +373,7 @@ impl BackupManager {
     /// List all available backups
     pub fn list_backups(&self) -> Vec<&BackupMetadata> {
         let mut backups: Vec<_> = self.metadata_index.values().collect();
-        backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        backups.sort_by_key(|b| std::cmp::Reverse(b.created_at));
         backups
     }
 
@@ -550,7 +550,7 @@ impl BackupManager {
     fn cleanup_old_backups(&mut self) -> Result<(), BackupError> {
         if let Some(max_backups) = self.config.max_backups {
             let mut backups: Vec<_> = self.metadata_index.values().cloned().collect();
-            backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            backups.sort_by_key(|b| std::cmp::Reverse(b.created_at));
 
             if backups.len() > max_backups {
                 for metadata in backups.iter().skip(max_backups) {

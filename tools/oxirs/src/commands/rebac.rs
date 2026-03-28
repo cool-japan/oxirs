@@ -81,7 +81,7 @@ impl std::str::FromStr for ExportFormat {
 #[derive(Debug, Args)]
 pub struct ImportArgs {
     /// Input file path
-    #[arg(short, long)]
+    #[arg(short = 'I', long)]
     pub input: PathBuf,
 
     /// Import format (turtle, json, auto)

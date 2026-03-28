@@ -4,7 +4,7 @@
 
 ## Overview
 
-This document describes the comprehensive benchmarking suite for oxirs-star, including performance tests for v0.2.2 features and beyond.
+This document describes the comprehensive benchmarking suite for oxirs-star, including performance tests for v0.2.3 features and beyond.
 
 ## Benchmark Suites
 
@@ -23,7 +23,7 @@ Advanced performance tests covering:
 - **Store Indexing**: Query patterns (subject-only, predicate-only, all-bound, etc.)
 - **Memory Performance**: Large graph operations and memory efficiency
 
-### 3. Adaptive Benchmarks (`benches/adaptive_benchmarks.rs`) - NEW in v0.2.2
+### 3. Adaptive Benchmarks (`benches/adaptive_benchmarks.rs`) - NEW in v0.2.3
 
 Comprehensive benchmarks for the latest features:
 
@@ -113,7 +113,7 @@ cargo bench --bench benchmarks
 # Enhanced benchmarks
 cargo bench --bench enhanced_benchmarks
 
-# Adaptive benchmarks (v0.2.2 features)
+# Adaptive benchmarks (v0.2.3 features)
 cargo bench --bench adaptive_benchmarks
 ```
 

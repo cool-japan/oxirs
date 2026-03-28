@@ -846,7 +846,7 @@ impl SsoAuthManager {
     /// List all registered providers
     pub fn list_providers(&self) -> Vec<&IdentityProvider> {
         let mut providers: Vec<&IdentityProvider> = self.providers.values().collect();
-        providers.sort_by(|a, b| b.priority.cmp(&a.priority));
+        providers.sort_by_key(|item| std::cmp::Reverse(item.priority));
         providers
     }
 

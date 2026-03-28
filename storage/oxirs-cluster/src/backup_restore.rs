@@ -623,7 +623,7 @@ impl BackupRestoreManager {
 
         // Sort backups by creation time
         let mut backup_list: Vec<_> = backups.values().cloned().collect();
-        backup_list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        backup_list.sort_by_key(|b| std::cmp::Reverse(b.created_at));
 
         // Remove backups exceeding max count
         if backup_list.len() > self.config.max_backups as usize {

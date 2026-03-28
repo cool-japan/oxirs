@@ -5,6 +5,7 @@
 //! prefix/regex/NOT filters, auto-completion, statistics, index
 //! maintenance (add/remove/rebuild), and wildcard matching.
 
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 // ── TagFilter ────────────────────────────────────────────────────────────────
@@ -313,7 +314,7 @@ impl TagIndex {
         }
 
         let mut most_common: Vec<(String, usize)> = key_usage.into_iter().collect();
-        most_common.sort_by(|a, b| b.1.cmp(&a.1));
+        most_common.sort_by_key(|m| Reverse(m.1));
 
         TagStats {
             total_keys: self.index.len(),

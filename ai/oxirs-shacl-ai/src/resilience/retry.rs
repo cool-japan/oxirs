@@ -1,7 +1,7 @@
 //! Retry mechanisms with exponential backoff
 
 use anyhow::Result;
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

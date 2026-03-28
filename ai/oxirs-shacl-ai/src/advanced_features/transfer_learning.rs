@@ -9,7 +9,7 @@ use crate::{Result, ShaclAiError};
 use oxirs_core::Store;
 use oxirs_shacl::Shape;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 // Note: Using simplified implementations since scirs2 doesn't expose all optimizer types
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

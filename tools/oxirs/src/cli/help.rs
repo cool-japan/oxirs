@@ -661,7 +661,7 @@ ORDER BY DESC(?bookCount)
         }
 
         // Sort by score
-        results.sort_by(|a, b| b.score.cmp(&a.score));
+        results.sort_by_key(|item| std::cmp::Reverse(item.score));
         results
     }
 

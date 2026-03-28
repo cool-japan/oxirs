@@ -184,10 +184,8 @@ impl BftNode {
         self.log_message(message.clone());
 
         match message {
-            BftMessage::Request { .. } => {
-                if self.is_primary() {
-                    self.handle_client_request(message).await?;
-                }
+            BftMessage::Request { .. } if self.is_primary() => {
+                self.handle_client_request(message).await?;
             }
 
             BftMessage::PrePrepare {
@@ -370,15 +368,11 @@ impl BftNode {
         // Update prepare count
         let should_commit = {
             match self.states.get_mut(&(view, sequence)) {
-                Some(mut state) => {
-                    if state.digest == digest {
-                        state.prepares.insert(node_id);
+                Some(mut state) if state.digest == digest => {
+                    state.prepares.insert(node_id);
 
-                        // Check if we have 2f prepares (including our own)
-                        state.prepares.len() >= 2 * self.config.fault_tolerance
-                    } else {
-                        false
-                    }
+                    // Check if we have 2f prepares (including our own)
+                    state.prepares.len() >= 2 * self.config.fault_tolerance
                 }
                 _ => false,
             }
@@ -433,15 +427,11 @@ impl BftNode {
         // Update commit count and execute if ready
         let should_execute = {
             match self.states.get_mut(&(view, sequence)) {
-                Some(mut state) => {
-                    if state.digest == digest {
-                        state.commits.insert(node_id);
+                Some(mut state) if state.digest == digest => {
+                    state.commits.insert(node_id);
 
-                        // Check if we have 2f+1 commits (including our own)
-                        state.commits.len() > 2 * self.config.fault_tolerance
-                    } else {
-                        false
-                    }
+                    // Check if we have 2f+1 commits (including our own)
+                    state.commits.len() > 2 * self.config.fault_tolerance
                 }
                 _ => false,
             }

@@ -25,8 +25,7 @@
 //! ```
 
 use anyhow::{anyhow, Result};
-use scirs2_core::random::rng;
-use scirs2_core::RngCore; // Trait for RNG methods
+use scirs2_core::random::{rng, Rng}; // Rng trait provides next_u64()
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;

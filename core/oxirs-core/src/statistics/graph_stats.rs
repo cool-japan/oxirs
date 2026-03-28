@@ -125,7 +125,7 @@ impl GraphStatistics {
             .iter()
             .map(|(k, &v)| (k.clone(), v))
             .collect();
-        v.sort_by(|a, b| b.1.cmp(&a.1));
+        v.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
         v.truncate(limit);
         v
     }
@@ -279,7 +279,7 @@ impl PredicateHistogram {
             .iter()
             .map(|(k, &v)| (k.clone(), v))
             .collect();
-        v.sort_by(|a, b| b.1.cmp(&a.1));
+        v.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
         v.truncate(n);
         v
     }
@@ -291,7 +291,7 @@ impl PredicateHistogram {
             .iter()
             .map(|(k, &v)| (k.clone(), v))
             .collect();
-        v.sort_by(|a, b| a.1.cmp(&b.1));
+        v.sort_by_key(|(_, count)| *count);
         v.truncate(n);
         v
     }

@@ -5,7 +5,7 @@
 //! cellular automata, and evolutionary computation for streaming RDF data.
 
 // MIGRATED: Using scirs2-core instead of direct rand dependency
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

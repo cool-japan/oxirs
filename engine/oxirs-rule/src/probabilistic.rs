@@ -42,7 +42,7 @@
 use crate::{Rule, RuleAtom, Term};
 use anyhow::{anyhow, Result};
 use scirs2_core::ndarray_ext::Array1;
-use scirs2_core::random::{Distribution, RngCore, Uniform};
+use scirs2_core::random::{Distribution, Rng as RngTrait, Uniform};
 use std::collections::{HashMap, HashSet};
 
 /// Bayesian Network for probabilistic inference
@@ -342,7 +342,7 @@ impl BayesianNetwork {
         &self,
         prob_dist: &Array1<f64>,
         domain: &[String],
-        rng: &mut impl RngCore,
+        rng: &mut impl RngTrait,
     ) -> String {
         let uniform = Uniform::new(0.0, 1.0).expect("distribution parameters are valid");
         let u: f64 = uniform.sample(rng);
@@ -656,7 +656,7 @@ impl MarkovLogicNetwork {
     fn gibbs_step(
         &self,
         current_state: &[RuleAtom],
-        _rng: &mut impl RngCore,
+        _rng: &mut impl RngTrait,
     ) -> Result<Vec<RuleAtom>> {
         // Randomly select a ground atom and resample it
         let new_state = current_state.to_vec();

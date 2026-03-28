@@ -374,7 +374,7 @@ Versions are managed at the workspace level in the root `Cargo.toml`:
 
 ```toml
 [workspace.package]
-version = "0.2.2"
+version = "0.2.3"
 ```
 
 ### Release Checklist

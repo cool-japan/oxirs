@@ -220,17 +220,15 @@ impl Journal {
                 JournalEntry::Begin(tid) => {
                     begun.entry(tid).or_insert(false);
                 }
-                JournalEntry::Commit(tid) => {
-                    if begun.contains_key(&tid) {
-                        *begun.get_mut(&tid).unwrap_or(&mut false) = true;
-                        committed_count += 1;
+                JournalEntry::Commit(tid) if begun.contains_key(&tid) => {
+                    if let Some(v) = begun.get_mut(&tid) {
+                        *v = true;
                     }
+                    committed_count += 1;
                 }
-                JournalEntry::Abort(tid) => {
-                    if begun.contains_key(&tid) {
-                        begun.remove(&tid);
-                        aborted_count += 1;
-                    }
+                JournalEntry::Abort(tid) if begun.contains_key(&tid) => {
+                    begun.remove(&tid);
+                    aborted_count += 1;
                 }
                 _ => {}
             }

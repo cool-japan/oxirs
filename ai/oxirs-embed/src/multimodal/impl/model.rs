@@ -64,7 +64,7 @@ impl MultiModalEmbedding {
     /// Create new multi-modal embedding model
     pub fn new(config: CrossModalConfig) -> Self {
         let model_id = {
-            use scirs2_core::random::{Random, Rng};
+            use scirs2_core::random::{Random, RngExt};
             let mut random = Random::default();
             Uuid::from_u128(random.random::<u128>())
         };

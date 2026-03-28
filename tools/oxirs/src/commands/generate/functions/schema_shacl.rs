@@ -4,7 +4,7 @@
 
 use super::super::types::*;
 use oxirs_core::model::{GraphName, Literal, NamedNode, Quad, Subject, Term};
-use scirs2_core::Rng;
+use scirs2_core::RngExt;
 use std::error::Error;
 
 /// Parse SHACL shapes from file (simplified implementation)
@@ -60,7 +60,7 @@ pub(super) fn parse_shacl_shapes(
 }
 
 /// Generate RDF data conforming to SHACL shapes
-pub(super) fn generate_from_shapes<R: Rng>(
+pub(super) fn generate_from_shapes<R: RngExt>(
     rng: &mut R,
     shapes: &[ShaclShape],
     count: usize,
@@ -113,7 +113,7 @@ pub(super) fn generate_from_shapes<R: Rng>(
 }
 
 /// Generate a property value conforming to constraints
-pub(super) fn generate_property_value<R: Rng>(
+pub(super) fn generate_property_value<R: RngExt>(
     rng: &mut R,
     constraint: &PropertyConstraint,
 ) -> Result<Term, Box<dyn Error>> {
@@ -183,7 +183,7 @@ pub(super) fn generate_property_value<R: Rng>(
 }
 
 /// Generate string value conforming to constraints
-pub(super) fn generate_string_value<R: Rng>(
+pub(super) fn generate_string_value<R: RngExt>(
     rng: &mut R,
     constraint: &PropertyConstraint,
 ) -> String {
@@ -217,7 +217,7 @@ pub(super) fn generate_string_value<R: Rng>(
 }
 
 /// Generate integer value conforming to constraints
-pub(super) fn generate_integer_value<R: Rng>(
+pub(super) fn generate_integer_value<R: RngExt>(
     rng: &mut R,
     constraint: &PropertyConstraint,
 ) -> String {
@@ -235,7 +235,7 @@ pub(super) fn generate_integer_value<R: Rng>(
 }
 
 /// Generate decimal value conforming to constraints
-pub(super) fn generate_decimal_value<R: Rng>(
+pub(super) fn generate_decimal_value<R: RngExt>(
     rng: &mut R,
     constraint: &PropertyConstraint,
 ) -> String {

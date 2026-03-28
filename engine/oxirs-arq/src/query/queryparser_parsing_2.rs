@@ -181,10 +181,8 @@ impl QueryParser {
                         _ => bail!("Expected INSERT or DELETE after WITH clause"),
                     };
                     match &mut operation {
-                        UpdateOperation::DeleteInsertWhere { using, .. } => {
-                            if using.is_none() {
-                                *using = Some(vec![graph_ref]);
-                            }
+                        UpdateOperation::DeleteInsertWhere { using, .. } if using.is_none() => {
+                            *using = Some(vec![graph_ref]);
                         }
                         UpdateOperation::InsertWhere { template, .. } => {
                             for quad in template {

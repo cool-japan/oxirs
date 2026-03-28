@@ -559,7 +559,7 @@ impl QueryProfiler {
             }
         }
         let mut top_patterns: Vec<_> = pattern_counts.into_iter().collect();
-        top_patterns.sort_by(|a, b| b.1.cmp(&a.1));
+        top_patterns.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
         top_patterns.truncate(10);
 
         // Aggregate index usage
@@ -570,7 +570,7 @@ impl QueryProfiler {
             }
         }
         let mut top_indexes: Vec<_> = index_counts.into_iter().collect();
-        top_indexes.sort_by(|a, b| b.1.cmp(&a.1));
+        top_indexes.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
         top_indexes.truncate(10);
 
         // Calculate overall cache hit rate

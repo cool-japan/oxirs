@@ -1,10 +1,10 @@
 # OxiRS ARQ
 
-[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL query engine with algebra and optimization**
 
-**Status**: Production Release (v0.2.2) - Released March 16, 2026
+**Status**: Production Release (v0.2.3) - Released March 16, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-arq = "0.2.2"
+oxirs-arq = "0.2.3"
 ```
 
 ## Quick Start
@@ -458,7 +458,7 @@ Licensed under:
 
 ## Status
 
-🚀 **Production Release (v0.2.2)** - March 16, 2026
+🚀 **Production Release (v0.2.3)** - March 16, 2026
 
 Current implementation status:
 - ✅ Full SPARQL 1.1/1.2 parsing and execution across persisted datasets

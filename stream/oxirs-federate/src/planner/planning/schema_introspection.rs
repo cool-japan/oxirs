@@ -207,13 +207,13 @@ impl SchemaIntrospector {
                                     }
                                 }
                             }
-                            "SCALAR" => {
+                            "SCALAR"
                                 if !matches!(
                                     type_name,
                                     "String" | "Int" | "Float" | "Boolean" | "ID"
-                                ) {
-                                    capabilities.scalar_types.push(type_name.to_string());
-                                }
+                                ) =>
+                            {
+                                capabilities.scalar_types.push(type_name.to_string());
                             }
                             _ => {}
                         }

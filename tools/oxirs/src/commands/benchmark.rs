@@ -497,18 +497,18 @@ fn get_benchmark_queries(suite: &str) -> Result<Vec<(String, String)>, Box<dyn s
 
 /// Simulate query execution (placeholder)
 fn simulate_query_execution() -> bool {
-    use scirs2_core::random::{Random, Rng};
+    use scirs2_core::random::Random;
 
     // Simulate some work with realistic timing
     let delay = {
         let mut random = Random::default();
-        1 + random.random::<u64>() % 15 // 1-15ms
+        1 + random.random_range(0..15_u64) // 1-15ms
     };
     std::thread::sleep(Duration::from_millis(delay));
 
     // Simulate 95% success rate
     let mut random = Random::default();
-    random.random::<f64>() < 0.95
+    random.random_f64() < 0.95
 }
 
 /// Display benchmark results

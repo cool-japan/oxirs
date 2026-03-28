@@ -10,7 +10,7 @@ use super::{
 };
 
 use scirs2_core::ndarray_ext::{Array2, Array3, Axis};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -360,8 +360,8 @@ impl GraphNeuralNetwork {
         let hidden_dim = (input_dim + output_dim) / 2;
 
         let mlp_layers = vec![
-            Array2::from_shape_fn((input_dim, hidden_dim), |_| rng.gen_range(-0.1..0.1)),
-            Array2::from_shape_fn((hidden_dim, output_dim), |_| rng.gen_range(-0.1..0.1)),
+            Array2::from_shape_fn((input_dim, hidden_dim), |_| rng.random_range(-0.1..0.1)),
+            Array2::from_shape_fn((hidden_dim, output_dim), |_| rng.random_range(-0.1..0.1)),
         ];
 
         GINLayerState {
@@ -400,13 +400,13 @@ impl GraphNeuralNetwork {
         let hidden_dim = (input_dim + output_dim) / 2;
 
         let message_net = vec![
-            Array2::from_shape_fn((input_dim * 2, hidden_dim), |_| rng.gen_range(-0.1..0.1)),
-            Array2::from_shape_fn((hidden_dim, input_dim), |_| rng.gen_range(-0.1..0.1)),
+            Array2::from_shape_fn((input_dim * 2, hidden_dim), |_| rng.random_range(-0.1..0.1)),
+            Array2::from_shape_fn((hidden_dim, input_dim), |_| rng.random_range(-0.1..0.1)),
         ];
 
         let update_net = vec![
-            Array2::from_shape_fn((input_dim * 2, hidden_dim), |_| rng.gen_range(-0.1..0.1)),
-            Array2::from_shape_fn((hidden_dim, output_dim), |_| rng.gen_range(-0.1..0.1)),
+            Array2::from_shape_fn((input_dim * 2, hidden_dim), |_| rng.random_range(-0.1..0.1)),
+            Array2::from_shape_fn((hidden_dim, output_dim), |_| rng.random_range(-0.1..0.1)),
         ];
 
         MPNNLayerState {
@@ -502,7 +502,7 @@ impl GraphNeuralNetwork {
         // Shape type classifier
         let num_shape_types = 10; // Placeholder, should be configurable
         let shape_classifier = Array2::from_shape_fn((config.output_dim, num_shape_types), |_| {
-            rng.gen_range(-0.1..0.1)
+            rng.random_range(-0.1..0.1)
         });
 
         // Constraint prediction heads
@@ -526,8 +526,9 @@ impl GraphNeuralNetwork {
                 _ => 10,                                 // Numerical or pattern
             };
 
-            let head =
-                Array2::from_shape_fn((config.output_dim, head_dim), |_| rng.gen_range(-0.1..0.1));
+            let head = Array2::from_shape_fn((config.output_dim, head_dim), |_| {
+                rng.random_range(-0.1..0.1)
+            });
 
             constraint_heads.insert(constraint_type.to_string(), head);
         }
@@ -658,7 +659,7 @@ impl GraphNeuralNetwork {
                 // Initialize with random features if no embedding
                 let mut rng = Random::default();
                 for j in 0..feature_dim {
-                    node_features[[i, j]] = rng.gen_range(-0.1..0.1);
+                    node_features[[i, j]] = rng.random_range(-0.1..0.1);
                 }
             }
         }

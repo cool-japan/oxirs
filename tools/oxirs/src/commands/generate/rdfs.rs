@@ -337,7 +337,7 @@ fn extract_rdfs_schema(
 }
 
 /// Generate RDF data conforming to RDFS schema
-pub fn generate_from_rdfs_schema<R: scirs2_core::RngCore>(
+pub fn generate_from_rdfs_schema<R: scirs2_core::RngExt>(
     schema: &RdfsSchema,
     instance_count: usize,
     rng: &mut Random<R>,
@@ -379,7 +379,7 @@ pub fn generate_from_rdfs_schema<R: scirs2_core::RngCore>(
 }
 
 /// Generate instances for a specific RDFS class
-fn generate_class_instances<R: scirs2_core::RngCore>(
+fn generate_class_instances<R: scirs2_core::RngExt>(
     class_def: &RdfsClass,
     count: usize,
     schema: &RdfsSchema,
@@ -423,7 +423,7 @@ fn generate_class_instances<R: scirs2_core::RngCore>(
 }
 
 /// Generate property values for an RDFS property
-fn generate_rdfs_property_values<R: scirs2_core::RngCore>(
+fn generate_rdfs_property_values<R: scirs2_core::RngExt>(
     subject_uri: &str,
     prop: &RdfsProperty,
     schema: &RdfsSchema,
@@ -474,10 +474,7 @@ fn generate_rdfs_property_values<R: scirs2_core::RngCore>(
 }
 
 /// Generate a literal value for a given XSD datatype
-fn generate_literal_value<R: scirs2_core::RngCore>(
-    datatype_uri: &str,
-    rng: &mut Random<R>,
-) -> Term {
+fn generate_literal_value<R: scirs2_core::RngExt>(datatype_uri: &str, rng: &mut Random<R>) -> Term {
     let value_str = match datatype_uri {
         dt if dt == format!("{}string", XSD_NS) => {
             let len = rng.gen_range(5..30);
@@ -535,7 +532,7 @@ fn generate_literal_value<R: scirs2_core::RngCore>(
 }
 
 /// Generate random string
-fn generate_random_string<R: scirs2_core::RngCore>(rng: &mut Random<R>, length: usize) -> String {
+fn generate_random_string<R: scirs2_core::RngExt>(rng: &mut Random<R>, length: usize) -> String {
     const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
     (0..length)
         .map(|_| {

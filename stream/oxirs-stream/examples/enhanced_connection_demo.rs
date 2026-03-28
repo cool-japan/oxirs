@@ -13,7 +13,8 @@ use oxirs_stream::connection_pool::{
 use oxirs_stream::health_monitor::HealthEvent;
 use oxirs_stream::reconnect::ReconnectEvent;
 use oxirs_stream::FailoverConfig;
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::Random;
+use scirs2_core::RngExt;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};

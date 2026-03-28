@@ -761,7 +761,7 @@ impl InsightGenerator {
             .map(|(shape, violations)| (shape.clone(), violations.len()))
             .collect();
 
-        shape_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        shape_counts.sort_by_key(|item| std::cmp::Reverse(item.1));
         shape_counts
             .into_iter()
             .take(limit)

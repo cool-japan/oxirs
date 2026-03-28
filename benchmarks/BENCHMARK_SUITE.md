@@ -1,6 +1,6 @@
 # OxiRS Comprehensive Benchmark Suite
 
-**Version**: 0.2.2
+**Version**: 0.2.3
 **Date**: 2026-03-05
 **Purpose**: Performance validation for production readiness
 
@@ -480,7 +480,7 @@ jobs:
 
 ### Executive Summary
 - **Date**: YYYY-MM-DD
-- **Version**: 0.2.2
+- **Version**: 0.2.3
 - **Status**: PASS/FAIL
 - **Overall Improvement**: Xx faster than Jena
 
@@ -509,4 +509,4 @@ jobs:
 ---
 
 *Benchmark Suite Documentation - January 6, 2026*
-*Production-ready benchmark suite for v0.2.2*
+*Production-ready benchmark suite for v0.2.3*

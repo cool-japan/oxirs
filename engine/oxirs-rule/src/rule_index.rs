@@ -1031,7 +1031,7 @@ impl PriorityIndex {
                 priority: self.get_priority(id),
             })
             .collect();
-        result.sort_by(|a, b| b.priority.cmp(&a.priority));
+        result.sort_by_key(|b| std::cmp::Reverse(b.priority));
         result
     }
 

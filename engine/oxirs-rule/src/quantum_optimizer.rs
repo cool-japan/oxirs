@@ -487,7 +487,7 @@ impl QuantumOptimizer {
             .map(|(i, &count)| (i, count))
             .collect();
 
-        order_with_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        order_with_counts.sort_by_key(|b| std::cmp::Reverse(b.1));
         let result: Vec<usize> = order_with_counts.iter().map(|(i, _)| *i).collect();
 
         info!("Quantum walk completed");

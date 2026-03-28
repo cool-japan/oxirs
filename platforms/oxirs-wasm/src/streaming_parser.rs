@@ -173,11 +173,7 @@ impl StreamingParser {
             emitted.push(ev);
         }
 
-        loop {
-            // Find next newline
-            let Some(nl_pos) = self.buffer.find('\n') else {
-                break;
-            };
+        while let Some(nl_pos) = self.buffer.find('\n') {
             let line = self.buffer[..nl_pos].to_string();
             self.buffer = self.buffer[nl_pos + 1..].to_string();
 

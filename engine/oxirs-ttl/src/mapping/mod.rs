@@ -659,7 +659,7 @@ impl MappingEngine {
                     message: format!("expected {} fields but got {}", headers.len(), values.len()),
                 });
             }
-            let row = Row::from_pairs(headers.iter().cloned().zip(values.into_iter()));
+            let row = Row::from_pairs(headers.iter().cloned().zip(values));
             rows.push(row);
         }
         Ok((headers, rows))
@@ -765,12 +765,8 @@ fn split_csv_lines(content: &str) -> Vec<String> {
                     current.push('\n');
                 }
             }
-            '\n' => {
-                if !in_quotes {
-                    lines.push(std::mem::take(&mut current));
-                } else {
-                    current.push(ch);
-                }
+            '\n' if !in_quotes => {
+                lines.push(std::mem::take(&mut current));
             }
             _ => {
                 current.push(ch);

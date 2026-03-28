@@ -22,6 +22,7 @@
 
 use crate::error::{TsdbError, TsdbResult};
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -232,7 +233,7 @@ impl DictionaryBlock {
             .enumerate()
             .map(|(i, s)| (s.as_str(), counts[i]))
             .collect();
-        freq.sort_by(|a, b| b.1.cmp(&a.1));
+        freq.sort_by_key(|f| Reverse(f.1));
         freq
     }
 }

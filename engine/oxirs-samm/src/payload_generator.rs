@@ -473,30 +473,26 @@ impl PayloadGenerator {
             CharacteristicKind::Collection
             | CharacteristicKind::Set
             | CharacteristicKind::SortedSet
-            | CharacteristicKind::TimeSeries => {
-                if !value.is_array() {
-                    return Err("Expected array for collection".to_string());
-                }
+            | CharacteristicKind::TimeSeries
+                if !value.is_array() =>
+            {
+                return Err("Expected array for collection".to_string());
             }
             _ => {}
         }
 
         // Check data type
         match data_type {
-            DataType::Integer => {
-                if !matches!(value, PayloadValue::Integer(_)) {
-                    return Err("Expected integer".to_string());
-                }
+            DataType::Integer if !matches!(value, PayloadValue::Integer(_)) => {
+                return Err("Expected integer".to_string());
             }
-            DataType::Decimal => {
-                if !matches!(value, PayloadValue::Decimal(_) | PayloadValue::Integer(_)) {
-                    return Err("Expected decimal".to_string());
-                }
+            DataType::Decimal
+                if !matches!(value, PayloadValue::Decimal(_) | PayloadValue::Integer(_)) =>
+            {
+                return Err("Expected decimal".to_string());
             }
-            DataType::Boolean => {
-                if !matches!(value, PayloadValue::Bool(_)) {
-                    return Err("Expected boolean".to_string());
-                }
+            DataType::Boolean if !matches!(value, PayloadValue::Bool(_)) => {
+                return Err("Expected boolean".to_string());
             }
             _ => {}
         }

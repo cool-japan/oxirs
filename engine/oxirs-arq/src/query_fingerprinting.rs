@@ -392,13 +392,12 @@ impl QueryFingerprinter {
         let string_pattern = string_literal_regex();
         let mut result = query.to_string();
         let mut params = Vec::new();
-        let mut index = start_index;
 
         // Find all string literals
         let matches: Vec<_> = string_pattern.find_iter(query).collect();
 
         // Replace from end to preserve positions
-        for m in matches.into_iter().rev() {
+        for (index, m) in (start_index..).zip(matches.into_iter().rev()) {
             let original = m.as_str().to_string();
             let param_name = format!("${}", index);
 
@@ -428,7 +427,6 @@ impl QueryFingerprinter {
                 param_name,
                 &result[m.end()..]
             );
-            index += 1;
         }
 
         params.reverse(); // Correct order
@@ -444,11 +442,10 @@ impl QueryFingerprinter {
         let number_pattern = numeric_literal_regex();
         let mut result = query.to_string();
         let mut params = Vec::new();
-        let mut index = start_index;
 
         let matches: Vec<_> = number_pattern.find_iter(query).collect();
 
-        for m in matches.into_iter().rev() {
+        for (index, m) in (start_index..).zip(matches.into_iter().rev()) {
             let original = m.as_str().to_string();
             let param_name = format!("${}", index);
 
@@ -465,7 +462,6 @@ impl QueryFingerprinter {
                 param_name,
                 &result[m.end()..]
             );
-            index += 1;
         }
 
         params.reverse();
@@ -542,7 +538,7 @@ impl QueryFingerprinter {
 
         // Replace variables (sorted by length descending to avoid partial replacements)
         let mut sorted_vars: Vec<_> = var_mapping.iter().collect();
-        sorted_vars.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        sorted_vars.sort_by_key(|b| std::cmp::Reverse(b.0.len()));
 
         for (original, normalized) in sorted_vars {
             result = result.replace(original, normalized);

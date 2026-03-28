@@ -1948,7 +1948,7 @@ metadata:
   name: oxirs-stream
   labels:
     app: oxirs-stream
-    version: v0.2.2
+    version: v0.2.3
 spec:
   replicas: 3
   selector:
@@ -1958,11 +1958,11 @@ spec:
     metadata:
       labels:
         app: oxirs-stream
-        version: v0.2.2
+        version: v0.2.3
     spec:
       containers:
       - name: oxirs-stream
-        image: oxirs/stream:v0.2.2
+        image: oxirs/stream:v0.2.3
         ports:
         - containerPort: 8080
           name: http
@@ -2013,7 +2013,7 @@ metadata:
   name: oxirs-federate
   labels:
     app: oxirs-federate
-    version: v0.2.2
+    version: v0.2.3
 spec:
   replicas: 2
   selector:
@@ -2023,11 +2023,11 @@ spec:
     metadata:
       labels:
         app: oxirs-federate
-        version: v0.2.2
+        version: v0.2.3
     spec:
       containers:
       - name: oxirs-federate
-        image: oxirs/federate:v0.2.2
+        image: oxirs/federate:v0.2.3
         ports:
         - containerPort: 8081
           name: http

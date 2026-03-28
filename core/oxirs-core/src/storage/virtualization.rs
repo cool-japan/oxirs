@@ -832,21 +832,17 @@ impl StorageEngine for VirtualStorage {
 
         // Handle errors based on write strategy
         match self.config.routing.write_strategy {
-            WriteStrategy::All => {
-                if !errors.is_empty() {
-                    return Err(OxirsError::Store(format!(
-                        "Failed to write to backends: {errors:?}"
-                    )));
-                }
+            WriteStrategy::All if !errors.is_empty() => {
+                return Err(OxirsError::Store(format!(
+                    "Failed to write to backends: {errors:?}"
+                )));
             }
-            WriteStrategy::Quorum { n } => {
-                if target_backends.len() - errors.len() < n {
-                    return Err(OxirsError::Store(format!(
-                        "Quorum write failed: {} successes, needed {}",
-                        target_backends.len() - errors.len(),
-                        n
-                    )));
-                }
+            WriteStrategy::Quorum { n } if target_backends.len() - errors.len() < n => {
+                return Err(OxirsError::Store(format!(
+                    "Quorum write failed: {} successes, needed {}",
+                    target_backends.len() - errors.len(),
+                    n
+                )));
             }
             _ => {}
         }

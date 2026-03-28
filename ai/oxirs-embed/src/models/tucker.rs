@@ -10,7 +10,7 @@ use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vect
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use scirs2_core::ndarray_ext::{Array2, Array3};
-use scirs2_core::random::{Random, Rng, SliceRandom};
+use scirs2_core::random::{Random, Rng, RngExt, SliceRandom};
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;

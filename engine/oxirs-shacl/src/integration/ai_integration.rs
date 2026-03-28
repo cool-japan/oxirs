@@ -22,7 +22,7 @@ use tracing::{debug, info, warn};
 
 // Note: SciRS2 integration for ML features
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 
 /// Configuration for AI integration
 #[derive(Debug, Clone, Serialize, Deserialize)]

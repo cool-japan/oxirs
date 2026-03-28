@@ -190,75 +190,61 @@ fn validate_integer_range(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
         .map_err(|_| OxirsError::Parse(format!("Cannot parse integer: '{value}'")))?;
 
     match datatype_iri {
-        "http://www.w3.org/2001/XMLSchema#byte" => {
-            if !(-128..=127).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Byte value out of range: {parsed_value}. Must be between -128 and 127"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#byte" if !(-128..=127).contains(&parsed_value) => {
+            return Err(OxirsError::Parse(format!(
+                "Byte value out of range: {parsed_value}. Must be between -128 and 127"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#short" => {
-            if !(-32768..=32767).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Short value out of range: {parsed_value}. Must be between -32768 and 32767"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#short" if !(-32768..=32767).contains(&parsed_value) => {
+            return Err(OxirsError::Parse(format!(
+                "Short value out of range: {parsed_value}. Must be between -32768 and 32767"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#int" => {
-            if !(-2147483648..=2147483647).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
+        "http://www.w3.org/2001/XMLSchema#int"
+            if !(-2147483648..=2147483647).contains(&parsed_value) =>
+        {
+            return Err(OxirsError::Parse(format!(
                     "Int value out of range: {parsed_value}. Must be between -2147483648 and 2147483647"
                 )));
-            }
         }
-        "http://www.w3.org/2001/XMLSchema#unsignedByte" => {
-            if !(0..=255).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Unsigned byte value out of range: {parsed_value}. Must be between 0 and 255"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#unsignedByte" if !(0..=255).contains(&parsed_value) => {
+            return Err(OxirsError::Parse(format!(
+                "Unsigned byte value out of range: {parsed_value}. Must be between 0 and 255"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#unsignedShort" => {
-            if !(0..=65535).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Unsigned short value out of range: {parsed_value}. Must be between 0 and 65535"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#unsignedShort"
+            if !(0..=65535).contains(&parsed_value) =>
+        {
+            return Err(OxirsError::Parse(format!(
+                "Unsigned short value out of range: {parsed_value}. Must be between 0 and 65535"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#unsignedInt" => {
-            if !(0..=4294967295).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Unsigned int value out of range: {parsed_value}. Must be between 0 and 4294967295"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#unsignedInt"
+            if !(0..=4294967295).contains(&parsed_value) =>
+        {
+            return Err(OxirsError::Parse(format!(
+                "Unsigned int value out of range: {parsed_value}. Must be between 0 and 4294967295"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#positiveInteger" => {
-            if parsed_value <= 0 {
-                return Err(OxirsError::Parse(format!(
-                    "Positive integer must be greater than 0, got: {parsed_value}"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#positiveInteger" if parsed_value <= 0 => {
+            return Err(OxirsError::Parse(format!(
+                "Positive integer must be greater than 0, got: {parsed_value}"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
-            if parsed_value < 0 {
-                return Err(OxirsError::Parse(format!(
-                    "Non-negative integer must be >= 0, got: {parsed_value}"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" if parsed_value < 0 => {
+            return Err(OxirsError::Parse(format!(
+                "Non-negative integer must be >= 0, got: {parsed_value}"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#negativeInteger" => {
-            if parsed_value >= 0 {
-                return Err(OxirsError::Parse(format!(
-                    "Negative integer must be less than 0, got: {parsed_value}"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#negativeInteger" if parsed_value >= 0 => {
+            return Err(OxirsError::Parse(format!(
+                "Negative integer must be less than 0, got: {parsed_value}"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
-            if parsed_value > 0 {
-                return Err(OxirsError::Parse(format!(
-                    "Non-positive integer must be <= 0, got: {parsed_value}"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" if parsed_value > 0 => {
+            return Err(OxirsError::Parse(format!(
+                "Non-positive integer must be <= 0, got: {parsed_value}"
+            )));
         }
         _ => {} // Other integer types don't have additional range restrictions in this simplified implementation
     }
@@ -274,75 +260,61 @@ fn validate_integer_range_oxs(integer: Integer, datatype_iri: &str) -> Result<()
     })?;
 
     match datatype_iri {
-        "http://www.w3.org/2001/XMLSchema#byte" => {
-            if !(-128..=127).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Byte value out of range: {parsed_value}. Must be between -128 and 127"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#byte" if !(-128..=127).contains(&parsed_value) => {
+            return Err(OxirsError::Parse(format!(
+                "Byte value out of range: {parsed_value}. Must be between -128 and 127"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#short" => {
-            if !(-32768..=32767).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Short value out of range: {parsed_value}. Must be between -32768 and 32767"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#short" if !(-32768..=32767).contains(&parsed_value) => {
+            return Err(OxirsError::Parse(format!(
+                "Short value out of range: {parsed_value}. Must be between -32768 and 32767"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#int" => {
-            if !(-2147483648..=2147483647).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
+        "http://www.w3.org/2001/XMLSchema#int"
+            if !(-2147483648..=2147483647).contains(&parsed_value) =>
+        {
+            return Err(OxirsError::Parse(format!(
                     "Int value out of range: {parsed_value}. Must be between -2147483648 and 2147483647"
                 )));
-            }
         }
-        "http://www.w3.org/2001/XMLSchema#unsignedByte" => {
-            if !(0..=255).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Unsigned byte value out of range: {parsed_value}. Must be between 0 and 255"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#unsignedByte" if !(0..=255).contains(&parsed_value) => {
+            return Err(OxirsError::Parse(format!(
+                "Unsigned byte value out of range: {parsed_value}. Must be between 0 and 255"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#unsignedShort" => {
-            if !(0..=65535).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Unsigned short value out of range: {parsed_value}. Must be between 0 and 65535"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#unsignedShort"
+            if !(0..=65535).contains(&parsed_value) =>
+        {
+            return Err(OxirsError::Parse(format!(
+                "Unsigned short value out of range: {parsed_value}. Must be between 0 and 65535"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#unsignedInt" => {
-            if !(0..=4294967295).contains(&parsed_value) {
-                return Err(OxirsError::Parse(format!(
-                    "Unsigned int value out of range: {parsed_value}. Must be between 0 and 4294967295"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#unsignedInt"
+            if !(0..=4294967295).contains(&parsed_value) =>
+        {
+            return Err(OxirsError::Parse(format!(
+                "Unsigned int value out of range: {parsed_value}. Must be between 0 and 4294967295"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#positiveInteger" => {
-            if parsed_value <= 0 {
-                return Err(OxirsError::Parse(format!(
-                    "Positive integer must be greater than 0, got: {parsed_value}"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#positiveInteger" if parsed_value <= 0 => {
+            return Err(OxirsError::Parse(format!(
+                "Positive integer must be greater than 0, got: {parsed_value}"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
-            if parsed_value < 0 {
-                return Err(OxirsError::Parse(format!(
-                    "Non-negative integer must be >= 0, got: {parsed_value}"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" if parsed_value < 0 => {
+            return Err(OxirsError::Parse(format!(
+                "Non-negative integer must be >= 0, got: {parsed_value}"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#negativeInteger" => {
-            if parsed_value >= 0 {
-                return Err(OxirsError::Parse(format!(
-                    "Negative integer must be less than 0, got: {parsed_value}"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#negativeInteger" if parsed_value >= 0 => {
+            return Err(OxirsError::Parse(format!(
+                "Negative integer must be less than 0, got: {parsed_value}"
+            )));
         }
-        "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
-            if parsed_value > 0 {
-                return Err(OxirsError::Parse(format!(
-                    "Non-positive integer must be <= 0, got: {parsed_value}"
-                )));
-            }
+        "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" if parsed_value > 0 => {
+            return Err(OxirsError::Parse(format!(
+                "Non-positive integer must be <= 0, got: {parsed_value}"
+            )));
         }
         _ => {} // Other integer types don't have additional range restrictions
     }
@@ -780,13 +752,13 @@ impl Literal {
                             }
                         }
                     }
-                    "http://www.w3.org/2001/XMLSchema#string"
-                    | "http://www.w3.org/2001/XMLSchema#normalizedString" => {
+                    "http://www.w3.org/2001/XMLSchema#normalizedString" => {
                         // Normalize whitespace for normalizedString
-                        if dt_iri == "http://www.w3.org/2001/XMLSchema#normalizedString" {
-                            let normalized = value.replace(['\t', '\n', '\r'], " ");
-                            return Literal::new_typed(normalized, datatype.clone());
-                        }
+                        let normalized = value.replace(['\t', '\n', '\r'], " ");
+                        return Literal::new_typed(normalized, datatype.clone());
+                    }
+                    "http://www.w3.org/2001/XMLSchema#string" => {
+                        // No normalization needed for string
                     }
                     "http://www.w3.org/2001/XMLSchema#token" => {
                         // Normalize whitespace and collapse consecutive spaces

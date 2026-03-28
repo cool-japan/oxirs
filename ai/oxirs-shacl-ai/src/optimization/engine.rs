@@ -557,10 +557,8 @@ impl OptimizationEngine {
                         }
                     }
                 }
-                (Target::Node(n1), Target::Node(n2)) => {
-                    if n1 == n2 {
-                        matches += 1;
-                    }
+                (Target::Node(n1), Target::Node(n2)) if n1 == n2 => {
+                    matches += 1;
                 }
                 _ => {}
             }

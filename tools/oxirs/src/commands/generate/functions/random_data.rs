@@ -4,11 +4,11 @@
 
 use oxirs_core::format::RdfFormat;
 use oxirs_core::model::{GraphName, Literal, NamedNode, Quad, Subject, Term};
-use scirs2_core::Rng;
+use scirs2_core::RngExt;
 use std::error::Error;
 
 /// Generate random RDF triples
-pub(super) fn generate_random_rdf<R: Rng>(rng: &mut R, count: usize) -> Vec<Quad> {
+pub(super) fn generate_random_rdf<R: RngExt>(rng: &mut R, count: usize) -> Vec<Quad> {
     let mut quads = Vec::with_capacity(count);
     let predicates = [
         "name",
@@ -56,7 +56,7 @@ pub(super) fn generate_random_rdf<R: Rng>(rng: &mut R, count: usize) -> Vec<Quad
 }
 
 /// Generate graph structure (nodes and edges)
-pub(super) fn generate_graph_structure<R: Rng>(rng: &mut R, count: usize) -> Vec<Quad> {
+pub(super) fn generate_graph_structure<R: RngExt>(rng: &mut R, count: usize) -> Vec<Quad> {
     let mut quads = Vec::with_capacity(count);
     let node_count = (count as f64).sqrt() as usize;
     let edge_types = ["connected", "linked", "related", "parent", "child"];

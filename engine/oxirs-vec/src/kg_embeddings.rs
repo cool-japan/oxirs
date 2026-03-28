@@ -10,7 +10,7 @@ use crate::random_utils::NormalSampler as Normal;
 use crate::Vector;
 use anyhow::{anyhow, Result};
 use nalgebra::{Complex, DVector};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -196,11 +196,11 @@ impl TransE {
         let mut negatives = Vec::new();
 
         for _ in 0..self.config.negative_samples {
-            if rng.gen_bool(0.5) {
+            if rng.random_bool(0.5) {
                 // Corrupt head
                 let mut negative = triple.clone();
                 loop {
-                    let idx = rng.gen_range(0..self.entities.len());
+                    let idx = rng.random_range(0..self.entities.len());
                     let entity = &self.entities[idx];
                     if entity != &triple.subject {
                         negative.subject = entity.clone();
@@ -212,7 +212,7 @@ impl TransE {
                 // Corrupt tail
                 let mut negative = triple.clone();
                 loop {
-                    let idx = rng.gen_range(0..self.entities.len());
+                    let idx = rng.random_range(0..self.entities.len());
                     let entity = &self.entities[idx];
                     if entity != &triple.object {
                         negative.object = entity.clone();
@@ -781,7 +781,7 @@ impl RotatE {
         for entity in &self.entities {
             let phases: Vec<Complex<f32>> = (0..self.config.dimensions)
                 .map(|_| {
-                    let phase = rng.gen_range(phase_range.clone());
+                    let phase = rng.random_range(phase_range.clone());
                     Complex::new(phase.cos(), phase.sin())
                 })
                 .collect();
@@ -793,7 +793,7 @@ impl RotatE {
         // Initialize relation embeddings (phase angles)
         for relation in &self.relations {
             let phases: Vec<f32> = (0..self.config.dimensions)
-                .map(|_| rng.gen_range(phase_range.clone()))
+                .map(|_| rng.random_range(phase_range.clone()))
                 .collect();
 
             self.relation_embeddings

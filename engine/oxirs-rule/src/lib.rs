@@ -1,9 +1,9 @@
 //! # OxiRS Rule Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-rule/badge.svg)](https://docs.rs/oxirs-rule)
 //!
-//! **Status**: Production Release (v0.2.2)
+//! **Status**: Production Release (v0.2.4)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Forward/backward rule engine for RDFS, OWL, and SWRL reasoning with RETE optimization.

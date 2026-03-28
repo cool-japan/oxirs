@@ -53,20 +53,14 @@ pub fn parse_gml(gml_str: &str) -> Result<Geometry> {
                 }
 
                 match name.as_str() {
-                    "Point" | "gml:Point" => {
-                        if current_geom_type.is_none() {
-                            current_geom_type = Some("Point".to_string());
-                        }
+                    "Point" | "gml:Point" if current_geom_type.is_none() => {
+                        current_geom_type = Some("Point".to_string());
                     }
-                    "LineString" | "gml:LineString" => {
-                        if current_geom_type.is_none() {
-                            current_geom_type = Some("LineString".to_string());
-                        }
+                    "LineString" | "gml:LineString" if current_geom_type.is_none() => {
+                        current_geom_type = Some("LineString".to_string());
                     }
-                    "Polygon" | "gml:Polygon" => {
-                        if current_geom_type.is_none() {
-                            current_geom_type = Some("Polygon".to_string());
-                        }
+                    "Polygon" | "gml:Polygon" if current_geom_type.is_none() => {
+                        current_geom_type = Some("Polygon".to_string());
                     }
                     "MultiPoint" | "gml:MultiPoint" => {
                         current_geom_type = Some("MultiPoint".to_string());
@@ -94,12 +88,10 @@ pub fn parse_gml(gml_str: &str) -> Result<Geometry> {
                     _ => {}
                 }
             }
-            Ok(Event::Text(e)) => {
-                if in_pos_list || in_coordinates {
-                    // In quick-xml 0.38+, decode text from bytes
-                    let text = String::from_utf8_lossy(e.as_ref());
-                    coords_buffer.push_str(&text);
-                }
+            Ok(Event::Text(e)) if (in_pos_list || in_coordinates) => {
+                // In quick-xml 0.38+, decode text from bytes
+                let text = String::from_utf8_lossy(e.as_ref());
+                coords_buffer.push_str(&text);
             }
             Ok(Event::End(e)) => {
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();

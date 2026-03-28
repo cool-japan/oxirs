@@ -1,10 +1,10 @@
 # OxiRS Core
 
-[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Zero-dependency, Rust-native RDF data model and SPARQL engine for the OxiRS semantic web platform**
 
-**Status**: v0.2.2 - Released March 16, 2026
+**Status**: v0.2.3 - Released March 16, 2026
 
 ✨ **Production Release**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
@@ -55,17 +55,17 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.2.2"
+oxirs-core = "0.2.3"
 
 # Optional: Enable async streaming support
-oxirs-core = { version = "0.2.2", features = ["async"] }
+oxirs-core = { version = "0.2.3", features = ["async"] }
 ```
 
 For maximum performance in production:
 
 ```toml
 [dependencies]
-oxirs-core = { version = "0.2.2", features = ["async"] }
+oxirs-core = { version = "0.2.3", features = ["async"] }
 
 [profile.release]
 lto = "fat"                    # Maximum link-time optimization
@@ -561,7 +561,7 @@ Licensed under:
 
 ### 🎯 Next Phase Priorities (Q1-Q2 2026)
 
-#### 🚀 Phase 2: v0.2.2 (Q1 2026)
+#### 🚀 Phase 2: v0.2.3 (Q1 2026)
 - **Query Optimization**: 10x performance improvements
 - **AI Production Hardening**: Production-ready AI features
 - **Multi-Region Clustering**: Distributed deployment support

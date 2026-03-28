@@ -404,12 +404,13 @@ impl ZeroCopyTripleStore {
                         current.clear();
                     }
                 }
-                ' ' | '\t' if !in_quotes && !in_angle => {
+                ' ' | '\t' if !in_quotes && !in_angle && !current.is_empty() && current != "." => {
                     // Skip whitespace outside quotes and angle brackets
-                    if !current.is_empty() && current != "." {
-                        parts.push(current.trim().to_string());
-                        current.clear();
-                    }
+                    parts.push(current.trim().to_string());
+                    current.clear();
+                }
+                ' ' | '\t' if !in_quotes && !in_angle => {
+                    // Skip whitespace when current is empty or "."
                 }
                 '.' if !in_quotes && !in_angle => {
                     // End of triple

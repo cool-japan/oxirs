@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use scirs2_core::ndarray_ext::{Array1, Array2};
 #[allow(unused_imports)]
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
@@ -183,7 +183,7 @@ impl GNNEmbedding {
             // Initialize weight matrix
             let scale = (2.0 / (input_dim + output_dim) as f32).sqrt();
             let weight_matrix = Array2::from_shape_fn((input_dim, output_dim), |_| {
-                rng.gen_range(0.0..1.0) * scale * 2.0 - scale
+                rng.random_range(0.0..1.0) * scale * 2.0 - scale
             });
 
             let bias = Array1::zeros(output_dim);
@@ -198,13 +198,13 @@ impl GNNEmbedding {
 
                 Some(AttentionWeights {
                     query_weights: Array2::from_shape_fn((input_dim, attention_dim), |_| {
-                        rng.gen_range(0.0..1.0) * scale * 2.0 - scale
+                        rng.random_range(0.0..1.0) * scale * 2.0 - scale
                     }),
                     key_weights: Array2::from_shape_fn((input_dim, attention_dim), |_| {
-                        rng.gen_range(0.0..1.0) * scale * 2.0 - scale
+                        rng.random_range(0.0..1.0) * scale * 2.0 - scale
                     }),
                     value_weights: Array2::from_shape_fn((input_dim, attention_dim), |_| {
-                        rng.gen_range(0.0..1.0) * scale * 2.0 - scale
+                        rng.random_range(0.0..1.0) * scale * 2.0 - scale
                     }),
                     num_heads,
                 })
@@ -574,7 +574,7 @@ impl GNNEmbedding {
                 .into_iter()
                 .map(|(idx, feat)| {
                     let masked = feat.mapv(|x| {
-                        if rng.gen_range(0.0..1.0) > dropout_rate as f32 {
+                        if rng.random_range(0.0..1.0) > dropout_rate as f32 {
                             x / (1.0 - dropout_rate as f32)
                         } else {
                             0.0
@@ -649,7 +649,7 @@ impl EmbeddingModel for GNNEmbedding {
         let mut initial_features = HashMap::new();
         for idx in self.entity_to_idx.values() {
             let embedding =
-                Array1::from_shape_fn(dimensions, |_| rng.gen_range(0.0..1.0) * 0.1 - 0.05);
+                Array1::from_shape_fn(dimensions, |_| rng.random_range(0.0..1.0) * 0.1 - 0.05);
             initial_features.insert(*idx, embedding);
         }
 
@@ -688,7 +688,7 @@ impl EmbeddingModel for GNNEmbedding {
         // Generate relation embeddings (simplified - using random initialization)
         for relation in self.relation_to_idx.keys() {
             let embedding =
-                Array1::from_shape_fn(dimensions, |_| rng.gen_range(0.0..1.0) * 0.1 - 0.05);
+                Array1::from_shape_fn(dimensions, |_| rng.random_range(0.0..1.0) * 0.1 - 0.05);
             self.relation_embeddings.insert(relation.clone(), embedding);
         }
 

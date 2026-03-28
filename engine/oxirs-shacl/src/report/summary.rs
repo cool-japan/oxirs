@@ -90,7 +90,7 @@ impl ValidationSummary {
             .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
-        component_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        component_counts.sort_by_key(|b| std::cmp::Reverse(b.1));
         self.top_violation_types = component_counts.into_iter().take(5).collect();
 
         // Calculate top problematic shapes
@@ -99,7 +99,7 @@ impl ValidationSummary {
             .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
-        shape_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        shape_counts.sort_by_key(|b| std::cmp::Reverse(b.1));
         self.top_problematic_shapes = shape_counts.into_iter().take(5).collect();
 
         // Calculate success rate (simplified - in practice would consider total nodes)

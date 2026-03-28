@@ -521,22 +521,20 @@ fn validate_api_key_scopes(scopes: &[ApiKeyScope], user: &User) -> FusekiResult<
     // Ensure user has permission to grant these scopes
     for scope in scopes {
         match scope {
-            ApiKeyScope::Admin => {
-                if !user.permissions.contains(&Permission::SystemConfig) {
-                    return Err(FusekiError::forbidden("Cannot grant admin scope"));
-                }
+            ApiKeyScope::Admin if !user.permissions.contains(&Permission::SystemConfig) => {
+                return Err(FusekiError::forbidden("Cannot grant admin scope"));
             }
-            ApiKeyScope::DatasetManagement => {
-                if !user.permissions.contains(&Permission::GlobalAdmin) {
-                    return Err(FusekiError::forbidden(
-                        "Cannot grant dataset management scope",
-                    ));
-                }
+            ApiKeyScope::DatasetManagement
+                if !user.permissions.contains(&Permission::GlobalAdmin) =>
+            {
+                return Err(FusekiError::forbidden(
+                    "Cannot grant dataset management scope",
+                ));
             }
-            ApiKeyScope::DatasetAdmin(_) => {
-                if !user.permissions.contains(&Permission::GlobalAdmin) {
-                    return Err(FusekiError::forbidden("Cannot grant dataset admin scope"));
-                }
+            ApiKeyScope::DatasetAdmin(_)
+                if !user.permissions.contains(&Permission::GlobalAdmin) =>
+            {
+                return Err(FusekiError::forbidden("Cannot grant dataset admin scope"));
             }
             _ => {} // Other scopes are generally allowed
         }

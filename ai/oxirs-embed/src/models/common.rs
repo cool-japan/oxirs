@@ -3,7 +3,7 @@
 // Removed unused import
 use scirs2_core::ndarray_ext::{Array1, Array2};
 #[allow(unused_imports)]
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 
 /// Initialize embeddings with Xavier/Glorot initialization (optimized)
 pub fn xavier_init<R>(
@@ -13,7 +13,7 @@ pub fn xavier_init<R>(
     rng: &mut Random<R>,
 ) -> Array2<f64>
 where
-    R: scirs2_core::random::RngCore,
+    R: scirs2_core::random::Rng,
 {
     let limit = (6.0 / (fan_in + fan_out) as f64).sqrt();
     let scale = 2.0 * limit;

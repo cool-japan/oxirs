@@ -3,13 +3,13 @@
 > Eine Rust-native, modulare Plattform für Semantic Web, SPARQL 1.2, GraphQL und KI-erweiterte Inferenz
 
 [![Lizenz: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.2.3-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: v0.2.2 - Veröffentlicht - 16. März 2026
+**Status**: v0.2.3 - Veröffentlicht - 16. März 2026
 
 **Produktionsbereit**: Vollständige SPARQL 1.1/1.2-Implementierung mit **3,8-fach schnellerem Optimizer**, industriellem IoT-Support und KI-gestützten Funktionen. **40.791+ Tests bestanden**, null Warnungen über alle 26 Crates.
 
-**v0.2.2 Highlights (16. März 2026)**: 26 neue funktionale Module über 16 Entwicklungsrunden hinzugefügt. Erweiterte SPARQL-Algebra (EXISTS, MINUS, Subquery, Service-Klausel), produktionsreifer Speicher (Sechs-Index-Store, Index-Merger/Rebuilder), KI-Fähigkeiten (Vektorspeicher, Constraint-Inferenz, Konversationsverlauf) und Sicherheitshärtung (Credential-Store, Trust-Chain-Validierung).
+**v0.2.3 Highlights (16. März 2026)**: 26 neue funktionale Module über 16 Entwicklungsrunden hinzugefügt. Erweiterte SPARQL-Algebra (EXISTS, MINUS, Subquery, Service-Klausel), produktionsreifer Speicher (Sechs-Index-Store, Index-Merger/Rebuilder), KI-Fähigkeiten (Vektorspeicher, Constraint-Inferenz, Konversationsverlauf) und Sicherheitshärtung (Credential-Store, Trust-Chain-Validierung).
 
 ## Vision
 
@@ -58,7 +58,7 @@ OxiRS bietet erstklassige Unterstützung für **Gaia-X Trust Framework** und eur
 
 ```bash
 # CLI-Tool installieren
-cargo install oxirs --version 0.2.2
+cargo install oxirs --version 0.2.3
 
 # Aus Quellcode bauen
 git clone https://github.com/cool-japan/oxirs.git
@@ -177,11 +177,11 @@ Manufacturing-X Digital Twin:
   Simulation:           Echtzeit-Physik (SciRS2)
 ```
 
-## Neu in v0.2.2 (16. März 2026)
+## Neu in v0.2.3 (16. März 2026)
 
-**v0.2.2 Release: 26 neue Module über 16 Entwicklungsrunden**
+**v0.2.3 Release: 26 neue Module über 16 Entwicklungsrunden**
 
-OxiRS v0.2.2 erweitert die Plattform erheblich mit tiefer SPARQL-Algebra, produktionsreifem Speicher, KI-Fähigkeiten und Sicherheitshärtung:
+OxiRS v0.2.3 erweitert die Plattform erheblich mit tiefer SPARQL-Algebra, produktionsreifem Speicher, KI-Fähigkeiten und Sicherheitshärtung:
 
 **Kernfunktionen:**
 - **Vollständiges SPARQL 1.1/1.2** - W3C-konform mit fortschrittlicher Abfrageoptimierung
@@ -194,7 +194,7 @@ OxiRS v0.2.2 erweitert die Plattform erheblich mit tiefer SPARQL-Algebra, produk
 - **Vollständige Observability** - Prometheus-Metriken, OpenTelemetry-Tracing
 - **Cloud-Native** - Kubernetes-Operator, Terraform-Module, Docker-Unterstützung
 
-**Neue Funktionen nach Bereich (v0.2.2):**
+**Neue Funktionen nach Bereich (v0.2.3):**
 - **Erweiterte SPARQL-Algebra**: EXISTS/MINUS-Evaluatoren, Subquery-Builder, Service-Klausel-Handler, LATERAL-Join
 - **Speicher-Härtung**: Sechs-Index-Store, Index-Merger/Rebuilder, B-Tree-Kompaktierung, Triple-Cache, Shard-Router
 - **KI-Produktionsreife**: Vektorspeicher, Constraint-Inferenz, Konversationsverlauf, Antwort-Cache, Reranker
@@ -205,7 +205,7 @@ OxiRS v0.2.2 erweitert die Plattform erheblich mit tiefer SPARQL-Algebra, produk
 - **Stream-Verarbeitung**: Partitionsmanager, Consumer Groups, Schema-Registry, Dead-Letter-Queue, Wasserzeichen-Tracking
 - **Zeitreihen**: Kontinuierliche Abfragen, Schreibpuffer, Tag-Index, Aufbewahrungsverwaltung
 
-**Qualitätsmetriken (v0.2.2):**
+**Qualitätsmetriken (v0.2.3):**
 - ✅ **40.791+ Tests bestanden** (100% Erfolgsquote, ca. 115 übersprungen)
 - ✅ **Null Kompilierungswarnungen** über alle 26 Crates
 - ✅ **95%+ Testabdeckung** und Dokumentationsabdeckung
@@ -254,7 +254,7 @@ oxirs/                  # Cargo Workspace Root
     └─ benchmarks/       # SP2Bench, WatDiv, LDBC SGS
 ```
 
-## Feature-Matrix (v0.2.2)
+## Feature-Matrix (v0.2.3)
 
 | Fähigkeit | OxiRS Crate(s) | Status | Jena/Fuseki-Parität |
 |-----------|----------------|--------|---------------------|
@@ -313,7 +313,7 @@ oxirs/                  # Cargo Workspace Root
 - ⏳ Geplant: Noch nicht implementiert
 - 🔸 Teilweise/Plug-in-Unterstützung in Jena
 
-**Qualitätsmetriken (v0.2.2):**
+**Qualitätsmetriken (v0.2.3):**
 - **40.791 Tests bestanden** (100% Erfolgsquote, ca. 115 übersprungen)
 - **Null Kompilierungswarnungen** (durchgesetzt mit `-D warnings`)
 - **95%+ Testabdeckung** über alle 26 Module
@@ -322,7 +322,7 @@ oxirs/                  # Cargo Workspace Root
 - **Produktions-Sicherheitsaudit abgeschlossen**
 - **CUDA GPU-Unterstützung** für KI-Beschleunigung
 - **3,8-fach schnellere Abfrageoptimierung** durch adaptive Komplexitätserkennung
-- **26 neue funktionale Module** in v0.2.2 hinzugefügt (16 Entwicklungsrunden)
+- **26 neue funktionale Module** in v0.2.3 hinzugefügt (16 Entwicklungsrunden)
 
 ## Veröffentlichte Crates
 
@@ -492,12 +492,12 @@ Optionale Features zur Minimierung von Abhängigkeiten:
 | Version | Zieldatum | Meilenstein | Lieferungen | Status |
 |---------|-----------|-------------|-------------|--------|
 | **v0.1.0** | **✅ 7. Jan 2026** | **Initial Production** | Vollständiges SPARQL 1.1/1.2, Industrielles IoT, KI, 13.123 Tests | ✅ Veröffentlicht |
-| **v0.2.2** | **✅ 16. März 2026** | **Tiefe Feature-Erweiterung** | 40.791+ Tests, 26 neue Module, 3,8-fach schnellerer Optimizer, erweiterte SPARQL-Algebra | ✅ Veröffentlicht (aktuell) |
+| **v0.2.3** | **✅ 16. März 2026** | **Tiefe Feature-Erweiterung** | 40.791+ Tests, 26 neue Module, 3,8-fach schnellerer Optimizer, erweiterte SPARQL-Algebra | ✅ Veröffentlicht (aktuell) |
 | **v0.3.0** | **Q2 2026** | **Volltextsuche & Skalierung** | Volltextsuche (Tantivy), 10x Performance, Multi-Region-Clustering | Geplant |
 
-### Aktuelle Version: v0.2.2 (16. März 2026)
+### Aktuelle Version: v0.2.3 (16. März 2026)
 
-**v0.2.2 Schwerpunkte (16 abgeschlossene Runden):**
+**v0.2.3 Schwerpunkte (16 abgeschlossene Runden):**
 - Erweiterte SPARQL-Algebra: EXISTS/MINUS-Evaluatoren, Subquery-Builder, Service-Klausel, LATERAL-Join
 - Speicher-Härtung: Sechs-Index-Store, Index-Merger/Rebuilder, B-Tree-Kompaktierung, Triple-Cache
 - KI-Produktionsreife: Vektorspeicher, Constraint-Inferenz, Konversationsverlauf, Antwort-Cache
@@ -506,7 +506,7 @@ Optionale Features zur Minimierung von Abhängigkeiten:
 - Stream-Erweiterungen: Partitionsmanager, Consumer Groups, Schema-Registry, Dead-Letter-Queue
 - Zeitreihen: Kontinuierliche Abfragen, Schreibpuffer, Tag-Index, Aufbewahrungsverwaltung
 
-## Releasenotes (v0.2.2)
+## Releasenotes (v0.2.3)
 
 Vollständige Hinweise in [CHANGELOG.md](CHANGELOG.md).
 
@@ -522,7 +522,7 @@ Vollständige Hinweise in [CHANGELOG.md](CHANGELOG.md).
 - **Geospatial**: Konvexe Hülle (Graham Scan), Distanzberechnung, Schnittmengenerkennung, Flächenberechnung
 - **Stream-Verarbeitung**: Partitionsmanager, Consumer Groups, Schema-Registry, Dead-Letter-Queue, Wasserzeichen-Tracking
 
-### Tests pro Crate (v0.2.2)
+### Tests pro Crate (v0.2.3)
 
 | Crate | Tests |
 |-------|-------|
@@ -612,4 +612,4 @@ Details siehe [LICENSE](LICENSE).
 
 *"Rust macht Speichersicherheit zur Selbstverständlichkeit; OxiRS macht Knowledge-Graph-Engineering zur Selbstverständlichkeit."*
 
-**v0.2.2 - Veröffentlicht - 16. März 2026**
+**v0.2.3 - Veröffentlicht - 16. März 2026**

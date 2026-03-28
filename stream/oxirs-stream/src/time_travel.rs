@@ -809,10 +809,10 @@ impl TimeTravelEngine {
     fn apply_ordering(&self, events: &mut [StreamEvent], ordering: &TemporalOrdering) {
         match ordering {
             TemporalOrdering::TimeAscending => {
-                events.sort_by(|a, b| a.metadata().timestamp.cmp(&b.metadata().timestamp));
+                events.sort_by_key(|a| a.metadata().timestamp);
             }
             TemporalOrdering::TimeDescending => {
-                events.sort_by(|a, b| b.metadata().timestamp.cmp(&a.metadata().timestamp));
+                events.sort_by_key(|b| std::cmp::Reverse(b.metadata().timestamp));
             }
             TemporalOrdering::VersionAscending => {
                 events.sort_by(|a, b| a.metadata().version.cmp(&b.metadata().version));

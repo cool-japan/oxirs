@@ -961,7 +961,7 @@ impl RecoveryManager {
                 for resource in resources {
                     // Simulate health check (in production, this would be actual health probe)
                     // For now, assume all resources are healthy with 95% probability
-                    use scirs2_core::random::{rng, Rng};
+                    use scirs2_core::random::{rng, RngExt};
                     let is_healthy = rng().random::<f64>() > 0.05;
                     health.insert(resource.to_string(), is_healthy);
 

@@ -1,10 +1,10 @@
 # OxiRS GraphQL - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Current Status
 
-OxiRS GraphQL v0.2.2 is production-ready, providing a modern GraphQL interface for RDF data with automatic schema generation and AI-powered capabilities.
+OxiRS GraphQL v0.2.3 is production-ready, providing a modern GraphQL interface for RDF data with automatic schema generation and AI-powered capabilities.
 
 ### Production Features
 - ✅ **GraphQL Server** - Full GraphQL specification compliance
@@ -30,7 +30,7 @@ OxiRS GraphQL v0.2.2 is production-ready, providing a modern GraphQL interface f
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ Full GraphQL specification, automatic schema, subscriptions, federation, 1213 tests
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ GraphQL caching improvements (field resolver cache TTL+LRU)
 - ✅ Advanced federation capabilities
 - ✅ Enhanced subscription features (ChangeTracker, SubscriptionManager, Broadcaster)
@@ -54,4 +54,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS GraphQL v0.2.2 - Modern GraphQL interface for RDF*
+*OxiRS GraphQL v0.2.3 - Modern GraphQL interface for RDF*

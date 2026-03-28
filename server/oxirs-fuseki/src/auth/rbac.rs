@@ -492,7 +492,7 @@ impl RbacManager {
             })
             .collect();
 
-        matching_policies.sort_by(|a, b| b.priority.cmp(&a.priority));
+        matching_policies.sort_by_key(|item| std::cmp::Reverse(item.priority));
 
         // Apply first matching policy
         if let Some(policy) = matching_policies.first() {

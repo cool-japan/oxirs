@@ -9,7 +9,7 @@
 
 use crate::{similarity::SimilarityMetric, Vector};
 use anyhow::{anyhow, Result};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -767,7 +767,7 @@ impl ClusteringEngine {
         let mut centroids = Vec::new();
 
         // Choose first centroid randomly
-        let first_idx = rng.gen_range(0..resources.len());
+        let first_idx = rng.random_range(0..resources.len());
         centroids.push(resources[first_idx].1.clone());
 
         // Choose remaining centroids with probability proportional to squared distance

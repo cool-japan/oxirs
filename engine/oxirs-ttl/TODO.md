@@ -1,6 +1,6 @@
 # OxiRS TTL - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -56,7 +56,7 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
 - ✅ RDF 1.2 support, streaming, async I/O, parallel processing
 - ✅ 1726 tests passing
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Additional N3 built-in predicates
 - ✅ Enhanced error recovery strategies
 - ✅ Performance optimizations for edge cases
@@ -78,4 +78,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TTL v0.2.2 - Streaming RDF parser and serializer*
+*OxiRS TTL v0.2.3 - Streaming RDF parser and serializer*

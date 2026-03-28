@@ -153,10 +153,11 @@ impl ForwardChainer {
                         new_bindings.insert(var.to_string(), fact_value.to_string());
                     }
                 }
-                Some(constant) => {
-                    if constant != fact_value {
-                        return None;
-                    }
+                Some(constant) if constant != fact_value => {
+                    return None;
+                }
+                Some(_) => {
+                    // Constant matches fact_value: continue
                 }
             }
         }

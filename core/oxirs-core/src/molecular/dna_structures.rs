@@ -151,13 +151,13 @@ impl DnaDataStructure {
                 }
                 NucleotideData::Adenine(term)
                 | NucleotideData::Thymine(term)
-                | NucleotideData::Guanine(term) => {
-                    if in_gene {
-                        current_triple_data.push(term.clone());
-                    }
+                | NucleotideData::Guanine(term)
+                    if in_gene =>
+                {
+                    current_triple_data.push(term.clone());
                 }
                 _ => {
-                    // Skip other special markers during decoding
+                    // Skip other special markers or non-gene nucleotides during decoding
                 }
             }
         }

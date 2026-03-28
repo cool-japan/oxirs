@@ -1,6 +1,6 @@
 # OxiRS Vec - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -62,7 +62,7 @@ Production-ready guides available in `/docs`:
 - ✅ 20+ distance metrics, GPU acceleration, hybrid search, multi-modal
 - ✅ 1598 tests passing
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ GPU-based index building
 - ✅ Multi-GPU load balancing
 - ✅ Enhanced CUDA kernel optimization
@@ -86,4 +86,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS Vec v0.2.2 - Vector search infrastructure*
+*OxiRS Vec v0.2.3 - Vector search infrastructure*

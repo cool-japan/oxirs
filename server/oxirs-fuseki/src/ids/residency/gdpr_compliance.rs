@@ -463,13 +463,10 @@ impl GdprComplianceChecker {
             match derogation {
                 Article49Derogation::ExplicitConsent {
                     informed_of_risks, ..
-                } => {
-                    if !informed_of_risks {
-                        result.recommendations.push(
-                            "Data subject must be informed of risks before giving consent"
-                                .to_string(),
-                        );
-                    }
+                } if !informed_of_risks => {
+                    result.recommendations.push(
+                        "Data subject must be informed of risks before giving consent".to_string(),
+                    );
                 }
                 Article49Derogation::CompellingLegitimateInterests {
                     not_repetitive,

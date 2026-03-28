@@ -12,7 +12,7 @@ use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use reqwest;
 use scirs2_core::metrics::{Counter, Timer};
-use scirs2_core::random::{rng, Rng}; // Use scirs2-core for random number generation
+use scirs2_core::random::{rng, RngExt}; // Use scirs2-core for random number generation
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};

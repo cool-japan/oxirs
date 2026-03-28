@@ -27,7 +27,7 @@ This guide helps you optimize `oxirs-geosparql` for production workloads, coveri
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-geosparql = { version = "0.2.2", features = [
+oxirs-geosparql = { version = "0.2.3", features = [
     "performance",    # Enables parallel, GPU, and caching
     "parallel",       # Parallel processing with rayon
     "gpu",            # GPU acceleration (optional)

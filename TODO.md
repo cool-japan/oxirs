@@ -1,20 +1,20 @@
 # OxiRS Development Roadmap
 
-*Version: 0.2.2 | Last Updated: March 16, 2026*
+*Version: 0.2.4 | Last Updated: March 28, 2026*
 
-## Current Status: v0.2.2 - Released (March 16, 2026)
+## Current Status: v0.2.4 - Released (March 28, 2026)
 
 **OxiRS** is an advanced AI-augmented semantic web platform built in Rust, delivering a production-ready alternative to Apache Jena + Fuseki with cutting-edge AI/ML capabilities.
 
-### Release Metrics (v0.2.2, March 16, 2026)
-- **Version**: 0.2.2
+### Release Metrics (v0.2.4, March 28, 2026)
+- **Version**: 0.2.4
 - **Architecture**: 26-crate workspace
 - **Build Status**: Clean compilation - Zero errors/warnings across all modules
 - **Test Status**: 40,786 tests passing (100% pass rate, ~115 skipped)
 - **Development Rounds Complete**: 16
 - **New Modules Added**: 150+ modules across all crates
 
-### v0.2.2 Feature Highlights
+### v0.2.4 Feature Highlights
 - Advanced SPARQL 1.2: ASK evaluator, EXISTS evaluator, service clause federation, subquery builder, MINUS evaluator, values clause
 - RDF Processing: literal parser (15 XSD types), WKT geometry parser, annotation graph, prefix resolver, quantizer (k-means++ PQ)
 - Storage: six-index store (SPO/POS/OSP), partition manager (Kafka-style), endpoint registry, shard router
@@ -37,7 +37,7 @@
 - Time-Series Analytics: anomaly detection, Holt-Winters forecasting, Prometheus remote write
 - WASM: query builder, triple store, storage adapter
 
-## v0.2.2 Test Coverage (March 16, 2026)
+## v0.2.4 Test Coverage (March 28, 2026)
 
 Per-crate test counts:
 - oxirs-arq: 2688 tests
@@ -68,7 +68,7 @@ Per-crate test counts:
 - oxirs-wasm: 858 tests
 - **Total: 40,786 tests**
 
-## v0.2.2 Development Rounds
+## v0.2.4 Development Rounds
 
 **Round 1**: +basic_auth, +websocket_handler, +type_resolver, +query_cache, +rule_compiler, +shape_matcher, +aspect_export, +bounding_box, +rdf_star_serializer, +iri_catalog, +delta_encoder, +wal_archive, +consensus_log, +compression_codec, +dead_letter_queue, +endpoint_discovery, +alarm_manager, +signal_monitor, +cross_encoder, +anomaly_detector, +tool_registry, +signal_processing, +graph_partitioner, +revocation_list, +wasm_bridge, +cache commands
 
@@ -112,7 +112,7 @@ Per-crate test counts:
 - Initial SHACL validation
 - Project workspace with foundational crates
 
-### v0.2.2 - Full-Featured Platform (Released - March 16, 2026)
+### v0.2.4 - Full-Featured Platform (Released - March 28, 2026)
 - 26-crate workspace with 40,786 tests
 - Complete SPARQL 1.2 feature set (federated ASK, EXISTS, LATERAL, MINUS, VALUES, subqueries)
 - Full GeoSPARQL 1.1 compliance with convex hull, topology, spatial indexing
@@ -141,4 +141,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS v0.2.2 - Production-ready semantic web platform with full Apache Jena parity, enterprise-grade AI/ML capabilities, and 40,786 tests.*
+*OxiRS v0.2.4 - Production-ready semantic web platform with full Apache Jena parity, enterprise-grade AI/ML capabilities, and 40,786 tests.*

@@ -203,22 +203,18 @@ impl BindingSet {
                 Constraint::TypeConstraint {
                     variable,
                     allowed_types,
-                } => {
-                    if variable == var && !self.check_type_constraint(term, allowed_types) {
-                        return Err(OxirsError::Query(format!(
-                            "Type constraint violation for variable {var}"
-                        )));
-                    }
+                } if variable == var && !self.check_type_constraint(term, allowed_types) => {
+                    return Err(OxirsError::Query(format!(
+                        "Type constraint violation for variable {var}"
+                    )));
                 }
                 Constraint::ValueConstraint {
                     variable,
                     constraint,
-                } => {
-                    if variable == var && !self.check_value_constraint(term, constraint) {
-                        return Err(OxirsError::Query(format!(
-                            "Value constraint violation for variable {var}"
-                        )));
-                    }
+                } if variable == var && !self.check_value_constraint(term, constraint) => {
+                    return Err(OxirsError::Query(format!(
+                        "Value constraint violation for variable {var}"
+                    )));
                 }
                 _ => {} // Other constraints checked elsewhere
             }

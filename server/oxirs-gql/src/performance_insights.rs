@@ -13,6 +13,7 @@
 //! - **Alerting**: Performance threshold notifications
 
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -615,7 +616,7 @@ impl PerformanceInsightsDashboard {
     pub async fn get_query_stats(&self) -> Vec<QueryStats> {
         let state = self.state.read().await;
         let mut stats: Vec<_> = state.query_stats.values().cloned().collect();
-        stats.sort_by(|a, b| b.total_executions.cmp(&a.total_executions));
+        stats.sort_by_key(|s| Reverse(s.total_executions));
         stats
     }
 
@@ -623,7 +624,7 @@ impl PerformanceInsightsDashboard {
     pub async fn get_slowest_queries(&self, limit: usize) -> Vec<QueryStats> {
         let state = self.state.read().await;
         let mut stats: Vec<_> = state.query_stats.values().cloned().collect();
-        stats.sort_by(|a, b| b.p99_duration_ms.cmp(&a.p99_duration_ms));
+        stats.sort_by_key(|s| Reverse(s.p99_duration_ms));
         stats.truncate(limit);
         stats
     }
@@ -632,7 +633,7 @@ impl PerformanceInsightsDashboard {
     pub async fn get_most_frequent_queries(&self, limit: usize) -> Vec<QueryStats> {
         let state = self.state.read().await;
         let mut stats: Vec<_> = state.query_stats.values().cloned().collect();
-        stats.sort_by(|a, b| b.total_executions.cmp(&a.total_executions));
+        stats.sort_by_key(|s| Reverse(s.total_executions));
         stats.truncate(limit);
         stats
     }

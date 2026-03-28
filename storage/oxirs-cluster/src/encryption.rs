@@ -6,7 +6,7 @@
 use crate::error::{ClusterError, Result};
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
 use scirs2_core::metrics::{Counter, Histogram};
-use scirs2_core::random::{Random, RngCore};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};

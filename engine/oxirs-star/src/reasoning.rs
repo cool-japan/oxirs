@@ -377,7 +377,7 @@ impl ReasoningEngine {
         rules.push(rule);
 
         // Sort by priority
-        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
 
         Ok(())
     }

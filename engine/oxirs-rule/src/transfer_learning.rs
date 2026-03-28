@@ -661,10 +661,8 @@ impl TransferLearner {
         vars: &mut std::collections::HashSet<String>,
     ) {
         match term {
-            Term::Variable(v) => {
-                if vars.insert(v.clone()) {
-                    features.num_variables += 1;
-                }
+            Term::Variable(v) if vars.insert(v.clone()) => {
+                features.num_variables += 1;
             }
             Term::Constant(_) => {
                 features.num_constants += 1;

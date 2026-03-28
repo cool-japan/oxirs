@@ -194,7 +194,7 @@ impl HistogramEstimator {
 
         // Get most common values (top 10)
         let mut mcv: Vec<(String, u64)> = freq_map.iter().map(|(k, v)| (k.clone(), *v)).collect();
-        mcv.sort_by(|a, b| b.1.cmp(&a.1));
+        mcv.sort_by_key(|b| std::cmp::Reverse(b.1));
         mcv.truncate(10);
 
         // Create equi-depth histogram buckets
@@ -1083,14 +1083,11 @@ impl QueryFeatureExtractor {
         // Simplified selectivity estimation based on predicate type
         match predicate {
             Term::Variable(_) => 1.0, // Very selective
-            Term::Iri(iri) => {
+            Term::Iri(iri)
                 // More common predicates (rdf:type, etc.) are less selective
-                if iri.as_str().contains("type") {
+                if iri.as_str().contains("type") => {
                     0.3
-                } else {
-                    0.5
                 }
-            }
             _ => 0.5,
         }
     }

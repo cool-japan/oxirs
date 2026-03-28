@@ -171,7 +171,7 @@ impl StreamRouter {
             Self::compile_regex(pat)?;
         }
         self.rules.push(rule);
-        self.rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
         Ok(())
     }
 
@@ -199,7 +199,7 @@ impl StreamRouter {
             Self::compile_regex(pat)?;
         }
         self.rules[idx] = rule;
-        self.rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
         Ok(())
     }
 

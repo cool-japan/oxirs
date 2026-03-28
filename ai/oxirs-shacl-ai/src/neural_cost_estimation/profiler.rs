@@ -271,7 +271,7 @@ impl PerformanceProfiler {
 
     fn get_slowest_operations(&self, count: usize) -> Vec<TimingStats> {
         let mut operations: Vec<_> = self.timing_measurements.values().cloned().collect();
-        operations.sort_by(|a, b| b.average_time.cmp(&a.average_time));
+        operations.sort_by_key(|item| std::cmp::Reverse(item.average_time));
         operations.into_iter().take(count).collect()
     }
 

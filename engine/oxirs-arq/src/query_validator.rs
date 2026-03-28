@@ -400,18 +400,13 @@ impl QueryValidator {
         errors: &mut Vec<ValidationError>,
     ) -> Result<()> {
         match expr {
-            Expression::Variable(v) => {
-                if !bound_vars.contains(v) {
-                    errors.push(ValidationError {
-                        error_type: ValidationErrorType::UnboundVariable,
-                        message: format!(
-                            "Variable ?{} used in expression is not bound",
-                            v.as_str()
-                        ),
-                        location: "Expression".to_string(),
-                        suggestion: Some(format!("Bind ?{} in a triple pattern", v.as_str())),
-                    });
-                }
+            Expression::Variable(v) if !bound_vars.contains(v) => {
+                errors.push(ValidationError {
+                    error_type: ValidationErrorType::UnboundVariable,
+                    message: format!("Variable ?{} used in expression is not bound", v.as_str()),
+                    location: "Expression".to_string(),
+                    suggestion: Some(format!("Bind ?{} in a triple pattern", v.as_str())),
+                });
             }
             Expression::Binary { left, right, op: _ } => {
                 Self::validate_expression_variables(left, bound_vars, errors)?;

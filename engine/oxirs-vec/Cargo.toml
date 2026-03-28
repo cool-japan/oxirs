@@ -31,7 +31,7 @@ tracing.workspace = true
 oxiarc-zstd = { workspace = true }
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 # rand_distr functionality now provided by scirs2-core (use scirs2_core::random::distributions)
-half = "2.4"
+half = "2.7"
 memmap2.workspace = true
 parking_lot.workspace = true
 blake3.workspace = true

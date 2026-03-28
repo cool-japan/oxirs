@@ -425,11 +425,9 @@ impl CellularDivision {
                 self.replicate_dna()?;
                 self.cycle_state = CellCycleState::G2;
             }
-            CellCycleState::G2 => {
-                // Check for DNA damage
-                if self.checkpoint_system.check_dna_integrity()? {
-                    self.cycle_state = CellCycleState::M(MitosisPhase::Prophase);
-                }
+            CellCycleState::G2 if self.checkpoint_system.check_dna_integrity()? => {
+                // Check for DNA damage - passed
+                self.cycle_state = CellCycleState::M(MitosisPhase::Prophase);
             }
             _ => {
                 // Already in appropriate phase

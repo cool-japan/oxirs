@@ -232,7 +232,7 @@ impl BackupManager {
         }
 
         // Sort by creation time (newest first)
-        backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        backups.sort_by_key(|b| std::cmp::Reverse(b.created_at));
 
         Ok(backups)
     }

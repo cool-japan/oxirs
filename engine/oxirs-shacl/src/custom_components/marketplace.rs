@@ -930,7 +930,7 @@ impl ConstraintMarketplace {
 
         // Sort by recent downloads
         let mut components: Vec<_> = index.components.values().collect();
-        components.sort_by(|a, b| b.stats.recent_downloads.cmp(&a.stats.recent_downloads));
+        components.sort_by_key(|b| std::cmp::Reverse(b.stats.recent_downloads));
 
         Ok(components.into_iter().take(limit).cloned().collect())
     }

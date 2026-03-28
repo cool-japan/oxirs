@@ -259,11 +259,11 @@ impl Compressor {
                 1.0
             },
             compression_count: self.stats.compression_count,
-            avg_time_us: if self.stats.compression_count > 0 {
-                self.stats.total_time_us / self.stats.compression_count
-            } else {
-                0
-            },
+            avg_time_us: self
+                .stats
+                .total_time_us
+                .checked_div(self.stats.compression_count)
+                .unwrap_or(0),
         }
     }
 }

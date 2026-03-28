@@ -6,7 +6,7 @@
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};

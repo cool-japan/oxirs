@@ -173,10 +173,8 @@ impl StarPatternMatcher {
 
     fn collect_vars_term(term: &StarTerm, vars: &mut Vec<String>) {
         match term {
-            StarTerm::Var(name) => {
-                if !vars.contains(name) {
-                    vars.push(name.clone());
-                }
+            StarTerm::Var(name) if !vars.contains(name) => {
+                vars.push(name.clone());
             }
             StarTerm::Nested(inner) => {
                 Self::collect_vars_term(&inner.subject, vars);

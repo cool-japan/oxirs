@@ -617,12 +617,11 @@ impl QuerySanitizer {
                 '@' => {
                     directive_count += 1;
                 }
-                ':' => {
+                ':'
                     // Potential alias (check if preceded by identifier)
-                    if i > 0 && chars[i - 1].is_alphanumeric() {
+                    if i > 0 && chars[i - 1].is_alphanumeric() => {
                         alias_count += 1;
                     }
-                }
                 _ => {}
             }
 

@@ -85,8 +85,9 @@ impl ConvLayer {
         let mut filters = Vec::new();
 
         for _ in 0..num_filters {
-            let filter =
-                Array2::from_shape_fn((kernel_size, kernel_size), |_| rng.gen_range(-scale..scale));
+            let filter = Array2::from_shape_fn((kernel_size, kernel_size), |_| {
+                rng.random_range(-scale..scale)
+            });
             filters.push(filter);
         }
 
@@ -147,8 +148,9 @@ struct FCLayer {
 impl FCLayer {
     fn new(input_size: usize, output_size: usize, rng: &mut Random) -> Self {
         let scale = (2.0 / input_size as f32).sqrt();
-        let weights =
-            Array2::from_shape_fn((input_size, output_size), |_| rng.gen_range(-scale..scale));
+        let weights = Array2::from_shape_fn((input_size, output_size), |_| {
+            rng.random_range(-scale..scale)
+        });
         let bias = Array1::zeros(output_size);
 
         Self { weights, bias }
@@ -255,7 +257,7 @@ impl ConvE {
         let mut local_rng = Random::default();
         let keep_prob = 1.0 - self.config.dropout_rate;
         for val in values.iter_mut() {
-            if local_rng.gen_range(0.0..1.0) > keep_prob {
+            if local_rng.random_range(0.0..1.0) > keep_prob {
                 *val = 0.0;
             } else {
                 *val /= keep_prob; // Inverted dropout
@@ -336,7 +338,7 @@ impl ConvE {
             let scale = (6.0 / self.config.base.dimensions as f32).sqrt();
             let embedding = Array1::from_vec(
                 (0..self.config.base.dimensions)
-                    .map(|_| local_rng.gen_range(-scale..scale))
+                    .map(|_| local_rng.random_range(-scale..scale))
                     .collect(),
             );
             self.entity_embeddings.insert(entity.to_string(), embedding);
@@ -354,7 +356,7 @@ impl ConvE {
             let scale = (6.0 / self.config.base.dimensions as f32).sqrt();
             let embedding = Array1::from_vec(
                 (0..self.config.base.dimensions)
-                    .map(|_| local_rng.gen_range(-scale..scale))
+                    .map(|_| local_rng.random_range(-scale..scale))
                     .collect(),
             );
             self.relation_embeddings

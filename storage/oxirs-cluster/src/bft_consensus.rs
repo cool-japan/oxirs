@@ -225,13 +225,12 @@ impl BftConsensusManager {
 mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
-    use scirs2_core::random::RngCore;
+    use scirs2_core::RngExt;
 
     #[test]
     fn test_peer_info() {
         let mut rng = rng();
-        let mut seed_bytes = [0u8; 32];
-        rng.fill_bytes(&mut seed_bytes);
+        let seed_bytes: [u8; 32] = std::array::from_fn(|_| rng.random_range(0..256) as u8);
         let keypair = SigningKey::from_bytes(&seed_bytes);
 
         let peer = PeerInfo {

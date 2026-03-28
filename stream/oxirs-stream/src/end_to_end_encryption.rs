@@ -523,8 +523,7 @@ impl E2EEManager {
 
     /// Generate random bytes
     fn generate_random_bytes(size: usize) -> Vec<u8> {
-        use scirs2_core::random::rng;
-        use scirs2_core::Rng;
+        use scirs2_core::random::{rng, RngExt};
         let mut rand_gen = rng();
         (0..size).map(|_| rand_gen.random_range(0..=255)).collect()
     }

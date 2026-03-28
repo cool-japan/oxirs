@@ -1,10 +1,10 @@
 # OxiRS WASM - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
-OxiRS WASM v0.2.2 provides WebAssembly bindings for browser-based RDF and SPARQL processing, enabling semantic web applications directly in the browser.
+OxiRS WASM v0.2.3 provides WebAssembly bindings for browser-based RDF and SPARQL processing, enabling semantic web applications directly in the browser.
 
 ### Features
 - ✅ WASM compilation with wasm-bindgen
@@ -30,7 +30,7 @@ OxiRS WASM v0.2.2 provides WebAssembly bindings for browser-based RDF and SPARQL
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ WASM compilation, JS/TS bindings, basic SPARQL, Turtle/N-Triples
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Full SPARQL 1.1 query support
 - ✅ SPARQL UPDATE operations
 - ✅ Property paths in patterns
@@ -54,4 +54,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS WASM v0.2.2 - Semantic web in the browser*
+*OxiRS WASM v0.2.3 - Semantic web in the browser*

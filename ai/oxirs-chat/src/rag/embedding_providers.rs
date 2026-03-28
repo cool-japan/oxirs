@@ -126,7 +126,7 @@ impl EnhancedEmbeddingModel {
             }
 
             // Add new results
-            for (i, embedding) in cache_indices.into_iter().zip(new_embeddings.into_iter()) {
+            for (i, embedding) in cache_indices.into_iter().zip(new_embeddings) {
                 results.push((i, embedding));
             }
         }

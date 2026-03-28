@@ -41,8 +41,8 @@ rio_api = "0.8"
 
 # New (OxiRS-TTL)
 [dependencies]
-oxirs-ttl = "0.2.2"
-oxirs-core = "0.2.2"  # For RDF data model
+oxirs-ttl = "0.2.3"
+oxirs-core = "0.2.3"  # For RDF data model
 ```
 
 ### 2. Module Structure

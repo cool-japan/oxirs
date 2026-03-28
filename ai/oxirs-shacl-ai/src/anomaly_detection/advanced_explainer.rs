@@ -8,7 +8,7 @@ use super::types::{Anomaly, AnomalyScore, AnomalyType};
 use crate::{Result, ShaclAiError};
 
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::Random;
+use scirs2_core::random::{Random, RngExt};
 use scirs2_core::Rng; // Import the Rng trait for gen() method
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

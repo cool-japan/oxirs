@@ -15,7 +15,7 @@ use base64::Engine;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use scirs2_core::ndarray_ext::Array1;
-use scirs2_core::Rng;
+use scirs2_core::random::RngExt;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -528,7 +528,7 @@ impl IntrusionDetectionSystem {
     /// Get recent alerts
     pub async fn get_recent_alerts(&self, limit: usize) -> Vec<SecurityAlert> {
         let mut alerts: Vec<_> = self.alerts.iter().map(|entry| entry.clone()).collect();
-        alerts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        alerts.sort_by_key(|item| std::cmp::Reverse(item.timestamp));
         alerts.truncate(limit);
         alerts
     }

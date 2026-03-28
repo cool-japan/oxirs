@@ -555,19 +555,15 @@ impl GovernanceManager {
         // Validate mandatory fields
         for field in &policy.mandatory_fields {
             match field.as_str() {
-                "confidence" => {
-                    if annotation.confidence.is_none() {
-                        return Err(GovernanceError::PolicyViolation(
-                            "Mandatory field 'confidence' missing".to_string(),
-                        ));
-                    }
+                "confidence" if annotation.confidence.is_none() => {
+                    return Err(GovernanceError::PolicyViolation(
+                        "Mandatory field 'confidence' missing".to_string(),
+                    ));
                 }
-                "source" => {
-                    if annotation.source.is_none() {
-                        return Err(GovernanceError::PolicyViolation(
-                            "Mandatory field 'source' missing".to_string(),
-                        ));
-                    }
+                "source" if annotation.source.is_none() => {
+                    return Err(GovernanceError::PolicyViolation(
+                        "Mandatory field 'source' missing".to_string(),
+                    ));
                 }
                 _ => {}
             }

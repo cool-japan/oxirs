@@ -248,11 +248,7 @@ impl RuleProfile {
 
     /// Average execution time per firing (nanoseconds).
     pub fn avg_nanos(&self) -> u64 {
-        if self.fire_count == 0 {
-            0
-        } else {
-            self.total_nanos / self.fire_count
-        }
+        self.total_nanos.checked_div(self.fire_count).unwrap_or(0)
     }
 
     fn record(&mut self, duration_nanos: u64, produced_count: u64) {
@@ -557,7 +553,7 @@ impl RuleTracer {
         // Append profile summary.
         out.push_str("=== Performance Summary ===\n\n");
         let mut profiles: Vec<_> = self.profiles.values().collect();
-        profiles.sort_by(|a, b| b.fire_count.cmp(&a.fire_count));
+        profiles.sort_by_key(|b| std::cmp::Reverse(b.fire_count));
         for p in &profiles {
             let _ = std::fmt::Write::write_fmt(
                 &mut out,

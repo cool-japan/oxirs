@@ -1,9 +1,9 @@
 //! # OxiRS Federation - Federated Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.2-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-federate/badge.svg)](https://docs.rs/oxirs-federate)
 //!
-//! **Status**: Production Release (v0.2.2)
+//! **Status**: Production Release (v0.2.4)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Federated query processing capabilities for SPARQL and GraphQL with service discovery,
@@ -182,38 +182,38 @@ pub use advanced_query_optimizer::{
     AdvancedOptimizerConfig, AdvancedQueryOptimizer, HardwareProfile, OptimizedPlan, QueryPlan,
     TrainingExample,
 };
-// Advanced ML Optimizer (v0.2.2 advanced features)
+// Advanced ML Optimizer (v0.2.4 advanced features)
 pub use advanced_ml_optimizer::{
     ActivationType, AdvancedMLConfig, AdvancedMLOptimizer, AutoML, DeepCardinalityEstimator,
     ExplainableAI, JoinType, NeuralArchitectureSearch, OnlineLearningManager, RLJoinOptimizer,
     TrainingEpoch, TransferLearningManager,
 };
-// Advanced Benchmarking (v0.2.2 advanced features)
+// Advanced Benchmarking (v0.2.4 advanced features)
 pub use advanced_benchmarking::{
     AdvancedBenchmarkConfig, AdvancedBenchmarkSuite, BenchmarkResult, CustomBenchmarkConfig,
     CustomBenchmarkGenerator, LUBMSuite, RegressionDetectionResult, SP2BenchSuite,
     ScalabilityTestResult, StressTestResult, WatDivSuite, WorkloadCharacterization,
 };
-// Advanced Semantic Features (v0.2.2 advanced features)
+// Advanced Semantic Features (v0.2.4 advanced features)
 pub use advanced_semantic_features::{
     AdvancedSemanticConfig, AdvancedSemanticFeatures, AutoMapping, AutoMappingGenerator,
     ChangeType, ConceptRelationship, DeepOntologyMatcher, Entity, EntityMatch, EntityResolver,
     MappingType, MatchType, MultiLingualConcept, MultiLingualSchemaManager, OntologyConcept,
     OntologyMatch, RelationType, SchemaChange, SchemaEvolutionTracker, SchemaVersion,
 };
-// Advanced Anomaly Detection (v0.2.2 advanced features)
+// Advanced Anomaly Detection (v0.2.4 advanced features)
 pub use advanced_anomaly_detection::{
     AdvancedAnomalyConfig, AdvancedAnomalyDetection, HealingAction, HealingActionType,
     IsolationForest, IssueType, LSTMPredictor, MaintenancePriority, MaintenanceTask,
     PredictiveMaintenanceScheduler, RootCause, RootCauseAnalyzer, SelfHealingEngine,
     Severity as AnomalySeverity,
 };
-// Advanced Consensus (v0.2.2 advanced features)
+// Advanced Consensus (v0.2.4 advanced features)
 pub use advanced_consensus::{
     AdvancedConsensusSystem, ByzantineFaultTolerance, DistributedLock, GCounter,
     NetworkPartitionDetector, PNCounter, VectorClock,
 };
-// Advanced Enterprise Features (v0.2.2 advanced features)
+// Advanced Enterprise Features (v0.2.4 advanced features)
 pub use advanced_enterprise_features::{
     AdvancedEnterpriseFeatures, AuditLogEntry, AuditLogger, AuditResult, DataLineageTracker,
     DataSubject, DeletionRequest, EdgeComputingManager, EdgeNode, EdgeNodeStatus,

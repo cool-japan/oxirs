@@ -5,6 +5,7 @@
 
 // anyhow removed - unused import
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -633,7 +634,7 @@ impl AdvancedCache {
             }
         }
 
-        popular.sort_by(|a, b| b.access_count.cmp(&a.access_count));
+        popular.sort_by_key(|p| Reverse(p.access_count));
         popular.truncate(10);
         popular
     }

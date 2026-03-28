@@ -414,11 +414,9 @@ impl XlsxHandler {
 
             loop {
                 match reader.read_event_into(&mut buf) {
-                    Ok(quick_xml::events::Event::Start(ref e)) => {
-                        if e.name().as_ref() == b"t" {
-                            in_text = true;
-                            current_string.clear();
-                        }
+                    Ok(quick_xml::events::Event::Start(ref e)) if e.name().as_ref() == b"t" => {
+                        in_text = true;
+                        current_string.clear();
                     }
                     Ok(quick_xml::events::Event::End(ref e)) => {
                         if e.name().as_ref() == b"t" {

@@ -1,6 +1,6 @@
 # OxiRS TDB - TODO
 
-*Version: 0.2.2 | Last Updated: 2026-03-16*
+*Version: 0.2.3 | Last Updated: 2026-03-16*
 
 ## Status: Production Ready
 
@@ -27,7 +27,7 @@
 ### v0.1.0 - Released (January 7, 2026)
 - ✅ MVCC + ACID, B+ Tree, TDB2 parity, bulk loader, distributed transactions, 950+ tests
 
-### v0.2.2 - Current Release (March 16, 2026)
+### v0.2.3 - Current Release (March 16, 2026)
 - ✅ Advanced compression algorithms
 - ✅ Enhanced index strategies (adaptive index, bloom index)
 - ✅ Improved query optimization
@@ -50,4 +50,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 
 ---
 
-*OxiRS TDB v0.2.2 - High-performance RDF storage*
+*OxiRS TDB v0.2.3 - High-performance RDF storage*

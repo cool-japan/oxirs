@@ -5,17 +5,35 @@ All notable changes to OxiRS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.2] - 2026-03-16
+## [0.2.4] - 2026-03-28
 
 ### Changed
-- Version bump to 0.2.2
+- Version bump to 0.2.4 across all 26 workspace crates
+- GPU acceleration: feature-gated `scirs2-core::gpu` imports in oxirs-star behind `gpu` feature flag (Pure Rust policy compliance)
+- GPU acceleration: CPU-only fallback for `GpuAccelerator::initialize_context` when `gpu` feature is disabled
+- CLI: fixed duplicate short argument flags in clap (`-i` → `-I`, `-c` → `-C`, `-v` → `-V`, `-q` → `-Q`, `-n` explicit) across cli_actions.rs, performance.rs, rebac.rs, and lib.rs
+- Dependency upgrades:
+  - scirs2-* 0.3.3 → 0.4.1 (all 12 sub-crates)
+  - oxiarc-archive, oxiarc-zstd, oxiarc-lz4 0.2.4 → 0.2.6
+  - tokio-tungstenite 0.28 → 0.29
+  - uuid 1.22 → 1.23
+  - redis 1.0 → 1.1
+  - kube 3.0 → 3.1
+  - toml 1.0 → 1.1
+  - proptest 1.10 → 1.11
+- Pinned digest to 0.10 and sha2 to 0.10 for compatibility
+
+## [0.2.3] - 2026-03-16
+
+### Changed
+- Version bump to 0.2.3
 - Production unwrap() audit: all unwrap() calls confirmed in test code only (zero production violations)
 - Fixed quantum_sparql_optimizer test marked #[ignore] (slow: >30s quantum simulation)
 - Refactored cloud_integration.rs (2000 lines → module with 6 files via splitrs)
 - Security: RUSTSEC-2026-0002 (lru 0.12.5 via tantivy) documented and suppressed; tantivy never calls iter_mut()
 - Security: RUSTSEC-2025-0134 (rustls-pemfile unmaintained) documented and suppressed; no CVE
 - Dependency updates: tempfile 3.26, chrono 0.4.44, rsa 0.9.10, serial_test 3.4, clap 4.6.0, serde_with 3.18.0, tracing-subscriber 0.3.23, oxigdal-proj 0.1.1
-- lib.rs doc comment version badges updated: 23 files v0.1.0 → v0.2.2 (html_root_url, shield.io badges)
+- lib.rs doc comment version badges updated: 23 files v0.1.0 → v0.2.3 (html_root_url, shield.io badges)
 - Workspace policy (phase 1): all 27 subcrate Cargo.toml files converted to use `.workspace = true` for shared dependencies
 - Workspace policy (phase 2): 28 additional deps added to `[workspace.dependencies]` (axum, rustls, tokio-test, tokio-rustls, rustls-pemfile, webpki-roots, lazy_static, blake3, crossbeam-utils, bumpalo, num-complex, indicatif, async-stream, handlebars, config, image, rust_xlsxwriter, governor, prometheus, metrics, moka, kube, k8s-openapi, tokio-test, wiremock, serial_test, rcgen, tracing-opentelemetry, http-body-util); ~60 more inline dep entries converted to `.workspace = true`
 
@@ -38,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All internal dependencies use workspace version management
 - Added `scirs2-integrate` to workspace dependencies
 - Upgraded scirs2 dependencies from 0.3.0 to 0.3.1
-- Upgraded oxiarc-archive, oxiarc-zstd, oxiarc-lz4 from 0.2.2 to 0.2.3
+- Upgraded oxiarc-archive, oxiarc-zstd, oxiarc-lz4 from 0.2.3 to 0.2.3
 - Added build profile optimizations to reduce target directory size
 - Added Round 16 development modules (+describe_builder, +query_logger, +enum_resolver, and 23 more)
 

@@ -315,23 +315,15 @@ impl PatternAnalyzer {
     fn calculate_similarity(&self, pattern1: &Pattern, pattern2: &Pattern) -> f64 {
         // Simple similarity calculation based on pattern type and properties
         match (pattern1, pattern2) {
-            (Pattern::ClassUsage { class: c1, .. }, Pattern::ClassUsage { class: c2, .. }) => {
-                if c1 == c2 {
-                    1.0
-                } else {
-                    0.0
-                }
+            (Pattern::ClassUsage { class: c1, .. }, Pattern::ClassUsage { class: c2, .. })
+                if c1 == c2 =>
+            {
+                1.0
             }
             (
                 Pattern::PropertyUsage { property: p1, .. },
                 Pattern::PropertyUsage { property: p2, .. },
-            ) => {
-                if p1 == p2 {
-                    1.0
-                } else {
-                    0.0
-                }
-            }
+            ) if p1 == p2 => 1.0,
             (
                 Pattern::Datatype {
                     property: p1,

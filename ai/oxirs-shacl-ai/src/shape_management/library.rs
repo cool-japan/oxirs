@@ -248,7 +248,7 @@ impl ShapeLibrary {
 
     pub fn get_popular_shapes(&self, limit: usize) -> Vec<&ShapeEntry> {
         let mut shapes: Vec<&ShapeEntry> = self.shape_catalog.values().collect();
-        shapes.sort_by(|a, b| b.usage_count.cmp(&a.usage_count));
+        shapes.sort_by_key(|item| std::cmp::Reverse(item.usage_count));
         shapes.into_iter().take(limit).collect()
     }
 

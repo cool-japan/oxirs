@@ -24,6 +24,7 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -300,7 +301,7 @@ impl PersistedQueryManager {
             .values()
             .map(|q| (q.hash.clone(), q.access_count))
             .collect();
-        queries.sort_by(|a, b| b.1.cmp(&a.1));
+        queries.sort_by_key(|q| Reverse(q.1));
         let top_queries = queries.into_iter().take(10).collect();
 
         QueryStatistics {

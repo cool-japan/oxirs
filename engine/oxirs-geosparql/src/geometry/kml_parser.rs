@@ -107,12 +107,10 @@ pub fn parse_kml(kml_str: &str) -> Result<Geometry> {
                     _ => {}
                 }
             }
-            Ok(Event::Text(e)) => {
-                if in_coordinates {
-                    // In quick-xml 0.38+, decode text from bytes
-                    let text = String::from_utf8_lossy(e.as_ref());
-                    coords_buffer.push_str(&text);
-                }
+            Ok(Event::Text(e)) if in_coordinates => {
+                // In quick-xml 0.38+, decode text from bytes
+                let text = String::from_utf8_lossy(e.as_ref());
+                coords_buffer.push_str(&text);
             }
             Ok(Event::End(e)) => {
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
@@ -138,29 +136,25 @@ pub fn parse_kml(kml_str: &str) -> Result<Geometry> {
                     "innerBoundaryIs" | "kml:innerBoundaryIs" => {
                         in_inner_boundary = false;
                     }
-                    "Point" | "kml:Point" => {
-                        if !last_coordinates.is_empty() {
-                            if let Some(point) = parse_kml_point(&last_coordinates) {
-                                if in_multi_geometry {
-                                    multi_points.push(point);
-                                } else {
-                                    geometry = Some(GeoGeometry::Point(point));
-                                }
+                    "Point" | "kml:Point" if !last_coordinates.is_empty() => {
+                        if let Some(point) = parse_kml_point(&last_coordinates) {
+                            if in_multi_geometry {
+                                multi_points.push(point);
+                            } else {
+                                geometry = Some(GeoGeometry::Point(point));
                             }
-                            last_coordinates.clear();
                         }
+                        last_coordinates.clear();
                     }
-                    "LineString" | "kml:LineString" => {
-                        if !last_coordinates.is_empty() {
-                            if let Some(linestring) = parse_kml_linestring(&last_coordinates) {
-                                if in_multi_geometry {
-                                    multi_linestrings.push(linestring);
-                                } else {
-                                    geometry = Some(GeoGeometry::LineString(linestring));
-                                }
+                    "LineString" | "kml:LineString" if !last_coordinates.is_empty() => {
+                        if let Some(linestring) = parse_kml_linestring(&last_coordinates) {
+                            if in_multi_geometry {
+                                multi_linestrings.push(linestring);
+                            } else {
+                                geometry = Some(GeoGeometry::LineString(linestring));
                             }
-                            last_coordinates.clear();
                         }
+                        last_coordinates.clear();
                     }
                     "Polygon" | "kml:Polygon" => {
                         if !outer_boundary_coords.is_empty() {

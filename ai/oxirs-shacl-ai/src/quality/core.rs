@@ -2,7 +2,7 @@
 //!
 //! This module implements AI-powered quality assessment for RDF data and SHACL shapes.
 
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;

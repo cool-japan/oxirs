@@ -4,7 +4,7 @@
 //! utilizing spiking neural networks, synaptic plasticity, and neural adaptation
 //! for ultra-efficient, biologically-inspired validation processing.
 
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;

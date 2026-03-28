@@ -985,7 +985,7 @@ impl KgCommunityDetector {
         // Build initial community list (sorted for determinism)
         let mut communities: Vec<KgCommunity> = {
             let mut kvs: Vec<(usize, Vec<String>)> = groups.into_iter().collect();
-            kvs.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+            kvs.sort_by_key(|item| std::cmp::Reverse(item.1.len()));
             kvs.into_iter()
                 .enumerate()
                 .map(|(id, (_, members))| KgCommunity {

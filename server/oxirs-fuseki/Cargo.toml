@@ -192,7 +192,7 @@ http-body-util.workspace = true
 tower = { version = "0.5", features = ["util"] }
 tempfile.workspace = true
 rstest = "0.26"
-insta = "1.46"
+insta = "1.47"
 serial_test.workspace = true
 proptest.workspace = true
 wiremock.workspace = true

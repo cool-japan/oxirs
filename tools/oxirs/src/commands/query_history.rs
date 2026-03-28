@@ -187,7 +187,7 @@ impl QueryHistoryStore {
             })
             .collect();
 
-        result.sort_by(|a, b| b.1.cmp(&a.1));
+        result.sort_by_key(|item| std::cmp::Reverse(item.1));
         result.into_iter().take(top_n).collect()
     }
 

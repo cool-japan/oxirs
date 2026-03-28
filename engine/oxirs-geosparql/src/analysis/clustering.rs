@@ -6,8 +6,7 @@
 use crate::error::{GeoSparqlError, Result};
 use geo_types::Point;
 use scirs2_core::ndarray_ext::Array2;
-use scirs2_core::random::rng;
-use scirs2_core::Rng;
+use scirs2_core::random::{rng, RngExt};
 use std::collections::HashMap;
 
 /// Parameters for DBSCAN clustering

@@ -741,7 +741,7 @@ impl DiagnosticAnalyzer {
         // Find top error patterns
         let mut top_errors: Vec<ErrorPattern> =
             error_tracker.error_patterns.values().cloned().collect();
-        top_errors.sort_by(|a, b| b.occurrences.cmp(&a.occurrences));
+        top_errors.sort_by_key(|b| std::cmp::Reverse(b.occurrences));
         top_errors.truncate(10);
 
         // Analyze error correlations

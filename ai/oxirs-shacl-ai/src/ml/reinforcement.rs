@@ -8,7 +8,7 @@ use super::{
     ShapeLearningModel, ShapeTrainingData,
 };
 
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::{Random, Rng, RngExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 
@@ -362,10 +362,8 @@ impl ReinforcementLearner {
 
         // Action-specific rewards
         match action {
-            Action::EnableCaching => {
-                if validation_result.cache_hits > 0 {
-                    reward += 0.5 * validation_result.cache_hits as f64;
-                }
+            Action::EnableCaching if validation_result.cache_hits > 0 => {
+                reward += 0.5 * validation_result.cache_hits as f64;
             }
             Action::ParallelValidation(threads) => {
                 let speedup = validation_result.speedup_factor;
@@ -489,7 +487,7 @@ impl ReinforcementLearner {
                 0
             },
             speedup_factor: if matches!(action, Action::ParallelValidation(_)) {
-                rng.gen_range(1.5..3.0)
+                rng.random_range(1.5..3.0)
             } else {
                 1.0
             },

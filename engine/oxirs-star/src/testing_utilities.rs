@@ -5,7 +5,7 @@
 
 use crate::annotations::TripleAnnotation;
 use crate::model::{StarGraph, StarTerm, StarTriple};
-use scirs2_core::random::{Rng, SeedableRng, StdRng};
+use scirs2_core::random::{RngExt, SeedableRng, StdRng};
 use thiserror::Error;
 
 /// Testing errors
@@ -94,7 +94,7 @@ impl TestGraphBuilder {
     pub fn generate_random_triples(&mut self, count: usize) -> &mut Self {
         for _ in 0..count {
             let subject = format!("http://example.org/s{}", self.counter);
-            let predicate = format!("http://example.org/p{}", self.rng.gen_range(0..10));
+            let predicate = format!("http://example.org/p{}", self.rng.random_range(0..10));
             let object = format!("object_{}", self.rng.random::<u32>());
 
             if let (Ok(s), Ok(p), Ok(o)) = (
@@ -335,7 +335,7 @@ impl PropertyTestGenerator {
         min_size: usize,
         max_size: usize,
     ) -> Result<StarGraph, TestingError> {
-        let size = self.rng.gen_range(min_size..=max_size);
+        let size = self.rng.random_range(min_size..=max_size);
         let mut graph = StarGraph::new();
 
         for _ in 0..size {
