@@ -55,17 +55,17 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.2.3"
+oxirs-core = "0.3.0"
 
 # Optional: Enable async streaming support
-oxirs-core = { version = "0.2.3", features = ["async"] }
+oxirs-core = { version = "0.3.0", features = ["async"] }
 ```
 
 For maximum performance in production:
 
 ```toml
 [dependencies]
-oxirs-core = { version = "0.2.3", features = ["async"] }
+oxirs-core = { version = "0.3.0", features = ["async"] }
 
 [profile.release]
 lto = "fat"                    # Maximum link-time optimization

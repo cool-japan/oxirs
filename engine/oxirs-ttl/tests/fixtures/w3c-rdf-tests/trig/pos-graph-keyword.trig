@@ -1,0 +1,4 @@
+@prefix ex: <http://example.org/> .
+GRAPH <http://example.org/g> {
+    ex:s ex:p ex:o .
+}

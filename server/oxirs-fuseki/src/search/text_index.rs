@@ -473,7 +473,7 @@ impl TantivyTextIndex {
             })?;
 
         let top_docs = searcher
-            .search(&query, &TopDocs::with_limit(limit))
+            .search(&query, &TopDocs::with_limit(limit).order_by_score())
             .map_err(|e| FusekiError::Internal {
                 message: format!("Tantivy search error: {e}"),
             })?;

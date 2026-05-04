@@ -272,4 +272,157 @@ mod tests {
             CharacteristicKind::Measurement { .. }
         );
     }
+
+    // ─── samm-c:Either tests ──────────────────────────────────────────────
+
+    #[test]
+    fn test_either_characteristic_creation() {
+        let left = Characteristic::new(
+            "urn:samm:org.example:1.0.0#LeftChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("xsd:string".to_string());
+
+        let right = Characteristic::new(
+            "urn:samm:org.example:1.0.0#RightChar".to_string(),
+            CharacteristicKind::Measurement {
+                unit: "unit:metre".to_string(),
+            },
+        );
+
+        let either = Characteristic::new(
+            "urn:samm:org.example:1.0.0#EitherChar".to_string(),
+            CharacteristicKind::Either {
+                left: Box::new(left.clone()),
+                right: Box::new(right.clone()),
+            },
+        );
+
+        assert_eq!(either.name(), "EitherChar");
+        assert!(matches!(either.kind(), CharacteristicKind::Either { .. }));
+
+        // Verify branches are accessible and match the originals
+        if let CharacteristicKind::Either {
+            left: got_left,
+            right: got_right,
+        } = either.kind()
+        {
+            assert_eq!(got_left.urn(), left.urn());
+            assert_eq!(got_right.urn(), right.urn());
+        } else {
+            panic!("Expected CharacteristicKind::Either");
+        }
+    }
+
+    #[test]
+    fn test_either_characteristic_left_right_differ() {
+        // Order matters: Either(A, B) != Either(B, A)
+        let char_a = Characteristic::new(
+            "urn:samm:org.example:1.0.0#A".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("xsd:string".to_string());
+
+        let char_b = Characteristic::new(
+            "urn:samm:org.example:1.0.0#B".to_string(),
+            CharacteristicKind::Measurement {
+                unit: "unit:kilogram".to_string(),
+            },
+        );
+
+        let either_ab = CharacteristicKind::Either {
+            left: Box::new(char_a.clone()),
+            right: Box::new(char_b.clone()),
+        };
+        let either_ba = CharacteristicKind::Either {
+            left: Box::new(char_b.clone()),
+            right: Box::new(char_a.clone()),
+        };
+
+        assert_ne!(
+            either_ab, either_ba,
+            "Either(A,B) must not equal Either(B,A)"
+        );
+        assert_eq!(
+            either_ab,
+            either_ab.clone(),
+            "Either(A,B) must equal itself"
+        );
+    }
+
+    #[test]
+    fn test_either_nested_either() {
+        // Either can nest: Either(Either(A, B), C) is valid
+        let char_a = Characteristic::new(
+            "urn:samm:org.example:1.0.0#A".to_string(),
+            CharacteristicKind::Trait,
+        );
+        let char_b = Characteristic::new(
+            "urn:samm:org.example:1.0.0#B".to_string(),
+            CharacteristicKind::Code,
+        );
+        let char_c = Characteristic::new(
+            "urn:samm:org.example:1.0.0#C".to_string(),
+            CharacteristicKind::Enumeration {
+                values: vec!["X".to_string(), "Y".to_string()],
+            },
+        );
+
+        let inner_either = Characteristic::new(
+            "urn:samm:org.example:1.0.0#InnerEither".to_string(),
+            CharacteristicKind::Either {
+                left: Box::new(char_a),
+                right: Box::new(char_b),
+            },
+        );
+
+        let outer_either = Characteristic::new(
+            "urn:samm:org.example:1.0.0#OuterEither".to_string(),
+            CharacteristicKind::Either {
+                left: Box::new(inner_either.clone()),
+                right: Box::new(char_c),
+            },
+        );
+
+        assert!(matches!(
+            outer_either.kind(),
+            CharacteristicKind::Either { .. }
+        ));
+
+        // Verify inner nesting
+        if let CharacteristicKind::Either { left, .. } = outer_either.kind() {
+            assert_eq!(left.urn(), inner_either.urn());
+            assert!(matches!(left.kind(), CharacteristicKind::Either { .. }));
+        } else {
+            panic!("Expected outer CharacteristicKind::Either");
+        }
+    }
+
+    #[test]
+    fn test_either_round_trips_through_kind_ref() {
+        // Confirm that kind() returns a reference that correctly identifies Either
+        let left = Characteristic::new(
+            "urn:samm:org.example:1.0.0#L".to_string(),
+            CharacteristicKind::Trait,
+        );
+        let right = Characteristic::new(
+            "urn:samm:org.example:1.0.0#R".to_string(),
+            CharacteristicKind::Trait,
+        );
+        let either = Characteristic::new(
+            "urn:samm:org.example:1.0.0#E".to_string(),
+            CharacteristicKind::Either {
+                left: Box::new(left),
+                right: Box::new(right),
+            },
+        );
+
+        // kind() ref matches Either pattern
+        let is_either = matches!(either.kind(), CharacteristicKind::Either { .. });
+        assert!(is_either);
+
+        // Serializes to the right name fragment
+        let urn_fragment = either.urn().split('#').next_back().unwrap_or("");
+        assert_eq!(urn_fragment, "E");
+    }
 }

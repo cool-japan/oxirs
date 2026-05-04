@@ -1,0 +1,23 @@
+# Implementation detail: Jena prints algebra in its own AST format; OxiRS
+# uses Rust debug formatting.  The shared contract is "AST is printed when
+# --print-ast is passed and the marker '--- Parsed AST ---' appears".
+description = "q-parse --print-ast emits structured AST after the parse summary"
+classification = "impl-detail"
+argv = [
+    "--quiet",
+    "q-parse",
+    "SELECT ?s WHERE { ?s ?p ?o }",
+    "--print-ast",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+--- Parsed AST ---
+Query
+where_clause
+"""
+
+[stderr]
+mode = "absent"

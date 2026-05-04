@@ -336,7 +336,7 @@ impl WebhookManager {
 
     /// Generate HMAC signature for webhook payload
     fn generate_signature(payload: &WebhookPayload, secret: &str) -> String {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
 
         type HmacSha256 = Hmac<Sha256>;

@@ -21,7 +21,7 @@ use axum::{
 use base32::Alphabet;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Duration, Utc};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use qrcode::{render::svg, QrCode};
 use scirs2_core::random::{Random, RngExt};
 use serde::{Deserialize, Serialize};

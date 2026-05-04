@@ -1,4 +1,18 @@
-//! Shape-based constraint implementations
+//! Shape-based constraint implementations.
+//!
+//! These constraints reference *other* shapes from inside a shape: a node shape
+//! can require its focus nodes to conform to another node shape, a property
+//! shape can require its values to conform to another shape, and a property
+//! shape can additionally bound how many of its values must conform to a
+//! "qualified" shape. The closed-shape constraint forbids any property outside
+//! a whitelisted set.
+//!
+//! | SHACL parameter            | Spec section | Struct                                       |
+//! |----------------------------|--------------|----------------------------------------------|
+//! | `sh:node`                  | §4.7.1       | [`NodeConstraint`]                           |
+//! | `sh:property`              | §4.7.2       | [`PropertyConstraint`]                       |
+//! | `sh:qualifiedValueShape`   | §4.7.3       | [`QualifiedValueShapeConstraint`]            |
+//! | `sh:closed`                | §4.8.1       | [`ClosedConstraint`]                         |
 
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
 use crate::{validation::ValidationEngine, Result, ShaclError, ShapeId, ValidationConfig};
@@ -6,9 +20,15 @@ use oxirs_core::{model::Term, Object, Predicate, Store, Subject};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-/// Node constraint (shape constraint)
+/// `sh:node` constraint (SHACL Core §4.7.1).
+///
+/// Requires every value node to conform to the referenced node shape.
+/// On a node shape, this delegates the validation of focus nodes to another shape.
+/// On a property shape, this requires every value reachable via `sh:path` to
+/// conform to the named node shape.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NodeConstraint {
+    /// Identifier of the node shape that values must conform to.
     pub shape: ShapeId,
 }
 
@@ -99,9 +119,14 @@ impl NodeConstraint {
     }
 }
 
-/// Property constraint
+/// `sh:property` constraint (SHACL Core §4.7.2).
+///
+/// Wires another property shape into this shape's evaluation. Every value node
+/// is checked against the referenced property shape, with the property shape's
+/// own `sh:path` resolved relative to the current focus node.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PropertyConstraint {
+    /// Identifier of the property shape to apply.
     pub shape: ShapeId,
 }
 
@@ -198,12 +223,25 @@ impl PropertyConstraint {
     }
 }
 
-/// Qualified value shape constraint
+/// `sh:qualifiedValueShape` constraint (SHACL Core §4.7.3).
+///
+/// Counts how many value nodes conform to a "qualified" shape and checks that
+/// the count falls within the configured range — `sh:qualifiedMinCount` and
+/// `sh:qualifiedMaxCount`. When `sh:qualifiedValueShapesDisjoint` is `true`,
+/// values that already match a sibling qualified shape are excluded from the count.
+///
+/// At least one of `qualified_min_count` or `qualified_max_count` must be set;
+/// see [`QualifiedValueShapeConstraint::validate`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QualifiedValueShapeConstraint {
+    /// The qualified value shape that values are tested against.
     pub shape: ShapeId,
+    /// Minimum number of conforming values (`sh:qualifiedMinCount`).
     pub qualified_min_count: Option<u32>,
+    /// Maximum number of conforming values (`sh:qualifiedMaxCount`).
     pub qualified_max_count: Option<u32>,
+    /// When `true`, conforming values overlapping with sibling qualified shapes are excluded
+    /// from the count (`sh:qualifiedValueShapesDisjoint`).
     pub qualified_value_shapes_disjoint: bool,
 }
 
@@ -260,12 +298,13 @@ impl QualifiedValueShapeConstraint {
         // Get values from context
         let values = &context.values;
 
-        eprintln!(
-            "DEBUG QualifiedValueShape: focus_node={:?}, values={:?}",
-            context.focus_node, values
+        tracing::trace!(
+            "QualifiedValueShape: focus_node={:?}, values={:?}",
+            context.focus_node,
+            values
         );
-        eprintln!(
-            "DEBUG QualifiedValueShape: shape={}, min_count={:?}, max_count={:?}",
+        tracing::trace!(
+            "QualifiedValueShape: shape={}, min_count={:?}, max_count={:?}",
             self.shape.as_str(),
             self.qualified_min_count,
             self.qualified_max_count
@@ -276,8 +315,8 @@ impl QualifiedValueShapeConstraint {
             tracing::trace!("QualifiedValueShape: No values to validate");
             if let Some(min_count) = self.qualified_min_count {
                 if min_count > 0 {
-                    eprintln!(
-                        "DEBUG QualifiedValueShape: VIOLATION - no values but min_count={min_count}"
+                    tracing::trace!(
+                        "QualifiedValueShape: VIOLATION - no values but min_count={min_count}"
                     );
                     return Ok(ConstraintEvaluationResult::violated(
                         None,
@@ -293,16 +332,16 @@ impl QualifiedValueShapeConstraint {
 
         // Count how many values conform to the qualified shape
         let conforming_count = self.count_conforming_values(values, store, context)?;
-        eprintln!(
-            "DEBUG QualifiedValueShape: conforming_count={} out of {} values",
+        tracing::trace!(
+            "QualifiedValueShape: conforming_count={} out of {} values",
             conforming_count,
             values.len()
         );
 
         // Check min count constraint
         if let Some(min_count) = self.qualified_min_count {
-            eprintln!(
-                "DEBUG QualifiedValueShape: Checking min_count={min_count}, conforming_count={conforming_count}"
+            tracing::trace!(
+                "QualifiedValueShape: Checking min_count={min_count}, conforming_count={conforming_count}"
             );
             if conforming_count < min_count {
                 tracing::trace!("QualifiedValueShape: VIOLATION - conforming_count < min_count");
@@ -318,8 +357,8 @@ impl QualifiedValueShapeConstraint {
 
         // Check max count constraint
         if let Some(max_count) = self.qualified_max_count {
-            eprintln!(
-                "DEBUG QualifiedValueShape: Checking max_count={max_count}, conforming_count={conforming_count}"
+            tracing::trace!(
+                "QualifiedValueShape: Checking max_count={max_count}, conforming_count={conforming_count}"
             );
             if conforming_count > max_count {
                 tracing::trace!("QualifiedValueShape: VIOLATION - conforming_count > max_count");
@@ -345,10 +384,7 @@ impl QualifiedValueShapeConstraint {
         context: &ConstraintContext,
     ) -> Result<u32> {
         let mut conforming_count = 0;
-        eprintln!(
-            "DEBUG count_conforming_values: checking {} values",
-            values.len()
-        );
+        tracing::trace!("count_conforming_values: checking {} values", values.len());
 
         // For each value, check if it conforms to the qualified shape
         for (i, value) in values.iter().enumerate() {
@@ -371,26 +407,26 @@ impl QualifiedValueShapeConstraint {
         store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<bool> {
-        eprintln!(
-            "DEBUG value_conforms_to_shape: checking value={:?} against shape={}",
+        tracing::trace!(
+            "value_conforms_to_shape: checking value={:?} against shape={}",
             value,
             self.shape.as_str()
         );
-        eprintln!(
-            "DEBUG value_conforms_to_shape: shapes_registry available = {}",
+        tracing::trace!(
+            "value_conforms_to_shape: shapes_registry available = {}",
             context.shapes_registry.is_some()
         );
 
         // Get the shape definition from the validation context
         // We need access to the full shapes collection to validate properly
         if let Some(shapes_registry) = &context.shapes_registry {
-            eprintln!(
-                "DEBUG value_conforms_to_shape: shapes_registry has {} shapes",
+            tracing::trace!(
+                "value_conforms_to_shape: shapes_registry has {} shapes",
                 shapes_registry.len()
             );
             if let Some(shape_def) = shapes_registry.get(&self.shape) {
-                eprintln!(
-                    "DEBUG value_conforms_to_shape: found shape definition for {}",
+                tracing::trace!(
+                    "value_conforms_to_shape: found shape definition for {}",
                     self.shape.as_str()
                 );
                 // Create a temporary validation engine for this shape validation
@@ -420,8 +456,8 @@ impl QualifiedValueShapeConstraint {
                 }
             } else {
                 // Shape not found - cannot validate
-                eprintln!(
-                    "DEBUG value_conforms_to_shape: shape {} not found in registry",
+                tracing::trace!(
+                    "value_conforms_to_shape: shape {} not found in registry",
                     self.shape.as_str()
                 );
                 Err(ShaclError::ShapeParsing(format!(
@@ -830,10 +866,17 @@ pub struct QualificationAnalysis {
     pub estimated_performance_impact: EvaluationComplexity,
 }
 
-/// Closed constraint
+/// `sh:closed` constraint (SHACL Core §4.8.1).
+///
+/// Forbids the focus node from carrying any property outside the union of
+/// `allowed_properties` (the explicit whitelist, derived from `sh:property`
+/// declarations) and `ignore_properties` (declared via `sh:ignoredProperties`).
+/// Useful to model strict, schema-like resources.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClosedConstraint {
+    /// Properties that are explicitly permitted on the focus node.
     pub allowed_properties: Vec<Term>,
+    /// Properties to ignore when checking closedness (`sh:ignoredProperties`).
     pub ignore_properties: Vec<Term>,
 }
 

@@ -1,0 +1,17 @@
+description = "tdb-query fails when the dataset location does not exist"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "tdb-query",
+    "${TMPDIR}/no-such-dataset",
+    "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+    "--results",
+    "text",
+]
+exit_code = 1
+
+[stderr]
+mode = "contains"
+expected = """
+TDB location does not exist
+"""

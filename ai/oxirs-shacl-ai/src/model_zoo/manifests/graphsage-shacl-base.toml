@@ -1,0 +1,15 @@
+name = "graphsage-shacl-base"
+model_type = "GraphSAGE"
+dataset = "LUBM-SHACL-synthetic"
+input_dim = 16
+hidden_dim = 64
+output_dim = 8
+num_heads = 4
+num_layers = 2
+sha256 = "fba55b09f60c90509f7ada2079e96a45fec837aa6a4c7d4210e00de92472470a"
+source = "file:///seeds/graphsage-shacl-base.ckpt"
+license = "Apache-2.0"
+citation = "Synthetic seed weights for testing — not trained on real data"
+version = "1.0.0"
+created = "2026-05-01"
+notes = "SYNTHETIC SEED: for unit testing only. Use a real checkpoint for production."

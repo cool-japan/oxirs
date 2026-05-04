@@ -1,0 +1,18 @@
+[
+  {
+    "name": "sla_term_equality",
+    "p50_us": 1,
+    "p99_us": 5,
+    "throughput_ops_s": 10000000.0,
+    "samples": 10000,
+    "total_duration_ms": 10
+  },
+  {
+    "name": "sla_ntriples_line_count_1k",
+    "p50_us": 50,
+    "p99_us": 200,
+    "throughput_ops_s": 15000.0,
+    "samples": 1000,
+    "total_duration_ms": 70
+  }
+]

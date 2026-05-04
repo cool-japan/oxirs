@@ -410,7 +410,7 @@ impl PersistentStorage {
         hasher.update(&op_bytes);
         hasher.update(entry.sequence.to_le_bytes());
         hasher.update(entry.timestamp.to_le_bytes());
-        let computed_checksum = format!("{:x}", hasher.finalize());
+        let computed_checksum = hex::encode(hasher.finalize());
         Ok(computed_checksum == entry.checksum)
     }
 
@@ -568,7 +568,7 @@ impl PersistentStorage {
         // Calculate checksum
         let mut hasher = Sha256::new();
         hasher.update(&snapshot_data);
-        let checksum = format!("{:x}", hasher.finalize());
+        let checksum = hex::encode(hasher.finalize());
 
         let metadata = SnapshotMetadata {
             last_included_index: last_log_entry.map(|e| e.index).unwrap_or(0),
@@ -674,7 +674,7 @@ impl PersistentStorage {
         hasher.update(&op_bytes);
         hasher.update(sequence.to_le_bytes());
         hasher.update(timestamp.to_le_bytes());
-        let checksum = format!("{:x}", hasher.finalize());
+        let checksum = hex::encode(hasher.finalize());
 
         let wal_entry = WalEntry {
             sequence,
@@ -1306,7 +1306,7 @@ impl PersistentStorage {
         let mut hasher = Sha256::new();
         hasher.update(data);
         let result = hasher.finalize();
-        Ok(format!("{result:x}"))
+        Ok(hex::encode(result))
     }
 
     /// Recover corrupted file from backup

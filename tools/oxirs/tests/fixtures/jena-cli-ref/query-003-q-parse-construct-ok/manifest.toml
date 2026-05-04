@@ -1,0 +1,18 @@
+description = "q-parse identifies a CONSTRUCT query"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "q-parse",
+    "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Query type : Construct
+Parse OK
+"""
+
+[stderr]
+mode = "absent"

@@ -1,0 +1,7 @@
+@prefix ex: <http://example.org/> .
+# leading comment
+<http://example.org/g> {
+    # comment inside graph
+    ex:s ex:p ex:o . # trailing comment
+}
+# trailing block

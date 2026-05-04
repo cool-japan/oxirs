@@ -1,0 +1,15 @@
+# RDF Patch simple add
+endpoint: patch
+classification: spec-required
+match_mode: status-only
+description: POST /patch with simple A row returns 200
+
+=== request
+POST /patch
+Content-Type: application/rdf-patch
+
+A <http://example.org/x> <http://example.org/p> "v" .
+
+=== response
+200
+

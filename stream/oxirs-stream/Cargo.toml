@@ -14,6 +14,10 @@ rust-version.workspace = true
 
 [dependencies]
 oxirs-core.workspace = true
+# W3-S11: producer-side of the cluster ↔ streaming bridge.
+# We implement `oxirs_cluster::streaming::cluster_sink::StreamSink` for our
+# own coordinator types and route operator state through Raft.
+oxirs-cluster.workspace = true
 
 # SciRS2 dependencies for streaming analysis
 scirs2-signal = { workspace = true }
@@ -40,11 +44,11 @@ bumpalo.workspace = true
 quick-xml.workspace = true
 rayon.workspace = true
 aws-config = { version = "1.8", optional = true }
-aws-sdk-kinesis = { version = "1.103", optional = true }
+aws-sdk-kinesis = { version = "1.104", optional = true }
 aws-smithy-types = { version = "1.4", optional = true }
 redis = { workspace = true, features = ["tokio-comp", "connection-manager", "cluster-async", "streams"], optional = true }
 pulsar = { version = "6.7", optional = true }
-lapin = { version = "4.3", optional = true, features = ["native-tls"] }
+lapin = { version = "4.7", optional = true, features = ["native-tls"] }
 rumqttc = { version = "0.25", optional = true, features = ["use-rustls"] }
 async-opcua = { version = "0.18", optional = true, features = ["client"] }
 time = { version = "0.3.47", optional = true }  # CVE-2026-25727 fix
@@ -78,10 +82,16 @@ opentelemetry-jaeger = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-semantic-conventions = { workspace = true, optional = true }
 sysinfo.workspace = true  # Updated to 0.33 to fix objc2-core-foundation conflict
-wasmparser = "0.245"
-wasmtime = { version = "43.0", optional = true }  # Multiple CVE fixes (CVE-2024-xxxx series)
+wasmparser = "0.248"
+wasmtime = { version = "44", optional = true }  # Multiple CVE fixes (CVE-2024-xxxx series)
 ed25519-dalek.workspace = true
 rsa = { workspace = true, optional = true }  # RUSTSEC-2023-0071 (Marvin Attack): only enable via the `wasm-rsa` feature; orphaned wasm_edge_processor.rs uses this for WASM module signature verification
+# Post-quantum cryptography (C-backed — must remain optional to satisfy Pure Rust Policy)
+pqcrypto-dilithium = { workspace = true, optional = true }
+pqcrypto-falcon = { workspace = true, optional = true }
+pqcrypto-sphincsplus = { workspace = true, optional = true }
+pqcrypto-kyber = { workspace = true, optional = true }
+pqcrypto-traits = { workspace = true, optional = true }
 once_cell.workspace = true
 serde_yaml.workspace = true
 
@@ -111,6 +121,8 @@ opentelemetry = ["dep:opentelemetry", "dep:opentelemetry-jaeger", "dep:opentelem
 all-backends = ["kafka", "nats", "kinesis", "redis", "pulsar", "rabbitmq", "mqtt", "opcua"]
 wasm = ["dep:wasmtime"]
 wasm-rsa = ["dep:rsa"]  # RUSTSEC-2023-0071: opt-in only; enables RSA WASM module signature verification (wasm_edge_processor.rs)
+# Post-quantum cryptography: Dilithium, Falcon, SPHINCS+, Kyber KEM (C-backed, not in default features)
+post-quantum = ["dep:pqcrypto-dilithium", "dep:pqcrypto-falcon", "dep:pqcrypto-sphincsplus", "dep:pqcrypto-kyber", "dep:pqcrypto-traits"]
 
 [package.metadata.docs.rs]
 # Use memory backend only for docs.rs (avoids rdkafka, async-nats system deps)

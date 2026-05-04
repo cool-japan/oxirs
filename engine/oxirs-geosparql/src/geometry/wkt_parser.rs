@@ -433,9 +433,10 @@ fn geometry_to_wkt_internal(geom: &GeoGeometry<f64>, coord3d: &Coord3D) -> Strin
             }
         }
         GeoGeometry::Triangle(t) => {
+            let (v1, v2, v3) = (t.v1(), t.v2(), t.v3());
             format!(
                 "POLYGON(({} {}, {} {}, {} {}, {} {}))",
-                t.0.x, t.0.y, t.1.x, t.1.y, t.2.x, t.2.y, t.0.x, t.0.y
+                v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, v1.x, v1.y
             )
         }
         GeoGeometry::Rect(r) => {

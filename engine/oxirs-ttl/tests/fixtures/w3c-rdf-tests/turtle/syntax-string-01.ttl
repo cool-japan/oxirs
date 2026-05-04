@@ -1,0 +1,3 @@
+# simple double-quoted string
+@prefix ex: <http://example.org/> .
+ex:s ex:p "hello world" .

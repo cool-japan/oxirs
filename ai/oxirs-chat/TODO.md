@@ -1,6 +1,6 @@
 # OxiRS Chat - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Status: Production Ready (Experimental)
 
@@ -68,13 +68,32 @@
 - ✅ 1195 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] Web-based chat UI components
-- [ ] Visual query builder UI
-- [ ] Enterprise SSO integration
-- [ ] Long-term support guarantees
-- [ ] Enterprise features
-- [ ] Comprehensive documentation
-- [ ] Model marketplace integration
+- [x] Web-based chat UI components — Tauri 2.x desktop app, desktop/oxirs-tauri/, chat.html (completed 2026-05-02)
+- [x] Visual query builder UI — Tauri 2.x SVG-based SPARQL visual editor, desktop/ui/query_builder.html (completed 2026-05-02)
+- [x] Enterprise SSO integration — OIDC + SAML-SP (completed 2026-05-01)
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Comprehensive documentation (planned 2026-05-01)
+  - **Goal:** Top-level rustdoc + admin/user-facing tutorial covering session
+    lifecycle, query routing, RAG retrieval path, LLM call paths. Two worked
+    examples; doctests so docs can't rot.
+  - **Design:**
+    - Rewrite `src/lib.rs` `//!` with module overview + quickstart doctest.
+    - `docs/tutorial.md` covering: spinning up a chat session against a
+      local KG, switching providers, configuring retrieval depth, persisting
+      session history.
+    - `docs/admin.md` covering deployment topology, environment variables,
+      logging, observability hooks.
+    - 2 examples: `examples/kg_chat.rs` (chat over an RDF dataset),
+      `examples/rag_chat.rs` (chat with vector retrieval over a doc corpus).
+    - README quickstart + cross-link to docs.
+  - **Files:** `src/lib.rs`, `README.md`, `docs/tutorial.md`, `docs/admin.md`,
+    `examples/{kg_chat.rs,rag_chat.rs}`, `tests/examples_compile_test.rs`.
+  - **Prerequisites:** existing session/store, query, retrieval modules.
+  - **Tests:** lib.rs doctest passes; both examples compile via
+    `cargo test --examples -p oxirs-chat`.
+  - **Risk:** drift; mitigation: example-as-test.
+- [x] Model marketplace integration — HF Hub + Ollama + local GGUF registry (completed 2026-05-02)
 
 ## Contributing
 
@@ -83,3 +102,12 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 ---
 
 *OxiRS Chat v0.2.3 - AI-powered conversational RDF interface*
+
+## Proposed follow-ups
+
+- [ ] Web chat UI components — OVERSIZED: requires a new frontend subcrate. Defer until UI strategy is decided (Tauri? Yew? Leptos? web-only?).
+- [x] Visual query builder UI — implemented: SVG canvas with drag-and-drop triple patterns, filter nodes, SPARQL generation/validation, example loader. desktop/ui/query_builder.html + desktop/oxirs-tauri/src/query_builder.rs (completed 2026-05-02).
+- [x] Enterprise SSO — OIDC + SAML-SP implemented in `src/sso/` (oidc.rs, saml_sp.rs, session.rs + SsoManagerConfig refactor).
+- [~] Long-term support guarantees — RFC published at `docs/policies/lts.md`.
+- [~] Enterprise features — decomposed in `docs/policies/enterprise.md`.
+- [x] Model marketplace integration — implemented: HuggingFace Hub (offline catalogue), Ollama (local server), local GGUF filesystem registry.

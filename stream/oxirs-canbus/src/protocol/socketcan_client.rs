@@ -203,13 +203,12 @@ impl CanbusClient {
 
         match frame.id {
             CanId::Standard(id) => {
-                let std_id =
-                    StandardId::new(id).ok_or_else(|| CanbusError::InvalidCanId(id as u32))?;
+                let std_id = StandardId::new(id).ok_or(CanbusError::InvalidCanId(id as u32))?;
                 Ok(SocketCanFrame::new(std_id, &data[..frame.data.len()])
                     .ok_or_else(|| CanbusError::Config("Failed to create CAN frame".to_string()))?)
             }
             CanId::Extended(id) => {
-                let ext_id = ExtendedId::new(id).ok_or_else(|| CanbusError::InvalidCanId(id))?;
+                let ext_id = ExtendedId::new(id).ok_or(CanbusError::InvalidCanId(id))?;
                 Ok(SocketCanFrame::new(ext_id, &data[..frame.data.len()])
                     .ok_or_else(|| CanbusError::Config("Failed to create CAN frame".to_string()))?)
             }

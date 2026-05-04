@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oxirs-embed
+  namespace: oxirs
+  labels:
+    app.kubernetes.io/name: oxirs-embed
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: oxirs
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oxirs-embed
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oxirs-embed
+        app.kubernetes.io/component: server
+        app.kubernetes.io/part-of: oxirs
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: oxirs-embed
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: oxirs-embed
+          image: ghcr.io/cool-japan/oxirs-embed:0.3.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: OXIRS_EMBED_BIND
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: bindAddress
+            - name: OXIRS_EMBED_METRICS
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: metricsAddress
+            - name: OXIRS_EMBED_LOG
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: logLevel
+            - name: OXIRS_EMBED_DISTRIBUTED
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: distributed
+            - name: OXIRS_EMBED_NUM_SHARDS
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: numShards
+            - name: OXIRS_EMBED_NUM_WORKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: numWorkers
+            - name: OXIRS_EMBED_UPDATE_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: updateMode
+            - name: OXIRS_EMBED_SHARDING_STRATEGY
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: shardingStrategy
+            - name: OXIRS_EMBED_MODEL_TYPE
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: modelType
+            - name: OXIRS_EMBED_MODEL_DIMENSIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: oxirs-embed
+                  key: modelDimensions
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oxirs-embed
+  namespace: oxirs
+  labels:
+    app.kubernetes.io/name: oxirs-embed
+automountServiceAccountToken: false

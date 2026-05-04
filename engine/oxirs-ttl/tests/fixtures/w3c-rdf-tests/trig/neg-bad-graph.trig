@@ -1,0 +1,4 @@
+# graph IRI without enclosing braces (placed alone before content)
+@prefix ex: <http://example.org/> .
+<http://example.org/g>
+ex:s ex:p ex:o .

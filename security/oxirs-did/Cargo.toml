@@ -24,10 +24,11 @@ scirs2-core.workspace = true
 
 # Cryptography
 ed25519-dalek.workspace = true
-sha2.workspace = true
+curve25519-dalek = { workspace = true, optional = true }
+sha2 = "0.10"
 sha3.workspace = true
-digest.workspace = true
-hmac.workspace = true
+digest = "0.10"
+hmac = "0.12"
 base64.workspace = true
 hex.workspace = true
 k256.workspace = true
@@ -87,6 +88,8 @@ signed-graphs = []
 key-management = []
 bbs-plus = []
 zkp = []
+# zkp-ristretto: harden Pedersen commitments with curve25519-dalek Ristretto255
+zkp-ristretto = ["dep:curve25519-dalek"]
 
 [package.metadata.docs.rs]
 all-features = true

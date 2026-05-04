@@ -1,0 +1,14 @@
+# SELECT query, TSV results.
+endpoint: sparql_query
+classification: spec-required
+match_mode: tsv
+description: SELECT empty body returns TSV with just header
+
+=== request
+GET /sparql?query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%200
+Accept: text/tab-separated-values
+
+=== response
+200
+Content-Type: text/tab-separated-values
+

@@ -477,9 +477,9 @@ impl ExternalServicesManager {
     /// Real-time streaming speech recognition
     pub async fn streaming_speech_to_text(
         &self,
-        _audio_stream: tokio::sync::mpsc::Receiver<Vec<u8>>,
+        audio_stream: tokio::sync::mpsc::Receiver<Vec<u8>>,
         language: &str,
-        _options: &SpeechProcessingOptions,
+        options: &SpeechProcessingOptions,
     ) -> Result<tokio::sync::mpsc::Receiver<PartialSpeechResult>> {
         // Find a speech service with real-time streaming support
         for speech_config in &self.config.speech_services {
@@ -493,8 +493,93 @@ impl ExternalServicesManager {
                 continue;
             }
 
-            // Streaming speech connection not yet implemented
-            return Err(anyhow!("Streaming speech-to-text not yet implemented"));
+            let url = speech_config
+                .speech_to_text_url
+                .as_ref()
+                .ok_or_else(|| anyhow!("speech_to_text_url missing in config"))?
+                .clone();
+            let api_key = speech_config.api_key.clone();
+            let service_name = speech_config.name.clone();
+            let language_owned = language.to_string();
+            let enable_punctuation = options.enable_punctuation;
+            let http_client = self.client.clone();
+
+            let (tx, rx) = tokio::sync::mpsc::channel::<PartialSpeechResult>(64);
+
+            tokio::spawn(async move {
+                let mut audio_rx = audio_stream;
+                while let Some(chunk) = audio_rx.recv().await {
+                    // Build per-chunk POST request with optional auth
+                    let mut builder = http_client
+                        .post(&url)
+                        .query(&[
+                            ("language", language_owned.as_str()),
+                            (
+                                "punctuation",
+                                if enable_punctuation { "true" } else { "false" },
+                            ),
+                        ])
+                        .body(chunk);
+
+                    if let Some(ref key) = api_key {
+                        builder = builder.header("Authorization", format!("Bearer {key}"));
+                    }
+
+                    match builder.send().await {
+                        Ok(response) => {
+                            match response.json::<serde_json::Value>().await {
+                                Ok(json) => {
+                                    let partial_text = json
+                                        .get("text")
+                                        .or_else(|| json.get("transcript"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let is_final = json
+                                        .get("is_final")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false);
+                                    let confidence = json
+                                        .get("confidence")
+                                        .and_then(|v| v.as_f64())
+                                        .unwrap_or(0.0)
+                                        as f32;
+
+                                    let result = PartialSpeechResult {
+                                        service: service_name.clone(),
+                                        partial_text,
+                                        is_final,
+                                        confidence,
+                                        language: language_owned.clone(),
+                                        timestamp: std::time::SystemTime::now(),
+                                    };
+
+                                    if tx.send(result).await.is_err() {
+                                        // Receiver dropped — exit cleanly
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Failed to parse streaming STT response from {}: {}",
+                                        service_name,
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Streaming STT request to {} failed: {}",
+                                service_name,
+                                e
+                            );
+                        }
+                    }
+                }
+            });
+
+            return Ok(rx);
         }
 
         Err(anyhow!(
@@ -1130,5 +1215,137 @@ impl PartialEq for SearchType {
                 | (SearchType::Videos, SearchType::Videos)
                 | (SearchType::Knowledge, SearchType::Knowledge)
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_streaming_config(language: &str) -> ExternalServicesConfig {
+        ExternalServicesConfig {
+            speech_services: vec![SpeechConfig {
+                name: "test-stt".to_string(),
+                speech_to_text_url: Some("http://127.0.0.1:19999/stt".to_string()),
+                text_to_speech_url: None,
+                api_key: None,
+                supported_languages: vec![language.to_string()],
+                enabled: true,
+                voice_models: Vec::new(),
+                real_time_streaming: true,
+                noise_cancellation: false,
+                speech_enhancement: false,
+                speaker_diarization: false,
+                emotion_detection: false,
+                custom_vocabulary: Vec::new(),
+            }],
+            ..ExternalServicesConfig::default()
+        }
+    }
+
+    /// streaming_speech_to_text returns Ok(receiver) immediately when a matching config exists.
+    /// The spawned worker exits cleanly when the audio sender is dropped.
+    #[tokio::test]
+    async fn test_streaming_speech_to_text_returns_receiver() {
+        let config = make_streaming_config("en-US");
+        let manager = ExternalServicesManager::new(config);
+
+        let options = SpeechProcessingOptions {
+            enable_punctuation: false,
+            enable_profanity_filter: false,
+            enable_automatic_formatting: false,
+            enable_word_timestamps: false,
+            enable_confidence_scores: false,
+            enable_speaker_identification: false,
+            language_detection_mode: LanguageDetectionMode::None,
+            audio_quality_enhancement: false,
+        };
+
+        let (audio_tx, audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
+
+        let result = manager
+            .streaming_speech_to_text(audio_rx, "en-US", &options)
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "expected Ok(receiver), got {:?}",
+            result.err()
+        );
+
+        // Drop the audio sender — the spawned worker should exit without hanging
+        drop(audio_tx);
+
+        // Receiver should close once the worker exits (may take a moment since no HTTP)
+        let mut rx = result.unwrap();
+        // Give the worker a tick to exit; because the endpoint is unreachable the loop
+        // will drain then stop — at most we get nothing back and the channel closes.
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv()).await;
+        // Either None (worker exited) or a timeout is acceptable — the point is no panic/hang
+    }
+
+    /// When no matching config is present, the function returns Err with a descriptive message.
+    #[tokio::test]
+    async fn test_streaming_speech_to_text_no_matching_service() {
+        let config = ExternalServicesConfig::default(); // no speech services
+        let manager = ExternalServicesManager::new(config);
+
+        let options = SpeechProcessingOptions {
+            enable_punctuation: false,
+            enable_profanity_filter: false,
+            enable_automatic_formatting: false,
+            enable_word_timestamps: false,
+            enable_confidence_scores: false,
+            enable_speaker_identification: false,
+            language_detection_mode: LanguageDetectionMode::None,
+            audio_quality_enhancement: false,
+        };
+
+        let (_audio_tx, audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+
+        let result = manager
+            .streaming_speech_to_text(audio_rx, "ja-JP", &options)
+            .await;
+
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("ja-JP"),
+            "error should mention language, got: {}",
+            msg
+        );
+        assert!(
+            !msg.contains("not yet implemented"),
+            "stub message should be gone, got: {}",
+            msg
+        );
+    }
+
+    /// When a config exists but real_time_streaming = false, it should skip that config.
+    #[tokio::test]
+    async fn test_streaming_speech_to_text_skips_non_streaming_config() {
+        let mut config = make_streaming_config("en-US");
+        // Disable streaming on the only config
+        config.speech_services[0].real_time_streaming = false;
+        let manager = ExternalServicesManager::new(config);
+
+        let options = SpeechProcessingOptions {
+            enable_punctuation: false,
+            enable_profanity_filter: false,
+            enable_automatic_formatting: false,
+            enable_word_timestamps: false,
+            enable_confidence_scores: false,
+            enable_speaker_identification: false,
+            language_detection_mode: LanguageDetectionMode::None,
+            audio_quality_enhancement: false,
+        };
+
+        let (_audio_tx, audio_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        let result = manager
+            .streaming_speech_to_text(audio_rx, "en-US", &options)
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("en-US"));
     }
 }

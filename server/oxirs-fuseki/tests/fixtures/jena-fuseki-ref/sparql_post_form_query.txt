@@ -1,0 +1,18 @@
+# SPARQL POST with x-www-form-urlencoded query
+endpoint: sparql_query
+classification: spec-required
+match_mode: structural-json
+description: POST /sparql with form-encoded query body returns JSON
+
+=== request
+POST /sparql
+Content-Type: application/x-www-form-urlencoded
+Accept: application/sparql-results+json
+
+query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%200
+
+=== response
+200
+Content-Type: application/sparql-results+json
+
+{"head":{"vars":[]},"results":{"bindings":[]}}

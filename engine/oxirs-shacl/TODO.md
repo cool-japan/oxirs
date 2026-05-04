@@ -1,6 +1,6 @@
 # OxiRS SHACL - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Current Status
 
@@ -39,10 +39,20 @@ OxiRS SHACL v0.2.3 is production-ready, providing W3C SHACL validation with cros
 - ✅ Production monitoring
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] Long-term support guarantees
-- [ ] Complete SHACL 1.0 compliance
-- [ ] Enterprise validation features
-- [ ] Comprehensive documentation
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [x] Complete SHACL 1.0 compliance (completed 2026-04-28)
+  - 47/47 real conformance tests pass (shacl_core_1_0_conformance.rs)
+  - Covers all 27 W3C SHACL Core constraint types: class, datatype, nodeKind, minCount, maxCount, minInclusive, maxInclusive, minLength, maxLength, pattern, languageIn, uniqueLang, equals, disjoint, lessThan, in, hasValue, and, or, not, xone, qualifiedValueShape, closed
+  - Removed all eprintln! debug prints from shape_constraints.rs, validation/engine.rs, targets/selector.rs (replaced with tracing::trace!)
+  - Fixed logical constraints (and/or/not/xone) to use shapes_registry for real sub-shape validation
+  - 2040 total tests passing, zero clippy warnings
+- [~] Enterprise validation features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Comprehensive documentation (completed 2026-04-30)
+  - **Goal:** Comprehensive documentation pass on oxirs-shacl: rustdoc enrichment + cookbook + spec mapping.
+  - **Design:** Comprehensive rustdoc on every public API in `src/lib.rs` and submodules. Cookbook `COOKBOOK.md` covering common shape patterns (cardinality, string constraints, datatype, qualified value, target chains, SHACL-AF SPARQL constraints). Spec mapping `SPEC_MAPPING.md` listing every SHACL Core / SHACL-AF construct with the symbol that implements it.
+  - **Files:** `src/lib.rs`, `src/constraints/comparison_constraints.rs`, `src/constraints/shape_constraints.rs`, `src/constraints/logical_constraints.rs`, `src/paths/mod.rs`, `src/sparql_af/mod.rs` (rustdoc enrichment), `COOKBOOK.md` (new), `SPEC_MAPPING.md` (new)
+  - **Tests:** `cargo doc --no-deps -p oxirs-shacl` warning-free; 29 doctests pass; 2040/2040 unit tests pass; clippy clean; fmt clean.
+  - **Risk:** docs drift from code. Mitigation: spec-mapping table is generated from a single doctest harness later (out of scope for this run; spec-mapping is hand-authored and reviewed).
 
 ## Contributing
 

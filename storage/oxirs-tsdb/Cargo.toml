@@ -28,6 +28,7 @@ serde_json.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 arrow = { workspace = true, features = ["prettyprint"], optional = true }
 parquet = { workspace = true, features = ["arrow"], optional = true }
+duckdb = { workspace = true, optional = true, features = ["bundled", "vtab-arrow", "appender-arrow"] }
 crc32fast = { workspace = true }
 bit-vec.workspace = true
 oxiarc-lz4 = { workspace = true }
@@ -46,6 +47,15 @@ tokio-test.workspace = true
 default = ["compression"]
 compression = []
 arrow-export = ["arrow", "parquet"]
+# GPU-accelerated aggregations.  When enabled, scirs2-core's `gpu` module is
+# activated and GpuAggregator dispatches to real GPU kernels on supported
+# hardware; otherwise every call falls back silently to the CPU path.
+gpu = ["scirs2-core/gpu"]
+# DuckDB integration. Requires `duckdb` crate which has C dependencies (libduckdb
+# is bundled and built from source). Default off per COOLJAPAN Pure Rust Policy.
+# Implies `arrow-export` because the bridge uses Arrow `RecordBatch` for zero-copy
+# data exchange with DuckDB's vtab-arrow engine.
+duckdb = ["dep:duckdb", "arrow-export"]
 
 [[bench]]
 name = "write_throughput"

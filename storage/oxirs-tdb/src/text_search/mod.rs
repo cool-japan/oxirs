@@ -351,7 +351,10 @@ impl TextSearchIndex {
         };
 
         let top_docs = searcher
-            .search(&parsed_query, &TopDocs::with_limit(fetch_limit))
+            .search(
+                &parsed_query,
+                &TopDocs::with_limit(fetch_limit).order_by_score(),
+            )
             .map_err(|e| TdbError::Other(format!("Tantivy search error: {e}")))?;
 
         let mut results = Vec::with_capacity(top_docs.len());

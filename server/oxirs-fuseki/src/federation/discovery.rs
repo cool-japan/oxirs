@@ -1,5 +1,6 @@
 //! Service discovery for federated SPARQL endpoints
 
+use hickory_resolver::proto::rr::RData;
 use hickory_resolver::TokioResolver;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -327,7 +328,10 @@ impl ServiceDiscovery {
             .map_err(|e| FusekiError::Internal {
                 message: format!("Failed to create DNS resolver: {e}"),
             })?
-            .build();
+            .build()
+            .map_err(|e| FusekiError::Internal {
+                message: format!("Failed to build DNS resolver: {e}"),
+            })?;
 
         // Look up SRV records for SPARQL services
         // Convention: _sparql._tcp.domain.com
@@ -338,9 +342,12 @@ impl ServiceDiscovery {
                 let mut eps = endpoints.write().await;
                 let mut discovered_count = 0;
 
-                for record in lookup.iter() {
-                    let target = record.target().to_string();
-                    let port = record.port();
+                for record in lookup.answers() {
+                    let RData::SRV(srv) = &record.data else {
+                        continue;
+                    };
+                    let target = srv.target.to_string();
+                    let port = srv.port;
 
                     // Construct service URL
                     let service_url = match Url::parse(&format!(

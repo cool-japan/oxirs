@@ -1,0 +1,20 @@
+description = "query rejects an unknown --output format with non-zero exit"
+classification = "spec-required"
+setup = [
+    ["--quiet", "init", "qds", "--format", "tdb2", "--location", "${TMPDIR}/qds"],
+]
+argv = [
+    "--quiet",
+    "query",
+    "${TMPDIR}/qds",
+    "SELECT ?s WHERE { ?s ?p ?o }",
+    "--output",
+    "xyznotaformat",
+]
+exit_code = 1
+
+[stderr]
+mode = "contains"
+expected = """
+Output format must be one of
+"""

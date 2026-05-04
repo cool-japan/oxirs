@@ -1,0 +1,5 @@
+# UTF-8 string literal: Japanese, Cyrillic, emoji
+@prefix ex: <http://example.org/> .
+ex:greeting ex:value "こんにちは" ;
+            ex:cyrillic "Привет" ;
+            ex:emoji "Hello 🌍 world!" .

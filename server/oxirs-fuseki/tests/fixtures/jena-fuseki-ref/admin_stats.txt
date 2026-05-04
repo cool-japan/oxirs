@@ -1,0 +1,15 @@
+# $/stats endpoint
+endpoint: admin_stats
+classification: spec-required
+match_mode: structural-json
+ignore_fields: uptime_seconds, total_requests, datasets_count, memory_usage_mb, cpu_usage_percent, active_connections, last_updated, version
+description: GET /$/stats returns JSON with `server_name`
+
+=== request
+GET /$/stats
+
+=== response
+200
+Content-Type: application/json
+
+{"server_name":"OxiRS Fuseki"}

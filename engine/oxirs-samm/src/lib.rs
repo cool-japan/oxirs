@@ -1,8 +1,8 @@
 //! # OxiRS SAMM - Semantic Aspect Meta Model Implementation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! ✅ All public APIs documented. Production-ready with API stability guarantees.
 //!
 //! This crate provides a Rust implementation of the Semantic Aspect Meta Model (SAMM),
@@ -253,14 +253,21 @@ pub mod property_mapper;
 /// SAMM characteristic constraint validators (RangeConstraint, LengthConstraint, EncodingConstraint, RegularExpressionConstraint) (v1.1.0 round 16).
 pub mod constraint_validator;
 
+/// ESMF SDK 2.x feature parity matrix and status report (v0.3.0).
+pub mod parity;
+
+/// Command-line interface sub-command implementations (v0.3.0).
+pub mod cli;
+
 // Re-exports for convenience
 pub use analytics::{
-    Anomaly, AnomalyType, BenchmarkComparison, BenchmarkLevel, BestPracticeCheck,
-    BestPracticeReport, CheckCategory, ComplexityAssessment, ComplexityLevel, ConfidenceLevel,
-    CorrelationDirection, CorrelationInsight, CorrelationStrength, DependencyMetrics,
-    DistributionAnalysis, DistributionFit, DistributionParameters, DistributionStats,
-    DistributionType, ModelAnalytics, PropertyCorrelationMatrix, QualityTest, Recommendation,
-    RecommendationType, Severity, StatisticalAnomaly, StatisticalMetrics,
+    Anomaly, AnomalyType, BatchCorrelationError, BatchCorrelationMatrix, BenchmarkComparison,
+    BenchmarkLevel, BestPracticeCheck, BestPracticeReport, CheckCategory, ComplexityAssessment,
+    ComplexityLevel, ConfidenceLevel, CorrelationDirection, CorrelationInsight,
+    CorrelationStrength, DependencyMetrics, DistributionAnalysis, DistributionFit,
+    DistributionParameters, DistributionStats, DistributionType, ModelAnalytics,
+    PropertyCorrelationMatrix, QualityTest, Recommendation, RecommendationType, Severity,
+    StatisticalAnomaly, StatisticalMetrics,
 };
 pub use cache::{
     AspectCache, CacheStatistics, CharacteristicCache, EntityCache, LruModelCache, OperationCache,
@@ -275,7 +282,7 @@ pub use cloud_storage::{
 };
 pub use codegen::{
     HttpMethod, JsonSchemaGenerator, JsonSchemaOptions, JsonSchemaValidator, OpenApiGenerator,
-    OpenApiOptions, ValidationError as JsonSchemaValidationError,
+    OpenApiOptions, OpenApiVersion, ValidationError as JsonSchemaValidationError,
 };
 pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, PropertyChange};
 pub use documentation::{DocumentationFormat, DocumentationGenerator, DocumentationStyle};
@@ -307,8 +314,8 @@ pub use templates::{
 };
 pub use transformation::{ModelTransformation, TransformationRule};
 pub use validation::{
-    SammSchemaValidator, SchemaValidationError, SchemaValidationWarning, ValidationReport,
-    ValidationRule,
+    BatchValidator, SammSchemaValidator, SchemaValidationError, SchemaValidationWarning,
+    ValidationReport, ValidationRule,
 };
 pub use versioning::{AspectMigrationRegistry, AspectVersion, MigrationStep, VersionedAspect};
 

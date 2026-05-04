@@ -1,0 +1,20 @@
+{
+    "id": "pizza-fragment-001",
+    "title": "Pizza ontology fragment with mixed RL and EL constructs",
+    "profiles": ["RL", "EL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "SubClassOf", "sub": "Margherita", "sup": "Pizza" },
+        { "kind": "SubClassOf", "sub": "Pizza", "sup": "Food" },
+        { "kind": "SubClassOf", "sub": "MozzarellaTopping", "sup": "PizzaTopping" }
+    ],
+    "data": [
+        { "subject": "pizza1", "predicate": "rdf:type", "object": "Margherita" },
+        { "subject": "topping1", "predicate": "rdf:type", "object": "MozzarellaTopping" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "pizza1", "class": "Pizza" },
+        { "kind": "Type", "individual": "pizza1", "class": "Food" },
+        { "kind": "Type", "individual": "topping1", "class": "PizzaTopping" }
+    ],
+    "forbidden": []
+}

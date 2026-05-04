@@ -44,7 +44,7 @@ ex:greeting "مرحبا"@ar--rtl .  # Right-to-left
 Enable with feature flag:
 ```toml
 [dependencies]
-oxirs-ttl = { version = "0.2.3", features = ["rdf-12"] }
+oxirs-ttl = { version = "0.3.0", features = ["rdf-12"] }
 ```
 
 ### Advanced Features
@@ -65,10 +65,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = "0.2.3"
+oxirs-ttl = "0.3.0"
 
 # With all features
-oxirs-ttl = { version = "0.2.3", features = ["async-tokio", "parallel", "rdf-12"] }
+oxirs-ttl = { version = "0.3.0", features = ["async-tokio", "parallel", "rdf-12"] }
 ```
 
 ## Quick Start

@@ -757,9 +757,17 @@ impl WasmModuleBuilder {
     }
 
     fn build(self) -> Result<Vec<u8>, OxirsError> {
-        // Would generate actual WASM bytes
-        // This is a placeholder
-        Ok(vec![0x00, 0x61, 0x73, 0x6d]) // WASM magic number
+        // WASM module generation requires a WASM binary encoding backend
+        // (e.g., wasmparser/wasm-encoder crate) that has not yet been integrated
+        // into oxirs-core. The module IR is captured and validated but cannot
+        // produce a runnable binary until that integration is complete.
+        Err(OxirsError::Query(
+            "WASM module binary encoding is not yet implemented: a WASM encoder backend \
+             (e.g., wasm-encoder) must be integrated into oxirs-core before \
+             WasmModuleBuilder::build() can produce a valid .wasm binary; \
+             use the server-side SPARQL executor instead"
+                .to_string(),
+        ))
     }
 }
 
@@ -859,8 +867,17 @@ mod tests {
             })
             .expect("operation should succeed");
 
-        let wasm = builder.build().expect("operation should succeed");
-        assert!(!wasm.is_empty());
+        // build() surfaces the "WASM encoder not yet integrated" waiting state
+        let result = builder.build();
+        assert!(
+            result.is_err(),
+            "build() must surface the WASM encoder pending state as an error"
+        );
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("WASM"),
+            "error message should mention WASM, got: {msg}"
+        );
     }
 
     #[test]

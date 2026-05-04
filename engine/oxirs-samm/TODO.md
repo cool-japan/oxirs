@@ -1,6 +1,6 @@
 # OxiRS SAMM - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Status: Production Ready
 
@@ -51,13 +51,19 @@ OxiRS SAMM provides comprehensive support for the Semantic Aspect Meta Model (SA
 - ✅ Presigned URL generation for sharing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] GPU-accelerated batch validation
-- [ ] Parallel code generation
-- [ ] Batch correlation matrix computation
-- [ ] Java ESMF SDK feature parity
-- [ ] Long-term support guarantees
-- [ ] Enterprise features
-- [ ] Comprehensive benchmarks
+- [x] GPU-accelerated batch validation
+- [x] Parallel code generation
+- [x] Batch correlation matrix computation
+- [x] ESMF SDK feature-parity matrix and status report (completed 2026-05-01)
+  - **Goal:** Build a *parity matrix* — a structured catalogue of every documented ESMF SDK 2.x feature tagged `implemented` / `partial` / `missing` against current `oxirs-samm`. Emit a markdown report. Surface the top-3 gaps as new TODO.md items. Does not close gaps — inventories them.
+  - **Design:** New module `engine/oxirs-samm/src/parity/` with `mod.rs`, `matrix.rs`, `report.rs`. `ParityMatrix` data type — `HashMap<FeatureCategory, Vec<FeatureEntry>>`. Hand-curated `esmf_catalog.toml` (ESMF SDK 2.x core: aspect modeling, validation, code-gen, OpenAPI emission, JSON-LD profiles). `report::generate_report()` produces markdown for `docs/esmf_parity.md`. New bin `src/bin/parity_report.rs`. New test `tests/parity_test.rs` — round-trips TOML, validates `oxirs_module` references resolve to real paths in this crate. Top-3 `missing` entries appended as new `[ ]` items to this TODO.md.
+  - **Files:** `engine/oxirs-samm/src/parity/{mod.rs,matrix.rs,report.rs}`, `src/parity/esmf_catalog.toml`, `src/bin/parity_report.rs`, `docs/esmf_parity.md`, `tests/parity_test.rs`, `src/lib.rs` (re-export `pub mod parity`), `Cargo.toml` (bin entry), `TODO.md` (appended gap list).
+  - **Prerequisites:** `toml`, `serde` already in workspace.
+  - **Tests:** TOML round-trip; catalog references resolve; report contains every category; missing-status rows generate proper TODO entries; status enum exhaustiveness.
+  - **Risk:** ESMF SDK feature list is large. Mitigation: scope to ESMF SDK 2.x core only; profile add-ons deferred.
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing
 
@@ -66,3 +72,15 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 ---
 
 *OxiRS SAMM v0.2.3 - Semantic Aspect Meta Model support*
+
+## Proposed follow-ups
+
+- ESMF parity gap closure: after the parity matrix identifies top-3 missing features, each gap is one dedicated plan round.
+
+## Identified ESMF parity gaps
+
+Top-3 `Missing` features surfaced by the ESMF SDK 2.x parity matrix (see `docs/esmf_parity.md`):
+
+- [x] **Either characteristic** — implement the `samm-c:Either` union-type characteristic in `metamodel::characteristic` so that aspects can model properties whose value may be one of two distinct types. Reference: <https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#either-characteristic>
+- [x] **CLI `generate` command** — wire the existing code generators (Java, TypeScript, Python) to an oxirs CLI sub-command `samm generate` so that developers can invoke code generation without writing Rust code. Reference: <https://eclipse-esmf.github.io/esmf-sdk/2.9.7/samm-cli.html#generate> (completed 2026-05-01)
+- [x] **OpenAPI 3.1 schema generation** — extend `codegen::openapi` to emit OpenAPI 3.1 specifications aligned with JSON Schema 2020-12, enabling validation of the emitted document with modern tools. Reference: <https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#open-api-generation>

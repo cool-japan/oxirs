@@ -1,0 +1,19 @@
+description = "riot --validate succeeds for a well-formed N-Triples file"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "riot",
+    "--validate",
+    "${FIXTURE}/../_data/sample.nt",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Validation Results
+All files are valid
+"""
+
+[stderr]
+mode = "absent"

@@ -1,0 +1,21 @@
+description = "shacl reports Conforms: true when no targets violate shapes"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "shacl",
+    "--shapes",
+    "${FIXTURE}/../_data/shapes.ttl",
+    "--data",
+    "${FIXTURE}/../_data/sample.nt",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+SHACL Validation Report
+Conforms: true
+"""
+
+[stderr]
+mode = "absent"

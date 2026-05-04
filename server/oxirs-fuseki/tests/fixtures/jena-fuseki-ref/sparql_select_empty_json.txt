@@ -1,0 +1,17 @@
+# Jena Fuseki Parity Fixture
+# SELECT query, empty result set, JSON results format.
+endpoint: sparql_query
+classification: spec-required
+match_mode: structural-json
+ignore_fields: head.vars
+description: GET /sparql with empty store returns valid SPARQL Results JSON
+
+=== request
+GET /sparql?query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%200
+Accept: application/sparql-results+json
+
+=== response
+200
+Content-Type: application/sparql-results+json
+
+{"head":{"vars":[]},"results":{"bindings":[]}}

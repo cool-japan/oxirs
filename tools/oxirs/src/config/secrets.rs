@@ -378,24 +378,144 @@ pub enum SecretSource {
     SystemKeyring,
 }
 
-/// Integration with system keyring
+/// Integration with system keyring.
+///
+/// Requires the `system-keyring` Cargo feature:
+/// ```text
+/// cargo build --features system-keyring
+/// ```
+///
+/// The underlying [`keyring`](https://docs.rs/keyring) crate delegates to the
+/// platform's native credential store:
+/// - **macOS** — Security framework (Keychain)
+/// - **Windows** — Credential Manager
+/// - **Linux** — Secret Service API (e.g. GNOME Keyring / KWallet)
 pub mod keyring {
     use super::*;
 
-    /// Store a secret in the system keyring
-    pub fn store_in_keyring(_service: &str, _name: &str, _value: &str) -> CliResult<()> {
-        // This would use platform-specific APIs:
-        // - macOS: Security framework
-        // - Windows: Windows Credential Manager
-        // - Linux: Secret Service API
-
-        // For now, return not implemented
-        Err(CliError::config_error("System keyring not yet implemented"))
+    /// Store a secret in the system keyring.
+    ///
+    /// On macOS this uses the Keychain Services API via `apple-native-keyring-store`.
+    /// The default credential store is initialised lazily on first call.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the `system-keyring` feature is not enabled or if
+    /// the OS credential store rejects the operation.
+    #[cfg(feature = "system-keyring")]
+    pub fn store_in_keyring(service: &str, name: &str, value: &str) -> CliResult<()> {
+        init_default_store()?;
+        let entry = keyring_core::Entry::new(service, name).map_err(|e| {
+            CliError::config_error(format!(
+                "System keyring error creating entry '{name}' for service '{service}': {e}"
+            ))
+        })?;
+        entry.set_password(value).map_err(|e| {
+            CliError::config_error(format!(
+                "System keyring error storing secret '{name}' for service '{service}': {e}"
+            ))
+        })
     }
 
-    /// Retrieve a secret from the system keyring
+    #[cfg(not(feature = "system-keyring"))]
+    pub fn store_in_keyring(_service: &str, _name: &str, _value: &str) -> CliResult<()> {
+        Err(CliError::config_error(
+            "System keyring requires the 'system-keyring' feature flag. \
+             Rebuild with: cargo build --features system-keyring",
+        ))
+    }
+
+    /// Retrieve a secret from the system keyring.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the `system-keyring` feature is not enabled, if the
+    /// secret is not found, or if the OS credential store returns an error.
+    #[cfg(feature = "system-keyring")]
+    pub fn get_from_keyring(service: &str, name: &str) -> CliResult<String> {
+        init_default_store()?;
+        let entry = keyring_core::Entry::new(service, name).map_err(|e| {
+            CliError::config_error(format!(
+                "System keyring error creating entry '{name}' for service '{service}': {e}"
+            ))
+        })?;
+        entry.get_password().map_err(|e| {
+            CliError::config_error(format!(
+                "System keyring error retrieving secret '{name}' for service '{service}': {e}"
+            ))
+        })
+    }
+
+    #[cfg(not(feature = "system-keyring"))]
     pub fn get_from_keyring(_service: &str, _name: &str) -> CliResult<String> {
-        Err(CliError::config_error("System keyring not yet implemented"))
+        Err(CliError::config_error(
+            "System keyring requires the 'system-keyring' feature flag. \
+             Rebuild with: cargo build --features system-keyring",
+        ))
+    }
+
+    /// Initialise the default keyring-core credential store.
+    ///
+    /// Uses the macOS Keychain on macOS and the `keyring-core` sample store
+    /// (in-memory, non-persistent) on other platforms for testing purposes.
+    ///
+    /// Safe to call multiple times — the store is only set once.
+    #[cfg(feature = "system-keyring")]
+    fn init_default_store() -> CliResult<()> {
+        use std::sync::{Mutex, Once};
+        static INIT: Once = Once::new();
+        static INIT_ERR: Mutex<Option<String>> = Mutex::new(None);
+
+        INIT.call_once(|| {
+            let result: CliResult<()> = (|| {
+                #[cfg(target_os = "macos")]
+                {
+                    use apple_native_keyring_store::keychain::Store;
+                    let store = Store::new_with_configuration(&std::collections::HashMap::new())
+                        .map_err(|e| {
+                            CliError::config_error(format!(
+                                "Failed to initialise macOS Keychain store: {e}"
+                            ))
+                        })?;
+                    keyring_core::set_default_store(store);
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    // Fall back to the in-memory sample store on non-macOS platforms
+                    // (useful for CI/testing; not persistent across processes)
+                    use keyring_core::sample::Store;
+                    let store =
+                        Store::new_with_configuration(&std::collections::HashMap::from([(
+                            "persist", "true",
+                        )]))
+                        .map_err(|e| {
+                            CliError::config_error(format!(
+                                "Failed to initialise keyring sample store: {e}"
+                            ))
+                        })?;
+                    keyring_core::set_default_store(store);
+                }
+                Ok(())
+            })();
+            if let Err(e) = result {
+                if let Ok(mut guard) = INIT_ERR.lock() {
+                    *guard = Some(e.to_string());
+                }
+            }
+        });
+
+        // Surface any initialisation error that was captured inside call_once
+        match INIT_ERR.lock() {
+            Ok(guard) => match guard.as_ref() {
+                Some(msg) => Err(CliError::config_error(format!(
+                    "System keyring initialisation failed: {msg}"
+                ))),
+                None => Ok(()),
+            },
+            Err(_) => Err(CliError::config_error(
+                "Internal error: keyring init mutex poisoned",
+            )),
+        }
     }
 }
 
@@ -509,5 +629,56 @@ mod tests {
 
         // SAFETY: Cleaning up test environment
         unsafe { std::env::remove_var("OXIRS_SECRET_API_KEY") };
+    }
+
+    // ------------------------------------------------------------------
+    // System keyring tests
+    // ------------------------------------------------------------------
+
+    /// Without the `system-keyring` feature the functions must return a
+    /// descriptive error mentioning the flag to enable.
+    #[cfg(not(feature = "system-keyring"))]
+    #[test]
+    fn test_keyring_store_requires_feature_flag() {
+        let result = keyring::store_in_keyring("oxirs-test", "test-key", "test-value");
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("system-keyring"),
+            "error should mention the feature flag, got: {msg}"
+        );
+    }
+
+    #[cfg(not(feature = "system-keyring"))]
+    #[test]
+    fn test_keyring_get_requires_feature_flag() {
+        let result = keyring::get_from_keyring("oxirs-test", "test-key");
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("system-keyring"),
+            "error should mention the feature flag, got: {msg}"
+        );
+    }
+
+    /// With the `system-keyring` feature a round-trip store → retrieve must
+    /// succeed. The test deletes the credential afterwards to leave the OS
+    /// keyring clean.
+    #[cfg(feature = "system-keyring")]
+    #[test]
+    fn test_keyring_round_trip() {
+        let service = "oxirs-test-service";
+        let key = "oxirs-test-round-trip-key";
+        let value = "super-secret-value-42";
+
+        keyring::store_in_keyring(service, key, value).expect("keyring store failed");
+
+        let retrieved = keyring::get_from_keyring(service, key).expect("keyring retrieve failed");
+        assert_eq!(retrieved, value, "retrieved value must equal stored value");
+
+        // Clean up: delete the test credential from the OS keyring
+        if let Ok(entry) = keyring_core::Entry::new(service, key) {
+            let _ = entry.delete_credential();
+        }
     }
 }

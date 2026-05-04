@@ -1,8 +1,8 @@
 //! # OxiRS TDB - Apache Jena TDB/TDB2 Compatible Storage Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! High-performance RDF triple store with B+Tree indexes, ACID transactions,
@@ -76,7 +76,7 @@
 //! - [`oxirs-core`](https://docs.rs/oxirs-core) - RDF data model
 //! - [`oxirs-arq`](https://docs.rs/oxirs-arq) - SPARQL query engine
 
-#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.2.4")]
+#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.3.0")]
 #![warn(missing_docs)]
 #![allow(dead_code)] // Allow during development
 #![allow(unused_imports)] // Allow during development
@@ -348,6 +348,10 @@ pub mod triple_cache;
 /// Bloom filter index for fast triple existence checks: FNV double-hashing,
 /// capacity-tuned bit array, TripleBloomIndex wrapper (v1.1.0 round 16)
 pub mod bloom_index;
+
+/// Six-index triple store (SPO/POS/OSP and derived patterns) for O(log n)
+/// pattern matching — used in TDB2 parity verification.
+pub mod six_index_store;
 
 pub use wal_compaction::{
     BaseSnapshot, CompactionConfig, CompactionStats as WalCompactionStats, PitrConfig, PitrEngine,

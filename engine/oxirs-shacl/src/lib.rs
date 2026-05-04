@@ -1,9 +1,9 @@
 //! # OxiRS SHACL - RDF Validation Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl/badge.svg)](https://docs.rs/oxirs-shacl)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SHACL (Shapes Constraint Language) validation engine for RDF data.
@@ -11,12 +11,23 @@
 //!
 //! ## Features
 //!
-//! - **SHACL Core** - Complete SHACL Core constraint validation
+//! - **SHACL Core** - Complete SHACL Core constraint validation (27/27 W3C constraint types)
 //! - **SHACL-SPARQL** - SPARQL-based constraints (experimental)
-//! - **Property Paths** - Full property path evaluation
-//! - **Logical Constraints** - sh:and, sh:or, sh:not, sh:xone
-//! - **Validation Reports** - Comprehensive violation reporting
-//! - **Performance** - Optimized validation engine
+//! - **SHACL-AF** - Advanced Features (SPARQL targets, ASK validators, target types)
+//! - **Property Paths** - Full property path evaluation including inverse, sequence, alternative,
+//!   zero-or-more, one-or-more, zero-or-one operators
+//! - **Logical Constraints** - `sh:and`, `sh:or`, `sh:not`, `sh:xone`
+//! - **Validation Reports** - W3C-compliant violation reports with metadata
+//! - **Performance** - Optimized validation engine with caching, parallelism, and incremental modes
+//!
+//! ## Companion Documentation
+//!
+//! In addition to this rustdoc reference, two companion documents live at the crate root:
+//!
+//! - `COOKBOOK.md` — task-oriented patterns (cardinality, string, datatype, qualified value,
+//!   target chains, SHACL-AF SPARQL constraints) with Turtle examples and Rust API snippets.
+//! - `SPEC_MAPPING.md` — exhaustive table mapping every SHACL Core / SHACL-AF construct to the
+//!   Rust symbol that implements it.
 //!
 //! ## See Also
 //!
@@ -41,6 +52,21 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! ## Crate Layout
+//!
+//! - [`constraints`] — every SHACL Core constraint component
+//!   ([`MinCountConstraint`](constraints::cardinality_constraints::MinCountConstraint),
+//!   [`PatternConstraint`](constraints::string_constraints::PatternConstraint),
+//!   [`NodeKindConstraint`](constraints::value_constraints::NodeKindConstraint), and so on).
+//! - [`paths`] — property path evaluation and traversal.
+//! - [`shapes`] — shape parsing, factories, and shape-level validation.
+//! - [`targets`] — target selectors (`sh:targetClass`, `sh:targetSubjectsOf`, …).
+//! - [`validation`] — the validation engine and reporting pipeline.
+//! - [`sparql_af`] — SHACL Advanced Features built on SPARQL.
+//! - [`report`] — W3C validation report generation in multiple formats.
+//! - [`optimization`] — query rewriting and execution-plan optimisation.
+//! - [`cache`] — validation result and parallel-validation caches.
 //!
 //! ## Advanced Features
 //!
@@ -206,78 +232,122 @@ pub static SHACL_VOCAB: Lazy<vocabulary::ShaclVocabulary> =
 /// IRI resolver for validation and expansion
 pub use iri_resolver::IriResolver;
 
-/// Core error type for SHACL operations
+/// Core error type for SHACL operations.
+///
+/// Every fallible API in this crate returns [`Result<T>`](crate::Result), which is a
+/// type alias for `std::result::Result<T, ShaclError>`. The variants below cover the full
+/// surface area of the validation pipeline — parsing, constraint evaluation, property
+/// path traversal, SPARQL execution, reporting, and resource limits.
+///
+/// All variants derive [`thiserror::Error`] and provide a human-readable `Display`
+/// implementation suitable for inclusion in user-facing diagnostics. Errors that wrap
+/// foreign types (`oxirs_core::OxirsError`, `regex::Error`, `IriResolutionError`)
+/// implement `From` so the `?` operator works without boilerplate.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ShaclError {
+    /// A shape document failed to parse (malformed Turtle/RDF, missing required terms,
+    /// or invalid SHACL syntax).
     #[error("Shape parsing error: {0}")]
     ShapeParsing(String),
 
+    /// A constraint definition was rejected during structural validation
+    /// (e.g. invalid `sh:pattern` regex, contradictory cardinalities).
     #[error("Constraint validation error: {0}")]
     ConstraintValidation(String),
 
+    /// Target selection failed — typically a malformed `sh:target*` declaration
+    /// or an inaccessible store.
     #[error("Target selection error: {0}")]
     TargetSelection(String),
 
+    /// A property path expression could not be parsed.
     #[error("Property path error: {0}")]
     PropertyPath(String),
 
+    /// A property path evaluated correctly but produced an unexpected result
+    /// during traversal (cycles, infinite paths beyond the recursion limit).
     #[error("Path evaluation error: {0}")]
     PathEvaluationError(String),
 
+    /// A SPARQL query (used by SHACL-SPARQL constraints, SHACL-AF targets,
+    /// or the optimizer) failed to execute.
     #[error("SPARQL execution error: {0}")]
     SparqlExecution(String),
 
+    /// The validation engine itself reported an internal error
+    /// (orchestration failure, scheduler error, etc.).
     #[error("Validation engine error: {0}")]
     ValidationEngine(String),
 
+    /// Producing a validation report failed (serialisation, IO, or formatter error).
     #[error("Report generation error: {0}")]
     ReportGeneration(String),
 
+    /// A user-supplied `ValidationConfig` or builder argument is invalid.
     #[error("Configuration error: {0}")]
     Configuration(String),
 
+    /// Wrapped error originating in the `oxirs-core` RDF data model.
     #[error("OxiRS core error: {0}")]
     Core(#[from] OxirsError),
 
+    /// Wrapped `std::io::Error`.
     #[error("IO error: {0}")]
     Io(String),
 
+    /// A `sh:pattern` regex failed to compile.
     #[error("Regex error: {0}")]
     Regex(#[from] regex::Error),
 
+    /// JSON serialisation/deserialisation error
+    /// (used by the JSON-LD report writer and YAML config loader).
     #[error("JSON error: {0}")]
     Json(String),
 
+    /// IRI resolution failed (relative IRI without a base, malformed prefix, etc.).
     #[error("IRI resolution error: {0}")]
     IriResolution(#[from] crate::iri_resolver::IriResolutionError),
 
+    /// A SHACL-SPARQL constraint was rejected by the security policy
+    /// (forbidden function, query too expensive, network egress denied).
     #[error("Security violation: {0}")]
     SecurityViolation(String),
 
+    /// A higher-level shape contract was violated
+    /// (e.g. inheritance cycle, conflicting `sh:property` definitions).
     #[error("Shape validation error: {0}")]
     ShapeValidation(String),
 
+    /// Validation exceeded the configured wall-clock timeout.
     #[error("Validation timeout: {0}")]
     Timeout(String),
 
+    /// Validation exceeded the configured memory budget.
     #[error("Memory limit exceeded: {0}")]
     MemoryLimit(String),
 
+    /// Recursive shape evaluation reached `ValidationConfig::max_recursion_depth`.
     #[error("Recursion limit exceeded: {0}")]
     RecursionLimit(String),
 
+    /// Internal pool used for short-lived allocations failed.
     #[error("Memory pool error: {0}")]
     MemoryPool(String),
 
+    /// Memory-aware optimisation pass aborted.
     #[error("Memory optimization error: {0}")]
     MemoryOptimization(String),
 
+    /// An async runtime task failed (only when the `async` feature is enabled).
     #[error("Async operation error: {0}")]
     AsyncOperation(String),
 
+    /// A construct was recognised but is not yet implemented in this build
+    /// (typically gated behind a Cargo feature).
     #[error("Unsupported operation: {0}")]
     UnsupportedOperation(String),
 
+    /// Generic report-related failure (writer IO, missing template, etc.).
     #[error("Report error: {0}")]
     ReportError(String),
 }
@@ -315,19 +385,41 @@ impl From<std::fmt::Error> for ShaclError {
 /// Result type alias for SHACL operations
 pub type Result<T> = std::result::Result<T, ShaclError>;
 
-/// SHACL shape identifier
+/// SHACL shape identifier.
+///
+/// A shape is identified by its IRI in the shapes graph; for blank-node shapes,
+/// implementations must mint a stable identifier. `ShapeId` is the canonical
+/// representation used throughout the engine to reference shapes in maps,
+/// inheritance chains, and validation reports.
+///
+/// Shapes are typically named with the `sh:NodeShape` or `sh:PropertyShape` IRI:
+///
+/// ```rust
+/// use oxirs_shacl::ShapeId;
+///
+/// let person = ShapeId::new("http://example.org/PersonShape");
+/// assert_eq!(person.as_str(), "http://example.org/PersonShape");
+/// ```
+///
+/// For blank-node shapes (anonymous shapes inlined in a property shape, etc.),
+/// use [`ShapeId::generate`] to mint a fresh UUID-based identifier.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ShapeId(pub String);
 
 impl ShapeId {
+    /// Construct a shape identifier from anything convertible into `String`.
     pub fn new(id: impl Into<String>) -> Self {
         ShapeId(id.into())
     }
 
+    /// Return the underlying IRI/string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
+    /// Generate a fresh, globally unique shape identifier (UUID-backed).
+    ///
+    /// Used for blank-node shapes and synthetic shapes constructed at runtime.
     pub fn generate() -> Self {
         ShapeId(format!("shape_{}", Uuid::new_v4()))
     }
@@ -351,15 +443,31 @@ impl From<&str> for ShapeId {
     }
 }
 
-/// SHACL constraint component identifier
+/// SHACL constraint component identifier.
+///
+/// Every SHACL constraint is associated with a *constraint component* — the
+/// IRI that identifies which kind of constraint it is. For example, the
+/// `sh:minCount` parameter activates the constraint component whose ID is
+/// `sh:MinCountConstraintComponent`. These IDs surface in violation reports
+/// (`sh:sourceConstraintComponent`) and let consumers route or filter
+/// violations by constraint family.
+///
+/// ```rust
+/// use oxirs_shacl::ConstraintComponentId;
+///
+/// let id = ConstraintComponentId::new("sh:MinCountConstraintComponent");
+/// assert_eq!(id.as_str(), "sh:MinCountConstraintComponent");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ConstraintComponentId(pub String);
 
 impl ConstraintComponentId {
+    /// Construct a constraint component ID from anything convertible into `String`.
     pub fn new(id: impl Into<String>) -> Self {
         ConstraintComponentId(id.into())
     }
 
+    /// Return the underlying IRI/string slice.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -383,14 +491,43 @@ impl From<&str> for ConstraintComponentId {
     }
 }
 
-/// SHACL shape type
+/// SHACL shape type.
+///
+/// SHACL distinguishes two shape kinds (SHACL Core §2.1):
+///
+/// - **Node shape** (`sh:NodeShape`) — places constraints on focus nodes themselves.
+/// - **Property shape** (`sh:PropertyShape`) — declares a `sh:path` and places
+///   constraints on the values reached via that path from a focus node.
+///
+/// The variant of this enum determines how a [`Shape`] is interpreted by the
+/// validation engine: property shapes always have a `path`, node shapes do not.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ShapeType {
+    /// `sh:NodeShape` — constraints applied directly to focus nodes.
     NodeShape,
+    /// `sh:PropertyShape` — constraints applied to values reachable from focus nodes
+    /// through the shape's `sh:path`.
     PropertyShape,
 }
 
-/// SHACL shape representation
+/// SHACL shape representation.
+///
+/// A `Shape` is the in-memory model of a single SHACL shape — either a node shape
+/// (`sh:NodeShape`) or a property shape (`sh:PropertyShape`). Shapes group together
+/// the targets that select focus nodes, the path (for property shapes), the
+/// constraints to evaluate, and various metadata used for reporting and
+/// inheritance.
+///
+/// Construct via [`Shape::node_shape`] or [`Shape::property_shape`]:
+///
+/// ```rust
+/// use oxirs_shacl::{Shape, ShapeId};
+///
+/// let mut person = Shape::node_shape(ShapeId::new("http://example.org/PersonShape"));
+/// person.label = Some("Person".into());
+/// person.description = Some("A natural person".into());
+/// assert!(person.is_node_shape());
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Shape {
     /// Unique identifier for this shape
@@ -445,6 +582,8 @@ pub struct Shape {
 }
 
 impl Shape {
+    /// Construct a new shape with the given ID and type, no targets, and no
+    /// constraints. Defaults: severity = `Violation`, `deactivated = false`.
     pub fn new(id: ShapeId, shape_type: ShapeType) -> Self {
         Self {
             id,
@@ -466,32 +605,41 @@ impl Shape {
         }
     }
 
+    /// Construct an empty `sh:NodeShape`.
     pub fn node_shape(id: ShapeId) -> Self {
         Self::new(id, ShapeType::NodeShape)
     }
 
+    /// Construct an empty `sh:PropertyShape` with the given `sh:path`.
     pub fn property_shape(id: ShapeId, path: PropertyPath) -> Self {
         let mut shape = Self::new(id, ShapeType::PropertyShape);
         shape.path = Some(path);
         shape
     }
 
+    /// Attach a constraint to this shape under the given component ID.
+    /// Inserting twice with the same `component_id` overwrites the previous value.
     pub fn add_constraint(&mut self, component_id: ConstraintComponentId, constraint: Constraint) {
         self.constraints.insert(component_id, constraint);
     }
 
+    /// Append a target declaration (`sh:targetClass`, `sh:targetNode`, …) to this shape.
     pub fn add_target(&mut self, target: Target) {
         self.targets.push(target);
     }
 
+    /// Whether this shape participates in validation. A shape with `sh:deactivated true`
+    /// is loaded into the shapes graph but skipped by the validation engine.
     pub fn is_active(&self) -> bool {
         !self.deactivated
     }
 
+    /// True when [`shape_type`](Shape::shape_type) is [`ShapeType::NodeShape`].
     pub fn is_node_shape(&self) -> bool {
         matches!(self.shape_type, ShapeType::NodeShape)
     }
 
+    /// True when [`shape_type`](Shape::shape_type) is [`ShapeType::PropertyShape`].
     pub fn is_property_shape(&self) -> bool {
         matches!(self.shape_type, ShapeType::PropertyShape)
     }
@@ -570,13 +718,23 @@ pub struct ShapeMetadata {
     pub custom: HashMap<String, String>,
 }
 
-/// Violation severity levels
+/// Violation severity levels (SHACL Core §2.1.4 `sh:severity`).
+///
+/// SHACL allows shape authors to mark violations as informational, warning, or
+/// hard violation. The default is [`Severity::Violation`]. Tools (CI, IDE,
+/// linters) typically filter or color-code reports by severity.
+///
+/// Severity values are totally ordered: `Info < Warning < Violation`. This
+/// allows `max(severities)` to compute the worst severity in a report.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
 )]
 pub enum Severity {
+    /// `sh:Info` — purely informational; not a failure.
     Info,
+    /// `sh:Warning` — soft violation; default-on but can be ignored.
     Warning,
+    /// `sh:Violation` — hard violation (default for SHACL Core).
     #[default]
     Violation,
 }
@@ -591,7 +749,22 @@ impl fmt::Display for Severity {
     }
 }
 
-/// Validation configuration
+/// Validation configuration shared by all entry points into the engine.
+///
+/// `ValidationConfig` controls how the engine behaves during a single validation
+/// run: how many violations to emit, which severities to include, whether to
+/// stop after the first failure, recursion limits, time budgets, parallelism,
+/// and which optimisation strategy to use.
+///
+/// ```rust
+/// use oxirs_shacl::{ValidationConfig, ValidationStrategy, Severity};
+///
+/// let cfg = ValidationConfig::default()
+///     .with_strategy(ValidationStrategy::Optimized)
+///     .with_inference_enabled(true);
+/// assert!(cfg.include_warnings);
+/// assert_eq!(cfg.max_recursion_depth, 50);
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationConfig {
     /// Maximum number of violations to report (0 = unlimited)

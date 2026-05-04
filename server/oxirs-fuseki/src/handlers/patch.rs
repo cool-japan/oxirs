@@ -67,10 +67,13 @@ pub enum PatchOperation {
     /// Delete triple
     Delete(oxirs_core::model::Triple),
 
-    /// Transaction commit
+    /// Transaction begin (TB)
+    TransactionBegin,
+
+    /// Transaction commit (TC)
     TransactionCommit,
 
-    /// Transaction abort
+    /// Transaction abort (TA)
     TransactionAbort,
 }
 
@@ -176,6 +179,15 @@ impl RdfPatch {
                     }
                 }
 
+                PatchOperation::TransactionBegin => {
+                    if in_transaction {
+                        return Err(PatchError::TransactionError(
+                            "TB while already in transaction".to_string(),
+                        ));
+                    }
+                    in_transaction = true;
+                }
+
                 PatchOperation::TransactionCommit => {
                     if !in_transaction {
                         return Err(PatchError::TransactionError(
@@ -276,6 +288,8 @@ fn parse_operation(
             let triple = parse_triple(&parts[1..], prefixes)?;
             Ok(PatchOperation::Delete(triple))
         }
+
+        "TB" => Ok(PatchOperation::TransactionBegin),
 
         "TC" => Ok(PatchOperation::TransactionCommit),
 

@@ -1,0 +1,5 @@
+# unterminated string inside graph
+@prefix ex: <http://example.org/> .
+<http://example.org/g> {
+    ex:s ex:p "no closing quote .
+}

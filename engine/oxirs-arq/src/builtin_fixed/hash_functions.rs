@@ -88,7 +88,7 @@ impl CustomFunction for Sha1Function {
         let mut hasher = Sha1::new();
         Sha1Digest::update(&mut hasher, string.as_bytes());
         let result = hasher.finalize();
-        Ok(Value::String(format!("{result:x}")))
+        Ok(Value::String(hex::encode(result)))
     }
 }
 
@@ -129,7 +129,7 @@ impl CustomFunction for Sha256Function {
         let mut hasher = Sha256::new();
         hasher.update(string.as_bytes());
         let result = hasher.finalize();
-        Ok(Value::String(format!("{result:x}")))
+        Ok(Value::String(hex::encode(result)))
     }
 }
 
@@ -170,7 +170,7 @@ impl CustomFunction for Sha384Function {
         let mut hasher = Sha384::new();
         hasher.update(string.as_bytes());
         let result = hasher.finalize();
-        Ok(Value::String(format!("{result:x}")))
+        Ok(Value::String(hex::encode(result)))
     }
 }
 
@@ -211,6 +211,6 @@ impl CustomFunction for Sha512Function {
         let mut hasher = Sha512::new();
         hasher.update(string.as_bytes());
         let result = hasher.finalize();
-        Ok(Value::String(format!("{result:x}")))
+        Ok(Value::String(hex::encode(result)))
     }
 }

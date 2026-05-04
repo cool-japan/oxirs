@@ -185,16 +185,38 @@ fn parse_and_validate_query(query: &str) -> ToolResult<QueryInfo> {
         return Err("Unknown query type. Must be SELECT, CONSTRUCT, ASK, or DESCRIBE".into());
     };
 
-    // Extract variables (simplified)
-    let mut variables = Vec::new();
+    // Extract variables (simplified).  We compare a case-folded copy of the
+    // line to find the "SELECT" keyword but slice the original to preserve
+    // case in variable names (Jena's `arq` reports `?s` not `?S`).  We also
+    // dedupe on variable name so a query like `SELECT ?s ?s` does not produce
+    // duplicate header columns.
+    let mut variables: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for line in query.lines() {
-        let line = line.trim().to_uppercase();
-        if line.starts_with("SELECT") {
-            // Extract variables from SELECT clause
-            let select_part = line.strip_prefix("SELECT").unwrap_or("");
+        let trimmed = line.trim();
+        let upper = trimmed.to_uppercase();
+        if upper.starts_with("SELECT") {
+            let select_part = &trimmed[6..]; // length of "SELECT"
             for token in select_part.split_whitespace() {
-                if token.starts_with('?') {
-                    variables.push(token.to_string());
+                let upper_token = token.to_uppercase();
+                if upper_token == "WHERE" || token == "{" {
+                    // The projection list ends at `WHERE` or `{`; subsequent
+                    // tokens belong to the body and must not be classified as
+                    // projected variables.
+                    break;
+                }
+                if let Some(name) = token.strip_prefix('?') {
+                    let var = format!("?{name}");
+                    if seen.insert(var.clone()) {
+                        variables.push(var);
+                    }
+                } else if let Some(name) = token.strip_prefix('$') {
+                    // Honour the SPARQL `$var` synonym for `?var` (per W3C
+                    // SPARQL 1.1 §4.1.2).
+                    let var = format!("${name}");
+                    if seen.insert(var.clone()) {
+                        variables.push(var);
+                    }
                 }
             }
             break;

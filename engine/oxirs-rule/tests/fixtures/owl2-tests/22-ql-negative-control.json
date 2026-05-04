@@ -1,0 +1,21 @@
+{
+    "id": "ql-negative-control-001",
+    "title": "QL negative control: no spurious type derivations across unrelated classes",
+    "profiles": ["QL", "RL", "EL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "SubClassOf", "sub": "Dog", "sup": "Mammal" }
+    ],
+    "data": [
+        { "subject": "rex", "predicate": "rdf:type", "object": "Dog" },
+        { "subject": "tweety", "predicate": "rdf:type", "object": "Bird" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "rex", "class": "Mammal" },
+        { "kind": "Type", "individual": "tweety", "class": "Bird" }
+    ],
+    "forbidden": [
+        { "kind": "Type", "individual": "rex", "class": "Bird" },
+        { "kind": "Type", "individual": "tweety", "class": "Mammal" },
+        { "kind": "Type", "individual": "tweety", "class": "Dog" }
+    ]
+}

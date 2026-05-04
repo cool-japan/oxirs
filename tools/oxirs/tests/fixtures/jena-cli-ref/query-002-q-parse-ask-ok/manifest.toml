@@ -1,0 +1,14 @@
+description = "q-parse identifies an ASK query"
+classification = "spec-required"
+argv = ["--quiet", "q-parse", "ASK WHERE { ?s ?p ?o }"]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Query type : Ask
+Parse OK
+"""
+
+[stderr]
+mode = "absent"

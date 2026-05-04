@@ -1,0 +1,4 @@
+# boolean literal
+@prefix ex: <http://example.org/> .
+ex:s ex:active true ;
+     ex:retired false .

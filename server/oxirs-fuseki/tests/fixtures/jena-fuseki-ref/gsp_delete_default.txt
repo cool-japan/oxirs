@@ -1,0 +1,12 @@
+# DELETE default graph
+endpoint: gsp_delete
+classification: spec-required
+match_mode: status-only
+description: DELETE /data?default returns 200
+
+=== request
+DELETE /data?default
+
+=== response
+200
+

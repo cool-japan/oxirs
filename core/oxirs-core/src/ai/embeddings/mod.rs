@@ -8,17 +8,31 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 pub mod complex;
+pub mod conve;
 pub mod distmult;
 pub mod evaluation;
+pub mod hype;
+pub mod kgtransformer;
+pub mod neural_tensor_network;
+pub mod rotate;
+pub mod simple;
 pub mod transe;
+pub mod tucker;
 
 pub use complex::ComplEx;
+pub use conve::ConvE;
 pub use distmult::DistMult;
 pub use evaluation::{
     ConfidenceIntervals, KnowledgeGraphMetrics, LinkPredictionMetrics, StatisticalTestResults,
     TaskBreakdownMetrics, TrainingMetrics,
 };
+pub use hype::HypE;
+pub use kgtransformer::KGTransformer;
+pub use neural_tensor_network::NeuralTensorNetwork;
+pub use rotate::RotatE;
+pub use simple::SimplE;
 pub use transe::TransE;
+pub use tucker::TuckER;
 
 /// Knowledge graph embedding trait
 #[async_trait::async_trait]
@@ -153,7 +167,15 @@ pub fn create_embedding_model(
         EmbeddingModelType::TransE => Ok(std::sync::Arc::new(TransE::new(config))),
         EmbeddingModelType::DistMult => Ok(std::sync::Arc::new(DistMult::new(config))),
         EmbeddingModelType::ComplEx => Ok(std::sync::Arc::new(ComplEx::new(config))),
-        _ => Err(anyhow::anyhow!("Embedding model not yet implemented")),
+        EmbeddingModelType::RotatE => Ok(std::sync::Arc::new(RotatE::new(config))),
+        EmbeddingModelType::HypE => Ok(std::sync::Arc::new(HypE::new(config))),
+        EmbeddingModelType::TuckER => Ok(std::sync::Arc::new(TuckER::new(config))),
+        EmbeddingModelType::ConvE => Ok(std::sync::Arc::new(ConvE::new(config))),
+        EmbeddingModelType::KGTransformer => Ok(std::sync::Arc::new(KGTransformer::new(config))),
+        EmbeddingModelType::NeuralTensorNetwork => {
+            Ok(std::sync::Arc::new(NeuralTensorNetwork::new(config)))
+        }
+        EmbeddingModelType::SimplE => Ok(std::sync::Arc::new(SimplE::new(config))),
     }
 }
 
@@ -184,6 +206,42 @@ impl Default for TrainingConfig {
             max_epochs: 1000,
             validation_split: 0.1,
             patience: 50,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify that every EmbeddingModelType variant can be constructed without error.
+    #[test]
+    fn test_create_embedding_model_all_variants() {
+        let variants = [
+            EmbeddingModelType::TransE,
+            EmbeddingModelType::DistMult,
+            EmbeddingModelType::ComplEx,
+            EmbeddingModelType::RotatE,
+            EmbeddingModelType::HypE,
+            EmbeddingModelType::TuckER,
+            EmbeddingModelType::ConvE,
+            EmbeddingModelType::KGTransformer,
+            EmbeddingModelType::NeuralTensorNetwork,
+            EmbeddingModelType::SimplE,
+        ];
+
+        for variant in &variants {
+            let config = EmbeddingConfig {
+                model_type: variant.clone(),
+                embedding_dim: 8,
+                ..Default::default()
+            };
+            let result = create_embedding_model(config);
+            assert!(
+                result.is_ok(),
+                "create_embedding_model should succeed for {:?}",
+                variant
+            );
         }
     }
 }

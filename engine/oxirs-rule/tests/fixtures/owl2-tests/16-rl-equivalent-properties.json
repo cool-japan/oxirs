@@ -1,0 +1,16 @@
+{
+    "id": "rl-equivalent-properties-001",
+    "title": "RL: equivalentObjectProperty propagates triples in both directions",
+    "profiles": ["RL", "QL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "EquivalentObjectProperties", "a": "givesBirthTo", "b": "isMotherOf" }
+    ],
+    "data": [
+        { "subject": "diana", "predicate": "givesBirthTo", "object": "alice" }
+    ],
+    "expected": [
+        { "kind": "Property", "subject": "diana", "property": "givesBirthTo", "object": "alice" },
+        { "kind": "Property", "subject": "diana", "property": "isMotherOf", "object": "alice" }
+    ],
+    "forbidden": []
+}

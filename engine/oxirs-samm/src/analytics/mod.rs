@@ -1,5 +1,6 @@
 //! Auto-generated module structure (extended with advanced analytics)
 
+pub mod batch_matrix;
 pub mod functions;
 pub mod modelanalytics_analyze_group;
 pub mod modelanalytics_compute_kendall_correlations_group;
@@ -14,6 +15,7 @@ pub mod severity_traits;
 pub mod types;
 
 // Re-export all types
+pub use batch_matrix::{BatchCorrelationError, BatchCorrelationMatrix};
 pub use functions::*;
 pub use modelanalytics_analyze_group::*;
 pub use modelanalytics_compute_kendall_correlations_group::*;

@@ -1,0 +1,3 @@
+# object list expands to multiple triples
+@prefix ex: <http://example.org/> .
+ex:s ex:p ex:o1, ex:o2 .

@@ -1,0 +1,16 @@
+# Parity with Jena `qparse "SELECT ..."` — recognises a SELECT query and
+# reports the query type without diagnostics on stderr.
+description = "q-parse accepts a well-formed SELECT and prints query type"
+classification = "spec-required"
+argv = ["--quiet", "q-parse", "SELECT ?s WHERE { ?s ?p ?o }"]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Query type : Select
+Parse OK
+"""
+
+[stderr]
+mode = "absent"

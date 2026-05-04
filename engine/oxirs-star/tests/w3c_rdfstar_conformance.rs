@@ -533,9 +533,9 @@ fn test_w3c_roundtrip_conformance() {
         stats.total_tests,
         stats.pass_rate()
     );
-    assert!(
-        stats.passed >= 3,
-        "At least 3 formats should pass round-trip (Turtle, N-Triples, TriG)"
+    assert_eq!(
+        stats.passed, stats.total_tests,
+        "All formats must pass round-trip (W3C full compliance requires 100%)"
     );
 }
 
@@ -661,8 +661,8 @@ fn test_w3c_rdfstar_master_conformance() {
     println!("✅ Entailment: {:.1}%", entailment_stats.pass_rate());
 
     assert!(
-        overall_compliance >= 95.0,
-        "Overall conformance should be ≥95% (got {:.1}%)",
+        overall_compliance >= 99.0,
+        "Overall conformance should be ≥99% (got {:.1}%)",
         overall_compliance
     );
 }

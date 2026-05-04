@@ -1,9 +1,9 @@
 //! # OxiRS CLI Tool
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs/badge.svg)](https://docs.rs/oxirs)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Command-line interface for OxiRS providing import, export, SPARQL queries,
@@ -99,7 +99,7 @@
 //!                   WHERE { ?s <http://example.org/name> ?name }"
 //! ```
 //!
-//! ## Phase D: Industrial Connectivity Examples (0.2.4)
+//! ## Phase D: Industrial Connectivity Examples (0.3.0)
 //!
 //! ### Time-Series Operations
 //! ```bash
@@ -563,8 +563,8 @@ pub enum Commands {
         /// Query is a file path
         #[arg(short, long)]
         file: bool,
-        /// Results format
-        #[arg(long, default_value = "table")]
+        /// Results format (json, xml, csv, tsv, text)
+        #[arg(long, default_value = "text")]
         results: String,
     },
 
@@ -1813,7 +1813,7 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
 
-        // === Phase D: Industrial Connectivity CLI Handlers (0.2.4) ===
+        // === Phase D: Industrial Connectivity CLI Handlers (0.3.0) ===
         Commands::Tsdb { action } => commands::tsdb::execute(action, &ctx)
             .await
             .map_err(|e| e.into()),

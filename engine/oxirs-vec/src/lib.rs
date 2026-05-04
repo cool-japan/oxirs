@@ -1,9 +1,9 @@
 //! # OxiRS Vector Search
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-vec/badge.svg)](https://docs.rs/oxirs-vec)
 //!
-//! **Status**: Production Release (v0.2.4) - **Production-Ready with Complete Documentation**
+//! **Status**: Production Release (v0.3.0) - **Production-Ready with Complete Documentation**
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing and 100 KB of documentation.
 //!
 //! Vector index abstractions for semantic similarity and AI-augmented SPARQL querying.
@@ -102,7 +102,6 @@
 //! ```
 
 use anyhow::Result;
-use std::collections::HashMap;
 
 pub mod adaptive_compression;
 pub mod adaptive_intelligent_caching;
@@ -249,6 +248,27 @@ pub mod pq_encoder;
 // Python bindings module
 #[cfg(feature = "python")]
 pub mod python_bindings;
+
+/// In-memory vector index and `VectorIndex` trait
+pub mod vector_index;
+
+/// Enhanced vector store with embedding management and persistence
+pub mod vector_store;
+
+/// Cost-based vector index optimizer (selectivity-aware family selection,
+/// online learning, persistent stats).  See [`optimizer`] for details.
+pub mod optimizer;
+
+/// Runtime index dispatcher: wraps the optimizer brain with concrete
+/// HNSW / IVF / LSH / PQ instances and re-issues queries on fallback.
+pub mod index_dispatcher;
+
+// Re-export types moved to dedicated modules
+pub use vector_index::{MemoryVectorIndex, VectorIndex};
+pub use vector_store::{
+    DocumentBatchProcessor, SearchOptions, SearchQuery, SearchType, VectorOperationResult,
+    VectorStore, VectorStoreConfig,
+};
 
 // Re-export commonly used types
 pub use adaptive_compression::{
@@ -456,17 +476,22 @@ pub use kg_embeddings::{
 pub use lsh::{LshConfig, LshFamily, LshIndex, LshStats};
 pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
 pub use multi_tenancy::{
-    AccessControl, AccessPolicy, BillingEngine, BillingMetrics, BillingPeriod, IsolationLevel,
-    IsolationStrategy, MultiTenancyError, MultiTenancyResult, MultiTenantManager, NamespaceManager,
-    Permission, PricingModel, QuotaEnforcer, QuotaLimits, QuotaUsage, RateLimiter, ResourceQuota,
-    ResourceType, Role, Tenant, TenantConfig, TenantContext, TenantId, TenantManagerConfig,
-    TenantMetadata, TenantOperation, TenantStatistics, TenantStatus, UsageRecord,
+    AccessControl, AccessPolicy, AdmissionController, AdmissionError, BillingEngine,
+    BillingMetrics, BillingPeriod, IsolationLevel, IsolationStrategy, MultiTenancyError,
+    MultiTenancyResult, MultiTenantManager, NamespaceManager, Permission, PricingModel,
+    PrioritizedQuery, QuotaEnforcer, QuotaLimits, QuotaUsage, RateLimiter, ResourceQuota,
+    ResourceType, Role, SlaClass, SlaQueryDispatcher, SlaThresholds, Tenant, TenantConfig,
+    TenantContext, TenantId, TenantManagerConfig, TenantMetadata, TenantOperation,
+    TenantStatistics, TenantStatus, UsageRecord,
 };
 pub use nsg::{DistanceMetric as NsgDistanceMetric, NsgConfig, NsgIndex, NsgStats};
 pub use performance_insights::{
     AlertingSystem, OptimizationRecommendations, PerformanceInsightsAnalyzer,
     PerformanceTrends as InsightsPerformanceTrends, QueryComplexity,
     QueryStatistics as InsightsQueryStatistics, ReportFormat, VectorStatistics,
+};
+pub use persistence::{
+    apply_wal_entry, restore_to_timestamp, CheckpointRef, PointInTimeRestore, RestoreReport,
 };
 pub use pq::{PQConfig, PQIndex, PQStats};
 pub use pytorch::{
@@ -561,6 +586,14 @@ pub use tree_indices::{
 pub use wal::{WalConfig, WalEntry, WalManager};
 pub use word2vec::{
     AggregationMethod, OovStrategy, Word2VecConfig, Word2VecEmbeddingGenerator, Word2VecFormat,
+};
+
+// ---- Optimizer & runtime dispatcher (W2-S7) -------------------------------
+pub use index_dispatcher::{DispatchedSearch, IndexDispatcher, IndexDispatcherConfig};
+pub use optimizer::{
+    CostEstimate, CostModel as OptimizerCostModel, CostWeights, DispatchError, DispatchPlan,
+    DispatcherConfig as OptimizerDispatcherConfig, FamilyStats, IndexFamily, IndexParameters,
+    OptimizerDispatcher, QueryObservation, QueryStats, WorkloadProfile,
 };
 
 /// Vector identifier type
@@ -1011,592 +1044,6 @@ impl Vector {
     }
 }
 
-/// Vector index trait for efficient similarity search
-pub trait VectorIndex: Send + Sync {
-    /// Insert a vector with associated URI
-    fn insert(&mut self, uri: String, vector: Vector) -> Result<()>;
-
-    /// Find k nearest neighbors
-    fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>>;
-
-    /// Find all vectors within threshold similarity
-    fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>>;
-
-    /// Get a vector by its URI
-    fn get_vector(&self, uri: &str) -> Option<&Vector>;
-
-    /// Add a vector with associated ID and metadata
-    fn add_vector(
-        &mut self,
-        id: VectorId,
-        vector: Vector,
-        _metadata: Option<HashMap<String, String>>,
-    ) -> Result<()> {
-        // Default implementation that delegates to insert
-        self.insert(id, vector)
-    }
-
-    /// Update an existing vector
-    fn update_vector(&mut self, id: VectorId, vector: Vector) -> Result<()> {
-        // Default implementation that delegates to insert
-        self.insert(id, vector)
-    }
-
-    /// Update metadata for a vector
-    fn update_metadata(&mut self, _id: VectorId, _metadata: HashMap<String, String>) -> Result<()> {
-        // Default implementation (no-op)
-        Ok(())
-    }
-
-    /// Remove a vector by its ID
-    fn remove_vector(&mut self, _id: VectorId) -> Result<()> {
-        // Default implementation (no-op)
-        Ok(())
-    }
-}
-
-/// In-memory vector index implementation
-pub struct MemoryVectorIndex {
-    vectors: Vec<(String, Vector)>,
-    similarity_config: similarity::SimilarityConfig,
-}
-
-impl MemoryVectorIndex {
-    pub fn new() -> Self {
-        Self {
-            vectors: Vec::new(),
-            similarity_config: similarity::SimilarityConfig::default(),
-        }
-    }
-
-    pub fn with_similarity_config(config: similarity::SimilarityConfig) -> Self {
-        Self {
-            vectors: Vec::new(),
-            similarity_config: config,
-        }
-    }
-}
-
-impl Default for MemoryVectorIndex {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl VectorIndex for MemoryVectorIndex {
-    fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
-        // Check if vector already exists and update it
-        if let Some(pos) = self.vectors.iter().position(|(id, _)| id == &uri) {
-            self.vectors[pos] = (uri, vector);
-        } else {
-            self.vectors.push((uri, vector));
-        }
-        Ok(())
-    }
-
-    fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
-        let metric = self.similarity_config.primary_metric;
-        let query_f32 = query.as_f32();
-        let mut similarities: Vec<(String, f32)> = self
-            .vectors
-            .iter()
-            .map(|(uri, vec)| {
-                let vec_f32 = vec.as_f32();
-                let sim = metric.similarity(&query_f32, &vec_f32).unwrap_or(0.0);
-                (uri.clone(), sim)
-            })
-            .collect();
-
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        similarities.truncate(k);
-
-        Ok(similarities)
-    }
-
-    fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
-        let metric = self.similarity_config.primary_metric;
-        let query_f32 = query.as_f32();
-        let similarities: Vec<(String, f32)> = self
-            .vectors
-            .iter()
-            .filter_map(|(uri, vec)| {
-                let vec_f32 = vec.as_f32();
-                let sim = metric.similarity(&query_f32, &vec_f32).unwrap_or(0.0);
-                if sim >= threshold {
-                    Some((uri.clone(), sim))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        Ok(similarities)
-    }
-
-    fn get_vector(&self, uri: &str) -> Option<&Vector> {
-        self.vectors.iter().find(|(u, _)| u == uri).map(|(_, v)| v)
-    }
-
-    fn update_vector(&mut self, id: VectorId, vector: Vector) -> Result<()> {
-        if let Some(pos) = self.vectors.iter().position(|(uri, _)| uri == &id) {
-            self.vectors[pos] = (id, vector);
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Vector with id '{}' not found", id))
-        }
-    }
-
-    fn remove_vector(&mut self, id: VectorId) -> Result<()> {
-        if let Some(pos) = self.vectors.iter().position(|(uri, _)| uri == &id) {
-            self.vectors.remove(pos);
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Vector with id '{}' not found", id))
-        }
-    }
-}
-
-/// Enhanced vector store with embedding management and advanced features
-pub struct VectorStore {
-    index: Box<dyn VectorIndex>,
-    embedding_manager: Option<embeddings::EmbeddingManager>,
-    config: VectorStoreConfig,
-}
-
-/// Configuration for vector store
-#[derive(Debug, Clone)]
-pub struct VectorStoreConfig {
-    pub auto_embed: bool,
-    pub cache_embeddings: bool,
-    pub similarity_threshold: f32,
-    pub max_results: usize,
-}
-
-impl Default for VectorStoreConfig {
-    fn default() -> Self {
-        Self {
-            auto_embed: true,
-            cache_embeddings: true,
-            similarity_threshold: 0.7,
-            max_results: 100,
-        }
-    }
-}
-
-impl VectorStore {
-    /// Create a new vector store with default memory index
-    pub fn new() -> Self {
-        Self {
-            index: Box::new(MemoryVectorIndex::new()),
-            embedding_manager: None,
-            config: VectorStoreConfig::default(),
-        }
-    }
-
-    /// Create vector store with specific embedding strategy
-    pub fn with_embedding_strategy(strategy: embeddings::EmbeddingStrategy) -> Result<Self> {
-        let embedding_manager = embeddings::EmbeddingManager::new(strategy, 1000)?;
-
-        Ok(Self {
-            index: Box::new(MemoryVectorIndex::new()),
-            embedding_manager: Some(embedding_manager),
-            config: VectorStoreConfig::default(),
-        })
-    }
-
-    /// Create vector store with custom index
-    pub fn with_index(index: Box<dyn VectorIndex>) -> Self {
-        Self {
-            index,
-            embedding_manager: None,
-            config: VectorStoreConfig::default(),
-        }
-    }
-
-    /// Create vector store with custom index and embedding strategy
-    pub fn with_index_and_embeddings(
-        index: Box<dyn VectorIndex>,
-        strategy: embeddings::EmbeddingStrategy,
-    ) -> Result<Self> {
-        let embedding_manager = embeddings::EmbeddingManager::new(strategy, 1000)?;
-
-        Ok(Self {
-            index,
-            embedding_manager: Some(embedding_manager),
-            config: VectorStoreConfig::default(),
-        })
-    }
-
-    /// Set vector store configuration
-    pub fn with_config(mut self, config: VectorStoreConfig) -> Self {
-        self.config = config;
-        self
-    }
-
-    /// Index a resource with automatic embedding generation
-    pub fn index_resource(&mut self, uri: String, content: &str) -> Result<()> {
-        if let Some(ref mut embedding_manager) = self.embedding_manager {
-            let embeddable_content = embeddings::EmbeddableContent::Text(content.to_string());
-            let vector = embedding_manager.get_embedding(&embeddable_content)?;
-            self.index.insert(uri, vector)
-        } else {
-            // Generate a simple hash-based vector as fallback
-            let vector = self.generate_fallback_vector(content);
-            self.index.insert(uri, vector)
-        }
-    }
-
-    /// Index an RDF resource with structured content
-    pub fn index_rdf_resource(
-        &mut self,
-        uri: String,
-        label: Option<String>,
-        description: Option<String>,
-        properties: std::collections::HashMap<String, Vec<String>>,
-    ) -> Result<()> {
-        if let Some(ref mut embedding_manager) = self.embedding_manager {
-            let embeddable_content = embeddings::EmbeddableContent::RdfResource {
-                uri: uri.clone(),
-                label,
-                description,
-                properties,
-            };
-            let vector = embedding_manager.get_embedding(&embeddable_content)?;
-            self.index.insert(uri, vector)
-        } else {
-            Err(anyhow::anyhow!(
-                "Embedding manager required for RDF resource indexing"
-            ))
-        }
-    }
-
-    /// Index a pre-computed vector
-    pub fn index_vector(&mut self, uri: String, vector: Vector) -> Result<()> {
-        self.index.insert(uri, vector)
-    }
-
-    /// Search for similar resources using text query
-    pub fn similarity_search(&self, query: &str, limit: usize) -> Result<Vec<(String, f32)>> {
-        let query_vector = if let Some(ref _embedding_manager) = self.embedding_manager {
-            let _embeddable_content = embeddings::EmbeddableContent::Text(query.to_string());
-            // We need a mutable reference, but we only have an immutable one
-            // For now, generate a fallback vector
-            self.generate_fallback_vector(query)
-        } else {
-            self.generate_fallback_vector(query)
-        };
-
-        self.index.search_knn(&query_vector, limit)
-    }
-
-    /// Search for similar resources using a vector query
-    pub fn similarity_search_vector(
-        &self,
-        query: &Vector,
-        limit: usize,
-    ) -> Result<Vec<(String, f32)>> {
-        self.index.search_knn(query, limit)
-    }
-
-    /// Find resources within similarity threshold
-    pub fn threshold_search(&self, query: &str, threshold: f32) -> Result<Vec<(String, f32)>> {
-        let query_vector = self.generate_fallback_vector(query);
-        self.index.search_threshold(&query_vector, threshold)
-    }
-
-    /// Advanced search with multiple options
-    pub fn advanced_search(&self, options: SearchOptions) -> Result<Vec<(String, f32)>> {
-        let query_vector = match options.query {
-            SearchQuery::Text(text) => self.generate_fallback_vector(&text),
-            SearchQuery::Vector(vector) => vector,
-        };
-
-        let results = match options.search_type {
-            SearchType::KNN(k) => self.index.search_knn(&query_vector, k)?,
-            SearchType::Threshold(threshold) => {
-                self.index.search_threshold(&query_vector, threshold)?
-            }
-        };
-
-        Ok(results)
-    }
-
-    fn generate_fallback_vector(&self, text: &str) -> Vector {
-        // Simple hash-based vector generation for fallback
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        let mut values = Vec::with_capacity(384); // Standard embedding size
-        let mut seed = hash;
-
-        for _ in 0..384 {
-            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-            let normalized = (seed as f32) / (u64::MAX as f32);
-            values.push((normalized - 0.5) * 2.0); // Range: -1.0 to 1.0
-        }
-
-        Vector::new(values)
-    }
-
-    /// Get embedding manager statistics
-    pub fn embedding_stats(&self) -> Option<(usize, usize)> {
-        self.embedding_manager.as_ref().map(|em| em.cache_stats())
-    }
-
-    /// Build vocabulary for TF-IDF embeddings
-    pub fn build_vocabulary(&mut self, documents: &[String]) -> Result<()> {
-        if let Some(ref mut embedding_manager) = self.embedding_manager {
-            embedding_manager.build_vocabulary(documents)
-        } else {
-            Ok(()) // No-op if no embedding manager
-        }
-    }
-
-    /// Calculate similarity between two resources by their URIs
-    pub fn calculate_similarity(&self, uri1: &str, uri2: &str) -> Result<f32> {
-        // If the URIs are identical, return perfect similarity
-        if uri1 == uri2 {
-            return Ok(1.0);
-        }
-
-        // Get the vectors for both URIs
-        let vector1 = self
-            .index
-            .get_vector(uri1)
-            .ok_or_else(|| anyhow::anyhow!("Vector not found for URI: {}", uri1))?;
-
-        let vector2 = self
-            .index
-            .get_vector(uri2)
-            .ok_or_else(|| anyhow::anyhow!("Vector not found for URI: {}", uri2))?;
-
-        // Calculate cosine similarity between the vectors
-        vector1.cosine_similarity(vector2)
-    }
-
-    /// Get a vector by its ID (delegates to VectorIndex)
-    pub fn get_vector(&self, id: &str) -> Option<&Vector> {
-        self.index.get_vector(id)
-    }
-
-    /// Index a vector with metadata (stub)
-    pub fn index_vector_with_metadata(
-        &mut self,
-        uri: String,
-        vector: Vector,
-        _metadata: HashMap<String, String>,
-    ) -> Result<()> {
-        // For now, just delegate to index_vector, ignoring metadata
-        // Future: Extend VectorIndex trait to support metadata
-        self.index_vector(uri, vector)
-    }
-
-    /// Index a resource with metadata (stub)
-    pub fn index_resource_with_metadata(
-        &mut self,
-        uri: String,
-        content: &str,
-        _metadata: HashMap<String, String>,
-    ) -> Result<()> {
-        // For now, just delegate to index_resource, ignoring metadata
-        // Future: Store and utilize metadata
-        self.index_resource(uri, content)
-    }
-
-    /// Search with additional parameters (stub)
-    pub fn similarity_search_with_params(
-        &self,
-        query: &str,
-        limit: usize,
-        _params: HashMap<String, String>,
-    ) -> Result<Vec<(String, f32)>> {
-        // For now, just delegate to similarity_search, ignoring params
-        // Future: Use params for filtering, threshold, etc.
-        self.similarity_search(query, limit)
-    }
-
-    /// Vector search with additional parameters (stub)
-    pub fn vector_search_with_params(
-        &self,
-        query: &Vector,
-        limit: usize,
-        _params: HashMap<String, String>,
-    ) -> Result<Vec<(String, f32)>> {
-        // For now, just delegate to similarity_search_vector, ignoring params
-        // Future: Use params for filtering, distance metric selection, etc.
-        self.similarity_search_vector(query, limit)
-    }
-
-    /// Get all vector IDs (stub)
-    pub fn get_vector_ids(&self) -> Result<Vec<String>> {
-        // VectorIndex trait doesn't provide this method yet
-        // Future: Add to VectorIndex trait or track separately
-        Ok(Vec::new())
-    }
-
-    /// Remove a vector by its URI (stub)
-    pub fn remove_vector(&mut self, uri: &str) -> Result<()> {
-        // Delegate to VectorIndex trait's remove_vector method
-        self.index.remove_vector(uri.to_string())
-    }
-
-    /// Get store statistics (stub)
-    pub fn get_statistics(&self) -> Result<HashMap<String, String>> {
-        // Return basic statistics as a map
-        // Future: Provide comprehensive stats from index
-        let mut stats = HashMap::new();
-        stats.insert("type".to_string(), "VectorStore".to_string());
-
-        if let Some((cache_size, cache_capacity)) = self.embedding_stats() {
-            stats.insert("embedding_cache_size".to_string(), cache_size.to_string());
-            stats.insert(
-                "embedding_cache_capacity".to_string(),
-                cache_capacity.to_string(),
-            );
-        }
-
-        Ok(stats)
-    }
-
-    /// Save store to disk (stub)
-    pub fn save_to_disk(&self, _path: &str) -> Result<()> {
-        // Stub implementation - serialization not yet implemented
-        // Future: Serialize index and configuration to disk
-        Err(anyhow::anyhow!("save_to_disk not yet implemented"))
-    }
-
-    /// Load store from disk (stub)
-    pub fn load_from_disk(_path: &str) -> Result<Self> {
-        // Stub implementation - deserialization not yet implemented
-        // Future: Deserialize index and configuration from disk
-        Err(anyhow::anyhow!("load_from_disk not yet implemented"))
-    }
-
-    /// Optimize the underlying index (stub)
-    pub fn optimize_index(&mut self) -> Result<()> {
-        // Stub implementation - optimization not yet implemented
-        // Future: Trigger index compaction, rebalancing, etc.
-        Ok(())
-    }
-}
-
-impl Default for VectorStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl VectorStoreTrait for VectorStore {
-    fn insert_vector(&mut self, id: VectorId, vector: Vector) -> Result<()> {
-        self.index.insert(id, vector)
-    }
-
-    fn add_vector(&mut self, vector: Vector) -> Result<VectorId> {
-        // Generate a unique ID for the vector
-        let id = format!("vec_{}", uuid::Uuid::new_v4());
-        self.index.insert(id.clone(), vector)?;
-        Ok(id)
-    }
-
-    fn get_vector(&self, id: &VectorId) -> Result<Option<Vector>> {
-        Ok(self.index.get_vector(id).cloned())
-    }
-
-    fn get_all_vector_ids(&self) -> Result<Vec<VectorId>> {
-        // For now, return empty vec as VectorIndex doesn't provide this method
-        // This could be enhanced if the underlying index supports it
-        Ok(Vec::new())
-    }
-
-    fn search_similar(&self, query: &Vector, k: usize) -> Result<Vec<(VectorId, f32)>> {
-        self.index.search_knn(query, k)
-    }
-
-    fn remove_vector(&mut self, id: &VectorId) -> Result<bool> {
-        // VectorIndex trait doesn't have remove, so we'll return false for now
-        // This could be enhanced in the future if needed
-        let _ = id;
-        Ok(false)
-    }
-
-    fn len(&self) -> usize {
-        // VectorIndex trait doesn't have len, so we'll return 0 for now
-        // This could be enhanced in the future if needed
-        0
-    }
-}
-
-/// Search query types
-#[derive(Debug, Clone)]
-pub enum SearchQuery {
-    Text(String),
-    Vector(Vector),
-}
-
-/// Search operation types
-#[derive(Debug, Clone)]
-pub enum SearchType {
-    KNN(usize),
-    Threshold(f32),
-}
-
-/// Advanced search options
-#[derive(Debug, Clone)]
-pub struct SearchOptions {
-    pub query: SearchQuery,
-    pub search_type: SearchType,
-}
-
-/// Vector operation results with enhanced metadata
-#[derive(Debug, Clone)]
-pub struct VectorOperationResult {
-    pub uri: String,
-    pub similarity: f32,
-    pub vector: Option<Vector>,
-    pub metadata: Option<std::collections::HashMap<String, String>>,
-    pub rank: usize,
-}
-
-/// Document batch processing utilities
-pub struct DocumentBatchProcessor;
-
-impl DocumentBatchProcessor {
-    /// Process multiple documents in batch for efficient indexing
-    pub fn batch_index(
-        store: &mut VectorStore,
-        documents: &[(String, String)], // (uri, content) pairs
-    ) -> Result<Vec<Result<()>>> {
-        let mut results = Vec::new();
-
-        for (uri, content) in documents {
-            let result = store.index_resource(uri.clone(), content);
-            results.push(result);
-        }
-
-        Ok(results)
-    }
-
-    /// Process multiple queries in batch
-    pub fn batch_search(
-        store: &VectorStore,
-        queries: &[String],
-        limit: usize,
-    ) -> Result<BatchSearchResult> {
-        let mut results = Vec::new();
-
-        for query in queries {
-            let result = store.similarity_search(query, limit);
-            results.push(result);
-        }
-
-        Ok(results)
-    }
-}
-
 /// Error types specific to vector operations
 #[derive(Debug, thiserror::Error)]
 pub enum VectorError {
@@ -1862,6 +1309,52 @@ mod tests {
         if !results.is_empty() {
             assert_eq!(results[0].0, "v1");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_save_load_roundtrip() -> Result<()> {
+        let dir = std::env::temp_dir().join(format!("oxirs_vec_test_{}", uuid::Uuid::new_v4()));
+
+        // Build a store with three known vectors.
+        let mut store = VectorStore::new();
+        let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
+        let v2 = Vector::new(vec![0.0, 1.0, 0.0]);
+        let v3 = Vector::new(vec![0.0, 0.0, 1.0]);
+
+        store.index_vector("alpha".to_string(), v1.clone())?;
+        store.index_vector("beta".to_string(), v2.clone())?;
+        store.index_vector("gamma".to_string(), v3.clone())?;
+
+        // Save.
+        let path = dir
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("temp dir path is not UTF-8"))?;
+        store.save_to_disk(path)?;
+
+        // Load into a fresh store.
+        let loaded = VectorStore::load_from_disk(path)?;
+
+        // Verify each vector survives the roundtrip by exact retrieval.
+        let r_alpha = loaded.get_vector("alpha").expect("alpha must be present");
+        assert_eq!(r_alpha.as_f32(), v1.as_f32(), "alpha roundtrip mismatch");
+
+        let r_beta = loaded.get_vector("beta").expect("beta must be present");
+        assert_eq!(r_beta.as_f32(), v2.as_f32(), "beta roundtrip mismatch");
+
+        let r_gamma = loaded.get_vector("gamma").expect("gamma must be present");
+        assert_eq!(r_gamma.as_f32(), v3.as_f32(), "gamma roundtrip mismatch");
+
+        // Verify search still works: query aligned with v1 should rank "alpha" first.
+        let results = loaded.similarity_search_vector(&v1, 3)?;
+        assert!(!results.is_empty(), "search returned no results after load");
+        assert_eq!(
+            results[0].0, "alpha",
+            "top result after load should be alpha"
+        );
+
+        // Clean up.
+        let _ = std::fs::remove_dir_all(&dir);
         Ok(())
     }
 

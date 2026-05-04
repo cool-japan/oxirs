@@ -10,6 +10,34 @@
 //! - [`ConsistentHashRouter`]: Routes stream partitions to nodes via consistent hashing
 //! - [`DistributedWindowAggregator`]: Aggregates windowed results across cluster nodes
 //! - [`ClusterStreamCoordinator`]: Manages stream job distribution across the cluster
+//!
+//! ## W3-S11 (Flink-lite distributed shards via Raft)
+//!
+//! - [`coordinator::DistributedStreamCoordinator`]: Raft-tracked shard assignment,
+//!   per-key routing, integration with the W3-S9 cluster sink for assignment durability.
+//! - [`shard_manager::ShardManager`]: deterministic balanced shard placement
+//!   and rebalance plan generation.
+//! - [`event_shipper::EventShipper`]: cross-shard event delivery with a pluggable
+//!   transport.
+
+pub mod coordinator;
+pub mod event_shipper;
+pub mod shard_manager;
+
+pub use coordinator::{
+    CoordinatorConfig, CoordinatorError, CoordinatorResult,
+    CoordinatorStats as DistributedCoordinatorStats,
+    CoordinatorStatsSnapshot as DistributedCoordinatorStatsSnapshot, DistributedStreamCoordinator,
+    RoutedEvent,
+};
+pub use event_shipper::{
+    EventShipper, InProcessShipperTransport, ShippedEvent, ShipperConfig, ShipperError,
+    ShipperResult, ShipperStats, ShipperStatsSnapshot, ShipperTransport,
+};
+pub use shard_manager::{
+    NodeId as ShardManagerNodeId, RebalancePlan, ShardAssignment, ShardId, ShardManager,
+    ShardManagerConfig, ShardManagerError, ShardManagerResult, ShardMove,
+};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;

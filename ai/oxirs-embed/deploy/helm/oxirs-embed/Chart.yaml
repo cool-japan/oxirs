@@ -1,0 +1,23 @@
+apiVersion: v2
+name: oxirs-embed
+description: |
+  Helm chart for OxiRS Embed — knowledge-graph embedding service with
+  optional parameter-server-style distributed training.
+type: application
+version: 0.3.0
+appVersion: "0.3.0"
+home: https://github.com/cool-japan/oxirs
+sources:
+  - https://github.com/cool-japan/oxirs
+maintainers:
+  - name: COOLJAPAN OU (Team Kitasan)
+    email: info@kitasan.io
+keywords:
+  - embeddings
+  - knowledge-graph
+  - rdf
+  - sparql
+  - distributed-training
+icon: https://raw.githubusercontent.com/cool-japan/oxirs/master/docs/logo.png
+annotations:
+  category: AI

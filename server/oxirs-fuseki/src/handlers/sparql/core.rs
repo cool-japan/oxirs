@@ -13,7 +13,7 @@ use crate::{
 use axum::{
     extract::{Query, State},
     http::{header::ACCEPT, HeaderMap, StatusCode},
-    response::{Html, IntoResponse, Json, Response},
+    response::{IntoResponse, Json, Response},
     Form,
 };
 use serde::{Deserialize, Serialize};
@@ -25,13 +25,82 @@ use tracing::{error, instrument, warn};
 // SPARQL query parsing
 use oxirs_arq::query::parse_query;
 
-/// SPARQL query parameters for GET requests
+/// Deserializer that accepts either a single string or a sequence of
+/// strings, returning `Some(Vec<String>)` in either case.
+///
+/// SPARQL Protocol query parameters such as `default-graph-uri` may
+/// appear once or multiple times in the URL query string. Plain
+/// `serde_urlencoded` decodes a single `key=value` as a string and
+/// rejects it when bound to `Vec<String>`. This helper bridges both.
+fn deserialize_string_or_seq<'de, D>(de: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, SeqAccess, Visitor};
+    use std::fmt;
+
+    struct V;
+
+    impl<'de> Visitor<'de> for V {
+        type Value = Option<Vec<String>>;
+
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("a string or a sequence of strings")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(Some(vec![v.to_string()]))
+        }
+
+        fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
+            Ok(Some(vec![v]))
+        }
+
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_some<D: serde::Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
+            d.deserialize_any(V)
+        }
+
+        fn visit_seq<S: SeqAccess<'de>>(self, mut seq: S) -> Result<Self::Value, S::Error> {
+            let mut out: Vec<String> = Vec::new();
+            while let Some(item) = seq.next_element::<String>()? {
+                out.push(item);
+            }
+            Ok(if out.is_empty() { None } else { Some(out) })
+        }
+    }
+
+    de.deserialize_any(V)
+}
+
+/// SPARQL query parameters for GET requests.
+///
+/// `default-graph-uri` and `named-graph-uri` MAY appear multiple times in
+/// a SPARQL Protocol request (per <https://www.w3.org/TR/sparql11-protocol/>).
+/// Use `deserialize_string_or_seq` so a single occurrence is also
+/// accepted (which is what `serde_urlencoded` produces for a single
+/// `default-graph-uri=foo`).
 #[derive(Debug, Deserialize)]
 pub struct SparqlQueryParams {
     pub query: Option<String>,
-    #[serde(rename = "default-graph-uri")]
+    #[serde(
+        rename = "default-graph-uri",
+        default,
+        deserialize_with = "deserialize_string_or_seq"
+    )]
     pub default_graph_uri: Option<Vec<String>>,
-    #[serde(rename = "named-graph-uri")]
+    #[serde(
+        rename = "named-graph-uri",
+        default,
+        deserialize_with = "deserialize_string_or_seq"
+    )]
     pub named_graph_uri: Option<Vec<String>>,
     pub timeout: Option<u32>,
     pub format: Option<String>,
@@ -41,9 +110,17 @@ pub struct SparqlQueryParams {
 #[derive(Debug, Deserialize)]
 pub struct SparqlUpdateParams {
     pub update: String,
-    #[serde(rename = "using-graph-uri")]
+    #[serde(
+        rename = "using-graph-uri",
+        default,
+        deserialize_with = "deserialize_string_or_seq"
+    )]
     pub using_graph_uri: Option<Vec<String>>,
-    #[serde(rename = "using-named-graph-uri")]
+    #[serde(
+        rename = "using-named-graph-uri",
+        default,
+        deserialize_with = "deserialize_string_or_seq"
+    )]
     pub using_named_graph_uri: Option<Vec<String>>,
 }
 
@@ -51,9 +128,17 @@ pub struct SparqlUpdateParams {
 #[derive(Debug, Deserialize)]
 pub struct SparqlQueryRequest {
     pub query: String,
-    #[serde(rename = "default-graph-uri")]
+    #[serde(
+        rename = "default-graph-uri",
+        default,
+        deserialize_with = "deserialize_string_or_seq"
+    )]
     pub default_graph_uri: Option<Vec<String>>,
-    #[serde(rename = "named-graph-uri")]
+    #[serde(
+        rename = "named-graph-uri",
+        default,
+        deserialize_with = "deserialize_string_or_seq"
+    )]
     pub named_graph_uri: Option<Vec<String>>,
     pub timeout: Option<u32>,
 }
@@ -723,164 +808,181 @@ async fn apply_query_optimizations(
     Ok(optimized_query)
 }
 
-/// Format query response based on content type
-fn format_query_response(result: QueryResult, content_type: &str) -> Response {
-    match content_type {
-        "application/sparql-results+json" => {
-            // Convert to standard SPARQL JSON Results format
-            let sparql_json = match result.query_type.as_str() {
-                "SELECT" => {
-                    let variables = if let Some(bindings) = &result.bindings {
-                        if let Some(first_binding) = bindings.first() {
-                            first_binding.keys().cloned().collect::<Vec<_>>()
-                        } else {
-                            Vec::new()
-                        }
-                    } else {
-                        Vec::new()
-                    };
-
-                    serde_json::json!({
-                        "head": {
-                            "vars": variables
-                        },
-                        "results": {
-                            "bindings": result.bindings.unwrap_or_default()
-                        }
-                    })
-                }
-                "ASK" => {
-                    serde_json::json!({
-                        "head": {},
-                        "boolean": result.boolean.unwrap_or(false)
-                    })
-                }
-                _ => {
-                    // For CONSTRUCT/DESCRIBE, return a simplified format
-                    serde_json::json!({
-                        "head": {},
-                        "results": {
-                            "bindings": result.bindings.unwrap_or_default()
-                        }
-                    })
-                }
-            };
-
-            let json_response = Json(sparql_json).into_response();
-            let mut response = json_response;
-            response.headers_mut().insert(
-                "content-type",
-                "application/sparql-results+json"
-                    .parse()
-                    .expect("content-type header should be valid"),
-            );
-            response
+/// Negotiate the preferred SPARQL response format from an Accept header.
+///
+/// Each comma-separated entry can carry a `q=` quality value (default
+/// 1.0). The highest q-value entry whose media type is in our known
+/// SPARQL Query Results / RDF Graph format set wins. When no known
+/// entry matches, the SPARQL Query Results JSON media type is returned.
+fn negotiate_sparql_format(accept: &str) -> String {
+    const KNOWN: &[&str] = &[
+        "application/sparql-results+json",
+        "application/sparql-results+xml",
+        "application/json",
+        "application/xml",
+        "text/csv",
+        "text/tab-separated-values",
+        "text/turtle",
+        "application/x-turtle",
+        "application/n-triples",
+        "application/rdf+xml",
+        "application/ld+json",
+    ];
+    if accept.trim().is_empty() {
+        return "application/sparql-results+json".to_string();
+    }
+    let mut entries: Vec<(String, f32)> = Vec::new();
+    for raw in accept.split(',') {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            continue;
         }
-        "application/json" => {
-            // Also use SPARQL JSON format for application/json
-            let sparql_json = match result.query_type.as_str() {
-                "SELECT" => {
-                    let variables = if let Some(bindings) = &result.bindings {
-                        if let Some(first_binding) = bindings.first() {
-                            first_binding.keys().cloned().collect::<Vec<_>>()
-                        } else {
-                            Vec::new()
-                        }
-                    } else {
-                        Vec::new()
-                    };
-
-                    serde_json::json!({
-                        "head": {
-                            "vars": variables
-                        },
-                        "results": {
-                            "bindings": result.bindings.unwrap_or_default()
-                        }
-                    })
+        let mut parts = raw.split(';');
+        let media = parts.next().unwrap_or("").trim().to_lowercase();
+        let mut q: f32 = 1.0;
+        for param in parts {
+            let param = param.trim();
+            if let Some(rest) = param.strip_prefix("q=") {
+                if let Ok(v) = rest.parse::<f32>() {
+                    q = v;
                 }
-                "ASK" => {
-                    serde_json::json!({
-                        "head": {},
-                        "boolean": result.boolean.unwrap_or(false)
-                    })
-                }
-                _ => {
-                    serde_json::json!({
-                        "head": {},
-                        "results": {
-                            "bindings": result.bindings.unwrap_or_default()
-                        }
-                    })
-                }
-            };
-            Json(sparql_json).into_response()
+            }
         }
-        "application/sparql-results+xml" => {
-            // Return XML format with proper content type
-            let xml_response = Html(format!("<result>{result:?}</result>")).into_response();
-            let mut response = xml_response;
-            response.headers_mut().insert(
-                "content-type",
-                "application/sparql-results+xml"
-                    .parse()
-                    .expect("content-type header should be valid"),
-            );
-            response
+        entries.push((media, q));
+    }
+    entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    for (media, _) in &entries {
+        for known in KNOWN {
+            if media == known {
+                return (*known).to_string();
+            }
         }
-        "text/csv" => {
-            // Return CSV format with proper content type
-            let csv_response = "CSV format not yet implemented".to_string().into_response();
-            let mut response = csv_response;
-            response.headers_mut().insert(
-                "content-type",
-                "text/csv"
-                    .parse()
-                    .expect("content-type header should be valid"),
-            );
-            response
+        if media == "*/*" {
+            return "application/sparql-results+json".to_string();
         }
-        _ => {
-            // Default to SPARQL JSON format
-            let sparql_json = match result.query_type.as_str() {
-                "SELECT" => {
-                    let variables = if let Some(bindings) = &result.bindings {
-                        if let Some(first_binding) = bindings.first() {
-                            first_binding.keys().cloned().collect::<Vec<_>>()
-                        } else {
-                            Vec::new()
-                        }
-                    } else {
-                        Vec::new()
-                    };
-
-                    serde_json::json!({
-                        "head": {
-                            "vars": variables
-                        },
-                        "results": {
-                            "bindings": result.bindings.unwrap_or_default()
-                        }
-                    })
-                }
-                "ASK" => {
-                    serde_json::json!({
-                        "head": {},
-                        "boolean": result.boolean.unwrap_or(false)
-                    })
-                }
-                _ => {
-                    serde_json::json!({
-                        "head": {},
-                        "results": {
-                            "bindings": result.bindings.unwrap_or_default()
-                        }
-                    })
-                }
-            };
-            Json(sparql_json).into_response()
+        if media == "application/*" {
+            return "application/sparql-results+json".to_string();
+        }
+        if media == "text/*" {
+            return "text/csv".to_string();
         }
     }
+    "application/sparql-results+json".to_string()
+}
+
+/// Format query response based on content type.
+///
+/// Performs HTTP Accept-header content negotiation across the W3C
+/// SPARQL Query Results JSON / XML / CSV / TSV formats and the common
+/// RDF graph media types (Turtle / N-Triples / RDF-XML / JSON-LD).
+/// For each media-range entry in `content_type` the q-value is
+/// honoured; the highest-scoring supported format wins. If no entry
+/// matches, JSON Results is the default.
+fn format_query_response(result: QueryResult, content_type: &str) -> Response {
+    let primary = negotiate_sparql_format(content_type);
+
+    match primary.as_str() {
+        "application/sparql-results+json" | "application/json" => {
+            let body = build_sparql_results_json(&result);
+            let body_text = serde_json::to_string(&body)
+                .unwrap_or_else(|_| "{\"head\":{},\"results\":{\"bindings\":[]}}".to_string());
+            response_with_content_type(body_text, "application/sparql-results+json")
+        }
+        "application/sparql-results+xml" | "application/xml" => {
+            let body = crate::handlers::sparql::content_types::sparql_results_xml(&result);
+            response_with_content_type(body, "application/sparql-results+xml")
+        }
+        "text/csv" => {
+            let body = crate::handlers::sparql::content_types::sparql_results_csv(&result);
+            response_with_content_type(body, "text/csv")
+        }
+        "text/tab-separated-values" => {
+            let body = crate::handlers::sparql::content_types::sparql_results_tsv(&result);
+            response_with_content_type(body, "text/tab-separated-values")
+        }
+        "text/turtle" | "application/x-turtle" => {
+            let body = result
+                .construct_graph
+                .clone()
+                .or(result.describe_graph.clone())
+                .unwrap_or_default();
+            response_with_content_type(body, "text/turtle")
+        }
+        "application/n-triples" => {
+            let body = result
+                .construct_graph
+                .clone()
+                .or(result.describe_graph.clone())
+                .unwrap_or_default();
+            response_with_content_type(body, "application/n-triples")
+        }
+        "application/rdf+xml" => {
+            let body = crate::handlers::sparql::content_types::rdf_graph_to_rdfxml(
+                result
+                    .construct_graph
+                    .as_deref()
+                    .or(result.describe_graph.as_deref())
+                    .unwrap_or(""),
+            );
+            response_with_content_type(body, "application/rdf+xml")
+        }
+        "application/ld+json" => {
+            let body = crate::handlers::sparql::content_types::rdf_graph_to_jsonld(
+                result
+                    .construct_graph
+                    .as_deref()
+                    .or(result.describe_graph.as_deref())
+                    .unwrap_or(""),
+            );
+            response_with_content_type(body, "application/ld+json")
+        }
+        _ => {
+            // Default: SPARQL Results JSON.
+            let body = build_sparql_results_json(&result);
+            let body_text = serde_json::to_string(&body)
+                .unwrap_or_else(|_| "{\"head\":{},\"results\":{\"bindings\":[]}}".to_string());
+            response_with_content_type(body_text, "application/sparql-results+json")
+        }
+    }
+}
+
+/// Build the W3C SPARQL Query Results JSON document for a `QueryResult`.
+///
+/// See <https://www.w3.org/TR/sparql11-results-json/>.
+fn build_sparql_results_json(result: &QueryResult) -> serde_json::Value {
+    match result.query_type.as_str() {
+        "ASK" => serde_json::json!({
+            "head": {},
+            "boolean": result.boolean.unwrap_or(false),
+        }),
+        "SELECT" => {
+            let bindings = result.bindings.clone().unwrap_or_default();
+            let variables: Vec<String> = bindings
+                .first()
+                .map(|b| b.keys().cloned().collect())
+                .unwrap_or_default();
+            serde_json::json!({
+                "head": { "vars": variables },
+                "results": { "bindings": bindings },
+            })
+        }
+        _ => serde_json::json!({
+            "head": {},
+            "results": { "bindings": result.bindings.clone().unwrap_or_default() },
+        }),
+    }
+}
+
+/// Build a Response with a fixed `Content-Type` header.
+fn response_with_content_type(body: String, content_type: &'static str) -> Response {
+    use axum::body::Body;
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(axum::http::header::CONTENT_TYPE, content_type)
+        .body(Body::from(body))
+        .unwrap_or_else(|_| {
+            (StatusCode::INTERNAL_SERVER_ERROR, "response build failure").into_response()
+        })
 }
 
 /// Basic SPARQL query validation

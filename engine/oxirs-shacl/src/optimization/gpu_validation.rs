@@ -235,34 +235,35 @@ impl GpuValidator {
 
     /// Prepare data for GPU processing
     fn prepare_gpu_data(&self, _data: &ValidationData) -> Result<GpuValidationData> {
-        // Convert validation data to arrays suitable for GPU processing
-        // TODO: Implement actual data conversion
-        Ok(GpuValidationData {
-            subject_ids: Array1::zeros(_data.num_triples),
-            predicate_ids: Array1::zeros(_data.num_triples),
-            object_ids: Array1::zeros(_data.num_triples),
-            num_triples: _data.num_triples,
-        })
+        // GPU data preparation requires a GPU buffer allocation API from scirs2_core::gpu
+        // that is not yet stable.  Callers reach this path only when gpu_available is
+        // true, which cannot happen until try_create_gpu_context succeeds.  This error
+        // is therefore defence-in-depth rather than an expected code path.
+        Err(ShaclError::UnsupportedOperation(
+            "GPU validation data preparation is not yet implemented: \
+             scirs2_core::gpu buffer allocation API is pending; \
+             the CPU fallback path (validate_on_cpu) should be used instead"
+                .to_string(),
+        ))
     }
 
     /// Process a batch of shapes on GPU
     fn process_batch_on_gpu(
         &self,
         _ctx: &GpuContext,
-        shapes: &[Shape],
+        _shapes: &[Shape],
         _gpu_data: &GpuValidationData,
     ) -> Result<Vec<GpuValidationResult>> {
-        // TODO: Implement actual GPU kernel execution for constraint checking
-        // For now, return placeholder results
-        Ok(shapes
-            .iter()
-            .map(|shape| GpuValidationResult {
-                shape_id: shape.id.clone(),
-                conforms: true,
-                violations: Vec::new(),
-                gpu_time_ms: 0,
-            })
-            .collect())
+        // GPU kernel dispatch for SHACL constraint checking requires scirs2_core::gpu
+        // kernel execution which is not yet integrated.  This method is unreachable
+        // in practice because prepare_gpu_data (called first) returns an error.
+        Err(ShaclError::UnsupportedOperation(
+            "GPU SHACL constraint kernel execution is not yet implemented: \
+             scirs2_core::gpu kernel dispatch is pending; \
+             use the CPU fallback validator or set enable_cpu_fallback = true \
+             in GpuValidationConfig"
+                .to_string(),
+        ))
     }
 
     /// Fallback to CPU validation
@@ -395,8 +396,15 @@ impl GpuConstraintKernel {
 
     /// Execute kernel on GPU
     pub fn execute(&self, _ctx: &GpuContext, _data: &GpuValidationData) -> Result<Vec<bool>> {
-        // TODO: Implement actual GPU kernel execution
-        Ok(vec![true; _data.num_triples])
+        // GPU kernel execution requires scirs2_core::gpu kernel dispatch which is not
+        // yet integrated.  Returning vec![true; n] would silently mark all triples as
+        // valid, masking real constraint violations.
+        Err(ShaclError::UnsupportedOperation(format!(
+            "GPU constraint kernel '{}' (type: '{}') cannot execute: \
+             scirs2_core::gpu kernel dispatch is not yet available; \
+             use GpuValidator with enable_cpu_fallback = true",
+            self.name, self.constraint_type,
+        )))
     }
 }
 

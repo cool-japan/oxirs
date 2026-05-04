@@ -687,6 +687,26 @@ pub enum TsdbAction {
         #[arg(long, default_value = "1")]
         series_count: usize,
     },
+    /// Inspect TSDB chunks via DuckDB SQL (requires `tsdb-duckdb` feature)
+    #[command(name = "duckdb")]
+    DuckDb {
+        /// Path to a TSDB chunk file (binary `oxirs-tsdb` chunk format) or
+        /// dataset directory.
+        chunk: PathBuf,
+        /// SQL query to run against the chunk after registering it as the
+        /// `tsdb_chunk` table. The chunk schema is
+        /// `(timestamp BIGINT, value DOUBLE, series_id VARCHAR)`.
+        #[arg(long)]
+        sql: String,
+        /// Optional logical series label written into the `series_id` column
+        /// (defaults to the chunk's numeric series id).
+        #[arg(long)]
+        series_label: Option<String>,
+        /// Output format for the SQL result. One of `table` (default), `csv`,
+        /// or `json`.
+        #[arg(long, default_value = "table")]
+        format: String,
+    },
 }
 
 /// Retention policy management

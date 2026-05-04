@@ -1,0 +1,15 @@
+{
+    "id": "ql-domain-001",
+    "title": "QL: domain reasoning unfolds queries to property triples",
+    "profiles": ["QL", "RL", "RLEL"],
+    "axioms": [
+        { "kind": "ObjectPropertyDomain", "property": "hasOwner", "class": "OwnedThing" }
+    ],
+    "data": [
+        { "subject": "rex", "predicate": "hasOwner", "object": "alice" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "rex", "class": "OwnedThing" }
+    ],
+    "forbidden": []
+}

@@ -600,7 +600,7 @@ impl AdaptiveExecutionEngine {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(query.as_bytes());
-        format!("{:x}", hasher.finalize())[..16].to_string()
+        hex::encode(hasher.finalize())[..16].to_string()
     }
 
     fn extract_query_pattern(&self, query: &str) -> String {

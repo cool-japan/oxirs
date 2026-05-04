@@ -728,9 +728,12 @@ impl SsoAuditEvent {
     }
 }
 
-/// Overall SSO configuration
+/// Overall SSO manager configuration (global settings for the SSO subsystem).
+///
+/// For per-provider lightweight configuration used by the OIDC validator and
+/// SAML SP helper, see the [`oidc`] and [`saml_sp`] submodules.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SsoConfig {
+pub struct SsoManagerConfig {
     /// Whether SSO is enabled
     pub enabled: bool,
     /// Default session TTL in seconds
@@ -751,7 +754,7 @@ pub struct SsoConfig {
     pub default_role: String,
 }
 
-impl Default for SsoConfig {
+impl Default for SsoManagerConfig {
     fn default() -> Self {
         Self {
             enabled: false,
@@ -769,7 +772,7 @@ impl Default for SsoConfig {
 
 /// The main SSO authentication manager
 pub struct SsoAuthManager {
-    config: SsoConfig,
+    config: SsoManagerConfig,
     providers: HashMap<String, IdentityProvider>,
     sessions: HashMap<String, SsoSession>,
     /// Pending PKCE states (keyed by state parameter)
@@ -782,7 +785,7 @@ pub struct SsoAuthManager {
 
 impl SsoAuthManager {
     /// Create a new SSO authentication manager
-    pub fn new(config: SsoConfig) -> Self {
+    pub fn new(config: SsoManagerConfig) -> Self {
         info!(
             "Initializing SSO authentication manager (enabled: {})",
             config.enabled
@@ -1302,6 +1305,15 @@ fn urlencoded(s: &str) -> String {
     }
     encoded
 }
+
+/// OIDC validator submodule — lightweight JWT claims parsing and authorization URL builder.
+pub mod oidc;
+
+/// SAML SP helper submodule — SAML AuthnRequest generation and SAMLResponse parsing.
+pub mod saml_sp;
+
+/// SSO session bridge — maps SSO user info to OxiRS chat session attributes.
+pub mod session;
 
 #[cfg(test)]
 mod tests;

@@ -1,0 +1,15 @@
+# Accept: */* on SELECT -> JSON default
+endpoint: sparql_query
+classification: spec-required
+match_mode: structural-json
+description: SELECT with Accept */* returns JSON results
+
+=== request
+GET /sparql?query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%200
+Accept: */*
+
+=== response
+200
+Content-Type: application/sparql-results+json
+
+{"head":{"vars":[]},"results":{"bindings":[]}}

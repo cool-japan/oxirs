@@ -1,13 +1,217 @@
 //! GPU-accelerated time-series aggregation simulator (pure Rust).
 //!
-//! This module simulates the API surface and behaviour of GPU-accelerated
-//! aggregations without requiring an actual GPU or any FFI.  All arithmetic is
-//! performed on the CPU in pure Rust, but the interface mirrors what a real
-//! GPU back-end would expose so that higher-level code can be written against
-//! it and later swapped for a GPU implementation.
+//! This module provides two complementary APIs:
+//!
+//! 1. **Free-function columnar API** — `sum_column`, `min_column`, `max_column`,
+//!    `avg_column`, `count_column`, `rolling_sum`, `rolling_avg`, and the
+//!    feature-gated `gpu_sum` primitive.  These are the lowest-overhead entry
+//!    points for one-shot aggregations over slices of `f64` values.
+//!    When the `gpu` cargo feature is enabled and a compatible device is
+//!    available, `gpu_sum` dispatches to `scirs2_core::gpu`; otherwise the
+//!    function returns [`GpuAggError::BackendUnavailable`] and `sum_column`
+//!    falls back to a plain iterator sum.
+//!
+//! 2. **`GpuTimeSeriesAggregator` / `GpuDownsampler` OO API** — the original
+//!    stateful interface for multi-operation pipelines, rollup windows, and
+//!    downsampling.  All arithmetic is always performed on the CPU in pure
+//!    Rust; the OO API simulates GPU throughput metrics for benchmarking.
 
 use crate::error::{TsdbError, TsdbResult};
 use serde::{Deserialize, Serialize};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// GpuAggError  (feature-gated GPU dispatch error)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Error returned by the low-level `gpu_sum` primitive.
+///
+/// When the `gpu` cargo feature is disabled — or a GPU device is not available
+/// at runtime — `gpu_sum` returns `BackendUnavailable` so that callers can
+/// switch to the CPU fallback transparently.  Higher-level functions such as
+/// [`sum_column`] handle this automatically.
+#[derive(Debug, thiserror::Error)]
+pub enum GpuAggError {
+    /// The `gpu` feature is not compiled in, or no suitable device was found.
+    #[error("GPU backend unavailable: {reason}. Use CPU aggregation.")]
+    BackendUnavailable {
+        /// Human-readable explanation.
+        reason: &'static str,
+    },
+    /// The GPU kernel was launched but failed at runtime.
+    #[error("GPU aggregation execution failed: {0}")]
+    ExecutionFailed(String),
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Free-function columnar API
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Compute the sum of `values` via the GPU when the `gpu` feature is enabled
+/// and a device is available, returning [`GpuAggError::BackendUnavailable`]
+/// otherwise.
+///
+/// Most callers should use [`sum_column`] which falls back to the CPU
+/// automatically.
+#[cfg(feature = "gpu")]
+pub fn gpu_sum(values: &[f64]) -> Result<f64, GpuAggError> {
+    use scirs2_core::gpu::{GpuBackend, GpuContext};
+
+    let ctx = GpuContext::new(GpuBackend::preferred())
+        .map_err(|e| GpuAggError::ExecutionFailed(e.to_string()))?;
+
+    let buf = ctx.create_buffer_from_slice(values);
+
+    // sum_all returns a single-element GpuBuffer<f64> containing the result.
+    let result_buf = ctx
+        .sum_all(&buf)
+        .map_err(|e| GpuAggError::ExecutionFailed(e.to_string()))?;
+
+    let result_vec = result_buf.to_vec();
+    result_vec
+        .first()
+        .copied()
+        .ok_or_else(|| GpuAggError::ExecutionFailed("sum_all returned empty buffer".into()))
+}
+
+/// CPU-only stub: the `gpu` feature is not enabled.
+///
+/// Returns [`GpuAggError::BackendUnavailable`] so that the caller (e.g.
+/// [`sum_column`]) can switch to the CPU path.
+#[cfg(not(feature = "gpu"))]
+pub fn gpu_sum(_values: &[f64]) -> Result<f64, GpuAggError> {
+    Err(GpuAggError::BackendUnavailable {
+        reason: "compiled without the `gpu` feature",
+    })
+}
+
+/// Sum all `f64` values in `values`.
+///
+/// Attempts GPU dispatch first; falls back to a plain iterator sum when the
+/// GPU backend is unavailable or fails.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_tsdb::analytics::gpu_aggregations::sum_column;
+/// assert_eq!(sum_column(&[1.0, 2.0, 3.0]), 6.0);
+/// assert_eq!(sum_column(&[]), 0.0);
+/// ```
+pub fn sum_column(values: &[f64]) -> f64 {
+    match gpu_sum(values) {
+        Ok(v) => v,
+        Err(_) => values.iter().sum(),
+    }
+}
+
+/// Return the minimum element of `values`, or `None` if the slice is empty.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_tsdb::analytics::gpu_aggregations::min_column;
+/// assert_eq!(min_column(&[3.0, 1.0, 4.0]), Some(1.0));
+/// assert_eq!(min_column(&[]), None);
+/// ```
+pub fn min_column(values: &[f64]) -> Option<f64> {
+    values.iter().copied().reduce(f64::min)
+}
+
+/// Return the maximum element of `values`, or `None` if the slice is empty.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_tsdb::analytics::gpu_aggregations::max_column;
+/// assert_eq!(max_column(&[3.0, 1.0, 4.0]), Some(4.0));
+/// assert_eq!(max_column(&[]), None);
+/// ```
+pub fn max_column(values: &[f64]) -> Option<f64> {
+    values.iter().copied().reduce(f64::max)
+}
+
+/// Return the arithmetic mean of `values`, or `None` if the slice is empty.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_tsdb::analytics::gpu_aggregations::avg_column;
+/// let avg = avg_column(&[2.0, 4.0, 6.0]).unwrap();
+/// assert!((avg - 4.0).abs() < 1e-10);
+/// ```
+pub fn avg_column(values: &[f64]) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    Some(sum_column(values) / values.len() as f64)
+}
+
+/// Return the count of elements in `values` (equivalent to `values.len()`).
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_tsdb::analytics::gpu_aggregations::count_column;
+/// assert_eq!(count_column(&[1.0; 7]), 7);
+/// ```
+pub fn count_column(values: &[f64]) -> usize {
+    values.len()
+}
+
+/// Compute the rolling (sliding-window) sum over `values` with a window of
+/// `window_size` elements.
+///
+/// Returns a `Vec<f64>` of length `values.len() - window_size + 1`, where
+/// entry `i` is the sum of `values[i..i + window_size]`.  Returns an empty
+/// `Vec` when `window_size == 0` or `window_size > values.len()`.
+///
+/// Uses a running-sum approach (O(n)) rather than a naive O(n·w) scan.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_tsdb::analytics::gpu_aggregations::rolling_sum;
+/// assert_eq!(rolling_sum(&[1.0, 2.0, 3.0, 4.0, 5.0], 3), vec![6.0, 9.0, 12.0]);
+/// assert!(rolling_sum(&[1.0, 2.0], 5).is_empty());
+/// ```
+pub fn rolling_sum(values: &[f64], window_size: usize) -> Vec<f64> {
+    if window_size == 0 || window_size > values.len() {
+        return vec![];
+    }
+    let n_out = values.len() - window_size + 1;
+    let mut result = Vec::with_capacity(n_out);
+    // Seed: sum of the first window.
+    let mut running: f64 = values[..window_size].iter().sum();
+    result.push(running);
+    for i in window_size..values.len() {
+        running += values[i] - values[i - window_size];
+        result.push(running);
+    }
+    result
+}
+
+/// Compute the rolling (sliding-window) average over `values` with a window
+/// of `window_size` elements.
+///
+/// Returns a `Vec<f64>` of length `values.len() - window_size + 1`.  Returns
+/// an empty `Vec` when `window_size == 0` or `window_size > values.len()`.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_tsdb::analytics::gpu_aggregations::rolling_avg;
+/// let result = rolling_avg(&[1.0, 2.0, 3.0, 4.0, 5.0], 3);
+/// assert_eq!(result.len(), 3);
+/// assert!((result[0] - 2.0).abs() < 1e-10);
+/// ```
+pub fn rolling_avg(values: &[f64], window_size: usize) -> Vec<f64> {
+    if window_size == 0 {
+        return vec![];
+    }
+    rolling_sum(values, window_size)
+        .into_iter()
+        .map(|s| s / window_size as f64)
+        .collect()
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // GpuAggOp

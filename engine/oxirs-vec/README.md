@@ -35,7 +35,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-vec = "0.2.3"
+oxirs-vec = "0.3.0"
 ```
 
 ## Quick Start

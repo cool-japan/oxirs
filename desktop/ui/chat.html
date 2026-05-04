@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OxiRS Chat</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, sans-serif;
+    display: flex;
+    height: 100vh;
+    background: #1a1a2e;
+    color: #e0e0e0;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 240px;
+    background: #16213e;
+    border-right: 1px solid #0f3460;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 16px;
+    font-weight: bold;
+    font-size: 1.05em;
+    color: #e94560;
+    border-bottom: 1px solid #0f3460;
+  }
+  .session-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  .session-item {
+    padding: 10px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    transition: background 0.15s;
+    font-size: 0.9em;
+    user-select: none;
+  }
+  .session-item:hover { background: #0f3460; }
+  .session-item.active { background: #0f3460; color: #e94560; }
+  .new-session-btn {
+    margin: 8px;
+    padding: 10px;
+    background: #e94560;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 0.9em;
+    font-weight: bold;
+  }
+  .new-session-btn:hover { background: #c73a52; }
+
+  /* Chat area */
+  .chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .chat-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #0f3460;
+    background: #16213e;
+    font-weight: bold;
+    font-size: 1em;
+    color: #e0e0e0;
+  }
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .message {
+    max-width: 70%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    line-height: 1.55;
+    font-size: 0.93em;
+    word-wrap: break-word;
+  }
+  .message.user {
+    align-self: flex-end;
+    background: #0f3460;
+    border-bottom-right-radius: 4px;
+  }
+  .message.assistant {
+    align-self: flex-start;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-bottom-left-radius: 4px;
+  }
+  .message.error {
+    align-self: flex-start;
+    background: #3d1a1a;
+    border: 1px solid #7a2020;
+    color: #e08080;
+    border-bottom-left-radius: 4px;
+  }
+  .message .role-label {
+    font-size: 0.75em;
+    color: #8a8a9a;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .thinking {
+    align-self: flex-start;
+    font-size: 0.85em;
+    color: #8a8a9a;
+    font-style: italic;
+    padding: 4px 0;
+  }
+  .input-row {
+    display: flex;
+    padding: 12px 16px;
+    gap: 8px;
+    border-top: 1px solid #0f3460;
+    background: #16213e;
+  }
+  .input-row textarea {
+    flex: 1;
+    background: #1a1a2e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    color: #e0e0e0;
+    padding: 10px 12px;
+    font-size: 0.93em;
+    resize: none;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .input-row textarea:focus { border-color: #e94560; }
+  .input-row button {
+    padding: 10px 20px;
+    background: #e94560;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-weight: bold;
+    font-size: 0.93em;
+    align-self: flex-end;
+  }
+  .input-row button:hover { background: #c73a52; }
+  .input-row button:disabled { background: #5a3a3a; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="sidebar-header">Conversations</div>
+  <div class="session-list" id="session-list"></div>
+  <button class="new-session-btn" id="new-session-btn">+ New Session</button>
+</div>
+<div class="chat-area">
+  <div class="chat-header" id="chat-header">Select or create a session</div>
+  <div class="messages" id="messages"></div>
+  <div class="input-row">
+    <textarea id="input" placeholder="Ask about your RDF data, SPARQL queries, or knowledge graph..." rows="2"></textarea>
+    <button id="send-btn" disabled>Send</button>
+  </div>
+</div>
+
+<script type="module">
+  const { invoke } = window.__TAURI__.core;
+
+  let currentSessionId = null;
+  let isSending = false;
+
+  // --- Session management ---
+
+  async function loadSessions() {
+    try {
+      const sessions = await invoke('list_sessions');
+      renderSessionList(sessions);
+      if (!currentSessionId && sessions.length > 0) {
+        await selectSession(sessions[0].id, sessions[0].title);
+      }
+    } catch (err) {
+      console.error('Failed to load sessions:', err);
+    }
+  }
+
+  function renderSessionList(sessions) {
+    const list = document.getElementById('session-list');
+    list.innerHTML = '';
+    for (const s of sessions) {
+      const item = document.createElement('div');
+      item.className = 'session-item' + (s.id === currentSessionId ? ' active' : '');
+      item.textContent = s.title || s.id;
+      item.dataset.sessionId = s.id;
+      item.addEventListener('click', () => selectSession(s.id, s.title || s.id));
+      list.appendChild(item);
+    }
+  }
+
+  async function selectSession(id, title) {
+    currentSessionId = id;
+    document.getElementById('chat-header').textContent = title || id;
+    document.getElementById('send-btn').removeAttribute('disabled');
+    document.getElementById('messages').innerHTML = '';
+    // Reload session list to update active state
+    await loadSessions();
+    // Load history
+    try {
+      const history = await invoke('get_session_history', { session_id: id });
+      for (const msg of history) {
+        appendMessage(msg.role, msg.content);
+      }
+    } catch (err) {
+      console.error('Failed to load history:', err);
+    }
+  }
+
+  // --- Messaging ---
+
+  async function sendMessage() {
+    if (isSending || !currentSessionId) return;
+    const input = document.getElementById('input');
+    const content = input.value.trim();
+    if (!content) return;
+
+    input.value = '';
+    isSending = true;
+    document.getElementById('send-btn').setAttribute('disabled', 'true');
+
+    appendMessage('user', content);
+    const thinkingEl = appendThinking();
+
+    try {
+      const response = await invoke('send_message', {
+        request: { session_id: currentSessionId, content }
+      });
+      thinkingEl.remove();
+      appendMessage('assistant', response.content);
+    } catch (err) {
+      thinkingEl.remove();
+      const errMsg = (err && (err.message || JSON.stringify(err))) || 'Unknown error';
+      appendMessage('error', 'Error: ' + errMsg);
+    } finally {
+      isSending = false;
+      document.getElementById('send-btn').removeAttribute('disabled');
+      input.focus();
+    }
+  }
+
+  function appendMessage(role, content) {
+    const messages = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'message ' + role;
+
+    const label = document.createElement('div');
+    label.className = 'role-label';
+    label.textContent = role === 'user' ? 'You' : role === 'assistant' ? 'OxiRS' : 'System';
+    el.appendChild(label);
+
+    const body = document.createElement('div');
+    body.textContent = content;
+    el.appendChild(body);
+
+    messages.appendChild(el);
+    messages.scrollTop = messages.scrollHeight;
+    return el;
+  }
+
+  function appendThinking() {
+    const messages = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'thinking';
+    el.textContent = 'OxiRS is thinking…';
+    messages.appendChild(el);
+    messages.scrollTop = messages.scrollHeight;
+    return el;
+  }
+
+  // --- Event listeners ---
+
+  document.getElementById('send-btn').addEventListener('click', sendMessage);
+
+  document.getElementById('input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  document.getElementById('new-session-btn').addEventListener('click', async () => {
+    const title = prompt('Session name:', 'New Session');
+    if (!title || !title.trim()) return;
+    try {
+      const s = await invoke('create_session', { title: title.trim() });
+      currentSessionId = s.id;
+      await loadSessions();
+      await selectSession(s.id, s.title);
+    } catch (err) {
+      console.error('Failed to create session:', err);
+    }
+  });
+
+  // --- Init ---
+  loadSessions();
+</script>
+</body>
+</html>

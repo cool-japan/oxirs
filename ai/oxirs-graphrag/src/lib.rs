@@ -1,34 +1,195 @@
 //! # OxiRS GraphRAG
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! **GraphRAG** (Graph Retrieval-Augmented Generation) is a production-ready
+//! Rust library that combines **knowledge-graph topology traversal** with
+//! **vector similarity search** to deliver context-rich answers for LLM
+//! pipelines — without any network dependencies at query time.
 //!
-//! **Status**: Production Release (v0.2.4)
+//! It is the JVM-free, pure-Rust counterpart of Microsoft's GraphRAG and
+//! LangChain's knowledge-graph QA stack, integrated directly with the OxiRS
+//! semantic-web engine.
 //!
-//! GraphRAG (Graph Retrieval-Augmented Generation) combines vector similarity search
-//! with graph topology traversal for enhanced knowledge retrieval.
-//!
-//! ## Architecture
+//! ## Data-flow overview
 //!
 //! ```text
-//! Query → Embed → Vector KNN + Keyword Search → Fusion → Graph Expansion → LLM Answer
+//! Natural-Language Query
+//!         │
+//!         ▼
+//! ┌───────────────────┐
+//! │  Query Embedding  │  (oxirs-embed / Node2Vec / TransE)
+//! └────────┬──────────┘
+//!          │
+//!   ┌──────┴──────┐
+//!   │             │
+//!   ▼             ▼
+//! Vector        Keyword
+//! KNN           BM25
+//! Search        Search
+//!   │             │
+//!   └──────┬──────┘
+//!          │
+//!          ▼
+//!  ┌───────────────┐
+//!  │  RRF Fusion   │  Reciprocal Rank Fusion → Seed Entities
+//!  └───────┬───────┘
+//!          │
+//!          ▼
+//!  ┌────────────────────────┐
+//!  │  SPARQL N-hop Expansion│  Graph traversal (up to 500 triples)
+//!  └────────────┬───────────┘
+//!               │
+//!               ▼
+//!  ┌────────────────────────┐
+//!  │  Community Detection   │  Louvain / Leiden clustering
+//!  └────────────┬───────────┘
+//!               │
+//!               ▼
+//!  ┌────────────────────────┐
+//!  │  Context Building      │  Subgraph → natural-language context
+//!  └────────────┬───────────┘
+//!               │
+//!               ▼
+//!  ┌────────────────────────┐
+//!  │  LLM Generation        │  Answer + citations
+//!  └────────────────────────┘
 //! ```
 //!
-//! ## Key Features
+//! ## Key modules
 //!
-//! - **Hybrid Retrieval**: Vector similarity + BM25 keyword search
-//! - **Graph Expansion**: SPARQL-based N-hop neighbor traversal
-//! - **Community Detection**: Louvain algorithm for hierarchical summarization
-//! - **Context Building**: Intelligent subgraph extraction for LLM context
+//! | Module | Purpose |
+//! |--------|---------|
+//! [`triple_extractor`] | Rule-based NLP → RDF triple extraction |
+//! [`community_detector`] | Greedy label-propagation community detection |
+//! [`path_finder`] | BFS / DFS shortest-path retrieval in KGs |
+//! [`graph_embedder`] | Node2Vec-style random-walk structural embeddings |
+//! [`summarizer`] | Cluster-based subgraph summarization for LLM context |
+//! [`path_ranker`] | Predicate-weighted path ranking |
+//! [`context_builder`] | N-hop subgraph extraction and truncation |
+//! [`knowledge_fusion`] | Multi-source KG fusion with provenance |
+//! [`graph_summarization`] | PageRank-style community summary generation |
+//! [`entity_linking`] | Entity linking and disambiguation |
+//! [`explainability`] | Attention weights, path explanation, provenance |
+//! [`feedback`] | Session-scoped user-feedback weight adaptation |
+//! [`graph`] | Core community detection and graph traversal primitives |
+//! [`retrieval`] | Hybrid vector + keyword retrieval with RRF fusion |
+//! [`generation`] | Prompt templates and LLM context building |
+//! [`temporal`] | Temporal knowledge graph retrieval |
 //!
-//! ## Example
+//! ## Quickstart — standalone pipeline (no network, no LLM)
+//!
+//! The example below runs an end-to-end mini-pipeline entirely in memory on a
+//! synthetic 8-node knowledge graph: extract triples from text, detect
+//! communities, find paths, and summarize the result.
+//!
+//! ```rust
+//! use oxirs_graphrag::triple_extractor::{ExtractionConfig, TripleExtractor};
+//! use oxirs_graphrag::community_detector::{CommunityGraph, CommunityDetector};
+//! use oxirs_graphrag::path_finder::{KnowledgeEdge, PathFinder, PathFinderConfig};
+//! use oxirs_graphrag::summarizer::{KgEdge, KgNode, KgSubgraph, SubgraphSummarizer};
+//!
+//! // ── Step 1: Extract triples from natural language ─────────────────────────
+//! let corpus = [
+//!     "Alice is a data scientist.",
+//!     "Bob works at ACME.",
+//!     "Carol is a software engineer.",
+//!     "Dave is part of the AI team.",
+//!     "ACME has a research division.",
+//! ];
+//! let extractor = TripleExtractor::with_defaults(ExtractionConfig::default());
+//! let all_triples: Vec<_> = corpus
+//!     .iter()
+//!     .flat_map(|sentence| extractor.extract(sentence))
+//!     .collect();
+//! assert!(!all_triples.is_empty(), "at least one triple extracted");
+//!
+//! // ── Step 2: Build community graph and detect clusters ─────────────────────
+//! let mut cg = CommunityGraph::new();
+//! // 8 synthetic nodes
+//! for (id, label) in [
+//!     (1u64, "Alice"), (2, "Bob"), (3, "Carol"), (4, "Dave"),
+//!     (5, "ACME"),    (6, "AI-Team"), (7, "Research"), (8, "Berlin"),
+//! ] {
+//!     cg.add_node(id, label);
+//! }
+//! for (a, b) in [(1,5),(2,5),(3,6),(4,6),(5,7),(6,7),(7,8),(1,2)] {
+//!     cg.add_edge(a, b, 1.0);
+//! }
+//! let detector = CommunityDetector::new(2, 50);
+//! let detection = detector.detect(&mut cg);
+//! assert!(!detection.communities.is_empty(), "at least one community");
+//!
+//! // ── Step 3: Graph path retrieval ──────────────────────────────────────────
+//! let edges = vec![
+//!     KnowledgeEdge::new("Alice",    "works_at",    "ACME"),
+//!     KnowledgeEdge::new("ACME",     "located_in",  "Berlin"),
+//!     KnowledgeEdge::new("Bob",      "knows",       "Alice"),
+//!     KnowledgeEdge::new("Alice",    "member_of",   "AI-Team"),
+//!     KnowledgeEdge::new("AI-Team",  "part_of",     "ACME"),
+//!     KnowledgeEdge::new("Carol",    "works_at",    "ACME"),
+//!     KnowledgeEdge::new("Dave",     "leads",       "AI-Team"),
+//!     KnowledgeEdge::new("Research", "division_of", "ACME"),
+//! ];
+//! let finder = PathFinder::new(edges, PathFinderConfig::default());
+//! let paths = finder.bfs_paths("Bob", "Berlin", 4);
+//! assert!(!paths.is_empty(), "path Bob→Berlin found");
+//!
+//! // ── Step 4: Summarize subgraph for LLM context ────────────────────────────
+//! let mut subgraph = KgSubgraph::new();
+//! for (id, label, ty) in [
+//!     ("alice",    "Alice",    "Person"),
+//!     ("bob",      "Bob",      "Person"),
+//!     ("carol",    "Carol",    "Person"),
+//!     ("acme",     "ACME",     "Organization"),
+//!     ("berlin",   "Berlin",   "Place"),
+//!     ("ai_team",  "AI-Team",  "Team"),
+//!     ("research", "Research", "Department"),
+//!     ("dave",     "Dave",     "Person"),
+//! ] {
+//!     subgraph.add_node(KgNode::simple(id, label, ty));
+//! }
+//! subgraph.add_edge(KgEdge::unweighted("alice", "acme",  "works_at"));
+//! subgraph.add_edge(KgEdge::unweighted("acme",  "berlin","located_in"));
+//!
+//! let summarizer = SubgraphSummarizer::new();
+//! let clusters = summarizer.summarize(&subgraph, 10);
+//! assert!(!clusters.is_empty(), "at least one cluster");
+//! let text_summary = summarizer.generate_text_summary(&clusters);
+//! assert!(!text_summary.is_empty(), "non-empty summary text");
+//! ```
+//!
+//! ## Full engine usage (async, requires trait impls)
+//!
+//! For production usage with a real vector index, embedding model, SPARQL engine,
+//! and LLM client:
 //!
 //! ```rust,ignore
 //! use oxirs_graphrag::{GraphRAGEngine, GraphRAGConfig};
+//! use std::sync::Arc;
 //!
-//! let engine = GraphRAGEngine::new(config).await?;
+//! let config = GraphRAGConfig {
+//!     top_k: 20,
+//!     expansion_hops: 2,
+//!     enable_communities: true,
+//!     ..Default::default()
+//! };
+//!
+//! // Provide your own implementations of VectorIndexTrait, EmbeddingModelTrait,
+//! // SparqlEngineTrait, and LlmClientTrait:
+//! let engine = GraphRAGEngine::new(
+//!     Arc::new(my_vec_index),
+//!     Arc::new(my_embedder),
+//!     Arc::new(my_sparql),
+//!     Arc::new(my_llm),
+//!     config,
+//! );
+//!
 //! let result = engine.query("What safety issues affect battery cells?").await?;
 //! println!("Answer: {}", result.answer);
+//! println!("Confidence: {:.2}", result.confidence);
 //! ```
+//!
+//! See [`docs/tutorial.md`](https://github.com/cool-japan/oxirs/blob/master/ai/oxirs-graphrag/docs/tutorial.md)
+//! for a step-by-step walkthrough.
 
 pub mod cache;
 pub mod config;
@@ -86,6 +247,25 @@ pub mod summarizer;
 // v1.1.0 round 15: Entity type classification for knowledge graph nodes
 pub mod entity_classifier;
 
+// v1.1.0 round 16: Explainability — attention weights, path explanation, provenance
+pub mod explainability;
+
+// v1.1.0 round 17: Interactive refinement with user feedback
+pub mod feedback;
+
+// v0.3.0 / block-5: GNN encoder — phase a: GraphSAGE over the knowledge graph
+pub mod gnn_encoder;
+
+// v0.3.0 / block-6: Hybrid GNN+LLM — phase b/c: LLM head with frozen GNN soft-prompt
+pub mod hybrid;
+
+// v0.3.0 / block-8: Hybrid GNN+LLM phase d — GGUF model loader + LoRA adapter
+#[cfg(feature = "gguf-loader")]
+pub mod model_loader;
+
+// v0.3.0 / block-7: Neuro-symbolic fusion — PINN-driven physics-informed entity scoring
+pub mod neuro_symbolic;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -106,8 +286,16 @@ pub use embeddings::node2vec::{
 pub use graph::community::{CommunityAlgorithm, CommunityConfig, CommunityDetector};
 pub use graph::embeddings::{CommunityAwareEmbeddings, CommunityStructure, EmbeddingConfig};
 pub use graph::traversal::GraphTraversal;
+pub use hybrid::lora::{LoraAdapter, LoraTrainer};
 pub use query::planner::QueryPlanner;
 pub use retrieval::fusion::FusionStrategy;
+
+// Feature-gated re-exports for GGUF model loader.
+#[cfg(feature = "gguf-loader")]
+pub use model_loader::{
+    GgufMetadata, GgufModelArch, GgufParseError, GgufParser, GgufTensorInfo, GgufValue,
+    ModelHandle, ModelInfo, ModelRegistry, RegistryError,
+};
 
 /// GraphRAG error types
 #[derive(Error, Debug)]

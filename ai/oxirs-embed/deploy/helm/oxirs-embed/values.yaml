@@ -1,0 +1,152 @@
+# Default values for the oxirs-embed Helm chart.
+#
+# Every value below is documented so an operator can copy the file, override
+# only what they care about, and reason about the rest.
+
+# ── image ────────────────────────────────────────────────────────────────────
+image:
+  repository: ghcr.io/cool-japan/oxirs-embed
+  tag: "0.3.0"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# ── deployment ───────────────────────────────────────────────────────────────
+replicaCount: 2
+
+# When `distributed.enabled: true` the chart provisions a StatefulSet with one
+# pod per parameter-server shard.  `replicaCount` is ignored in that mode and
+# `distributed.numShards` is used instead.
+distributed:
+  enabled: false
+  numShards: 4
+  numWorkers: 4
+  updateMode: async   # one of: async | sync
+  shardingStrategy: entity-hash
+
+# ── pod scheduling ───────────────────────────────────────────────────────────
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+topologySpreadConstraints: []
+
+# ── service ──────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+  annotations: {}
+
+# Set to `true` to expose the embedding API via an Ingress controller.
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: oxirs-embed.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ── pod resources ────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: "500m"
+    memory: "512Mi"
+  limits:
+    cpu: "2"
+    memory: "4Gi"
+
+# ── runtime configuration ────────────────────────────────────────────────────
+config:
+  bindAddress: "0.0.0.0:8080"
+  metricsAddress: "0.0.0.0:9090"
+  logLevel: "info"
+  # Embedding model defaults (override per environment).
+  modelDimensions: 128
+  modelType: "TransE"
+
+# ── persistent storage (optional) ────────────────────────────────────────────
+persistence:
+  enabled: false
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  mountPath: /var/lib/oxirs-embed
+
+# ── horizontal autoscaler ────────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+# ── pod disruption budget ────────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ── service account ──────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# ── security context ─────────────────────────────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  privileged: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# ── observability ────────────────────────────────────────────────────────────
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+
+# ── liveness / readiness probes ──────────────────────────────────────────────
+probes:
+  liveness:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readiness:
+    httpGet:
+      path: /ready
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Extra environment variables forwarded to the container, e.g.
+#   extraEnv:
+#     - name: RUST_BACKTRACE
+#       value: "1"
+extraEnv: []
+
+# Arbitrary extra volumes / volumeMounts (e.g. mount a model from a PVC).
+extraVolumes: []
+extraVolumeMounts: []

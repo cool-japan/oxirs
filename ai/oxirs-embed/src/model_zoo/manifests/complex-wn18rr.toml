@@ -1,0 +1,13 @@
+name = "complex-wn18rr"
+model_type = "ComplEx"
+dataset = "WN18RR"
+dimensions = 100
+entities = 40943
+relations = 11
+sha256 = "PLACEHOLDER"
+source = "file:///seeds/complex-wn18rr.ckpt"
+license = "Apache-2.0"
+citation = "Trouillon, T., Welbl, J., Riedel, S., Gaussier, E., & Bouchard, G. (2016). Complex Embeddings for Simple Link Prediction. ICML."
+version = "1.0.0"
+created = "2026-05-01"
+notes = "SYNTHETIC SEED: small random-initialized weights for testing only. Not actual research weights. Run 'cargo run --example fetch_real_weights' for production weights."

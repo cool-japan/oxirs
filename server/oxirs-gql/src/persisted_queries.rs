@@ -264,7 +264,7 @@ impl PersistedQueryManager {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(query.as_bytes());
-        format!("{:x}", hasher.finalize())
+        hex::encode(hasher.finalize())
     }
 
     /// Add query to denylist
@@ -400,7 +400,7 @@ impl PersistedQueryStore {
         use sha2::{Digest, Sha256};
         let mut h = Sha256::new();
         h.update(query.as_bytes());
-        format!("{:x}", h.finalize())
+        hex::encode(h.finalize())
     }
 
     /// Store a query and return its hash.

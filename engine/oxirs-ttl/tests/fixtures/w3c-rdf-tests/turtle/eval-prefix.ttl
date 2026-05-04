@@ -1,0 +1,3 @@
+# prefix expansion to absolute IRIs
+@prefix ex: <http://example.org/> .
+ex:alice ex:knows ex:bob .

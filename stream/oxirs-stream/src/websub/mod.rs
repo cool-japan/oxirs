@@ -8,7 +8,7 @@
 //! - [`WebSubSubscriber`]: Handles intent verification and signature checking.
 //! - [`DatasetEventBus`]: In-process change notifications for RDF datasets.
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use std::fmt;
 use std::sync::{Arc, Mutex};

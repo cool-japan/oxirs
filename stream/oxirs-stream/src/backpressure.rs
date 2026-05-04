@@ -366,6 +366,15 @@ impl<T: Clone + Send> BackpressureController<T> {
 
     /// Apply graceful degradation strategy
     async fn apply_degradation(&self, _event: &T) -> Result<bool> {
+        // Block strategy explicitly forbids silent drops: the caller wants
+        // the producer to await available capacity, not have its events
+        // discarded behind its back. Skipping degradation here keeps
+        // `Block` semantics correct end-to-end (no event loss) while
+        // still allowing degradation to throttle drop-tolerant strategies.
+        if matches!(self.config.strategy, BackpressureStrategy::Block) {
+            return Ok(true);
+        }
+
         let stats = self.stats.lock().await;
         let utilization = stats.buffer_utilization;
         drop(stats);
@@ -524,8 +533,14 @@ impl<T: Clone + Send> BackpressureController<T> {
 
     /// Offer with blocking strategy
     async fn offer_blocking(&self, event: T) -> Result<()> {
-        // Acquire semaphore permit
-        let _permit = self
+        // Acquire a semaphore permit representing one slot in the buffer.
+        // Ownership of the permit is conceptually transferred to the
+        // buffered event: it is released later by `poll()` via
+        // `Semaphore::add_permits(1)`. We therefore `forget()` the
+        // permit guard so it is NOT auto-released on scope exit — that
+        // would double-release and let the buffer grow without bound,
+        // defeating the whole point of `Block` backpressure.
+        let permit = self
             .semaphore
             .acquire()
             .await
@@ -535,7 +550,12 @@ impl<T: Clone + Send> BackpressureController<T> {
         buffer.push_back((event, Utc::now()));
 
         let buffer_size = buffer.len();
+        self.metrics_queue_depth.set(buffer_size as f64);
         drop(buffer);
+
+        // Transfer ownership of the permit to the buffered event.
+        // `poll()` will call `add_permits(1)` to release it on consume.
+        permit.forget();
 
         self.update_flow_control(buffer_size).await;
 

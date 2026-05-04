@@ -1,0 +1,13 @@
+description = "iri --validate accepts an HTTP URL"
+classification = "spec-required"
+argv = ["--quiet", "iri", "http://example.org/foo", "--validate"]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+IRI is valid
+"""
+
+[stderr]
+mode = "absent"

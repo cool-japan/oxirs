@@ -361,9 +361,9 @@ fn extract_all_coordinates(
             coords.push((rect.min().x, rect.max().y, coord3d.z_at(3).unwrap_or(0.0)));
         }
         GeoGeometry::Triangle(tri) => {
-            coords.push((tri.0.x, tri.0.y, coord3d.z_at(0).unwrap_or(0.0)));
-            coords.push((tri.1.x, tri.1.y, coord3d.z_at(1).unwrap_or(0.0)));
-            coords.push((tri.2.x, tri.2.y, coord3d.z_at(2).unwrap_or(0.0)));
+            coords.push((tri.v1().x, tri.v1().y, coord3d.z_at(0).unwrap_or(0.0)));
+            coords.push((tri.v2().x, tri.v2().y, coord3d.z_at(1).unwrap_or(0.0)));
+            coords.push((tri.v3().x, tri.v3().y, coord3d.z_at(2).unwrap_or(0.0)));
         }
     }
 

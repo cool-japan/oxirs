@@ -1,0 +1,2 @@
+<http://example.org/s> <http://example.org/p> "é latin small e with acute" .
+<http://example.org/s> <http://example.org/p> "中 Chinese U+4E2D" .

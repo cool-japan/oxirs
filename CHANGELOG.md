@@ -5,6 +5,27 @@ All notable changes to OxiRS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-03
+
+### Added
+- **oxirs-core**: audit/ module — SOC2/GDPR compliance with AuditEvent, InMemoryAuditLogger, JsonLineAuditLogger, AuditFilter, and GdprService (30 tests)
+- **oxirs-shacl-ai**: certification/ module — ClassificationMetrics, CertificationRunner, and report generation (19 tests)
+- **oxirs-chat**: marketplace/ module — HuggingFace Hub, Ollama, and local GGUF registry integration (28 tests)
+- **oxirs-chat**: SSO module — OIDC (oidc.rs), SAML 2.0 SP (saml_sp.rs), and session management (session.rs) (13 tests)
+- **oxirs-cluster**: certification/ module — consistency, partition, raft, and SLA checks (13 tests)
+- **oxirs-graphrag**: model_loader/ module — GGUF parser and ModelRegistry
+- **oxirs-graphrag**: hybrid/lora.rs — LoRA adapter and trainer implementation
+- **oxirs-fuseki**: SAML 2.0 XML parsing via quick-xml with ring RSA-SHA256 signature verification (32 tests)
+- **oxirs-modbus**: browser/ TUI module — ratatui 0.30, feature-gated as `tui` (33 tests)
+- docs/policies/lts.md — RFC-001 LTS support policy
+- docs/policies/enterprise.md — RFC-002 enterprise deployment policy
+- 26 TODO.md files updated with policy references
+
+### Changed
+- Version bump to 0.3.0 across all workspace crates
+- Total test count: ~41,400 (up from ~40,530 in v0.2.4)
+- SLoC: 2.46M Rust (4,873 files)
+
 ## [0.2.4] - 2026-03-28
 
 ### Changed

@@ -1,0 +1,16 @@
+{
+    "id": "rl-equivalent-classes-001",
+    "title": "RL: equivalentClass propagates type assertions both ways",
+    "profiles": ["RL", "EL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "EquivalentClasses", "a": "Person", "b": "Human" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "rdf:type", "object": "Person" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "alice", "class": "Person" },
+        { "kind": "Type", "individual": "alice", "class": "Human" }
+    ],
+    "forbidden": []
+}

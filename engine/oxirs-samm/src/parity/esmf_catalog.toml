@@ -1,0 +1,262 @@
+##############################################################################
+# ESMF SDK 2.x Feature Parity Catalog for oxirs-samm
+#
+# Each entry covers one documented ESMF SDK 2.x feature.
+# Fields:
+#   name           - human-readable feature name
+#   status         - "implemented" | "partial" | "missing"
+#   oxirs_module   - Rust module in this crate (omit if status != "implemented")
+#   esmf_reference - canonical URL into ESMF / SAMM 2.x specification
+#   notes          - one-sentence clarification / scope note
+##############################################################################
+
+# ──────────────────────────────────────────────────────────────────────────
+# Aspect Modeling
+# ──────────────────────────────────────────────────────────────────────────
+
+[[aspect_modeling]]
+name = "Aspect definition"
+status = "implemented"
+oxirs_module = "metamodel::aspect"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#aspect"
+notes = "Core Aspect element with properties, operations and events fully modelled."
+
+[[aspect_modeling]]
+name = "Property (mandatory and optional)"
+status = "implemented"
+oxirs_module = "metamodel::property"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#property"
+notes = "Property with optional flag, characteristic binding and example values."
+
+[[aspect_modeling]]
+name = "Operation"
+status = "implemented"
+oxirs_module = "metamodel::operation"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#operation"
+notes = "Operation with typed input and output parameters."
+
+[[aspect_modeling]]
+name = "Event"
+status = "implemented"
+oxirs_module = "event_model"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#event"
+notes = "Event element with parameter list; lifecycle hooks are partial."
+
+[[aspect_modeling]]
+name = "Characteristic definition (Trait)"
+status = "implemented"
+oxirs_module = "metamodel::characteristic"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#characteristics"
+notes = "Characteristic trait hierarchy including Measurement, Enumeration, Collection, etc."
+
+[[aspect_modeling]]
+name = "Entity (complex structured type)"
+status = "implemented"
+oxirs_module = "metamodel::entity"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#entity"
+notes = "Entity with extends-hierarchy and nested property lists."
+
+[[aspect_modeling]]
+name = "Abstract entity / entity inheritance"
+status = "partial"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#abstract-entity"
+notes = "Single-level inheritance supported; multi-level abstract chains not fully validated."
+
+[[aspect_modeling]]
+name = "Constraint types (Range, Length, RegularExpression, Encoding, FixedPoint)"
+status = "partial"
+oxirs_module = "constraint_validator"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#constraints"
+notes = "Range, Length, and RegularExpression constraints implemented; FixedPoint and Encoding constraints are partial."
+
+[[aspect_modeling]]
+name = "Either characteristic"
+status = "implemented"
+oxirs_module = "metamodel::characteristic"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#either-characteristic"
+notes = "samm-c:Either discriminated union variant in CharacteristicKind with parser (samm-c:left/right), Turtle serializer, JSON Schema oneOf, OpenAPI oneOf, DTDL fallback, and schema validation."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Validation
+# ──────────────────────────────────────────────────────────────────────────
+
+[[validation]]
+name = "Turtle model syntactic validation"
+status = "implemented"
+oxirs_module = "validator"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#validation"
+notes = "Validates Turtle file syntax via the integrated oxttl parser."
+
+[[validation]]
+name = "SAMM SHACL shape validation"
+status = "implemented"
+oxirs_module = "validator::shacl_validator"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#model-validation"
+notes = "Validates aspect models against SAMM SHACL shapes via oxirs-shacl integration."
+
+[[validation]]
+name = "Semantic violation detection (cyclic dependencies)"
+status = "implemented"
+oxirs_module = "aspect_validator"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#model-validation"
+notes = "Cycle detection, required-property checks, and cardinality validation."
+
+[[validation]]
+name = "Cross-model reference validation"
+status = "missing"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#cross-model-reference"
+notes = "External URN references across independently loaded model files not validated."
+
+[[validation]]
+name = "Batch validation with progress reporting"
+status = "implemented"
+oxirs_module = "validation::batch"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#validation"
+notes = "Parallel batch validation with optional GPU acceleration."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Code Generation
+# ──────────────────────────────────────────────────────────────────────────
+
+[[code_generation]]
+name = "Java POJO generation"
+status = "implemented"
+oxirs_module = "generators::java"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#code-generation"
+notes = "Generates Java POJO classes with Lombok annotations from aspect models."
+
+[[code_generation]]
+name = "TypeScript interface generation"
+status = "implemented"
+oxirs_module = "generators::typescript"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#code-generation"
+notes = "Generates TypeScript interfaces including optional field handling."
+
+[[code_generation]]
+name = "Python dataclass generation"
+status = "implemented"
+oxirs_module = "generators::python"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#code-generation"
+notes = "Generates Python 3.10+ dataclasses with type hints."
+
+[[code_generation]]
+name = "JSON Schema generation"
+status = "implemented"
+oxirs_module = "codegen::json_schema"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#code-generation"
+notes = "Emits JSON Schema draft-07; additional drafts are not yet supported."
+
+[[code_generation]]
+name = "Static payload example generation"
+status = "implemented"
+oxirs_module = "generators::payload"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#code-generation"
+notes = "Generates sample JSON payloads from characteristic types and example values."
+
+[[code_generation]]
+name = "Scala case-class generation"
+status = "implemented"
+oxirs_module = "generators::scala"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#code-generation"
+notes = "Generates Scala 3 case classes; Scala 2 compatibility not guaranteed."
+
+[[code_generation]]
+name = "SQL DDL generation"
+status = "implemented"
+oxirs_module = "generators::sql"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#code-generation"
+notes = "PostgreSQL and SQLite DDL; Oracle/MSSQL dialects are missing."
+
+# ──────────────────────────────────────────────────────────────────────────
+# OpenAPI Emission
+# ──────────────────────────────────────────────────────────────────────────
+
+[[open_api_emission]]
+name = "OpenAPI 3.0 schema generation"
+status = "implemented"
+oxirs_module = "codegen::openapi"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#open-api-generation"
+notes = "Generates OpenAPI 3.0.x YAML/JSON specs from aspect model definitions."
+
+[[open_api_emission]]
+name = "OpenAPI 3.1 schema generation"
+status = "implemented"
+oxirs_module = "codegen::openapi"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#open-api-generation"
+notes = "OpenAPI 3.1.0 with JSON Schema 2020-12 dialect: jsonSchemaDialect field, type arrays for optional properties, const for single-value enumerations, oneOf-null wrapping for reference schemas."
+
+[[open_api_emission]]
+name = "Pagination extension in OpenAPI output"
+status = "missing"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#open-api-generation"
+notes = "SAMM pagination extension (x-samm-pagination) blocks not emitted."
+
+# ──────────────────────────────────────────────────────────────────────────
+# JSON-LD Profiles
+# ──────────────────────────────────────────────────────────────────────────
+
+[[json_ld_profiles]]
+name = "JSON-LD context generation"
+status = "implemented"
+oxirs_module = "generators::jsonld"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#mapping-to-json-ld"
+notes = "Emits a JSON-LD 1.1 @context document mapping aspect properties to IRIs."
+
+[[json_ld_profiles]]
+name = "JSON-LD compaction / framing"
+status = "missing"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#mapping-to-json-ld"
+notes = "JSON-LD compaction algorithm and framing API not implemented."
+
+[[json_ld_profiles]]
+name = "RDF/JSON-LD serialisation round-trip"
+status = "partial"
+esmf_reference = "https://eclipse-esmf.github.io/samm-specification/2.1.0/index.html#mapping-to-json-ld"
+notes = "Serialization implemented; lossless round-trip from parsed RDF back to JSON-LD is untested."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Model Resolution
+# ──────────────────────────────────────────────────────────────────────────
+
+[[model_resolution]]
+name = "file: URI and local filesystem model loading"
+status = "implemented"
+oxirs_module = "parser::resolver"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#loading-models"
+notes = "Resolves urn:samm: identifiers to local .ttl files via configurable base path."
+
+[[model_resolution]]
+name = "External HTTP model fetching"
+status = "partial"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#loading-models"
+notes = "HTTP fetch via reqwest implemented; caching and ETags not yet wired."
+
+[[model_resolution]]
+name = "Model version migration (SAMM 1.x → 2.x)"
+status = "implemented"
+oxirs_module = "migration"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/java-aspect-tooling.html#migration"
+notes = "Automated migration from BAMM 1.x / SAMM 2.x older minor versions."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Command-Line Tooling
+# ──────────────────────────────────────────────────────────────────────────
+
+[[command_line_tooling]]
+name = "validate command"
+status = "partial"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/samm-cli.html#validate"
+notes = "Basic validation output available; structured JSON violation reports not yet emitted."
+
+[[command_line_tooling]]
+name = "generate command (Java / TypeScript / Python)"
+status = "implemented"
+oxirs_module = "cli::generate"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/samm-cli.html#generate"
+notes = "Implemented in src/cli/generate.rs; samm binary at src/bin/samm.rs. Supports java, typescript, python, openapi, json-schema targets."
+
+[[command_line_tooling]]
+name = "aspect command (list / describe)"
+status = "missing"
+esmf_reference = "https://eclipse-esmf.github.io/esmf-sdk/2.9.7/samm-cli.html#aspect"
+notes = "Introspection sub-command for listing properties / operations not implemented."

@@ -1,0 +1,4 @@
+# blank node as object
+@prefix ex: <http://example.org/> .
+ex:s ex:knows _:friend .
+_:friend ex:name "Alice" .

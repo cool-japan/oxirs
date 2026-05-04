@@ -1,0 +1,18 @@
+# SPARQL POST with application/sparql-query body
+endpoint: sparql_query
+classification: spec-required
+match_mode: structural-json
+description: POST /sparql with application/sparql-query body returns JSON
+
+=== request
+POST /sparql
+Content-Type: application/sparql-query
+Accept: application/sparql-results+json
+
+SELECT * WHERE { ?s ?p ?o } LIMIT 0
+
+=== response
+200
+Content-Type: application/sparql-results+json
+
+{"head":{"vars":[]},"results":{"bindings":[]}}

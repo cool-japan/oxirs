@@ -1,0 +1,15 @@
+# Jena-specific server-info fields (impl detail)
+endpoint: admin_server
+classification: implementation-detail
+match_mode: structural-json
+ignore_fields: name, version, description, built_at, datasets_count, features
+description: Jena emits these specific keys; OxiRS may or may not (impl-detail)
+
+=== request
+GET /$/server
+
+=== response
+200
+Content-Type: application/json
+
+{"version":"4.10.0","datasets":[],"server":"Apache Jena Fuseki"}

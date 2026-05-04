@@ -1,0 +1,14 @@
+# CONSTRUCT with Accept: application/ld+json -> JSON-LD
+endpoint: sparql_query
+classification: spec-required
+match_mode: status-only
+description: CONSTRUCT honours Accept: application/ld+json
+
+=== request
+GET /sparql?query=CONSTRUCT%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D
+Accept: application/ld+json
+
+=== response
+200
+Content-Type: application/ld+json
+

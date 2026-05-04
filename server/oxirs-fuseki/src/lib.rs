@@ -1,9 +1,9 @@
 //! # OxiRS Fuseki - SPARQL HTTP Server
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-fuseki/badge.svg)](https://docs.rs/oxirs-fuseki)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SPARQL 1.1/1.2 HTTP protocol server with Apache Fuseki compatibility.
@@ -158,6 +158,9 @@ pub mod endpoint_router;
 
 // v1.1.0 round 16 SPARQL query audit logger with ring-buffer and statistics
 pub mod query_logger;
+
+// v0.3.0 API stability harness (mirrors core/oxirs-core/src/api_surface.rs)
+pub mod api_surface;
 
 pub use ldp::{LdpContainer, LdpRequest, LdpResourceType, LdpResponse, LdpService};
 

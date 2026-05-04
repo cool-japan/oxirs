@@ -1,6 +1,6 @@
 # OxiRS-Star - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Status: Production Ready
 
@@ -51,10 +51,15 @@ OxiRS-Star provides RDF-star and SPARQL-star support for quoted triples with ent
 - ✅ Distributed query processing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] Full W3C RDF-star compliance
-- [ ] Long-term support guarantees
-- [ ] Enterprise features
-- [ ] Comprehensive benchmarks
+- [x] Full W3C RDF-star compliance (completed 2026-04-28)
+  - **Goal:** Pass W3C RDF 1.2/RDF-star conformance suite for parsing, querying, and serializing quoted triples.
+  - **Design:** Vendor W3C test suite fixtures → driver reads manifest → dispatch per-test → fix parser/serializer/query gaps (asserted vs unasserted semantics, SPARQL-star in BIND/FILTER/OPTIONAL, blank-node scope in quoted triples, round-trip NQ-star/TriG-star).
+  - **Files:** src/parser/{turtle_star,trig_star,nquads_star}.rs, src/sparql_star/query_executor.rs, src/serializer.rs, tests/w3c_rdf_star_conformance.rs (new)
+  - **Tests:** W3C corpus driver pass_rate >= 0.99; parse→serialize→parse round-trip property test
+  - **Risk:** RDF 1.2 spec still settling — pin to specific commit hash
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing
 

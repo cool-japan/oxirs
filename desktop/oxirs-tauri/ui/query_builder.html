@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OxiRS Visual Query Builder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ---- Toolbar ---- */
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #16213e;
+    border-bottom: 1px solid #0f3460;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .toolbar button {
+    padding: 7px 14px;
+    background: #0f3460;
+    border: 1px solid #e94560;
+    border-radius: 6px;
+    color: #e0e0e0;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: background 0.15s;
+  }
+  .toolbar button:hover { background: #e94560; }
+  .toolbar select {
+    background: #0f3460;
+    border: 1px solid #0f3460;
+    color: #e0e0e0;
+    padding: 7px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    cursor: pointer;
+  }
+  .toolbar select:hover { border-color: #e94560; }
+  .spacer { flex: 1; }
+
+  /* ---- Main layout ---- */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ---- SVG Canvas ---- */
+  .canvas-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #12122a;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+  svg#canvas {
+    width: 100%;
+    height: 100%;
+    cursor: default;
+  }
+
+  /* ---- Right panel ---- */
+  .panel {
+    width: 330px;
+    background: #16213e;
+    border-left: 1px solid #0f3460;
+    display: flex;
+    flex-direction: column;
+    min-width: 250px;
+  }
+  .panel-tabs {
+    display: flex;
+    border-bottom: 1px solid #0f3460;
+  }
+  .panel-tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 0.85em;
+    color: #8a8a9a;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+  }
+  .panel-tab:hover { color: #e0e0e0; }
+  .panel-tab.active { color: #e94560; border-bottom-color: #e94560; }
+
+  .panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  .panel-content.hidden { display: none; }
+
+  /* ---- SPARQL output ---- */
+  .sparql-output {
+    font-family: 'Fira Mono', 'Courier New', monospace;
+    font-size: 0.82em;
+    background: #12122a;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    padding: 12px;
+    white-space: pre;
+    overflow-x: auto;
+    min-height: 140px;
+    color: #b0d0ff;
+    line-height: 1.5;
+  }
+
+  /* ---- Forms ---- */
+  .field-group { margin-bottom: 10px; }
+  .field-group label {
+    display: block;
+    font-size: 0.78em;
+    color: #8a8a9a;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .field-group input, .field-group select {
+    width: 100%;
+    background: #12122a;
+    border: 1px solid #0f3460;
+    color: #e0e0e0;
+    padding: 7px 9px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field-group input:focus { border-color: #e94560; }
+
+  /* ---- Add pattern form ---- */
+  .add-form {
+    background: #12122a;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .add-form h4 {
+    font-size: 0.82em;
+    color: #e94560;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .btn-primary {
+    width: 100%;
+    padding: 8px;
+    background: #e94560;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 0.85em;
+    margin-top: 6px;
+    transition: opacity 0.15s;
+  }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-secondary {
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    color: #8a8a9a;
+    cursor: pointer;
+    font-size: 0.85em;
+    margin-top: 4px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-secondary:hover { border-color: #e94560; color: #e0e0e0; }
+
+  /* ---- Pattern / filter cards ---- */
+  .card {
+    background: #0f3460;
+    border-radius: 8px;
+    padding: 9px 11px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: border-color 0.15s;
+    position: relative;
+  }
+  .card:hover { border-left-color: #e94560; }
+  .card .card-title {
+    font-size: 0.78em;
+    font-weight: bold;
+    color: #e94560;
+    margin-bottom: 3px;
+  }
+  .card .card-body {
+    font-size: 0.78em;
+    font-family: monospace;
+    color: #c0d0e0;
+    word-break: break-all;
+  }
+  .card .card-delete {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 0.75em;
+    color: #8a8a9a;
+    cursor: pointer;
+  }
+  .card .card-delete:hover { color: #e94560; }
+
+  /* ---- Section headings inside panel ---- */
+  .section-heading {
+    font-size: 0.75em;
+    color: #8a8a9a;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 12px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #0f3460;
+  }
+
+  /* ---- Validation badge ---- */
+  .validation-badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 0.78em;
+    font-weight: bold;
+  }
+  .badge-valid { background: #1a4a1a; color: #4caf50; }
+  .badge-invalid { background: #4a1a1a; color: #e94560; }
+
+  /* ---- Empty state ---- */
+  .empty-state {
+    color: #8a8a9a;
+    font-size: 0.82em;
+    text-align: center;
+    padding: 20px 0;
+    line-height: 1.6;
+  }
+
+  /* ---- Modifiers section ---- */
+  .modifiers-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .modifiers-row .field-group { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ======================= TOOLBAR ======================= -->
+<div class="toolbar">
+  <button id="add-pattern-btn" title="Add a triple pattern node">+ Triple</button>
+  <button id="add-filter-btn" title="Add a FILTER expression">+ Filter</button>
+  <button id="clear-btn" title="Remove all nodes">Clear</button>
+  <select id="examples-select" title="Load an example query">
+    <option value="">-- Examples --</option>
+  </select>
+  <div class="spacer"></div>
+  <button id="validate-btn" title="Validate the generated SPARQL">Validate</button>
+  <span id="validation-badge" class="validation-badge" style="display:none"></span>
+  <button id="copy-btn" title="Copy SPARQL to clipboard">Copy SPARQL</button>
+</div>
+
+<!-- ======================= MAIN ======================= -->
+<div class="main">
+
+  <!-- ---- Canvas ---- -->
+  <div class="canvas-area">
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="7"
+                refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#e94560" opacity="0.8"/>
+        </marker>
+      </defs>
+      <g id="edges-layer"></g>
+      <g id="nodes-layer"></g>
+    </svg>
+  </div>
+
+  <!-- ---- Right panel ---- -->
+  <div class="panel">
+    <div class="panel-tabs">
+      <div class="panel-tab active" data-tab="patterns">Patterns</div>
+      <div class="panel-tab" data-tab="modifiers">Options</div>
+      <div class="panel-tab" data-tab="sparql">SPARQL</div>
+    </div>
+
+    <!-- Tab: Patterns -->
+    <div class="panel-content" id="tab-patterns">
+      <!-- Add-pattern form (hidden by default) -->
+      <div class="add-form" id="add-pattern-form" style="display:none">
+        <h4>New Triple Pattern</h4>
+        <div class="field-group">
+          <label>Subject</label>
+          <input id="f-subj" placeholder="?s  or  &lt;http://...&gt;">
+        </div>
+        <div class="field-group">
+          <label>Predicate</label>
+          <input id="f-pred" placeholder="?p  or  a  or  foaf:name">
+        </div>
+        <div class="field-group">
+          <label>Object</label>
+          <input id="f-obj" placeholder='?o  or  &lt;URI&gt;  or  "literal"'>
+        </div>
+        <button class="btn-primary" id="confirm-add-pattern">Add Pattern</button>
+        <button class="btn-secondary" id="cancel-add-pattern">Cancel</button>
+      </div>
+
+      <!-- Add-filter form (hidden by default) -->
+      <div class="add-form" id="add-filter-form" style="display:none">
+        <h4>New Filter</h4>
+        <div class="field-group">
+          <label>Expression</label>
+          <input id="f-expr" placeholder="?age > 18  or  regex(?name, &quot;^A&quot;)">
+        </div>
+        <button class="btn-primary" id="confirm-add-filter">Add Filter</button>
+        <button class="btn-secondary" id="cancel-add-filter">Cancel</button>
+      </div>
+
+      <!-- Pattern list -->
+      <div id="pattern-list"></div>
+
+      <!-- Filter list -->
+      <div id="filter-list"></div>
+    </div>
+
+    <!-- Tab: Options -->
+    <div class="panel-content hidden" id="tab-modifiers">
+      <div class="section-heading">Select Variables</div>
+      <div class="field-group">
+        <label>Variables (space-separated, empty = auto)</label>
+        <input id="opt-select-vars" placeholder="?s ?p ?o">
+      </div>
+
+      <div class="section-heading">Pagination</div>
+      <div class="modifiers-row">
+        <div class="field-group">
+          <label>LIMIT</label>
+          <input id="opt-limit" type="number" min="1" placeholder="e.g. 100">
+        </div>
+        <div class="field-group">
+          <label>OFFSET</label>
+          <input id="opt-offset" type="number" min="0" placeholder="e.g. 0">
+        </div>
+      </div>
+
+      <button class="btn-primary" id="apply-options-btn">Apply &amp; Refresh</button>
+    </div>
+
+    <!-- Tab: SPARQL -->
+    <div class="panel-content hidden" id="tab-sparql">
+      <pre class="sparql-output" id="sparql-output">-- Add triple patterns to generate SPARQL --</pre>
+    </div>
+  </div><!-- /.panel -->
+
+</div><!-- /.main -->
+
+<script type="module">
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Tauri bridge — works in Tauri 2.x
+// ---------------------------------------------------------------------------
+const invoke = window.__TAURI__?.core?.invoke
+  ?? window.__TAURI_INTERNALS__?.invoke
+  ?? (() => Promise.reject(new Error("Tauri IPC not available")));
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let state = mkEmptyState();
+let nextId = 1;
+
+function mkEmptyState() {
+  return { patterns: [], filters: [], edges: [], select_vars: [], limit: null, offset: null };
+}
+
+// ---------------------------------------------------------------------------
+// Drag state
+// ---------------------------------------------------------------------------
+let dragNode = null;
+let dragOffset = { x: 0, y: 0 };
+
+// ---------------------------------------------------------------------------
+// DOM refs
+// ---------------------------------------------------------------------------
+const canvas      = document.getElementById("canvas");
+const nodesLayer  = document.getElementById("nodes-layer");
+const edgesLayer  = document.getElementById("edges-layer");
+const sparqlOut   = document.getElementById("sparql-output");
+const patternList = document.getElementById("pattern-list");
+const filterList  = document.getElementById("filter-list");
+
+// ---------------------------------------------------------------------------
+// Load example queries
+// ---------------------------------------------------------------------------
+invoke("get_example_queries")
+  .then(examples => {
+    const sel = document.getElementById("examples-select");
+    for (const [name, sparql] of examples) {
+      const opt = document.createElement("option");
+      opt.value = sparql;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    }
+  })
+  .catch(() => { /* no-op if backend unavailable */ });
+
+document.getElementById("examples-select").addEventListener("change", async e => {
+  const sparql = e.target.value;
+  if (!sparql) return;
+  e.target.value = "";
+  const g = await invoke("parse_sparql_to_graph", { query: sparql }).catch(() => null);
+  if (g) { state = g; nextId = state.patterns.length + state.filters.length + 1; renderAll(); }
+});
+
+// ---------------------------------------------------------------------------
+// Toolbar buttons
+// ---------------------------------------------------------------------------
+document.getElementById("add-pattern-btn").addEventListener("click", () => {
+  closeAllForms();
+  document.getElementById("add-pattern-form").style.display = "block";
+  document.getElementById("f-subj").focus();
+});
+
+document.getElementById("add-filter-btn").addEventListener("click", () => {
+  closeAllForms();
+  document.getElementById("add-filter-form").style.display = "block";
+  document.getElementById("f-expr").focus();
+});
+
+document.getElementById("cancel-add-pattern").addEventListener("click", () => closeAllForms());
+document.getElementById("cancel-add-filter").addEventListener("click", () => closeAllForms());
+
+document.getElementById("confirm-add-pattern").addEventListener("click", () => {
+  const s = document.getElementById("f-subj").value.trim() || "?s";
+  const p = document.getElementById("f-pred").value.trim() || "?p";
+  const o = document.getElementById("f-obj").value.trim() || "?o";
+  const id = `p${nextId++}`;
+  const col = state.patterns.length % 4;
+  const row = Math.floor(state.patterns.length / 4);
+  state.patterns.push({ id, subject: s, predicate: p, object: o, x: 60 + col * 230, y: 60 + row * 110 });
+  clearFormFields("f-subj", "f-pred", "f-obj");
+  closeAllForms();
+  renderAll();
+});
+
+document.getElementById("confirm-add-filter").addEventListener("click", () => {
+  const expr = document.getElementById("f-expr").value.trim();
+  if (!expr) return;
+  const id = `f${nextId++}`;
+  state.filters.push({ id, expression: expr, x: 60, y: 60 + (state.patterns.length + state.filters.length) * 80 });
+  clearFormFields("f-expr");
+  closeAllForms();
+  renderAll();
+});
+
+document.getElementById("clear-btn").addEventListener("click", () => {
+  state = mkEmptyState();
+  nextId = 1;
+  closeAllForms();
+  renderAll();
+});
+
+document.getElementById("copy-btn").addEventListener("click", () => {
+  navigator.clipboard.writeText(sparqlOut.textContent).catch(() => {});
+});
+
+document.getElementById("validate-btn").addEventListener("click", async () => {
+  const badge = document.getElementById("validation-badge");
+  const q = sparqlOut.textContent;
+  const r = await invoke("validate_sparql", { query: q }).catch(() => ({ valid: false, error: "IPC error" }));
+  badge.style.display = "inline-block";
+  badge.className = "validation-badge " + (r.valid ? "badge-valid" : "badge-invalid");
+  badge.textContent = r.valid ? "✓ Valid" : ("✗ " + (r.error ?? "Invalid"));
+});
+
+document.getElementById("apply-options-btn").addEventListener("click", () => {
+  const raw = document.getElementById("opt-select-vars").value.trim();
+  state.select_vars = raw ? raw.split(/\s+/).filter(Boolean) : [];
+  const lim = parseInt(document.getElementById("opt-limit").value, 10);
+  const off = parseInt(document.getElementById("opt-offset").value, 10);
+  state.limit  = isNaN(lim) ? null : lim;
+  state.offset = isNaN(off) ? null : off;
+  updateSparql();
+});
+
+// ---------------------------------------------------------------------------
+// Panel tabs
+// ---------------------------------------------------------------------------
+for (const tab of document.querySelectorAll(".panel-tab")) {
+  tab.addEventListener("click", () => {
+    for (const t of document.querySelectorAll(".panel-tab")) t.classList.remove("active");
+    for (const c of document.querySelectorAll(".panel-content")) c.classList.add("hidden");
+    tab.classList.add("active");
+    document.getElementById("tab-" + tab.dataset.tab).classList.remove("hidden");
+    if (tab.dataset.tab === "sparql") updateSparql();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Drag on canvas
+// ---------------------------------------------------------------------------
+canvas.addEventListener("mousemove", e => {
+  if (!dragNode) return;
+  const pt = svgPoint(e);
+  dragNode.x = Math.max(0, pt.x - dragOffset.x);
+  dragNode.y = Math.max(0, pt.y - dragOffset.y);
+  renderNodes();
+  renderEdges();
+});
+canvas.addEventListener("mouseup", () => {
+  if (dragNode) { dragNode = null; updateSparql(); }
+});
+canvas.addEventListener("mouseleave", () => { dragNode = null; });
+
+function svgPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function renderAll() {
+  renderNodes();
+  renderEdges();
+  updatePatternList();
+  updateSparql();
+}
+
+function renderNodes() {
+  nodesLayer.innerHTML = "";
+  state.patterns.forEach((p, i) => nodesLayer.appendChild(makePatternNode(p, i)));
+  state.filters.forEach((f, i) => nodesLayer.appendChild(makeFilterNode(f, i)));
+}
+
+function renderEdges() {
+  edgesLayer.innerHTML = "";
+  // Draw an edge for each JoinEdge in state.
+  for (const edge of state.edges) {
+    const from = state.patterns.find(p => p.id === edge.from_pattern_id);
+    const to   = state.patterns.find(p => p.id === edge.to_pattern_id);
+    if (!from || !to) continue;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", from.x + 100);
+    line.setAttribute("y1", from.y + 30);
+    line.setAttribute("x2", to.x + 100);
+    line.setAttribute("y2", to.y + 30);
+    line.setAttribute("stroke", "#e94560");
+    line.setAttribute("stroke-width", "1.5");
+    line.setAttribute("stroke-dasharray", "5 4");
+    line.setAttribute("marker-end", "url(#arrow)");
+    line.setAttribute("opacity", "0.6");
+    edgesLayer.appendChild(line);
+  }
+}
+
+function makePatternNode(p, index) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.setAttribute("transform", `translate(${p.x},${p.y})`);
+  g.style.cursor = "grab";
+
+  const rect = svgRect(200, 64, "#1a2a4a", "#e94560", "1.5", 8);
+
+  const labelText = svgText(`P${index + 1}`, 10, 18, "#e94560", 10, "bold");
+  const spoRaw = `${p.subject} ${p.predicate} ${p.object}`;
+  const spoDisplay = spoRaw.length > 30 ? spoRaw.slice(0, 27) + "..." : spoRaw;
+  const spoText = svgText(spoDisplay, 10, 36, "#c0d0e0", 9, "normal");
+  const idText  = svgText(p.id, 10, 54, "#8a8a9a", 8, "normal");
+
+  g.appendChild(rect);
+  g.appendChild(labelText);
+  g.appendChild(spoText);
+  g.appendChild(idText);
+  attachDrag(g, p);
+  return g;
+}
+
+function makeFilterNode(f, index) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.setAttribute("transform", `translate(${f.x},${f.y})`);
+  g.style.cursor = "grab";
+
+  const rect = svgRect(200, 50, "#2a1a2a", "#a040c0", "1.5", 8);
+  const labelText = svgText(`F${index + 1}`, 10, 17, "#c060ff", 10, "bold");
+  const exprRaw = f.expression;
+  const exprDisplay = exprRaw.length > 28 ? exprRaw.slice(0, 25) + "..." : exprRaw;
+  const exprText = svgText(exprDisplay, 10, 36, "#d0c0e0", 9, "normal");
+
+  g.appendChild(rect);
+  g.appendChild(labelText);
+  g.appendChild(exprText);
+  attachDrag(g, f);
+  return g;
+}
+
+function svgRect(w, h, fill, stroke, strokeWidth, rx) {
+  const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  r.setAttribute("width", w);
+  r.setAttribute("height", h);
+  r.setAttribute("fill", fill);
+  r.setAttribute("stroke", stroke);
+  r.setAttribute("stroke-width", strokeWidth);
+  r.setAttribute("rx", rx);
+  return r;
+}
+
+function svgText(content, x, y, fill, fontSize, fontWeight) {
+  const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  t.setAttribute("x", x);
+  t.setAttribute("y", y);
+  t.setAttribute("fill", fill);
+  t.setAttribute("font-size", fontSize);
+  t.setAttribute("font-family", "monospace");
+  t.setAttribute("font-weight", fontWeight);
+  t.textContent = content;
+  return t;
+}
+
+function attachDrag(g, node) {
+  g.addEventListener("mousedown", e => {
+    dragNode = node;
+    const pt = svgPoint(e);
+    dragOffset = { x: pt.x - node.x, y: pt.y - node.y };
+    g.style.cursor = "grabbing";
+    e.stopPropagation();
+  });
+  g.addEventListener("mouseup", () => { g.style.cursor = "grab"; });
+}
+
+// ---------------------------------------------------------------------------
+// Pattern / Filter list in the panel
+// ---------------------------------------------------------------------------
+function updatePatternList() {
+  patternList.innerHTML = "";
+  if (state.patterns.length === 0 && state.filters.length === 0) {
+    patternList.innerHTML =
+      '<div class="empty-state">No nodes yet.<br>Click "+ Triple" to begin.</div>';
+    return;
+  }
+
+  if (state.patterns.length > 0) {
+    const heading = document.createElement("div");
+    heading.className = "section-heading";
+    heading.textContent = `Triple Patterns (${state.patterns.length})`;
+    patternList.appendChild(heading);
+
+    state.patterns.forEach((p, i) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="card-title">P${i + 1} &mdash; ${escHtml(p.id)}</div>
+        <div class="card-body">${escHtml(p.subject)} ${escHtml(p.predicate)} ${escHtml(p.object)}</div>
+        <span class="card-delete" title="Remove pattern">&times;</span>
+      `;
+      card.querySelector(".card-delete").addEventListener("click", e => {
+        e.stopPropagation();
+        state.patterns.splice(i, 1);
+        renderAll();
+      });
+      patternList.appendChild(card);
+    });
+  }
+
+  filterList.innerHTML = "";
+  if (state.filters.length > 0) {
+    const heading = document.createElement("div");
+    heading.className = "section-heading";
+    heading.textContent = `Filters (${state.filters.length})`;
+    filterList.appendChild(heading);
+
+    state.filters.forEach((f, i) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="card-title">F${i + 1} &mdash; FILTER</div>
+        <div class="card-body">${escHtml(f.expression)}</div>
+        <span class="card-delete" title="Remove filter">&times;</span>
+      `;
+      card.querySelector(".card-delete").addEventListener("click", e => {
+        e.stopPropagation();
+        state.filters.splice(i, 1);
+        renderAll();
+      });
+      filterList.appendChild(card);
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SPARQL generation
+// ---------------------------------------------------------------------------
+async function updateSparql() {
+  const result = await invoke("generate_sparql", { graph: state })
+    .catch(err => ({ sparql: `-- Error: ${err} --`, warnings: [] }));
+  sparqlOut.textContent = result.sparql;
+  // Reset validation badge on change.
+  const badge = document.getElementById("validation-badge");
+  badge.style.display = "none";
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function closeAllForms() {
+  document.getElementById("add-pattern-form").style.display = "none";
+  document.getElementById("add-filter-form").style.display = "none";
+}
+
+function clearFormFields(...ids) {
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  }
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard shortcut: Escape closes open forms
+// ---------------------------------------------------------------------------
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeAllForms();
+});
+
+// ---------------------------------------------------------------------------
+// Initial render
+// ---------------------------------------------------------------------------
+renderAll();
+</script>
+</body>
+</html>

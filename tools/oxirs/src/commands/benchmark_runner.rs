@@ -356,6 +356,187 @@ fn compute_benchmark_result(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Comprehensive benchmark suite
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Standard query category for grouping results.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum QueryCategory {
+    /// Single triple-pattern lookups.
+    SimpleSelect,
+    /// Multi-way joins (2–5 patterns).
+    Join,
+    /// GROUP BY / COUNT / AVG aggregations.
+    Aggregation,
+    /// OPTIONAL and MINUS patterns.
+    Optional,
+    /// FILTER expressions.
+    Filter,
+    /// UNION queries.
+    Union,
+    /// Subquery / VALUES injection.
+    Subquery,
+    /// INSERT / DELETE / LOAD write operations.
+    Update,
+}
+
+/// A single named query in the comprehensive suite.
+#[derive(Debug, Clone)]
+pub struct CatalogQuery {
+    /// Short identifier (e.g. `"SP2B-Q1"`).
+    pub id: String,
+    /// Human-readable description.
+    pub description: String,
+    /// SPARQL query text.
+    pub sparql: String,
+    /// Functional category.
+    pub category: QueryCategory,
+}
+
+/// A pre-built comprehensive benchmark suite covering the major query
+/// patterns described in `BENCHMARK_SUITE.md`.
+///
+/// Use [`ComprehensiveBenchmarkSuite::standard()`] to obtain the full
+/// catalog, then pass individual queries to a [`BenchmarkRunner`].
+pub struct ComprehensiveBenchmarkSuite {
+    queries: Vec<CatalogQuery>,
+}
+
+impl ComprehensiveBenchmarkSuite {
+    /// Construct the standard suite with queries representing every category.
+    #[allow(clippy::vec_init_then_push)]
+    pub fn standard() -> Self {
+        let mut queries = Vec::new();
+
+        // ── Simple SELECT ────────────────────────────────────────────────────
+        queries.push(CatalogQuery {
+            id: "COMP-SS-1".into(),
+            description: "Single triple-pattern lookup".into(),
+            sparql: "SELECT ?s ?o WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?o }".into(),
+            category: QueryCategory::SimpleSelect,
+        });
+        queries.push(CatalogQuery {
+            id: "COMP-SS-2".into(),
+            description: "Two-pattern fetch with LIMIT".into(),
+            sparql: "SELECT ?s ?name WHERE { ?s a <http://xmlns.com/foaf/0.1/Person> . ?s <http://xmlns.com/foaf/0.1/name> ?name } LIMIT 100".into(),
+            category: QueryCategory::SimpleSelect,
+        });
+
+        // ── JOIN ─────────────────────────────────────────────────────────────
+        queries.push(CatalogQuery {
+            id: "COMP-J-2".into(),
+            description: "Two-way join".into(),
+            sparql: "SELECT ?person ?name ?email WHERE { ?person a <http://xmlns.com/foaf/0.1/Person> . ?person <http://xmlns.com/foaf/0.1/name> ?name . ?person <http://xmlns.com/foaf/0.1/mbox> ?email }".into(),
+            category: QueryCategory::Join,
+        });
+        queries.push(CatalogQuery {
+            id: "COMP-J-4".into(),
+            description: "Four-way join".into(),
+            sparql: "SELECT ?p ?name ?email ?age ?city WHERE { ?p a <http://xmlns.com/foaf/0.1/Person> . ?p <http://xmlns.com/foaf/0.1/name> ?name . ?p <http://xmlns.com/foaf/0.1/mbox> ?email . ?p <http://xmlns.com/foaf/0.1/age> ?age . ?p <http://xmlns.com/foaf/0.1/based_near> ?city }".into(),
+            category: QueryCategory::Join,
+        });
+
+        // ── AGGREGATION ───────────────────────────────────────────────────────
+        queries.push(CatalogQuery {
+            id: "COMP-AG-1".into(),
+            description: "COUNT all triples".into(),
+            sparql: "SELECT (COUNT(*) AS ?count) WHERE { ?s ?p ?o }".into(),
+            category: QueryCategory::Aggregation,
+        });
+        queries.push(CatalogQuery {
+            id: "COMP-AG-2".into(),
+            description: "GROUP BY with COUNT".into(),
+            sparql: "SELECT ?type (COUNT(?s) AS ?n) WHERE { ?s a ?type } GROUP BY ?type ORDER BY DESC(?n) LIMIT 10".into(),
+            category: QueryCategory::Aggregation,
+        });
+        queries.push(CatalogQuery {
+            id: "COMP-AG-3".into(),
+            description: "AVG aggregation".into(),
+            sparql: "SELECT ?type (AVG(?val) AS ?avg) WHERE { ?s a ?type . ?s <http://schema.org/value> ?val } GROUP BY ?type".into(),
+            category: QueryCategory::Aggregation,
+        });
+
+        // ── OPTIONAL ─────────────────────────────────────────────────────────
+        queries.push(CatalogQuery {
+            id: "COMP-OPT-1".into(),
+            description: "OPTIONAL single pattern".into(),
+            sparql: "SELECT ?s ?name ?email WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name . OPTIONAL { ?s <http://xmlns.com/foaf/0.1/mbox> ?email } }".into(),
+            category: QueryCategory::Optional,
+        });
+        queries.push(CatalogQuery {
+            id: "COMP-MINUS-1".into(),
+            description: "MINUS exclusion".into(),
+            sparql: "SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name } MINUS { ?s <http://xmlns.com/foaf/0.1/depiction> ?pic }".into(),
+            category: QueryCategory::Optional,
+        });
+
+        // ── FILTER ───────────────────────────────────────────────────────────
+        queries.push(CatalogQuery {
+            id: "COMP-F-1".into(),
+            description: "FILTER with STRLEN".into(),
+            sparql: "SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name . FILTER(STRLEN(?name) > 5) }".into(),
+            category: QueryCategory::Filter,
+        });
+        queries.push(CatalogQuery {
+            id: "COMP-F-2".into(),
+            description: "FILTER with REGEX".into(),
+            sparql: r#"SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name . FILTER REGEX(?name, "^A") }"#.into(),
+            category: QueryCategory::Filter,
+        });
+
+        // ── UNION ────────────────────────────────────────────────────────────
+        queries.push(CatalogQuery {
+            id: "COMP-UN-1".into(),
+            description: "Two-branch UNION".into(),
+            sparql: "SELECT ?s ?label WHERE { { ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label } UNION { ?s <http://xmlns.com/foaf/0.1/name> ?label } }".into(),
+            category: QueryCategory::Union,
+        });
+
+        // ── SUBQUERY ─────────────────────────────────────────────────────────
+        queries.push(CatalogQuery {
+            id: "COMP-SQ-1".into(),
+            description: "Subquery with LIMIT".into(),
+            sparql: "SELECT ?person ?name WHERE { ?person <http://xmlns.com/foaf/0.1/name> ?name { SELECT ?person WHERE { ?person a <http://xmlns.com/foaf/0.1/Person> } LIMIT 50 } }".into(),
+            category: QueryCategory::Subquery,
+        });
+
+        Self { queries }
+    }
+
+    /// Return all queries in the catalog.
+    pub fn all_queries(&self) -> &[CatalogQuery] {
+        &self.queries
+    }
+
+    /// Return queries filtered to a specific category.
+    pub fn queries_for_category(&self, category: &QueryCategory) -> Vec<&CatalogQuery> {
+        self.queries
+            .iter()
+            .filter(|q| &q.category == category)
+            .collect()
+    }
+
+    /// Build a [`BenchmarkRunner`] pre-loaded with all queries in the suite.
+    pub fn into_runner(self, config: BenchmarkConfig) -> BenchmarkRunner {
+        let mut runner = BenchmarkRunner::with_config(config);
+        for q in self.queries {
+            runner.add_query(q.id, q.sparql);
+        }
+        runner
+    }
+
+    /// Total number of queries in the suite.
+    pub fn len(&self) -> usize {
+        self.queries.len()
+    }
+
+    /// Return `true` if the suite contains no queries.
+    pub fn is_empty(&self) -> bool {
+        self.queries.is_empty()
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Tests
 // ──────────────────────────────────────────────────────────────────────────────
 

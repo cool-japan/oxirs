@@ -1,0 +1,5 @@
+# IRI missing closing >
+@prefix ex: <http://example.org/> .
+<http://example.org/g {
+    ex:s ex:p ex:o .
+}

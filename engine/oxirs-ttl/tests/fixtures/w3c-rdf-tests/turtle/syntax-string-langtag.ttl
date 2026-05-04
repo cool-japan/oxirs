@@ -1,0 +1,3 @@
+# language-tagged string literal
+@prefix ex: <http://example.org/> .
+ex:greeting ex:translation "Hello"@en, "Bonjour"@fr, "Konnichiwa"@ja .

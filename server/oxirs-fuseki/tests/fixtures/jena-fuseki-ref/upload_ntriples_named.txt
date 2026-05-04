@@ -1,0 +1,15 @@
+# Upload N-Triples to named graph
+endpoint: upload
+classification: spec-required
+match_mode: status-only
+description: POST /upload?graph=<uri> with N-Triples returns 2xx
+
+=== request
+POST /upload?graph=http%3A%2F%2Fexample.org%2Fg1
+Content-Type: application/n-triples
+
+<http://example.org/u3> <http://example.org/p> "v" .
+
+=== response
+200
+

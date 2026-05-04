@@ -1,0 +1,23 @@
+{
+    "id": "el-intersection-001",
+    "title": "EL: intersection on LHS classifies multi-typed individuals",
+    "profiles": ["EL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "IntersectionSubClassOf", "parts": ["Doctor", "Surgeon"], "sup": "DoctorSurgeon" },
+        { "kind": "IntersectionSubClassOf", "parts": ["Doctor", "Pediatrician"], "sup": "PediatricDoctor" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "rdf:type", "object": "Doctor" },
+        { "subject": "alice", "predicate": "rdf:type", "object": "Surgeon" },
+        { "subject": "bob", "predicate": "rdf:type", "object": "Doctor" },
+        { "subject": "bob", "predicate": "rdf:type", "object": "Pediatrician" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "alice", "class": "DoctorSurgeon" },
+        { "kind": "Type", "individual": "bob", "class": "PediatricDoctor" }
+    ],
+    "forbidden": [
+        { "kind": "Type", "individual": "alice", "class": "PediatricDoctor" },
+        { "kind": "Type", "individual": "bob", "class": "DoctorSurgeon" }
+    ]
+}

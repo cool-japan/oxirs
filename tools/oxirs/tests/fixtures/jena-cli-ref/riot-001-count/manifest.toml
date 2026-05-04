@@ -1,0 +1,19 @@
+description = "riot --count reports total triples for a single N-Triples input"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "riot",
+    "--count",
+    "${FIXTURE}/../_data/sample.nt",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Count Results
+Total triples/quads: 3
+"""
+
+[stderr]
+mode = "absent"

@@ -28,6 +28,7 @@ scirs2-core = { workspace = true, features = ["random", "array", "parallel", "si
 
 serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -47,6 +48,7 @@ urlencoding.workspace = true
 uuid.workspace = true
 dashmap.workspace = true
 parking_lot.workspace = true
+seahash.workspace = true
 ordered-float.workspace = true
 rust_decimal.workspace = true
 hex.workspace = true
@@ -60,6 +62,12 @@ oxiarc-zstd.workspace = true
 redis = { workspace = true, features = ["connection-manager"], optional = true }
 lru = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
+cranelift-codegen = { workspace = true, optional = true }
+cranelift-frontend = { workspace = true, optional = true }
+cranelift-jit = { workspace = true, optional = true }
+cranelift-module = { workspace = true, optional = true }
+cranelift-native = { workspace = true, optional = true }
+tantivy = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -73,10 +81,22 @@ star = ["oxirs-star"]
 extensions = []
 parallel = ["rayon", "tokio", "num_cpus"]
 distributed-cache = ["redis", "lru", "tokio", "futures"]
+text-search = ["dep:tantivy"]
+jit = [
+    "dep:cranelift-codegen",
+    "dep:cranelift-frontend",
+    "dep:cranelift-jit",
+    "dep:cranelift-module",
+    "dep:cranelift-native",
+]
 
 [dependencies.oxirs-star]
 workspace = true
 optional = true
+
+[[bin]]
+name = "jena_parity_report"
+path = "src/bin/jena_parity_report.rs"
 
 [[bench]]
 name = "join_performance"
@@ -108,5 +128,18 @@ harness = false
 
 
 [[bench]]
+name = "plan_cache_bench"
+harness = false
+
+[[bench]]
 name = "sparql_bench"
 harness = false
+
+[[bench]]
+name = "analytics_bench"
+harness = false
+
+[[bench]]
+name = "jit_bench"
+harness = false
+required-features = ["jit"]

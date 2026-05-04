@@ -1,0 +1,3 @@
+# RDF list with blank-node head
+@prefix ex: <http://example.org/> .
+ex:s ex:items ( "a" "b" "c" ) .

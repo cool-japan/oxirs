@@ -1,0 +1,29 @@
+{
+    "@context": "dtmi:dtdl:context;3",
+    "@id": "dtmi:example:Thermostat;1",
+    "@type": "Interface",
+    "displayName": "Thermostat",
+    "description": "Reports current temperature and provides a way to set the target temperature.",
+    "contents": [
+        {
+            "@type": ["Telemetry", "Temperature"],
+            "name": "temperature",
+            "displayName": "Current temperature",
+            "unit": "Celsius",
+            "schema": "double"
+        },
+        {
+            "@type": "Property",
+            "name": "targetTemperature",
+            "displayName": "Target Temperature",
+            "unit": "Celsius",
+            "schema": "double",
+            "writable": true
+        },
+        {
+            "@type": "Command",
+            "name": "setTemperature",
+            "displayName": "Set temperature"
+        }
+    ]
+}

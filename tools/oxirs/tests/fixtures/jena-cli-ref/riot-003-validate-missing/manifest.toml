@@ -1,0 +1,21 @@
+description = "riot --validate fails on a missing input file"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "riot",
+    "--validate",
+    "${TMPDIR}/no-such-input.nt",
+]
+exit_code = 1
+
+[stdout]
+mode = "contains"
+expected = """
+Mode: Validation only
+"""
+
+[stderr]
+mode = "contains"
+expected = """
+File does not exist
+"""

@@ -1,0 +1,18 @@
+{
+    "id": "el-property-chain-001",
+    "title": "EL: property chain hasParent ∘ hasParent ⊑ hasGrandparent",
+    "profiles": ["EL", "RLEL"],
+    "axioms": [
+        { "kind": "PropertyChain", "chain": ["hasParent", "hasParent"], "result_role": "hasGrandparent" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "hasParent", "object": "bob" },
+        { "subject": "bob", "predicate": "hasParent", "object": "carol" }
+    ],
+    "expected": [
+        { "kind": "Property", "subject": "alice", "property": "hasParent", "object": "bob" },
+        { "kind": "Property", "subject": "bob", "property": "hasParent", "object": "carol" },
+        { "kind": "Property", "subject": "alice", "property": "hasGrandparent", "object": "carol" }
+    ],
+    "forbidden": []
+}

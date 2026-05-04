@@ -3,6 +3,9 @@
 //! Full implementation of Digital Twin synchronization, sensor/actuator management,
 //! and DTDL (Digital Twin Definition Language) v2 support.
 //!
+//! Also exposes a lightweight property store ([`twin_value::Twin`] /
+//! [`twin_value::TwinValue`]) for use by protocol bridge implementations.
+//!
 //! ## State model
 //!
 //! Each `DigitalTwin` maintains two complementary state maps:
@@ -16,6 +19,10 @@
 //! Deviation analysis in [`DigitalTwinManager::synchronize`] always compares
 //! the *physical* sensor reading against the *digital* `model_state`, so a
 //! deviation is reported even when both values have been observed.
+
+/// Lightweight typed-value store for use by protocol bridges (e.g. J1939 ↔ DTDL).
+pub mod twin_value;
+pub use twin_value::{Twin, TwinValue};
 
 use crate::error::{PhysicsError, PhysicsResult};
 use crate::simulation::SimulationParameters;

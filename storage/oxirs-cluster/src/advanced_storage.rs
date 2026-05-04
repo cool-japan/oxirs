@@ -240,7 +240,7 @@ impl WriteAheadLog {
         drop(serializer);
 
         // Calculate checksum of serialized data
-        let checksum = format!("{:x}", Sha256::digest(&serialized.payload));
+        let checksum = hex::encode(Sha256::digest(&serialized.payload));
         let entry_with_checksum = WalEntry { checksum, ..entry };
 
         // Re-serialize with checksum
@@ -307,7 +307,7 @@ impl WriteAheadLog {
             match serializer.deserialize::<WalEntry>(&serialized_message) {
                 Ok(entry) => {
                     // Verify checksum
-                    let computed_checksum = format!("{:x}", Sha256::digest(&buffer));
+                    let computed_checksum = hex::encode(Sha256::digest(&buffer));
                     if entry.checksum == computed_checksum {
                         let sequence = entry.sequence;
                         recovered_entries.push(entry);
@@ -855,7 +855,7 @@ impl AdvancedStorageBackend {
         };
 
         // Calculate checksum
-        let checksum = format!("{:x}", Sha256::digest(&final_data));
+        let checksum = hex::encode(Sha256::digest(&final_data));
 
         let metadata = SnapshotMetadata {
             last_included_index,
@@ -991,7 +991,7 @@ impl AdvancedStorageBackend {
         let data = fs::read(&snapshot_path).await?;
 
         // Verify checksum
-        let computed_checksum = format!("{:x}", Sha256::digest(&data));
+        let computed_checksum = hex::encode(Sha256::digest(&data));
         if computed_checksum != metadata.checksum {
             let mut stats = self.stats.write().await;
             stats.corruption_detections += 1;

@@ -19,6 +19,7 @@ pub mod adapter;
 pub mod centrality;
 pub mod community;
 pub mod components;
+pub mod graph_analytics_agg;
 pub mod paths;
 pub mod stats;
 
@@ -28,6 +29,9 @@ pub use adapter::{EdgeWeight, NodeId, RdfGraphAdapter};
 pub use centrality::{BetweennessCentrality, DegreeCentrality, PageRank};
 pub use community::LouvainCommunities;
 pub use components::ConnectedComponents;
+pub use graph_analytics_agg::{
+    DegreeDirection, GraphAnalyticsAccumulator, GraphAnalyticsAggregate, GraphAnalyticsError,
+};
 pub use paths::ShortestPaths;
 pub use stats::{is_dag, is_reachable, GraphStats, GraphStatsSummary};
 

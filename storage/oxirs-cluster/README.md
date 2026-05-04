@@ -58,7 +58,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-cluster = "0.2.3"
+oxirs-cluster = "0.3.0"
 ```
 
 ### Basic Usage

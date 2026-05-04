@@ -622,7 +622,7 @@ impl QueryFingerprinter {
             HashAlgorithm::Sha256 => {
                 let mut hasher = Sha256::new();
                 hasher.update(normalized.as_bytes());
-                format!("{:x}", hasher.finalize())
+                hex::encode(hasher.finalize())
             }
             HashAlgorithm::Fnv1a => {
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();

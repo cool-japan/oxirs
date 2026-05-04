@@ -1,0 +1,17 @@
+{
+    "id": "rl-domain-range-001",
+    "title": "RL: rdfs:domain and rdfs:range infer types",
+    "profiles": ["RL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "ObjectPropertyDomain", "property": "hasParent", "class": "Person" },
+        { "kind": "ObjectPropertyRange", "property": "hasParent", "class": "Person" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "hasParent", "object": "bob" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "alice", "class": "Person" },
+        { "kind": "Type", "individual": "bob", "class": "Person" }
+    ],
+    "forbidden": []
+}

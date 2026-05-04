@@ -592,10 +592,25 @@ impl Parser {
         let word: String = chars.into_iter().collect();
 
         if word == keyword {
-            // Check that it's not part of a larger identifier
-            let next_chars: Vec<char> = self.chars.clone().skip(keyword.len()).take(1).collect();
-            if let Some(&next_ch) = next_chars.first() {
-                !next_ch.is_alphanumeric() && next_ch != '_'
+            // Only apply word-boundary check for alphabetic keywords (e.g. "query",
+            // "fragment", "on", "true", "false", "null"). Punctuation-only keywords
+            // like "..." do not need a word-boundary check because they are not
+            // identifiers and can be immediately followed by alphanumeric characters
+            // (e.g. "...FragmentName").
+            let keyword_is_alpha = keyword
+                .chars()
+                .next()
+                .map(|c| c.is_alphabetic())
+                .unwrap_or(false);
+
+            if keyword_is_alpha {
+                let next_chars: Vec<char> =
+                    self.chars.clone().skip(keyword.len()).take(1).collect();
+                if let Some(&next_ch) = next_chars.first() {
+                    !next_ch.is_alphanumeric() && next_ch != '_'
+                } else {
+                    true
+                }
             } else {
                 true
             }

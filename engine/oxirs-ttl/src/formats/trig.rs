@@ -249,16 +249,53 @@ impl TriGParser {
             if line.starts_with("@prefix") {
                 // Parse: @prefix ex: <http://example.org/> .
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 3 {
-                    let prefix = parts[1].trim_end_matches(':');
-                    let iri = parts[2]
-                        .trim_start_matches('<')
-                        .trim_end_matches('>')
-                        .trim_end_matches('.');
-                    // Resolve prefix IRI against base if it's relative
-                    let resolved_iri = Self::resolve_iri(iri, &base_iri);
-                    prefixes.insert(prefix.to_string(), resolved_iri);
+                if parts.len() < 3 {
+                    if !self.lenient {
+                        return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                            message:
+                                "Invalid @prefix declaration: expected `@prefix <name>: <iri> .`"
+                                    .to_string(),
+                            position: TextPosition::start(),
+                        }));
+                    }
+                    i += 1;
+                    continue;
                 }
+                let prefix_token = parts[1];
+                // Per Turtle 1.1 grammar (`PNAME_NS ::= PN_PREFIX? ':'`) the
+                // colon is mandatory. Either the prefix-name token ends with
+                // `:` (e.g. `ex:`) or the next whitespace-separated token is a
+                // bare `:` (e.g. `ex :` — uncommon but still legal).
+                let prefix = if prefix_token.ends_with(':') {
+                    prefix_token.trim_end_matches(':').to_string()
+                } else if parts.get(2).copied() == Some(":") && parts.len() >= 4 {
+                    prefix_token.to_string()
+                } else if !self.lenient {
+                    return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                        message: format!(
+                            "Invalid @prefix declaration: prefix '{prefix_token}' is missing required ':'"
+                        ),
+                        position: TextPosition::start(),
+                    }));
+                } else {
+                    prefix_token.to_string()
+                };
+                // The IRI is the next token after the colon-bearing portion.
+                let iri_token_idx = if prefix_token.ends_with(':') { 2 } else { 3 };
+                let iri = parts
+                    .get(iri_token_idx)
+                    .ok_or_else(|| {
+                        TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                            message: "@prefix declaration missing IRI".to_string(),
+                            position: TextPosition::start(),
+                        })
+                    })?
+                    .trim_start_matches('<')
+                    .trim_end_matches('>')
+                    .trim_end_matches('.');
+                // Resolve prefix IRI against base if it's relative
+                let resolved_iri = Self::resolve_iri(iri, &base_iri);
+                prefixes.insert(prefix, resolved_iri);
                 i += 1;
                 continue;
             }

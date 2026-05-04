@@ -88,7 +88,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-star = "0.2.3"
+oxirs-star = "0.3.0"
 ```
 
 ### Basic Usage

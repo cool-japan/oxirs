@@ -119,6 +119,17 @@ pub const GEO_ENVELOPE: &str = "http://www.opengis.net/def/function/geosparql/en
 /// Boundary function (full URI)
 pub const GEO_BOUNDARY: &str = "http://www.opengis.net/def/function/geosparql/boundary";
 
+/// Relate function (full URI) — DE-9IM pattern matching
+pub const GEO_RELATE: &str = "http://www.opengis.net/def/function/geosparql/relate";
+/// Simplify function (full URI) — Douglas-Peucker geometry simplification
+pub const GEO_SIMPLIFY: &str = "http://www.opengis.net/def/function/geosparql/simplify";
+/// Is-valid function (full URI) — topological validity predicate
+pub const GEO_IS_VALID: &str = "http://www.opengis.net/def/function/geosparql/isValid";
+/// Is-ring function (full URI) — closed + simple LineString predicate
+pub const GEO_IS_RING: &str = "http://www.opengis.net/def/function/geosparql/isRing";
+/// Is-closed function (full URI) — endpoints-equal predicate
+pub const GEO_IS_CLOSED: &str = "http://www.opengis.net/def/function/geosparql/isClosed";
+
 /// Dimension property (full URI)
 pub const GEO_DIMENSION: &str = "http://www.opengis.net/ont/geosparql#dimension";
 /// Coordinate dimension property (full URI)
@@ -295,6 +306,14 @@ pub mod functions {
     // Common Functions
     /// Test the spatial relation using DE-9IM pattern
     pub const RELATE: &str = "relate";
+    /// Simplify a geometry using the Douglas-Peucker algorithm
+    pub const SIMPLIFY: &str = "simplify";
+    /// Check topological validity of a geometry
+    pub const IS_VALID: &str = "isValid";
+    /// Check if a LineString is a ring (closed + simple)
+    pub const IS_RING: &str = "isRing";
+    /// Check if a LineString/MultiLineString is closed (endpoints equal)
+    pub const IS_CLOSED: &str = "isClosed";
     /// Convert geometry to WKT format
     pub const AS_WKT: &str = "asWKT";
     /// Convert geometry to GML format

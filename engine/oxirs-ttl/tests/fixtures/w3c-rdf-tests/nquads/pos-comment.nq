@@ -1,0 +1,3 @@
+# leading comment
+<http://example.org/s> <http://example.org/p> "x" . # trailing comment
+# trailing comment block

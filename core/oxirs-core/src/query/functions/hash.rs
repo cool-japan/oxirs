@@ -17,7 +17,7 @@ pub(super) fn fn_sha1(args: &[Term]) -> Result<Term, OxirsError> {
             let mut hasher = Sha1::new();
             hasher.update(lit.value().as_bytes());
             let result = hasher.finalize();
-            let hex = format!("{result:x}");
+            let hex = hex::encode(result);
             Ok(Term::Literal(Literal::new(&hex)))
         }
         _ => Err(OxirsError::Query(
@@ -40,7 +40,7 @@ pub(super) fn fn_sha256(args: &[Term]) -> Result<Term, OxirsError> {
             let mut hasher = Sha256::new();
             hasher.update(lit.value().as_bytes());
             let result = hasher.finalize();
-            let hex = format!("{result:x}");
+            let hex = hex::encode(result);
             Ok(Term::Literal(Literal::new(&hex)))
         }
         _ => Err(OxirsError::Query(
@@ -63,7 +63,7 @@ pub(super) fn fn_sha384(args: &[Term]) -> Result<Term, OxirsError> {
             let mut hasher = Sha384::new();
             hasher.update(lit.value().as_bytes());
             let result = hasher.finalize();
-            let hex = format!("{result:x}");
+            let hex = hex::encode(result);
             Ok(Term::Literal(Literal::new(&hex)))
         }
         _ => Err(OxirsError::Query(
@@ -86,7 +86,7 @@ pub(super) fn fn_sha512(args: &[Term]) -> Result<Term, OxirsError> {
             let mut hasher = Sha512::new();
             hasher.update(lit.value().as_bytes());
             let result = hasher.finalize();
-            let hex = format!("{result:x}");
+            let hex = hex::encode(result);
             Ok(Term::Literal(Literal::new(&hex)))
         }
         _ => Err(OxirsError::Query(

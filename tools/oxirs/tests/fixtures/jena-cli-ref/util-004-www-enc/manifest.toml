@@ -1,0 +1,11 @@
+description = "www-enc percent-encodes special characters"
+classification = "spec-required"
+argv = ["--quiet", "www-enc", "hello world&foo=bar"]
+exit_code = 0
+
+[stdout]
+mode = "exact"
+expected = "hello%20world%26foo%3Dbar\n"
+
+[stderr]
+mode = "absent"

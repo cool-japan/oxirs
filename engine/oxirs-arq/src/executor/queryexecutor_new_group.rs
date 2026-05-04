@@ -36,6 +36,9 @@ impl QueryExecutor {
             parallel_executor,
             result_cache: Arc::new(RwLock::new(HashMap::new())),
             execution_strategy: ExecutionStrategy::default(),
+            adaptive_stats: Arc::new(crate::optimizer::adaptive::AdaptiveStatsStore::new(1024)),
+            sla_gate: None,
+            execution_budget: None,
         }
     }
     /// Create executor with custom context
@@ -54,7 +57,86 @@ impl QueryExecutor {
             parallel_executor,
             result_cache: Arc::new(RwLock::new(HashMap::new())),
             execution_strategy: ExecutionStrategy::default(),
+            adaptive_stats: Arc::new(crate::optimizer::adaptive::AdaptiveStatsStore::new(1024)),
+            sla_gate: None,
+            execution_budget: None,
         }
+    }
+    /// Attach an SLA gate to this executor.
+    ///
+    /// When set, queries can be routed through
+    /// [`QueryExecutor::execute_for_tenant`] which performs admission control
+    /// before delegating to [`QueryExecutor::execute`].
+    pub fn with_sla_gate(mut self, gate: crate::sla_integration::ArqSlaGate) -> Self {
+        self.sla_gate = Some(gate);
+        self
+    }
+    /// Whether an SLA gate has been attached.
+    pub fn has_sla_gate(&self) -> bool {
+        self.sla_gate.is_some()
+    }
+    /// Borrow the attached SLA gate, if any.
+    pub fn sla_gate(&self) -> Option<&crate::sla_integration::ArqSlaGate> {
+        self.sla_gate.as_ref()
+    }
+    /// Attach a runtime resource budget to this executor.
+    ///
+    /// When set, [`QueryExecutor::execute`] will:
+    ///
+    /// 1. Call [`crate::query_governor::ExecutionBudget::check_time`] at
+    ///    entry, returning early if the wall-time limit is already breached.
+    /// 2. Call [`crate::query_governor::ExecutionBudget::record_result_row`]
+    ///    once for every binding in the produced solution.
+    ///
+    /// Triple-scan recording via
+    /// [`crate::query_governor::ExecutionBudget::record_triple_scan`] is
+    /// provided by the `ExecutionBudget` API but is not yet threaded into
+    /// `execute_single_pattern` — callers that need per-triple enforcement
+    /// should call it directly in their BGP iterator loops.
+    pub fn with_budget(
+        mut self,
+        budget: std::sync::Arc<crate::query_governor::ExecutionBudget>,
+    ) -> Self {
+        self.execution_budget = Some(budget);
+        self
+    }
+    /// Whether a runtime budget has been attached.
+    pub fn has_budget(&self) -> bool {
+        self.execution_budget.is_some()
+    }
+    /// Borrow the attached budget, if any.
+    pub fn budget(&self) -> Option<&std::sync::Arc<crate::query_governor::ExecutionBudget>> {
+        self.execution_budget.as_ref()
+    }
+    /// Execute a query on behalf of `tenant_id`, gated by the attached
+    /// [`crate::sla_integration::ArqSlaGate`].
+    ///
+    /// On admission, the algebra is enqueued in the priority dispatcher (for
+    /// observability), then dispatched immediately via [`Self::execute`].
+    /// On rejection, [`crate::sla_integration::ArqSlaError::SlaExceeded`] is
+    /// returned without touching the dataset.
+    ///
+    /// Returns an `Err(anyhow::Error)` when no gate is attached or when the
+    /// underlying execution fails; the error chain carries the SLA root cause
+    /// when applicable.
+    pub fn execute_for_tenant(
+        &mut self,
+        tenant_id: &str,
+        algebra: &crate::algebra::Algebra,
+        dataset: &dyn super::dataset::Dataset,
+    ) -> Result<(crate::algebra::Solution, super::stats::ExecutionStats)> {
+        let gate = self
+            .sla_gate
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("no SLA gate attached to QueryExecutor"))?;
+        let admitted = gate
+            .admit(tenant_id, ())
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
+        // Stick the admitted entry into the priority dispatcher for observability,
+        // then immediately dequeue (single-thread mode).
+        gate.enqueue(&admitted, format!("query for {tenant_id}"));
+        let _ = gate.next_dispatch();
+        self.execute(algebra, dataset)
     }
     /// Execute using serial strategy with index-aware optimizations
     pub(super) fn execute_serial(

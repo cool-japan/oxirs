@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oxirs-embed.fullname" . }}
+  labels:
+    {{- include "oxirs-embed.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "oxirs-embed.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "oxirs-embed.selectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.service.metricsPort | quote }}
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ include "oxirs-embed.serviceAccountName" . }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: oxirs-embed
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: OXIRS_EMBED_BIND
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "oxirs-embed.fullname" . }}
+                  key: bindAddress
+            - name: OXIRS_EMBED_METRICS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "oxirs-embed.fullname" . }}
+                  key: metricsAddress
+            - name: OXIRS_EMBED_LOG
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "oxirs-embed.fullname" . }}
+                  key: logLevel
+            - name: OXIRS_EMBED_DISTRIBUTED
+              value: {{ .Values.distributed.enabled | quote }}
+            - name: OXIRS_EMBED_NUM_SHARDS
+              value: {{ .Values.distributed.numShards | quote }}
+            - name: OXIRS_EMBED_NUM_WORKERS
+              value: {{ .Values.distributed.numWorkers | quote }}
+            - name: OXIRS_EMBED_UPDATE_MODE
+              value: {{ .Values.distributed.updateMode | quote }}
+            - name: OXIRS_EMBED_SHARDING_STRATEGY
+              value: {{ .Values.distributed.shardingStrategy | quote }}
+            - name: OXIRS_EMBED_MODEL_TYPE
+              value: {{ .Values.config.modelType | quote }}
+            - name: OXIRS_EMBED_MODEL_DIMENSIONS
+              value: {{ .Values.config.modelDimensions | quote }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.probes.liveness }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.probes.readiness }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "oxirs-embed.fullname" . }}-data
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

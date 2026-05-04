@@ -1,0 +1,15 @@
+# ASK query, JSON results.
+endpoint: sparql_query
+classification: spec-required
+match_mode: structural-json
+description: ASK query returns boolean false on empty store, JSON format
+
+=== request
+GET /sparql?query=ASK%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D
+Accept: application/sparql-results+json
+
+=== response
+200
+Content-Type: application/sparql-results+json
+
+{"head":{},"boolean":false}

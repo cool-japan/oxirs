@@ -26,6 +26,19 @@ where
     K: Ord + Clone + Serialize + for<'de> Deserialize<'de> + Debug,
     V: Clone + Serialize + for<'de> Deserialize<'de> + Debug,
 {
+    /// Create an empty iterator that yields no entries.
+    ///
+    /// Used when the underlying B+Tree has no root page (empty store).
+    pub fn empty(buffer_pool: Arc<BufferPool>) -> Self {
+        BTreeIterator {
+            buffer_pool,
+            current_leaf: None,
+            current_entries: Vec::new(),
+            current_index: 0,
+            end_key: None,
+        }
+    }
+
     /// Create a new iterator starting from a leaf node
     pub fn new(
         buffer_pool: Arc<BufferPool>,

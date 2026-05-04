@@ -1,26 +1,50 @@
-//! Comparison constraint implementations
+//! Comparison constraint implementations.
+//!
+//! This module groups SHACL constraints that compare the value nodes of a
+//! property shape against either another property's values or a fixed value
+//! list. Each struct corresponds to one SHACL Core constraint component:
+//!
+//! | SHACL parameter            | Spec section | Struct                                       |
+//! |----------------------------|--------------|----------------------------------------------|
+//! | `sh:equals`                | §4.5.1       | [`EqualsConstraint`]                         |
+//! | `sh:disjoint`              | §4.5.2       | [`DisjointConstraint`]                       |
+//! | `sh:lessThan`              | §4.5.3       | [`LessThanConstraint`]                       |
+//! | `sh:lessThanOrEquals`      | §4.5.4       | [`LessThanOrEqualsConstraint`]               |
+//! | `sh:in`                    | §4.8.3       | [`InConstraint`]                             |
+//! | `sh:hasValue`              | §4.8.2       | [`HasValueConstraint`]                       |
 
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
 use crate::Result;
 use oxirs_core::{model::Term, rdf_store::Store};
 use serde::{Deserialize, Serialize};
 
-/// Equals constraint
+/// `sh:equals` constraint (SHACL Core §4.5.1).
+///
+/// Validates that the set of value nodes for the focus path equals the set of
+/// values for the property identified by `property` on the focus node.
+/// Two value sets are equal iff they contain the same RDF terms.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EqualsConstraint {
+    /// The property whose values must equal the current shape's value nodes.
     pub property: Term,
 }
 
 impl EqualsConstraint {
+    /// Build an `sh:equals` constraint that compares against the given property.
     pub fn new(property: Term) -> Self {
         Self { property }
     }
 
+    /// Structural validation of the constraint definition itself.
+    /// Always succeeds for `EqualsConstraint`; the property reference is checked at evaluation time.
     pub fn validate(&self) -> Result<()> {
         // Basic validation of the constraint structure
         Ok(())
     }
 
+    /// Evaluate the constraint against `context.values` using `store` to look up
+    /// the comparator property's values for the focus node. Returns
+    /// [`ConstraintEvaluationResult::Satisfied`] when both value sets are equal.
     pub fn evaluate(
         &self,
         context: &ConstraintContext,
@@ -60,9 +84,13 @@ impl EqualsConstraint {
     }
 }
 
-/// Disjoint constraint
+/// `sh:disjoint` constraint (SHACL Core §4.5.2).
+///
+/// Validates that the set of value nodes is disjoint from the set of values
+/// for the named comparator property — i.e. the two sets share no RDF term.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DisjointConstraint {
+    /// The comparator property whose values must not appear in the current value set.
     pub property: Term,
 }
 
@@ -115,9 +143,14 @@ impl DisjointConstraint {
     }
 }
 
-/// Less than constraint
+/// `sh:lessThan` constraint (SHACL Core §4.5.3).
+///
+/// For every value node `v` of the focus shape, there must be at least one
+/// value `w` of the comparator property such that `v < w` under SPARQL ordering.
+/// Non-numeric (and non-comparable) value nodes are skipped.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LessThanConstraint {
+    /// Comparator property whose values must each be greater than every value node.
     pub property: Term,
 }
 
@@ -188,9 +221,12 @@ impl LessThanConstraint {
     }
 }
 
-/// Less than or equals constraint
+/// `sh:lessThanOrEquals` constraint (SHACL Core §4.5.4).
+///
+/// Like [`LessThanConstraint`] but uses `<=` instead of strict `<`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LessThanOrEqualsConstraint {
+    /// Comparator property whose values must each be greater than or equal to every value node.
     pub property: Term,
 }
 
@@ -258,9 +294,13 @@ impl LessThanOrEqualsConstraint {
     }
 }
 
-/// In constraint
+/// `sh:in` constraint (SHACL Core §4.8.3).
+///
+/// Validates that every value node is contained in the explicit, ordered list
+/// of allowed values declared via `sh:in`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InConstraint {
+    /// The closed enumeration of permitted RDF terms.
     pub values: Vec<Term>,
 }
 
@@ -721,9 +761,13 @@ mod tests {
     }
 }
 
-/// Has value constraint
+/// `sh:hasValue` constraint (SHACL Core §4.8.2).
+///
+/// Validates that the set of value nodes contains at least one occurrence of
+/// the configured RDF term. Empty value sets fail the constraint.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HasValueConstraint {
+    /// The required RDF term that must appear among the value nodes.
     pub value: Term,
 }
 

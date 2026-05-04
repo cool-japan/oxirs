@@ -189,6 +189,7 @@ impl TurtleTokenizer {
                 }))
             }
             '"' => self.read_string_literal(start_position),
+            '\'' => self.read_single_quoted_string_literal(start_position),
             '@' => self.read_at_keyword_or_language_tag(start_position),
             '_' => self.read_blank_node_label(start_position),
             '^' => self.read_datatype_annotation(start_position),
@@ -201,7 +202,8 @@ impl TurtleTokenizer {
             )),
             '+' | '-' | '0'..='9' => self.read_numeric_literal(start_position),
             _ => {
-                // Check for boolean keywords (true/false) or prefixed names
+                // Check for boolean keywords (true/false), SPARQL-style
+                // BASE/PREFIX (case-insensitive, no leading `@`), or prefixed names.
                 let remaining = &self.input[self.position..];
                 if remaining.starts_with("true") && self.is_keyword_boundary(4) {
                     Ok((
@@ -219,11 +221,47 @@ impl TurtleTokenizer {
                         },
                         5,
                     ))
+                } else if Self::starts_with_keyword_ci(remaining, "BASE")
+                    && self.is_keyword_boundary(4)
+                {
+                    Ok((
+                        Token {
+                            kind: TokenKind::SparqlBaseKeyword,
+                            position: start_position,
+                        },
+                        4,
+                    ))
+                } else if Self::starts_with_keyword_ci(remaining, "PREFIX")
+                    && self.is_keyword_boundary(6)
+                {
+                    Ok((
+                        Token {
+                            kind: TokenKind::SparqlPrefixKeyword,
+                            position: start_position,
+                        },
+                        6,
+                    ))
                 } else {
                     self.read_prefixed_name_or_prefix(start_position)
                 }
             }
         }
+    }
+
+    /// Returns true if `input` starts with `keyword`, comparing ASCII case-insensitively.
+    fn starts_with_keyword_ci(input: &str, keyword: &str) -> bool {
+        let bytes = input.as_bytes();
+        let kw = keyword.as_bytes();
+        if bytes.len() < kw.len() {
+            return false;
+        }
+        for i in 0..kw.len() {
+            if bytes[i].eq_ignore_ascii_case(&kw[i]) {
+                continue;
+            }
+            return false;
+        }
+        true
     }
 
     /// Consumes and returns the next token.
@@ -370,6 +408,80 @@ impl TurtleTokenizer {
         }))
     }
 
+    /// Reads a single-quoted string literal `'...'` or a triple-single-quoted
+    /// string literal `'''...'''`, per Turtle 1.1 grammar [22] STRING_LITERAL_QUOTE
+    /// and [23] STRING_LITERAL_LONG_QUOTE.
+    pub(crate) fn read_single_quoted_string_literal(
+        &self,
+        position: TextPosition,
+    ) -> TurtleResult<(Token, usize)> {
+        let remaining = &self.input[self.position..];
+        if remaining.starts_with("'''") {
+            return self.read_multiline_single_quoted_string_literal(position);
+        }
+
+        let mut end_pos = self.position + 1;
+        let mut escaped = false;
+
+        while end_pos < self.input.len() {
+            let ch = self.input[end_pos..]
+                .chars()
+                .next()
+                .expect("iterator should have next element");
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '\'' {
+                let raw_content = &self.input[self.position + 1..end_pos];
+                let content = self.process_escape_sequences(raw_content)?;
+                let raw_length = end_pos - self.position + 1;
+                return Ok((
+                    Token {
+                        kind: TokenKind::StringLiteral(content),
+                        position,
+                    },
+                    raw_length,
+                ));
+            }
+            end_pos += ch.len_utf8();
+        }
+
+        Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+            message: "Unterminated single-quoted string literal".to_string(),
+            position,
+        }))
+    }
+
+    /// Reads a triple-single-quoted multi-line literal `'''...'''`.
+    pub(crate) fn read_multiline_single_quoted_string_literal(
+        &self,
+        position: TextPosition,
+    ) -> TurtleResult<(Token, usize)> {
+        let mut end_pos = self.position + 3;
+
+        while end_pos + 2 < self.input.len() {
+            if &self.input[end_pos..end_pos + 3] == "'''" {
+                let raw_content = &self.input[self.position + 3..end_pos];
+                let content = self.process_escape_sequences(raw_content)?;
+                let raw_length = end_pos - self.position + 3;
+                return Ok((
+                    Token {
+                        kind: TokenKind::StringLiteral(content),
+                        position,
+                    },
+                    raw_length,
+                ));
+            }
+            end_pos += 1;
+        }
+
+        Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+            message: "Unterminated multiline single-quoted string literal".to_string(),
+            position,
+        }))
+    }
+
     /// Processes escape sequences in a string (e.g., \n, \t, \uXXXX).
     pub(crate) fn process_escape_sequences(&self, input: &str) -> TurtleResult<String> {
         let mut result = String::with_capacity(input.len());
@@ -449,14 +561,25 @@ impl TurtleTokenizer {
                                 ));
                             }
                         }
+                        'b' => result.push('\u{0008}'),
+                        'f' => result.push('\u{000C}'),
                         _ => {
-                            // Unknown escape sequence - just include it as-is
-                            result.push('\\');
-                            result.push(next);
+                            // Per Turtle 1.1 grammar [159s]-[164s], any other
+                            // backslash escape is illegal. Surface a typed
+                            // error rather than silently passing.
+                            return Err(TurtleParseError::syntax(
+                                TurtleSyntaxError::InvalidEscape {
+                                    sequence: next.to_string(),
+                                    position: TextPosition::default(),
+                                },
+                            ));
                         }
                     }
                 } else {
-                    result.push('\\');
+                    return Err(TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                        sequence: String::new(),
+                        position: TextPosition::default(),
+                    }));
                 }
             } else {
                 result.push(ch);
@@ -577,42 +700,139 @@ impl TurtleTokenizer {
         }
     }
 
-    /// Reads a prefixed name or prefix declaration (e.g., foaf:name, foaf).
+    /// Reads a prefixed name or prefix declaration (e.g., `foaf:name`, `foaf`).
+    ///
+    /// Handles PN_LOCAL escape sequences `\<reserved>` (per Turtle 1.1 [172s]
+    /// PN_LOCAL_ESC) and percent-encoded octets `%HH` so that names like
+    /// `ex:item\#1` and `ex:item%201` round-trip correctly.
+    ///
+    /// Implementation walks the input by character indices to stay
+    /// O(n) over the token length and avoid allocating a `Vec<char>`, while
+    /// still tracking exact byte offsets for non-ASCII inputs.
     pub(crate) fn read_prefixed_name_or_prefix(
         &self,
         position: TextPosition,
     ) -> TurtleResult<(Token, usize)> {
         let remaining = &self.input[self.position..];
 
-        // Find the end of the identifier
-        let end = remaining
-            .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-' && c != ':')
-            .unwrap_or(remaining.len());
-
-        let identifier = &remaining[..end];
-        let raw_length = end;
-
-        if let Some(colon_pos) = identifier.find(':') {
-            // Prefixed name
-            let prefix = identifier[..colon_pos].to_string();
-            let local = identifier[colon_pos + 1..].to_string();
-            Ok((
-                Token {
-                    kind: TokenKind::PrefixedName(prefix, local),
-                    position,
-                },
-                raw_length,
-            ))
-        } else {
-            // Just a prefix name (used in @prefix declarations)
-            Ok((
-                Token {
-                    kind: TokenKind::PrefixName(identifier.to_string()),
-                    position,
-                },
-                raw_length,
-            ))
+        // Step 1: read PN_PREFIX (alphanumeric + underscore + dash).
+        let mut iter = remaining.char_indices().peekable();
+        let mut prefix_byte_end = 0;
+        while let Some(&(byte_idx, c)) = iter.peek() {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                prefix_byte_end = byte_idx + c.len_utf8();
+                iter.next();
+            } else {
+                break;
+            }
         }
+
+        // Step 2: check for the optional ':' separator.
+        let colon_byte_end = match iter.peek() {
+            Some(&(byte_idx, ':')) => {
+                iter.next();
+                byte_idx + 1
+            }
+            _ => {
+                // No colon: bare prefix-name token.
+                let identifier = &remaining[..prefix_byte_end];
+                return Ok((
+                    Token {
+                        kind: TokenKind::PrefixName(identifier.to_string()),
+                        position,
+                    },
+                    prefix_byte_end,
+                ));
+            }
+        };
+
+        // Step 3: read PN_LOCAL — may include \-escapes and %HH.
+        let mut local_byte_end = colon_byte_end;
+        let mut has_escape = false;
+        while let Some(&(byte_idx, c)) = iter.peek() {
+            if c == '\\' {
+                // Look ahead at the next character without consuming.
+                let after = byte_idx + 1;
+                let next_ch = remaining[after..].chars().next();
+                if let Some(esc) = next_ch {
+                    if matches!(
+                        esc,
+                        '_' | '~'
+                            | '.'
+                            | '-'
+                            | '!'
+                            | '$'
+                            | '&'
+                            | '\''
+                            | '('
+                            | ')'
+                            | '*'
+                            | '+'
+                            | ','
+                            | ';'
+                            | '='
+                            | '/'
+                            | '?'
+                            | '#'
+                            | '@'
+                            | '%'
+                    ) {
+                        local_byte_end = byte_idx + 1 + esc.len_utf8();
+                        // advance iterator past both characters
+                        iter.next();
+                        iter.next();
+                        has_escape = true;
+                        continue;
+                    }
+                }
+                break;
+            }
+            if c == '%' {
+                // Need exactly two hex digits.
+                let after = byte_idx + 1;
+                let h1 = remaining[after..].chars().next();
+                let h2 = h1.and_then(|_| remaining[after + 1..].chars().next());
+                if matches!(
+                    (h1, h2),
+                    (Some(c1), Some(c2)) if c1.is_ascii_hexdigit() && c2.is_ascii_hexdigit()
+                ) {
+                    local_byte_end = byte_idx + 3;
+                    iter.next();
+                    iter.next();
+                    iter.next();
+                    continue;
+                }
+                break;
+            }
+            if c.is_alphanumeric() || c == '_' || c == '-' || c == '.' || c == ':' {
+                local_byte_end = byte_idx + c.len_utf8();
+                iter.next();
+            } else {
+                break;
+            }
+        }
+
+        // Trim a trailing dot — the dot is the statement terminator and not
+        // part of PN_LOCAL ([171s] last-char rule).
+        while local_byte_end > colon_byte_end && remaining[..local_byte_end].ends_with('.') {
+            local_byte_end -= 1;
+        }
+
+        let prefix = &remaining[..prefix_byte_end];
+        let raw_local = &remaining[colon_byte_end..local_byte_end];
+        let local = if has_escape {
+            unescape_pn_local(raw_local)
+        } else {
+            raw_local.to_string()
+        };
+
+        Ok((
+            Token {
+                kind: TokenKind::PrefixedName(prefix.to_string(), local),
+                position,
+            },
+            local_byte_end,
+        ))
     }
 
     /// Reads an empty prefix name (e.g., :alice).
@@ -788,4 +1008,51 @@ impl TurtleTokenizer {
             end,
         ))
     }
+}
+
+/// Unescape a PN_LOCAL run by replacing each `\X` sequence with `X` for the
+/// PN_LOCAL_ESC reserved set.
+fn unescape_pn_local(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(next) = chars.next() {
+                if matches!(
+                    next,
+                    '_' | '~'
+                        | '.'
+                        | '-'
+                        | '!'
+                        | '$'
+                        | '&'
+                        | '\''
+                        | '('
+                        | ')'
+                        | '*'
+                        | '+'
+                        | ','
+                        | ';'
+                        | '='
+                        | '/'
+                        | '?'
+                        | '#'
+                        | '@'
+                        | '%'
+                ) {
+                    out.push(next);
+                } else {
+                    // Should not happen because the tokenizer only consumes
+                    // legal escapes. Preserve verbatim as a fallback.
+                    out.push('\\');
+                    out.push(next);
+                }
+            } else {
+                out.push('\\');
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }

@@ -1,0 +1,3 @@
+# quoted triple as object (RDF-star)
+@prefix ex: <http://example.org/> .
+ex:claim ex:asserts << ex:alice ex:age 30 >> .

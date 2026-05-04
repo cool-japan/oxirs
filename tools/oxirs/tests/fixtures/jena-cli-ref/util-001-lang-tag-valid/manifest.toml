@@ -1,0 +1,13 @@
+description = "lang-tag --validate accepts a well-formed BCP-47 tag"
+classification = "spec-required"
+argv = ["--quiet", "lang-tag", "en-US", "--validate"]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Valid BCP-47 language tag: en-US
+"""
+
+[stderr]
+mode = "absent"

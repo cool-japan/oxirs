@@ -1,0 +1,16 @@
+# ASK query, CSV results.
+endpoint: sparql_query
+classification: spec-required
+match_mode: csv
+description: ASK returns single-column CSV with bool
+
+=== request
+GET /sparql?query=ASK%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D
+Accept: text/csv
+
+=== response
+200
+Content-Type: text/csv
+
+result
+false

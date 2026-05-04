@@ -1,0 +1,20 @@
+# SELECT after upload returns CSV with rows.
+# We seed via INSERT DATA in a single fixture (POST update) — but
+# every fixture starts fresh, so here we do a SELECT against an
+# inserted-via-FORM body in the same request: actually, this fixture
+# only validates header on empty store. The shape is the same as
+# csv_empty but ensures CSV header bytes use \r\n and the spec
+# header line is exactly empty when no bindings.
+endpoint: sparql_query
+classification: spec-required
+match_mode: bytes-prefix
+description: CSV results: empty SELECT just emits header line then \r\n
+
+=== request
+GET /sparql?query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%200
+Accept: text/csv
+
+=== response
+200
+Content-Type: text/csv
+

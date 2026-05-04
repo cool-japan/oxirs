@@ -1,0 +1,26 @@
+{
+    "@context": "dtmi:dtdl:context;3",
+    "@id": "dtmi:example:EnergyMeter;2",
+    "@type": "Interface",
+    "displayName": "Energy Meter",
+    "contents": [
+        {
+            "@type": ["Telemetry", "Power"],
+            "name": "currentPower",
+            "unit": "watt",
+            "schema": "double"
+        },
+        {
+            "@type": ["Telemetry", "Energy"],
+            "name": "totalEnergy",
+            "unit": "kilowattHour",
+            "schema": "double"
+        },
+        {
+            "@type": "Property",
+            "name": "meterID",
+            "schema": "string",
+            "writable": false
+        }
+    ]
+}

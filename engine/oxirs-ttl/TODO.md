@@ -1,6 +1,6 @@
 # OxiRS TTL - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Status: Production Ready
 
@@ -67,10 +67,15 @@ OxiRS TTL provides streaming RDF parsing and serialization with comprehensive fo
 - ✅ Extended format conversion options
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] Full W3C compliance certification
-- [ ] Long-term support guarantees
-- [ ] Enterprise features
-- [ ] Comprehensive benchmarks
+- [x] Full W3C compliance certification (completed 2026-04-30)
+  - **Goal:** Pass every test in the W3C RDF 1.1 / 1.2 conformance suite for Turtle, N-Triples, N-Quads, and TriG that the parser/serializer does not yet pass; document any constructs that remain unsupported as typed errors (no silent passes). N3 is best-effort (no W3C conformance suite).
+  - **Design:** Vendor W3C RDF test corpus under `tests/fixtures/w3c-rdf-tests/` (pinned commit) covering Turtle, N-Triples, TriG, N-Quads (positive/negative parser tests + eval). Driver `tests/w3c_compliance.rs` reads per-format manifest, dispatches by `mf:Test` type. Cluster failures by category and close in `src/parser/{turtle,nquads,trig,ntriples}.rs` and `src/serializer/`. RDF 1.2 quoted-triple coverage: TriG-star and N-Quads-star round-trip (oxirs-star handles SPARQL-star).
+  - **Files:** `src/parser/{turtle,nquads,trig,ntriples,n3}.rs`, `src/serializer/{turtle,nquads,trig,ntriples}.rs`, `tests/w3c_compliance.rs` (new), `tests/fixtures/w3c-rdf-tests/` (vendored, pinned)
+  - **Tests:** unit per-parser positive + negative (escapes, IRI refs, blank scope, prefix declarations, language tags, datatype IRIs); integration W3C corpus per format with `pass_rate >= 0.99`; property parse → serialize → parse round-trip stability over N=1000 generated graphs
+  - **Risk:** RDF 1.2 spec settling; some tests may flap. Mitigation: pin to specific test-suite commit; document version in test header.
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing
 

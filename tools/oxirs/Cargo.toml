@@ -19,8 +19,10 @@ scirs2-graph = { workspace = true }  # Graph algorithms (betweenness, closeness,
 # scirs2-linalg, scirs2-optimize will be added when needed
 oxirs-core.workspace = true
 oxirs-arq.workspace = true
+oxirs-ttl.workspace = true
 oxirs-fuseki.workspace = true
 oxirs-tdb.workspace = true
+oxirs-rule.workspace = true
 oxirs-samm.workspace = true
 clap.workspace = true
 tokio.workspace = true
@@ -40,8 +42,8 @@ tempfile.workspace = true    # Temporary file handling
 indicatif.workspace = true  # Progress bars
 colored = "3.1"     # Colored output
 prettytable-rs = "0.10"  # Table formatting
-rustyline = "17.0"  # Interactive mode
-rustyline-derive = "0.11"  # Helper derive macros
+rustyline = "18.0"  # Interactive mode
+rustyline-derive = "0.12"  # Helper derive macros
 strsim = "0.11"     # String similarity for suggestions
 regex.workspace = true
 once_cell.workspace = true
@@ -62,13 +64,17 @@ hostname = "0.4"    # System hostname for test reports
 md5.workspace = true
 hex.workspace = true         # Hex encoding for checksums
 rust_xlsxwriter = { workspace = true, optional = true }  # Excel XLSX file generation (feature-gated for Pure Rust policy)
+keyring-core = { workspace = true, optional = true }  # System keyring integration (platform-specific, feature-gated)
+apple-native-keyring-store = { workspace = true, optional = true }  # macOS Keychain backend for keyring
 inferno = "0.12"    # Flame graph generation for profiling
-printpdf = "0.9"    # PDF generation for reports
+printpdf = { version = "0.9", optional = true }    # PDF generation for reports (feature-gated; requires pdf-export feature)
 handlebars.workspace = true  # Template engine for custom output formats
+oxilangtag.workspace = true  # BCP-47 language tag validation and normalization
 
 [dev-dependencies]
 criterion.workspace = true
 tokio-test.workspace = true
+wiremock.workspace = true
 
 [features]
 default = []
@@ -78,15 +84,22 @@ all-features = [
     "cluster",
     "text",
     "geo",
-    "vec"
+    "vec",
+    "pdf-export"
 ]
 excel-export = ["rust_xlsxwriter"]
+pdf-export = ["dep:printpdf"]
+system-keyring = ["dep:keyring-core", "dep:apple-native-keyring-store"]  # Enable OS-level secret storage (macOS Keychain, Windows Credential Manager, Linux Secret Service)
 star = ["oxirs-star"]
 ai = ["oxirs-chat"] # oxirs-embed temporarily disabled
 cluster = ["oxirs-cluster"]
 text = ["tantivy"]
 geo = []
 vec = ["oxirs-vec"]
+# DuckDB-backed TSDB chunk inspection (`oxirs tsdb duck-db`). Pulls libduckdb
+# C dependencies via `oxirs-tsdb`'s `duckdb` feature; off by default per the
+# COOLJAPAN Pure Rust default policy.
+tsdb-duckdb = ["dep:oxirs-tsdb", "dep:arrow"]
 
 [dependencies.oxirs-star]
 workspace = true
@@ -111,6 +124,16 @@ optional = true
 [dependencies.tantivy]
 workspace = true
 optional = true
+
+[dependencies.oxirs-tsdb]
+workspace = true
+optional = true
+features = ["duckdb"]
+
+[dependencies.arrow]
+workspace = true
+optional = true
+features = ["prettyprint"]
 
 [package.metadata.docs.rs]
 # Use minimal features for docs.rs build (avoid features with system dependencies)

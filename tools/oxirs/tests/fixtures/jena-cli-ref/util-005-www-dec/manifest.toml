@@ -1,0 +1,11 @@
+description = "www-dec reverses percent-encoding"
+classification = "spec-required"
+argv = ["--quiet", "www-dec", "hello%20world%26foo%3Dbar"]
+exit_code = 0
+
+[stdout]
+mode = "exact"
+expected = "hello world&foo=bar\n"
+
+[stderr]
+mode = "absent"

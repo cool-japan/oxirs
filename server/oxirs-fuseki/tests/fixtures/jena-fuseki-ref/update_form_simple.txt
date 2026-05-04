@@ -1,0 +1,15 @@
+# SPARQL Update via form-encoded POST
+endpoint: sparql_update
+classification: spec-required
+match_mode: status-only
+description: POST /update with form-encoded INSERT DATA returns 2xx
+
+=== request
+POST /update
+Content-Type: application/x-www-form-urlencoded
+
+update=INSERT%20DATA%20%7B%20%3Chttp%3A%2F%2Fex%2Fa%3E%20%3Chttp%3A%2F%2Fex%2Fp%3E%20%22v%22%20.%20%7D
+
+=== response
+200
+

@@ -1,0 +1,14 @@
+description = "q-parse identifies a DESCRIBE query"
+classification = "spec-required"
+argv = ["--quiet", "q-parse", "DESCRIBE <http://example.org/alice>"]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Query type : Describe
+Parse OK
+"""
+
+[stderr]
+mode = "absent"

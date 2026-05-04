@@ -1,0 +1,22 @@
+description = "rdf-diff of identical graphs reports zero changes on the summary line"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "rdf-diff",
+    "${FIXTURE}/../_data/sample.nt",
+    "${FIXTURE}/../_data/sample.nt",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+RDF Diff Summary
+Unchanged:    3 triples
+"""
+
+[stderr]
+mode = "contains"
+expected = """
+Diff: 0 removed, 0 added
+"""

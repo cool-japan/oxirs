@@ -1,0 +1,16 @@
+{
+    "id": "ql-equivalent-properties-001",
+    "title": "QL: equivalentProperty allows substitution in queries",
+    "profiles": ["QL", "RL", "RLEL"],
+    "axioms": [
+        { "kind": "EquivalentObjectProperties", "a": "hasOwner", "b": "ownedBy" }
+    ],
+    "data": [
+        { "subject": "rex", "predicate": "hasOwner", "object": "alice" }
+    ],
+    "expected": [
+        { "kind": "Property", "subject": "rex", "property": "hasOwner", "object": "alice" },
+        { "kind": "Property", "subject": "rex", "property": "ownedBy", "object": "alice" }
+    ],
+    "forbidden": []
+}

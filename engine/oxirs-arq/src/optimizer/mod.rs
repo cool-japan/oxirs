@@ -11,6 +11,7 @@ pub mod production_tuning;
 pub mod statistics;
 
 pub mod adaptive;
+pub mod federated_plan;
 pub mod join_order;
 pub mod materialized_view;
 pub mod passes;
@@ -34,10 +35,15 @@ pub use statistics::*;
 
 use crate::algebra::{Algebra, Expression, TriplePattern, Variable};
 use crate::cost_model::{CostEstimate, CostModel, CostModelConfig};
+use crate::optimizer::federated_plan::{
+    FederatedPlanOutcome, FederatedPlanner, SourceSelectivityProvider,
+};
+use crate::plan_cache::{compute_fingerprint, PlanCache};
 use anyhow::Result;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 /// Query complexity metrics for adaptive optimization
 #[derive(Debug, Clone, Default)]
@@ -60,6 +66,27 @@ pub struct Optimizer {
     statistics: Statistics,
     execution_records: Vec<ExecutionRecord>,
     cost_model: CostModel,
+    /// Optional federation-aware planning provider (W2-S4 deepening).
+    ///
+    /// When `Some`, [`Optimizer::optimize`] applies a [`FederatedPlanner`] pass
+    /// after the standard rule/cost-based passes, rewriting BGPs whose IRIs
+    /// resolve to known endpoints into [`crate::algebra::Algebra::Service`]
+    /// nodes.  When `None`, optimization behavior is identical to the
+    /// pre-W2-S4 baseline (no federated rewrite).
+    federated_provider: Option<Arc<dyn SourceSelectivityProvider>>,
+    /// Latency weight passed to [`FederatedPlanner`].  Defaults to 1.0.
+    federated_latency_weight: f64,
+    /// Last federated planning outcome, captured for observability.
+    last_federated_outcome: Option<FederatedPlanOutcome>,
+    /// Optional algebra-level plan cache (JIT phase a).
+    ///
+    /// When `Some`, repeated queries whose algebra fingerprint matches a cached
+    /// entry skip the rule/cost-based optimization passes entirely.  The cache
+    /// is **not** consulted when a federation provider is registered, because
+    /// the federation pass writes observable side-state
+    /// ([`Optimizer::last_federated_outcome`]) that must remain correct on
+    /// every call.
+    plan_cache: Option<PlanCache<Algebra>>,
 }
 
 impl Optimizer {
@@ -70,6 +97,10 @@ impl Optimizer {
             statistics: Statistics::new(),
             execution_records: Vec::new(),
             cost_model: CostModel::new(CostModelConfig::default()),
+            federated_provider: None,
+            federated_latency_weight: 1.0,
+            last_federated_outcome: None,
+            plan_cache: None,
         }
     }
 
@@ -80,11 +111,167 @@ impl Optimizer {
             statistics: Statistics::new(),
             execution_records: Vec::new(),
             cost_model: CostModel::new(cost_config),
+            federated_provider: None,
+            federated_latency_weight: 1.0,
+            last_federated_outcome: None,
+            plan_cache: None,
         }
     }
 
+    /// Enable the algebra-level plan cache with the given LRU `capacity`.
+    ///
+    /// When enabled, calls to [`Self::optimize`] that match a cached fingerprint
+    /// skip the rule/cost-based passes.  The cache is bypassed when a federation
+    /// provider is registered (see [`Self::with_federated_planner`]) to preserve
+    /// [`Self::last_federated_outcome`] correctness.
+    ///
+    /// Builder pattern; chains naturally with [`Self::new`].
+    ///
+    /// ```rust
+    /// use oxirs_arq::optimizer::{Optimizer, OptimizerConfig};
+    ///
+    /// let optimizer = Optimizer::new(OptimizerConfig::default())
+    ///     .with_plan_cache_capacity(1024);
+    /// assert!(optimizer.has_plan_cache());
+    /// ```
+    pub fn with_plan_cache_capacity(mut self, capacity: usize) -> Self {
+        self.plan_cache = Some(PlanCache::new(capacity));
+        self
+    }
+
+    /// Returns `true` if a plan cache has been attached.
+    pub fn has_plan_cache(&self) -> bool {
+        self.plan_cache.is_some()
+    }
+
+    /// Return `(hits, misses, evictions)` from the attached plan cache, or
+    /// `(0, 0, 0)` when no cache is configured.
+    pub fn plan_cache_stats(&self) -> (u64, u64, u64) {
+        self.plan_cache
+            .as_ref()
+            .map(|c| c.stats())
+            .unwrap_or((0, 0, 0))
+    }
+
+    /// Invalidate all entries in the plan cache (e.g. after a schema change).
+    ///
+    /// A no-op when no cache is configured.
+    pub fn invalidate_plan_cache(&self) {
+        if let Some(ref cache) = self.plan_cache {
+            cache.invalidate_all();
+        }
+    }
+
+    /// Register a [`SourceSelectivityProvider`] so that [`Self::optimize`]
+    /// transparently applies federated planning after the standard passes.
+    ///
+    /// This is the canonical opt-in entry point for embedders that want
+    /// federation-aware rewriting.  When a provider is registered, queries
+    /// whose IRIs map to known endpoints are rewritten into
+    /// [`crate::algebra::Algebra::Service`] nodes.  When no provider is
+    /// registered the optimizer behavior is unchanged.
+    ///
+    /// Builder pattern; chains naturally with [`Self::new`].
+    ///
+    /// ```
+    /// # use std::sync::Arc;
+    /// # use oxirs_arq::optimizer::{Optimizer, OptimizerConfig};
+    /// # use oxirs_arq::optimizer::federated_plan::StaticSourceProvider;
+    /// let provider = Arc::new(StaticSourceProvider::new());
+    /// let optimizer = Optimizer::new(OptimizerConfig::default())
+    ///     .with_federated_planner(provider);
+    /// assert!(optimizer.has_federated_planner());
+    /// ```
+    pub fn with_federated_planner(mut self, provider: Arc<dyn SourceSelectivityProvider>) -> Self {
+        self.federated_provider = Some(provider);
+        self
+    }
+
+    /// Set the latency weight used by the federation planner.
+    ///
+    /// Higher values penalise slow endpoints more aggressively.  Default is
+    /// 1.0.  Has no effect unless [`Self::with_federated_planner`] is also
+    /// invoked.
+    pub fn with_federated_latency_weight(mut self, weight: f64) -> Self {
+        self.federated_latency_weight = weight;
+        self
+    }
+
+    /// Whether a federated planning provider is registered.
+    pub fn has_federated_planner(&self) -> bool {
+        self.federated_provider.is_some()
+    }
+
+    /// Outcome of the most recent federated planning pass, if any.
+    ///
+    /// Useful for observability — embedders can inspect which endpoints
+    /// were touched by the last [`Self::optimize`] call.  Returns `None`
+    /// when no provider is registered or when no query has been optimized
+    /// yet.
+    ///
+    /// **Note:** the `algebra` field of the cached
+    /// [`FederatedPlanOutcome`] is intentionally a placeholder
+    /// (`Algebra::Bgp(vec![])`); the actually rewritten algebra is moved into
+    /// the value returned by [`Self::optimize`] to avoid paying for a deep
+    /// clone of the plan tree.  Inspect `endpoints_used` and
+    /// `patterns_federated` for observability — those carry the useful state.
+    pub fn last_federated_outcome(&self) -> Option<&FederatedPlanOutcome> {
+        self.last_federated_outcome.as_ref()
+    }
+
     /// Optimize a query algebra
+    ///
+    /// When a plan cache is configured **and** no federation provider is
+    /// registered, this first computes the fingerprint of `algebra` and
+    /// returns the cached result on a hit, skipping all optimization passes.
+    /// On a miss it runs the standard passes, stores the result, and returns
+    /// it.
+    ///
+    /// The cache is bypassed when a federation provider is registered to
+    /// preserve the correctness of [`Self::last_federated_outcome`] — the
+    /// federation pass writes observable side-state on every call.
     pub fn optimize(&mut self, algebra: Algebra) -> Result<Algebra> {
+        // JIT plan cache — phase a.
+        // Only active when a cache is attached AND no federation provider is
+        // registered (federation writes per-call side-state that must stay fresh).
+        if self.plan_cache.is_some() && self.federated_provider.is_none() {
+            let fp = compute_fingerprint(&algebra);
+            if let Some(cached) = self.plan_cache.as_ref().and_then(|c| c.get(fp)) {
+                return Ok(cached);
+            }
+            // Cache miss — run optimization, then store.
+            let result = self.run_optimization_passes(algebra)?;
+            if let Some(ref cache) = self.plan_cache {
+                cache.insert(fp, result.clone());
+            }
+            return Ok(result);
+        }
+
+        // No cache (or cache bypassed due to federation provider).
+        self.run_optimization_passes_and_federate(algebra)
+    }
+
+    /// Internal helper: run rule/cost passes + federation pass.
+    /// Called when the plan cache is bypassed (federation or no cache).
+    fn run_optimization_passes_and_federate(&mut self, algebra: Algebra) -> Result<Algebra> {
+        let optimised = self.run_optimization_passes(algebra)?;
+
+        // Federation pass (W2-S4).
+        if let Some(provider) = self.federated_provider.clone() {
+            let planner =
+                FederatedPlanner::new(provider).with_latency_weight(self.federated_latency_weight);
+            let mut outcome = planner.plan(optimised);
+            let rewritten = std::mem::replace(&mut outcome.algebra, Algebra::Bgp(Vec::new()));
+            self.last_federated_outcome = Some(outcome);
+            Ok(rewritten)
+        } else {
+            self.last_federated_outcome = None;
+            Ok(optimised)
+        }
+    }
+
+    /// Run the rule/cost-based optimization passes only (no federation, no cache).
+    fn run_optimization_passes(&mut self, algebra: Algebra) -> Result<Algebra> {
         // Adaptive optimization: use fast path for simple queries
         let complexity = self.estimate_query_complexity(&algebra);
 
@@ -873,3 +1060,283 @@ impl Default for Optimizer {
 
 /// Type alias for backwards compatibility
 pub type QueryOptimizer = Optimizer;
+
+#[cfg(test)]
+mod federated_integration_tests {
+    //! W2-S4 deepening: integration of [`FederatedPlanner`] with the main
+    //! [`Optimizer::optimize`] entry point.
+    //!
+    //! These tests assert two invariants:
+    //!
+    //! 1. With **no** [`SourceSelectivityProvider`] registered, optimization
+    //!    behaviour is byte-for-byte identical to the pre-W2-S4 baseline —
+    //!    no `Algebra::Service` nodes are introduced.
+    //! 2. With a provider registered, BGPs whose IRIs map to known endpoints
+    //!    are transparently rewritten to `Algebra::Service` nodes with the
+    //!    correct endpoint URL.
+
+    use super::*;
+    use crate::algebra::{Term, TriplePattern, Variable};
+    use crate::optimizer::federated_plan::{FederatedSelectivity, StaticSourceProvider};
+    use oxirs_core::model::NamedNode;
+
+    fn iri_term(s: &str) -> Term {
+        Term::Iri(NamedNode::new_unchecked(s))
+    }
+
+    fn var_term(name: &str) -> Term {
+        Term::Variable(Variable::new(name).expect("valid variable name"))
+    }
+
+    fn triple(s: Term, p: Term, o: Term) -> TriplePattern {
+        TriplePattern {
+            subject: s,
+            predicate: p,
+            object: o,
+        }
+    }
+
+    fn dbpedia_provider() -> StaticSourceProvider {
+        let mut provider = StaticSourceProvider::new();
+        provider.register(
+            "http://dbpedia.org/",
+            "https://dbpedia.org/sparql",
+            FederatedSelectivity {
+                estimated_cardinality: 100.0,
+                estimated_latency_ms: 80.0,
+                confidence: 0.9,
+            },
+        );
+        provider
+    }
+
+    fn assert_no_service_nodes(algebra: &Algebra) {
+        match algebra {
+            Algebra::Service { .. } => panic!("unexpected Service node: {algebra:?}"),
+            Algebra::Bgp(_) | Algebra::Table | Algebra::Empty | Algebra::Zero => {}
+            Algebra::Join { left, right }
+            | Algebra::Union { left, right }
+            | Algebra::Minus { left, right } => {
+                assert_no_service_nodes(left);
+                assert_no_service_nodes(right);
+            }
+            Algebra::LeftJoin { left, right, .. } => {
+                assert_no_service_nodes(left);
+                assert_no_service_nodes(right);
+            }
+            Algebra::Filter { pattern, .. }
+            | Algebra::Distinct { pattern }
+            | Algebra::Reduced { pattern }
+            | Algebra::Slice { pattern, .. }
+            | Algebra::OrderBy { pattern, .. }
+            | Algebra::Project { pattern, .. }
+            | Algebra::Extend { pattern, .. }
+            | Algebra::Group { pattern, .. }
+            | Algebra::Having { pattern, .. }
+            | Algebra::Graph { pattern, .. } => {
+                assert_no_service_nodes(pattern);
+            }
+            // Other algebra variants (Values, PropertyPath, …) cannot contain
+            // nested algebra so they're trivially Service-free.
+            _ => {}
+        }
+    }
+
+    fn contains_service_to(algebra: &Algebra, expected_endpoint: &str) -> bool {
+        match algebra {
+            Algebra::Service {
+                endpoint: Term::Iri(node),
+                ..
+            } => node.as_str() == expected_endpoint,
+            Algebra::Service { .. } => false,
+            Algebra::Join { left, right }
+            | Algebra::Union { left, right }
+            | Algebra::Minus { left, right } => {
+                contains_service_to(left, expected_endpoint)
+                    || contains_service_to(right, expected_endpoint)
+            }
+            Algebra::LeftJoin { left, right, .. } => {
+                contains_service_to(left, expected_endpoint)
+                    || contains_service_to(right, expected_endpoint)
+            }
+            Algebra::Filter { pattern, .. }
+            | Algebra::Distinct { pattern }
+            | Algebra::Reduced { pattern }
+            | Algebra::Slice { pattern, .. }
+            | Algebra::OrderBy { pattern, .. }
+            | Algebra::Project { pattern, .. }
+            | Algebra::Extend { pattern, .. }
+            | Algebra::Group { pattern, .. }
+            | Algebra::Having { pattern, .. }
+            | Algebra::Graph { pattern, .. } => contains_service_to(pattern, expected_endpoint),
+            _ => false,
+        }
+    }
+
+    #[test]
+    fn optimizer_without_provider_skips_federation() {
+        let mut optimizer = Optimizer::new(OptimizerConfig::default());
+        assert!(!optimizer.has_federated_planner());
+
+        let alg = Algebra::Bgp(vec![triple(
+            var_term("s"),
+            iri_term("http://dbpedia.org/property/birthDate"),
+            var_term("o"),
+        )]);
+
+        let optimized = optimizer
+            .optimize(alg)
+            .expect("baseline optimize must succeed");
+        assert_no_service_nodes(&optimized);
+        assert!(optimizer.last_federated_outcome().is_none());
+    }
+
+    #[test]
+    fn optimizer_with_provider_emits_service_node() {
+        let provider: Arc<dyn SourceSelectivityProvider> = Arc::new(dbpedia_provider());
+        let mut optimizer =
+            Optimizer::new(OptimizerConfig::default()).with_federated_planner(provider);
+        assert!(optimizer.has_federated_planner());
+
+        let alg = Algebra::Bgp(vec![triple(
+            var_term("s"),
+            iri_term("http://dbpedia.org/property/birthDate"),
+            var_term("o"),
+        )]);
+
+        let optimized = optimizer
+            .optimize(alg)
+            .expect("federated optimize must succeed");
+        assert!(
+            contains_service_to(&optimized, "https://dbpedia.org/sparql"),
+            "expected Service node targeting dbpedia, got {optimized:?}"
+        );
+
+        let outcome = optimizer
+            .last_federated_outcome()
+            .expect("outcome should be recorded");
+        assert!(outcome.touched_federation());
+        assert_eq!(outcome.patterns_federated, 1);
+        assert!(outcome
+            .endpoints_used
+            .contains_key("https://dbpedia.org/sparql"));
+    }
+
+    #[test]
+    fn optimizer_with_provider_keeps_local_only_query_unchanged() {
+        let provider: Arc<dyn SourceSelectivityProvider> = Arc::new(dbpedia_provider());
+        let mut optimizer =
+            Optimizer::new(OptimizerConfig::default()).with_federated_planner(provider);
+
+        let alg = Algebra::Bgp(vec![triple(
+            iri_term("http://example.org/local/alice"),
+            iri_term("http://example.org/local/knows"),
+            var_term("friend"),
+        )]);
+
+        let optimized = optimizer
+            .optimize(alg)
+            .expect("optimize must succeed even with provider");
+        assert_no_service_nodes(&optimized);
+
+        let outcome = optimizer
+            .last_federated_outcome()
+            .expect("outcome should be recorded even when nothing federates");
+        assert!(!outcome.touched_federation());
+    }
+
+    #[test]
+    fn optimizer_emits_join_for_mixed_local_and_federated_query() {
+        let provider: Arc<dyn SourceSelectivityProvider> = Arc::new(dbpedia_provider());
+        let mut optimizer =
+            Optimizer::new(OptimizerConfig::default()).with_federated_planner(provider);
+
+        let alg = Algebra::Bgp(vec![
+            triple(
+                var_term("s"),
+                iri_term("http://example.org/local/labelOf"),
+                var_term("label"),
+            ),
+            triple(
+                var_term("s"),
+                iri_term("http://dbpedia.org/property/birthDate"),
+                var_term("date"),
+            ),
+        ]);
+
+        let optimized = optimizer
+            .optimize(alg)
+            .expect("optimize must succeed for mixed BGP");
+        assert!(
+            contains_service_to(&optimized, "https://dbpedia.org/sparql"),
+            "expected Service node, got {optimized:?}"
+        );
+
+        let outcome = optimizer
+            .last_federated_outcome()
+            .expect("outcome should be recorded");
+        assert_eq!(outcome.patterns_federated, 1);
+    }
+
+    #[test]
+    fn with_federated_latency_weight_propagates_to_planner() {
+        // Smoke test: setting the latency weight should not panic and should
+        // not change optimize() success on a query with no federated patterns.
+        let provider: Arc<dyn SourceSelectivityProvider> = Arc::new(dbpedia_provider());
+        let mut optimizer = Optimizer::new(OptimizerConfig::default())
+            .with_federated_planner(provider)
+            .with_federated_latency_weight(2.5);
+
+        let alg = Algebra::Bgp(vec![triple(
+            iri_term("http://example.org/local/x"),
+            iri_term("http://example.org/local/p"),
+            var_term("o"),
+        )]);
+
+        let optimized = optimizer
+            .optimize(alg)
+            .expect("latency-weighted optimize must succeed");
+        assert_no_service_nodes(&optimized);
+    }
+
+    #[test]
+    fn federation_pass_runs_after_filter_pushdown() {
+        // FILTER on a federated BGP — the filter should sit on top of the
+        // emitted Service node so the executor evaluates it on the joined
+        // (local + remote) solutions, preserving SPARQL 1.1 SERVICE semantics.
+        let provider: Arc<dyn SourceSelectivityProvider> = Arc::new(dbpedia_provider());
+        let mut optimizer =
+            Optimizer::new(OptimizerConfig::default()).with_federated_planner(provider);
+
+        let alg = Algebra::Filter {
+            pattern: Box::new(Algebra::Bgp(vec![triple(
+                var_term("s"),
+                iri_term("http://dbpedia.org/property/birthDate"),
+                var_term("o"),
+            )])),
+            condition: Expression::Variable(Variable::new("o").expect("valid var")),
+        };
+
+        let optimized = optimizer
+            .optimize(alg)
+            .expect("filter+federate optimize must succeed");
+        assert!(
+            contains_service_to(&optimized, "https://dbpedia.org/sparql"),
+            "expected Service node under filter, got {optimized:?}"
+        );
+    }
+
+    #[test]
+    fn last_federated_outcome_resets_when_provider_unset_after_run() {
+        // Sanity: building a fresh optimizer without a provider always
+        // produces None for last_federated_outcome.
+        let mut optimizer = Optimizer::new(OptimizerConfig::default());
+        let alg = Algebra::Bgp(vec![triple(
+            var_term("s"),
+            iri_term("http://example.org/local/p"),
+            var_term("o"),
+        )]);
+        let _ = optimizer.optimize(alg).expect("optimize must succeed");
+        assert!(optimizer.last_federated_outcome().is_none());
+    }
+}

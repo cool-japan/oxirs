@@ -277,7 +277,7 @@ impl TantivySearcher {
             .context("Failed to parse query")?;
 
         let top_docs = searcher
-            .search(&query, &TopDocs::with_limit(limit))
+            .search(&query, &TopDocs::with_limit(limit).order_by_score())
             .context("Failed to execute search")?;
 
         let mut results = Vec::new();
@@ -350,7 +350,7 @@ impl TantivySearcher {
         let query = PhraseQuery::new(terms);
 
         let top_docs = searcher
-            .search(&query, &TopDocs::with_limit(limit))
+            .search(&query, &TopDocs::with_limit(limit).order_by_score())
             .context("Failed to execute phrase search")?;
 
         let mut results = Vec::new();
@@ -419,7 +419,7 @@ impl TantivySearcher {
         let fuzzy_query = FuzzyTermQuery::new(term, distance, true);
 
         let top_docs = searcher
-            .search(&fuzzy_query, &TopDocs::with_limit(limit))
+            .search(&fuzzy_query, &TopDocs::with_limit(limit).order_by_score())
             .context("Failed to execute fuzzy search")?;
 
         let mut results = Vec::new();
@@ -482,7 +482,7 @@ impl TantivySearcher {
             .context("Failed to parse field query")?;
 
         let top_docs = searcher
-            .search(&query, &TopDocs::with_limit(limit))
+            .search(&query, &TopDocs::with_limit(limit).order_by_score())
             .context("Failed to execute field search")?;
 
         let mut results = Vec::new();

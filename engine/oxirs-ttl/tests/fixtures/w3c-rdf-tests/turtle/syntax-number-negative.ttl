@@ -1,0 +1,5 @@
+# negative numeric literal
+@prefix ex: <http://example.org/> .
+ex:s ex:int -7 ;
+     ex:dec -2.5 ;
+     ex:dbl -1.0e-3 .

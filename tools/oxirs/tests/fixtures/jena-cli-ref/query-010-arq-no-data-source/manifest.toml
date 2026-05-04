@@ -1,0 +1,15 @@
+description = "arq exits with non-zero code when no data source flag is provided"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "arq",
+    "--query",
+    "SELECT ?s WHERE { ?s ?p ?o }",
+]
+exit_code = 1
+
+[stderr]
+mode = "contains"
+expected = """
+No data sources specified
+"""

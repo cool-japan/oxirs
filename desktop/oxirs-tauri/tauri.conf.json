@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OxiRS",
+  "version": "0.3.0",
+  "identifier": "org.oxirs.desktop",
+  "build": {
+    "frontendDist": "ui"
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["icons/icon.png"]
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "OxiRS Desktop",
+        "width": 1200,
+        "height": 800,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "withGlobalTauri": true
+  }
+}

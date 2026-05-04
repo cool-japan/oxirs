@@ -1,0 +1,3 @@
+# missing closing quote
+@prefix ex: <http://example.org/> .
+ex:s ex:p "missing closing .

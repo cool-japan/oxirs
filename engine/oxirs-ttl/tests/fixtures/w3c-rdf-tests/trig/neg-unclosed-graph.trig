@@ -1,0 +1,4 @@
+# missing closing brace on named graph
+@prefix ex: <http://example.org/> .
+<http://example.org/g> {
+    ex:s ex:p ex:o .

@@ -326,7 +326,9 @@ where
         }
     }
 
-    /// Range scan from start_key (inclusive) to end_key (exclusive)
+    /// Range scan from start_key (inclusive) to end_key (exclusive).
+    ///
+    /// Returns an empty iterator when the tree has no entries yet.
     pub fn range_scan(
         &self,
         start_key: Option<K>,
@@ -334,7 +336,8 @@ where
     ) -> Result<BTreeIterator<K, V>> {
         let root_page = match self.root_page {
             Some(id) => id,
-            None => return Err(TdbError::Other("Empty tree".to_string())),
+            // Empty tree: return an iterator that yields nothing
+            None => return Ok(BTreeIterator::empty(self.buffer_pool.clone())),
         };
 
         // Find leftmost leaf

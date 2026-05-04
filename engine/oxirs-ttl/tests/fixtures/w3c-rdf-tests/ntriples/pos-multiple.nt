@@ -1,0 +1,5 @@
+<http://example.org/s1> <http://example.org/p> <http://example.org/o> .
+<http://example.org/s2> <http://example.org/p> _:b1 .
+<http://example.org/s3> <http://example.org/p> "literal" .
+<http://example.org/s4> <http://example.org/p> "lang"@en .
+<http://example.org/s5> <http://example.org/p> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .

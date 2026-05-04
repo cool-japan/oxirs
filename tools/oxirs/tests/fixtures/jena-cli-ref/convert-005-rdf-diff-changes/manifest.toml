@@ -1,0 +1,30 @@
+# Jena's `riot --diff` puts the summary on stderr and the patch on stdout so
+# downstream tooling can pipe the diff body without parsing the header.  We
+# preserve that separation: the patch content (e.g. removed/added triples
+# with `-`/`+` sentinels) lands on stdout while the one-line summary goes to
+# stderr.
+description = "rdf-diff prints summary on stderr and patch body on stdout"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "rdf-diff",
+    "${FIXTURE}/../_data/sample.nt",
+    "${FIXTURE}/../_data/sample-b.nt",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+RDF Diff Summary
+First graph
+Second graph
+Removed
+Added
+"""
+
+[stderr]
+mode = "contains"
+expected = """
+Diff: 2 removed, 1 added
+"""

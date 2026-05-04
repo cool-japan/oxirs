@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: oxirs-embed
+  namespace: oxirs
+  labels:
+    app.kubernetes.io/name: oxirs-embed
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: oxirs
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: oxirs-embed
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP

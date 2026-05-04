@@ -764,6 +764,15 @@ impl HNSWIndex {
     }
 }
 
+// IVF, LSH, and PQ index implementations live in separate sibling modules
+// (ivf_index.rs, lsh_index.rs, pq_index.rs) to keep this file under 2000 lines.
+// They are re-exported here for ergonomic access by callers.
+pub use super::ivf_index::IVFIndex;
+pub use super::lsh_index::LSHIndex;
+pub use super::pq_index::PQIndexLocal;
+
+// (The struct definitions that used to be inline are now in their own files.)
+
 /// Helper struct for priority queue
 #[derive(Debug, Clone)]
 struct SimilarityItem {
@@ -1139,7 +1148,21 @@ impl VectorStore for InMemoryVectorStore {
                 *ef_construction,
                 *ef_search,
             )),
-            _ => return Err(anyhow!("Index type not yet implemented")),
+            IndexType::IVF {
+                num_clusters,
+                num_probes,
+            } => Box::new(IVFIndex::new(*num_clusters, *num_probes)),
+            IndexType::LSH {
+                num_tables,
+                hash_length,
+            } => Box::new(LSHIndex::new(*num_tables, *hash_length)),
+            IndexType::PQ {
+                num_subquantizers,
+                bits_per_subquantizer,
+            } => Box::new(PQIndexLocal::new(
+                *num_subquantizers,
+                *bits_per_subquantizer,
+            )),
         };
 
         new_index.build(&self.vectors).await?;
@@ -1703,5 +1726,181 @@ mod tests {
         assert!(similarities[1].abs() < 0.01);
         // Third should be ~0.707
         assert!((similarities[2] - 0.707).abs() < 0.01);
+    }
+
+    #[tokio::test]
+    async fn test_ivf_index_build_and_search() {
+        let vectors: DashMap<String, VectorData> = DashMap::new();
+        for i in 0..20usize {
+            let vec = vec![i as f32, (i * 2) as f32, (i * 3) as f32];
+            vectors.insert(
+                format!("v{}", i),
+                VectorData {
+                    id: format!("v{}", i),
+                    vector: vec,
+                    metadata: None,
+                    timestamp: std::time::SystemTime::now(),
+                },
+            );
+        }
+
+        let mut index = IVFIndex::new(4, 2);
+        index
+            .build(&vectors)
+            .await
+            .expect("IVF build should succeed");
+        assert_eq!(index.get_stats().index_type, "IVF");
+        assert_eq!(index.get_stats().num_vectors, 20);
+
+        let query = vec![5.0, 10.0, 15.0]; // close to v5
+        let results = index
+            .search(&query, 3, SimilarityMetric::Cosine)
+            .await
+            .expect("IVF search should succeed");
+        assert!(!results.is_empty(), "IVF should return results");
+    }
+
+    #[tokio::test]
+    async fn test_lsh_index_build_and_search() {
+        let vectors: DashMap<String, VectorData> = DashMap::new();
+        for i in 0..12usize {
+            let vec = vec![i as f32, (20 - i) as f32, 1.0];
+            vectors.insert(
+                format!("lsh_{}", i),
+                VectorData {
+                    id: format!("lsh_{}", i),
+                    vector: vec,
+                    metadata: None,
+                    timestamp: std::time::SystemTime::now(),
+                },
+            );
+        }
+
+        let mut index = LSHIndex::new(4, 8);
+        index
+            .build(&vectors)
+            .await
+            .expect("LSH build should succeed");
+        assert_eq!(index.get_stats().index_type, "LSH");
+        assert_eq!(index.get_stats().num_vectors, 12);
+
+        let query = vec![3.0, 17.0, 1.0];
+        let results = index
+            .search(&query, 3, SimilarityMetric::Cosine)
+            .await
+            .expect("LSH search should succeed");
+        // LSH may return 0 results if no bucket matched — that is valid.
+        // We only require it doesn't error.
+        let _ = results;
+    }
+
+    #[tokio::test]
+    async fn test_pq_index_build_and_search() {
+        let vectors: DashMap<String, VectorData> = DashMap::new();
+        for i in 0..16usize {
+            let vec = vec![i as f32, (i + 1) as f32, (i + 2) as f32, (i + 3) as f32];
+            vectors.insert(
+                format!("pq_{}", i),
+                VectorData {
+                    id: format!("pq_{}", i),
+                    vector: vec,
+                    metadata: None,
+                    timestamp: std::time::SystemTime::now(),
+                },
+            );
+        }
+
+        let mut index = PQIndexLocal::new(2, 2); // 2 sub-spaces, 2 bits (4 codewords)
+        index
+            .build(&vectors)
+            .await
+            .expect("PQ build should succeed");
+        assert_eq!(index.get_stats().index_type, "PQ");
+        assert_eq!(index.get_stats().num_vectors, 16);
+
+        let query = vec![7.0, 8.0, 9.0, 10.0];
+        let results = index
+            .search(&query, 3, SimilarityMetric::Cosine)
+            .await
+            .expect("PQ search should succeed");
+        assert!(!results.is_empty(), "PQ should return results");
+        assert!(results.len() <= 3);
+    }
+
+    #[tokio::test]
+    async fn test_build_index_ivf_variant() {
+        let config = VectorStoreConfig {
+            dimension: 3,
+            index_type: IndexType::IVF {
+                num_clusters: 2,
+                num_probes: 1,
+            },
+            ..Default::default()
+        };
+        let store = InMemoryVectorStore::new(config);
+
+        for i in 0..6usize {
+            store
+                .insert(format!("v{}", i), vec![i as f32, (i * 2) as f32, 1.0], None)
+                .await
+                .expect("insert should succeed");
+        }
+        // Trigger index build
+        store
+            .build_index()
+            .await
+            .expect("IVF index build should succeed via store");
+    }
+
+    #[tokio::test]
+    async fn test_build_index_lsh_variant() {
+        let config = VectorStoreConfig {
+            dimension: 3,
+            index_type: IndexType::LSH {
+                num_tables: 2,
+                hash_length: 4,
+            },
+            ..Default::default()
+        };
+        let store = InMemoryVectorStore::new(config);
+
+        for i in 0..6usize {
+            store
+                .insert(format!("v{}", i), vec![i as f32, 1.0, (i + 1) as f32], None)
+                .await
+                .expect("insert should succeed");
+        }
+        store
+            .build_index()
+            .await
+            .expect("LSH index build should succeed via store");
+    }
+
+    #[tokio::test]
+    async fn test_build_index_pq_variant() {
+        let config = VectorStoreConfig {
+            dimension: 4,
+            index_type: IndexType::PQ {
+                num_subquantizers: 2,
+                bits_per_subquantizer: 2,
+            },
+            ..Default::default()
+        };
+        let store = InMemoryVectorStore::new(config);
+
+        for i in 0..8usize {
+            store
+                .insert(
+                    format!("v{}", i),
+                    vec![i as f32, (i + 1) as f32, (i + 2) as f32, (i + 3) as f32],
+                    None,
+                )
+                .await
+                .expect("insert should succeed");
+        }
+        store
+            .build_index()
+            .await
+            .expect("PQ index build should succeed via store");
     }
 }

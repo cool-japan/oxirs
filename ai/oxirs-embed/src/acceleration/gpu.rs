@@ -25,12 +25,30 @@ pub type GpuArray<T> = Vec<T>;
 pub type GpuContext = ();
 #[cfg(feature = "gpu")]
 #[derive(Debug)]
-pub struct GpuError(String);
+pub enum GpuError {
+    /// The GPU backend required for this operation is not yet available.
+    ///
+    /// This variant is returned by all operations that are pending
+    /// `scirs2_linalg::gpu` stabilisation.
+    BackendUnavailable {
+        /// Human-readable description of what is missing
+        reason: String,
+        /// Suggestion for how the caller can proceed
+        fallback: String,
+    },
+    /// A general GPU error not covered by the above variants.
+    Other(String),
+}
 
 #[cfg(feature = "gpu")]
 impl std::fmt::Display for GpuError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            GpuError::BackendUnavailable { reason, fallback } => {
+                write!(f, "GPU backend unavailable: {reason}. Fallback: {fallback}")
+            }
+            GpuError::Other(msg) => write!(f, "GPU error: {msg}"),
+        }
     }
 }
 
@@ -385,14 +403,17 @@ impl GpuEmbeddingAccelerator {
                 .map(|_| rng.random_f64() * scale - limit)
                 .collect();
             let array = Array2::from_shape_vec((rows, cols), data)
-                .map_err(|e| GpuError(format!("Failed to create array: {}", e)))?;
+                .map_err(|e| GpuError::Other(format!("Failed to create array: {}", e)))?;
             results.push(array);
         }
         Ok(results)
     }
 
     /// GPU-accelerated contrastive learning updates
-    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
+    ///
+    /// This operation requires `scirs2_linalg::gpu` which is not yet stable.
+    /// Returning `Ok(0.0)` would silently report zero loss even when the model
+    /// has not converged, masking training failures from callers.
     pub fn contrastive_learning_gpu(
         &self,
         _entity_embeddings: &mut [Array1<f32>],
@@ -401,26 +422,48 @@ impl GpuEmbeddingAccelerator {
         _temperature: f32,
         _learning_rate: f32,
     ) -> Result<f32, GpuError> {
-        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
-        // For now, return placeholder loss
-        Ok(0.0)
+        Err(GpuError::BackendUnavailable {
+            reason: "contrastive_learning_gpu requires scirs2_linalg::gpu \
+                     GPU tensor operations which are not yet stable"
+                .to_string(),
+            fallback: "implement contrastive learning on the CPU embedding arrays directly \
+                       without calling this method"
+                .to_string(),
+        })
     }
 
-    /// Helper function to upload vectors to GPU
-    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
+    /// Helper function to upload vectors to GPU.
+    ///
+    /// Returns an error rather than an empty `Vec` to surface the waiting state
+    /// to callers: an empty slice is indistinguishable from an empty upload, which
+    /// would silently produce wrong results in downstream GPU kernels.
     fn upload_vectors_to_gpu(&self, _vectors: &[Array1<f64>]) -> Result<GpuArray<f64>, GpuError> {
-        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
-        Ok(Vec::new())
+        Err(GpuError::BackendUnavailable {
+            reason: "upload_vectors_to_gpu requires scirs2_linalg::gpu \
+                     GPU memory transfer which is not yet stable"
+                .to_string(),
+            fallback: "operate on CPU Array1<f64> slices directly; \
+                       GPU upload is a no-op until the backend is available"
+                .to_string(),
+        })
     }
 
-    /// Helper function to upload f32 vectors to GPU
-    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
+    /// Helper function to upload f32 vectors to GPU.
+    ///
+    /// Returns an error rather than an empty `Vec` to surface the waiting state
+    /// to callers.
     fn upload_f32_vectors_to_gpu(
         &self,
         _vectors: &[Array1<f32>],
     ) -> Result<GpuArray<f32>, GpuError> {
-        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
-        Ok(Vec::new())
+        Err(GpuError::BackendUnavailable {
+            reason: "upload_f32_vectors_to_gpu requires scirs2_linalg::gpu \
+                     GPU memory transfer which is not yet stable"
+                .to_string(),
+            fallback: "operate on CPU Array1<f32> slices directly; \
+                       GPU upload is a no-op until the backend is available"
+                .to_string(),
+        })
     }
 
     /// Get GPU device info
@@ -431,11 +474,20 @@ impl GpuEmbeddingAccelerator {
         )
     }
 
-    /// Get available GPU memory
-    /// Note: Currently using placeholder until scirs2_linalg::gpu is available
+    /// Get available GPU memory.
+    ///
+    /// Cannot return a meaningful value without `scirs2_linalg::gpu`; returning
+    /// `Ok(0)` would be interpreted by callers as "GPU has no memory" rather than
+    /// "GPU memory query is not yet implemented", causing incorrect adaptive batching.
     pub fn available_memory(&self) -> Result<u64, GpuError> {
-        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
-        Ok(0)
+        Err(GpuError::BackendUnavailable {
+            reason: "available_memory requires scirs2_linalg::gpu device query \
+                     which is not yet stable"
+                .to_string(),
+            fallback: "use GpuEmbeddingAccelerator::device_info() for a status string, \
+                       or check available system RAM via the non-GPU fallback"
+                .to_string(),
+        })
     }
 
     /// GPU memory and performance monitoring
@@ -693,8 +745,11 @@ mod tests {
         match GpuEmbeddingAccelerator::new(0) {
             Ok(gpu) => {
                 println!("GPU Accelerator: {}", gpu.device_info());
-                let memory = gpu.available_memory().unwrap_or(0);
-                println!("Available GPU Memory: {} MB", memory / (1024 * 1024));
+                // available_memory surfaces a typed error while scirs2_linalg::gpu is pending
+                match gpu.available_memory() {
+                    Ok(bytes) => println!("Available GPU Memory: {} MB", bytes / (1024 * 1024)),
+                    Err(e) => println!("GPU memory query pending: {}", e),
+                }
             }
             Err(_) => {
                 println!("GPU not available for testing");

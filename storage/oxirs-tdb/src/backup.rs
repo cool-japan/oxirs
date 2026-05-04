@@ -562,10 +562,12 @@ impl BackupManager {
                     changed.push(path.clone());
                 }
                 Some(old_metadata) => {
-                    // Check if file has changed
+                    // Check if file has changed using size and checksum only.
+                    // Modified time is intentionally excluded: SystemTime loses
+                    // sub-second precision through JSON serialization, which
+                    // causes spurious mismatches for unchanged files.
                     if old_metadata.size != new_metadata.size
                         || old_metadata.checksum != new_metadata.checksum
-                        || old_metadata.modified != new_metadata.modified
                     {
                         changed.push(path.clone());
                     }

@@ -1,0 +1,6 @@
+# typed literal with explicit XSD datatype
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+ex:event ex:date "2026-04-30"^^xsd:date ;
+         ex:count "42"^^xsd:integer ;
+         ex:weight "3.14"^^xsd:decimal .

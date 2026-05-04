@@ -1,0 +1,26 @@
+description = "tdb-query --results json emits SPARQL Results JSON for empty store"
+classification = "spec-required"
+setup = [
+    ["--quiet", "init", "ds", "--format", "tdb2", "--location", "${TMPDIR}/ds"],
+]
+argv = [
+    "--quiet",
+    "tdb-query",
+    "${TMPDIR}/ds",
+    "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+    "--results",
+    "json",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+"head"
+"vars"
+"results"
+"bindings"
+"""
+
+[stderr]
+mode = "absent"

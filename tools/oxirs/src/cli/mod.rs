@@ -48,8 +48,10 @@ pub use error::{CliError, CliResult};
 pub use error_suggestions::{enhance_error, enhanced_error_from_message};
 pub use formatters::{
     create_formatter, Binding, CsvFormatter, HtmlFormatter, JsonFormatter, MarkdownFormatter,
-    PdfFormatter, QueryResults, RdfTerm, ResultFormatter, TableFormatter, XmlFormatter,
+    QueryResults, RdfTerm, ResultFormatter, TableFormatter, XmlFormatter,
 };
+#[cfg(feature = "pdf-export")]
+pub use formatters::PdfFormatter;
 pub use fuzzy_history::{FuzzyConfig, FuzzyHistorySearch, FuzzyMatch, HistoryEntryWithMetadata};
 pub use graphviz_export::{
     GraphOptions, GraphvizExporter, LayoutEngine, NodeShape, NodeStyle, PlanNode, PlanOptions,

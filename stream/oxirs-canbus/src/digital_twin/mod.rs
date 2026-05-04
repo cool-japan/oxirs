@@ -463,6 +463,28 @@ pub fn obd_pid_description(pid: u8) -> &'static str {
         .unwrap_or("Unknown PID")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// J1939 ↔ DTDL bridge sub-modules (v0.3.0)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Bridge error type and the core J1939 ↔ DTDL event loop.
+pub mod bridge;
+/// J1939 source facade trait and mock implementation.
+pub mod client;
+/// TOML-serialisable bridge configuration.
+pub mod config;
+/// SPN extraction and TwinValue conversion helpers.
+pub mod mapper;
+/// DTDL sink facade trait and mock implementation.
+pub mod sink;
+
+// Bridge public surface
+pub use bridge::{BridgeError, J1939DtdlBridge};
+pub use client::{J1939Frame, J1939SourceError, J1939SourceFacade, MockJ1939Source};
+pub use config::{BridgeConfig, MappingDirection, RegisterMapping};
+pub use mapper::PropertyMapper;
+pub use sink::{DtdlSinkError, DtdlSinkFacade, MockDtdlSink};
+
 #[cfg(test)]
 mod tests {
     use super::*;

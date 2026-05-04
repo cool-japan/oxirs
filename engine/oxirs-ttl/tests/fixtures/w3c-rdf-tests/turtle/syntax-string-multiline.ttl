@@ -1,0 +1,5 @@
+# triple-quoted multi-line string
+@prefix ex: <http://example.org/> .
+ex:s ex:p """line 1
+line 2
+line 3""" .

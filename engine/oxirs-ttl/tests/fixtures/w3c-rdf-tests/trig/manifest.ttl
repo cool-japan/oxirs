@@ -1,0 +1,165 @@
+# OxiRS W3C RDF 1.1 TriG compliance manifest
+#
+# Modelled on the W3C TriG Test Suite
+# (https://github.com/w3c/rdf-tests/tree/master/rdf/rdf11/rdf-trig). Pinned
+# reference snapshot:
+#
+#   https://github.com/w3c/rdf-tests/tree/2e2bedfe9a23c98d4a7d40e3a5d9f4f50bbf5bbf
+#
+# Reference: W3C RDF 1.1 TriG TR https://www.w3.org/TR/trig/
+
+@base         <urn:oxirs-tests:trig/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:   <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix rdft: <http://www.w3.org/ns/rdftest#> .
+@prefix oxt:  <https://w3.org/TR/trig/oxirs-tests#> .
+
+oxt:manifest rdf:type mf:Manifest ;
+    rdfs:comment "OxiRS TriG conformance tests (modelled on W3C rdf-tests)." ;
+    mf:entries (
+        oxt:trig-pos-default
+        oxt:trig-pos-named-block
+        oxt:trig-pos-graph-keyword
+        oxt:trig-pos-multiple-named
+        oxt:trig-pos-prefix
+        oxt:trig-pos-base
+        oxt:trig-pos-langtag
+        oxt:trig-pos-typed
+        oxt:trig-pos-objlist
+        oxt:trig-pos-predobjlist
+        oxt:trig-pos-rdftype-shorthand
+        oxt:trig-pos-collection
+        oxt:trig-pos-bnode
+        oxt:trig-pos-mixed
+        oxt:trig-pos-comments
+        oxt:trig-pos-utf8
+        oxt:trig-pos-empty-graph
+        oxt:trig-pos-numeric
+
+        oxt:trig-neg-bad-graph
+        oxt:trig-neg-unclosed-graph
+        oxt:trig-neg-bad-prefix
+        oxt:trig-neg-bad-iri
+        oxt:trig-neg-missing-dot
+        oxt:trig-neg-bad-string
+
+        oxt:trig-eval-default
+        oxt:trig-eval-named
+        oxt:trig-eval-mixed
+
+        oxt:trig-star-syntax-subject
+        oxt:trig-star-syntax-object
+        oxt:trig-star-syntax-graph
+    ) .
+
+# ============================================================================
+# Positive tests
+# ============================================================================
+oxt:trig-pos-default rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "default-graph triple"; mf:action <pos-default.trig> .
+
+oxt:trig-pos-named-block rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "named graph block"; mf:action <pos-named-block.trig> .
+
+oxt:trig-pos-graph-keyword rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "GRAPH keyword"; mf:action <pos-graph-keyword.trig> .
+
+oxt:trig-pos-multiple-named rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "two named graphs"; mf:action <pos-multiple-named.trig> .
+
+oxt:trig-pos-prefix rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "@prefix declarations"; mf:action <pos-prefix.trig> .
+
+oxt:trig-pos-base rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "@base declaration"; mf:action <pos-base.trig> .
+
+oxt:trig-pos-langtag rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "language-tagged literals inside graph"; mf:action <pos-langtag.trig> .
+
+oxt:trig-pos-typed rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "typed literals inside graph"; mf:action <pos-typed.trig> .
+
+oxt:trig-pos-objlist rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "object list inside graph"; mf:action <pos-objlist.trig> .
+
+oxt:trig-pos-predobjlist rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "predicate-object list inside graph"; mf:action <pos-predobjlist.trig> .
+
+oxt:trig-pos-rdftype-shorthand rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "'a' shorthand inside graph"; mf:action <pos-rdftype-shorthand.trig> .
+
+oxt:trig-pos-collection rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "RDF collection inside graph"; mf:action <pos-collection.trig> .
+
+oxt:trig-pos-bnode rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "blank node inside graph"; mf:action <pos-bnode.trig> .
+
+oxt:trig-pos-mixed rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "default and named graphs in same document";
+    mf:action <pos-mixed.trig> .
+
+oxt:trig-pos-comments rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "comments inside and outside graph blocks";
+    mf:action <pos-comments.trig> .
+
+oxt:trig-pos-utf8 rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "UTF-8 literal inside named graph"; mf:action <pos-utf8.trig> .
+
+oxt:trig-pos-empty-graph rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "empty named graph block"; mf:action <pos-empty-graph.trig> .
+
+oxt:trig-pos-numeric rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "numeric literals (integer, decimal, double)";
+    mf:action <pos-numeric.trig> .
+
+# ============================================================================
+# Negative tests
+# ============================================================================
+oxt:trig-neg-bad-graph rdf:type rdft:TestTrigNegativeSyntax ;
+    mf:name "graph IRI without enclosing braces"; mf:action <neg-bad-graph.trig> .
+
+oxt:trig-neg-unclosed-graph rdf:type rdft:TestTrigNegativeSyntax ;
+    mf:name "missing closing brace on named graph"; mf:action <neg-unclosed-graph.trig> .
+
+oxt:trig-neg-bad-prefix rdf:type rdft:TestTrigNegativeSyntax ;
+    mf:name "missing colon in @prefix declaration"; mf:action <neg-bad-prefix.trig> .
+
+oxt:trig-neg-bad-iri rdf:type rdft:TestTrigNegativeSyntax ;
+    mf:name "IRI missing closing >"; mf:action <neg-bad-iri.trig> .
+
+oxt:trig-neg-missing-dot rdf:type rdft:TestTrigNegativeSyntax ;
+    mf:name "missing terminating dot inside graph"; mf:action <neg-missing-dot.trig> .
+
+oxt:trig-neg-bad-string rdf:type rdft:TestTrigNegativeSyntax ;
+    mf:name "unterminated string inside graph"; mf:action <neg-bad-string.trig> .
+
+# ============================================================================
+# Evaluation tests
+# ============================================================================
+oxt:trig-eval-default rdf:type rdft:TestTrigEval ;
+    mf:name "default graph evaluates to N-Quads default-graph triple";
+    mf:action <eval-default.trig> ; mf:result <eval-default.nq> .
+
+oxt:trig-eval-named rdf:type rdft:TestTrigEval ;
+    mf:name "named graph block evaluates to N-Quads named graph";
+    mf:action <eval-named.trig> ; mf:result <eval-named.nq> .
+
+oxt:trig-eval-mixed rdf:type rdft:TestTrigEval ;
+    mf:name "mixed graphs evaluate to combined N-Quads";
+    mf:action <eval-mixed.trig> ; mf:result <eval-mixed.nq> .
+
+# ============================================================================
+# RDF-star (RDF 1.2 / TriG-star) extensions
+# ============================================================================
+oxt:trig-star-syntax-subject rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "TriG-star quoted triple as subject (default graph)";
+    mf:action <star-syntax-subject.trig> .
+
+oxt:trig-star-syntax-object rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "TriG-star quoted triple as object (default graph)";
+    mf:action <star-syntax-object.trig> .
+
+oxt:trig-star-syntax-graph rdf:type rdft:TestTrigPositiveSyntax ;
+    mf:name "TriG-star quoted triple inside named graph";
+    mf:action <star-syntax-graph.trig> .

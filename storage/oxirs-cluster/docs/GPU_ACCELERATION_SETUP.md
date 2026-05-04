@@ -229,7 +229,7 @@ async fn main() -> Result<()> {
 
 ```toml
 [dependencies]
-oxirs-cluster = { version = "0.2.3", features = ["cuda"] }  # Or "metal"
+oxirs-cluster = { version = "0.3.0", features = ["cuda"] }  # Or "metal"
 
 [features]
 default = []

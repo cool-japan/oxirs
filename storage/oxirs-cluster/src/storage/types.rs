@@ -86,7 +86,7 @@ where
         let data_bytes = oxicode::serde::encode_to_vec(&data, oxicode::config::standard())?;
         let mut hasher = Sha256::new();
         hasher.update(&data_bytes);
-        let checksum = format!("{:x}", hasher.finalize());
+        let checksum = hex::encode(hasher.finalize());
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -104,7 +104,7 @@ where
         let data_bytes = oxicode::serde::encode_to_vec(&self.data, oxicode::config::standard())?;
         let mut hasher = Sha256::new();
         hasher.update(&data_bytes);
-        let computed_checksum = format!("{:x}", hasher.finalize());
+        let computed_checksum = hex::encode(hasher.finalize());
         Ok(computed_checksum == self.checksum)
     }
 }

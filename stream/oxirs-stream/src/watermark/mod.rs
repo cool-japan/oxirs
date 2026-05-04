@@ -8,6 +8,20 @@
 //! - [`WatermarkGenerator`]: Advances a watermark as events are observed
 //! - [`WatermarkAligner`]: Computes the global watermark across multiple sources (minimum)
 //! - [`LateDataHandler`]: Decides what to do with events that arrive after the watermark
+//!
+//! ## Submodules
+//!
+//! - [`propagation`]: Operator-graph watermark propagation with monotonicity
+//!   enforcement.
+//! - [`late_handler`]: Allowed-lateness budget tracker and side-output router
+//!   (the [`LateDataHandler`] / [`LateDataPolicy`] / [`LateDataDecision`]
+//!   types are re-exported from there for convenience).
+
+pub mod late_handler;
+pub mod propagation;
+
+pub use late_handler::{AllowedLatenessTracker, SideOutputRouter};
+pub use propagation::{OperatorId, OperatorWatermarkAggregator, WatermarkPropagator};
 
 use std::collections::HashMap;
 

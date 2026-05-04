@@ -1,0 +1,7 @@
+@prefix ex: <http://example.org/> .
+<http://example.org/g1> {
+    ex:alice ex:age 30 .
+}
+<http://example.org/g2> {
+    ex:bob ex:age 28 .
+}

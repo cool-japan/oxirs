@@ -98,12 +98,13 @@ impl MfaStorage {
                 .map(|entry| (entry.key().clone(), entry.value().clone()))
                 .collect();
 
-            let content = serde_json::to_string_pretty(&data)
-                .map_err(|e| FusekiError::internal(format!("Failed to serialize MFA data: {}", e)))?;
+            let content = serde_json::to_string_pretty(&data).map_err(|e| {
+                FusekiError::internal(format!("Failed to serialize MFA data: {}", e))
+            })?;
 
-            fs::write(path, content)
-                .await
-                .map_err(|e| FusekiError::internal(format!("Failed to write MFA storage: {}", e)))?;
+            fs::write(path, content).await.map_err(|e| {
+                FusekiError::internal(format!("Failed to write MFA storage: {}", e))
+            })?;
 
             debug!("Saved MFA data to disk");
         }
@@ -142,7 +143,10 @@ impl MfaStorage {
 
     /// Get TOTP secret for user
     pub async fn get_totp_secret(&self, username: &str) -> FusekiResult<Option<String>> {
-        Ok(self.cache.get(username).and_then(|data| data.totp_secret.clone()))
+        Ok(self
+            .cache
+            .get(username)
+            .and_then(|data| data.totp_secret.clone()))
     }
 
     /// Store backup codes for user
@@ -158,7 +162,7 @@ impl MfaStorage {
             .or_insert_with(|| UserMfaData {
                 username: username.to_string(),
                 totp_secret: None,
-                backup_codes: codes,
+                backup_codes: codes.clone(),
                 email: None,
                 sms_phone: None,
                 webauthn_credentials: Vec::new(),
@@ -167,8 +171,9 @@ impl MfaStorage {
                 updated_at: now,
             });
 
+        let code_count = codes.len();
         self.save_to_disk().await?;
-        info!("Stored {} backup codes for user: {}", codes.len(), username);
+        info!("Stored {} backup codes for user: {}", code_count, username);
         Ok(())
     }
 
@@ -265,7 +270,10 @@ impl MfaStorage {
 
     /// Get SMS phone number for user
     pub async fn get_sms_phone(&self, username: &str) -> FusekiResult<Option<String>> {
-        Ok(self.cache.get(username).and_then(|data| data.sms_phone.clone()))
+        Ok(self
+            .cache
+            .get(username)
+            .and_then(|data| data.sms_phone.clone()))
     }
 
     /// Store WebAuthn credential
@@ -378,12 +386,18 @@ mod tests {
         let username = "testuser";
         let codes = vec!["ABC123".to_string(), "DEF456".to_string()];
 
-        storage.store_backup_codes(username, codes.clone()).await.unwrap();
+        storage
+            .store_backup_codes(username, codes.clone())
+            .await
+            .unwrap();
         let retrieved = storage.get_backup_codes(username).await.unwrap();
         assert_eq!(retrieved, codes);
 
         // Test code verification and consumption
-        let verified = storage.verify_backup_code(username, "ABC123").await.unwrap();
+        let verified = storage
+            .verify_backup_code(username, "ABC123")
+            .await
+            .unwrap();
         assert!(verified);
 
         let remaining = storage.get_backup_codes(username).await.unwrap();
@@ -408,7 +422,10 @@ mod tests {
         let username = "testuser";
 
         storage.store_totp_secret(username, "SECRET").await.unwrap();
-        storage.store_sms_phone(username, "+1234567890").await.unwrap();
+        storage
+            .store_sms_phone(username, "+1234567890")
+            .await
+            .unwrap();
 
         let methods = storage.get_enrolled_methods(username).await.unwrap();
         assert_eq!(methods.len(), 2);

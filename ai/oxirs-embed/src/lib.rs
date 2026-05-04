@@ -1,9 +1,9 @@
 //! # OxiRS Embed: Advanced Knowledge Graph Embeddings
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! State-of-the-art knowledge graph embedding methods including TransE, DistMult, ComplEx,
@@ -231,8 +231,15 @@ pub mod index_optimizer;
 // v1.1.0 round 15: Batch text encoding pipeline with chunking and pooling
 pub mod batch_encoder;
 
+// v0.3.0: Ensemble embedding aggregation (Voting, WeightedAverage, Stacking meta-learner)
+pub mod ensemble;
+
 // v1.1.0 round 16: Random projection for embedding dimensionality reduction
 pub mod embedding_compressor;
+
+// v0.3.0 / v1.0.0: Model zoo with pretrained (and synthetic-seed) embedding models
+pub mod model_zoo;
+pub use model_zoo::{sha256_hex, ModelManifest, ModelZoo, ModelZooError, ModelZooLoader};
 
 // Import Vector from oxirs-vec for type compatibility across the ecosystem
 pub use oxirs_vec::Vector as VecVector;
@@ -716,8 +723,10 @@ pub use distributed_training::{
     AggregationMethod, AllReduceStrategy, CommunicationBackend, DataParallelTrainer,
     DistributedEmbeddingTrainer, DistributedStrategy, DistributedTrainingConfig,
     DistributedTrainingCoordinator, DistributedTrainingSample, DistributedTrainingStats,
-    FaultToleranceConfig, GradientAggregator, GradientCompressor, ModelUpdate, SparseGradient,
-    WorkerInfo, WorkerStatus, WorkerUpdate,
+    FaultToleranceConfig, GradientAggregator, GradientCompressor, ModelShardManager, ModelUpdate,
+    ParameterServer, ParameterServerConfig, ParameterServerStats, ShardAssignment, ShardSnapshot,
+    ShardingStrategy, SparseGradient, TripleSample, UpdateMode, Worker, WorkerConfig, WorkerInfo,
+    WorkerLoss, WorkerStatus, WorkerUpdate,
 };
 #[cfg(feature = "conve")]
 pub use models::{ConvE, ConvEConfig};

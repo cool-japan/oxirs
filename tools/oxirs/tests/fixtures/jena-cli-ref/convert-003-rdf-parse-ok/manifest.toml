@@ -1,0 +1,18 @@
+description = "rdf-parse validates a well-formed N-Triples file"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "rdf-parse",
+    "${FIXTURE}/../_data/sample.nt",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Format : ntriples
+Parse OK
+"""
+
+[stderr]
+mode = "absent"

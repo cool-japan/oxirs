@@ -328,7 +328,7 @@ impl JwtManager {
 
     /// Sign data using HMAC-SHA256
     fn sign_hmac_sha256(&self, data: &str) -> Result<Vec<u8>> {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         type HmacSha256 = Hmac<Sha256>;
 
         let mut mac = HmacSha256::new_from_slice(self.config.secret.as_bytes())

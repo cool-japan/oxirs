@@ -7,10 +7,12 @@ pub mod bbox_utils;
 // GeoSPARQL Simple Features topology predicates (v1.1.0 round 5)
 pub mod buffer_3d;
 pub mod coordinate_transformation;
+pub mod de9im;
 pub mod egenhofer;
 pub mod extended_ogc;
 pub mod geometric_operations;
 pub mod geometric_properties;
+pub mod geometry_simplify;
 pub mod ogc11;
 pub mod rcc8;
 pub mod simple_features;

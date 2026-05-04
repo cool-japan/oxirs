@@ -136,6 +136,15 @@ pub enum StreamError {
 
     #[error("Resource exhausted: {0}")]
     ResourceExhausted(String),
+
+    /// Per-stream SLA admission control rejected the event because the stream
+    /// is over its admitted budget (rate, lag, or jitter envelope).
+    #[error("SLA exceeded for stream '{stream_id}': {reason}")]
+    SlaExceeded { stream_id: String, reason: String },
+
+    /// Watermark monotonicity violated by an upstream operator.
+    #[error("Watermark violation for operator '{operator_id}': {reason}")]
+    WatermarkViolation { operator_id: String, reason: String },
 }
 
 impl From<std::io::Error> for StreamError {

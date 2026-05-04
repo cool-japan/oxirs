@@ -671,9 +671,14 @@ mod osm_performance_scenarios {
         let load_time = start.elapsed();
 
         // Should load 10k POIs quickly
+        // Debug builds are significantly slower; use relaxed thresholds outside release mode
+        #[cfg(debug_assertions)]
+        let load_limit_ms = 2000u128;
+        #[cfg(not(debug_assertions))]
+        let load_limit_ms = 500u128;
         assert!(
-            load_time.as_millis() < 500,
-            "Bulk loading 10k POIs should take <500ms, took {}ms",
+            load_time.as_millis() < load_limit_ms,
+            "Bulk loading 10k POIs should take <{load_limit_ms}ms, took {}ms",
             load_time.as_millis()
         );
 
@@ -682,9 +687,13 @@ mod osm_performance_scenarios {
         let results = loaded_index.query_bbox(-122.405, 37.705, -122.395, 37.715);
         let query_time = start.elapsed();
 
+        #[cfg(debug_assertions)]
+        let query_limit_ms = 200u128;
+        #[cfg(not(debug_assertions))]
+        let query_limit_ms = 50u128;
         assert!(
-            query_time.as_millis() < 50,
-            "Viewport query should take <50ms, took {}ms",
+            query_time.as_millis() < query_limit_ms,
+            "Viewport query should take <{query_limit_ms}ms, took {}ms",
             query_time.as_millis()
         );
 

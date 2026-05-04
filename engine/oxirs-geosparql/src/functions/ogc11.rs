@@ -405,9 +405,9 @@ fn extract_points(geom: &Geometry) -> Vec<(f64, f64)> {
                 out.push((r.min().x, r.max().y));
             }
             G::Triangle(t) => {
-                out.push((t.0.x, t.0.y));
-                out.push((t.1.x, t.1.y));
-                out.push((t.2.x, t.2.y));
+                out.push((t.v1().x, t.v1().y));
+                out.push((t.v2().x, t.v2().y));
+                out.push((t.v3().x, t.v3().y));
             }
         }
     }

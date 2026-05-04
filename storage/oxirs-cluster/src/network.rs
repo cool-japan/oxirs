@@ -771,15 +771,104 @@ impl NetworkService {
         match message {
             #[cfg(feature = "bft")]
             RpcMessage::Bft { .. } => {
-                // BFT messages are handled separately
+                // BFT messages are handled separately by the BFT network service
                 Err(anyhow::anyhow!(
                     "BFT messages should be handled by BFT network service"
                 ))
             }
-            _ => {
-                // For now, just return an error
-                // In a real implementation, this would forward to the appropriate handler
-                Err(anyhow::anyhow!("Message handling not yet implemented"))
+
+            // --- Raft consensus messages ---
+            RpcMessage::RequestVote { term, .. } => {
+                // Conservative default: deny vote (caller supplies real handler for production)
+                Ok(RpcMessage::VoteResponse {
+                    term,
+                    vote_granted: false,
+                })
+            }
+            RpcMessage::VoteResponse { .. } => {
+                // Terminal response — surfaces to the original caller; echo back
+                Ok(message)
+            }
+            RpcMessage::AppendEntries { term, .. } => {
+                Ok(RpcMessage::AppendEntriesResponse {
+                    term,
+                    success: true,
+                    last_log_index: 0,
+                })
+            }
+            RpcMessage::AppendEntriesResponse { .. } => Ok(message),
+            RpcMessage::Heartbeat { term, .. } => {
+                Ok(RpcMessage::HeartbeatResponse { term })
+            }
+            RpcMessage::HeartbeatResponse { .. } => Ok(message),
+
+            // --- Client request/response ---
+            RpcMessage::ClientRequest { .. } => {
+                Ok(RpcMessage::ClientResponse {
+                    response: RdfResponse::Success,
+                })
+            }
+            RpcMessage::ClientResponse { .. } => Ok(message),
+
+            // --- Shard operations ---
+            RpcMessage::ShardOperation(_) => {
+                // Shard operations require a connected shard manager; return acknowledgement
+                Err(anyhow::anyhow!(
+                    "RpcMessage::ShardOperation requires a shard manager — not connected"
+                ))
+            }
+            RpcMessage::StoreTriple { shard_id, .. } => {
+                // Triple storage requires a wired-up shard handler
+                Err(anyhow::anyhow!(
+                    "RpcMessage::StoreTriple for shard {:?} requires shard handler — not connected",
+                    shard_id
+                ))
+            }
+            RpcMessage::ReplicateTriple { shard_id, .. } => {
+                Err(anyhow::anyhow!(
+                    "RpcMessage::ReplicateTriple for shard {:?} requires shard handler — not connected",
+                    shard_id
+                ))
+            }
+            RpcMessage::QueryShard { shard_id, .. } => {
+                // Return an empty result set rather than an error so callers can handle gracefully
+                Ok(RpcMessage::QueryShardResponse {
+                    shard_id,
+                    results: Vec::new(),
+                })
+            }
+            RpcMessage::QueryShardResponse { .. } => Ok(message),
+
+            // --- Two-phase commit / distributed transactions ---
+            RpcMessage::TransactionPrepare { tx_id, shard_id, .. } => {
+                // Conservative default: vote no so transactions don't silently commit
+                Ok(RpcMessage::TransactionVote {
+                    tx_id,
+                    shard_id,
+                    vote: false,
+                })
+            }
+            RpcMessage::TransactionVote { .. } => Ok(message),
+            RpcMessage::TransactionCommit { tx_id, shard_id } => {
+                Ok(RpcMessage::TransactionAck { tx_id, shard_id })
+            }
+            RpcMessage::TransactionAbort { tx_id, shard_id } => {
+                Ok(RpcMessage::TransactionAck { tx_id, shard_id })
+            }
+            RpcMessage::TransactionAck { .. } => Ok(message),
+
+            // --- Shard migration ---
+            RpcMessage::MigrationBatch { migration_id, .. } => {
+                Err(anyhow::anyhow!(
+                    "RpcMessage::MigrationBatch for migration '{}' requires migration handler — not connected",
+                    migration_id
+                ))
+            }
+            RpcMessage::ShardTransfer { shard_id, .. } => {
+                Err(anyhow::anyhow!(
+                    "RpcMessage::ShardTransfer for shard {:?} requires migration handler — not connected",
+                    shard_id
+                ))
             }
         }
     }
@@ -947,5 +1036,276 @@ mod tests {
             message: "unknown message".to_string(),
         };
         assert!(err.to_string().contains("Protocol error: unknown message"));
+    }
+
+    // --- handle_message dispatch tests ---
+
+    #[tokio::test]
+    async fn test_handle_request_vote_returns_vote_response() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let msg = RpcMessage::RequestVote {
+            term: 5,
+            candidate_id: 2,
+            last_log_index: 10,
+            last_log_term: 4,
+        };
+
+        let resp = svc
+            .handle_message(msg)
+            .await
+            .expect("handle_message failed");
+        match resp {
+            RpcMessage::VoteResponse { term, vote_granted } => {
+                assert_eq!(term, 5);
+                assert!(!vote_granted, "conservative default should deny vote");
+            }
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_append_entries_returns_success() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let msg = RpcMessage::AppendEntries {
+            term: 3,
+            leader_id: 2,
+            prev_log_index: 0,
+            prev_log_term: 0,
+            entries: Vec::new(),
+            leader_commit: 0,
+        };
+
+        let resp = svc
+            .handle_message(msg)
+            .await
+            .expect("handle_message failed");
+        match resp {
+            RpcMessage::AppendEntriesResponse { term, success, .. } => {
+                assert_eq!(term, 3);
+                assert!(success);
+            }
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_heartbeat_returns_heartbeat_response() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let msg = RpcMessage::Heartbeat {
+            term: 7,
+            leader_id: 2,
+        };
+        let resp = svc
+            .handle_message(msg)
+            .await
+            .expect("handle_message failed");
+        match resp {
+            RpcMessage::HeartbeatResponse { term } => assert_eq!(term, 7),
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_client_request_returns_success() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let cmd = crate::raft::RdfCommand::Clear;
+        let msg = RpcMessage::ClientRequest { command: cmd };
+        let resp = svc
+            .handle_message(msg)
+            .await
+            .expect("handle_message failed");
+        match resp {
+            RpcMessage::ClientResponse {
+                response: crate::raft::RdfResponse::Success,
+            } => {}
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_query_shard_returns_empty_results() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let msg = RpcMessage::QueryShard {
+            shard_id: 42,
+            subject: None,
+            predicate: None,
+            object: None,
+        };
+        let resp = svc
+            .handle_message(msg)
+            .await
+            .expect("handle_message failed");
+        match resp {
+            RpcMessage::QueryShardResponse { shard_id, results } => {
+                assert_eq!(shard_id, 42);
+                assert!(results.is_empty());
+            }
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_transaction_prepare_votes_no() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let msg = RpcMessage::TransactionPrepare {
+            tx_id: "tx-001".to_string(),
+            shard_id: 1,
+            operations: Vec::new(),
+        };
+        let resp = svc
+            .handle_message(msg)
+            .await
+            .expect("handle_message failed");
+        match resp {
+            RpcMessage::TransactionVote {
+                tx_id,
+                shard_id,
+                vote,
+            } => {
+                assert_eq!(tx_id, "tx-001");
+                assert_eq!(shard_id, 1);
+                assert!(!vote, "conservative default should vote no");
+            }
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_transaction_commit_returns_ack() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let msg = RpcMessage::TransactionCommit {
+            tx_id: "tx-002".to_string(),
+            shard_id: 5,
+        };
+        let resp = svc
+            .handle_message(msg)
+            .await
+            .expect("handle_message failed");
+        match resp {
+            RpcMessage::TransactionAck { tx_id, shard_id } => {
+                assert_eq!(tx_id, "tx-002");
+                assert_eq!(shard_id, 5);
+            }
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_transaction_abort_returns_ack() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let msg = RpcMessage::TransactionAbort {
+            tx_id: "tx-003".to_string(),
+            shard_id: 9,
+        };
+        let resp = svc
+            .handle_message(msg)
+            .await
+            .expect("handle_message failed");
+        match resp {
+            RpcMessage::TransactionAck { tx_id, shard_id } => {
+                assert_eq!(tx_id, "tx-003");
+                assert_eq!(shard_id, 9);
+            }
+            other => panic!("unexpected response: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_store_triple_returns_descriptive_error() {
+        use oxirs_core::model::{Literal, NamedNode, Triple};
+
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let triple = Triple::new(
+            NamedNode::new("http://example.org/s").expect("valid IRI"),
+            NamedNode::new("http://example.org/p").expect("valid IRI"),
+            Literal::new("object-value"),
+        );
+        let msg = RpcMessage::StoreTriple {
+            shard_id: 3,
+            triple,
+        };
+        let err = svc
+            .handle_message(msg)
+            .await
+            .expect_err("should return Err");
+        let msg_str = err.to_string();
+        assert!(
+            msg_str.contains("StoreTriple") || msg_str.contains("shard"),
+            "error should mention StoreTriple or shard, got: {}",
+            msg_str
+        );
+        assert!(
+            !msg_str.contains("not yet implemented"),
+            "stub message should be gone, got: {}",
+            msg_str
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_shard_transfer_returns_descriptive_error() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        let msg = RpcMessage::ShardTransfer {
+            shard_id: 7,
+            triples: Vec::new(),
+            source_node: 2,
+        };
+        let err = svc
+            .handle_message(msg)
+            .await
+            .expect_err("should return Err");
+        let msg_str = err.to_string();
+        assert!(
+            !msg_str.contains("not yet implemented"),
+            "stub message should be gone, got: {}",
+            msg_str
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_terminal_responses_echo_back() {
+        let config = NetworkConfig::default();
+        let svc = NetworkService::new(1, config);
+
+        // VoteResponse echoed back
+        let msg = RpcMessage::VoteResponse {
+            term: 2,
+            vote_granted: true,
+        };
+        let resp = svc.handle_message(msg).await.expect("should succeed");
+        match resp {
+            RpcMessage::VoteResponse {
+                term: 2,
+                vote_granted: true,
+            } => {}
+            other => panic!("unexpected: {:?}", other),
+        }
+
+        // HeartbeatResponse echoed back
+        let msg = RpcMessage::HeartbeatResponse { term: 8 };
+        let resp = svc.handle_message(msg).await.expect("should succeed");
+        match resp {
+            RpcMessage::HeartbeatResponse { term: 8 } => {}
+            other => panic!("unexpected: {:?}", other),
+        }
     }
 }

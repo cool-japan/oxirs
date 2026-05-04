@@ -7,6 +7,10 @@
 //! private key bytes as the HMAC key — sufficient for testing and mock usage.
 //! Production deployments should wire in actual cloud SDK calls.
 
+// v0.3.0: Simulated PKCS#11 HSM signer
+pub mod audit;
+pub mod pkcs11;
+
 use crate::{DidDocument, DidError, DidResult, VerificationMethod};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;

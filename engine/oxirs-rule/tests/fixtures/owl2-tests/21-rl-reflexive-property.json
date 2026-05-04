@@ -1,0 +1,17 @@
+{
+    "id": "dl-reflexive-property-001",
+    "title": "DL: ReflexiveProperty self-relates every known individual",
+    "profiles": ["DL"],
+    "axioms": [
+        { "kind": "ReflexiveProperty", "property": "knows" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "rdf:type", "object": "Person" },
+        { "subject": "bob", "predicate": "rdf:type", "object": "Person" }
+    ],
+    "expected": [
+        { "kind": "Property", "subject": "alice", "property": "knows", "object": "alice" },
+        { "kind": "Property", "subject": "bob", "property": "knows", "object": "bob" }
+    ],
+    "forbidden": []
+}

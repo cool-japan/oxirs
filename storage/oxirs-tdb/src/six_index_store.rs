@@ -150,12 +150,7 @@ impl SixIndexStore {
     /// Query triples matching any combination of S/P/O pattern.
     ///
     /// Each parameter is `Some(value)` to match exactly, or `None` to match any.
-    pub fn query_spo(
-        &self,
-        s: Option<&str>,
-        p: Option<&str>,
-        o: Option<&str>,
-    ) -> Vec<Triple> {
+    pub fn query_spo(&self, s: Option<&str>, p: Option<&str>, o: Option<&str>) -> Vec<Triple> {
         let mut results = Vec::new();
 
         match (s, p, o) {
@@ -396,7 +391,10 @@ mod tests {
         let idx = store_with_triples();
         let results = idx.query_spo(Some("s1"), Some("p1"), Some("o1"));
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0], ("s1".to_string(), "p1".to_string(), "o1".to_string()));
+        assert_eq!(
+            results[0],
+            ("s1".to_string(), "p1".to_string(), "o1".to_string())
+        );
     }
 
     #[test]

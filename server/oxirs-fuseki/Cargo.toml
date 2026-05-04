@@ -70,6 +70,10 @@ bcrypt = { version = "0.19", optional = true }
 sha2.workspace = true
 base64.workspace = true
 
+# SAML 2.0 pure-Rust XML parsing and signature verification (optional)
+quick-xml = { workspace = true, optional = true }
+rsa = { workspace = true, optional = true }
+
 # Time and dates
 chrono.workspace = true
 
@@ -113,6 +117,10 @@ regex.workspace = true
 # Serialization and encoding
 oxicode.workspace = true  # Replaces bincode per COOLJAPAN Policy
 hex.workspace = true
+
+# API surface tracking (syn/quote for AST parsing in api_surface.rs and api_snapshot bin)
+syn = { workspace = true }
+quote = { workspace = true }
 
 # Additional dependencies for MFA and authentication
 urlencoding.workspace = true
@@ -161,7 +169,7 @@ utoipa = { version = "5.4", features = ["chrono"] }
 utoipa-swagger-ui = { version = "9.0", features = ["axum", "vendored"] }
 
 # DNS resolution for service discovery (migrated from trust-dns to hickory-dns)
-hickory-resolver = "0.25"
+hickory-resolver = "0.26.1"
 
 # X.509 certificate parsing for client authentication
 x509-parser = "0.18"
@@ -178,7 +186,7 @@ rcgen = { workspace = true, optional = true }
 notify = { version = "8.2", optional = true }
 
 # Template engine for admin UI
-askama = { version = "0.15", optional = true }
+askama = { version = "0.16", optional = true }
 
 # Environment
 dotenv = "0.15"
@@ -186,7 +194,7 @@ dotenv = "0.15"
 [dev-dependencies]
 criterion = { workspace = true, features = ["html_reports"] }
 tokio-test.workspace = true
-axum-test = "19"
+axum-test = "20"
 http = { workspace = true }
 http-body-util.workspace = true
 tower = { version = "0.5", features = ["util"] }
@@ -209,8 +217,7 @@ kafka = ["rdkafka"]
 nats = ["async-nats"]
 hot-reload = ["notify"]
 ldap = ["ldap3"]
-saml = []  # SAML authentication support (implementation in progress)
-# saml = [] # Disabled until xmlsec compatibility issues are resolved
+saml = ["dep:quick-xml", "dep:rsa"]  # SAML authentication support via pure-Rust XML parsing
 development = ["admin-ui", "tracing"]
 production = ["metrics", "auth", "rate-limit", "tls", "ldap"]
 k8s = ["kube", "k8s-openapi", "schemars"]  # Kubernetes operator support
@@ -226,4 +233,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[bin]]
 name = "oxirs-fuseki"
 path = "src/main.rs"
+
+[[bin]]
+name = "fuseki_api_snapshot"
+path = "src/bin/api_snapshot.rs"
 

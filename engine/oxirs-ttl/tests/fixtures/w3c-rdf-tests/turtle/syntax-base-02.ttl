@@ -1,0 +1,3 @@
+# BASE directive (SPARQL-style)
+BASE <http://example.org/>
+<s> <p> <o> .

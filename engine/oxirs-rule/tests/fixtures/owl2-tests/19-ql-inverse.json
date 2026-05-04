@@ -1,0 +1,16 @@
+{
+    "id": "ql-inverse-property-001",
+    "title": "QL: inverseOf rewrites queries to use the inverse direction",
+    "profiles": ["QL", "RL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "InverseObjectProperties", "a": "hasParent", "b": "hasChild" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "hasParent", "object": "diana" }
+    ],
+    "expected": [
+        { "kind": "Property", "subject": "alice", "property": "hasParent", "object": "diana" },
+        { "kind": "Property", "subject": "diana", "property": "hasChild", "object": "alice" }
+    ],
+    "forbidden": []
+}

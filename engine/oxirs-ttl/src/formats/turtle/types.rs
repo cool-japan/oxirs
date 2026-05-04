@@ -85,10 +85,14 @@ pub enum TurtleStatement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Keywords
-    /// @prefix keyword
+    /// `@prefix` keyword (Turtle 1.1 form, terminated by `.`)
     PrefixKeyword,
-    /// @base keyword
+    /// `@base` keyword (Turtle 1.1 form, terminated by `.`)
     BaseKeyword,
+    /// `PREFIX` keyword (SPARQL-style, no terminating `.`)
+    SparqlPrefixKeyword,
+    /// `BASE` keyword (SPARQL-style, no terminating `.`)
+    SparqlBaseKeyword,
     /// 'a' shorthand for rdf:type
     A,
 

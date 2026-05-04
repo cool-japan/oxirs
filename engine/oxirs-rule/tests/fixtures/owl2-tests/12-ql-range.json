@@ -1,0 +1,15 @@
+{
+    "id": "ql-range-001",
+    "title": "QL: range reasoning gives the object a type",
+    "profiles": ["QL", "RL", "RLEL"],
+    "axioms": [
+        { "kind": "ObjectPropertyRange", "property": "hasOwner", "class": "Person" }
+    ],
+    "data": [
+        { "subject": "rex", "predicate": "hasOwner", "object": "alice" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "alice", "class": "Person" }
+    ],
+    "forbidden": []
+}

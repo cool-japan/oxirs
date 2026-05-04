@@ -1,8 +1,8 @@
 //! # OxiRS WASM
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Development Release (v0.2.4)
+//! **Status**: Development Release (v0.3.0)
 //!
 //! WebAssembly bindings for OxiRS - Run RDF/SPARQL in the browser.
 //!
@@ -83,6 +83,15 @@ pub mod event_dispatcher;
 
 // v1.1.0 round 16: RDF namespace prefix management for WASM bindings
 pub mod namespace_manager;
+
+// v0.3.0: Web Workers for parallel execution
+pub mod web_worker;
+
+// v0.3.0: ServiceWorker offline cache
+pub mod offline_cache;
+
+// v0.3.0: SHACL validation subset
+pub mod shacl;
 
 use wasm_bindgen::prelude::*;
 

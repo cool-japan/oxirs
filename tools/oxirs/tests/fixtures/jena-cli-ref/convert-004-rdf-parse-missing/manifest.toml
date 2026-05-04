@@ -1,0 +1,13 @@
+description = "rdf-parse fails on non-existent file with non-zero exit"
+classification = "spec-required"
+argv = ["--quiet", "rdf-parse", "${TMPDIR}/no-such.nt"]
+exit_code = 1
+
+[stdout]
+mode = "absent"
+
+[stderr]
+mode = "contains"
+expected = """
+File does not exist
+"""

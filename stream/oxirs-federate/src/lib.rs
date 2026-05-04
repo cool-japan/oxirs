@@ -1,9 +1,9 @@
 //! # OxiRS Federation - Federated Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-federate/badge.svg)](https://docs.rs/oxirs-federate)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Federated query processing capabilities for SPARQL and GraphQL with service discovery,
@@ -72,6 +72,7 @@ pub mod advanced_security_hardening;
 pub mod advanced_semantic_features;
 pub mod advanced_visualization;
 pub mod anomaly_detection;
+pub mod arq_bridge;
 pub mod auth;
 pub mod auto_discovery;
 pub mod automl_pipeline;
@@ -174,6 +175,12 @@ pub mod query_splitter;
 // v1.1.0 round 16: Federated result streaming with backpressure and streaming join
 pub mod result_streamer;
 
+// v0.3.0 W3-S10: SPARQL 1.1 federation algebra optimizer (filter pushdown,
+// service merge, join decomposition).  Operates on `oxirs_arq::algebra::Algebra`
+// trees; pairs with `cost_model::FederationCostModel` for plan comparison
+// and `cache::endpoint_cache::EndpointCache` for stable subresult caching.
+pub mod optimizer;
+
 // Minimal imports to ensure compilation - only core types
 // Re-enabled specific non-duplicate exports after fixing ServiceRegistry conflicts
 // AutoDiscovery and CacheConfig already imported above, skipping duplicates
@@ -182,38 +189,39 @@ pub use advanced_query_optimizer::{
     AdvancedOptimizerConfig, AdvancedQueryOptimizer, HardwareProfile, OptimizedPlan, QueryPlan,
     TrainingExample,
 };
-// Advanced ML Optimizer (v0.2.4 advanced features)
+pub use arq_bridge::ArqSourceSelectivityProvider;
+// Advanced ML Optimizer (v0.3.0 advanced features)
 pub use advanced_ml_optimizer::{
     ActivationType, AdvancedMLConfig, AdvancedMLOptimizer, AutoML, DeepCardinalityEstimator,
     ExplainableAI, JoinType, NeuralArchitectureSearch, OnlineLearningManager, RLJoinOptimizer,
     TrainingEpoch, TransferLearningManager,
 };
-// Advanced Benchmarking (v0.2.4 advanced features)
+// Advanced Benchmarking (v0.3.0 advanced features)
 pub use advanced_benchmarking::{
     AdvancedBenchmarkConfig, AdvancedBenchmarkSuite, BenchmarkResult, CustomBenchmarkConfig,
     CustomBenchmarkGenerator, LUBMSuite, RegressionDetectionResult, SP2BenchSuite,
     ScalabilityTestResult, StressTestResult, WatDivSuite, WorkloadCharacterization,
 };
-// Advanced Semantic Features (v0.2.4 advanced features)
+// Advanced Semantic Features (v0.3.0 advanced features)
 pub use advanced_semantic_features::{
     AdvancedSemanticConfig, AdvancedSemanticFeatures, AutoMapping, AutoMappingGenerator,
     ChangeType, ConceptRelationship, DeepOntologyMatcher, Entity, EntityMatch, EntityResolver,
     MappingType, MatchType, MultiLingualConcept, MultiLingualSchemaManager, OntologyConcept,
     OntologyMatch, RelationType, SchemaChange, SchemaEvolutionTracker, SchemaVersion,
 };
-// Advanced Anomaly Detection (v0.2.4 advanced features)
+// Advanced Anomaly Detection (v0.3.0 advanced features)
 pub use advanced_anomaly_detection::{
     AdvancedAnomalyConfig, AdvancedAnomalyDetection, HealingAction, HealingActionType,
     IsolationForest, IssueType, LSTMPredictor, MaintenancePriority, MaintenanceTask,
     PredictiveMaintenanceScheduler, RootCause, RootCauseAnalyzer, SelfHealingEngine,
     Severity as AnomalySeverity,
 };
-// Advanced Consensus (v0.2.4 advanced features)
+// Advanced Consensus (v0.3.0 advanced features)
 pub use advanced_consensus::{
     AdvancedConsensusSystem, ByzantineFaultTolerance, DistributedLock, GCounter,
     NetworkPartitionDetector, PNCounter, VectorClock,
 };
-// Advanced Enterprise Features (v0.2.4 advanced features)
+// Advanced Enterprise Features (v0.3.0 advanced features)
 pub use advanced_enterprise_features::{
     AdvancedEnterpriseFeatures, AuditLogEntry, AuditLogger, AuditResult, DataLineageTracker,
     DataSubject, DeletionRequest, EdgeComputingManager, EdgeNode, EdgeNodeStatus,

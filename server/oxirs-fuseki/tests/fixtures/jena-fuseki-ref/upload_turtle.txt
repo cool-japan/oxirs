@@ -1,0 +1,16 @@
+# Bulk upload of Turtle data
+endpoint: upload
+classification: spec-required
+match_mode: status-only
+description: POST /upload with Turtle returns 2xx
+
+=== request
+POST /upload
+Content-Type: text/turtle
+
+<http://example.org/u1> <http://example.org/p> "v" .
+<http://example.org/u2> <http://example.org/p> "v" .
+
+=== response
+200
+

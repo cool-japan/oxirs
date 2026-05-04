@@ -1,0 +1,23 @@
+# Implementation detail: riot prints a banner header and a stats footer that
+# Jena does not (Jena prints only the converted RDF on stdout).  The shared
+# *spec* requirement is "the converted Turtle data appears on stdout when
+# converting an N-Triples input with the default --output".
+description = "riot default output emits Turtle for an N-Triples input"
+classification = "impl-detail"
+argv = [
+    "--quiet",
+    "riot",
+    "${FIXTURE}/../_data/sample.nt",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/age> "30" .
+<http://example.org/bob> <http://xmlns.com/foaf/0.1/name> "Bob" .
+"""
+
+[stderr]
+mode = "absent"

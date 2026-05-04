@@ -1,0 +1,15 @@
+# $/server endpoint
+endpoint: admin_server
+classification: spec-required
+match_mode: structural-json
+ignore_fields: built_at, datasets_count, features, version, description
+description: GET /$/server returns JSON with `name` field
+
+=== request
+GET /$/server
+
+=== response
+200
+Content-Type: application/json
+
+{"name":"OxiRS Fuseki"}

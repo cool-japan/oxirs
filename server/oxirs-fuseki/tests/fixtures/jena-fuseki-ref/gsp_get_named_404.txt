@@ -1,0 +1,13 @@
+# GET unknown named graph -> 404
+endpoint: gsp_get
+classification: spec-required
+match_mode: status-only
+description: GET /data?graph=<missing-uri> returns 404
+
+=== request
+GET /data?graph=http%3A%2F%2Fexample.org%2Fno-such-graph
+Accept: text/turtle
+
+=== response
+404
+

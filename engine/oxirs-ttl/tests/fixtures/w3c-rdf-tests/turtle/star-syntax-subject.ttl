@@ -1,0 +1,3 @@
+# quoted triple as subject (RDF-star)
+@prefix ex: <http://example.org/> .
+<< ex:alice ex:knows ex:bob >> ex:source ex:rumor .

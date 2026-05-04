@@ -437,7 +437,7 @@ impl SecurityManager {
         hasher.update(password.as_bytes());
         hasher.update(salt.as_bytes());
         let result = hasher.finalize();
-        Ok(format!("{result:x}"))
+        Ok(hex::encode(result))
     }
 
     /// Verify password hash

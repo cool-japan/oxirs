@@ -1,0 +1,3 @@
+# @base directive
+@base <http://example.org/> .
+<s> <p> <o> .

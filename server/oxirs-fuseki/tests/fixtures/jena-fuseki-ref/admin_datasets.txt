@@ -1,0 +1,14 @@
+# $/datasets endpoint
+endpoint: admin_datasets
+classification: spec-required
+match_mode: structural-json
+description: GET /$/datasets returns JSON array (empty when no datasets configured)
+
+=== request
+GET /$/datasets
+
+=== response
+200
+Content-Type: application/json
+
+[]

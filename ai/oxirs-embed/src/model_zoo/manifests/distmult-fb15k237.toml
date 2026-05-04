@@ -1,0 +1,13 @@
+name = "distmult-fb15k237"
+model_type = "DistMult"
+dataset = "FB15k-237"
+dimensions = 200
+entities = 14541
+relations = 237
+sha256 = "PLACEHOLDER"
+source = "file:///seeds/distmult-fb15k237.ckpt"
+license = "Apache-2.0"
+citation = "Yang, B., Yih, W., He, X., Gao, J., & Deng, L. (2015). Embedding Entities and Relations for Learning and Inference in Knowledge Bases. ICLR."
+version = "1.0.0"
+created = "2026-05-01"
+notes = "SYNTHETIC SEED: small random-initialized weights for testing only. Not actual research weights. Run 'cargo run --example fetch_real_weights' for production weights."

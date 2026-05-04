@@ -1,8 +1,8 @@
 //! # OxiRS Physics - Physics-Informed Digital Twin Bridge
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //!
 //! Connects RDF knowledge graphs with SciRS2 physics simulations.
 //!
@@ -86,6 +86,9 @@
 pub mod conservation;
 pub mod constraints;
 pub mod digital_twin;
+
+// DTDL v3 (Digital Twin Definition Language) full parser + RDF mapper
+pub mod dtdl;
 pub mod error;
 pub mod fem;
 pub mod modal_analysis;
@@ -137,7 +140,26 @@ pub mod control_systems;
 // v1.1.0 round 16: Kinematic equations for linear and rotational motion
 pub mod kinematics;
 
+// v0.3.0 W4-S12: GPU-accelerated kernels (FEM stress, Navier-Stokes pressure,
+// heat-diffusion stencils). The whole module is feature-gated; without `gpu`
+// the dispatchers return `GpuError::BackendUnavailable` so callers can fall
+// back to the existing CPU paths without conditional compilation.
+pub mod gpu;
+
+// v0.3.0 W4-S12: Bidirectional state synchronisation. The existing parameter
+// extraction handles RDF → physics; this module adds physics → RDF (with
+// diff-only updates) and a periodic orchestrator.
+pub mod sync;
+
+// v0.3.0 W4-S12: Physics-Informed Neural Network residual corrector. Pure
+// Rust feed-forward network gated behind the `pinn_correction` feature.
+pub mod pinn;
+
 pub use error::{PhysicsError, PhysicsResult};
+
+// v0.3.0: Type-safe dimensional quantities via `uom` crate (requires `simulation` feature)
+#[cfg(feature = "simulation")]
+pub mod uom_quantities;
 
 /// Physics simulation bridge version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

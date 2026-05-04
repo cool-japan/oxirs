@@ -126,3 +126,8 @@ engine/oxirs-vec/metadata.json
 
 # Rustc ICE dumps
 rustc-ice-*.txt
+
+# tests
+# server/oxirs-fuseki/tests/fixtures/jena-fuseki-ref/*
+# engine/oxirs-ttl/tests/fixtures/w3c-rdf-tests/*
+

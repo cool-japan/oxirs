@@ -154,7 +154,7 @@ Storage Backends (RDF Store, Disk, Cloud)
    ```bash
    # Add to Cargo.toml
    [dependencies]
-   oxirs-vec = "0.2.3"
+   oxirs-vec = "0.3.0"
    scirs2-core = "0.7"  # Required for scientific computing
    ```
 

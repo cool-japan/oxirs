@@ -1,0 +1,16 @@
+description = "lang-tag --validate rejects a non-BCP-47 string with non-zero exit"
+classification = "spec-required"
+argv = ["--quiet", "lang-tag", "123", "--validate"]
+exit_code = 1
+
+[stdout]
+mode = "contains"
+expected = """
+Invalid BCP-47 language tag: 123
+"""
+
+[stderr]
+mode = "contains"
+expected = """
+invalid BCP-47 language tag
+"""

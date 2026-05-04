@@ -1,0 +1,26 @@
+description = "query against an initialised but empty dataset returns empty SPARQL Results JSON"
+classification = "spec-required"
+setup = [
+    ["--quiet", "init", "qds", "--format", "tdb2", "--location", "${TMPDIR}/qds"],
+]
+argv = [
+    "--quiet",
+    "query",
+    "${TMPDIR}/qds",
+    "SELECT ?s WHERE { ?s ?p ?o }",
+    "--output",
+    "json",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+"head"
+"vars"
+"results"
+"bindings"
+"""
+
+[stderr]
+mode = "absent"

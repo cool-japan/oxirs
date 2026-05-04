@@ -19,4 +19,22 @@ pub struct QueryExecutor {
     #[allow(dead_code)]
     pub(super) result_cache: Arc<RwLock<HashMap<String, CachedResult>>>,
     pub(super) execution_strategy: ExecutionStrategy,
+    /// Adaptive statistics store for runtime feedback to the optimizer.
+    pub(super) adaptive_stats: Arc<crate::optimizer::adaptive::AdaptiveStatsStore>,
+    /// Optional SLA admission control gate.
+    ///
+    /// When `Some`, callers can invoke
+    /// [`crate::executor::QueryExecutor::execute_for_tenant`] which routes the
+    /// query through the admission controller and priority dispatcher before
+    /// dispatching to the regular [`crate::executor::QueryExecutor::execute`].
+    pub(super) sla_gate: Option<crate::sla_integration::ArqSlaGate>,
+    /// Optional runtime resource budget.
+    ///
+    /// When `Some`, [`crate::executor::QueryExecutor::execute`] checks the
+    /// wall-time limit at entry and records one result row per binding in the
+    /// returned solution.  Triple-scan hooks are provided by
+    /// [`crate::query_governor::ExecutionBudget::record_triple_scan`] but must
+    /// be threaded into `execute_single_pattern` by callers that iterate the
+    /// store directly (stubbed — see `query_governor` module docs).
+    pub(super) execution_budget: Option<std::sync::Arc<crate::query_governor::ExecutionBudget>>,
 }

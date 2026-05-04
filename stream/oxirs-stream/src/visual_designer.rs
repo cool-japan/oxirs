@@ -131,6 +131,7 @@ pub enum SinkType {
     Kafka,
     Nats,
     Redis,
+    Memory,
     Database,
     File,
     WebSocket,
@@ -649,8 +650,12 @@ impl VisualStreamDesigner {
             }
             ExportFormat::Dot => self.export_dot(pipeline),
             ExportFormat::Mermaid => self.export_mermaid(pipeline),
-            ExportFormat::Svg => Err(anyhow!("SVG export not yet implemented")),
-            ExportFormat::Png => Err(anyhow!("PNG export not yet implemented")),
+            ExportFormat::Svg => self.export_svg(pipeline),
+            ExportFormat::Png => Err(anyhow!(
+                "PNG export requires SVG rasterization; use ExportFormat::Svg and convert with \
+                 resvg/tiny-skia externally (these crates depend on miniz_oxide which is \
+                 prohibited by COOLJAPAN Pure Rust Policy)"
+            )),
         }
     }
 
@@ -775,6 +780,129 @@ impl VisualStreamDesigner {
         let limit = limit.unwrap_or(history.len());
 
         Ok(history.iter().rev().take(limit).cloned().collect())
+    }
+
+    /// Export pipeline to SVG format
+    fn export_svg(&self, pipeline: &VisualPipeline) -> Result<String> {
+        // Layout constants
+        const NODE_W: f64 = 140.0;
+        const NODE_H: f64 = 44.0;
+        const H_GAP: f64 = 60.0;
+        const V_GAP: f64 = 70.0;
+        const MARGIN: f64 = 30.0;
+
+        // Collect nodes sorted deterministically so layout is stable.
+        let mut nodes: Vec<(&String, &PipelineNode)> = pipeline.nodes.iter().collect();
+        nodes.sort_by_key(|(id, _)| id.as_str());
+
+        // Assign positions: use stored position when non-zero, otherwise fall back to
+        // a simple grid layout so the SVG is always valid even for freshly created pipelines.
+        let cols = ((nodes.len() as f64).sqrt().ceil() as usize).max(1);
+        let mut node_positions: HashMap<&str, (f64, f64)> = HashMap::new();
+
+        for (idx, (id, node)) in nodes.iter().enumerate() {
+            let (cx, cy) = if node.position.x.abs() > 1e-9 || node.position.y.abs() > 1e-9 {
+                (node.position.x, node.position.y)
+            } else {
+                let col = idx % cols;
+                let row = idx / cols;
+                (
+                    MARGIN + col as f64 * (NODE_W + H_GAP),
+                    MARGIN + row as f64 * (NODE_H + V_GAP),
+                )
+            };
+            node_positions.insert(id.as_str(), (cx, cy));
+        }
+
+        // Canvas size
+        let total_w = if node_positions.is_empty() {
+            200.0
+        } else {
+            node_positions
+                .values()
+                .map(|(x, _)| *x)
+                .fold(f64::NEG_INFINITY, f64::max)
+                + NODE_W
+                + MARGIN
+        };
+        let total_h = if node_positions.is_empty() {
+            100.0
+        } else {
+            node_positions
+                .values()
+                .map(|(_, y)| *y)
+                .fold(f64::NEG_INFINITY, f64::max)
+                + NODE_H
+                + MARGIN
+        };
+
+        let mut svg = String::new();
+        svg.push_str(&format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">"#,
+            w = total_w,
+            h = total_h
+        ));
+        svg.push('\n');
+
+        // Styles embedded inline for portability
+        svg.push_str(
+            r##"<defs><style>
+  .node-rect{fill:#4a90d9;stroke:#2c5f8a;stroke-width:1.5;rx:6;ry:6;}
+  .node-label{fill:#fff;font-family:sans-serif;font-size:12px;text-anchor:middle;dominant-baseline:middle;}
+  .edge-line{stroke:#888;stroke-width:1.5;marker-end:url(#arrow);}
+</style>
+<marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+  <path d="M0,0 L0,6 L8,3 z" fill="#888"/>
+</marker></defs>
+"##,
+        );
+
+        // Draw edges first (behind nodes)
+        for edge in pipeline.edges.values() {
+            if let (Some(&(sx, sy)), Some(&(tx, ty))) = (
+                node_positions.get(edge.source_node_id.as_str()),
+                node_positions.get(edge.target_node_id.as_str()),
+            ) {
+                let x1 = sx + NODE_W;
+                let y1 = sy + NODE_H / 2.0;
+                let x2 = tx;
+                let y2 = ty + NODE_H / 2.0;
+                svg.push_str(&format!(
+                    r#"<line class="edge-line" x1="{x1:.1}" y1="{y1:.1}" x2="{x2:.1}" y2="{y2:.1}"/>"#
+                ));
+                svg.push('\n');
+            }
+        }
+
+        // Draw nodes
+        for (id, node) in &nodes {
+            if let Some(&(x, y)) = node_positions.get(id.as_str()) {
+                let label = xml_escape(&node.name);
+                svg.push_str(&format!(
+                    r#"<rect class="node-rect" x="{x:.1}" y="{y:.1}" width="{w}" height="{h}" rx="6" ry="6"/>"#,
+                    w = NODE_W,
+                    h = NODE_H
+                ));
+                svg.push('\n');
+                svg.push_str(&format!(
+                    r#"<text class="node-label" x="{cx:.1}" y="{cy:.1}">{label}</text>"#,
+                    cx = x + NODE_W / 2.0,
+                    cy = y + NODE_H / 2.0,
+                ));
+                svg.push('\n');
+            }
+        }
+
+        // Pipeline name as title
+        let title = xml_escape(&pipeline.name);
+        svg.push_str(&format!(
+            r##"<text x="{x}" y="16" font-family="sans-serif" font-size="14" fill="#333">{title}</text>"##,
+            x = MARGIN
+        ));
+        svg.push('\n');
+
+        svg.push_str("</svg>\n");
+        Ok(svg)
     }
 
     /// Export pipeline to DOT format (GraphViz)
@@ -1061,8 +1189,9 @@ impl PipelineOptimizer {
         // Analyze pipeline structure
         let metrics = self.analyze_structure(pipeline);
 
-        // Generate optimization suggestions
-        if metrics.avg_chain_length > 10.0 {
+        // Generate optimization suggestions — trigger when either the longest path exceeds
+        // 10 hops (max_chain_length) or the average depth across all nodes exceeds 10.
+        if metrics.max_chain_length > 10 || metrics.avg_chain_length > 10.0 {
             suggestions.push(OptimizationSuggestion {
                 suggestion_type: OptimizationType::ReduceChainLength,
                 impact: ImpactLevel::High,
@@ -1091,14 +1220,17 @@ impl PipelineOptimizer {
     }
 
     fn analyze_structure(&self, pipeline: &VisualPipeline) -> PipelineMetrics {
-        let mut total_chain_length = 0;
-        let mut chain_count = 0;
+        let mut total_chain_length = 0usize;
+        let mut max_depth = 0usize;
+        let chain_count = pipeline.nodes.len();
 
         // Simple chain length calculation
         for node_id in pipeline.nodes.keys() {
             let depth = self.calculate_depth(pipeline, node_id);
             total_chain_length += depth;
-            chain_count += 1;
+            if depth > max_depth {
+                max_depth = depth;
+            }
         }
 
         PipelineMetrics {
@@ -1109,7 +1241,7 @@ impl PipelineOptimizer {
             } else {
                 0.0
             },
-            max_chain_length: total_chain_length,
+            max_chain_length: max_depth,
             parallel_opportunities: self.count_parallel_opportunities(pipeline),
             bottleneck_nodes: Vec::new(),
         }
@@ -1148,6 +1280,22 @@ impl PipelineOptimizer {
 
         count
     }
+}
+
+/// Escape special XML/HTML characters for safe embedding in SVG text elements.
+fn xml_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 /// Optimization result
@@ -1611,5 +1759,92 @@ mod tests {
 
         designer.delete_pipeline(&pipeline_id).await.unwrap();
         assert_eq!(designer.list_pipelines().await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_export_svg_contains_svg_tag() {
+        let designer = VisualStreamDesigner::new(VisualDesignerConfig::default());
+        let pipeline_id = designer
+            .create_pipeline("SVG Test Pipeline".to_string(), None)
+            .await
+            .unwrap();
+
+        let source_id = designer
+            .add_node(
+                &pipeline_id,
+                "Source".to_string(),
+                NodeType::Source(SourceType::Memory),
+                Position {
+                    x: 0.0,
+                    y: 0.0,
+                    z: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        let sink_id = designer
+            .add_node(
+                &pipeline_id,
+                "Sink".to_string(),
+                NodeType::Sink(SinkType::Memory),
+                Position {
+                    x: 200.0,
+                    y: 0.0,
+                    z: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        designer
+            .add_edge(
+                &pipeline_id,
+                source_id,
+                "output".to_string(),
+                sink_id,
+                "input".to_string(),
+            )
+            .await
+            .unwrap();
+
+        let svg = designer
+            .export_pipeline(&pipeline_id, ExportFormat::Svg)
+            .await
+            .expect("SVG export should succeed");
+
+        assert!(
+            svg.contains("<svg"),
+            "SVG output must start with <svg element"
+        );
+        assert!(svg.contains("</svg>"), "SVG output must be closed");
+        assert!(
+            svg.contains("Source"),
+            "SVG must contain node label 'Source'"
+        );
+        assert!(svg.contains("Sink"), "SVG must contain node label 'Sink'");
+    }
+
+    #[tokio::test]
+    async fn test_export_png_returns_descriptive_error() {
+        let designer = VisualStreamDesigner::new(VisualDesignerConfig::default());
+        let pipeline_id = designer
+            .create_pipeline("PNG Test".to_string(), None)
+            .await
+            .unwrap();
+
+        let result = designer
+            .export_pipeline(&pipeline_id, ExportFormat::Png)
+            .await;
+
+        assert!(
+            result.is_err(),
+            "PNG export should return an error per policy"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("PNG"),
+            "Error message should mention PNG: {err_msg}"
+        );
     }
 }

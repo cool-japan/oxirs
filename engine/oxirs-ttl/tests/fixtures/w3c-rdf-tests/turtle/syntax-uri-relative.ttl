@@ -1,0 +1,3 @@
+# relative IRI resolved against @base
+@base <http://example.org/data/> .
+<a> <p> <b> .

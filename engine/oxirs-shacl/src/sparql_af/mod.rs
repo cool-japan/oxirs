@@ -31,37 +31,47 @@ pub use target_type::{
     SparqlTargetParameter, SparqlTargetType, SparqlTargetTypeInstance, SparqlTargetTypeRegistry,
 };
 
-/// Standard SHACL namespace prefix
+/// Standard SHACL namespace prefix.
 pub const SHACL_NS: &str = "http://www.w3.org/ns/shacl#";
-/// Standard SHACL-AF namespace prefix (same namespace, different types)
+/// Full IRI of the `sh:SPARQLTargetType` class (SHACL-AF §3.1).
 pub const SHACL_AF_TARGET_TYPE: &str = "http://www.w3.org/ns/shacl#SPARQLTargetType";
+/// Full IRI of the `sh:SPARQLTarget` class (SHACL-AF §3.2).
 pub const SHACL_AF_SPARQL_TARGET: &str = "http://www.w3.org/ns/shacl#SPARQLTarget";
 
 /// A single row of SPARQL SELECT results, mapping variable names to value strings.
 pub type SparqlRow = HashMap<String, String>;
 
-/// Error type for SHACL-AF operations
+/// Error type for SHACL-AF operations.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum SparqlAfError {
+    /// The underlying SPARQL engine returned an error while running the SHACL-AF query.
     #[error("SPARQL query execution error: {0}")]
     QueryExecution(String),
 
+    /// A `sh:SPARQLTargetType` instance failed to bind a parameter declared as required.
     #[error("Missing required parameter: {0}")]
     MissingParameter(String),
 
+    /// A bound parameter value did not match its declared shape.
     #[error("Invalid parameter value '{value}' for parameter '{param}': {reason}")]
     InvalidParameter {
+        /// The declared parameter name.
         param: String,
+        /// The offending value.
         value: String,
+        /// Human-readable reason.
         reason: String,
     },
 
+    /// A target-type lookup failed because no matching type is registered.
     #[error("Target type not found: {0}")]
     TargetTypeNotFound(String),
 
+    /// Query assembly (template substitution, prefix declaration) failed.
     #[error("Query building error: {0}")]
     QueryBuild(String),
 
+    /// A validator builder rejected its configuration.
     #[error("Validator configuration error: {0}")]
     Configuration(String),
 }

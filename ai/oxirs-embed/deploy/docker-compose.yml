@@ -1,0 +1,90 @@
+# OxiRS Embed — single-node docker-compose stack.
+#
+# Spins up:
+#   - oxirs-embed       (the embedding HTTP service)
+#   - prometheus        (scrapes /metrics from oxirs-embed)
+#   - grafana           (dashboard import via provisioning)
+#
+# Usage:
+#   docker compose -f deploy/docker-compose.yml up --build
+#   open http://localhost:3000  (Grafana, default admin/admin)
+#
+# This file is meant for local validation, **not** production: there is no
+# auth on Grafana, no TLS, no HA.  For production use the Helm chart in
+# deploy/helm/oxirs-embed/.
+
+services:
+  oxirs-embed:
+    build:
+      context: ../../..
+      dockerfile: ai/oxirs-embed/deploy/Dockerfile
+    image: oxirs-embed:local
+    container_name: oxirs-embed
+    restart: unless-stopped
+    environment:
+      OXIRS_EMBED_BIND: "0.0.0.0:8080"
+      OXIRS_EMBED_METRICS: "0.0.0.0:9090"
+      OXIRS_EMBED_LOG: "info,oxirs_embed=debug"
+      OXIRS_EMBED_DISTRIBUTED: "false"
+      OXIRS_EMBED_NUM_SHARDS: "4"
+      OXIRS_EMBED_NUM_WORKERS: "4"
+    ports:
+      - "8080:8080"      # HTTP API
+      - "9090:9090"      # Prometheus scrape endpoint
+    volumes:
+      - oxirs-embed-data:/var/lib/oxirs-embed
+    networks:
+      - oxirs-net
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    container_name: oxirs-embed-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9091:9090"
+    depends_on:
+      - oxirs-embed
+    networks:
+      - oxirs-net
+
+  grafana:
+    image: grafana/grafana:11.5.0
+    container_name: oxirs-embed-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: "admin"
+      GF_SECURITY_ADMIN_PASSWORD: "admin"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana-dashboard.json:/var/lib/grafana/dashboards/oxirs-embed.json:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - oxirs-net
+
+volumes:
+  oxirs-embed-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  oxirs-net:
+    driver: bridge

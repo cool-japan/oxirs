@@ -1,0 +1,2 @@
+# IRI with disallowed whitespace
+<http://example.org/with space> <http://example.org/p> "v" .

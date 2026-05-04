@@ -17,12 +17,26 @@ use super::types::ExecutionStrategy;
 use super::queryexecutor_type::QueryExecutor;
 
 impl QueryExecutor {
-    /// Execute algebra expression with optimized strategy selection
+    /// Execute algebra expression with optimized strategy selection.
+    ///
+    /// When a runtime budget has been attached via
+    /// [`crate::executor::QueryExecutor::with_budget`], this method:
+    ///
+    /// 1. Checks the wall-time limit **before** dispatching to the chosen
+    ///    execution strategy.
+    /// 2. Records one result row for every binding in the returned solution,
+    ///    stopping early and propagating the error if the row limit is
+    ///    exceeded.
     pub fn execute(
         &mut self,
         algebra: &Algebra,
         dataset: &dyn Dataset,
     ) -> Result<(Solution, super::stats::ExecutionStats)> {
+        // ── Budget: pre-execution wall-time check ────────────────────────
+        if let Some(ref budget) = self.execution_budget {
+            budget.check_time().map_err(|e| anyhow::anyhow!("{e}"))?;
+        }
+
         let start_time = std::time::Instant::now();
         let strategy = self.choose_execution_strategy(algebra);
         let result = match strategy {
@@ -39,6 +53,16 @@ impl QueryExecutor {
                 }
             }
         }?;
+
+        // ── Budget: post-execution per-row accounting ────────────────────
+        if let Some(ref budget) = self.execution_budget {
+            for _ in &result {
+                budget
+                    .record_result_row()
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+            }
+        }
+
         let execution_time = start_time.elapsed();
         let stats = super::stats::ExecutionStats {
             execution_time,

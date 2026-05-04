@@ -1,11 +1,14 @@
-//! SAMM to OpenAPI 3.0 Specification Generator
+//! SAMM to OpenAPI Specification Generator
 //!
-//! Generates [OpenAPI 3.0.3](https://spec.openapis.org/oas/v3.0.3) specification
-//! documents from SAMM Aspect Models.  The resulting spec exposes a REST endpoint
-//! that returns the Aspect payload, and documents all types as reusable schema
-//! components.
+//! Generates [OpenAPI 3.0.3](https://spec.openapis.org/oas/v3.0.3) and
+//! [OpenAPI 3.1.0](https://spec.openapis.org/oas/v3.1.0) specification
+//! documents from SAMM Aspect Models.  OpenAPI 3.1 aligns with
+//! [JSON Schema 2020-12](https://json-schema.org/draft/2020-12/schema).
 //!
-//! # Example
+//! The resulting spec exposes a REST endpoint that returns the Aspect payload,
+//! and documents all types as reusable schema components.
+//!
+//! # Example – OpenAPI 3.0
 //!
 //! ```rust,no_run
 //! use oxirs_samm::parser::parse_aspect_model;
@@ -19,6 +22,25 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! # Example – OpenAPI 3.1 (JSON Schema 2020-12)
+//!
+//! ```rust,no_run
+//! use oxirs_samm::parser::parse_aspect_model;
+//! use oxirs_samm::codegen::{OpenApiGenerator, OpenApiOptions, OpenApiVersion};
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let aspect = parse_aspect_model("Movement.ttl").await?;
+//! let options = OpenApiOptions {
+//!     version: OpenApiVersion::V31,
+//!     ..OpenApiOptions::default()
+//! };
+//! let gen = OpenApiGenerator::with_options(options);
+//! let spec = gen.generate(&aspect)?;
+//! println!("{}", serde_json::to_string_pretty(&spec)?);
+//! # Ok(())
+//! # }
+//! ```
 
 use serde_json::{json, Map, Value};
 
@@ -26,6 +48,31 @@ use crate::error::{Result, SammError};
 use crate::metamodel::{
     Aspect, Characteristic, CharacteristicKind, Entity, ModelElement, Property,
 };
+
+/// JSON Schema 2020-12 meta-schema URI used as `jsonSchemaDialect` in OpenAPI 3.1 documents.
+const JSON_SCHEMA_2020_12_DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
+
+// ------------------------------------------------------------------ //
+//  OpenAPI version selector                                            //
+// ------------------------------------------------------------------ //
+
+/// Target OpenAPI specification version for [`OpenApiGenerator`].
+///
+/// Choosing [`OpenApiVersion::V31`] produces a document that conforms to
+/// OpenAPI 3.1.0 and uses JSON Schema 2020-12 as its schema dialect.
+/// The key differences from 3.0 are:
+///
+/// - Version string `"3.1.0"` and a `jsonSchemaDialect` field.
+/// - Optional properties use `type: ["T", "null"]` instead of `nullable: true`.
+/// - Single-value enumerations use `const` instead of `enum: [value]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OpenApiVersion {
+    /// OpenAPI 3.0.3 (default, maximum compatibility).
+    #[default]
+    V30,
+    /// OpenAPI 3.1.0, aligned with JSON Schema 2020-12.
+    V31,
+}
 
 // ------------------------------------------------------------------ //
 //  HTTP method vocabulary                                              //
@@ -65,6 +112,8 @@ impl HttpMethod {
 /// Configuration for [`OpenApiGenerator`].
 #[derive(Debug, Clone)]
 pub struct OpenApiOptions {
+    /// Target OpenAPI specification version (3.0 or 3.1).
+    pub version: OpenApiVersion,
     /// The base path prefix for all generated endpoints.
     pub base_path: String,
     /// API version string embedded in the `info` object.
@@ -86,6 +135,7 @@ pub struct OpenApiOptions {
 impl Default for OpenApiOptions {
     fn default() -> Self {
         Self {
+            version: OpenApiVersion::V30,
             base_path: "/api/v1/aspects".to_string(),
             api_version: "1.0.0".to_string(),
             include_get: true,
@@ -146,8 +196,18 @@ impl OpenApiGenerator {
     //  Public API                                                        //
     // ---------------------------------------------------------------- //
 
-    /// Generate an OpenAPI 3.0.3 specification `Value` for the given `aspect`.
+    /// Generate an OpenAPI specification `Value` for the given `aspect`.
+    ///
+    /// The output version (3.0 or 3.1) is controlled by [`OpenApiOptions::version`].
     pub fn generate(&self, aspect: &Aspect) -> Result<Value> {
+        match self.options.version {
+            OpenApiVersion::V30 => self.generate_v30(aspect),
+            OpenApiVersion::V31 => self.generate_v31(aspect),
+        }
+    }
+
+    /// Generate an OpenAPI 3.0.3 specification `Value` for the given `aspect`.
+    pub fn generate_v30(&self, aspect: &Aspect) -> Result<Value> {
         let aspect_name = aspect.name();
         let path = format!(
             "{}/{}",
@@ -155,7 +215,6 @@ impl OpenApiGenerator {
             to_kebab_case(&aspect_name)
         );
 
-        // Top-level document
         let mut spec = Map::new();
         spec.insert("openapi".to_string(), Value::String("3.0.3".to_string()));
         spec.insert("info".to_string(), self.build_info(aspect));
@@ -164,6 +223,38 @@ impl OpenApiGenerator {
             json!({ path: self.build_path_item(aspect)? }),
         );
         spec.insert("components".to_string(), self.build_components(aspect)?);
+
+        Ok(Value::Object(spec))
+    }
+
+    /// Generate an OpenAPI 3.1.0 specification `Value` for the given `aspect`.
+    ///
+    /// The generated document:
+    /// - Sets `openapi: "3.1.0"` and `jsonSchemaDialect` to the JSON Schema
+    ///   2020-12 meta-schema URI.
+    /// - Represents optional properties as `type: ["T", "null"]` (or wraps
+    ///   non-primitive schemas in `oneOf: [..., {type: "null"}]`).
+    /// - Uses `const` for single-value enumerations.
+    pub fn generate_v31(&self, aspect: &Aspect) -> Result<Value> {
+        let aspect_name = aspect.name();
+        let path = format!(
+            "{}/{}",
+            self.options.base_path.trim_end_matches('/'),
+            to_kebab_case(&aspect_name)
+        );
+
+        let mut spec = Map::new();
+        spec.insert("openapi".to_string(), Value::String("3.1.0".to_string()));
+        spec.insert(
+            "jsonSchemaDialect".to_string(),
+            Value::String(JSON_SCHEMA_2020_12_DIALECT.to_string()),
+        );
+        spec.insert("info".to_string(), self.build_info(aspect));
+        spec.insert(
+            "paths".to_string(),
+            json!({ path: self.build_path_item(aspect)? }),
+        );
+        spec.insert("components".to_string(), self.build_components_v31(aspect)?);
 
         Ok(Value::Object(spec))
     }
@@ -345,9 +436,15 @@ impl OpenApiGenerator {
         Value::Object(responses)
     }
 
-    /// Build the `components` section, including all schemas.
+    /// Build the `components` section for OpenAPI 3.0.
     fn build_components(&self, aspect: &Aspect) -> Result<Value> {
         let schemas = self.build_schemas(aspect)?;
+        Ok(json!({ "schemas": schemas }))
+    }
+
+    /// Build the `components` section for OpenAPI 3.1 (JSON Schema 2020-12).
+    fn build_components_v31(&self, aspect: &Aspect) -> Result<Value> {
+        let schemas = self.build_schemas_v31(aspect)?;
         Ok(json!({ "schemas": schemas }))
     }
 
@@ -376,6 +473,233 @@ impl OpenApiGenerator {
         }
 
         Ok(Value::Object(schemas))
+    }
+
+    /// Build the `components/schemas` mapping for OpenAPI 3.1 documents.
+    pub fn build_schemas_v31(&self, aspect: &Aspect) -> Result<Value> {
+        let mut schemas = Map::new();
+
+        let aspect_schema = self.build_aspect_schema_v31(aspect)?;
+        schemas.insert(aspect.name(), aspect_schema);
+
+        // Inline entity schemas (SingleEntity references)
+        for prop in aspect.properties() {
+            if let Some(char) = &prop.characteristic {
+                if let CharacteristicKind::SingleEntity { entity_type } = char.kind() {
+                    let entity_name = entity_type
+                        .split('#')
+                        .next_back()
+                        .unwrap_or(entity_type.as_str())
+                        .to_string();
+                    if !schemas.contains_key(&entity_name) {
+                        schemas.insert(entity_name, json!({ "type": "object" }));
+                    }
+                }
+            }
+        }
+
+        Ok(Value::Object(schemas))
+    }
+
+    fn build_aspect_schema_v31(&self, aspect: &Aspect) -> Result<Value> {
+        let mut schema = Map::new();
+
+        schema.insert("type".to_string(), Value::String("object".to_string()));
+
+        if let Some(desc) = aspect.metadata().get_description(&self.options.language) {
+            schema.insert("description".to_string(), Value::String(desc.to_string()));
+        }
+
+        let (properties_map, required) = self.build_properties_schema_v31(aspect.properties())?;
+        schema.insert("properties".to_string(), Value::Object(properties_map));
+        if !required.is_empty() {
+            schema.insert(
+                "required".to_string(),
+                Value::Array(required.into_iter().map(Value::String).collect()),
+            );
+        }
+
+        Ok(Value::Object(schema))
+    }
+
+    fn build_properties_schema_v31(
+        &self,
+        props: &[Property],
+    ) -> Result<(Map<String, Value>, Vec<String>)> {
+        let mut map = Map::new();
+        let mut required = Vec::new();
+
+        for prop in props {
+            let name = prop.payload_name.clone().unwrap_or_else(|| prop.name());
+            let prop_schema = self.property_schema_v31(prop)?;
+            map.insert(name.clone(), prop_schema);
+            if !prop.optional {
+                required.push(name);
+            }
+        }
+
+        Ok((map, required))
+    }
+
+    /// Build a property schema following OpenAPI 3.1 / JSON Schema 2020-12 rules.
+    ///
+    /// For optional properties the schema is wrapped to include `"null"` in the
+    /// type array (for primitives) or via `oneOf: [..., {type: "null"}]` for
+    /// reference/composite schemas that do not have a simple `type` field.
+    fn property_schema_v31(&self, prop: &Property) -> Result<Value> {
+        let mut s = Map::new();
+
+        if let Some(desc) = prop.metadata().get_description(&self.options.language) {
+            s.insert("description".to_string(), Value::String(desc.to_string()));
+        }
+
+        if !prop.example_values.is_empty() {
+            s.insert(
+                "example".to_string(),
+                Value::String(prop.example_values.first().cloned().unwrap_or_default()),
+            );
+        }
+
+        let type_schema = if let Some(char) = &prop.characteristic {
+            self.characteristic_schema_v31(char)?
+        } else {
+            json!({ "type": "string" })
+        };
+
+        if prop.optional {
+            // Merge the nullability annotation into the schema.
+            let nullable_schema = make_nullable_v31(type_schema);
+            if let Value::Object(nullable_map) = nullable_schema {
+                for (k, v) in nullable_map {
+                    s.insert(k, v);
+                }
+            }
+        } else if let Value::Object(type_map) = type_schema {
+            for (k, v) in type_map {
+                s.insert(k, v);
+            }
+        }
+
+        Ok(Value::Object(s))
+    }
+
+    fn characteristic_schema_v31(&self, char: &Characteristic) -> Result<Value> {
+        match char.kind() {
+            CharacteristicKind::Trait => {
+                let json_type = char
+                    .data_type
+                    .as_deref()
+                    .map(xsd_to_openapi_type)
+                    .unwrap_or("string");
+                Ok(json!({ "type": json_type }))
+            }
+            CharacteristicKind::Measurement { unit }
+            | CharacteristicKind::Quantifiable { unit } => {
+                let json_type = char
+                    .data_type
+                    .as_deref()
+                    .map(xsd_to_openapi_type)
+                    .unwrap_or("number");
+                Ok(json!({
+                    "type": json_type,
+                    "description": format!("Value expressed in {}", unit)
+                }))
+            }
+            CharacteristicKind::Duration { unit } => Ok(json!({
+                "type": "number",
+                "description": format!("Duration in {}", unit)
+            })),
+            CharacteristicKind::Enumeration { values } => {
+                let data_type = char
+                    .data_type
+                    .as_deref()
+                    .map(xsd_to_openapi_type)
+                    .unwrap_or("string");
+                // In 3.1 / JSON Schema 2020-12: single-value enum → `const`
+                if values.len() == 1 {
+                    Ok(json!({
+                        "type": data_type,
+                        "const": values[0]
+                    }))
+                } else {
+                    Ok(json!({
+                        "type": data_type,
+                        "enum": values
+                    }))
+                }
+            }
+            CharacteristicKind::State {
+                values,
+                default_value,
+            } => {
+                let data_type = char
+                    .data_type
+                    .as_deref()
+                    .map(xsd_to_openapi_type)
+                    .unwrap_or("string");
+                let mut s = json!({
+                    "type": data_type,
+                    "enum": values
+                });
+                if let (Some(obj), Some(default)) = (s.as_object_mut(), default_value.as_deref()) {
+                    obj.insert("default".to_string(), Value::String(default.to_string()));
+                }
+                Ok(s)
+            }
+            CharacteristicKind::Collection {
+                element_characteristic,
+            }
+            | CharacteristicKind::List {
+                element_characteristic,
+            }
+            | CharacteristicKind::TimeSeries {
+                element_characteristic,
+            } => {
+                let items = if let Some(inner) = element_characteristic {
+                    self.characteristic_schema_v31(inner)?
+                } else {
+                    json!({})
+                };
+                Ok(json!({ "type": "array", "items": items }))
+            }
+            CharacteristicKind::Set {
+                element_characteristic,
+            }
+            | CharacteristicKind::SortedSet {
+                element_characteristic,
+            } => {
+                let items = if let Some(inner) = element_characteristic {
+                    self.characteristic_schema_v31(inner)?
+                } else {
+                    json!({})
+                };
+                Ok(json!({ "type": "array", "items": items, "uniqueItems": true }))
+            }
+            CharacteristicKind::Code => {
+                let format: Option<&'static str> =
+                    char.data_type.as_deref().and_then(xsd_to_openapi_format);
+                let mut s = json!({ "type": "string" });
+                if let (Some(obj), Some(fmt)) = (s.as_object_mut(), format) {
+                    obj.insert("format".to_string(), Value::String(fmt.to_string()));
+                }
+                Ok(s)
+            }
+            CharacteristicKind::Either { left, right } => {
+                let left_schema = self.characteristic_schema_v31(left)?;
+                let right_schema = self.characteristic_schema_v31(right)?;
+                Ok(json!({ "oneOf": [left_schema, right_schema] }))
+            }
+            CharacteristicKind::SingleEntity { entity_type } => {
+                let ref_name = entity_type
+                    .split('#')
+                    .next_back()
+                    .unwrap_or(entity_type.as_str());
+                Ok(json!({ "$ref": format!("#/components/schemas/{}", ref_name) }))
+            }
+            CharacteristicKind::StructuredValue { .. } => {
+                Ok(json!({ "type": "string", "format": "structured-value" }))
+            }
+        }
     }
 
     fn build_aspect_schema(&self, aspect: &Aspect) -> Result<Value> {
@@ -561,6 +885,32 @@ impl OpenApiGenerator {
 // ------------------------------------------------------------------ //
 //  Helper functions                                                    //
 // ------------------------------------------------------------------ //
+
+/// Wrap a type schema so that `null` is an accepted value (OpenAPI 3.1 style).
+///
+/// For schemas with a single `type` field the type is widened to an array that
+/// includes `"null"`.  For composite schemas (`$ref`, `oneOf`, `anyOf`, …) an
+/// outer `oneOf: [schema, {type: "null"}]` wrapper is used instead.
+fn make_nullable_v31(schema: Value) -> Value {
+    // Determine whether the schema has a plain `type` string we can widen.
+    let has_simple_type = schema
+        .as_object()
+        .and_then(|m| m.get("type"))
+        .map(|t| t.is_string())
+        .unwrap_or(false);
+
+    if has_simple_type {
+        // Widen: {"type": "string", ...} → {"type": ["string", "null"], ...}
+        let mut out = schema.as_object().cloned().unwrap_or_default();
+        if let Some(t) = out.remove("type") {
+            out.insert("type".to_string(), json!([t, "null"]));
+        }
+        Value::Object(out)
+    } else {
+        // Composite or reference schema: wrap with oneOf + {type: "null"}
+        json!({ "oneOf": [schema, { "type": "null" }] })
+    }
+}
 
 /// Map XSD/SAMM data type string to an OpenAPI type string.
 fn xsd_to_openapi_type(dt: &str) -> &'static str {
@@ -842,6 +1192,248 @@ mod tests {
         assert_eq!(
             xsd_to_openapi_type("http://www.w3.org/2001/XMLSchema#string"),
             "string"
+        );
+    }
+
+    // ---------------------------------------------------------------- //
+    //  OpenAPI 3.1 tests                                                //
+    // ---------------------------------------------------------------- //
+
+    fn v31_gen() -> OpenApiGenerator {
+        let options = OpenApiOptions {
+            version: OpenApiVersion::V31,
+            ..OpenApiOptions::default()
+        };
+        OpenApiGenerator::with_options(options)
+    }
+
+    fn aspect_with_optional_property() -> Aspect {
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#SensorReading".to_string());
+        aspect
+            .metadata
+            .add_preferred_name("en".to_string(), "SensorReading".to_string());
+
+        // mandatory numeric property
+        let char_mandatory = Characteristic::new(
+            "urn:samm:org.example:1.0.0#ValueChar".to_string(),
+            CharacteristicKind::Measurement {
+                unit: "unit:metre".to_string(),
+            },
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#float".to_string());
+        let prop_mandatory = Property::new("urn:samm:org.example:1.0.0#value".to_string())
+            .with_characteristic(char_mandatory);
+        aspect.add_property(prop_mandatory);
+
+        // optional string label
+        let char_optional = Characteristic::new(
+            "urn:samm:org.example:1.0.0#LabelChar".to_string(),
+            CharacteristicKind::Trait,
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#string".to_string());
+        let prop_optional = Property::new("urn:samm:org.example:1.0.0#label".to_string())
+            .with_characteristic(char_optional)
+            .as_optional();
+        aspect.add_property(prop_optional);
+
+        aspect
+    }
+
+    #[test]
+    fn test_openapi31_version_string() {
+        let aspect = movement_aspect();
+        let gen = v31_gen();
+        let spec = gen
+            .generate(&aspect)
+            .expect("3.1 generation should succeed");
+        assert_eq!(spec["openapi"], "3.1.0", "should emit openapi 3.1.0");
+    }
+
+    #[test]
+    fn test_openapi31_json_schema_dialect() {
+        let aspect = movement_aspect();
+        let gen = v31_gen();
+        let spec = gen
+            .generate(&aspect)
+            .expect("3.1 generation should succeed");
+        let dialect = spec["jsonSchemaDialect"].as_str().unwrap_or("");
+        assert!(
+            dialect.contains("json-schema.org") || dialect.contains("2020-12"),
+            "jsonSchemaDialect should reference JSON Schema 2020-12, got: {}",
+            dialect
+        );
+    }
+
+    #[test]
+    fn test_openapi31_no_nullable_keyword() {
+        let aspect = aspect_with_optional_property();
+        let gen = v31_gen();
+        let spec = gen
+            .generate(&aspect)
+            .expect("3.1 generation should succeed");
+        let json = serde_json::to_string(&spec).expect("serialize");
+        assert!(
+            !json.contains("\"nullable\""),
+            "3.1 document must not use the `nullable` keyword"
+        );
+    }
+
+    #[test]
+    fn test_openapi31_type_array_for_optional() {
+        let aspect = aspect_with_optional_property();
+        let gen = v31_gen();
+        let schemas = gen
+            .build_schemas_v31(&aspect)
+            .expect("build_schemas_v31 should succeed");
+
+        // The optional `label` property should have a type array containing "null"
+        let label_schema = &schemas["SensorReading"]["properties"]["label"];
+        let type_val = &label_schema["type"];
+        assert!(
+            type_val.is_array(),
+            "optional property type should be an array, got: {}",
+            type_val
+        );
+        let empty = vec![];
+        let types: Vec<&str> = type_val
+            .as_array()
+            .unwrap_or(&empty)
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(
+            types.contains(&"null"),
+            "optional property type array should contain 'null', got: {:?}",
+            types
+        );
+    }
+
+    #[test]
+    fn test_openapi31_mandatory_property_not_nullable() {
+        let aspect = aspect_with_optional_property();
+        let gen = v31_gen();
+        let schemas = gen
+            .build_schemas_v31(&aspect)
+            .expect("build_schemas_v31 should succeed");
+
+        // The mandatory `value` property should NOT have a type array containing "null"
+        let value_schema = &schemas["SensorReading"]["properties"]["value"];
+        let type_val = &value_schema["type"];
+        // It should be a string (not an array) or at minimum not contain null
+        if let Some(arr) = type_val.as_array() {
+            let types: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+            assert!(
+                !types.contains(&"null"),
+                "mandatory property should not include 'null' type, got: {:?}",
+                types
+            );
+        }
+        // If it's a string type that's also acceptable (non-nullable)
+    }
+
+    #[test]
+    fn test_openapi31_const_for_single_value_enum() {
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#ConstAspect".to_string());
+        let char = Characteristic::new(
+            "urn:samm:org.example:1.0.0#FixedVal".to_string(),
+            CharacteristicKind::Enumeration {
+                values: vec!["FIXED".to_string()],
+            },
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#string".to_string());
+        let prop = Property::new("urn:samm:org.example:1.0.0#fixedField".to_string())
+            .with_characteristic(char);
+        aspect.add_property(prop);
+
+        let gen = v31_gen();
+        let schemas = gen
+            .build_schemas_v31(&aspect)
+            .expect("build_schemas_v31 should succeed");
+        let field = &schemas["ConstAspect"]["properties"]["fixedField"];
+        assert!(
+            field["const"].is_string(),
+            "single-value enum should use `const` in 3.1, got: {}",
+            field
+        );
+        assert!(
+            field.get("enum").is_none(),
+            "single-value `const` should not also emit `enum`"
+        );
+    }
+
+    #[test]
+    fn test_openapi31_multi_value_enum_uses_enum_keyword() {
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#EnumAspect".to_string());
+        let char = Characteristic::new(
+            "urn:samm:org.example:1.0.0#StatusEnum".to_string(),
+            CharacteristicKind::Enumeration {
+                values: vec!["Active".to_string(), "Inactive".to_string()],
+            },
+        )
+        .with_data_type("http://www.w3.org/2001/XMLSchema#string".to_string());
+        let prop = Property::new("urn:samm:org.example:1.0.0#status".to_string())
+            .with_characteristic(char);
+        aspect.add_property(prop);
+
+        let gen = v31_gen();
+        let schemas = gen
+            .build_schemas_v31(&aspect)
+            .expect("build_schemas_v31 should succeed");
+        let status = &schemas["EnumAspect"]["properties"]["status"];
+        assert!(
+            status["enum"].is_array(),
+            "multi-value enum should still use `enum` keyword in 3.1"
+        );
+    }
+
+    #[test]
+    fn test_openapi30_still_works() {
+        // Regression: the 3.0 generator must not be broken by 3.1 changes
+        let aspect = movement_aspect();
+        let gen = OpenApiGenerator::new("1.0.0", "/api/v1/aspects");
+        let spec = gen
+            .generate(&aspect)
+            .expect("3.0 generation should succeed");
+        assert_eq!(
+            spec["openapi"], "3.0.3",
+            "default generator should still emit 3.0.3"
+        );
+        assert!(
+            spec.get("jsonSchemaDialect").is_none(),
+            "3.0 document should not have jsonSchemaDialect field"
+        );
+        let schemas = gen.build_schemas(&aspect).expect("build_schemas");
+        assert_eq!(
+            schemas["Movement"]["properties"]["speed"]["type"], "number",
+            "3.0 schema type should be a plain string"
+        );
+    }
+
+    #[test]
+    fn test_openapi31_ref_optional_uses_one_of() {
+        // An optional SingleEntity property cannot use type array — must use oneOf + null
+        let mut aspect = Aspect::new("urn:samm:org.example:1.0.0#RefAspect".to_string());
+        let char = Characteristic::new(
+            "urn:samm:org.example:1.0.0#EntityRef".to_string(),
+            CharacteristicKind::SingleEntity {
+                entity_type: "urn:samm:org.example:1.0.0#MyEntity".to_string(),
+            },
+        );
+        let prop = Property::new("urn:samm:org.example:1.0.0#entity".to_string())
+            .with_characteristic(char)
+            .as_optional();
+        aspect.add_property(prop);
+
+        let gen = v31_gen();
+        let schemas = gen
+            .build_schemas_v31(&aspect)
+            .expect("build_schemas_v31 should succeed");
+        let entity_prop = &schemas["RefAspect"]["properties"]["entity"];
+        // Should use oneOf wrapping since $ref can't have type array
+        assert!(
+            entity_prop["oneOf"].is_array(),
+            "optional $ref property should be wrapped with oneOf, got: {}",
+            entity_prop
         );
     }
 }

@@ -1,9 +1,9 @@
 //! # OxiRS Cluster
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-cluster/badge.svg)](https://docs.rs/oxirs-cluster)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Raft-backed distributed dataset for high availability and horizontal scaling.
@@ -185,7 +185,25 @@ pub mod node_monitor;
 pub mod failover_manager;
 
 /// Anti-entropy protocol for distributed consistency (v1.9.0).
+///
+/// Includes [`anti_entropy::AntiEntropyThrottle`] — a tokio-Semaphore-backed
+/// concurrency gate that limits concurrent sync sessions to
+/// `max_concurrent_syncs` (default 4) per node.
 pub mod anti_entropy;
+
+/// Gossip protocol primitives — fanout policies (`GossipFanout`) for
+/// epidemic-protocol dissemination.  For adaptive fanout (log₂-based,
+/// loss-rate aware) see [`gossip_scaling`].
+pub mod gossip;
+
+/// In-memory cluster simulation for scalability testing (10 → 1000 nodes).
+///
+/// `SimCluster` runs N virtual nodes in a single tokio runtime with bounded
+/// `mpsc` mailboxes — no real network sockets.  Available unconditionally so
+/// integration tests in `tests/` can import it without the `simulation`
+/// feature flag.  The `simulation` feature remains available for downstream
+/// crates that want to opt in explicitly.
+pub mod simulation;
 
 /// Replication bandwidth throttling: token-bucket per-peer rate limiting with adaptive adjustment (v2.0.0).
 pub mod replication_throttle;
@@ -200,6 +218,81 @@ pub mod shard_router;
 /// Raft-style election timer: randomised timeout, TimerState (Idle/Running/Expired),
 /// reset/check/stop lifecycle, LCG seed for deterministic tests (v1.1.0 round 16)
 pub mod election_timer;
+
+/// Advanced compression codec system: Compressor trait, IdentityCodec, RleCodec,
+/// Lz4Codec, ZstdCodec, CodecRegistry (v0.3.0 W2-S8).
+pub mod compression;
+
+/// Advanced backup policy DSL: BackupPolicy, RetentionTier, GfsRotation,
+/// BackupExecutor with audit log, DestinationConfig (v0.3.0 W2-S8).
+pub mod backup;
+
+/// Per-node SLA admission control on Raft log writes and read replicas.
+///
+/// Reuses the shared per-tenant SLA primitives from [`oxirs_core::sla`]
+/// (W2-S4): [`oxirs_core::sla::SlaClass`],
+/// [`oxirs_core::sla::AdmissionController`], [`oxirs_core::sla::SlaThresholds`].
+/// Adds cluster-aware wrappers: [`sla::ClusterAdmissionController`],
+/// [`sla::SlaProposerGate`], [`sla::SlaReaderGate`] (v0.3.0 W2-S5).
+pub mod sla;
+
+/// Real-time streaming integration with the Raft log (W3-S9).
+///
+/// Provides [`streaming::ClusterSink`], a [`streaming::StreamSink`]
+/// implementation that proposes streaming events through
+/// [`consensus::ConsensusManager`] using the existing
+/// [`raft::RdfCommand`] payload, plus a
+/// [`streaming::BackpressureBridge`] that upstream operators poll for
+/// flow-control signals.
+pub mod streaming;
+
+/// Hierarchical log-replication topology for O(log N) fan-out (Phase B, v0.3.0).
+///
+/// Replaces O(N) all-to-all log shipping with a √N-relay spanning tree that
+/// respects rack/AZ/region topology. The leader ships to R = ceil(√N) relays,
+/// each relay fans out to its AZ members: total messages per round ≈ 2·√N.
+///
+/// See [`log_replication_topology::ReplicationTopology`] for the main entry point.
+pub mod log_replication_topology;
+
+/// Witness nodes for quorum participation without full log storage (Phase B, v0.3.0).
+///
+/// A witness participates in Raft leader election and confirms recent
+/// `AppendEntries` RPCs, but stores only the last `tail_window` log entries.
+/// For a 1000-node cluster with 200 witnesses, disk usage drops by ~20%.
+///
+/// See [`witness_node::WitnessNode`] for the main entry point.
+pub mod witness_node;
+
+/// Real-TCP-network E2E cluster harness (Phase C, v0.3.0).
+///
+/// Proves gossip and replication primitives over actual TCP sockets
+/// (localhost, single-process, multiple tokio tasks).  Not a production
+/// cluster; designed for integration testing.
+///
+/// See [`tcp_cluster::TcpClusterNetwork`] for the main entry point.
+pub mod tcp_cluster;
+
+/// Comprehensive certification suite for operational correctness guarantees (v1.0.0 LTS).
+///
+/// Validates four correctness dimensions via deterministic in-memory simulation:
+/// consistency guarantees, network-partition resilience, Raft invariants, and
+/// SLA latency bounds.
+///
+/// See [`certification::CertificationSuite`] for the main entry point.
+pub mod certification;
+
+pub use log_replication_topology::{
+    NodeDescriptor, ReplicationRole, ReplicationTopology, TopologyNode,
+};
+pub use tcp_cluster::{
+    ClusterMessage, GossipState, MessageCodec, NetworkStats, TcpClusterNetwork, TcpClusterNode,
+    TcpNodeConfig, TcpNodeError,
+};
+pub use witness_node::{
+    VoteRequest, VoteResponse, WitnessAppendRequest, WitnessAppendResponse, WitnessLogEntry,
+    WitnessNode,
+};
 
 pub use error::{ClusterError, Result};
 pub use failover::{FailoverConfig, FailoverManager, FailoverStrategy, RecoveryAction};

@@ -110,7 +110,13 @@ struct Entry<V> {
     value: V,
     created_at: Instant,
     expires_at: Option<Instant>,
-    last_accessed: Instant,
+    /// Monotonic logical clock for LRU/TTL victim selection.
+    ///
+    /// Wall-clock `Instant`s can collide on fast hardware when two cache
+    /// operations occur within the same sub-microsecond window, leading to
+    /// non-deterministic ordering when the LRU victim is chosen via
+    /// `min_by_key`.  A strictly monotonic counter avoids these ties.
+    last_access_seq: u64,
     access_count: u64,
     insertion_seq: u64,
 }
@@ -122,7 +128,7 @@ impl<V: Clone> Entry<V> {
             value,
             created_at: now,
             expires_at: ttl.map(|d| now + d),
-            last_accessed: now,
+            last_access_seq: seq,
             access_count: 0,
             insertion_seq: seq,
         }
@@ -134,8 +140,8 @@ impl<V: Clone> Entry<V> {
             .unwrap_or(false)
     }
 
-    fn touch(&mut self) {
-        self.last_accessed = Instant::now();
+    fn touch(&mut self, seq: u64) {
+        self.last_access_seq = seq;
         self.access_count += 1;
     }
 }
@@ -164,11 +170,18 @@ impl<K: Eq + Hash + Clone, V: Clone> TripleCacheInner<K, V> {
     }
 
     fn get_mut(&mut self, key: &K) -> Option<&V> {
+        // Bump the counter eagerly so that, on a hit, the touched entry is
+        // tagged with a strictly greater `last_access_seq` than any prior
+        // operation.  We compute the next value before the mutable borrow
+        // because borrowing `self.entries` mutably would otherwise prevent
+        // us from also incrementing `self.seq_counter`.
+        let next_seq = self.seq_counter.wrapping_add(1);
         if let Some(entry) = self.entries.get_mut(key) {
             if entry.is_expired() {
                 return None;
             }
-            entry.touch();
+            self.seq_counter = next_seq;
+            entry.touch(next_seq);
             // SAFETY: reborrow as immutable after touch
             Some(&self.entries[key].value)
         } else {
@@ -188,8 +201,11 @@ impl<K: Eq + Hash + Clone, V: Clone> TripleCacheInner<K, V> {
             }
         }
 
-        self.seq_counter += 1;
+        self.seq_counter = self.seq_counter.wrapping_add(1);
         let entry = Entry::new(value, self.ttl, self.seq_counter);
+        // Inserting (or overwriting) a key counts as the freshest access; the
+        // new `last_access_seq == insertion_seq` ensures that a re-`put` of
+        // an existing key bumps it to the front of the LRU queue.
         self.entries.insert(key, entry);
         stats.record_insertion();
     }
@@ -199,7 +215,7 @@ impl<K: Eq + Hash + Clone, V: Clone> TripleCacheInner<K, V> {
             CachePolicy::Lru | CachePolicy::Ttl => self
                 .entries
                 .iter()
-                .min_by_key(|(_, e)| e.last_accessed)
+                .min_by_key(|(_, e)| e.last_access_seq)
                 .map(|(k, _)| k.clone()),
             CachePolicy::Lfu => self
                 .entries

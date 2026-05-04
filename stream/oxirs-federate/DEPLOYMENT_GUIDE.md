@@ -29,7 +29,7 @@ This comprehensive guide covers deploying oxirs-federate in production environme
 ```bash
 # 1. Add dependency to Cargo.toml
 [dependencies]
-oxirs-federate = { version = "0.2.3", features = ["default"] }
+oxirs-federate = { version = "0.3.0", features = ["default"] }
 
 # 2. Basic server setup
 use oxirs_federate::FederationEngine;

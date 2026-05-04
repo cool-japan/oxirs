@@ -1,0 +1,16 @@
+{
+    "id": "rl-inverse-property-001",
+    "title": "RL: inverseOf inverts triples",
+    "profiles": ["RL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "InverseObjectProperties", "a": "hasParent", "b": "hasChild" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "hasChild", "object": "bob" }
+    ],
+    "expected": [
+        { "kind": "Property", "subject": "alice", "property": "hasChild", "object": "bob" },
+        { "kind": "Property", "subject": "bob", "property": "hasParent", "object": "alice" }
+    ],
+    "forbidden": []
+}

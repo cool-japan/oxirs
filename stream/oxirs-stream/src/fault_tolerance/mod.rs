@@ -10,9 +10,25 @@
 //! - [`BulkheadIsolator`]: Isolates stream failures using the bulkhead pattern
 //! - [`StreamRetryPolicy`]: Configurable retry with exponential backoff
 //! - [`StreamSupervisor`]: Supervises stream workers and restarts on failure
+//! - [`checkpoint::MarkerPropagator`] / [`checkpoint::CheckpointController`]:
+//!   Chandy-Lamport-style marker propagation for distributed checkpoints
+//! - [`exactly_once::EndToEndExactlyOnceCoordinator`]: end-to-end exactly-once
+//!   coordinator combining dedup + idempotent producers + atomic transactions
 
+pub mod checkpoint;
 pub mod checkpoint_recovery;
+pub mod exactly_once;
+pub use checkpoint::{
+    CheckpointController, CheckpointControllerConfig, CheckpointError, CheckpointId,
+    CheckpointProgress, CheckpointResult, CheckpointStore, InMemoryCheckpointStore, InputEdgeId,
+    Marker, MarkerPropagator, MarkerPropagatorEvent, OperatorId, OperatorSnapshot,
+};
 pub use checkpoint_recovery::*;
+pub use exactly_once::{
+    EndToEndExactlyOnceCoordinator, ExactlyOnceCoordinatorConfig, ExactlyOnceCoordinatorStats,
+    ExactlyOnceError, ExactlyOnceResult, ExactlyOnceStatsSnapshot, IdempotentProducer,
+    IdempotentProducerConfig, ProducerStamp,
+};
 
 use std::collections::HashMap;
 use std::sync::Arc;

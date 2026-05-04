@@ -1,0 +1,2 @@
+# missing closing '>' in IRI
+<http://example.org/s <http://example.org/p> "x" .

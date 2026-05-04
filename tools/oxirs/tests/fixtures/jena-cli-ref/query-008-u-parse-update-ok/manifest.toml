@@ -1,0 +1,18 @@
+description = "u-parse accepts a syntactically valid SPARQL update"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "u-parse",
+    "INSERT DATA { <http://example.org/a> <http://example.org/p> \"v\" }",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+parsed
+SPARQL Update
+"""
+
+[stderr]
+mode = "absent"

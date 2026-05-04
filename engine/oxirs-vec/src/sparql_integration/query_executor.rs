@@ -4,6 +4,7 @@ use super::config::{VectorQuery, VectorQueryOptimizer, VectorQueryResult, Vector
 use super::cross_language::CrossLanguageProcessor;
 use super::monitoring::PerformanceMonitor;
 use crate::{
+    clustering::{ClusteringAlgorithm, ClusteringConfig, ClusteringEngine},
     embeddings::{EmbeddableContent, EmbeddingManager},
     graph_aware_search::{GraphAwareSearch, GraphContext, GraphSearchScope},
     VectorStore,
@@ -215,7 +216,9 @@ impl QueryExecutor {
             .clone();
 
         // Perform similarity search
-        let results = self.vector_store.index.search_knn(&query_vector, limit)?;
+        let results = self
+            .vector_store
+            .similarity_search_vector(&query_vector, limit)?;
 
         Ok(results
             .into_iter()
@@ -294,7 +297,8 @@ impl QueryExecutor {
         let query_vector = self.embedding_manager.get_embedding(&content)?;
 
         // Perform similarity search
-        self.vector_store.index.search_knn(&query_vector, limit)
+        self.vector_store
+            .similarity_search_vector(&query_vector, limit)
     }
 
     /// Execute cross-language search
@@ -317,7 +321,10 @@ impl QueryExecutor {
             let content = EmbeddableContent::Text(variation_text);
 
             if let Ok(query_vector) = self.embedding_manager.get_embedding(&content) {
-                if let Ok(results) = self.vector_store.index.search_knn(&query_vector, limit) {
+                if let Ok(results) = self
+                    .vector_store
+                    .similarity_search_vector(&query_vector, limit)
+                {
                     for (id, score) in results {
                         all_results.push((id, score * weight));
                     }
@@ -402,11 +409,86 @@ impl QueryExecutor {
         }
     }
 
-    /// Execute clustering query
-    fn execute_cluster_query(&self, _query: &VectorQuery) -> Result<Vec<(String, f32)>> {
-        // Simplified clustering implementation
-        // In a real implementation, this would use clustering algorithms
-        Err(anyhow!("Clustering not yet implemented"))
+    /// Execute clustering query.
+    ///
+    /// Argument protocol (all optional, positional):
+    /// - `args[0]` `Number` — number of clusters `k` (default: 3)
+    /// - `args[1]` `String` — algorithm name: `"kmeans"` (default), `"dbscan"`,
+    ///   `"hierarchical"`, `"spectral"`, `"community"`, `"similarity"`
+    /// - `args[2]` `Number` — similarity threshold for DBSCAN / similarity
+    ///   clustering (default: 0.7)
+    ///
+    /// Returns `Vec<(resource_id, cluster_id_as_f32)>` — one entry per member of
+    /// every non-empty cluster found in the store.  Resources that were not
+    /// assigned to any cluster (DBSCAN noise) are omitted.
+    ///
+    /// **Note:** only index implementations that override `iter_vectors()`
+    /// (currently `MemoryVectorIndex`) expose their vectors; other index types
+    /// will return an empty result.
+    fn execute_cluster_query(&self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
+        // --- parse arguments ------------------------------------------------
+        let num_clusters = if query.args.is_empty() {
+            3usize
+        } else {
+            match &query.args[0] {
+                VectorServiceArg::Number(n) => (*n as usize).max(1),
+                _ => 3,
+            }
+        };
+
+        let algorithm = if query.args.len() > 1 {
+            match &query.args[1] {
+                VectorServiceArg::String(s) | VectorServiceArg::Literal(s) => match s.as_str() {
+                    "dbscan" => ClusteringAlgorithm::DBSCAN,
+                    "hierarchical" => ClusteringAlgorithm::Hierarchical,
+                    "spectral" => ClusteringAlgorithm::Spectral,
+                    "community" => ClusteringAlgorithm::Community,
+                    "similarity" => ClusteringAlgorithm::Similarity,
+                    _ => ClusteringAlgorithm::KMeans,
+                },
+                _ => ClusteringAlgorithm::KMeans,
+            }
+        } else {
+            ClusteringAlgorithm::KMeans
+        };
+
+        let similarity_threshold = if query.args.len() > 2 {
+            match &query.args[2] {
+                VectorServiceArg::Number(n) => *n,
+                _ => 0.7,
+            }
+        } else {
+            0.7
+        };
+
+        // --- retrieve all indexed vectors -----------------------------------
+        let resources: Vec<(String, crate::Vector)> = self.vector_store.iter_vectors();
+
+        if resources.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // --- run clustering engine ------------------------------------------
+        let config = ClusteringConfig {
+            algorithm,
+            num_clusters: Some(num_clusters),
+            similarity_threshold,
+            ..ClusteringConfig::default()
+        };
+
+        let engine = ClusteringEngine::new(config);
+        let clustering_result = engine.cluster(&resources)?;
+
+        // --- flatten clusters into (resource_id, cluster_id_as_f32) pairs --
+        let mut output: Vec<(String, f32)> = Vec::new();
+        for cluster in &clustering_result.clusters {
+            let cluster_score = cluster.id as f32;
+            for member in &cluster.members {
+                output.push((member.clone(), cluster_score));
+            }
+        }
+
+        Ok(output)
     }
 
     /// Execute embedding generation query
@@ -426,9 +508,7 @@ impl QueryExecutor {
 
         // Store the vector with a generated ID
         let id = format!("embedded_{}", hash_string(text));
-        self.vector_store
-            .index
-            .add_vector(id.clone(), vector, None)?;
+        self.vector_store.index_vector(id.clone(), vector)?;
 
         Ok(vec![(id, 1.0)])
     }
@@ -499,7 +579,7 @@ impl QueryExecutor {
         let vector = self.embedding_manager.get_embedding(content)?;
 
         // Insert the vector into the store with the URI as the key
-        self.vector_store.index.insert(uri.to_string(), vector)?;
+        self.vector_store.index_vector(uri.to_string(), vector)?;
 
         Ok(())
     }
@@ -577,6 +657,139 @@ mod tests {
         assert_eq!(merged.len(), 3);
         assert_eq!(merged[0].0, "doc2"); // Highest score first
         assert_eq!(merged[1].1, 0.8); // doc1 should have max score of 0.8
+        Ok(())
+    }
+
+    /// Helpers shared by the cluster query tests.
+    mod cluster_test_helpers {
+        use crate::{MemoryVectorIndex, Vector, VectorIndex as _};
+
+        /// Build a `MemoryVectorIndex` with `n_per_cluster` vectors per cluster
+        /// group.  Each cluster group lives in a linearly-separated band of the
+        /// first dimension so that k-means can reliably separate them.
+        pub fn build_clustered_index(
+            n_clusters: usize,
+            n_per_cluster: usize,
+        ) -> Box<dyn crate::VectorIndex> {
+            let mut idx = MemoryVectorIndex::new();
+
+            // Vectors are made well-separated in cosine space: each cluster
+            // group points primarily along a different axis so cosine
+            // k-means can reliably separate them.  We use `n_clusters`
+            // dimensions (one per cluster) and a small noise in the others
+            // to keep every vector non-zero.
+            let dim = n_clusters.max(4); // at least 4 dims
+
+            for cluster in 0..n_clusters {
+                for member in 0..n_per_cluster {
+                    // Primary component: large value along the cluster's axis.
+                    // Noise: tiny values on all other axes so cosine distance
+                    // between clusters is close to 1 (orthogonal).
+                    let mut values = vec![0.001f32; dim];
+                    values[cluster] = 10.0 + (member as f32) * 0.01;
+                    let id = format!("cluster{cluster}_member{member}");
+                    idx.insert(id, Vector::new(values)).expect("insert ok");
+                }
+            }
+
+            Box::new(idx)
+        }
+    }
+
+    /// Happy path: 9 vectors in 3 clear groups → all 9 appear in the output
+    /// and exactly 3 distinct cluster-id values are present.
+    #[test]
+    fn test_cluster_query_happy_path() -> Result<()> {
+        use cluster_test_helpers::build_clustered_index;
+
+        let n_clusters = 3usize;
+        let n_per_cluster = 3usize;
+        let total = n_clusters * n_per_cluster;
+
+        // Vectors are pre-loaded into the index; no embedding generation needed.
+        let vector_store =
+            VectorStore::with_index(build_clustered_index(n_clusters, n_per_cluster));
+        let embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100)?;
+        let optimizer = VectorQueryOptimizer::default();
+        let executor = QueryExecutor::new(vector_store, embedding_manager, optimizer, None, None);
+
+        let query = VectorQuery::new(
+            "cluster".to_string(),
+            vec![
+                VectorServiceArg::Number(n_clusters as f32), // k
+                VectorServiceArg::String("kmeans".to_string()),
+            ],
+        );
+
+        let results = executor.execute_cluster_query(&query)?;
+
+        // Every vector must appear exactly once.
+        assert_eq!(results.len(), total, "all members must be returned");
+
+        // There should be exactly `n_clusters` distinct cluster ids.
+        let mut cluster_ids: Vec<u32> = results
+            .iter()
+            .map(|(_, cid)| *cid as u32)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        cluster_ids.sort();
+        assert_eq!(
+            cluster_ids.len(),
+            n_clusters,
+            "expected {n_clusters} distinct cluster ids, got {:?}",
+            cluster_ids
+        );
+
+        Ok(())
+    }
+
+    /// Empty store: cluster query must return an empty vec, not an error.
+    #[test]
+    fn test_cluster_query_empty_store() -> Result<()> {
+        let vector_store = VectorStore::new(); // no vectors
+        let embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100)?;
+        let optimizer = VectorQueryOptimizer::default();
+        let executor = QueryExecutor::new(vector_store, embedding_manager, optimizer, None, None);
+
+        let query = VectorQuery::new("cluster".to_string(), vec![VectorServiceArg::Number(3.0)]);
+
+        let results = executor.execute_cluster_query(&query)?;
+        assert!(
+            results.is_empty(),
+            "empty store must yield empty cluster result"
+        );
+        Ok(())
+    }
+
+    /// Invalid k (k >= n): the `ClusteringEngine` must return an error.
+    #[test]
+    fn test_cluster_query_invalid_k() -> Result<()> {
+        use cluster_test_helpers::build_clustered_index;
+
+        // 2 vectors, k=5 → k >= n → engine error expected.
+        let n_clusters = 1usize;
+        let n_per_cluster = 2usize;
+
+        let vector_store =
+            VectorStore::with_index(build_clustered_index(n_clusters, n_per_cluster));
+        let embedding_manager = EmbeddingManager::new(EmbeddingStrategy::TfIdf, 100)?;
+        let optimizer = VectorQueryOptimizer::default();
+        let executor = QueryExecutor::new(vector_store, embedding_manager, optimizer, None, None);
+
+        let query = VectorQuery::new(
+            "cluster".to_string(),
+            vec![
+                VectorServiceArg::Number(5.0), // k=5, but only 2 vectors
+                VectorServiceArg::String("kmeans".to_string()),
+            ],
+        );
+
+        let result = executor.execute_cluster_query(&query);
+        assert!(
+            result.is_err(),
+            "k >= n should produce an error from the clustering engine"
+        );
         Ok(())
     }
 }

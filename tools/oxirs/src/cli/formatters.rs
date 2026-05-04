@@ -842,11 +842,13 @@ impl ResultFormatter for ExcelFormatter {
 }
 
 /// PDF formatter for query results
+#[cfg(feature = "pdf-export")]
 pub struct PdfFormatter {
     pub title: String,
     pub include_metadata: bool,
 }
 
+#[cfg(feature = "pdf-export")]
 impl Default for PdfFormatter {
     fn default() -> Self {
         Self {
@@ -856,6 +858,7 @@ impl Default for PdfFormatter {
     }
 }
 
+#[cfg(feature = "pdf-export")]
 impl ResultFormatter for PdfFormatter {
     fn format(&self, results: &QueryResults, writer: &mut dyn Write) -> std::io::Result<()> {
         use printpdf::*;
@@ -1017,7 +1020,13 @@ pub fn create_formatter(format: &str) -> Option<Box<dyn ResultFormatter>> {
             eprintln!("Excel export requires the 'excel-export' feature");
             None
         }
+        #[cfg(feature = "pdf-export")]
         "pdf" => Some(Box::new(PdfFormatter::default())),
+        #[cfg(not(feature = "pdf-export"))]
+        "pdf" => {
+            eprintln!("PDF export requires the 'pdf-export' feature");
+            None
+        }
         // Template presets
         "template-html" => TemplateFormatter::from_string(
             TemplatePresets::html_table().to_string(),
@@ -1423,6 +1432,7 @@ mod tests {
         assert!(create_formatter("XLSX").is_none());
     }
 
+    #[cfg(feature = "pdf-export")]
     #[test]
     fn test_pdf_formatter() {
         let results = create_test_results();
@@ -1441,6 +1451,7 @@ mod tests {
         assert!(output.len() > 500);
     }
 
+    #[cfg(feature = "pdf-export")]
     #[test]
     fn test_pdf_formatter_empty_results() {
         let results = QueryResults {
@@ -1457,6 +1468,7 @@ mod tests {
         assert_eq!(&output[0..4], b"%PDF");
     }
 
+    #[cfg(feature = "pdf-export")]
     #[test]
     fn test_formatter_factory_pdf() {
         assert!(create_formatter("pdf").is_some());

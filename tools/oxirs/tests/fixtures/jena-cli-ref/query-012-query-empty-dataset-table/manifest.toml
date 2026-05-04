@@ -1,0 +1,22 @@
+description = "query against empty dataset using default table format reports zero results"
+classification = "spec-required"
+setup = [
+    ["--quiet", "init", "qds", "--format", "tdb2", "--location", "${TMPDIR}/qds"],
+]
+argv = [
+    "--quiet",
+    "query",
+    "${TMPDIR}/qds",
+    "SELECT ?s WHERE { ?s ?p ?o }",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+?s
+0 results returned
+"""
+
+[stderr]
+mode = "absent"

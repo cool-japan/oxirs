@@ -1,0 +1,27 @@
+# Behavioural gap closed: prior to the parity audit `tdb-query` defaulted to
+# `--results table`, which the underlying tool rejects with "Unsupported
+# results format 'table'".  After the gap is closed the default produces a
+# tabular text result identical to `--results text`.
+description = "tdb-query with no --results flag uses an accepted default format"
+classification = "spec-required"
+setup = [
+    ["--quiet", "init", "ds", "--format", "tdb2", "--location", "${TMPDIR}/ds"],
+]
+argv = [
+    "--quiet",
+    "tdb-query",
+    "${TMPDIR}/ds",
+    "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+s
+p
+o
+"""
+
+[stderr]
+mode = "absent"

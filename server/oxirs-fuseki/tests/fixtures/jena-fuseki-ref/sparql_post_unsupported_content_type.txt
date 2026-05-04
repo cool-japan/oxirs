@@ -1,0 +1,16 @@
+# POST with unsupported content type
+endpoint: sparql_query
+classification: spec-required
+match_mode: status-only
+description: POST /sparql with unsupported Content-Type returns 4xx
+
+=== request
+POST /sparql
+Content-Type: application/octet-stream
+Accept: application/sparql-results+json
+
+binarygarbage
+
+=== response
+400
+

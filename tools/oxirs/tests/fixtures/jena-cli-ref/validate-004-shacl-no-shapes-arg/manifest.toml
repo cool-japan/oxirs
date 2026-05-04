@@ -1,0 +1,16 @@
+description = "shacl exits with usage error (code 2) when --shapes is omitted"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "shacl",
+    "--data",
+    "${FIXTURE}/../_data/sample.nt",
+]
+exit_code = 2
+
+[stderr]
+mode = "contains"
+expected = """
+required arguments
+--shapes
+"""

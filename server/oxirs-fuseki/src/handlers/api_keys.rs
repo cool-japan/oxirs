@@ -514,7 +514,7 @@ fn hash_api_key(api_key: &str) -> FusekiResult<String> {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(api_key.as_bytes());
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex::encode(hasher.finalize()))
 }
 
 fn validate_api_key_scopes(scopes: &[ApiKeyScope], user: &User) -> FusekiResult<()> {

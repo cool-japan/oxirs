@@ -3,9 +3,12 @@
 //! Provides Merkle tree construction, hash comparison between nodes, missing
 //! data detection, bidirectional reconciliation, conflict resolution (LWW and
 //! vector clocks), sync scheduling, bandwidth throttling, progress tracking,
-//! and incremental Merkle tree updates.
+//! incremental Merkle tree updates, and concurrency throttling via
+//! [`AntiEntropyThrottle`].
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 // ── Hash helpers ─────────────────────────────────────────────────────────────
 
@@ -654,6 +657,69 @@ impl AntiEntropy {
     }
 }
 
+// ── AntiEntropyThrottle ──────────────────────────────────────────────────────
+
+/// Concurrency throttle for anti-entropy synchronisation.
+///
+/// Limits the number of concurrent sync sessions per node to `max_concurrent_syncs`
+/// (default 4).  Callers acquire a permit before starting a sync and release it
+/// when done (by dropping the `OwnedSemaphorePermit`).  Additional sync attempts
+/// block (via [`acquire`](AntiEntropyThrottle::acquire)) or fail immediately (via
+/// [`try_acquire`](AntiEntropyThrottle::try_acquire)) when all permits are taken.
+///
+/// # Example
+///
+/// ```
+/// # tokio_test::block_on(async {
+/// use oxirs_cluster::anti_entropy::AntiEntropyThrottle;
+///
+/// let throttle = AntiEntropyThrottle::new(4);
+/// let permit = throttle.acquire().await.expect("permit available");
+/// // ... perform sync ...
+/// drop(permit); // releases the slot
+/// # });
+/// ```
+pub struct AntiEntropyThrottle {
+    /// Maximum number of sync sessions that may run concurrently.
+    pub max_concurrent_syncs: usize,
+    semaphore: Arc<Semaphore>,
+}
+
+impl AntiEntropyThrottle {
+    /// Create a new throttle allowing up to `max_concurrent_syncs` concurrent syncs.
+    pub fn new(max_concurrent_syncs: usize) -> Self {
+        Self {
+            max_concurrent_syncs,
+            semaphore: Arc::new(Semaphore::new(max_concurrent_syncs)),
+        }
+    }
+
+    /// Create a throttle with the default concurrency limit of 4.
+    pub fn with_default_limit() -> Self {
+        Self::new(4)
+    }
+
+    /// Acquire a permit, waiting if none are available.
+    ///
+    /// Returns `None` if the semaphore has been closed (which never happens in
+    /// normal operation).
+    pub async fn acquire(&self) -> Option<OwnedSemaphorePermit> {
+        Arc::clone(&self.semaphore).acquire_owned().await.ok()
+    }
+
+    /// Try to acquire a permit without blocking.
+    ///
+    /// Returns `None` if no permits are currently available.
+    pub fn try_acquire(&self) -> Option<OwnedSemaphorePermit> {
+        Arc::clone(&self.semaphore).try_acquire_owned().ok()
+    }
+
+    /// Number of permits currently available.
+    pub fn available_permits(&self) -> usize {
+        self.semaphore.available_permits()
+    }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1206,5 +1272,33 @@ mod tests {
         let h = combine_hashes(123, 456);
         let h2 = combine_hashes(123, 456);
         assert_eq!(h, h2);
+    }
+
+    // ── AntiEntropyThrottle ──────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_throttle_allows_up_to_max() {
+        let t = AntiEntropyThrottle::new(3);
+        let _p1 = t.acquire().await.expect("first permit");
+        let _p2 = t.acquire().await.expect("second permit");
+        let _p3 = t.acquire().await.expect("third permit");
+        // try_acquire should fail when all slots are taken
+        assert!(t.try_acquire().is_none(), "no permit available beyond max");
+    }
+
+    #[tokio::test]
+    async fn test_throttle_releases_permit() {
+        let t = AntiEntropyThrottle::new(1);
+        {
+            let _p = t.acquire().await.expect("permit");
+        } // permit dropped here → released back to semaphore
+          // Should be acquirable again
+        assert!(t.try_acquire().is_some());
+    }
+
+    #[test]
+    fn test_throttle_max_concurrent_syncs() {
+        let t = AntiEntropyThrottle::new(4);
+        assert_eq!(t.max_concurrent_syncs, 4);
     }
 }

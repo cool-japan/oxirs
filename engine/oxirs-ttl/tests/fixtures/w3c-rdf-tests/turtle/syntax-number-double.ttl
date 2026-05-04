@@ -1,0 +1,3 @@
+# double / scientific literal
+@prefix ex: <http://example.org/> .
+ex:s ex:p 6.022e23 .

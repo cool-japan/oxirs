@@ -1,0 +1,16 @@
+description = "iri --validate rejects an IRI containing whitespace"
+classification = "spec-required"
+argv = ["--quiet", "iri", "not valid", "--validate"]
+exit_code = 1
+
+[stdout]
+mode = "contains"
+expected = """
+IRI is invalid
+"""
+
+[stderr]
+mode = "contains"
+expected = """
+Invalid IRI
+"""

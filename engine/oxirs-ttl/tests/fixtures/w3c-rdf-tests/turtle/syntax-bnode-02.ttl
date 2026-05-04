@@ -1,0 +1,4 @@
+# labeled blank node _:b
+@prefix ex: <http://example.org/> .
+_:b1 ex:p ex:o .
+ex:s ex:p _:b1 .

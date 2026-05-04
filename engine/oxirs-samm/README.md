@@ -47,7 +47,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-samm = "0.2.3"
+oxirs-samm = "0.3.0"
 ```
 
 ### Basic Usage

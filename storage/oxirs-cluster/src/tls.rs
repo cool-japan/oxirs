@@ -250,7 +250,7 @@ impl TlsManager {
         let mut hasher = Sha256::new();
         hasher.update(&cert_der[0]);
         let hash_result = hasher.finalize();
-        let fingerprint = format!("{hash_result:x}");
+        let fingerprint = hex::encode(hash_result);
 
         let cert_info = CertificateInfo {
             subject: format!("node-{}", self.node_id),

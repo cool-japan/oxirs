@@ -1,0 +1,21 @@
+description = "tdb-query SELECT against an empty TDB store returns just the header row"
+classification = "spec-required"
+setup = [
+    ["--quiet", "init", "ds", "--format", "tdb2", "--location", "${TMPDIR}/ds"],
+]
+argv = [
+    "--quiet",
+    "tdb-query",
+    "${TMPDIR}/ds",
+    "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+    "--results",
+    "text",
+]
+exit_code = 0
+
+[stdout]
+mode = "exact"
+expected = "s\tp\to\n"
+
+[stderr]
+mode = "absent"

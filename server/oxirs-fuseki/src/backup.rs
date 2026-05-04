@@ -241,7 +241,7 @@ impl BackupManager {
         // Calculate checksum
         let mut hasher = Sha256::new();
         hasher.update(all_data.as_bytes());
-        let checksum = format!("{:x}", hasher.finalize());
+        let checksum = hex::encode(hasher.finalize());
 
         // Write to file
         fs::write(&export_path, all_data.as_bytes())
@@ -488,7 +488,7 @@ impl BackupManager {
 
         let mut hasher = Sha256::new();
         hasher.update(&data);
-        Ok(format!("{:x}", hasher.finalize()))
+        Ok(hex::encode(hasher.finalize()))
     }
 
     /// Save backup metadata
@@ -623,7 +623,7 @@ impl BackupManager {
         if let Some(expected_checksum) = &metadata.checksum {
             let mut hasher = Sha256::new();
             hasher.update(data.as_bytes());
-            let actual_checksum = format!("{:x}", hasher.finalize());
+            let actual_checksum = hex::encode(hasher.finalize());
 
             if &actual_checksum != expected_checksum {
                 return Err(FusekiError::internal(format!(

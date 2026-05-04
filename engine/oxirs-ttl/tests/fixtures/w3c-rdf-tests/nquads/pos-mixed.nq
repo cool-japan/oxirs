@@ -1,0 +1,2 @@
+<http://example.org/a> <http://example.org/p> "default" .
+<http://example.org/b> <http://example.org/p> "named" <http://example.org/g> .

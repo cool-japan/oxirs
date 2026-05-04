@@ -1,0 +1,30 @@
+[package]
+name = "oxirs-tauri"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "OxiRS desktop application — chat UI, visual SPARQL query builder, CAN bus monitor"
+keywords = ["tauri", "desktop", "sparql", "chat", "rdf"]
+categories = ["gui", "web-programming"]
+rust-version.workspace = true
+
+[[bin]]
+name = "oxirs-tauri"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { workspace = true, default-features = false, features = ["wry"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["full"] }
+thiserror.workspace = true
+fastrand.workspace = true
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[features]
+default = ["tauri/default"]

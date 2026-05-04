@@ -1,0 +1,18 @@
+description = "rdf-copy fails with non-zero exit when the source file is absent"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "rdf-copy",
+    "${TMPDIR}/no-such-file.ttl",
+    "${TMPDIR}/out.ttl",
+]
+exit_code = 1
+
+[stdout]
+mode = "absent"
+
+[stderr]
+mode = "contains"
+expected = """
+File does not exist
+"""

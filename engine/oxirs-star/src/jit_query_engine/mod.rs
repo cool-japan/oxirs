@@ -236,8 +236,13 @@ impl JitQueryEngine {
     pub fn with_config(config: JitConfig) -> Self {
         // Initialize the actual JIT compiler
         let jit_compiler = SparqlJitCompiler::new().unwrap_or_else(|e| {
-            tracing::warn!("Failed to initialize JIT compiler: {}, using fallback", e);
-            SparqlJitCompiler::default()
+            tracing::warn!(
+                "Failed to initialise LLVM JIT backend ({}); \
+                 falling back to interpreter backend — \
+                 execute_compiled() will surface typed errors until LLVM is available",
+                e
+            );
+            SparqlJitCompiler::interpreter_fallback().unwrap_or_default()
         });
 
         Self {

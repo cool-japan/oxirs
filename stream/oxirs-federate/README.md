@@ -35,7 +35,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Features complete - APIs stable
 [dependencies]
-oxirs-federate = "0.2.3"
+oxirs-federate = "0.3.0"
 ```
 
 ## Quick Start

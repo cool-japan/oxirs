@@ -1,0 +1,377 @@
+##############################################################################
+# Apache Jena Feature Parity Catalog for OxiRS
+#
+# Each entry covers one documented Apache Jena feature and its current status
+# in the OxiRS ecosystem (a JVM-free Jena/Fuseki alternative in pure Rust).
+#
+# Fields:
+#   name              - human-readable feature name
+#   jena_component    - Maven artifact, e.g. "jena-arq", "jena-tdb2"
+#   jena_class_or_api - primary Jena class or API entry point
+#   oxirs_module      - Rust module path in OxiRS (omit if unimplemented)
+#   status            - "implemented" | "partial" | "missing" | "out_of_scope"
+#   notes             - one-sentence clarification or scope note
+##############################################################################
+
+# ──────────────────────────────────────────────────────────────────────────
+# SPARQL Engine (ARQ)
+# ──────────────────────────────────────────────────────────────────────────
+
+[[sparql_engine]]
+name = "SPARQL 1.1 SELECT/CONSTRUCT/ASK/DESCRIBE"
+jena_component = "jena-arq"
+jena_class_or_api = "QueryExecutionFactory.create()"
+oxirs_module = "oxirs_arq::executor"
+status = "implemented"
+notes = "Full SPARQL 1.1 compliance; W3C test suite passing."
+
+[[sparql_engine]]
+name = "SPARQL 1.1 UPDATE (SPARQL/Update)"
+jena_component = "jena-arq"
+jena_class_or_api = "UpdateExecutionFactory"
+oxirs_module = "oxirs_arq::update_processor"
+status = "implemented"
+notes = "INSERT/DELETE/LOAD/CLEAR/DROP/CREATE all implemented."
+
+[[sparql_engine]]
+name = "SPARQL 1.1 Federation (SERVICE clause)"
+jena_component = "jena-arq"
+jena_class_or_api = "FederatedQuery / ServiceExecutorRegistry"
+oxirs_module = "oxirs_arq::federation"
+status = "implemented"
+notes = "SERVICE clause plus federated planning with selectivity provider."
+
+[[sparql_engine]]
+name = "ARQ LATERAL JOIN"
+jena_component = "jena-arq"
+jena_class_or_api = "Algebra.lateral()"
+oxirs_module = "oxirs_arq::lateral_join"
+status = "implemented"
+notes = "LATERAL keyword supported."
+
+[[sparql_engine]]
+name = "ARQ Property Functions"
+jena_component = "jena-arq"
+jena_class_or_api = "PropertyFunctionRegistry"
+oxirs_module = "oxirs_arq"
+status = "partial"
+notes = "Built-in property functions implemented; custom registration API planned."
+
+[[sparql_engine]]
+name = "SPARQL 1.2 draft features"
+jena_component = "jena-arq"
+jena_class_or_api = "SPARQL 1.2 WD"
+oxirs_module = "oxirs_arq"
+status = "implemented"
+notes = "Conformance suite passing."
+
+[[sparql_engine]]
+name = "ARQ Query Explain API"
+jena_component = "jena-arq"
+jena_class_or_api = "Explain.InfoLevel / QueryExecution.explain()"
+oxirs_module = "oxirs_arq::plan_cache"
+status = "partial"
+notes = "Plan cache exposes CompiledPlan; explain-as-JSON format planned."
+
+# ──────────────────────────────────────────────────────────────────────────
+# RDF Formats
+# ──────────────────────────────────────────────────────────────────────────
+
+[[rdf_formats]]
+name = "Turtle (TTL)"
+jena_component = "jena-core"
+jena_class_or_api = "RDFDataMgr / Lang.TURTLE"
+oxirs_module = "oxirs_ttl::formats::turtle"
+status = "implemented"
+notes = "Full Turtle 1.1 parsing and serialization."
+
+[[rdf_formats]]
+name = "N-Triples"
+jena_component = "jena-core"
+jena_class_or_api = "Lang.NTRIPLES"
+oxirs_module = "oxirs_ttl::formats::ntriples"
+status = "implemented"
+notes = "Full N-Triples 1.1 parse and serialization."
+
+[[rdf_formats]]
+name = "N-Quads"
+jena_component = "jena-core"
+jena_class_or_api = "Lang.NQUADS"
+oxirs_module = "oxirs_ttl::formats::nquads"
+status = "implemented"
+notes = "Full N-Quads parse and serialization."
+
+[[rdf_formats]]
+name = "TriG"
+jena_component = "jena-arq"
+jena_class_or_api = "Lang.TRIG"
+oxirs_module = "oxirs_ttl::formats::trig"
+status = "implemented"
+notes = "Full TriG parse and serialization."
+
+[[rdf_formats]]
+name = "RDF/XML"
+jena_component = "jena-core"
+jena_class_or_api = "Lang.RDFXML"
+oxirs_module = "oxirs_ttl"
+status = "partial"
+notes = "Read support implemented; write support planned."
+
+[[rdf_formats]]
+name = "JSON-LD 1.0/1.1"
+jena_component = "jena-arq"
+jena_class_or_api = "Lang.JSONLD / Lang.JSONLD11"
+oxirs_module = "oxirs_ttl"
+status = "partial"
+notes = "Basic JSON-LD read support; full framing and compaction planned."
+
+[[rdf_formats]]
+name = "RDF Binary Thrift"
+jena_component = "jena-arq"
+jena_class_or_api = "Lang.RDFTHRIFT"
+oxirs_module = "oxirs_ttl::formats::rdf_thrift"
+status = "implemented"
+notes = "RDF Binary Thrift write support implemented."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Storage Backends
+# ──────────────────────────────────────────────────────────────────────────
+
+[[storage_backends]]
+name = "TDB2 (disk-based quad store)"
+jena_component = "jena-tdb2"
+jena_class_or_api = "TDB2Factory / DatasetGraphTDB"
+oxirs_module = "oxirs_tdb"
+status = "implemented"
+notes = "6-index B+tree quad store with bloom filter."
+
+[[storage_backends]]
+name = "In-memory dataset"
+jena_component = "jena-core"
+jena_class_or_api = "DatasetFactory.createGeneral()"
+oxirs_module = "oxirs_tdb"
+status = "implemented"
+notes = "In-memory dataset for testing and small workloads."
+
+[[storage_backends]]
+name = "Transactional dataset (READ/WRITE)"
+jena_component = "jena-arq"
+jena_class_or_api = "dataset.begin(ReadWrite.READ)"
+oxirs_module = "oxirs_tdb"
+status = "partial"
+notes = "MVCC transactions implemented; begin/commit/abort API present."
+
+[[storage_backends]]
+name = "SDB (SQL-backed store)"
+jena_component = "jena-sdb"
+jena_class_or_api = "SDBFactory"
+status = "out_of_scope"
+notes = "COOLJAPAN Pure Rust Policy: SQL-backed stores not planned; native TDB2-equivalent preferred."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Inference & Reasoning
+# ──────────────────────────────────────────────────────────────────────────
+
+[[inference]]
+name = "RDFS reasoner"
+jena_component = "jena-core"
+jena_class_or_api = "ReasonerRegistry.getRDFSReasoner()"
+oxirs_module = "oxirs_rule"
+status = "implemented"
+notes = "RDFS forward chaining fully implemented."
+
+[[inference]]
+name = "OWL-RL reasoner (built-in)"
+jena_component = "jena-core"
+jena_class_or_api = "ReasonerRegistry.getOWLReasoner()"
+oxirs_module = "oxirs_rule"
+status = "implemented"
+notes = "OWL 2 RL profile fully implemented."
+
+[[inference]]
+name = "OWL-DL reasoner (via Pellet/HermiT)"
+jena_component = "jena-core"
+jena_class_or_api = "OntModelSpec.OWL_DL_MEM_RDFS_INF"
+oxirs_module = "oxirs_rule"
+status = "partial"
+notes = "OWL 2 DL implemented via native Rust reasoner; Pellet/HermiT integration not planned (JVM-only)."
+
+[[inference]]
+name = "Jena Rule Language (JRL)"
+jena_component = "jena-core"
+jena_class_or_api = "GenericRuleReasoner / Rule.parseRules()"
+oxirs_module = "oxirs_rule"
+status = "missing"
+notes = "Jena's own .rules file syntax not parsed; Datalog dialect used instead."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Validation (SHACL)
+# ──────────────────────────────────────────────────────────────────────────
+
+[[validation]]
+name = "SHACL Core"
+jena_component = "jena-shacl"
+jena_class_or_api = "ShaclValidator"
+oxirs_module = "oxirs_shacl"
+status = "implemented"
+notes = "W3C SHACL Core plus SPARQL constraints; all 27 constraint types."
+
+[[validation]]
+name = "SHACLC (compact syntax)"
+jena_component = "jena-shacl"
+jena_class_or_api = "ShaclcWriter / ShaclcParser"
+oxirs_module = "oxirs_shacl"
+status = "implemented"
+notes = "SHACLC parse and write support implemented."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Spatial / GeoSPARQL
+# ──────────────────────────────────────────────────────────────────────────
+
+[[spatial]]
+name = "GeoSPARQL 1.0 / 1.1"
+jena_component = "jena-geosparql"
+jena_class_or_api = "GeoSPARQLConfig"
+oxirs_module = "oxirs_geosparql"
+status = "implemented"
+notes = "Full GeoSPARQL 1.1 function library with WKT/GML support."
+
+# ──────────────────────────────────────────────────────────────────────────
+# HTTP Server (Fuseki)
+# ──────────────────────────────────────────────────────────────────────────
+
+[[http_server]]
+name = "SPARQL 1.1 HTTP Protocol"
+jena_component = "jena-fuseki2"
+jena_class_or_api = "FusekiServer"
+oxirs_module = "oxirs_fuseki"
+status = "implemented"
+notes = "Full SPARQL 1.1 over HTTP protocol implemented."
+
+[[http_server]]
+name = "Graph Store Protocol (GSP)"
+jena_component = "jena-fuseki2"
+jena_class_or_api = "GSP endpoints"
+oxirs_module = "oxirs_fuseki"
+status = "implemented"
+notes = "GET/PUT/POST/DELETE on named graphs via GSP."
+
+[[http_server]]
+name = "Fuseki Admin API"
+jena_component = "jena-fuseki2"
+jena_class_or_api = "/$/datasets management"
+oxirs_module = "oxirs_fuseki::handlers"
+status = "implemented"
+notes = "Dataset CRUD via Admin API endpoints."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Full-Text Search (JenaText)
+# ──────────────────────────────────────────────────────────────────────────
+
+[[text_search]]
+name = "JenaText SPARQL integration"
+jena_component = "jena-text"
+jena_class_or_api = "TextDatasetFactory / text:query property function"
+status = "missing"
+notes = "tantivy in workspace; full-text SPARQL property function (text:query) not yet implemented."
+
+[[text_search]]
+name = "External index (Elasticsearch) integration"
+jena_component = "jena-text"
+jena_class_or_api = "ElasticIndexer"
+status = "missing"
+notes = "Elasticsearch client available in ecosystem; SPARQL integration not yet implemented."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Dataset Assembler
+# ──────────────────────────────────────────────────────────────────────────
+
+[[assembler]]
+name = "RDF-based dataset assembly (ja: vocab)"
+jena_component = "jena-core"
+jena_class_or_api = "AssemblerHelp / ja:Model / ja:RDFDataset"
+status = "missing"
+notes = "Jena Assembler uses RDF config files; OxiRS uses TOML/code config instead."
+
+[[assembler]]
+name = "Inference model assembly"
+jena_component = "jena-core"
+jena_class_or_api = "ja:ReasonerURL / ja:OntModel"
+status = "missing"
+notes = "Part of Assembler; depends on the Assembler feature being implemented first."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Graph API
+# ──────────────────────────────────────────────────────────────────────────
+
+[[graph_api]]
+name = "Model / Graph / Dataset Java API"
+jena_component = "jena-core"
+jena_class_or_api = "Model, Graph, Dataset interfaces"
+oxirs_module = "oxirs_core"
+status = "implemented"
+notes = "Rust API: RdfStore, Dataset, Triple, Quad — equivalent to Jena Model/Graph/Dataset."
+
+[[graph_api]]
+name = "Ontology API (OntModel, OntClass, OntProperty)"
+jena_component = "jena-core"
+jena_class_or_api = "OntModel / OntModelSpec"
+oxirs_module = "oxirs_rule"
+status = "partial"
+notes = "OWL vocabulary accessible via query; typed OntClass/OntProperty wrapper API not implemented."
+
+[[graph_api]]
+name = "RDF* / RDF 1.2 quoted triples"
+jena_component = "jena-arq (RDF*)"
+jena_class_or_api = "NodeFactory.createTripleNode() / StarQL"
+oxirs_module = "oxirs_star"
+status = "implemented"
+notes = "Full RDF* including SPARQL* query rewriting."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Security
+# ──────────────────────────────────────────────────────────────────────────
+
+[[security]]
+name = "Access control / RBAC"
+jena_component = "jena-fuseki2"
+jena_class_or_api = "DataAccessCtl / FusekiRequestProcessor"
+oxirs_module = "oxirs_fuseki::auth"
+status = "implemented"
+notes = "Graph-level ACL, OAuth2, and MFA implemented."
+
+# ──────────────────────────────────────────────────────────────────────────
+# Tooling
+# ──────────────────────────────────────────────────────────────────────────
+
+[[tooling]]
+name = "riot (RDF I/O Technology CLI)"
+jena_component = "jena-arq"
+jena_class_or_api = "riot command"
+oxirs_module = "tools::oxirs::rdfparse"
+status = "implemented"
+notes = "rdfparse, rdfcopy, rdfdiff CLI tools implemented."
+
+[[tooling]]
+name = "rsparql / rupdate CLI"
+jena_component = "jena-arq"
+jena_class_or_api = "rsparql, rupdate commands"
+oxirs_module = "tools::oxirs"
+status = "implemented"
+notes = "rsparql, rupdate, and rset commands all implemented."
+
+[[tooling]]
+name = "tdbquery / tdbupdate CLI"
+jena_component = "jena-tdb2"
+jena_class_or_api = "tdbquery, tdbupdate commands"
+oxirs_module = "tools::oxirs"
+status = "implemented"
+notes = "tdbquery and tdbupdate commands implemented."
+
+[[tooling]]
+name = "schemagen (OWL/RDFS schema class generator)"
+jena_component = "jena-core"
+jena_class_or_api = "schemagen tool"
+oxirs_module = "tools::oxirs"
+status = "implemented"
+notes = "Rust struct generation from OWL/RDFS schemas."

@@ -27,6 +27,7 @@ pub mod http_auth; // Simplified HTTP auth middleware (ApiKey, Basic, Bearer, No
 pub mod jwt; // JWT token generation and validation
 pub mod jwt_validation; // JWT validation and JWK management
 pub mod ldap;
+pub mod mfa_storage; // MFA persistent/in-memory storage backend
 pub mod oauth;
 pub mod oauth_providers; // Provider-specific OAuth2 implementations
 pub mod password;
@@ -60,8 +61,12 @@ pub struct AuthService {
     ldap_service: Option<ldap::LdapService>,
     #[cfg(feature = "saml")]
     saml_provider: Option<Arc<saml::SamlProvider>>,
-    /// Storage for MFA challenges
+    /// Storage for MFA challenges (transient, keyed by challenge_id)
     mfa_challenges: Arc<RwLock<HashMap<String, MfaChallenge>>>,
+    /// Persistent MFA profile storage (TOTP secrets, backup codes, phones, etc.)
+    mfa_storage: Arc<mfa_storage::MfaStorage>,
+    /// Transient WebAuthn registration challenges (keyed by user_id)
+    webauthn_challenges: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl AuthService {
@@ -156,6 +161,8 @@ impl AuthService {
             #[cfg(feature = "saml")]
             saml_provider,
             mfa_challenges: Arc::new(RwLock::new(HashMap::new())),
+            mfa_storage: Arc::new(mfa_storage::MfaStorage::new(None)),
+            webauthn_challenges: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -618,40 +625,37 @@ impl AuthService {
     }
 
     /// Store MFA email for user
-    pub async fn store_mfa_email(&self, username: &str, _email: &str) -> FusekiResult<()> {
-        // TODO: Implement MFA email storage in user profile
+    pub async fn store_mfa_email(&self, username: &str, email: &str) -> FusekiResult<()> {
         info!("Storing MFA email for user: {}", username);
-        Ok(())
+        self.mfa_storage.store_email(username, email).await
     }
 
     /// Get user's SMS phone number
-    pub async fn get_user_sms_phone(&self, _username: &str) -> FusekiResult<Option<String>> {
-        // TODO: Implement SMS phone retrieval from user profile
-        Ok(Some("+1-555-0123".to_string())) // Placeholder
+    pub async fn get_user_sms_phone(&self, username: &str) -> FusekiResult<Option<String>> {
+        self.mfa_storage.get_sms_phone(username).await
     }
 
     /// Get user's MFA email
-    pub async fn get_user_mfa_email(&self, _username: &str) -> FusekiResult<Option<String>> {
-        // TODO: Implement MFA email retrieval from user profile
-        Ok(Some("user@example.com".to_string())) // Placeholder
+    pub async fn get_user_mfa_email(&self, username: &str) -> FusekiResult<Option<String>> {
+        self.mfa_storage.get_email(username).await
     }
 
-    /// Store WebAuthn challenge
+    /// Store a transient WebAuthn registration challenge for user
     pub async fn store_webauthn_challenge(
         &self,
         username: &str,
-        _challenge: &str,
+        challenge: &str,
     ) -> FusekiResult<()> {
-        // TODO: Implement WebAuthn challenge storage
-        info!("Storing WebAuthn challenge for user: {}", username);
+        let mut challenges = self.webauthn_challenges.write().await;
+        challenges.insert(username.to_string(), challenge.to_string());
+        debug!("Stored WebAuthn challenge for user: {}", username);
         Ok(())
     }
 
     /// Store SMS phone number for user
-    pub async fn store_sms_phone(&self, username: &str, _phone: &str) -> FusekiResult<()> {
-        // TODO: Implement SMS phone storage in user profile
+    pub async fn store_sms_phone(&self, username: &str, phone: &str) -> FusekiResult<()> {
         info!("Storing SMS phone for user: {}", username);
-        Ok(())
+        self.mfa_storage.store_sms_phone(username, phone).await
     }
 
     /// Update MFA challenge (placeholder)
@@ -666,43 +670,94 @@ impl AuthService {
         Ok(())
     }
 
-    /// Get user MFA status (placeholder)
-    pub async fn get_user_mfa_status(&self, _username: &str) -> FusekiResult<MfaStatus> {
-        // TODO: Implement MFA status retrieval
-        Ok(MfaStatus {
-            enabled: false,
-            enrolled_methods: vec![],
-            backup_codes_remaining: 0,
-            last_used: None,
-            expires_at: None,
-            message: "MFA disabled".to_string(),
-        })
+    /// Get user MFA status derived from stored MFA profile data
+    pub async fn get_user_mfa_status(&self, username: &str) -> FusekiResult<MfaStatus> {
+        use chrono::Utc;
+        match self.mfa_storage.get_user_data(username).await? {
+            None => Ok(MfaStatus {
+                enabled: false,
+                enrolled_methods: vec![],
+                backup_codes_remaining: 0,
+                last_used: None,
+                expires_at: None,
+                message: "MFA not configured".to_string(),
+            }),
+            Some(data) => {
+                let enrolled_methods: Vec<MfaMethodInfo> = data
+                    .enrolled_methods
+                    .iter()
+                    .filter_map(|m| {
+                        let method_type = match m.as_str() {
+                            "totp" => MfaType::Totp,
+                            "sms" => MfaType::Sms,
+                            "email" => MfaType::Email,
+                            "webauthn" => MfaType::Hardware,
+                            "backup" => MfaType::Backup,
+                            _ => return None,
+                        };
+                        let identifier = match m.as_str() {
+                            "sms" => data.sms_phone.clone().unwrap_or_default(),
+                            "email" => data.email.clone().unwrap_or_default(),
+                            _ => m.clone(),
+                        };
+                        Some(MfaMethodInfo {
+                            method_type,
+                            identifier,
+                            enrolled_at: data.created_at,
+                            last_used: Some(data.updated_at),
+                            enabled: true,
+                        })
+                    })
+                    .collect();
+                let backup_codes_remaining = data.backup_codes.len().min(255) as u8;
+                let enabled = !enrolled_methods.is_empty();
+                let message = if enabled {
+                    format!("{} MFA method(s) enrolled", enrolled_methods.len())
+                } else {
+                    "MFA disabled".to_string()
+                };
+                Ok(MfaStatus {
+                    enabled,
+                    enrolled_methods,
+                    backup_codes_remaining,
+                    last_used: Some(data.updated_at),
+                    expires_at: None,
+                    message,
+                })
+            }
+        }
     }
 
-    /// Disable MFA method (placeholder)
-    pub async fn disable_mfa_method(
-        &self,
-        _username: &str,
-        _method: MfaMethod,
-    ) -> FusekiResult<()> {
-        // TODO: Implement MFA method disabling
-        Ok(())
+    /// Disable an MFA method for user
+    pub async fn disable_mfa_method(&self, username: &str, method: MfaMethod) -> FusekiResult<()> {
+        let method_str = match method {
+            MfaMethod::Totp => "totp",
+            MfaMethod::Sms => "sms",
+            MfaMethod::Email => "email",
+            MfaMethod::Hardware => "webauthn",
+            MfaMethod::Backup => "backup",
+        };
+        info!(
+            "Disabling MFA method '{}' for user: {}",
+            method_str, username
+        );
+        self.mfa_storage.disable_method(username, method_str).await
     }
 
-    /// Store backup codes (placeholder)
-    pub async fn store_backup_codes(
-        &self,
-        _username: &str,
-        _codes: Vec<String>,
-    ) -> FusekiResult<()> {
-        // TODO: Implement backup code storage
-        Ok(())
+    /// Store backup codes for user
+    pub async fn store_backup_codes(&self, username: &str, codes: Vec<String>) -> FusekiResult<()> {
+        info!(
+            "Storing {} backup codes for user: {}",
+            codes.len(),
+            username
+        );
+        self.mfa_storage.store_backup_codes(username, codes).await
     }
 
-    /// Store TOTP secret (placeholder)
-    pub async fn store_totp_secret(&self, _username: &str, _secret: &str) -> FusekiResult<()> {
-        // TODO: Implement TOTP secret storage
-        Ok(())
+    /// Store TOTP secret for user
+    pub async fn store_totp_secret(&self, username: &str, secret: &str) -> FusekiResult<()> {
+        info!("Storing TOTP secret for user: {}", username);
+        self.mfa_storage.store_totp_secret(username, secret).await
     }
 
     /// Cleanup LDAP cache
@@ -845,6 +900,13 @@ fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::err
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SecurityConfig;
+
+    async fn make_auth_service() -> AuthService {
+        AuthService::new(SecurityConfig::default())
+            .await
+            .expect("AuthService::new should succeed with default config")
+    }
 
     #[test]
     fn test_decode_basic_auth() {
@@ -852,5 +914,200 @@ mod tests {
         let result = decode_basic_auth(encoded).unwrap();
         assert_eq!(result.0, "test");
         assert_eq!(result.1, "password");
+    }
+
+    // --- MFA storage method tests ---
+
+    #[tokio::test]
+    async fn test_store_and_get_mfa_email() {
+        let svc = make_auth_service().await;
+        let user = "alice";
+        let email = "alice@example.com";
+
+        svc.store_mfa_email(user, email)
+            .await
+            .expect("store_mfa_email");
+        let retrieved = svc
+            .get_user_mfa_email(user)
+            .await
+            .expect("get_user_mfa_email");
+        assert_eq!(retrieved, Some(email.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_user_mfa_email_returns_none_when_absent() {
+        let svc = make_auth_service().await;
+        let result = svc
+            .get_user_mfa_email("nobody")
+            .await
+            .expect("get_user_mfa_email");
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_store_and_get_sms_phone() {
+        let svc = make_auth_service().await;
+        let user = "bob";
+        let phone = "+15550001234";
+
+        svc.store_sms_phone(user, phone)
+            .await
+            .expect("store_sms_phone");
+        let retrieved = svc
+            .get_user_sms_phone(user)
+            .await
+            .expect("get_user_sms_phone");
+        assert_eq!(retrieved, Some(phone.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_user_sms_phone_returns_none_when_absent() {
+        let svc = make_auth_service().await;
+        let result = svc
+            .get_user_sms_phone("nobody")
+            .await
+            .expect("get_user_sms_phone");
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_store_webauthn_challenge() {
+        let svc = make_auth_service().await;
+        let user = "carol";
+        let challenge = "base64urlencodedchallenge==";
+
+        svc.store_webauthn_challenge(user, challenge)
+            .await
+            .expect("store_webauthn_challenge");
+
+        // Verify the challenge is stored in the internal map
+        let challenges = svc.webauthn_challenges.read().await;
+        assert_eq!(challenges.get(user).map(String::as_str), Some(challenge));
+    }
+
+    #[tokio::test]
+    async fn test_store_totp_secret() {
+        let svc = make_auth_service().await;
+        let user = "dave";
+        let secret = "JBSWY3DPEHPK3PXP";
+
+        svc.store_totp_secret(user, secret)
+            .await
+            .expect("store_totp_secret");
+
+        // Confirm via MFA status: totp method is enrolled
+        let status = svc
+            .get_user_mfa_status(user)
+            .await
+            .expect("get_user_mfa_status");
+        assert!(status.enabled);
+        assert!(status
+            .enrolled_methods
+            .iter()
+            .any(|m| m.method_type == MfaType::Totp));
+    }
+
+    #[tokio::test]
+    async fn test_store_backup_codes() {
+        let svc = make_auth_service().await;
+        let user = "eve";
+        let codes = vec![
+            "CODE1".to_string(),
+            "CODE2".to_string(),
+            "CODE3".to_string(),
+        ];
+
+        svc.store_backup_codes(user, codes.clone())
+            .await
+            .expect("store_backup_codes");
+
+        let status = svc
+            .get_user_mfa_status(user)
+            .await
+            .expect("get_user_mfa_status");
+        assert_eq!(status.backup_codes_remaining, 3);
+    }
+
+    #[tokio::test]
+    async fn test_disable_mfa_method_totp() {
+        let svc = make_auth_service().await;
+        let user = "frank";
+
+        svc.store_totp_secret(user, "SECRETKEY")
+            .await
+            .expect("store_totp_secret");
+        let before = svc.get_user_mfa_status(user).await.expect("status before");
+        assert!(before
+            .enrolled_methods
+            .iter()
+            .any(|m| m.method_type == MfaType::Totp));
+
+        svc.disable_mfa_method(user, MfaMethod::Totp)
+            .await
+            .expect("disable_mfa_method");
+        let after = svc.get_user_mfa_status(user).await.expect("status after");
+        assert!(!after
+            .enrolled_methods
+            .iter()
+            .any(|m| m.method_type == MfaType::Totp));
+    }
+
+    #[tokio::test]
+    async fn test_disable_mfa_method_sms() {
+        let svc = make_auth_service().await;
+        let user = "grace";
+
+        svc.store_sms_phone(user, "+15559990000")
+            .await
+            .expect("store_sms_phone");
+        svc.disable_mfa_method(user, MfaMethod::Sms)
+            .await
+            .expect("disable_mfa_method sms");
+
+        let phone = svc
+            .get_user_sms_phone(user)
+            .await
+            .expect("get phone after disable");
+        assert!(phone.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_user_mfa_status_no_profile() {
+        let svc = make_auth_service().await;
+        let status = svc.get_user_mfa_status("nobody").await.expect("mfa_status");
+        assert!(!status.enabled);
+        assert!(status.enrolled_methods.is_empty());
+        assert_eq!(status.backup_codes_remaining, 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_user_mfa_status_full_profile() {
+        let svc = make_auth_service().await;
+        let user = "heidi";
+
+        svc.store_totp_secret(user, "TOTPSECRET")
+            .await
+            .expect("store totp");
+        svc.store_sms_phone(user, "+15551112222")
+            .await
+            .expect("store sms");
+        svc.store_mfa_email(user, "heidi@example.com")
+            .await
+            .expect("store email");
+        svc.store_backup_codes(user, vec!["B1".to_string(), "B2".to_string()])
+            .await
+            .expect("store backup codes");
+
+        let status = svc.get_user_mfa_status(user).await.expect("mfa status");
+        assert!(status.enabled);
+        assert!(status
+            .enrolled_methods
+            .iter()
+            .any(|m| m.method_type == MfaType::Totp));
+        assert!(status
+            .enrolled_methods
+            .iter()
+            .any(|m| m.method_type == MfaType::Sms));
+        assert_eq!(status.backup_codes_remaining, 2);
     }
 }

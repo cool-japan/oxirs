@@ -645,7 +645,14 @@ impl ReportCommand {
 
         match self.format.as_str() {
             "html" => self.generate_html_report(&report).await?,
+            #[cfg(feature = "pdf-export")]
             "pdf" => self.generate_pdf_report(&report).await?,
+            #[cfg(not(feature = "pdf-export"))]
+            "pdf" => {
+                return Err(CliError::invalid_arguments(
+                    "PDF export requires the 'pdf-export' feature. Recompile with --features pdf-export".to_string(),
+                ));
+            }
             "markdown" => self.generate_markdown_report(&report).await?,
             "json" => self.generate_json_report(&report).await?,
             _ => {
@@ -730,6 +737,7 @@ impl ReportCommand {
         Ok(())
     }
 
+    #[cfg(feature = "pdf-export")]
     async fn generate_pdf_report(
         &self,
         report: &crate::tools::performance::PerformanceReport,

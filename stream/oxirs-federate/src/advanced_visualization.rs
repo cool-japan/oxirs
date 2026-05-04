@@ -852,7 +852,83 @@ impl AdvancedVisualization {
                     Err(anyhow!("No data available for performance metrics"))
                 }
             }
-            _ => Err(anyhow!("Data source not yet implemented")),
+            DataSource::FederationTopology => {
+                if let Some(series) = self
+                    .metrics_collector
+                    .get_time_series("federation_topology")
+                    .await
+                {
+                    self.chart_generator
+                        .generate_line_chart(&series, &widget.config)
+                        .await
+                } else {
+                    Err(anyhow!(
+                        "No data available for federation topology; record metrics under \
+                         the 'federation_topology' key via record_metric()"
+                    ))
+                }
+            }
+            DataSource::SecurityAlerts => {
+                if let Some(series) = self
+                    .metrics_collector
+                    .get_time_series("security_alerts")
+                    .await
+                {
+                    self.chart_generator
+                        .generate_line_chart(&series, &widget.config)
+                        .await
+                } else {
+                    Err(anyhow!(
+                        "No data available for security alerts; record metrics under \
+                         the 'security_alerts' key via record_metric()"
+                    ))
+                }
+            }
+            DataSource::ComplianceStatus => {
+                if let Some(series) = self
+                    .metrics_collector
+                    .get_time_series("compliance_status")
+                    .await
+                {
+                    self.chart_generator
+                        .generate_line_chart(&series, &widget.config)
+                        .await
+                } else {
+                    Err(anyhow!(
+                        "No data available for compliance status; record metrics under \
+                         the 'compliance_status' key via record_metric()"
+                    ))
+                }
+            }
+            DataSource::ServiceHealth => {
+                if let Some(series) = self
+                    .metrics_collector
+                    .get_time_series("service_health")
+                    .await
+                {
+                    self.chart_generator
+                        .generate_line_chart(&series, &widget.config)
+                        .await
+                } else {
+                    Err(anyhow!(
+                        "No data available for service health; record metrics under \
+                         the 'service_health' key via record_metric()"
+                    ))
+                }
+            }
+            DataSource::Custom(ref key) => {
+                if let Some(series) = self.metrics_collector.get_time_series(key).await {
+                    self.chart_generator
+                        .generate_line_chart(&series, &widget.config)
+                        .await
+                } else {
+                    Err(anyhow!(
+                        "No data available for custom data source '{}'; \
+                         record metrics under that key via record_metric()",
+                        key
+                    ))
+                }
+            }
         }
     }
 
@@ -907,7 +983,40 @@ impl AdvancedVisualization {
                 );
                 Ok(svg.into_bytes())
             }
-            _ => Err(anyhow!("Export format not yet implemented")),
+            ExportFormat::CSV => {
+                // Serialize dashboard widgets as CSV: id, title, widget_type, data_source
+                let mut csv = String::new();
+                csv.push_str("id,title,widget_type,data_source\n");
+                for widget in &dashboard.widgets {
+                    let widget_type = format!("{:?}", widget.widget_type);
+                    let data_source = format!("{:?}", widget.data_source);
+                    // Escape fields: wrap in quotes and escape inner quotes
+                    let escape = |s: &str| {
+                        if s.contains(',') || s.contains('"') || s.contains('\n') {
+                            format!("\"{}\"", s.replace('"', "\"\""))
+                        } else {
+                            s.to_string()
+                        }
+                    };
+                    csv.push_str(&format!(
+                        "{},{},{},{}\n",
+                        escape(&widget.id),
+                        escape(&widget.title),
+                        escape(&widget_type),
+                        escape(&data_source),
+                    ));
+                }
+                Ok(csv.into_bytes())
+            }
+            ExportFormat::PNG => Err(anyhow!(
+                "PNG export requires SVG rasterization; use ExportFormat::SVG and convert \
+                 externally (resvg/tiny-skia depend on miniz_oxide which is prohibited by \
+                 COOLJAPAN Pure Rust Policy)"
+            )),
+            ExportFormat::PDF => Err(anyhow!(
+                "PDF export is not supported; export as SVG or JSON and convert using an \
+                 external tool"
+            )),
         }
     }
 
@@ -1187,5 +1296,111 @@ mod tests {
             .await
             .expect("operation should succeed");
         assert!(!svg_export.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_export_dashboard_csv() {
+        let config = VisualizationConfig::default();
+        let viz = AdvancedVisualization::new(config);
+
+        let dashboard_id = viz
+            .create_default_performance_dashboard()
+            .await
+            .expect("async operation should succeed");
+
+        let csv_bytes = viz
+            .export_dashboard(&dashboard_id, ExportFormat::CSV)
+            .await
+            .expect("CSV export should succeed");
+
+        let csv = String::from_utf8(csv_bytes).expect("CSV must be valid UTF-8");
+        assert!(
+            csv.starts_with("id,title,widget_type,data_source\n"),
+            "must have header row"
+        );
+        assert!(csv.contains("Query Latency"), "must contain widget title");
+    }
+
+    #[tokio::test]
+    async fn test_export_dashboard_png_returns_error() {
+        let config = VisualizationConfig::default();
+        let viz = AdvancedVisualization::new(config);
+
+        let dashboard_id = viz
+            .create_default_performance_dashboard()
+            .await
+            .expect("async operation should succeed");
+
+        let result = viz.export_dashboard(&dashboard_id, ExportFormat::PNG).await;
+
+        assert!(
+            result.is_err(),
+            "PNG export should return an error per policy"
+        );
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("PNG"), "Error message must mention PNG: {msg}");
+    }
+
+    #[tokio::test]
+    async fn test_widget_chart_custom_data_source() {
+        let config = VisualizationConfig::default();
+        let viz = AdvancedVisualization::new(config);
+
+        // Record data under a custom key
+        viz.record_metric("my_custom_metric", 42.0)
+            .await
+            .expect("record_metric should succeed");
+
+        let widget = Widget {
+            id: uuid::Uuid::new_v4().to_string(),
+            widget_type: WidgetType::Chart,
+            title: "Custom".to_string(),
+            position: WidgetPosition { row: 0, col: 0 },
+            size: WidgetSize {
+                width: 1,
+                height: 1,
+            },
+            data_source: DataSource::Custom("my_custom_metric".to_string()),
+            visualization_type: VisualizationType::LineChart,
+            config: WidgetConfig::default(),
+        };
+
+        let chart = viz.generate_widget_chart(&widget).await;
+        assert!(
+            chart.is_ok(),
+            "Custom data source with recorded data should succeed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_widget_chart_security_alerts_no_data() {
+        let config = VisualizationConfig::default();
+        let viz = AdvancedVisualization::new(config);
+
+        let widget = Widget {
+            id: uuid::Uuid::new_v4().to_string(),
+            widget_type: WidgetType::Alert,
+            title: "Alerts".to_string(),
+            position: WidgetPosition { row: 0, col: 0 },
+            size: WidgetSize {
+                width: 1,
+                height: 1,
+            },
+            data_source: DataSource::SecurityAlerts,
+            visualization_type: VisualizationType::Table,
+            config: WidgetConfig::default(),
+        };
+
+        // No data recorded — should return descriptive error, not a panic
+        let result = viz.generate_widget_chart(&widget).await;
+        assert!(
+            result.is_err(),
+            "Missing data should return an error, not panic"
+        );
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("security_alerts"),
+            "Error must mention the metric key: {msg}"
+        );
     }
 }

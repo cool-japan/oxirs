@@ -1,9 +1,9 @@
 //! # OxiRS Rule Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-rule/badge.svg)](https://docs.rs/oxirs-rule)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Forward/backward rule engine for RDFS, OWL, and SWRL reasoning with RETE optimization.
@@ -94,6 +94,7 @@ pub mod migration;
 pub mod negation;
 pub mod optimization;
 pub mod owl;
+pub mod owl2;
 pub mod owl_dl;
 pub mod owl_el;
 pub mod owl_profiles;
@@ -400,6 +401,10 @@ pub mod rule_executor;
 
 // Rule execution statistics and profiling (v1.1.0 round 16)
 pub mod rule_statistics;
+
+// Jena Rule Language (.rules) parser and lowering
+pub mod jena_rl;
+pub use jena_rl::{parse_and_lower, parse_jrl, JrlParseError, JrlRuleSet, LoweringError};
 
 #[cfg(test)]
 mod comprehensive_tests;

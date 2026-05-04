@@ -1,0 +1,12 @@
+# Missing query parameter -> 400
+endpoint: sparql_query
+classification: spec-required
+match_mode: status-only
+description: GET /sparql without query parameter returns 400
+
+=== request
+GET /sparql
+
+=== response
+400
+

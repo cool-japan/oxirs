@@ -1,4 +1,22 @@
-//! Auto-generated module structure
+//! SHACL property path evaluation.
+//!
+//! Property paths are SPARQL 1.1 path expressions reused by SHACL Core §2.3.1
+//! to declare what values a property shape applies to. This module implements
+//! every operator from the SHACL spec:
+//!
+//! | Operator                   | Spec section | Construct (in [`PropertyPath`])     |
+//! |----------------------------|--------------|--------------------------------------|
+//! | Predicate path             | §2.3.1.1     | [`PropertyPath::Predicate`]          |
+//! | Sequence path              | §2.3.1.2     | [`PropertyPath::Sequence`]           |
+//! | Alternative path           | §2.3.1.3     | [`PropertyPath::Alternative`]        |
+//! | Inverse path               | §2.3.1.4     | [`PropertyPath::Inverse`]            |
+//! | Zero-or-more path          | §2.3.1.5     | [`PropertyPath::ZeroOrMore`]         |
+//! | One-or-more path           | §2.3.1.6     | [`PropertyPath::OneOrMore`]          |
+//! | Zero-or-one path           | §2.3.1.7     | [`PropertyPath::ZeroOrOne`]          |
+//!
+//! Path evaluation is exposed through `PropertyPathEvaluator`, with caching,
+//! cycle detection, and an optional SPARQL fallback for paths that cannot be
+//! materialised in-memory.
 
 pub mod functions;
 pub mod pathcacheconfig_traits;

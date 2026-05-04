@@ -280,6 +280,61 @@ pub fn get_property_functions() -> Vec<GeoSparqlFunction> {
             arity: 1,
             category: FunctionCategory::Property,
         },
+        GeoSparqlFunction {
+            uri: vocabulary::GEO_IS_VALID.to_string(),
+            name: "isValid".to_string(),
+            description: "Tests if a geometry is topologically valid (OGC GeoSPARQL 1.1)"
+                .to_string(),
+            arity: 1,
+            category: FunctionCategory::Property,
+        },
+        GeoSparqlFunction {
+            uri: vocabulary::GEO_IS_RING.to_string(),
+            name: "isRing".to_string(),
+            description: "Tests if a LineString is a ring (closed and simple)".to_string(),
+            arity: 1,
+            category: FunctionCategory::Property,
+        },
+        GeoSparqlFunction {
+            uri: vocabulary::GEO_IS_CLOSED.to_string(),
+            name: "isClosed".to_string(),
+            description: "Tests if a LineString or MultiLineString is closed".to_string(),
+            arity: 1,
+            category: FunctionCategory::Property,
+        },
+    ]
+}
+
+/// Get all OGC GeoSPARQL 1.1 non-topological filter functions (relate, simplify, boundary).
+pub fn get_ogc11_filter_functions() -> Vec<GeoSparqlFunction> {
+    vec![
+        GeoSparqlFunction {
+            uri: vocabulary::GEO_RELATE.to_string(),
+            name: "relate".to_string(),
+            description:
+                "Tests if two geometries satisfy a given DE-9IM intersection-matrix pattern"
+                    .to_string(),
+            arity: 3, // (geomA, geomB, pattern)
+            category: FunctionCategory::Filter,
+        },
+        GeoSparqlFunction {
+            uri: vocabulary::GEO_SIMPLIFY.to_string(),
+            name: "simplify".to_string(),
+            description:
+                "Returns a simplified version of the geometry using the Douglas-Peucker algorithm"
+                    .to_string(),
+            arity: 2, // (geom, tolerance)
+            category: FunctionCategory::Property,
+        },
+        GeoSparqlFunction {
+            uri: vocabulary::GEO_BOUNDARY.to_string(),
+            name: "boundary".to_string(),
+            description:
+                "Returns the combinatorial boundary of a geometry (pure Rust, OGC SFA §6.1.6.1)"
+                    .to_string(),
+            arity: 1,
+            category: FunctionCategory::Property,
+        },
     ]
 }
 
@@ -308,6 +363,7 @@ pub fn get_all_geosparql_functions() -> Vec<GeoSparqlFunction> {
 
     functions.extend(get_property_functions());
     functions.extend(get_distance_functions());
+    functions.extend(get_ogc11_filter_functions());
 
     functions
 }
@@ -383,7 +439,8 @@ mod tests {
     #[test]
     fn test_get_property_functions() {
         let functions = get_property_functions();
-        assert_eq!(functions.len(), 7);
+        // 7 original + 3 new OGC 1.1 (isValid, isRing, isClosed)
+        assert_eq!(functions.len(), 10);
 
         // Check dimension function
         let dim_func = functions
@@ -392,6 +449,11 @@ mod tests {
             .expect("should succeed");
         assert_eq!(dim_func.arity, 1);
         assert_eq!(dim_func.category, FunctionCategory::Property);
+
+        // Check new OGC 1.1 predicates are present
+        assert!(functions.iter().any(|f| f.name == "isValid"));
+        assert!(functions.iter().any(|f| f.name == "isRing"));
+        assert!(functions.iter().any(|f| f.name == "isClosed"));
     }
 
     #[test]
@@ -409,12 +471,13 @@ mod tests {
     fn test_get_all_geosparql_functions() {
         let functions = get_all_geosparql_functions();
 
-        // Should have at least Simple Features + Property + Distance functions
+        // SF(8) + Property(10) + Distance(1) + OGC11-filter(3) = 22
         #[cfg(not(feature = "geos-backend"))]
-        assert_eq!(functions.len(), 8 + 7 + 1); // SF + Property + Distance
+        assert_eq!(functions.len(), 8 + 10 + 1 + 3);
 
+        // SF(8) + Egenhofer(8) + RCC8(8) + Property(10) + Distance(1) + OGC11-filter(3) = 38
         #[cfg(feature = "geos-backend")]
-        assert_eq!(functions.len(), 8 + 8 + 8 + 7 + 1); // SF + Egenhofer + RCC8 + Property + Distance
+        assert_eq!(functions.len(), 8 + 8 + 8 + 10 + 1 + 3);
     }
 
     #[test]
@@ -434,8 +497,10 @@ mod tests {
             .filter(|f| f.category == FunctionCategory::Distance)
             .count();
 
-        assert!(filter_count > 0);
-        assert_eq!(property_count, 7);
+        // Filter: 8 SF + 1 relate (OGC11)
+        assert!(filter_count >= 9);
+        // Property: 10 base + 2 OGC11 (simplify, boundary) = 12
+        assert_eq!(property_count, 12);
         assert_eq!(distance_count, 1);
     }
 }

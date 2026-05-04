@@ -1,0 +1,2 @@
+_:b1 <http://example.org/p> _:b2 .
+_:b2 <http://example.org/q> "x" .

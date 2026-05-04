@@ -127,7 +127,7 @@ pub struct TrainingStats {
 }
 
 /// Entity and relation vocabulary
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vocabulary {
     /// Entity to index mapping
     entity_to_idx: HashMap<String, usize>,
@@ -223,6 +223,7 @@ impl Vocabulary {
 /// TransE: Translation-based embeddings
 ///
 /// Models relations as translations in embedding space: h + r ≈ t
+#[derive(Serialize, Deserialize)]
 pub struct TransE {
     config: EmbeddingConfig,
     /// Entity embeddings (num_entities × embedding_dim)
@@ -523,13 +524,22 @@ impl EmbeddingModel for TransE {
         Ok(scores.into_iter().take(k).collect())
     }
 
-    fn save(&self, _path: &str) -> StarResult<()> {
-        // TODO: Implement serialization
-        Ok(())
+    fn save(&self, path: &str) -> StarResult<()> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
+        std::fs::write(path, json).map_err(|e| crate::StarError::serialization_error(e.to_string()))
     }
 
-    fn load(&mut self, _path: &str) -> StarResult<()> {
-        // TODO: Implement deserialization
+    fn load(&mut self, path: &str) -> StarResult<()> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
+        let loaded: TransE = serde_json::from_str(&content)
+            .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
+        self.config = loaded.config;
+        self.entity_embeddings = loaded.entity_embeddings;
+        self.relation_embeddings = loaded.relation_embeddings;
+        self.vocab = loaded.vocab;
+        self.seed = loaded.seed;
         Ok(())
     }
 }
@@ -676,6 +686,97 @@ mod tests {
         let norm: f64 = emb.iter().map(|x| x * x).sum::<f64>().sqrt();
         assert!((norm - 1.0).abs() < 0.01); // Should be close to 1
     }
+
+    #[test]
+    fn test_transe_save_load_roundtrip() {
+        let config = EmbeddingConfig {
+            embedding_dim: 32,
+            learning_rate: 0.01,
+            batch_size: 2,
+            num_negative_samples: 3,
+            ..Default::default()
+        };
+
+        let mut model = TransE::new(config);
+        let triples = create_test_triples();
+        model.train(&triples, 10).unwrap();
+
+        // Capture embedding before save
+        let emb_before = model.get_embedding("Alice").unwrap();
+
+        // Save to temp file
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "oxirs_transe_test_{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let path_str = path.to_string_lossy().to_string();
+
+        model.save(&path_str).expect("save should succeed");
+
+        // Load into a fresh model and verify embeddings match
+        let mut model2 = TransE::new(EmbeddingConfig::default());
+        model2.load(&path_str).expect("load should succeed");
+
+        let emb_after = model2
+            .get_embedding("Alice")
+            .expect("Alice should exist after load");
+        assert_eq!(emb_before.len(), emb_after.len());
+        for (a, b) in emb_before.iter().zip(emb_after.iter()) {
+            assert!(
+                (a - b).abs() < 1e-12,
+                "embedding values must match after round-trip"
+            );
+        }
+
+        let _ = std::fs::remove_file(&path_str);
+    }
+
+    #[test]
+    fn test_transe_save_load_predictions_match() {
+        let config = EmbeddingConfig {
+            embedding_dim: 16,
+            batch_size: 2,
+            num_negative_samples: 2,
+            ..Default::default()
+        };
+
+        let mut model = TransE::new(config);
+        let triples = create_test_triples();
+        model.train(&triples, 5).unwrap();
+
+        let preds_before = model.predict_tail("Alice", "knows", 2).unwrap();
+
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "oxirs_transe_pred_test_{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let path_str = path.to_string_lossy().to_string();
+
+        model.save(&path_str).expect("save should succeed");
+
+        let mut model2 = TransE::new(EmbeddingConfig::default());
+        model2.load(&path_str).expect("load should succeed");
+
+        let preds_after = model2.predict_tail("Alice", "knows", 2).unwrap();
+        assert_eq!(preds_before.len(), preds_after.len());
+        for ((name_a, score_a), (name_b, score_b)) in preds_before.iter().zip(preds_after.iter()) {
+            assert_eq!(name_a, name_b, "prediction order must be preserved");
+            assert!(
+                (score_a - score_b).abs() < 1e-12,
+                "prediction scores must match after round-trip"
+            );
+        }
+
+        let _ = std::fs::remove_file(&path_str);
+    }
 }
 
 /// DistMult: Bilinear Diagonal Model
@@ -693,6 +794,7 @@ mod tests {
 ///
 /// ## Reference
 /// Yang et al., "Embedding Entities and Relations for Learning and Inference in Knowledge Bases", ICLR 2015
+#[derive(Serialize, Deserialize)]
 pub struct DistMult {
     config: EmbeddingConfig,
     /// Entity embeddings (num_entities × embedding_dim)
@@ -994,13 +1096,22 @@ impl EmbeddingModel for DistMult {
         Ok(scores.into_iter().take(k).collect())
     }
 
-    fn save(&self, _path: &str) -> StarResult<()> {
-        // TODO: Implement serialization
-        Ok(())
+    fn save(&self, path: &str) -> StarResult<()> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
+        std::fs::write(path, json).map_err(|e| crate::StarError::serialization_error(e.to_string()))
     }
 
-    fn load(&mut self, _path: &str) -> StarResult<()> {
-        // TODO: Implement deserialization
+    fn load(&mut self, path: &str) -> StarResult<()> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
+        let loaded: DistMult = serde_json::from_str(&content)
+            .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
+        self.config = loaded.config;
+        self.entity_embeddings = loaded.entity_embeddings;
+        self.relation_embeddings = loaded.relation_embeddings;
+        self.vocab = loaded.vocab;
+        self.seed = loaded.seed;
         Ok(())
     }
 }
@@ -1023,6 +1134,7 @@ impl EmbeddingModel for DistMult {
 ///
 /// ## Reference
 /// Trouillon et al., "Complex Embeddings for Simple Link Prediction", ICML 2016
+#[derive(Serialize, Deserialize)]
 pub struct ComplEx {
     config: EmbeddingConfig,
     /// Entity embeddings - real part (num_entities × embedding_dim)
@@ -1385,13 +1497,24 @@ impl EmbeddingModel for ComplEx {
         Ok(scores.into_iter().take(k).collect())
     }
 
-    fn save(&self, _path: &str) -> StarResult<()> {
-        // TODO: Implement serialization
-        Ok(())
+    fn save(&self, path: &str) -> StarResult<()> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
+        std::fs::write(path, json).map_err(|e| crate::StarError::serialization_error(e.to_string()))
     }
 
-    fn load(&mut self, _path: &str) -> StarResult<()> {
-        // TODO: Implement deserialization
+    fn load(&mut self, path: &str) -> StarResult<()> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
+        let loaded: ComplEx = serde_json::from_str(&content)
+            .map_err(|e| crate::StarError::serialization_error(e.to_string()))?;
+        self.config = loaded.config;
+        self.entity_embeddings_real = loaded.entity_embeddings_real;
+        self.entity_embeddings_imag = loaded.entity_embeddings_imag;
+        self.relation_embeddings_real = loaded.relation_embeddings_real;
+        self.relation_embeddings_imag = loaded.relation_embeddings_imag;
+        self.vocab = loaded.vocab;
+        self.seed = loaded.seed;
         Ok(())
     }
 }
@@ -1623,5 +1746,182 @@ mod advanced_model_tests {
         assert_eq!(pred_transe.len(), 1);
         assert_eq!(pred_distmult.len(), 1);
         assert_eq!(pred_complex.len(), 1);
+    }
+
+    #[test]
+    fn test_distmult_save_load_roundtrip() {
+        let config = EmbeddingConfig {
+            embedding_dim: 32,
+            learning_rate: 0.01,
+            batch_size: 2,
+            num_negative_samples: 3,
+            ..Default::default()
+        };
+
+        let mut model = DistMult::new(config);
+        let triples = create_test_triples();
+        model.train(&triples, 10).unwrap();
+
+        let emb_before = model.get_embedding("Bob").unwrap();
+
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "oxirs_distmult_test_{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let path_str = path.to_string_lossy().to_string();
+
+        model.save(&path_str).expect("DistMult save should succeed");
+
+        let mut model2 = DistMult::new(EmbeddingConfig::default());
+        model2
+            .load(&path_str)
+            .expect("DistMult load should succeed");
+
+        let emb_after = model2
+            .get_embedding("Bob")
+            .expect("Bob should exist after load");
+        assert_eq!(emb_before.len(), emb_after.len());
+        for (a, b) in emb_before.iter().zip(emb_after.iter()) {
+            assert!(
+                (a - b).abs() < 1e-12,
+                "DistMult embedding values must match after round-trip"
+            );
+        }
+
+        let _ = std::fs::remove_file(&path_str);
+    }
+
+    #[test]
+    fn test_distmult_save_load_similarity_preserved() {
+        let config = EmbeddingConfig {
+            embedding_dim: 16,
+            batch_size: 2,
+            num_negative_samples: 2,
+            ..Default::default()
+        };
+
+        let mut model = DistMult::new(config);
+        let triples = create_test_triples();
+        model.train(&triples, 5).unwrap();
+
+        let sim_before = model.similarity("Alice", "Charlie").unwrap();
+
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "oxirs_distmult_sim_test_{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let path_str = path.to_string_lossy().to_string();
+
+        model.save(&path_str).expect("DistMult save should succeed");
+
+        let mut model2 = DistMult::new(EmbeddingConfig::default());
+        model2
+            .load(&path_str)
+            .expect("DistMult load should succeed");
+
+        let sim_after = model2.similarity("Alice", "Charlie").unwrap();
+        assert!(
+            (sim_before - sim_after).abs() < 1e-12,
+            "similarity must be preserved after round-trip"
+        );
+
+        let _ = std::fs::remove_file(&path_str);
+    }
+
+    #[test]
+    fn test_complex_save_load_roundtrip() {
+        let config = EmbeddingConfig {
+            embedding_dim: 32,
+            learning_rate: 0.01,
+            batch_size: 2,
+            num_negative_samples: 3,
+            ..Default::default()
+        };
+
+        let mut model = ComplEx::new(config);
+        let triples = create_test_triples();
+        model.train(&triples, 10).unwrap();
+
+        // ComplEx returns concatenated real+imag embeddings
+        let emb_before = model.get_embedding("Alice").unwrap();
+
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "oxirs_complex_test_{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let path_str = path.to_string_lossy().to_string();
+
+        model.save(&path_str).expect("ComplEx save should succeed");
+
+        let mut model2 = ComplEx::new(EmbeddingConfig::default());
+        model2.load(&path_str).expect("ComplEx load should succeed");
+
+        let emb_after = model2
+            .get_embedding("Alice")
+            .expect("Alice should exist after ComplEx load");
+        assert_eq!(emb_before.len(), emb_after.len());
+        for (a, b) in emb_before.iter().zip(emb_after.iter()) {
+            assert!(
+                (a - b).abs() < 1e-12,
+                "ComplEx embedding values must match after round-trip"
+            );
+        }
+
+        let _ = std::fs::remove_file(&path_str);
+    }
+
+    #[test]
+    fn test_complex_save_load_predictions_preserved() {
+        let config = EmbeddingConfig {
+            embedding_dim: 16,
+            batch_size: 2,
+            num_negative_samples: 2,
+            ..Default::default()
+        };
+
+        let mut model = ComplEx::new(config);
+        let triples = create_test_triples();
+        model.train(&triples, 5).unwrap();
+
+        let preds_before = model.predict_tail("Bob", "knows", 2).unwrap();
+
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "oxirs_complex_pred_test_{}.json",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let path_str = path.to_string_lossy().to_string();
+
+        model.save(&path_str).expect("ComplEx save should succeed");
+
+        let mut model2 = ComplEx::new(EmbeddingConfig::default());
+        model2.load(&path_str).expect("ComplEx load should succeed");
+
+        let preds_after = model2.predict_tail("Bob", "knows", 2).unwrap();
+        assert_eq!(preds_before.len(), preds_after.len());
+        for ((name_a, score_a), (name_b, score_b)) in preds_before.iter().zip(preds_after.iter()) {
+            assert_eq!(name_a, name_b, "ComplEx prediction order must be preserved");
+            assert!(
+                (score_a - score_b).abs() < 1e-12,
+                "ComplEx prediction scores must match after round-trip"
+            );
+        }
+
+        let _ = std::fs::remove_file(&path_str);
     }
 }

@@ -1,0 +1,21 @@
+# SELECT query, empty result, XML results format.
+endpoint: sparql_query
+classification: spec-required
+match_mode: structural-xml
+description: GET /sparql with Accept: application/sparql-results+xml returns valid XML
+
+=== request
+GET /sparql?query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%200
+Accept: application/sparql-results+xml
+
+=== response
+200
+Content-Type: application/sparql-results+xml
+
+<?xml version="1.0" encoding="UTF-8"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head>
+  </head>
+  <results>
+  </results>
+</sparql>

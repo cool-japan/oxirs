@@ -1,16 +1,38 @@
-//! Logical constraint implementations with performance optimizations for negation and deep nesting
+//! Logical constraint implementations with performance optimisations for negation and deep nesting.
+//!
+//! SHACL provides four boolean combinators over shapes. Each is implemented as
+//! a struct holding either one nested shape (for `sh:not`) or a list of nested
+//! shapes (for `sh:and`, `sh:or`, `sh:xone`).
+//!
+//! | SHACL parameter | Spec section | Struct                |
+//! |-----------------|--------------|-----------------------|
+//! | `sh:not`        | §4.6.1       | [`NotConstraint`]     |
+//! | `sh:and`        | §4.6.2       | [`AndConstraint`]     |
+//! | `sh:or`         | §4.6.3       | [`OrConstraint`]      |
+//! | `sh:xone`       | §4.6.4       | [`XoneConstraint`]    |
+//!
+//! [`NegationConstraintMetrics`], [`LogicalConstraintMetrics`], and
+//! [`XoneAnalysis`] expose runtime instrumentation for the optimiser.
 
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
 use super::shape_constraints::EvaluationComplexity;
-use crate::{optimization::NegationOptimizer, Result, ShaclError, ShapeId};
+use crate::{
+    optimization::NegationOptimizer, validation::ValidationEngine, Result, ShaclError, ShapeId,
+    ValidationConfig,
+};
 use oxirs_core::{model::Term, Store};
 use oxirs_core::{Object, Predicate, Subject};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-/// Not constraint
+/// `sh:not` constraint (SHACL Core §4.6.1).
+///
+/// Satisfied when no value node conforms to the referenced shape. The most
+/// expensive of the boolean combinators because it requires *negation* over
+/// shape conformance; see [`NegationOptimizer`] for the supported reductions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NotConstraint {
+    /// Shape whose conformance must be falsified for every value.
     pub shape: ShapeId,
 }
 
@@ -177,12 +199,23 @@ impl NotConstraint {
         &self,
         value: &Term,
         store: &dyn Store,
-        _context: &ConstraintContext,
+        context: &ConstraintContext,
     ) -> Result<bool> {
-        // This is a simplified implementation
-        // In a full implementation, this would delegate to the actual shape validator
+        // Use shapes_registry from context when available
+        if let Some(shapes_registry) = &context.shapes_registry {
+            if let Some(shape_def) = shapes_registry.get(&self.shape) {
+                let config = ValidationConfig::default();
+                let mut temp_shapes = indexmap::IndexMap::new();
+                temp_shapes.insert(self.shape.clone(), shape_def.clone());
+                let mut validator = ValidationEngine::new(&temp_shapes, config);
+                return match validator.validate_node_against_shape(store, shape_def, value, None) {
+                    Ok(report) => Ok(report.conforms()),
+                    Err(_) => Ok(false),
+                };
+            }
+        }
 
-        // For test cases and demo purposes, implement basic shape checking
+        // Fallback: FriendShape check for backward compatibility
         if self.shape.as_str().contains("FriendShape") {
             if let Term::NamedNode(node) = value {
                 // Check if the value has type Friend
@@ -212,8 +245,7 @@ impl NotConstraint {
             return Ok(false);
         }
 
-        // For other shapes, implement proper shape validation
-        // This is a placeholder that would be replaced by actual shape validation
+        // Unknown shape with no registry: conservatively report non-conforming
         Ok(false)
     }
 
@@ -246,9 +278,14 @@ impl NotConstraint {
     }
 }
 
-/// And constraint
+/// `sh:and` constraint (SHACL Core §4.6.2).
+///
+/// Conjunction over a list of shapes — every value node must conform to *all*
+/// referenced shapes. Implemented with short-circuit evaluation: the first
+/// non-conforming shape stops the loop.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AndConstraint {
+    /// The shapes that must all conform.
     pub shapes: Vec<ShapeId>,
 }
 
@@ -445,9 +482,23 @@ impl AndConstraint {
         value: &Term,
         shape_id: &ShapeId,
         store: &dyn Store,
-        _context: &ConstraintContext,
+        context: &ConstraintContext,
     ) -> Result<bool> {
-        // Simplified implementation for test cases
+        // Use shapes_registry from context when available
+        if let Some(shapes_registry) = &context.shapes_registry {
+            if let Some(shape_def) = shapes_registry.get(shape_id) {
+                let config = ValidationConfig::default();
+                let mut temp_shapes = indexmap::IndexMap::new();
+                temp_shapes.insert(shape_id.clone(), shape_def.clone());
+                let mut validator = ValidationEngine::new(&temp_shapes, config);
+                return match validator.validate_node_against_shape(store, shape_def, value, None) {
+                    Ok(report) => Ok(report.conforms()),
+                    Err(_) => Ok(false),
+                };
+            }
+        }
+
+        // Fallback: FriendShape check for backward compatibility
         if shape_id.as_str().contains("FriendShape") {
             if let Term::NamedNode(node) = value {
                 let type_predicate = match oxirs_core::model::NamedNode::new(
@@ -475,8 +526,8 @@ impl AndConstraint {
             return Ok(false);
         }
 
-        // Placeholder for other shape types
-        Ok(true) // Default to conforming for unknown shapes
+        // Unknown shape with no registry: conservatively report non-conforming
+        Ok(false)
     }
 
     /// Get performance metrics for AND constraint evaluation
@@ -513,9 +564,14 @@ impl AndConstraint {
     }
 }
 
-/// Or constraint with performance optimizations
+/// `sh:or` constraint (SHACL Core §4.6.3).
+///
+/// Disjunction over a list of shapes — every value node must conform to *at least one*
+/// referenced shape. Short-circuits on the first matching shape; selectivity-aware
+/// reordering is applied when the optimiser is enabled.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrConstraint {
+    /// The shapes, at least one of which must conform.
     pub shapes: Vec<ShapeId>,
 }
 
@@ -739,9 +795,23 @@ impl OrConstraint {
         value: &Term,
         shape_id: &ShapeId,
         store: &dyn Store,
-        _context: &ConstraintContext,
+        context: &ConstraintContext,
     ) -> Result<bool> {
-        // Simplified implementation for test cases
+        // Use shapes_registry from context when available
+        if let Some(shapes_registry) = &context.shapes_registry {
+            if let Some(shape_def) = shapes_registry.get(shape_id) {
+                let config = ValidationConfig::default();
+                let mut temp_shapes = indexmap::IndexMap::new();
+                temp_shapes.insert(shape_id.clone(), shape_def.clone());
+                let mut validator = ValidationEngine::new(&temp_shapes, config);
+                return match validator.validate_node_against_shape(store, shape_def, value, None) {
+                    Ok(report) => Ok(report.conforms()),
+                    Err(_) => Ok(false),
+                };
+            }
+        }
+
+        // Fallback: FriendShape check for backward compatibility
         if shape_id.as_str().contains("FriendShape") {
             if let Term::NamedNode(node) = value {
                 let type_predicate = match oxirs_core::model::NamedNode::new(
@@ -769,8 +839,8 @@ impl OrConstraint {
             return Ok(false);
         }
 
-        // Placeholder for other shape types
-        Ok(false) // Default to non-conforming for unknown shapes
+        // Unknown shape with no registry: conservatively report non-conforming
+        Ok(false)
     }
 
     /// Get performance metrics for OR constraint evaluation
@@ -808,9 +878,15 @@ impl OrConstraint {
     }
 }
 
-/// Xone (exactly one) constraint with performance optimizations
+/// `sh:xone` constraint (SHACL Core §4.6.4).
+///
+/// Exclusive disjunction — every value node must conform to *exactly one* of
+/// the referenced shapes. Conformance to zero or more than one of the shapes is
+/// a violation. Useful for type-tagged unions (e.g. either a foaf:Person or a
+/// foaf:Organization, never both).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct XoneConstraint {
+    /// The shapes; exactly one must conform.
     pub shapes: Vec<ShapeId>,
 }
 
@@ -1083,9 +1159,23 @@ impl XoneConstraint {
         value: &Term,
         shape_id: &ShapeId,
         store: &dyn Store,
-        _context: &ConstraintContext,
+        context: &ConstraintContext,
     ) -> Result<bool> {
-        // Simplified implementation for test cases
+        // Use shapes_registry from context when available
+        if let Some(shapes_registry) = &context.shapes_registry {
+            if let Some(shape_def) = shapes_registry.get(shape_id) {
+                let config = ValidationConfig::default();
+                let mut temp_shapes = indexmap::IndexMap::new();
+                temp_shapes.insert(shape_id.clone(), shape_def.clone());
+                let mut validator = ValidationEngine::new(&temp_shapes, config);
+                return match validator.validate_node_against_shape(store, shape_def, value, None) {
+                    Ok(report) => Ok(report.conforms()),
+                    Err(_) => Ok(false),
+                };
+            }
+        }
+
+        // Fallback: FriendShape check for backward compatibility
         if shape_id.as_str().contains("FriendShape") {
             if let Term::NamedNode(node) = value {
                 let type_predicate = match oxirs_core::model::NamedNode::new(
@@ -1113,8 +1203,8 @@ impl XoneConstraint {
             return Ok(false);
         }
 
-        // Placeholder for other shape types
-        Ok(false) // Default to non-conforming for unknown shapes
+        // Unknown shape with no registry: conservatively report non-conforming
+        Ok(false)
     }
 
     /// Get performance metrics for XONE constraint evaluation

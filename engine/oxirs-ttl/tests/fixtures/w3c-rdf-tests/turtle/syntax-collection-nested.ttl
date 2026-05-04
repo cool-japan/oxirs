@@ -1,0 +1,3 @@
+# nested RDF collection
+@prefix ex: <http://example.org/> .
+ex:s ex:matrix ( ( 1 2 ) ( 3 4 ) ) .

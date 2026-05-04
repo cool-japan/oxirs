@@ -18,7 +18,7 @@
 //! - Aggregations: 15-20x
 
 use super::ir::*;
-use crate::{StarResult, StarStore, StarTriple};
+use crate::{StarError, StarResult, StarStore, StarTriple};
 use scirs2_core::jit::{
     CompilationHints, CompiledKernel, ComputeIntensity, DataType, JitBackend, JitCompiler,
     JitConfig, JitError, KernelLanguage, KernelSource, MemoryPattern, OptimizationLevel,
@@ -270,20 +270,34 @@ impl SparqlJitCompiler {
     }
 
     /// Execute compiled kernel
-    #[instrument(skip(self, store))]
+    #[instrument(skip(self, _store))]
     pub fn execute_compiled(
         &self,
         kernel_id: &str,
-        store: &StarStore,
+        _store: &StarStore,
     ) -> StarResult<Vec<StarTriple>> {
         debug!("Executing compiled kernel: {}", kernel_id);
 
-        // In production, this would execute the compiled native code
-        // For now, we simulate compiled execution by using optimized paths
-        // This is a placeholder until scirs2_core::jit's execute_kernel is fully integrated
-
-        // Execute with optimization hints from compilation
-        Ok(store.all_triples())
+        // JIT kernel execution requires scirs2_core::jit::execute_kernel, which is
+        // not yet integrated.  The `compile_ir` step produces a kernel_id and caches
+        // the kernel, but the runtime side (loading the native code into a function
+        // pointer and calling it with a StarStore binding) is pending.  Callers must
+        // use the interpreted SPARQL-star executor until this is resolved.
+        Err(StarError::QueryError {
+            message: format!(
+                "JIT kernel execution is not yet implemented: kernel '{}' was compiled \
+                 but scirs2_core::jit::execute_kernel integration is pending; \
+                 use the interpreted SPARQL-star executor instead",
+                kernel_id
+            ),
+            query_fragment: Some(kernel_id.to_string()),
+            position: None,
+            suggestion: Some(
+                "Call the non-JIT query path or disable JIT compilation \
+                 with CompilationStrategy::Interpreted"
+                    .to_string(),
+            ),
+        })
     }
 
     /// Get compiled kernel from cache
@@ -317,8 +331,45 @@ impl SparqlJitCompiler {
 }
 
 impl Default for SparqlJitCompiler {
+    /// Create a compiler using the interpreter backend, which never fails.
+    ///
+    /// This is the safe fallback when LLVM is unavailable.  All compilation
+    /// attempts through this instance will use the interpreter path.
     fn default() -> Self {
-        Self::new().expect("Failed to create JIT compiler")
+        Self::interpreter_fallback().unwrap_or_else(|e| {
+            // Should never happen: interpreter backend has no failure modes.
+            // If it does, the scirs2_core::jit API has changed in a breaking way.
+            unreachable!(
+                "BUG: interpreter JIT backend failed to initialise — \
+                 scirs2_core::jit API may have changed: {}",
+                e
+            )
+        })
+    }
+}
+
+impl SparqlJitCompiler {
+    /// Create a compiler that uses the safe interpreter backend.
+    ///
+    /// Unlike `new()`, which requires the LLVM backend, this constructor
+    /// always succeeds and is suitable as a last-resort fallback.
+    pub fn interpreter_fallback() -> Result<Self, JitError> {
+        let config = JitConfig {
+            backend: JitBackend::Interpreter,
+            target_arch: Self::detect_architecture(),
+            optimization_level: OptimizationLevel::O1,
+            enable_caching: true,
+            enable_profiling: false,
+            max_cache_size: 32 * 1024 * 1024, // 32 MB
+            compilation_timeout: std::time::Duration::from_secs(10),
+            adaptive_optimization: false,
+            custom_flags: Vec::new(),
+        };
+        let jit_compiler = JitCompiler::new(config)?;
+        Ok(Self {
+            jit_compiler,
+            kernel_cache: HashMap::new(),
+        })
     }
 }
 
@@ -367,35 +418,39 @@ mod tests {
 
     #[test]
     fn test_compiler_creation() {
-        let result = SparqlJitCompiler::new();
-        assert!(result.is_ok());
+        // LLVM backend may not be available in all environments; interpreter always is.
+        let result = SparqlJitCompiler::interpreter_fallback();
+        assert!(result.is_ok(), "interpreter_fallback should never fail");
     }
 
     #[test]
     fn test_parse_simple_pattern() {
-        let compiler = SparqlJitCompiler::new().unwrap();
+        let compiler =
+            SparqlJitCompiler::interpreter_fallback().expect("interpreter_fallback should succeed");
         let query = "SELECT * WHERE { ?s ?p ?o }";
         let result = compiler.parse_to_ir(query);
 
         assert!(result.is_ok());
-        let plan = result.unwrap();
+        let plan = result.expect("parse should succeed");
         assert!(plan.estimated_cost > 0.0);
     }
 
     #[test]
     fn test_parse_quoted_pattern() {
-        let compiler = SparqlJitCompiler::new().unwrap();
+        let compiler =
+            SparqlJitCompiler::interpreter_fallback().expect("interpreter_fallback should succeed");
         let query = "SELECT * WHERE { << ?s ?p ?o >> ?meta ?value }";
         let result = compiler.parse_to_ir(query);
 
         assert!(result.is_ok());
-        let plan = result.unwrap();
+        let plan = result.expect("parse should succeed");
         assert!(plan.estimated_cost > 10.0); // More expensive than simple pattern
     }
 
     #[test]
     fn test_compile_ir() {
-        let mut compiler = SparqlJitCompiler::new().unwrap();
+        let mut compiler =
+            SparqlJitCompiler::interpreter_fallback().expect("interpreter_fallback should succeed");
         let pattern = IrOp::TriplePattern {
             subject: IrTerm::Variable("s".to_string()),
             predicate: IrTerm::Variable("p".to_string()),
@@ -406,6 +461,25 @@ mod tests {
         let result = compiler.compile_ir(&plan);
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_execute_compiled_surfaces_error() {
+        // execute_compiled is a stub: it must surface a typed error rather than
+        // silently returning all triples.
+        let compiler =
+            SparqlJitCompiler::interpreter_fallback().expect("interpreter_fallback should succeed");
+        let store = StarStore::default();
+        let result = compiler.execute_compiled("some_kernel_id", &store);
+        assert!(
+            result.is_err(),
+            "execute_compiled must return a typed error while JIT execution is pending"
+        );
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("not yet implemented") || msg.contains("JIT"),
+            "error should mention JIT, got: {msg}"
+        );
     }
 
     #[test]
@@ -426,7 +500,8 @@ mod tests {
 
     #[test]
     fn test_codegen_triple_pattern() {
-        let compiler = SparqlJitCompiler::new().unwrap();
+        let compiler =
+            SparqlJitCompiler::interpreter_fallback().expect("interpreter_fallback should succeed");
         let pattern = IrOp::TriplePattern {
             subject: IrTerm::Variable("s".to_string()),
             predicate: IrTerm::Variable("p".to_string()),
@@ -443,7 +518,8 @@ mod tests {
 
     #[test]
     fn test_codegen_join() {
-        let compiler = SparqlJitCompiler::new().unwrap();
+        let compiler =
+            SparqlJitCompiler::interpreter_fallback().expect("interpreter_fallback should succeed");
         let left = IrOp::TriplePattern {
             subject: IrTerm::Variable("s".to_string()),
             predicate: IrTerm::Variable("p".to_string()),
@@ -472,7 +548,8 @@ mod tests {
 
     #[test]
     fn test_kernel_source_generation() {
-        let compiler = SparqlJitCompiler::new().unwrap();
+        let compiler =
+            SparqlJitCompiler::interpreter_fallback().expect("interpreter_fallback should succeed");
         let pattern = IrOp::TriplePattern {
             subject: IrTerm::Variable("s".to_string()),
             predicate: IrTerm::Variable("p".to_string()),
@@ -483,7 +560,7 @@ mod tests {
         let result = compiler.generate_kernel_source(&plan);
 
         assert!(result.is_ok());
-        let source = result.unwrap();
+        let source = result.expect("kernel source generation should succeed");
         assert!(source.source.contains("execute_query"));
         assert!(source.source.contains("results"));
     }

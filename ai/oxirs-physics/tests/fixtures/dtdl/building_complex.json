@@ -1,0 +1,43 @@
+{
+    "@context": "dtmi:dtdl:context;3",
+    "@id": "dtmi:example:Building;1",
+    "@type": "Interface",
+    "displayName": { "en": "Building", "de": "Gebäude" },
+    "description": "A smart building with multiple floors and HVAC control.",
+    "contents": [
+        {
+            "@type": "Property",
+            "name": "buildingName",
+            "schema": "string",
+            "writable": false
+        },
+        {
+            "@type": ["Telemetry", "Temperature"],
+            "name": "ambientTemperature",
+            "unit": "Celsius",
+            "schema": "double"
+        },
+        {
+            "@type": ["Telemetry", "Humidity"],
+            "name": "relativeHumidity",
+            "unit": "percent",
+            "schema": "double"
+        },
+        {
+            "@type": "Command",
+            "name": "activateHVAC",
+            "description": "Switch the HVAC system on or off"
+        },
+        {
+            "@type": "Component",
+            "name": "hvacUnit",
+            "schema": "dtmi:example:HvacUnit;1"
+        },
+        {
+            "@type": "Relationship",
+            "name": "hasFloor",
+            "target": "dtmi:example:Floor;1",
+            "description": "The floors contained in this building"
+        }
+    ]
+}

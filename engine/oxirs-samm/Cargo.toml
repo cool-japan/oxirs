@@ -44,6 +44,7 @@ futures.workspace = true
 # Serialization
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+toml.workspace = true
 quick-xml = { workspace = true, features = ["serialize"] }
 oxiarc-archive.workspace = true
 base64.workspace = true
@@ -81,6 +82,14 @@ tokio-test.workspace = true
 criterion = { workspace = true, features = ["async_tokio"] }
 proptest.workspace = true
 
+[[bin]]
+name = "parity_report"
+path = "src/bin/parity_report.rs"
+
+[[bin]]
+name = "samm"
+path = "src/bin/samm.rs"
+
 [[bench]]
 name = "parser_benchmarks"
 harness = false
@@ -101,12 +110,17 @@ harness = false
 name = "large_model_benchmarks"
 harness = false
 
+[[bench]]
+name = "parallel_correlation_bench"
+harness = false
+
 [features]
 default = []
 codegen = []  # Code generation support (GraphQL, TypeScript)
 aas = []      # Asset Administration Shell support
 aasx-thumbnails = ["image"]  # Custom thumbnail support for AASX packages
 graphviz = ["graphviz-rust"]  # SVG/PNG diagram rendering via Graphviz
+gpu = ["scirs2-core/gpu"]  # GPU-accelerated batch validation (off by default)
 
 [lints]
 workspace = true

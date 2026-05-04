@@ -1,6 +1,6 @@
 # OxiRS Vec - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Status: Production Ready
 
@@ -72,13 +72,24 @@ Production-ready guides available in `/docs`:
 - ✅ Geo-distributed deployment
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] Enhanced snapshot and restore
-- [ ] SLA-based resource allocation
-- [ ] Advanced query optimization
-- [ ] Full production deployment validation
-- [ ] Long-term support guarantees
-- [ ] Enterprise features
-- [ ] Comprehensive benchmarks
+- [x] Enhanced snapshot and restore
+- [x] SLA-based resource allocation
+- [x] Advanced query optimization (completed 2026-04-30)
+  - **Goal:** Selectivity-aware vector index choice (HNSW vs IVF vs LSH vs PQ) per-query at runtime.
+  - **Design:** Cost model estimates query cost per index given (data_size, dim, requested_recall, query_density). HNSW: O(log n × M); IVF: O(n / nprobe); LSH: O(buckets); PQ: O(centroids × subquantizers). At query time dispatcher picks index with lowest estimated cost meeting requested recall. Fallback: if dispatcher misclassifies and recall drops below threshold, re-issue against next-best index. Persist runtime statistics (per-index hit/miss + recall observed) in `query_stats` for online learning of cost-model weights.
+  - **Files:** `src/optimizer/{cost_model,index_dispatcher,query_stats,mod}.rs`, `src/index_dispatcher.rs`
+  - **Tests:** unit on cost-model formulas + index pick under various (n, dim, recall) tuples; integration recall-vs-latency test on synthetic dataset
+  - **Risk:** cost-model weights drift. Mitigation: seed with empirical data from criterion benchmarks shipped in round 1.
+- [x] Full production deployment validation (completed 2026-04-30)
+  - **Goal:** Chaos-test harness validating production deployment (multi-tenant, snapshot-restore, SLA) under fault injection.
+  - **Design:** Build `tests/production_deployment.rs` with scenarios: multi-tenant load (10 tenants × 4 SLA classes × 1000 queries); snapshot during load (trigger PIT snapshot mid-load, verify queries continue, restore on fresh node); chaos (kill writer, verify reads continue; kill reader, verify others pick up; corrupt a checkpoint file, verify error path). Pass criteria: zero data loss, zero corruption, RTO < 30s, RPO < 1s.
+  - **Files:** `tests/production_deployment.rs`
+  - **Prerequisites:** snapshot+SLA from round 1 (W2-S6, already shipped)
+  - **Tests:** full chaos-deployment scenario under fault injection (heavy 40k-op variant `#[ignore]`-gated)
+  - **Risk:** test flakiness on slower hardware. Mitigation: relaxed thresholds in `cfg(debug_assertions)` branches.
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing
 

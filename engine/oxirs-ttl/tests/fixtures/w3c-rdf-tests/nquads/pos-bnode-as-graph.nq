@@ -1,0 +1,2 @@
+<http://example.org/s> <http://example.org/p> <http://example.org/o> _:graph1 .
+<http://example.org/s2> <http://example.org/p> <http://example.org/o2> _:graph1 .

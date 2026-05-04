@@ -1,9 +1,9 @@
 //! # OxiRS SHACL-AI
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.
@@ -558,12 +558,30 @@ pub mod constraint_ranker;
 
 // v1.1.0 round 16: SHACL shape pattern scoring and ranking
 pub mod pattern_scorer;
+
+// v0.3.0 Certification suite: measures ML prediction accuracy vs. deterministic SHACL engine
+pub mod certification;
+pub use certification::{
+    CertificationCase, CertificationReport, CertificationRunner, CertificationStatus,
+    CertificationSuite, ClassificationMetrics, ConfusionMatrix, ConstraintTypeMetrics,
+};
+
+// v0.3.0 Block 4: LLM completion-API provider abstraction, shape generator, explainer
+pub mod explainer;
+pub mod shape_nl_generator;
+
+// v0.3.0 Block 3: Model zoo and pretrained shape-learning model manifests
+pub mod model_zoo;
+pub use model_zoo::{
+    LoadedShapeModel, ShapeModelManifest, ShapeModelZoo, ShapeModelZooError, ShapeModelZooLoader,
+};
+
 pub use constraint_synthesizer::{
     ConstraintSynthesizer, ConstraintType, DataSample, SynthesizedConstraint,
 };
 
 // Re-export key types for convenience with explicit imports to avoid ambiguity
-// A/B Testing Framework (v0.2.4 Final - NEW)
+// A/B Testing Framework (v0.3.0 Final - NEW)
 pub use ab_testing::{
     ABTestConfig, ABTestFramework, Experiment as ABExperiment, ExperimentResults,
     ExperimentStatus as ABExperimentStatus, MetricDefinition, MetricGoal, MetricSummary,
@@ -571,7 +589,7 @@ pub use ab_testing::{
     StatisticalTestType, Variant,
 };
 
-// Advanced Features (v0.2.4 - NEW)
+// Advanced Features (v0.3.0 - NEW)
 pub use advanced_features::{
     // Active Learning
     ActiveLearner,
@@ -741,6 +759,17 @@ pub use llm::{
     LlmConstraintGenerator, LlmConstraintGeneratorConfig, LlmProvider, LlmRequest, LlmResponse,
     PromptTemplate, StubLlmProvider, TokenUsage,
 };
+
+// Re-export the newer completion-API types (non-colliding names at crate root).
+#[cfg(feature = "llm-network")]
+pub use llm::{AnthropicProvider, OpenAiProvider};
+pub use llm::{
+    Capabilities, CompletionProvider, CompletionRequest, CompletionResponse, CompletionTokenUsage,
+    LlmError, LocalProvider, Message, Role, ShaclPrompts,
+};
+
+// Re-export shape NL generator and explainer public API.
+pub use explainer::{ConstraintExplainer, ExplainerError};
 pub use meta_learning::{
     AdaptationStrategy, AdaptedModel, LearningTask, MetaLearner, MetaLearningConfig,
     MetaLearningResult, TaskType,
@@ -772,9 +801,9 @@ pub use model_registry::{
 };
 pub use models::{
     AttributedGraph, ConstraintHead, FeatureEncoder, FeedForward, GraphEdge, GraphNode,
-    GraphTransformerConfig, GraphTransformerLayer, GtShaclModel, GtShaclStats, GtShaclTrainer,
-    LayerNorm, LearnedRule, Linear, MultiHeadAttention as ModelMultiHeadAttention,
-    RuleBasedShapeLearner, TrainingReport,
+    GraphTransformerConfig, GraphTransformerLayer, GraphTransformerModel, GraphormerModel,
+    GtShaclModel, GtShaclStats, GtShaclTrainer, LayerNorm, LearnedRule, Linear,
+    MultiHeadAttention as ModelMultiHeadAttention, RuleBasedShapeLearner, TrainingReport,
 };
 pub use multi_task_learning::{
     ActivationType, ConvergenceInfo, GradientNormalizer, LayerNormalization, LearnedTaskModel,
@@ -855,6 +884,9 @@ pub use realtime_anomaly_streams::{
 pub use recommendation_systems::*;
 pub use self_adaptive_ai::*;
 pub use shape::*;
+pub use shape_nl_generator::{
+    GeneratorError, NlPropertyConstraint, ProposedShape, ShapeNlGenerator,
+};
 pub use sophisticated_validation_optimization::{
     ConstraintSatisfactionStrategy, EnvironmentalFactors, OptimizationContext, OptimizationMetrics,
     OptimizationObjective, OptimizationParameters, OptimizationPriority,

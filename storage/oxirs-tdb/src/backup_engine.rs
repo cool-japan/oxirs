@@ -217,7 +217,7 @@ impl BackupEngine {
     fn sha256_hex(data: &[u8]) -> String {
         let mut hasher = Sha256::new();
         hasher.update(data);
-        format!("{:x}", hasher.finalize())
+        hex::encode(hasher.finalize())
     }
 
     fn serialize(triples: &[(String, String, String)], format: BackupFormat) -> Result<Vec<u8>> {

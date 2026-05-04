@@ -72,7 +72,7 @@ GPU: NVIDIA A100 (40GB+) or H100
 ```toml
 # Cargo.toml
 [dependencies]
-oxirs-embed = { version = "0.2.3", features = ["all"] }
+oxirs-embed = { version = "0.3.0", features = ["all"] }
 tokio = { version = "1.48", features = ["full"] }
 tracing-subscriber = "0.3"
 ```

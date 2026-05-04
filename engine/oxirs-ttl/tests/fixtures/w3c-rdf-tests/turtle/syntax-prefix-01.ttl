@@ -1,0 +1,3 @@
+# @prefix directive
+@prefix ex: <http://example.org/> .
+ex:s ex:p ex:o .

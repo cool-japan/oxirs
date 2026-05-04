@@ -11,6 +11,17 @@
 //! - **Join cost**: combination of left / right materialization plus join overhead.
 //! - **Transfer cost**: network latency and bandwidth between endpoints.
 //! - **Greedy ordering**: repeatedly pick the cheapest next fragment.
+//!
+//! ## Two layers
+//!
+//! - [`CostModel`] — the original federate-internal model that operates on
+//!   [`QueryFragment`] descriptors.
+//! - [`FederationCostModel`] — a higher-level model that walks
+//!   [`oxirs_arq::algebra::Algebra`] trees and combines the local CPU/IO/
+//!   memory costs from
+//!   [`oxirs_arq::cost_model::CostModel`] with network transfer costs derived
+//!   from per-endpoint stats.  This is the surface used by the W3-S10
+//!   federation optimizer to compare plans during rewrite.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -576,5 +587,360 @@ mod tests {
         let order = model.optimal_join_order(&frags);
         // The cheap fragment (index 1) should be first
         assert_eq!(order[0], 1, "cheap fragment should come first");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FederationCostModel — bridge to oxirs-arq cost estimator
+// ─────────────────────────────────────────────────────────────────────────────
+
+use oxirs_arq::algebra::{Algebra, Term};
+use oxirs_arq::cost_model::{CostEstimate, CostModel as ArqCostModel, CostModelConfig};
+
+/// Aggregate cost estimate for a federated query plan.
+///
+/// Combines the *local* CPU/IO/memory cost computed by oxirs-arq with the
+/// *network* cost of moving intermediate bindings between endpoints.
+#[derive(Debug, Clone)]
+pub struct FederationPlanCost {
+    /// Sum of all local-execution costs at every SERVICE leg (CPU + IO + memory).
+    pub local_cost: f64,
+    /// Sum of all network transfer costs between endpoints + coordinator.
+    pub network_cost: f64,
+    /// `local_cost + network_cost`.
+    pub total_cost: f64,
+    /// Estimated total cardinality of the plan output.
+    pub estimated_cardinality: usize,
+    /// Per-endpoint subtotal of local cost (informational).
+    pub per_endpoint_local: HashMap<String, f64>,
+}
+
+impl FederationPlanCost {
+    /// Empty cost (zero everywhere).
+    pub fn zero() -> Self {
+        Self {
+            local_cost: 0.0,
+            network_cost: 0.0,
+            total_cost: 0.0,
+            estimated_cardinality: 0,
+            per_endpoint_local: HashMap::new(),
+        }
+    }
+}
+
+/// Federation-aware cost model.
+///
+/// Wraps an [`oxirs_arq::cost_model::CostModel`] and supplements it with
+/// per-endpoint network statistics so plans involving SERVICE clauses can be
+/// compared on a uniform total-cost scale.
+pub struct FederationCostModel {
+    arq: ArqCostModel,
+    network: CostModel,
+}
+
+impl FederationCostModel {
+    /// Build a new model with default arq config and a transfer-only
+    /// federation cost model with `network_overhead_ms` per hop.
+    pub fn new(network_overhead_ms: f64) -> Self {
+        Self {
+            arq: ArqCostModel::new(CostModelConfig::default()),
+            network: CostModel::new(network_overhead_ms),
+        }
+    }
+
+    /// Build with a custom oxirs-arq cost-model configuration.
+    pub fn with_arq_config(network_overhead_ms: f64, arq_cfg: CostModelConfig) -> Self {
+        Self {
+            arq: ArqCostModel::new(arq_cfg),
+            network: CostModel::new(network_overhead_ms),
+        }
+    }
+
+    /// Register endpoint statistics.  Forwards to the inner [`CostModel`].
+    pub fn register_endpoint(&mut self, stats: EndpointStats) {
+        self.network.register_endpoint(stats);
+    }
+
+    /// Borrow the network cost model.
+    pub fn network(&self) -> &CostModel {
+        &self.network
+    }
+
+    /// Borrow the local (oxirs-arq) cost model.
+    pub fn arq(&self) -> &ArqCostModel {
+        &self.arq
+    }
+
+    /// Estimate the cost of executing `algebra`.
+    ///
+    /// Walks the tree:
+    /// - Each `Algebra::Service { endpoint, pattern, .. }` contributes a
+    ///   local oxirs-arq cost for `pattern` plus a transfer cost from
+    ///   `endpoint` to a virtual `coordinator`.
+    /// - Other nodes recurse into their children and combine costs (joins
+    ///   add, unions add, filters take their child's cost).
+    pub fn estimate_plan_cost(&mut self, algebra: &Algebra) -> FederationPlanCost {
+        let mut acc = FederationPlanCost::zero();
+        self.walk(algebra, &mut acc);
+        acc.total_cost = acc.local_cost + acc.network_cost;
+        acc
+    }
+
+    fn walk(&mut self, algebra: &Algebra, acc: &mut FederationPlanCost) {
+        match algebra {
+            Algebra::Service {
+                endpoint, pattern, ..
+            } => {
+                let endpoint_str = match endpoint {
+                    Term::Iri(n) => n.as_str().to_string(),
+                    _ => "<unknown>".into(),
+                };
+                let local: CostEstimate = self
+                    .arq
+                    .estimate_cost(pattern)
+                    .unwrap_or_else(|_| CostEstimate::new(0.0, 0.0, 0.0, 0.0, 0));
+                let local_total = local.cpu_cost + local.io_cost + local.memory_cost;
+                acc.local_cost += local_total;
+                *acc.per_endpoint_local
+                    .entry(endpoint_str.clone())
+                    .or_insert(0.0) += local_total;
+
+                let net = self.network.estimate_transfer_cost(
+                    &endpoint_str,
+                    "coordinator",
+                    local.cardinality as u64,
+                );
+                acc.network_cost += net;
+                acc.estimated_cardinality =
+                    acc.estimated_cardinality.saturating_add(local.cardinality);
+            }
+            Algebra::Join { left, right }
+            | Algebra::Union { left, right }
+            | Algebra::Minus { left, right } => {
+                self.walk(left, acc);
+                self.walk(right, acc);
+            }
+            Algebra::LeftJoin { left, right, .. } => {
+                self.walk(left, acc);
+                self.walk(right, acc);
+            }
+            Algebra::Filter { pattern, .. }
+            | Algebra::Project { pattern, .. }
+            | Algebra::Distinct { pattern }
+            | Algebra::Reduced { pattern }
+            | Algebra::OrderBy { pattern, .. }
+            | Algebra::Slice { pattern, .. }
+            | Algebra::Group { pattern, .. }
+            | Algebra::Having { pattern, .. }
+            | Algebra::Extend { pattern, .. }
+            | Algebra::Graph { pattern, .. } => {
+                self.walk(pattern, acc);
+            }
+            Algebra::Bgp(patterns) => {
+                // Local BGP — count its execution against a synthetic
+                // "local" cost using oxirs-arq.
+                let local: CostEstimate = self.arq.estimate_cost(algebra).unwrap_or_else(|_| {
+                    CostEstimate::new(
+                        (patterns.len() as f64) * 100.0,
+                        (patterns.len() as f64) * 50.0,
+                        0.0,
+                        0.0,
+                        patterns.len() * 1_000,
+                    )
+                });
+                acc.local_cost += local.cpu_cost + local.io_cost + local.memory_cost;
+                acc.estimated_cardinality =
+                    acc.estimated_cardinality.saturating_add(local.cardinality);
+            }
+            Algebra::Values { bindings, .. } => {
+                acc.estimated_cardinality =
+                    acc.estimated_cardinality.saturating_add(bindings.len());
+            }
+            Algebra::PropertyPath { .. } => {
+                acc.local_cost += 5_000.0;
+                acc.estimated_cardinality = acc.estimated_cardinality.saturating_add(2_000);
+            }
+            Algebra::Table | Algebra::Zero | Algebra::Empty => {}
+        }
+    }
+
+    /// Compare two plans and return the cheaper one (by `total_cost`).
+    /// Returns the first plan on ties.
+    pub fn cheaper<'a>(
+        &mut self,
+        left: &'a Algebra,
+        right: &'a Algebra,
+    ) -> (&'a Algebra, FederationPlanCost) {
+        let lc = self.estimate_plan_cost(left);
+        let rc = self.estimate_plan_cost(right);
+        if rc.total_cost < lc.total_cost {
+            (right, rc)
+        } else {
+            (left, lc)
+        }
+    }
+}
+
+#[cfg(test)]
+mod federation_cost_tests {
+    use super::*;
+    use oxirs_arq::algebra::{Term, TriplePattern, Variable};
+    use oxirs_core::model::NamedNode;
+
+    fn var(s: &str) -> Variable {
+        Variable::new(s).expect("valid var")
+    }
+
+    fn iri_term(s: &str) -> Term {
+        Term::Iri(NamedNode::new_unchecked(s))
+    }
+
+    fn bgp(s: &str, p: &str, o: &str) -> Algebra {
+        Algebra::Bgp(vec![TriplePattern {
+            subject: Term::Variable(var(s)),
+            predicate: iri_term(p),
+            object: Term::Variable(var(o)),
+        }])
+    }
+
+    fn service(endpoint: &str, pattern: Algebra, silent: bool) -> Algebra {
+        Algebra::Service {
+            endpoint: iri_term(endpoint),
+            pattern: Box::new(pattern),
+            silent,
+        }
+    }
+
+    fn ep_stats(url: &str, latency: f64, triples: u64) -> EndpointStats {
+        EndpointStats {
+            endpoint_url: url.to_string(),
+            avg_latency_ms: latency,
+            triples_count: triples,
+            selectivity_estimate: 0.05,
+            bandwidth_mbps: 100.0,
+        }
+    }
+
+    #[test]
+    fn fcm_builds_with_defaults() {
+        let m = FederationCostModel::new(5.0);
+        assert!(m.network().estimate_transfer_cost("a", "b", 0) >= 5.0);
+    }
+
+    #[test]
+    fn fcm_zero_cost_for_empty() {
+        let mut m = FederationCostModel::new(5.0);
+        let cost = m.estimate_plan_cost(&Algebra::Empty);
+        assert!((cost.total_cost).abs() < 1e-9);
+    }
+
+    #[test]
+    fn fcm_estimates_service_cost() {
+        let mut m = FederationCostModel::new(5.0);
+        m.register_endpoint(ep_stats("http://a.example", 10.0, 1_000_000));
+        let s = service("http://a.example", bgp("s", "http://p", "o"), false);
+        let cost = m.estimate_plan_cost(&s);
+        assert!(cost.local_cost >= 0.0);
+        assert!(cost.network_cost >= 5.0);
+        assert!(cost.total_cost >= cost.local_cost);
+    }
+
+    #[test]
+    fn fcm_local_cost_aggregates_per_endpoint() {
+        let mut m = FederationCostModel::new(5.0);
+        m.register_endpoint(ep_stats("http://a.example", 10.0, 1_000));
+        m.register_endpoint(ep_stats("http://b.example", 20.0, 2_000));
+        let plan = Algebra::Join {
+            left: Box::new(service(
+                "http://a.example",
+                bgp("s", "http://p", "o"),
+                false,
+            )),
+            right: Box::new(service(
+                "http://b.example",
+                bgp("s", "http://q", "o"),
+                false,
+            )),
+        };
+        let cost = m.estimate_plan_cost(&plan);
+        assert!(cost.per_endpoint_local.contains_key("http://a.example"));
+        assert!(cost.per_endpoint_local.contains_key("http://b.example"));
+    }
+
+    #[test]
+    fn fcm_cheaper_picks_lower_cost() {
+        let mut m = FederationCostModel::new(5.0);
+        m.register_endpoint(ep_stats("http://a.example", 10.0, 1_000));
+        let cheap = bgp("s", "http://p", "o");
+        let expensive = service("http://a.example", bgp("s", "http://p", "o"), false);
+        let (winner, _cost) = m.cheaper(&cheap, &expensive);
+        // cheap is purely local → no network, should win.
+        assert!(matches!(winner, Algebra::Bgp(_)));
+    }
+
+    #[test]
+    fn fcm_filter_does_not_double_count() {
+        let mut m = FederationCostModel::new(5.0);
+        m.register_endpoint(ep_stats("http://a.example", 10.0, 1_000));
+        let s = service("http://a.example", bgp("s", "http://p", "o"), false);
+        let f = Algebra::Filter {
+            pattern: Box::new(s.clone()),
+            condition: oxirs_arq::algebra::Expression::Literal(oxirs_arq::algebra::Literal {
+                value: "true".into(),
+                language: None,
+                datatype: None,
+            }),
+        };
+        let c_s = m.estimate_plan_cost(&s);
+        let c_f = m.estimate_plan_cost(&f);
+        // Filter wraps service — costs should be equal (filter wraps without adding more SERVICE legs).
+        assert!((c_s.network_cost - c_f.network_cost).abs() < 1e-6);
+    }
+
+    #[test]
+    fn fcm_join_cost_is_sum_of_legs_local() {
+        let mut m = FederationCostModel::new(0.0);
+        m.register_endpoint(ep_stats("http://a.example", 0.0, 1_000));
+        m.register_endpoint(ep_stats("http://b.example", 0.0, 1_000));
+        let s_a = service("http://a.example", bgp("s", "http://p", "o"), false);
+        let s_b = service("http://b.example", bgp("s", "http://q", "o"), false);
+        let c_a = m.estimate_plan_cost(&s_a);
+        let c_b = m.estimate_plan_cost(&s_b);
+        let join = Algebra::Join {
+            left: Box::new(s_a),
+            right: Box::new(s_b),
+        };
+        let c_join = m.estimate_plan_cost(&join);
+        // Local costs add (with small tolerance for non-deterministic arq cache).
+        assert!(c_join.local_cost >= c_a.local_cost + c_b.local_cost - 1e-6);
+    }
+
+    #[test]
+    fn fcm_silent_flag_does_not_change_cost() {
+        let mut m = FederationCostModel::new(5.0);
+        m.register_endpoint(ep_stats("http://a.example", 10.0, 1_000));
+        let s_loud = service("http://a.example", bgp("s", "http://p", "o"), false);
+        let s_silent = service("http://a.example", bgp("s", "http://p", "o"), true);
+        let c_loud = m.estimate_plan_cost(&s_loud);
+        let c_silent = m.estimate_plan_cost(&s_silent);
+        assert!((c_loud.total_cost - c_silent.total_cost).abs() < 1e-6);
+    }
+
+    #[test]
+    fn fcm_handles_unknown_endpoint() {
+        let mut m = FederationCostModel::new(5.0);
+        let s = service("http://unknown.example", bgp("s", "http://p", "o"), false);
+        let cost = m.estimate_plan_cost(&s);
+        // Should still produce a finite, non-negative cost.
+        assert!(cost.total_cost.is_finite());
+        assert!(cost.total_cost >= 0.0);
+    }
+
+    #[test]
+    fn fcm_zero_struct() {
+        let z = FederationPlanCost::zero();
+        assert!((z.total_cost).abs() < 1e-9);
+        assert_eq!(z.estimated_cardinality, 0);
+        assert!(z.per_endpoint_local.is_empty());
     }
 }

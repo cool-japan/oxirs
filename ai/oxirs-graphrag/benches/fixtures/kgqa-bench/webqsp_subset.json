@@ -1,0 +1,216 @@
+{
+  "name": "WebQSP-derived KGQA Subset",
+  "description": "Hand-crafted subset of WebQSP-style knowledge graph QA questions over a small geography/people knowledge graph. The schema mirrors the WebQSP dataset (qid, question, topic_entity, answer_entities) so that operator-side LangChain reference captures share the same JSON shape.",
+  "license": "Apache-2.0",
+  "version": "1.0",
+  "kg": [
+    {"s": "ent:Albert_Einstein", "p": "rel:born_in", "o": "ent:Ulm"},
+    {"s": "ent:Albert_Einstein", "p": "rel:died_in", "o": "ent:Princeton"},
+    {"s": "ent:Albert_Einstein", "p": "rel:profession", "o": "ent:Physicist"},
+    {"s": "ent:Albert_Einstein", "p": "rel:nationality", "o": "ent:Germany"},
+    {"s": "ent:Albert_Einstein", "p": "rel:nationality", "o": "ent:United_States"},
+    {"s": "ent:Albert_Einstein", "p": "rel:awarded", "o": "ent:Nobel_Prize_Physics"},
+    {"s": "ent:Albert_Einstein", "p": "rel:worked_at", "o": "ent:Princeton_University"},
+    {"s": "ent:Albert_Einstein", "p": "rel:authored", "o": "ent:Theory_of_Relativity"},
+
+    {"s": "ent:Marie_Curie", "p": "rel:born_in", "o": "ent:Warsaw"},
+    {"s": "ent:Marie_Curie", "p": "rel:died_in", "o": "ent:Passy"},
+    {"s": "ent:Marie_Curie", "p": "rel:profession", "o": "ent:Physicist"},
+    {"s": "ent:Marie_Curie", "p": "rel:profession", "o": "ent:Chemist"},
+    {"s": "ent:Marie_Curie", "p": "rel:nationality", "o": "ent:Poland"},
+    {"s": "ent:Marie_Curie", "p": "rel:nationality", "o": "ent:France"},
+    {"s": "ent:Marie_Curie", "p": "rel:awarded", "o": "ent:Nobel_Prize_Physics"},
+    {"s": "ent:Marie_Curie", "p": "rel:awarded", "o": "ent:Nobel_Prize_Chemistry"},
+    {"s": "ent:Marie_Curie", "p": "rel:worked_at", "o": "ent:University_of_Paris"},
+    {"s": "ent:Marie_Curie", "p": "rel:discovered", "o": "ent:Polonium"},
+    {"s": "ent:Marie_Curie", "p": "rel:discovered", "o": "ent:Radium"},
+
+    {"s": "ent:Isaac_Newton", "p": "rel:born_in", "o": "ent:Woolsthorpe"},
+    {"s": "ent:Isaac_Newton", "p": "rel:died_in", "o": "ent:Kensington"},
+    {"s": "ent:Isaac_Newton", "p": "rel:profession", "o": "ent:Physicist"},
+    {"s": "ent:Isaac_Newton", "p": "rel:profession", "o": "ent:Mathematician"},
+    {"s": "ent:Isaac_Newton", "p": "rel:nationality", "o": "ent:England"},
+    {"s": "ent:Isaac_Newton", "p": "rel:worked_at", "o": "ent:Cambridge_University"},
+    {"s": "ent:Isaac_Newton", "p": "rel:authored", "o": "ent:Principia_Mathematica"},
+
+    {"s": "ent:Ada_Lovelace", "p": "rel:born_in", "o": "ent:London"},
+    {"s": "ent:Ada_Lovelace", "p": "rel:died_in", "o": "ent:Marylebone"},
+    {"s": "ent:Ada_Lovelace", "p": "rel:profession", "o": "ent:Mathematician"},
+    {"s": "ent:Ada_Lovelace", "p": "rel:nationality", "o": "ent:England"},
+    {"s": "ent:Ada_Lovelace", "p": "rel:authored", "o": "ent:Notes_on_Analytical_Engine"},
+
+    {"s": "ent:Alan_Turing", "p": "rel:born_in", "o": "ent:London"},
+    {"s": "ent:Alan_Turing", "p": "rel:died_in", "o": "ent:Wilmslow"},
+    {"s": "ent:Alan_Turing", "p": "rel:profession", "o": "ent:Mathematician"},
+    {"s": "ent:Alan_Turing", "p": "rel:profession", "o": "ent:Computer_Scientist"},
+    {"s": "ent:Alan_Turing", "p": "rel:nationality", "o": "ent:England"},
+    {"s": "ent:Alan_Turing", "p": "rel:worked_at", "o": "ent:Cambridge_University"},
+    {"s": "ent:Alan_Turing", "p": "rel:authored", "o": "ent:Computing_Machinery_and_Intelligence"},
+
+    {"s": "ent:Ulm", "p": "rel:located_in", "o": "ent:Germany"},
+    {"s": "ent:Princeton", "p": "rel:located_in", "o": "ent:United_States"},
+    {"s": "ent:Warsaw", "p": "rel:located_in", "o": "ent:Poland"},
+    {"s": "ent:Passy", "p": "rel:located_in", "o": "ent:France"},
+    {"s": "ent:Woolsthorpe", "p": "rel:located_in", "o": "ent:England"},
+    {"s": "ent:Kensington", "p": "rel:located_in", "o": "ent:England"},
+    {"s": "ent:London", "p": "rel:located_in", "o": "ent:England"},
+    {"s": "ent:Marylebone", "p": "rel:located_in", "o": "ent:England"},
+    {"s": "ent:Wilmslow", "p": "rel:located_in", "o": "ent:England"},
+
+    {"s": "ent:Princeton_University", "p": "rel:located_in", "o": "ent:Princeton"},
+    {"s": "ent:University_of_Paris", "p": "rel:located_in", "o": "ent:Passy"},
+    {"s": "ent:Cambridge_University", "p": "rel:located_in", "o": "ent:England"},
+
+    {"s": "ent:Germany", "p": "rel:capital", "o": "ent:Berlin"},
+    {"s": "ent:United_States", "p": "rel:capital", "o": "ent:Washington_DC"},
+    {"s": "ent:Poland", "p": "rel:capital", "o": "ent:Warsaw"},
+    {"s": "ent:France", "p": "rel:capital", "o": "ent:Paris"},
+    {"s": "ent:England", "p": "rel:capital", "o": "ent:London"}
+  ],
+  "labels": {
+    "ent:Albert_Einstein": "Albert Einstein",
+    "ent:Marie_Curie": "Marie Curie",
+    "ent:Isaac_Newton": "Isaac Newton",
+    "ent:Ada_Lovelace": "Ada Lovelace",
+    "ent:Alan_Turing": "Alan Turing",
+    "ent:Ulm": "Ulm",
+    "ent:Princeton": "Princeton",
+    "ent:Warsaw": "Warsaw",
+    "ent:Passy": "Passy",
+    "ent:Woolsthorpe": "Woolsthorpe",
+    "ent:Kensington": "Kensington",
+    "ent:London": "London",
+    "ent:Marylebone": "Marylebone",
+    "ent:Wilmslow": "Wilmslow",
+    "ent:Germany": "Germany",
+    "ent:United_States": "United States",
+    "ent:Poland": "Poland",
+    "ent:France": "France",
+    "ent:England": "England",
+    "ent:Berlin": "Berlin",
+    "ent:Washington_DC": "Washington DC",
+    "ent:Paris": "Paris",
+    "ent:Princeton_University": "Princeton University",
+    "ent:University_of_Paris": "University of Paris",
+    "ent:Cambridge_University": "Cambridge University",
+    "ent:Physicist": "Physicist",
+    "ent:Chemist": "Chemist",
+    "ent:Mathematician": "Mathematician",
+    "ent:Computer_Scientist": "Computer Scientist",
+    "ent:Nobel_Prize_Physics": "Nobel Prize in Physics",
+    "ent:Nobel_Prize_Chemistry": "Nobel Prize in Chemistry",
+    "ent:Theory_of_Relativity": "Theory of Relativity",
+    "ent:Principia_Mathematica": "Principia Mathematica",
+    "ent:Notes_on_Analytical_Engine": "Notes on the Analytical Engine",
+    "ent:Computing_Machinery_and_Intelligence": "Computing Machinery and Intelligence",
+    "ent:Polonium": "Polonium",
+    "ent:Radium": "Radium"
+  },
+  "questions": [
+    {
+      "qid": "WebQSP-001",
+      "question": "Where was Albert Einstein born?",
+      "topic_entity": "ent:Albert_Einstein",
+      "predicate": "rel:born_in",
+      "answer_entities": ["ent:Ulm"]
+    },
+    {
+      "qid": "WebQSP-002",
+      "question": "What was Albert Einstein's profession?",
+      "topic_entity": "ent:Albert_Einstein",
+      "predicate": "rel:profession",
+      "answer_entities": ["ent:Physicist"]
+    },
+    {
+      "qid": "WebQSP-003",
+      "question": "Which country is Marie Curie a citizen of?",
+      "topic_entity": "ent:Marie_Curie",
+      "predicate": "rel:nationality",
+      "answer_entities": ["ent:Poland", "ent:France"]
+    },
+    {
+      "qid": "WebQSP-004",
+      "question": "What did Marie Curie discover?",
+      "topic_entity": "ent:Marie_Curie",
+      "predicate": "rel:discovered",
+      "answer_entities": ["ent:Polonium", "ent:Radium"]
+    },
+    {
+      "qid": "WebQSP-005",
+      "question": "Which prize did Marie Curie receive?",
+      "topic_entity": "ent:Marie_Curie",
+      "predicate": "rel:awarded",
+      "answer_entities": ["ent:Nobel_Prize_Physics", "ent:Nobel_Prize_Chemistry"]
+    },
+    {
+      "qid": "WebQSP-006",
+      "question": "Where did Isaac Newton work?",
+      "topic_entity": "ent:Isaac_Newton",
+      "predicate": "rel:worked_at",
+      "answer_entities": ["ent:Cambridge_University"]
+    },
+    {
+      "qid": "WebQSP-007",
+      "question": "What book did Isaac Newton author?",
+      "topic_entity": "ent:Isaac_Newton",
+      "predicate": "rel:authored",
+      "answer_entities": ["ent:Principia_Mathematica"]
+    },
+    {
+      "qid": "WebQSP-008",
+      "question": "Where was Ada Lovelace born?",
+      "topic_entity": "ent:Ada_Lovelace",
+      "predicate": "rel:born_in",
+      "answer_entities": ["ent:London"]
+    },
+    {
+      "qid": "WebQSP-009",
+      "question": "What was Alan Turing's profession?",
+      "topic_entity": "ent:Alan_Turing",
+      "predicate": "rel:profession",
+      "answer_entities": ["ent:Mathematician", "ent:Computer_Scientist"]
+    },
+    {
+      "qid": "WebQSP-010",
+      "question": "Where did Alan Turing work?",
+      "topic_entity": "ent:Alan_Turing",
+      "predicate": "rel:worked_at",
+      "answer_entities": ["ent:Cambridge_University"]
+    },
+    {
+      "qid": "WebQSP-011",
+      "question": "Where did Albert Einstein die?",
+      "topic_entity": "ent:Albert_Einstein",
+      "predicate": "rel:died_in",
+      "answer_entities": ["ent:Princeton"]
+    },
+    {
+      "qid": "WebQSP-012",
+      "question": "What is the capital of Germany?",
+      "topic_entity": "ent:Germany",
+      "predicate": "rel:capital",
+      "answer_entities": ["ent:Berlin"]
+    },
+    {
+      "qid": "WebQSP-013",
+      "question": "Where did Marie Curie work?",
+      "topic_entity": "ent:Marie_Curie",
+      "predicate": "rel:worked_at",
+      "answer_entities": ["ent:University_of_Paris"]
+    },
+    {
+      "qid": "WebQSP-014",
+      "question": "What did Albert Einstein author?",
+      "topic_entity": "ent:Albert_Einstein",
+      "predicate": "rel:authored",
+      "answer_entities": ["ent:Theory_of_Relativity"]
+    },
+    {
+      "qid": "WebQSP-015",
+      "question": "What is the capital of France?",
+      "topic_entity": "ent:France",
+      "predicate": "rel:capital",
+      "answer_entities": ["ent:Paris"]
+    }
+  ]
+}

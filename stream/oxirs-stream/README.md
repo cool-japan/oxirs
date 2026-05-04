@@ -35,10 +35,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-stream = "0.2.3"
+oxirs-stream = "0.3.0"
 
 # Enable specific brokers
-oxirs-stream = { version = "0.2.3", features = ["kafka", "nats"] }
+oxirs-stream = { version = "0.3.0", features = ["kafka", "nats"] }
 ```
 
 ## Quick Start

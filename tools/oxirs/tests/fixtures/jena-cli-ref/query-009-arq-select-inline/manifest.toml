@@ -1,0 +1,26 @@
+description = "arq runs an inline SELECT against an N-Triples data file and emits JSON results"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "arq",
+    "--query",
+    "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+    "--data",
+    "${FIXTURE}/../_data/sample.nt",
+    "--results",
+    "json",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Query type: SELECT
+"vars": ["s", "p", "o"]
+"head"
+"results"
+"bindings"
+"""
+
+[stderr]
+mode = "absent"

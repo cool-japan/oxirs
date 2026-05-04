@@ -1,6 +1,6 @@
 //! Modbus TCP/RTU protocol support for OxiRS
 //!
-//! **Status**: ✅ Production Ready (v0.2.4)
+//! **Status**: ✅ Production Ready (v0.3.0)
 //!
 //! This crate provides Modbus protocol implementations for industrial IoT
 //! data ingestion into RDF knowledge graphs.
@@ -287,3 +287,30 @@ pub mod protocol_analyzer;
 
 /// Modbus register change detection: tracks sequential snapshots and emits diffs.
 pub mod register_watcher;
+
+/// Register auto-discovery: probes unknown Modbus devices, infers register
+/// types (UInt16, Int16, Float32, ScaledInt, Boolean), and emits a candidate
+/// register map consumable by `register_validator`.
+pub mod discovery;
+
+/// Modbus ↔ OPC UA bidirectional bridge: configurable polling, type coercion,
+/// and graceful cancellation via `CancellationToken`.  Production OPC UA and
+/// Modbus transports are hidden behind facades; in-process mocks are provided
+/// for zero-socket testing.
+pub mod opcua;
+
+// OPC UA bridge re-exports
+pub use opcua::{
+    BridgeConfig, BridgeError, DataTypeSpec, Direction, OpcuaModbusBridge, RegisterMapper,
+    RegisterMapping,
+};
+
+/// Terminal UI register browser (feature `tui`).
+///
+/// An interactive ratatui-based browser for all four Modbus register spaces.
+/// Feature-gate: `--features tui`.
+#[cfg(feature = "tui")]
+pub mod browser;
+
+#[cfg(feature = "tui")]
+pub use browser::{BrowserConfig, BrowserError, RegisterBrowser};

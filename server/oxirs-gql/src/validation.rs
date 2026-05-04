@@ -163,6 +163,38 @@ pub enum ValidationRule {
     OperationNotAllowed,
     ForbiddenField,
     CostAnalysis,
+    /// GraphQL spec rule: see SpecRule for the specific rule
+    Spec(SpecRule),
+}
+
+/// GraphQL June 2018 specification validation rules
+#[derive(Debug, Clone, PartialEq)]
+pub enum SpecRule {
+    ExecutableDefinitions,
+    UniqueOperationNames,
+    LoneAnonymousOperation,
+    SingleFieldSubscriptions,
+    KnownTypeNames,
+    FragmentsOnCompositeTypes,
+    VariablesAreInputTypes,
+    LeafFieldSelections,
+    FieldsInSetCanMerge,
+    UniqueFragmentNames,
+    KnownFragmentNames,
+    NoUnusedFragments,
+    PossibleFragmentSpreads,
+    NoFragmentCycles,
+    UniqueVariableNames,
+    NoUndefinedVariables,
+    NoUnusedVariables,
+    KnownDirectives,
+    UniqueDirectivesPerLocation,
+    KnownArgumentNames,
+    UniqueArgumentNames,
+    ValuesOfCorrectType,
+    ProvidedRequiredArguments,
+    VariablesInAllowedPosition,
+    OverlappingFieldsCanBeMerged,
 }
 
 /// Main query validator

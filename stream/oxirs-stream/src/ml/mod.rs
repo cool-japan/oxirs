@@ -5,6 +5,20 @@
 //! - [`StreamingModelRunner`]: Runs ML inference on stream events with batching
 //! - [`StreamAnomalyDetector`]: Z-score based streaming anomaly detection with sliding window
 //! - [`StreamFeatureExtractor`]: Configurable feature extraction from RDF stream events
+//! - [`regression::StreamRegressor`]: Online regression (linear, GBT-streaming)
+//! - [`classification::StreamClassifier`]: Online classification (logistic, kNN streaming)
+
+pub mod classification;
+pub mod regression;
+
+pub use classification::{
+    ClassPrediction, ClassificationError, ClassificationResult, KnnConfig, LogisticConfig,
+    OnlineLogisticClassifier, StreamClassifier, StreamingKnnClassifier,
+};
+pub use regression::{
+    GbtConfig, LinearConfig, OnlineLinearRegressor, RegressionError, RegressionResult,
+    StreamRegressor, StreamingGradientBoostedRegressor,
+};
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;

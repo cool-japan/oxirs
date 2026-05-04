@@ -1,0 +1,19 @@
+description = "q-parse reads SPARQL from a file via --file"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "q-parse",
+    "${FIXTURE}/../_data/select.rq",
+    "--file",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Query type : Select
+Parse OK
+"""
+
+[stderr]
+mode = "absent"

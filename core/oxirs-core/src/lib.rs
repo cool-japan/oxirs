@@ -1,9 +1,9 @@
 //! # OxiRS Core - RDF and SPARQL Foundation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stabilizing. Production-ready for RDF/SPARQL core operations.
 //!
 //! ## Overview
@@ -252,7 +252,7 @@
 //!
 //! ## API Stability
 //!
-//! As of Beta 1 (v0.2.4):
+//! As of Beta 1 (v0.3.0):
 //! - **Stable APIs**: Core RDF model types (`NamedNode`, `Literal`, `Triple`, `Quad`)
 //! - **Stable APIs**: Store operations (`RdfStore`, `insert`, `query`, `remove`)
 //! - **Stable APIs**: Parser and serializer interfaces
@@ -275,6 +275,9 @@
 //! - `federation.rs` - Federated SPARQL queries
 
 pub mod ai;
+pub mod api_surface; // Programmatic public-API surface tracking and stability enforcement
+pub mod assembler; // Jena Assembler vocabulary — RDF-based dataset/model configuration using ja:
+pub mod audit; // SOC2/GDPR-compliant structured audit trail (enterprise compliance)
 pub mod concurrent;
 pub mod consciousness; // Consciousness-inspired computing for intuitive query optimization
 pub mod distributed;
@@ -288,6 +291,7 @@ pub mod model;
 pub mod molecular;
 pub mod optimization;
 pub mod parser;
+pub mod perf_sla; // Performance SLA harness: SloTarget, BenchmarkResult, assert_meets_slo
 pub mod production;
 pub mod quantum;
 pub mod query;
@@ -320,6 +324,7 @@ pub mod named_graph; // Named Graph Management API (Jena Dataset-compatible)
 pub mod optimizer; // Runtime feedback-based adaptive query optimization
 pub mod provenance; // W3C PROV-O ontology support for RDF data provenance tracking
 pub mod rdf;
+pub mod sla; // Shared per-tenant SLA primitives (admission control, priority dispatcher)
 pub mod stability; // API stability markers and LTS compatibility matrix
 pub mod statistics; // Equi-depth histogram statistics for cardinality estimation
 pub mod view; // Incremental view maintenance with delta propagation // W3C DataFactory API for programmatic RDF term construction
@@ -330,6 +335,12 @@ pub use model::*;
 pub use rdf_store::{ConcreteStore, RdfStore, Store};
 pub use transaction::{
     AcidTransaction, IsolationLevel, TransactionId, TransactionManager, TransactionState,
+};
+
+// Re-export Jena Assembler types at crate root for ergonomic access
+pub use assembler::{
+    from_turtle, AssemblerBuilder, AssemblerConfig, AssemblerError, DatasetConfig, GraphConfig,
+    StoreBackend,
 };
 
 /// Core error type for OxiRS operations

@@ -20,6 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 oxirs-core = { workspace = true, features = ["serde"] }
 oxirs-gql.workspace = true
 oxirs-vec.workspace = true
+oxirs-arq.workspace = true
 
 # SciRS2 dependencies for federated processing
 scirs2-optimize = { workspace = true }
@@ -33,7 +34,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-reqwest = { workspace = true, features = ["stream", "gzip", "brotli"] }
+reqwest = { workspace = true, features = ["stream", "gzip"] }
 async-trait.workspace = true
 futures.workspace = true
 dashmap.workspace = true
@@ -62,7 +63,7 @@ pin-project = "1.1"
 nalgebra = { workspace = true, features = ["serde"] }
 async-graphql = { workspace = true, optional = true }
 async-graphql-parser = { version = "7.2", optional = true }
-mdns-sd = { version = "0.18", optional = true }
+mdns-sd = { version = "0.19", optional = true }
 kube = { workspace = true, optional = true }
 k8s-openapi = { workspace = true, optional = true }
 oauth2 = { version = "5.0", optional = true }

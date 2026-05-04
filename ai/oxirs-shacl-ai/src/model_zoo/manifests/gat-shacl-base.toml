@@ -1,0 +1,15 @@
+name = "gat-shacl-base"
+model_type = "GAT"
+dataset = "LUBM-SHACL-synthetic"
+input_dim = 16
+hidden_dim = 64
+output_dim = 8
+num_heads = 4
+num_layers = 2
+sha256 = "f5166a14c94cb4e8fb3ca7db76954312fe6a2859709de22026228c98db9f0a2d"
+source = "file:///seeds/gat-shacl-base.ckpt"
+license = "Apache-2.0"
+citation = "Synthetic seed weights for testing — not trained on real data"
+version = "1.0.0"
+created = "2026-05-01"
+notes = "SYNTHETIC SEED: for unit testing only. Use a real checkpoint for production."

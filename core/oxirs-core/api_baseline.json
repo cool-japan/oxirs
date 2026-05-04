@@ -1,0 +1,76 @@
+{
+  "types": [
+    {
+      "name": "OxirsError",
+      "kind": "enum",
+      "generics": ""
+    },
+    {
+      "name": "Result",
+      "kind": "type",
+      "generics": "< T >"
+    }
+  ],
+  "fns": [
+    {
+      "name": "init",
+      "signature": "fn init () -> Result < () >"
+    }
+  ],
+  "traits": [],
+  "modules": [
+    "ai",
+    "api_surface",
+    "concurrent",
+    "consciousness",
+    "distributed",
+    "federation",
+    "format",
+    "graph",
+    "indexing",
+    "interning",
+    "io",
+    "model",
+    "molecular",
+    "optimization",
+    "parser",
+    "production",
+    "quantum",
+    "query",
+    "rdf_store",
+    "serializer",
+    "sparql",
+    "storage",
+    "store",
+    "transaction",
+    "vocab",
+    "jsonld",
+    "oxigraph_compat",
+    "rdfxml",
+    "error",
+    "parallel",
+    "platform",
+    "simd",
+    "simd_triple_matching",
+    "zero_copy_rdf",
+    "cache",
+    "data_factory",
+    "named_graph",
+    "optimizer",
+    "provenance",
+    "rdf",
+    "sla",
+    "stability",
+    "statistics",
+    "view",
+    "views"
+  ],
+  "uses": [
+    "model :: *",
+    "rdf_store :: { ConcreteStore , RdfStore , Store }",
+    "transaction :: { AcidTransaction , IsolationLevel , TransactionId , TransactionManager , TransactionState , }"
+  ],
+  "constants": [
+    "VERSION"
+  ]
+}

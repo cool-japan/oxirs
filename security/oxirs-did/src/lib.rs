@@ -1,8 +1,8 @@
 //! # OxiRS DID
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //!
 //! W3C Decentralized Identifiers (DID) and Verifiable Credentials (VC) implementation
 //! for OxiRS, enabling signed RDF graphs and trust layer for data sovereignty.
@@ -107,8 +107,11 @@ pub use key_management::{
     VerificationKey as ManagedVerificationKey,
 };
 pub use kms::{
-    create_mock_kms, KeyUsage, KmsAlgorithm, KmsBackend, KmsDidSigner, KmsKeyMetadata, KmsProvider,
-    MockAwsKms, MockAzureKms, MockGcpKms,
+    audit::{AuditEvent, AuditEventKind, AuditLog},
+    create_mock_kms,
+    pkcs11::{KeyHandle, Pkcs11Mechanism, Pkcs11Slot},
+    KeyUsage, KmsAlgorithm, KmsBackend, KmsDidSigner, KmsKeyMetadata, KmsProvider, MockAwsKms,
+    MockAzureKms, MockGcpKms,
 };
 pub use proof::{
     jws::{
@@ -134,8 +137,8 @@ pub use signatures::{
 pub use signed_graph::SignedGraph;
 pub use url::{DereferencedResource, DidDereferencer, DidUrl};
 pub use vc::{
-    CredentialIssuer, CredentialSubject, CredentialVerifier, VerifiableCredential,
-    VerifiablePresentation,
+    decode_jwt_vc, encode_vc_as_jwt, CredentialIssuer, CredentialSubject, CredentialVerifier,
+    JwtVc, JwtVcHeader, JwtVcPayload, VerifiableCredential, VerifiablePresentation,
 };
 #[cfg(feature = "zkp")]
 pub use zkp::{
@@ -186,6 +189,9 @@ pub enum DidError {
 
     #[error("Internal error: {0}")]
     InternalError(String),
+
+    #[error("Invalid credential: {0}")]
+    InvalidCredential(String),
 }
 
 pub type DidResult<T> = Result<T, DidError>;

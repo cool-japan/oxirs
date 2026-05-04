@@ -1,0 +1,13 @@
+name = "transe-fb15k237"
+model_type = "TransE"
+dataset = "FB15k-237"
+dimensions = 200
+entities = 14541
+relations = 237
+sha256 = "PLACEHOLDER"
+source = "file:///seeds/transe-fb15k237.ckpt"
+license = "Apache-2.0"
+citation = "Bordes, A., Usunier, N., Garcia-Duran, A., Weston, J., & Yakhnenko, O. (2013). Translating Embeddings for Modeling Multi-relational Data. NIPS."
+version = "1.0.0"
+created = "2026-05-01"
+notes = "SYNTHETIC SEED: small random-initialized weights for testing only. Not actual research weights. Run 'cargo run --example fetch_real_weights' for production weights."

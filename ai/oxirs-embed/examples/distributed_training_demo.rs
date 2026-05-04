@@ -1,16 +1,30 @@
 //! Distributed Training Demo
 //!
-//! This example demonstrates how to use the distributed training capabilities
-//! of oxirs-embed to train knowledge graph embeddings across multiple workers.
+//! This example demonstrates the distributed training capabilities of
+//! oxirs-embed.  Two execution modes are available:
+//!
+//! - **default** (no flag): runs the legacy `DistributedEmbeddingTrainer`
+//!   coordinator path with simulated worker registration and gradient
+//!   aggregation.
+//! - **`--distributed`**: drives the new parameter-server-style prototype
+//!   (`ParameterServer` + `Worker` + `ModelShardManager`) with 4 workers on
+//!   a small KG.  Use this to reproduce the unit/integration test path.
 //!
 //! Run with:
 //! ```bash
 //! cargo run --example distributed_training_demo --features basic-models
+//! cargo run --example distributed_training_demo --features basic-models -- --distributed
 //! ```
+
+use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::Utc;
 use oxirs_embed::{
+    distributed_training::{
+        ModelShardManager, ParameterServer, ParameterServerConfig, ShardingStrategy, TripleSample,
+        UpdateMode, Worker, WorkerConfig,
+    },
     AggregationMethod,
     CommunicationBackend,
     DistributedEmbeddingTrainer,
@@ -31,7 +45,16 @@ async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
+    // Parse the `--distributed` flag explicitly — adding `clap` for one flag
+    // is overkill, and the project policy prefers minimal dependencies.
+    let distributed_mode = std::env::args().any(|a| a == "--distributed");
+
+    if distributed_mode {
+        return run_parameter_server_demo().await;
+    }
+
     println!("=== OxiRS Distributed Training Demo ===\n");
+    println!("(re-run with `-- --distributed` for the parameter-server prototype)\n");
 
     // Step 1: Create a knowledge graph embedding model
     println!("1. Creating TransE model...");
@@ -197,11 +220,112 @@ async fn main() -> Result<()> {
 
     println!("\n=== Demo Complete ===");
     println!("\nKey Takeaways:");
-    println!("✓ Distributed training accelerates knowledge graph embedding");
-    println!("✓ Multiple workers process data in parallel");
-    println!("✓ Gradient aggregation ensures consistency");
-    println!("✓ Fault tolerance provides reliability");
-    println!("✓ Mixed precision reduces memory usage");
+    println!("[x] Distributed training accelerates knowledge graph embedding");
+    println!("[x] Multiple workers process data in parallel");
+    println!("[x] Gradient aggregation ensures consistency");
+    println!("[x] Fault tolerance provides reliability");
+    println!("[x] Mixed precision reduces memory usage");
 
+    Ok(())
+}
+
+/// Parameter-server prototype demo invoked by the `--distributed` flag.
+///
+/// Boots a 4-shard parameter server and 4 workers, runs the TransE-shaped
+/// inner loop on a tiny KG, and reports per-worker tail-loss alongside
+/// server statistics.  Mirrors the integration test in
+/// `tests/distributed_training.rs`.
+async fn run_parameter_server_demo() -> Result<()> {
+    println!("=== OxiRS Parameter-Server Prototype Demo ===\n");
+
+    let num_entities = 16;
+    let num_shards = 4;
+    let num_workers = 4;
+
+    let entity_ids: Vec<String> = (0..num_entities).map(|i| format!("e{i}")).collect();
+    let relation_ids: Vec<String> = vec!["rel0".into(), "rel1".into()];
+
+    let cfg = ParameterServerConfig {
+        embedding_dim: 16,
+        num_entities,
+        num_relations: relation_ids.len(),
+        num_shards,
+        expected_workers: 1,
+        update_mode: UpdateMode::Async,
+        learning_rate: 0.05,
+        max_staleness: 32,
+        barrier_timeout: std::time::Duration::from_secs(2),
+    };
+    let mgr = ModelShardManager::new(num_shards, ShardingStrategy::EntityHash);
+    let server = Arc::new(ParameterServer::new(
+        cfg,
+        entity_ids.clone(),
+        relation_ids,
+        mgr,
+    )?);
+
+    // Build the training KG.
+    let mut samples = Vec::new();
+    for i in 0..num_entities {
+        let next = (i + 1) % num_entities;
+        samples.push(TripleSample::new(
+            format!("e{i}"),
+            "rel0",
+            format!("e{next}"),
+        ));
+    }
+    for i in 0..num_entities {
+        if i % 2 == 0 {
+            let next = (i + 2) % num_entities;
+            samples.push(TripleSample::new(
+                format!("e{i}"),
+                "rel1",
+                format!("e{next}"),
+            ));
+        }
+    }
+
+    println!(
+        "Configured {num_workers} workers, {num_shards} shards, {} samples\n",
+        samples.len()
+    );
+
+    let mut workers = Vec::with_capacity(num_workers);
+    for i in 0..num_workers {
+        workers.push(Worker::new(
+            WorkerConfig {
+                worker_id: i as u32,
+                max_steps: 20,
+                margin: 1.0,
+                l2_reg: 1e-4,
+                seed: 1 + i as u64,
+            },
+            Arc::clone(&server),
+            samples.clone(),
+        ));
+    }
+
+    let losses = oxirs_embed::distributed_training::worker::run_workers(workers).await?;
+    let stats = server.stats().await;
+    let steps = server.shard_steps().await;
+
+    println!("=== Per-worker Loss Summary ===");
+    for l in &losses {
+        println!(
+            "  worker {:>2}: samples={:>5} mean_loss={:.4}",
+            l.worker_id,
+            l.samples,
+            l.mean()
+        );
+    }
+    println!();
+    println!("=== Parameter Server Stats ===");
+    println!("  total_pulls         : {}", stats.total_pulls);
+    println!("  total_pushes        : {}", stats.total_pushes);
+    println!("  barriers_completed  : {}", stats.barriers_completed);
+    println!("  max_staleness_seen  : {}", stats.max_staleness_observed);
+    println!("  per-shard steps     : {steps:?}");
+    println!();
+    println!("=== Demo Complete ===");
     Ok(())
 }

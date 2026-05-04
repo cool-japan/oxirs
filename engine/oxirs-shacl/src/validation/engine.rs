@@ -639,14 +639,14 @@ impl<'a> ValidationEngine<'a> {
         let resolved_constraints = self.resolve_inherited_constraints(&shape.id)?;
 
         for (component_id, constraint) in &resolved_constraints {
-            eprintln!(
-                "DEBUG validate_constraints: evaluating constraint {} for shape {}",
+            tracing::trace!(
+                "validate_constraints: evaluating constraint {} for shape {}",
                 component_id.as_str(),
                 shape.id.as_str()
             );
             tracing::trace!("validate_constraints: constraint = {constraint:?}");
-            eprintln!(
-                "DEBUG validate_constraints: focus_node = {focus_node:?}, values = {values:?}"
+            tracing::trace!(
+                "validate_constraints: focus_node = {focus_node:?}, values = {values:?}"
             );
 
             // Create constraint context

@@ -1,9 +1,9 @@
 //! # OxiRS ARQ - SPARQL Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-arq/badge.svg)](https://docs.rs/oxirs-arq)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Advanced SPARQL 1.1/1.2 query engine with optimization, federation support, and custom functions.
@@ -129,6 +129,15 @@ pub mod rdf_star;
 #[cfg(feature = "star")]
 pub mod star_integration;
 pub mod statistics;
+
+// JenaText full-text SPARQL integration (feature = "text-search")
+#[cfg(feature = "text-search")]
+pub mod text_search;
+#[cfg(feature = "text-search")]
+pub use text_search::{
+    register_text_query, TextQueryPropertyFunction, TextSearchError, TextSearchIndex,
+    TextSearchResult,
+};
 
 // Adaptive query optimization and parallel evaluation (v0.2.0 Phase 2)
 pub use execution::{ParallelBgpEvaluator, PatternDependencyGraph, TripleStore};
@@ -477,3 +486,77 @@ pub mod exists_evaluator;
 
 // SPARQL 1.1 property path expression parser and evaluator (v1.1.0 round 16)
 pub mod path_expression;
+
+// Algebra-level JIT plan cache (phase a) — fingerprint + bounded LRU cache (v0.3.0)
+pub mod plan_cache;
+
+// Apache Jena feature parity matrix and markdown report generator (v0.3.0)
+pub mod jena_parity;
+pub use jena_parity::{
+    generate_jena_report, load_catalog, JenaCategory, JenaEntry, JenaParityMatrix, JenaStatus,
+};
+
+// JIT compilation phases b, c, and d — Cranelift-based filter, join-key, ORDER BY,
+// PROJECT, DISTINCT, and HAVING codegen (v0.3.0)
+// Feature-gated: `cargo build --features jit`
+pub mod jit;
+#[cfg(feature = "jit")]
+pub use jit::{
+    // Phase d — HAVING clause predicates over aggregate results
+    AggVarMap,
+    // Phase b — filter expressions
+    BinOp,
+    BuiltinFunc,
+    // Phase d — DISTINCT deduplication hashing
+    CompiledDistinct,
+    CompiledFilter,
+    // Phase c — hash-join key comparison
+    CompiledJoinKey,
+    // Phase c — ORDER BY evaluation
+    CompiledOrder,
+    // Phase d — PROJECT column extraction
+    CompiledProject,
+    DistinctCompiler,
+    DistinctCompilerError,
+    DistinctKeySpec,
+    FilterCompiler,
+    FilterCompilerError,
+    FilterExpr,
+    HavingCompiler,
+    JitFilterCache,
+    JoinCompiler,
+    JoinCompilerError,
+    JoinKeySpec,
+    OrderCompiler,
+    OrderCompilerError,
+    OrderKeySpec,
+    ProjectCompiler,
+    ProjectCompilerError,
+    ProjectSpec,
+    VarIndexMap,
+};
+
+// W2-S4: per-tenant SLA admission control + federation-aware planning
+pub mod sla_integration;
+pub mod tenant_config;
+
+// W2-S4 re-exports — typed errors, gate handles, planner trait
+pub use optimizer::federated_plan::{
+    FederatedPlanOutcome, FederatedPlanner, FederatedSelectivity, SourceSelectivityProvider,
+    StaticSourceProvider,
+};
+pub use sla_integration::{
+    AdmittedQuery, ArqSlaError, ArqSlaGate, DispatchedQuery, SlaClassDisplay,
+};
+pub use tenant_config::{TenantConfig as ArqTenantConfig, TenantConfigRegistry};
+
+// Runtime query resource governor — wall-time, result-row, triple-scan budgets (v0.3.0)
+pub mod query_governor;
+pub use query_governor::{BudgetExceeded, ExecutionBudget, ResourceBudget};
+
+// Graph-topology analytics aggregates — SPARQL-style custom aggregate functions
+// backed by PageRank, betweenness, connected components, clustering, and degree
+// centrality over collected edge sets (v0.3.0)
+pub use analytics::{
+    DegreeDirection, GraphAnalyticsAccumulator, GraphAnalyticsAggregate, GraphAnalyticsError,
+};

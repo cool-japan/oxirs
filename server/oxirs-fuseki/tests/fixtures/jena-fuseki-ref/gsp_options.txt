@@ -1,0 +1,12 @@
+# GSP OPTIONS request
+endpoint: gsp_options
+classification: spec-required
+match_mode: status-only
+description: OPTIONS /data returns 200 with Allow header
+
+=== request
+OPTIONS /data
+
+=== response
+200
+

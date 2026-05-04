@@ -1,0 +1,3 @@
+# empty RDF collection ()
+@prefix ex: <http://example.org/> .
+ex:s ex:items () .

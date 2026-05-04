@@ -575,19 +575,53 @@ impl W3cTestSuiteRunner {
         Ok(report)
     }
 
-    /// Load RDF store from location (URL or file path)
-    async fn load_rdf_store(&self, _location: &str) -> Result<ConcreteStore> {
-        // TODO: Implement proper RDF loading once oxirs-core API is stabilized
-        // For now, return an empty store for testing framework structure
+    /// Load RDF store from location (URL or file path).
+    ///
+    /// File paths are read and parsed using the oxirs-core parser.
+    /// Remote URLs are not yet fetched; an empty store is returned as a stub.
+    async fn load_rdf_store(&self, location: &str) -> Result<ConcreteStore> {
         let store = ConcreteStore::new()?;
+
+        // Attempt to load from file system path
+        let path = std::path::Path::new(location);
+        if path.exists() {
+            use oxirs_core::parser::{Parser, RdfFormat};
+
+            // Detect format from extension; default to Turtle
+            let format = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .and_then(RdfFormat::from_extension)
+                .unwrap_or(RdfFormat::Turtle);
+
+            let raw = std::fs::read(path)?;
+            let parser = Parser::new(format);
+            match parser.parse_bytes_to_quads(&raw) {
+                Ok(quads) => {
+                    for quad in quads {
+                        store.insert_quad(quad)?;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse RDF file {}: {}", location, e);
+                }
+            }
+            return Ok(store);
+        }
+
+        // Remote URL loading is not yet implemented; return empty store as stub
+        tracing::debug!(
+            "Remote RDF loading not yet implemented, returning empty store for: {}",
+            location
+        );
         Ok(store)
     }
 
-    /// Parse shapes from RDF store (placeholder implementation)
-    fn parse_shapes_from_store(&self, _store: &ConcreteStore) -> Result<Vec<Shape>> {
-        // TODO: Implement proper shape parsing from RDF store
-        // For now, return empty shapes for testing framework structure
-        Ok(Vec::new())
+    /// Parse SHACL shapes from an RDF store using the shape parser.
+    fn parse_shapes_from_store(&self, store: &ConcreteStore) -> Result<Vec<Shape>> {
+        let mut shape_parser = crate::ShapeParser::new();
+        let shapes = shape_parser.parse_shapes_from_store(store, None)?;
+        Ok(shapes)
     }
 
     /// Assess compliance for a test result
@@ -689,14 +723,34 @@ impl W3cTestSuiteRunner {
         let mut skipped = 0;
         let mut error = 0;
 
-        let _category_stats: HashMap<TestCategory, (usize, usize)> = HashMap::new();
+        // Build test_id → category mapping from manifests so we can break down by category.
+        let mut test_to_category: HashMap<String, TestCategory> = HashMap::new();
+        for manifest in &self.manifests {
+            for entry in &manifest.entries {
+                test_to_category.insert(entry.id.clone(), manifest.category.clone());
+            }
+        }
+
+        // Per-category counters: category → (passed, total)
+        let mut category_stats: HashMap<TestCategory, (usize, usize)> = HashMap::new();
         let mut issue_counts: HashMap<ComplianceIssueType, usize> = HashMap::new();
 
         for result in self.results.values() {
             total += 1;
 
+            // Look up category for this test; default to Core if not found
+            let category = test_to_category
+                .get(&result.test_entry.id)
+                .cloned()
+                .unwrap_or(TestCategory::Core);
+            let cat_entry = category_stats.entry(category).or_insert((0, 0));
+            cat_entry.1 += 1; // increment total for this category
+
             match result.status {
-                TestStatus::Passed => passed += 1,
+                TestStatus::Passed => {
+                    passed += 1;
+                    cat_entry.0 += 1; // increment passed for this category
+                }
                 TestStatus::Failed => failed += 1,
                 TestStatus::Skipped => skipped += 1,
                 TestStatus::Error | TestStatus::Timeout => error += 1,
@@ -714,6 +768,19 @@ impl W3cTestSuiteRunner {
             0.0
         };
 
+        // Build per-category compliance percentage map
+        let compliance_by_category: HashMap<TestCategory, f64> = category_stats
+            .into_iter()
+            .map(|(cat, (cat_passed, cat_total))| {
+                let pct = if cat_total > 0 {
+                    (cat_passed as f64 / cat_total as f64) * 100.0
+                } else {
+                    100.0
+                };
+                (cat, pct)
+            })
+            .collect();
+
         let common_issues: Vec<(ComplianceIssueType, usize)> = {
             let mut issues: Vec<_> = issue_counts.into_iter().collect();
             issues.sort_by_key(|b| std::cmp::Reverse(b.1));
@@ -727,7 +794,7 @@ impl W3cTestSuiteRunner {
             tests_skipped: skipped,
             tests_error: error,
             compliance_percentage,
-            compliance_by_category: HashMap::new(), // TODO: Implement category breakdown
+            compliance_by_category,
             common_issues,
             total_execution_time_ms: self.stats.total_execution_time_ms,
         };

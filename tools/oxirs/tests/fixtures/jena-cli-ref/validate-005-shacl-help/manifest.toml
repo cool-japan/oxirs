@@ -1,0 +1,17 @@
+description = "shacl --help advertises --shapes, --data, --format flags"
+classification = "spec-required"
+argv = ["shacl", "--help"]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+SHACL validation
+--shapes
+--data
+--format
+--output
+"""
+
+[stderr]
+mode = "absent"

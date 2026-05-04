@@ -292,7 +292,7 @@ fn test_sso_session_expired_error_display() {
 
 #[test]
 fn test_multiple_providers_registered() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });
@@ -321,7 +321,7 @@ fn test_multiple_providers_registered() {
 #[test]
 fn test_duplicate_provider_registration_replaces() {
     // register_provider uses HashMap::insert which replaces on duplicate ID
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });

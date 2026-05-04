@@ -1,0 +1,14 @@
+# DESCRIBE with explicit IRI argument
+endpoint: sparql_query
+classification: spec-required
+match_mode: status-only
+description: DESCRIBE <iri> returns 200 + Turtle
+
+=== request
+GET /sparql?query=DESCRIBE%20%3Chttp%3A%2F%2Fexample.org%2Fa%3E
+Accept: text/turtle
+
+=== response
+200
+Content-Type: text/turtle
+

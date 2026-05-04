@@ -1,0 +1,16 @@
+description = "riot rejects an unsupported --output format"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "riot",
+    "--output",
+    "zzznoformat",
+    "${FIXTURE}/../_data/sample.nt",
+]
+exit_code = 1
+
+[stderr]
+mode = "contains"
+expected = """
+Unsupported output format
+"""

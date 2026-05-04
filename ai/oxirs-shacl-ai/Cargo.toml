@@ -47,6 +47,7 @@ sysinfo.workspace = true  # Updated to 0.33 to fix objc2-core-foundation conflic
 nalgebra = { workspace = true, features = ["serde-serialize"] }
 num-complex = { workspace = true, features = ["serde"] }
 async-trait.workspace = true
+reqwest = { workspace = true, optional = true }
 futures.workspace = true
 dashmap.workspace = true
 # datafusion.workspace = true  # Temporarily disabled due to version conflicts
@@ -58,6 +59,10 @@ libm = "0.2"  # For erf function
 flate2 = { workspace = true }
 oxiarc-zstd = { workspace = true }
 oxiarc-lz4 = { workspace = true }
+sha2.workspace = true
+hex.workspace = true
+once_cell.workspace = true
+toml.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
@@ -67,3 +72,6 @@ tracing-subscriber.workspace = true
 default = []
 shape-induction = []
 data-repair = []
+# Enable network-based LLM providers (OpenAI, Anthropic).
+# Requires a valid API key at runtime; default features remain 100% offline.
+llm-network = ["dep:reqwest"]

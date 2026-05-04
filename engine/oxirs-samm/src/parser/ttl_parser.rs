@@ -512,9 +512,51 @@ impl SammTurtleParser {
             "TimeSeries" => Ok(CharacteristicKind::TimeSeries {
                 element_characteristic: None,
             }),
+            "Either" => {
+                // Parse samm-c:left and samm-c:right branch characteristics
+                let left = self.parse_either_branch(subject, "left")?;
+                let right = self.parse_either_branch(subject, "right")?;
+                Ok(CharacteristicKind::Either {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                })
+            }
             _ => {
                 tracing::warn!("Unknown characteristic type '{}', using Trait", local_name);
                 Ok(CharacteristicKind::Trait)
+            }
+        }
+    }
+
+    /// Parse a single branch characteristic (left or right) of a `samm-c:Either`.
+    ///
+    /// Looks up the `samm-c:<branch>` predicate on `subject`, resolves the linked
+    /// characteristic URN, and recursively parses it.  Falls back to a bare `Trait`
+    /// characteristic when the predicate is absent, so that partially authored models
+    /// can still be loaded.
+    fn parse_either_branch(&mut self, subject: &NamedNode, branch: &str) -> Result<Characteristic> {
+        let samm_c_ns = self
+            .samm_c_ns
+            .as_ref()
+            .ok_or_else(|| SammError::ParseError("SAMM-C namespace not initialized".to_string()))?
+            .clone();
+
+        let pred = NamedNode::new(format!("{}{}", samm_c_ns, branch))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        match self.get_object(subject, &pred) {
+            Some(branch_term) => {
+                let branch_urn = self.term_to_string(&branch_term)?;
+                self.parse_characteristic(&branch_urn)
+            }
+            None => {
+                tracing::warn!(
+                    "samm-c:Either branch '{}' missing on '{}', defaulting to Trait",
+                    branch,
+                    subject.as_str()
+                );
+                let fallback_urn = format!("{}#{}-fallback", subject.as_str(), branch);
+                Ok(Characteristic::new(fallback_urn, CharacteristicKind::Trait))
             }
         }
     }

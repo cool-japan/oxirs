@@ -60,6 +60,12 @@ simulation = ["scirs2-integrate", "scirs2-optimize", "uom"]
 embeddings = ["scirs2-neural", "oxirs-embed"]
 samm = ["oxirs-samm"]
 streaming = ["oxirs-stream"]
+# v0.3.0 W4-S12: GPU acceleration for FEM stress, Navier-Stokes pressure, and
+# heat-diffusion stencils. Default off; CPU fallback is always available.
+gpu = ["scirs2-core/gpu"]
+# v0.3.0 W4-S12: PINN residual correction. Default off; pure-Rust feed-forward
+# network loaded from a JSON model file.
+pinn_correction = []
 full = ["simulation", "embeddings", "samm", "streaming"]
 
 [package.metadata.docs.rs]

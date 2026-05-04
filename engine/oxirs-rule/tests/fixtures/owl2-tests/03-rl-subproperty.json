@@ -1,0 +1,18 @@
+{
+    "id": "rl-subproperty-001",
+    "title": "RL: subPropertyOf inheritance propagates triples",
+    "profiles": ["RL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "SubObjectPropertyOf", "sub": "hasMother", "sup": "hasParent" },
+        { "kind": "SubObjectPropertyOf", "sub": "hasParent", "sup": "hasAncestor" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "hasMother", "object": "diana" }
+    ],
+    "expected": [
+        { "kind": "Property", "subject": "alice", "property": "hasMother", "object": "diana" },
+        { "kind": "Property", "subject": "alice", "property": "hasParent", "object": "diana" },
+        { "kind": "Property", "subject": "alice", "property": "hasAncestor", "object": "diana" }
+    ],
+    "forbidden": []
+}

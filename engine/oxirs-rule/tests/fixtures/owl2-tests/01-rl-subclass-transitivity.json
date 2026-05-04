@@ -1,0 +1,20 @@
+{
+    "id": "rl-subclass-transitivity-001",
+    "title": "RL: rdfs:subClassOf transitivity",
+    "profiles": ["RL", "EL", "QL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "SubClassOf", "sub": "Cat", "sup": "Mammal" },
+        { "kind": "SubClassOf", "sub": "Mammal", "sup": "Animal" },
+        { "kind": "SubClassOf", "sub": "Animal", "sup": "LivingThing" }
+    ],
+    "data": [
+        { "subject": "felix", "predicate": "rdf:type", "object": "Cat" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "felix", "class": "Cat" },
+        { "kind": "Type", "individual": "felix", "class": "Mammal" },
+        { "kind": "Type", "individual": "felix", "class": "Animal" },
+        { "kind": "Type", "individual": "felix", "class": "LivingThing" }
+    ],
+    "forbidden": []
+}

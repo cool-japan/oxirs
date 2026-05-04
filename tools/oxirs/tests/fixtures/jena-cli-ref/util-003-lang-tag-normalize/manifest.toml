@@ -1,0 +1,13 @@
+description = "lang-tag --normalize uppercases region and titlecases script per RFC 5646"
+classification = "spec-required"
+argv = ["--quiet", "lang-tag", "zh-hans-cn", "--normalize"]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Normalized: zh-Hans-CN
+"""
+
+[stderr]
+mode = "absent"

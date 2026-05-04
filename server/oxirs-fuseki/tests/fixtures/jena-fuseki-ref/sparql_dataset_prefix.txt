@@ -1,0 +1,15 @@
+# Dataset-prefixed URL: /ds/sparql
+endpoint: sparql_query
+classification: spec-required
+match_mode: structural-json
+description: GET /ds/sparql works (Jena-style dataset prefix routing)
+
+=== request
+GET /ds/sparql?query=SELECT%20%2A%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D%20LIMIT%200
+Accept: application/sparql-results+json
+
+=== response
+200
+Content-Type: application/sparql-results+json
+
+{"head":{"vars":[]},"results":{"bindings":[]}}

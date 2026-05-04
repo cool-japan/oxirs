@@ -552,3 +552,11 @@ mod tests {
 // Sub-module: dependency-free binary snapshot
 pub mod snapshot;
 pub use snapshot::{IndexSnapshot, SnapshotHeader};
+
+// Sub-module: point-in-time WAL recovery
+pub mod point_in_time;
+pub use point_in_time::{CheckpointRef, PointInTimeRestore};
+
+// Sub-module: high-level restore function
+pub mod restore;
+pub use restore::{apply_wal_entry, restore_to_timestamp, RestoreReport};

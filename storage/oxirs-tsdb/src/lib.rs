@@ -1,6 +1,6 @@
 //! Time-series optimizations for OxiRS
 //!
-//! **Status**: Production Ready (v0.2.4)
+//! **Status**: Production Ready (v0.3.0)
 //!
 //! This crate provides high-performance time-series storage and query
 //! capabilities for IoT-scale RDF data.
@@ -143,6 +143,12 @@ pub mod anomaly_detector;
 // Replication group re-exports
 pub use replication::{ReplicationGroup, TsdbRaftNode};
 
+// WAL replicator + state machine re-exports
+pub use replication::{ApplyError, ReplicationError, TsdbRaftOp, TsdbStateMachine, WalReplicator};
+
+// Snapshot re-exports
+pub use replication::{SnapshotDataPoint, SnapshotError, SnapshotStore, TsdbRaftSnapshot};
+
 // Write path re-exports (batch writer)
 pub use write::{BatchWriter, BatchWriterConfig, CrcWal, MetricPoint};
 
@@ -158,8 +164,13 @@ pub use analytics::{DataValueType, MetricSchema, MetricSchemaBuilder, SqlDataPoi
 // Kalman filter re-exports
 pub use analytics::{AdaptiveKalmanFilter, AnomalyEvent, KalmanAnomaly, KalmanFilter};
 
-// GPU aggregation re-exports
+// GPU aggregation re-exports — OO API
 pub use analytics::{GpuAggMetrics, GpuAggOp, GpuDownsampler, GpuTimeSeriesAggregator};
+// GPU aggregation re-exports — free-function columnar API (feature-gated gpu_sum + CPU fallbacks)
+pub use analytics::{
+    avg_column, count_column, gpu_sum, max_column, min_column, rolling_avg, rolling_sum,
+    sum_column, GpuAggError,
+};
 
 // Arrow IPC re-exports
 pub use analytics::{
@@ -212,3 +223,27 @@ pub mod forecaster;
 /// Time-series rollup/downsampling engine: windowed Mean/Sum/Min/Max/Count/First/Last
 /// aggregation, multi-resolution rollup, and LTTB visual downsampling (v1.1.0 round 16)
 pub mod rollup_engine;
+
+/// Active-active multi-region deployment: per-region Raft groups, write
+/// routing, region health probing, and asynchronous cross-region fanout
+/// with last-writer-wins conflict resolution (W3-S8).
+pub mod multi_region;
+
+// Multi-region re-exports
+pub use multi_region::{
+    ActiveActiveConfig, ActiveActiveMultiRegion, CrossRegionReplicator, FanoutEntry, FanoutOutcome,
+    FanoutQueueStats, FanoutResolution, HealthConfig, HealthProbe, LwwConflictResolver,
+    RegionHealthSnapshot, RegionId as MultiRegionId, RegionStatus, RegionWriteRecord, RouteContext,
+    RouteDecision, RoutingError, RoutingTable, WriteOutcome, WriteRoutingRule,
+};
+
+/// DuckDB ↔ TSDB chunk bridge (W3-S8). Feature-gated behind `duckdb`.
+#[cfg(feature = "duckdb")]
+pub mod duckdb_bridge;
+
+#[cfg(feature = "duckdb")]
+pub use duckdb_bridge::{
+    chunk_to_record_batch, open_in_memory as duckdb_open_in_memory, points_to_record_batch,
+    read_into_chunk, record_batches_to_points, register_tsdb_chunk, run_sql as duckdb_run_sql,
+    ReadOptions as DuckDbReadOptions, RegisterOptions as DuckDbRegisterOptions,
+};

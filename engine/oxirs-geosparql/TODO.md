@@ -1,6 +1,6 @@
 # OxiRS GeoSPARQL - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Current Status
 
@@ -32,10 +32,18 @@ OxiRS GeoSPARQL v0.2.3 is production-ready, providing complete OGC GeoSPARQL 1.0
 - ✅ GeoJSON integration improvements
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] Full OGC GeoSPARQL 1.1 compliance
-- [ ] Long-term support guarantees
-- [ ] Enterprise features
-- [ ] Comprehensive benchmarks
+- [x] Full OGC GeoSPARQL 1.1 compliance (completed 2026-04-28)
+  - [x] geof:relate — DE-9IM pattern matching via geo::algorithm::relate::Relate
+  - [x] geof:simplify — geometry-level Douglas-Peucker (dispatches over geo_types variants)
+  - [x] geof:boundary — pure-Rust implementation (OGC SFA §6.1.6.1 Mod-2 rule)
+  - [x] geof:isValid — topological validity check
+  - [x] geof:isRing — closed + simple LineString predicate
+  - [x] geof:isClosed — endpoints equal predicate for LineString/MultiLineString
+  - [x] Register all new functions in sparql_integration.rs
+  - [x] tests/ogc_geosparql_1_1_conformance.rs conformance test suite
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing
 

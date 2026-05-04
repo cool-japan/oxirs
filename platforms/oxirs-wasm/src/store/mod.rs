@@ -245,6 +245,29 @@ impl OxiRSStore {
     pub fn add_prefix(&mut self, prefix: &str, uri: &str) {
         self.prefixes.insert(prefix.to_string(), uri.to_string());
     }
+
+    /// Apply RDFS forward-chaining entailment rules and materialise inferred triples.
+    ///
+    /// Returns a JS object `{ added: number }` describing how many new triples
+    /// were derived.  Calling this multiple times is idempotent — subsequent
+    /// calls return 0 once the fixed-point has been reached.
+    ///
+    /// Rules implemented: rdfs:subClassOf transitivity (rdfs11), rdf:type
+    /// propagation via rdfs:subClassOf (rdfs9), rdfs:subPropertyOf transitivity
+    /// (rdfs5), rdfs:subPropertyOf usage propagation (rdfs7), rdfs:domain
+    /// subject-typing (rdfs2), rdfs:range object-typing (rdfs3).
+    #[wasm_bindgen(js_name = inferRdfs)]
+    pub fn infer_rdfs(&mut self) -> Result<JsValue, JsValue> {
+        let added = crate::inference::apply_rdfs_inference(self);
+        let obj = js_sys::Object::new();
+        js_sys::Reflect::set(
+            &obj,
+            &JsValue::from_str("added"),
+            &JsValue::from_f64(added as f64),
+        )
+        .map_err(|_| JsValue::from_str("Failed to build inferRdfs result object"))?;
+        Ok(obj.into())
+    }
 }
 
 // Internal (non-wasm_bindgen) methods

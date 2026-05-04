@@ -1,0 +1,165 @@
+# OxiRS W3C RDF 1.1 N-Triples compliance manifest
+#
+# Modelled on the W3C N-Triples Test Suite
+# (https://github.com/w3c/rdf-tests/tree/master/rdf/rdf11/rdf-n-triples). Pinned
+# reference snapshot:
+#
+#   https://github.com/w3c/rdf-tests/tree/2e2bedfe9a23c98d4a7d40e3a5d9f4f50bbf5bbf
+#
+# Reference: W3C RDF 1.1 N-Triples TR https://www.w3.org/TR/n-triples/
+
+@base         <urn:oxirs-tests:ntriples/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:   <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix rdft: <http://www.w3.org/ns/rdftest#> .
+@prefix oxt:  <https://w3.org/TR/n-triples/oxirs-tests#> .
+
+oxt:manifest rdf:type mf:Manifest ;
+    rdfs:comment "OxiRS N-Triples conformance tests (modelled on W3C rdf-tests)." ;
+    mf:entries (
+        oxt:nt-pos-01
+        oxt:nt-pos-02
+        oxt:nt-pos-03
+        oxt:nt-pos-comment
+        oxt:nt-pos-blank
+        oxt:nt-pos-langtag
+        oxt:nt-pos-typed
+        oxt:nt-pos-utf8
+        oxt:nt-pos-escapes
+        oxt:nt-pos-bnode
+        oxt:nt-pos-empty
+        oxt:nt-pos-multiline
+        oxt:nt-pos-string-escape
+        oxt:nt-pos-iri-encoded
+        oxt:nt-pos-bnode-id
+        oxt:nt-pos-numeric-as-typed
+        oxt:nt-pos-multiple
+        oxt:nt-pos-unicode-bmp
+        oxt:nt-pos-unicode-supp
+        oxt:nt-pos-tab-in-iri-pct
+
+        oxt:nt-neg-no-dot
+        oxt:nt-neg-bad-iri
+        oxt:nt-neg-bad-string
+        oxt:nt-neg-bad-blank
+        oxt:nt-neg-extra-tokens
+        oxt:nt-neg-bad-escape
+        oxt:nt-neg-prefixed-iri
+        oxt:nt-neg-bad-langtag
+
+        oxt:nt-eval-simple
+        oxt:nt-eval-typed
+        oxt:nt-eval-langtag
+        oxt:nt-eval-blank
+        oxt:nt-eval-multi
+    ) .
+
+# ============================================================================
+# Positive tests
+# ============================================================================
+oxt:nt-pos-01 rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "single triple"; mf:action <pos-01.nt> .
+
+oxt:nt-pos-02 rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "two triples"; mf:action <pos-02.nt> .
+
+oxt:nt-pos-03 rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "literal object"; mf:action <pos-03.nt> .
+
+oxt:nt-pos-comment rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "leading and trailing comments"; mf:action <pos-comment.nt> .
+
+oxt:nt-pos-blank rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "blank lines are skipped"; mf:action <pos-blank.nt> .
+
+oxt:nt-pos-langtag rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "language-tagged literal"; mf:action <pos-langtag.nt> .
+
+oxt:nt-pos-typed rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "typed literal"; mf:action <pos-typed.nt> .
+
+oxt:nt-pos-utf8 rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "UTF-8 literal payload"; mf:action <pos-utf8.nt> .
+
+oxt:nt-pos-escapes rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "all required string escapes"; mf:action <pos-escapes.nt> .
+
+oxt:nt-pos-bnode rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "blank node subject and object"; mf:action <pos-bnode.nt> .
+
+oxt:nt-pos-empty rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "empty document"; mf:action <pos-empty.nt> .
+
+oxt:nt-pos-multiline rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "many triples across many lines"; mf:action <pos-multiline.nt> .
+
+oxt:nt-pos-string-escape rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "unicode escape sequences \\uXXXX and \\UXXXXXXXX";
+    mf:action <pos-string-escape.nt> .
+
+oxt:nt-pos-iri-encoded rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "IRI with percent-encoded characters"; mf:action <pos-iri-encoded.nt> .
+
+oxt:nt-pos-bnode-id rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "blank node label with mixed alphanumerics"; mf:action <pos-bnode-id.nt> .
+
+oxt:nt-pos-numeric-as-typed rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "integers stored as xsd:integer"; mf:action <pos-numeric-as-typed.nt> .
+
+oxt:nt-pos-multiple rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "multiple statements with mixed objects"; mf:action <pos-multiple.nt> .
+
+oxt:nt-pos-unicode-bmp rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "BMP unicode character escapes"; mf:action <pos-unicode-bmp.nt> .
+
+oxt:nt-pos-unicode-supp rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "supplementary plane unicode \\U escape"; mf:action <pos-unicode-supp.nt> .
+
+oxt:nt-pos-tab-in-iri-pct rdf:type rdft:TestNTriplesPositiveSyntax ;
+    mf:name "percent-encoded tab in IRI is allowed"; mf:action <pos-tab-in-iri-pct.nt> .
+
+# ============================================================================
+# Negative tests
+# ============================================================================
+oxt:nt-neg-no-dot rdf:type rdft:TestNTriplesNegativeSyntax ;
+    mf:name "missing terminating dot"; mf:action <neg-no-dot.nt> .
+
+oxt:nt-neg-bad-iri rdf:type rdft:TestNTriplesNegativeSyntax ;
+    mf:name "IRI not enclosed in angle brackets"; mf:action <neg-bad-iri.nt> .
+
+oxt:nt-neg-bad-string rdf:type rdft:TestNTriplesNegativeSyntax ;
+    mf:name "single quotes are illegal"; mf:action <neg-bad-string.nt> .
+
+oxt:nt-neg-bad-blank rdf:type rdft:TestNTriplesNegativeSyntax ;
+    mf:name "missing label after _:"; mf:action <neg-bad-blank.nt> .
+
+oxt:nt-neg-extra-tokens rdf:type rdft:TestNTriplesNegativeSyntax ;
+    mf:name "extra token after object"; mf:action <neg-extra-tokens.nt> .
+
+oxt:nt-neg-bad-escape rdf:type rdft:TestNTriplesNegativeSyntax ;
+    mf:name "illegal escape sequence in literal"; mf:action <neg-bad-escape.nt> .
+
+oxt:nt-neg-prefixed-iri rdf:type rdft:TestNTriplesNegativeSyntax ;
+    mf:name "prefixed name is not allowed in N-Triples"; mf:action <neg-prefixed-iri.nt> .
+
+oxt:nt-neg-bad-langtag rdf:type rdft:TestNTriplesNegativeSyntax ;
+    mf:name "empty language tag is invalid"; mf:action <neg-bad-langtag.nt> .
+
+# ============================================================================
+# Evaluation tests (parse, then re-serialise and compare to expected N-Triples)
+# ============================================================================
+oxt:nt-eval-simple rdf:type rdft:TestNTriplesEval ;
+    mf:name "simple triple round-trip"; mf:action <eval-simple.nt> ; mf:result <eval-simple.nt> .
+
+oxt:nt-eval-typed rdf:type rdft:TestNTriplesEval ;
+    mf:name "typed literal round-trip"; mf:action <eval-typed.nt> ; mf:result <eval-typed.nt> .
+
+oxt:nt-eval-langtag rdf:type rdft:TestNTriplesEval ;
+    mf:name "language-tagged literal round-trip"; mf:action <eval-langtag.nt> ; mf:result <eval-langtag.nt> .
+
+oxt:nt-eval-blank rdf:type rdft:TestNTriplesEval ;
+    mf:name "blank node round-trip (modulo bnode renaming)"; mf:action <eval-blank.nt> ; mf:result <eval-blank.nt> .
+
+oxt:nt-eval-multi rdf:type rdft:TestNTriplesEval ;
+    mf:name "multi-statement round-trip"; mf:action <eval-multi.nt> ; mf:result <eval-multi.nt> .

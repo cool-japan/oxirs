@@ -534,7 +534,7 @@ impl ModelValidator {
                     }
                     hasher.update(&buffer[..count]);
                 }
-                Ok(format!("{:x}", hasher.finalize()))
+                Ok(hex::encode(hasher.finalize()))
             }
             ChecksumAlgorithm::Blake3 => {
                 let mut hasher = Blake3Hasher::new();
@@ -575,7 +575,7 @@ impl ModelValidator {
                     }
                     hasher.update(&buffer[..count]);
                 }
-                Ok(format!("{:x}", hasher.finalize()))
+                Ok(hex::encode(hasher.finalize()))
             }
             ChecksumAlgorithm::Blake3 => {
                 let mut hasher = Blake3Hasher::new();

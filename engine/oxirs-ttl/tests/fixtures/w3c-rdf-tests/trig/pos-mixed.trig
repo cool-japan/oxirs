@@ -1,0 +1,6 @@
+@prefix ex: <http://example.org/> .
+ex:default-s ex:default-p ex:default-o .
+
+<http://example.org/g> {
+    ex:named-s ex:named-p ex:named-o .
+}

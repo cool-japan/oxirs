@@ -1,0 +1,16 @@
+# POST form without query field -> 400
+endpoint: sparql_query
+classification: spec-required
+match_mode: status-only
+description: POST /sparql with form-encoded body but no query returns 400
+
+=== request
+POST /sparql
+Content-Type: application/x-www-form-urlencoded
+Accept: application/sparql-results+json
+
+other=ignored
+
+=== response
+400
+

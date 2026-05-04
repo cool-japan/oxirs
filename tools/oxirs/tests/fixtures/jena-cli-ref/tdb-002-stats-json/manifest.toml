@@ -1,0 +1,24 @@
+description = "tdb-stats --format json emits valid SPARQL-like JSON statistics"
+classification = "spec-required"
+setup = [
+    ["--quiet", "init", "ds", "--format", "tdb2", "--location", "${TMPDIR}/ds"],
+]
+argv = [
+    "--quiet",
+    "tdb-stats",
+    "${TMPDIR}/ds",
+    "--format",
+    "json",
+]
+exit_code = 0
+
+[stdout]
+mode = "regex"
+expected = """
+"triples"
+"count"
+\\A\\s*\\{
+"""
+
+[stderr]
+mode = "absent"

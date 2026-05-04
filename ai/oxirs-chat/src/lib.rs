@@ -1,12 +1,10 @@
 //! # OxiRS Chat
 //!
-//! [![Version](https://img.shields.io/badge/version-0.2.4-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-chat/badge.svg)](https://docs.rs/oxirs-chat)
 //!
-//! **Status**: Production Release (v0.2.4)
+//! **Status**: Production Release (v0.3.0)
 //! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
-//!
-#![allow(dead_code)]
 //!
 //! Advanced RAG chat API with LLM integration, natural language to SPARQL translation,
 //! streaming responses, self-healing capabilities, and consciousness-inspired computing.
@@ -14,6 +12,34 @@
 //! This crate provides a production-ready conversational interface for knowledge graphs,
 //! combining retrieval-augmented generation (RAG) with SPARQL querying, vector search,
 //! and advanced AI features including temporal reasoning and consciousness-guided processing.
+//!
+//! ## Module Overview
+//!
+//! | Module | Purpose |
+//! |---|---|
+//! | [`session_manager`] | [`ChatConfig`], [`SessionData`], context-window management |
+//! | [`chat_session`] | [`ChatSession`] — per-user state, message history, statistics |
+//! | [`rag`] | Multi-stage retrieval pipeline (semantic, graph, quantum, consciousness) |
+//! | [`llm`] | Provider abstraction (OpenAI, Anthropic, local); circuit breakers; routing |
+//! | [`nl2sparql`] | Natural-language-to-SPARQL translation with schema-aware generation |
+//! | [`messages`] | [`Message`], [`MessageContent`], [`RichContentElement`] |
+//! | [`session_store`] | Persistent session registry with TTL and eviction |
+//! | [`dialogue_manager`] | Multi-turn conversation state machine |
+//! | [`health_monitoring`] | System health reporting and self-healing |
+//! | [`analytics`] | Conversation analytics and pattern detection |
+//! | [`collaboration`] | Real-time shared sessions and cursor sharing |
+//! | [`voice`] | Speech-to-text / text-to-speech provider abstractions |
+//!
+//! ## Call Path
+//!
+//! ```text
+//! OxiRSChat::process_message
+//!   └─ RagEngine::retrieve          (semantic + graph + optional quantum)
+//!   └─ NL2SPARQLSystem::generate_sparql   (when query intent detected)
+//!   └─ Store::prepare_query / exec        (SPARQL execution)
+//!   └─ LLMManager::generate_response      (LLM call with assembled context)
+//!   └─ ChatSession::add_message           (persist to session history)
+//! ```
 //!
 //! ## Key Features
 //!
@@ -170,6 +196,8 @@
 //! # }
 //! ```
 
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
@@ -282,6 +310,9 @@ pub mod dialogue_manager;
 
 // v1.1.0 round 16: Chat session persistence and retrieval
 pub mod session_store;
+
+// v0.3.0: Model marketplace — HuggingFace Hub, Ollama, and local GGUF registry
+pub mod marketplace;
 
 // Re-export commonly used types
 pub use chat_session::{ChatSession, SessionStatistics};

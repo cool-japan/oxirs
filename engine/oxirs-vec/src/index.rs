@@ -13,6 +13,8 @@ use std::collections::{BinaryHeap, HashMap};
 use std::sync::Arc;
 
 use crate::hnsw::{HnswConfig, HnswIndex};
+use crate::ivf::{IvfConfig, IvfIndex};
+use crate::pq::{PQConfig, PQIndex};
 
 /// Type alias for filter functions
 pub type FilterFunction = Box<dyn Fn(&str) -> bool>;
@@ -127,6 +129,10 @@ pub struct AdvancedVectorIndex {
     vectors: Vec<(String, Vector)>,
     uri_to_id: HashMap<String, usize>,
     hnsw_index: Option<HnswIndex>,
+    /// Trained IVF index (populated after `build()` when `IndexType::Ivf`)
+    ivf_index: Option<IvfIndex>,
+    /// Trained PQ index (populated after `build()` when `IndexType::PQ`)
+    pq_index: Option<PQIndex>,
     dimensions: Option<usize>,
 }
 
@@ -137,6 +143,8 @@ impl AdvancedVectorIndex {
             vectors: Vec::new(),
             uri_to_id: HashMap::new(),
             hnsw_index: None,
+            ivf_index: None,
+            pq_index: None,
             dimensions: None,
         }
     }
@@ -154,8 +162,11 @@ impl AdvancedVectorIndex {
             IndexType::Flat => {
                 // No special building needed for flat index
             }
-            IndexType::Ivf | IndexType::PQ => {
-                return Err(anyhow!("IVF and PQ indices not yet implemented"));
+            IndexType::Ivf => {
+                self.build_ivf_index()?;
+            }
+            IndexType::PQ => {
+                self.build_pq_index()?;
             }
         }
 
@@ -184,6 +195,65 @@ impl AdvancedVectorIndex {
         Ok(())
     }
 
+    /// Build an IVF index by training on all stored vectors and then adding them.
+    ///
+    /// Uses the default `IvfConfig` with `n_clusters` derived from the number of
+    /// stored vectors (capped at 256) so that every cluster has at least one
+    /// training sample.
+    fn build_ivf_index(&mut self) -> Result<()> {
+        let training_vectors: Vec<Vector> = self.vectors.iter().map(|(_, v)| v.clone()).collect();
+        let n_clusters = (self.vectors.len() / 4).clamp(2, 256);
+
+        let config = IvfConfig {
+            n_clusters,
+            n_probes: (n_clusters / 8).max(1),
+            ..Default::default()
+        };
+        let mut ivf = IvfIndex::new(config)?;
+        ivf.train(&training_vectors)?;
+
+        for (uri, vector) in &self.vectors {
+            ivf.insert(uri.clone(), vector.clone())?;
+        }
+
+        self.ivf_index = Some(ivf);
+        Ok(())
+    }
+
+    /// Build a PQ index by training on all stored vectors and then encoding them.
+    ///
+    /// Chooses `n_subquantizers` so that it evenly divides the vector dimension
+    /// and stays within [1, 8].  Falls back gracefully with a descriptive error
+    /// if dimensions are not yet known.
+    fn build_pq_index(&mut self) -> Result<()> {
+        let dims = self
+            .dimensions
+            .ok_or_else(|| anyhow!("Cannot build PQ index: no vectors have been inserted yet"))?;
+
+        // Pick the largest power-of-two divisor of dims in [1, 8]
+        let n_subquantizers = [8usize, 4, 2, 1]
+            .iter()
+            .copied()
+            .find(|&s| dims % s == 0)
+            .unwrap_or(1);
+
+        let config = PQConfig {
+            n_subquantizers,
+            n_centroids: 16, // small for small test sets
+            ..Default::default()
+        };
+        let mut pq = PQIndex::new(config);
+        let training_vectors: Vec<Vector> = self.vectors.iter().map(|(_, v)| v.clone()).collect();
+        pq.train(&training_vectors)?;
+
+        for (uri, vector) in &self.vectors {
+            pq.insert(uri.clone(), vector.clone())?;
+        }
+
+        self.pq_index = Some(pq);
+        Ok(())
+    }
+
     /// Add metadata to a vector
     pub fn add_metadata(&mut self, _uri: &str, _metadata: HashMap<String, String>) -> Result<()> {
         // For now, we'll store metadata separately
@@ -201,7 +271,9 @@ impl AdvancedVectorIndex {
     ) -> Result<Vec<SearchResult>> {
         match self.config.index_type {
             IndexType::Hnsw => self.search_hnsw(query, k),
-            _ => self.search_flat(query, k, filter),
+            IndexType::Ivf => self.search_ivf(query, k),
+            IndexType::PQ => self.search_pq(query, k),
+            IndexType::Flat => self.search_flat(query, k, filter),
         }
     }
 
@@ -221,6 +293,40 @@ impl AdvancedVectorIndex {
         } else {
             Err(anyhow!("HNSW index not built"))
         }
+    }
+
+    fn search_ivf(&self, query: &Vector, k: usize) -> Result<Vec<SearchResult>> {
+        let ivf = self
+            .ivf_index
+            .as_ref()
+            .ok_or_else(|| anyhow!("IVF index not built — call build() first"))?;
+        let results = ivf.search_knn(query, k)?;
+        Ok(results
+            .into_iter()
+            .map(|(uri, distance)| SearchResult {
+                uri,
+                score: 1.0 - distance,
+                distance,
+                metadata: None,
+            })
+            .collect())
+    }
+
+    fn search_pq(&self, query: &Vector, k: usize) -> Result<Vec<SearchResult>> {
+        let pq = self
+            .pq_index
+            .as_ref()
+            .ok_or_else(|| anyhow!("PQ index not built — call build() first"))?;
+        let results = pq.search_knn(query, k)?;
+        Ok(results
+            .into_iter()
+            .map(|(uri, distance)| SearchResult {
+                uri,
+                score: 1.0 - distance,
+                distance,
+                metadata: None,
+            })
+            .collect())
     }
 
     fn search_flat(
@@ -745,5 +851,95 @@ impl VectorIndex for MultiIndex {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_vectors() -> Vec<(&'static str, Vector)> {
+        vec![
+            (
+                "http://example.org/a",
+                Vector::new(vec![1.0, 0.0, 0.0, 1.0]),
+            ),
+            (
+                "http://example.org/b",
+                Vector::new(vec![0.0, 1.0, 1.0, 0.0]),
+            ),
+            (
+                "http://example.org/c",
+                Vector::new(vec![-1.0, 0.0, 0.0, -1.0]),
+            ),
+            (
+                "http://example.org/d",
+                Vector::new(vec![0.0, -1.0, -1.0, 0.0]),
+            ),
+            (
+                "http://example.org/e",
+                Vector::new(vec![0.5, 0.5, 0.5, 0.5]),
+            ),
+            (
+                "http://example.org/f",
+                Vector::new(vec![-0.5, 0.5, -0.5, 0.5]),
+            ),
+            (
+                "http://example.org/g",
+                Vector::new(vec![1.0, 1.0, 0.0, 0.0]),
+            ),
+            (
+                "http://example.org/h",
+                Vector::new(vec![0.0, 0.0, 1.0, 1.0]),
+            ),
+        ]
+    }
+
+    fn build_index(index_type: IndexType) -> Result<AdvancedVectorIndex> {
+        let config = IndexConfig {
+            index_type,
+            ..Default::default()
+        };
+        let mut idx = AdvancedVectorIndex::new(config);
+        for (uri, vec) in sample_vectors() {
+            idx.insert(uri.to_string(), vec)?;
+        }
+        idx.build()?;
+        Ok(idx)
+    }
+
+    #[test]
+    fn test_ivf_build_and_search() -> Result<()> {
+        let idx = build_index(IndexType::Ivf)?;
+        assert!(idx.ivf_index.is_some(), "IVF index should be built");
+
+        let query = Vector::new(vec![1.0, 0.0, 0.0, 1.0]);
+        let results = idx.search(&query.as_f32(), 3)?;
+        assert!(!results.is_empty(), "IVF search should return results");
+        Ok(())
+    }
+
+    #[test]
+    fn test_pq_build_and_search() -> Result<()> {
+        let idx = build_index(IndexType::PQ)?;
+        assert!(idx.pq_index.is_some(), "PQ index should be built");
+
+        let query = Vector::new(vec![0.0, 1.0, 1.0, 0.0]);
+        let results = idx.search(&query.as_f32(), 3)?;
+        assert!(!results.is_empty(), "PQ search should return results");
+        Ok(())
+    }
+
+    #[test]
+    fn test_flat_search_unchanged() -> Result<()> {
+        let idx = build_index(IndexType::Flat)?;
+        let query = Vector::new(vec![1.0, 0.0, 0.0, 1.0]);
+        let results = idx.search(&query.as_f32(), 2)?;
+        assert_eq!(
+            results.len(),
+            2,
+            "Flat search should return exactly k results"
+        );
+        Ok(())
     }
 }

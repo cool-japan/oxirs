@@ -1,0 +1,22 @@
+description = "tdb-stats prints text statistics for a freshly initialised dataset"
+classification = "spec-required"
+setup = [
+    ["--quiet", "init", "ds", "--format", "tdb2", "--location", "${TMPDIR}/ds"],
+]
+argv = [
+    "--quiet",
+    "tdb-stats",
+    "${TMPDIR}/ds",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+TDB Database Statistics
+Triple Count
+Dictionary Size
+"""
+
+[stderr]
+mode = "absent"

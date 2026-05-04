@@ -1,0 +1,6 @@
+@prefix ex: <http://example.org/> .
+<http://example.org/g> {
+    ex:s ex:int 42 ;
+         ex:dec 3.14 ;
+         ex:dbl 6.022e23 .
+}

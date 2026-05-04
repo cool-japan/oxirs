@@ -58,6 +58,21 @@ pub async fn execute(action: TsdbAction, _ctx: &CliContext) -> Result<()> {
             points,
             series_count,
         } => benchmark_command(dataset, points, series_count).await,
+        #[cfg(feature = "tsdb-duckdb")]
+        TsdbAction::DuckDb {
+            chunk,
+            sql,
+            series_label,
+            format,
+        } => crate::tools::tsdb_duckdb::run(chunk, sql, series_label, format).await,
+        #[cfg(not(feature = "tsdb-duckdb"))]
+        TsdbAction::DuckDb { .. } => {
+            anyhow::bail!(
+                "this oxirs binary was built without the `tsdb-duckdb` feature; \
+                 rebuild with `cargo build -p oxirs --features tsdb-duckdb` to enable \
+                 DuckDB inspection of TSDB chunks"
+            )
+        }
     }
 }
 

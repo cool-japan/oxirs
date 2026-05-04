@@ -1,6 +1,6 @@
 # OxiRS TDB - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Status: Production Ready
 
@@ -39,10 +39,16 @@
 - ✅ 2005 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] Long-term support guarantees
-- [ ] Complete TDB2 parity verification
-- [ ] Enterprise support
-- [ ] Comprehensive benchmarks
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [x] Complete TDB2 parity verification (completed 2026-04-28)
+  - **Goal:** Verify behavioral parity with Apache Jena TDB2 over a defined operation matrix and fix any gaps surfaced.
+  - **Scope:** Storage-engine level (oxirs-tdb layer). SPARQL execution (FILTER/OPTIONAL/UNION/aggregation/paths) lives in oxirs-arq and is excluded — classified as impl-detail divergence, not a failure. Parity is measured at the triple-pattern, MVCC transaction, six-index lookup, BNode ID, prefix-compression, and bulk-load layers.
+  - **Design:** Build parity matrix in tests/tdb2_parity.rs — operations: bulk-load (Term API + BulkLoader), triple-pattern query (all 7 wildcard combos), MVCC txn (RW/RO/abort/concurrent), six-index lookup (SixIndexStore all 7 patterns), BNode ID interning via Tdb2Database, prefix-table compress/expand. Reference outputs are pinned inside the test file as inline constants.
+  - **Files:** tests/tdb2_parity.rs (new), src/tdb2/mod.rs + src/six_index_store.rs + src/prefix_table.rs (gap closure if needed)
+  - **Tests:** unit per-op + integration full parity matrix (load:1.0, triple-pattern:1.0, txn:1.0, index:1.0, bnode:1.0, prefix:1.0)
+  - **Risk:** Jena-specific behaviors not in spec → classify as impl-detail divergence, not failure
+- [~] Enterprise support (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing
 

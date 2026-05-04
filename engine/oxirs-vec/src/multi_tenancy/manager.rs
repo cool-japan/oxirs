@@ -5,6 +5,7 @@ use crate::multi_tenancy::{
     billing::{BillingEngine, BillingMetrics, BillingPeriod, PricingModel},
     isolation::{IsolationLevel, IsolationStrategy, NamespaceManager},
     quota::{QuotaEnforcer, QuotaLimits, RateLimiter},
+    sla::SlaClass,
     tenant::{Tenant, TenantId, TenantMetadata, TenantStatus},
     types::{
         MultiTenancyError, MultiTenancyResult, TenantContext, TenantOperation, TenantStatistics,
@@ -31,10 +32,15 @@ pub struct TenantConfig {
 
     /// Rate limit (requests per second)
     pub rate_limit: Option<f64>,
+
+    /// SLA class for admission control and priority dispatch.
+    ///
+    /// Defaults to [`SlaClass::Bronze`] (best-effort) when not explicitly set.
+    pub sla_class: SlaClass,
 }
 
 impl TenantConfig {
-    /// Create config for free tier
+    /// Create config for free tier (maps to [`SlaClass::Bronze`]).
     pub fn free_tier(tenant_id: impl Into<String>, name: impl Into<String>) -> Self {
         let tenant_id = tenant_id.into();
         Self {
@@ -45,10 +51,11 @@ impl TenantConfig {
                 cost_per_request: 0.001,
             },
             rate_limit: Some(10.0),
+            sla_class: SlaClass::Bronze,
         }
     }
 
-    /// Create config for pro tier
+    /// Create config for pro tier (maps to [`SlaClass::Gold`]).
     pub fn pro_tier(tenant_id: impl Into<String>, name: impl Into<String>) -> Self {
         let tenant_id = tenant_id.into();
         Self {
@@ -59,10 +66,11 @@ impl TenantConfig {
                 cost_per_unit: 0.01,
             },
             rate_limit: Some(100.0),
+            sla_class: SlaClass::Gold,
         }
     }
 
-    /// Create config for enterprise tier
+    /// Create config for enterprise tier (maps to [`SlaClass::Platinum`]).
     pub fn enterprise_tier(tenant_id: impl Into<String>, name: impl Into<String>) -> Self {
         let tenant_id = tenant_id.into();
         Self {
@@ -75,6 +83,7 @@ impl TenantConfig {
                 overage_cost: 0.005,
             },
             rate_limit: None, // Unlimited
+            sla_class: SlaClass::Platinum,
         }
     }
 }

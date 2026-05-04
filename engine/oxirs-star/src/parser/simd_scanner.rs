@@ -265,10 +265,11 @@ impl SimdScanner {
             if mask != 0 {
                 // Found potential matches, check second byte
                 for bit in 0..16 {
-                    if (mask & (1 << bit)) != 0 && offset + bit + 1 < len {
-                        if bytes[offset + bit + 1] == pattern[1] {
-                            return true;
-                        }
+                    if (mask & (1 << bit)) != 0
+                        && offset + bit + 1 < len
+                        && bytes[offset + bit + 1] == pattern[1]
+                    {
+                        return true;
                     }
                 }
             }
@@ -321,10 +322,11 @@ impl SimdScanner {
                 if mask != 0 {
                     // Found potential matches, check second byte
                     for bit in 0..16 {
-                        if (mask & (1 << bit)) != 0 && offset + bit + 1 < len {
-                            if bytes[offset + bit + 1] == pattern[1] {
-                                count += 1;
-                            }
+                        if (mask & (1 << bit)) != 0
+                            && offset + bit + 1 < len
+                            && bytes[offset + bit + 1] == pattern[1]
+                        {
+                            count += 1;
                         }
                     }
                 }

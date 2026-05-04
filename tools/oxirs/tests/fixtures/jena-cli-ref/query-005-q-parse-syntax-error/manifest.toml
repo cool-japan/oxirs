@@ -1,0 +1,19 @@
+# Spec requirement: SPARQL parser rejects garbage input with non-zero exit
+# code and a useful diagnostic on stderr (Jena exits with non-zero too).
+description = "q-parse rejects unrecognised query form"
+classification = "spec-required"
+argv = ["--quiet", "q-parse", "INVALID QUERY"]
+exit_code = 1
+
+[stdout]
+mode = "contains"
+expected = """
+--- SPARQL Query ---
+INVALID QUERY
+"""
+
+[stderr]
+mode = "contains"
+expected = """
+Parse error
+"""

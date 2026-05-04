@@ -1,0 +1,22 @@
+{
+    "id": "rl-deep-hierarchy-001",
+    "title": "RL: 5-level deep subClassOf hierarchy",
+    "profiles": ["RL", "EL", "QL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "SubClassOf", "sub": "L1", "sup": "L2" },
+        { "kind": "SubClassOf", "sub": "L2", "sup": "L3" },
+        { "kind": "SubClassOf", "sub": "L3", "sup": "L4" },
+        { "kind": "SubClassOf", "sub": "L4", "sup": "L5" }
+    ],
+    "data": [
+        { "subject": "x", "predicate": "rdf:type", "object": "L1" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "x", "class": "L1" },
+        { "kind": "Type", "individual": "x", "class": "L2" },
+        { "kind": "Type", "individual": "x", "class": "L3" },
+        { "kind": "Type", "individual": "x", "class": "L4" },
+        { "kind": "Type", "individual": "x", "class": "L5" }
+    ],
+    "forbidden": []
+}

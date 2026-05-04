@@ -1,0 +1,53 @@
+# Prometheus scrape config for OxiRS Embed.
+#
+# The embedding service exports the following metric families on /metrics
+# (port 9090 by default):
+#
+#   oxirs_embed_requests_total          counter
+#   oxirs_embed_request_duration_seconds  histogram
+#   oxirs_embed_embedding_latency_seconds histogram
+#   oxirs_embed_active_models           gauge
+#   oxirs_embed_distributed_workers     gauge
+#   oxirs_embed_distributed_pushes_total counter
+#   oxirs_embed_distributed_pulls_total  counter
+#   oxirs_embed_distributed_barriers_total counter
+#   oxirs_embed_distributed_staleness   gauge
+#   process_cpu_seconds_total           counter (default)
+#   process_resident_memory_bytes       gauge   (default)
+#
+# Adjust scrape_interval / evaluation_interval per environment.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: oxirs-embed
+    env: local
+
+scrape_configs:
+  - job_name: oxirs-embed
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "oxirs-embed:9090"
+        labels:
+          service: oxirs-embed
+          instance: oxirs-embed-0
+
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - "localhost:9090"
+
+# ── Optional Kubernetes service-discovery (uncomment when running under K8s) ──
+#  - job_name: oxirs-embed-k8s
+#    kubernetes_sd_configs:
+#      - role: endpoints
+#    relabel_configs:
+#      - source_labels: [__meta_kubernetes_service_label_app]
+#        regex: oxirs-embed
+#        action: keep
+#      - source_labels: [__meta_kubernetes_endpoint_port_name]
+#        regex: metrics
+#        action: keep

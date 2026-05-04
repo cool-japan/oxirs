@@ -1,0 +1,16 @@
+{
+    "id": "el-subrole-001",
+    "title": "EL: sub-role propagation P ⊑ Q",
+    "profiles": ["EL", "RLEL"],
+    "axioms": [
+        { "kind": "SubObjectPropertyOf", "sub": "isMotherOf", "sup": "isParentOf" }
+    ],
+    "data": [
+        { "subject": "diana", "predicate": "isMotherOf", "object": "alice" }
+    ],
+    "expected": [
+        { "kind": "Property", "subject": "diana", "property": "isMotherOf", "object": "alice" },
+        { "kind": "Property", "subject": "diana", "property": "isParentOf", "object": "alice" }
+    ],
+    "forbidden": []
+}

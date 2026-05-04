@@ -277,7 +277,7 @@ impl EnhancedSnapshotManager {
             checksum: {
                 let mut hasher = Sha256::new();
                 hasher.update(&serialized_data);
-                format!("{:x}", hasher.finalize())
+                hex::encode(hasher.finalize())
             },
         };
 

@@ -1,0 +1,21 @@
+{
+    "id": "rlel-hybrid-001",
+    "title": "Hybrid TBox needs RL transitivity AND EL intersection",
+    "profiles": ["RLEL"],
+    "axioms": [
+        { "kind": "SubClassOf", "sub": "Mammal", "sup": "Animal" },
+        { "kind": "SubClassOf", "sub": "Animal", "sup": "LivingThing" },
+        { "kind": "IntersectionSubClassOf", "parts": ["Doctor", "Surgeon"], "sup": "DoctorSurgeon" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "rdf:type", "object": "Mammal" },
+        { "subject": "alice", "predicate": "rdf:type", "object": "Doctor" },
+        { "subject": "alice", "predicate": "rdf:type", "object": "Surgeon" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "alice", "class": "Animal" },
+        { "kind": "Type", "individual": "alice", "class": "LivingThing" },
+        { "kind": "Type", "individual": "alice", "class": "DoctorSurgeon" }
+    ],
+    "forbidden": []
+}

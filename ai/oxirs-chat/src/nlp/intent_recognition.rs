@@ -584,17 +584,26 @@ impl IntentRecognizer {
         None
     }
 
-    /// Update intent recognizer with training data
+    /// Update intent recognizer with training data.
+    ///
+    /// Training requires the `scirs2-text` classification API which is not yet
+    /// stable.  Returning `Ok(())` silently discards the training examples and
+    /// leaves the recogniser unchanged, which misleads callers into believing the
+    /// model has been updated.
     pub fn train(&mut self, examples: Vec<(String, IntentType)>) -> Result<()> {
-        info!(
-            "Training intent recognizer with {} examples (training currently not implemented)",
+        if examples.is_empty() {
+            return Ok(());
+        }
+
+        // Surface the waiting state loudly so callers know to retry once
+        // scirs2-text classification is available.
+        Err(anyhow::anyhow!(
+            "IntentRecognizer::train is not yet implemented: \
+             scirs2-text classification API (needed for data-driven intent training) \
+             is not yet stable; {} example(s) were provided but not applied. \
+             The current pattern-based recognizer continues to operate unchanged.",
             examples.len()
-        );
-
-        // TODO: Implement training when scirs2-text classification API is stabilized
-        // For now, pattern-based matching is sufficient
-
-        Ok(())
+        ))
     }
 }
 

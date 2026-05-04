@@ -1,0 +1,20 @@
+{
+    "id": "rl-transitive-property-001",
+    "title": "RL: TransitiveProperty closes a chain",
+    "profiles": ["RL", "EL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "TransitiveProperty", "property": "ancestorOf" }
+    ],
+    "data": [
+        { "subject": "ada", "predicate": "ancestorOf", "object": "bob" },
+        { "subject": "bob", "predicate": "ancestorOf", "object": "carol" },
+        { "subject": "carol", "predicate": "ancestorOf", "object": "dave" }
+    ],
+    "expected": [
+        { "kind": "Property", "subject": "ada", "property": "ancestorOf", "object": "bob" },
+        { "kind": "Property", "subject": "ada", "property": "ancestorOf", "object": "carol" },
+        { "kind": "Property", "subject": "ada", "property": "ancestorOf", "object": "dave" },
+        { "kind": "Property", "subject": "bob", "property": "ancestorOf", "object": "dave" }
+    ],
+    "forbidden": []
+}

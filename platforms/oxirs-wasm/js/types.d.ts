@@ -129,6 +129,18 @@ declare module 'oxirs-wasm' {
          * Add a namespace prefix
          */
         addPrefix(prefix: string, uri: string): void;
+
+        /**
+         * Apply RDFS forward-chaining entailment and materialise inferred triples.
+         *
+         * Implements rules rdfs2, rdfs3, rdfs5, rdfs7, rdfs9, rdfs11.
+         * Calling this multiple times is idempotent — returns `{ added: 0 }`
+         * once the fixed-point has been reached.
+         *
+         * @returns An object with an `added` field indicating the number of
+         *          new triples derived.
+         */
+        inferRdfs(): { added: number };
     }
 
     /**

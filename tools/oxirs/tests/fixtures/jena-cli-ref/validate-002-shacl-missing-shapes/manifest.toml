@@ -1,0 +1,17 @@
+description = "shacl fails when the shapes file does not exist"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "shacl",
+    "--shapes",
+    "${TMPDIR}/no-such-shapes.ttl",
+    "--data",
+    "${FIXTURE}/../_data/sample.nt",
+]
+exit_code = 1
+
+[stderr]
+mode = "contains"
+expected = """
+File does not exist
+"""

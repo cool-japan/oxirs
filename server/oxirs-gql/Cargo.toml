@@ -68,6 +68,11 @@ criterion.workspace = true
 default = []
 graphiql = []
 
+[[bench]]
+name = "gql_benchmarks"
+path = "benches/gql_benchmarks.rs"
+harness = false
+
 [[bin]]
 name = "oxirs-gql"
 path = "src/main.rs"

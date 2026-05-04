@@ -47,6 +47,11 @@ oxiarc-zstd.workspace = true
 # Model validation dependencies
 sha2.workspace = true
 blake3.workspace = true
+hex.workspace = true
+
+# Model zoo dependencies
+toml.workspace = true
+once_cell.workspace = true
 
 # Internal OxiRS dependencies
 oxirs-vec.workspace = true
@@ -89,6 +94,9 @@ multi-modal = []
 gpu-acceleration = ["gpu", "cuda"]
 api-server = ["dep:axum", "dep:tower", "dep:tower-http"]
 graphql = []  # GraphQL API support
+onnx-export = []   # Placeholder — no dep yet, pure-Rust ONNX writer not mature
+tf-export = []     # Placeholder — TensorFlow SavedModel export (future)
+download = []      # Placeholder — HTTP checkpoint download (future, requires network permission)
 
 # High-performance acceleration features
 gpu = ["scirs2-core/gpu", "scirs2-linalg/gpu", "scirs2-neural/gpu"]
@@ -121,3 +129,6 @@ required-features = ["gpu"]
 [[example]]
 name = "integrated_ai_platform_demo"
 required-features = ["gpu"]
+
+[[example]]
+name = "load_pretrained"

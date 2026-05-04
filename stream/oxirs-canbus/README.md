@@ -33,7 +33,7 @@ CANbus/J1939 protocol support for the OxiRS semantic web platform.
 
 ```toml
 [dependencies]
-oxirs-canbus = "0.2.3"
+oxirs-canbus = "0.3.0"
 ```
 
 **Note**: Linux only (requires socketcan kernel module).

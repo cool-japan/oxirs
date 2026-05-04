@@ -530,7 +530,7 @@ impl QueryIntelligenceEngine {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(query.trim().to_lowercase().as_bytes());
-        format!("{:x}", hasher.finalize())
+        hex::encode(hasher.finalize())
     }
 
     async fn analyze_query_complexity(&self, query: &str) -> QueryComplexity {

@@ -1,0 +1,151 @@
+# OxiRS W3C RDF 1.1 N-Quads compliance manifest
+#
+# Modelled on the W3C N-Quads Test Suite
+# (https://github.com/w3c/rdf-tests/tree/master/rdf/rdf11/rdf-n-quads). Pinned
+# reference snapshot:
+#
+#   https://github.com/w3c/rdf-tests/tree/2e2bedfe9a23c98d4a7d40e3a5d9f4f50bbf5bbf
+#
+# Reference: W3C RDF 1.1 N-Quads TR https://www.w3.org/TR/n-quads/
+
+@base         <urn:oxirs-tests:nquads/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:   <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix rdft: <http://www.w3.org/ns/rdftest#> .
+@prefix oxt:  <https://w3.org/TR/n-quads/oxirs-tests#> .
+
+oxt:manifest rdf:type mf:Manifest ;
+    rdfs:comment "OxiRS N-Quads conformance tests (modelled on W3C rdf-tests)." ;
+    mf:entries (
+        oxt:nq-pos-default
+        oxt:nq-pos-named
+        oxt:nq-pos-blank-graph
+        oxt:nq-pos-mixed
+        oxt:nq-pos-langtag
+        oxt:nq-pos-typed
+        oxt:nq-pos-utf8
+        oxt:nq-pos-blank-subject
+        oxt:nq-pos-comment
+        oxt:nq-pos-multi-graph
+        oxt:nq-pos-iri-encoded
+        oxt:nq-pos-empty-graph
+        oxt:nq-pos-many
+        oxt:nq-pos-bnode-as-graph
+        oxt:nq-pos-string-escape
+
+        oxt:nq-neg-no-dot
+        oxt:nq-neg-bad-iri
+        oxt:nq-neg-only-two
+        oxt:nq-neg-five-tokens
+        oxt:nq-neg-bad-blank
+        oxt:nq-neg-bad-langtag
+
+        oxt:nq-eval-default
+        oxt:nq-eval-named
+        oxt:nq-eval-multi-graph
+
+        oxt:nq-star-pos-subject
+        oxt:nq-star-pos-object
+        oxt:nq-star-pos-nested
+        oxt:nq-star-pos-graph
+    ) .
+
+# ============================================================================
+# Positive tests
+# ============================================================================
+oxt:nq-pos-default rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "triple in default graph"; mf:action <pos-default.nq> .
+
+oxt:nq-pos-named rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "quad with named graph"; mf:action <pos-named.nq> .
+
+oxt:nq-pos-blank-graph rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "quad with blank-node graph name"; mf:action <pos-blank-graph.nq> .
+
+oxt:nq-pos-mixed rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "default and named graphs interleaved"; mf:action <pos-mixed.nq> .
+
+oxt:nq-pos-langtag rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "language-tagged literal in named graph"; mf:action <pos-langtag.nq> .
+
+oxt:nq-pos-typed rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "typed literal in named graph"; mf:action <pos-typed.nq> .
+
+oxt:nq-pos-utf8 rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "UTF-8 literal in named graph"; mf:action <pos-utf8.nq> .
+
+oxt:nq-pos-blank-subject rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "blank-node subject in named graph"; mf:action <pos-blank-subject.nq> .
+
+oxt:nq-pos-comment rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "leading and trailing comments"; mf:action <pos-comment.nq> .
+
+oxt:nq-pos-multi-graph rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "many quads spread across multiple named graphs"; mf:action <pos-multi-graph.nq> .
+
+oxt:nq-pos-iri-encoded rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "percent-encoded IRI"; mf:action <pos-iri-encoded.nq> .
+
+oxt:nq-pos-empty-graph rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "blank lines between quads"; mf:action <pos-empty-graph.nq> .
+
+oxt:nq-pos-many rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "many simple quads"; mf:action <pos-many.nq> .
+
+oxt:nq-pos-bnode-as-graph rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "blank node used as graph name"; mf:action <pos-bnode-as-graph.nq> .
+
+oxt:nq-pos-string-escape rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "string with backslash escapes"; mf:action <pos-string-escape.nq> .
+
+# ============================================================================
+# Negative tests
+# ============================================================================
+oxt:nq-neg-no-dot rdf:type rdft:TestNQuadsNegativeSyntax ;
+    mf:name "missing terminating dot"; mf:action <neg-no-dot.nq> .
+
+oxt:nq-neg-bad-iri rdf:type rdft:TestNQuadsNegativeSyntax ;
+    mf:name "IRI without angle brackets"; mf:action <neg-bad-iri.nq> .
+
+oxt:nq-neg-only-two rdf:type rdft:TestNQuadsNegativeSyntax ;
+    mf:name "only two terms before dot"; mf:action <neg-only-two.nq> .
+
+oxt:nq-neg-five-tokens rdf:type rdft:TestNQuadsNegativeSyntax ;
+    mf:name "five terms in one quad"; mf:action <neg-five-tokens.nq> .
+
+oxt:nq-neg-bad-blank rdf:type rdft:TestNQuadsNegativeSyntax ;
+    mf:name "missing label after _:"; mf:action <neg-bad-blank.nq> .
+
+oxt:nq-neg-bad-langtag rdf:type rdft:TestNQuadsNegativeSyntax ;
+    mf:name "empty language tag is invalid"; mf:action <neg-bad-langtag.nq> .
+
+# ============================================================================
+# Evaluation tests
+# ============================================================================
+oxt:nq-eval-default rdf:type rdft:TestNQuadsEval ;
+    mf:name "round-trip default-graph triple";
+    mf:action <eval-default.nq> ; mf:result <eval-default.nq> .
+
+oxt:nq-eval-named rdf:type rdft:TestNQuadsEval ;
+    mf:name "round-trip named-graph quad";
+    mf:action <eval-named.nq> ; mf:result <eval-named.nq> .
+
+oxt:nq-eval-multi-graph rdf:type rdft:TestNQuadsEval ;
+    mf:name "round-trip across multiple graphs";
+    mf:action <eval-multi-graph.nq> ; mf:result <eval-multi-graph.nq> .
+
+# ============================================================================
+# RDF-star (RDF 1.2 / N-Quads-star)
+# ============================================================================
+oxt:nq-star-pos-subject rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "quoted triple as subject"; mf:action <star-pos-subject.nq> .
+
+oxt:nq-star-pos-object rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "quoted triple as object"; mf:action <star-pos-object.nq> .
+
+oxt:nq-star-pos-nested rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "nested quoted triple"; mf:action <star-pos-nested.nq> .
+
+oxt:nq-star-pos-graph rdf:type rdft:TestNQuadsPositiveSyntax ;
+    mf:name "quoted triple inside named graph"; mf:action <star-pos-graph.nq> .

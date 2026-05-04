@@ -1,6 +1,6 @@
 # OxiRS DID - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Status: Production Ready
 
@@ -42,11 +42,28 @@ OxiRS DID v0.2.3 provides W3C Decentralized Identifiers (DID) and Verifiable Cre
 - ✅ 1043 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] W3C test suite compliance
-- [ ] Long-term support guarantees
-- [ ] Enterprise security features
-- [ ] Hardware Security Module (HSM) support
-- [ ] ZKP-based selective disclosure
+- [x] W3C test suite compliance (planned 2026-04-17)
+  - **Goal:** Build automated W3C DID test suite runner using official test vectors covering all MUST/SHOULD assertions; add JWT-VC and SD-JWT credential format support for W3C alignment
+  - **Design:** Embed official W3C DID Core 1.0 and VC Data Model 2.0 test vectors as static JSON/CBOR; automated assertion runner validates all MUST requirements; compliance matrix report; JWT-VC encoding/decoding; SD-JWT (Selective Disclosure JWT) implementation per IETF draft
+  - **Files:** tests/w3c_compliance.rs (new), src/vc/jwt_vc.rs (new), src/vc/sd_jwt.rs (new)
+  - **Tests:** All W3C DID Core MUST assertions; VC Data Model 2.0 test vectors; JWT-VC round-trip; SD-JWT disclosure correctness
+  - **Risk:** W3C test suite coverage may reveal undiscovered compliance gaps; treat as bug-discovery phase
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [~] Enterprise security features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Hardware Security Module (HSM) support (planned 2026-04-17)
+  - **Goal:** Replace mock KMS backends with real PKCS#11, AWS KMS, GCP Cloud KMS, and Azure Key Vault implementations behind feature gates; add cryptographic operation audit logging
+  - **Design:** PKCS#11 via pkcs11 crate (pure Rust FFI); Pkcs11Signer implementing DIDSigner trait; supports YubiHSM, Thales, SoftHSM2; AwsKmsSigner via aws-sdk-kms; GcpKmsSigner via google-cloud-kms; AzureKvSigner via azure_security_keyvault; all behind feature = ["hsm", "aws-kms", "gcp-kms", "azure-kms"]; AuditLog appends every sign/verify with timestamp, key_id, operation type
+  - **Files:** src/kms/pkcs11.rs (new), src/kms/aws.rs, src/kms/gcp.rs, src/kms/azure.rs, src/kms/audit.rs (new), Cargo.toml
+  - **Prerequisites:** pkcs11 crate (feature-gated), aws-sdk-kms (feature-gated), google-cloud-kms (feature-gated), azure_security_keyvault (feature-gated)
+  - **Tests:** SoftHSM2 PKCS#11 integration test (feature-gated); audit log completeness; mock provider still used for default unit tests
+  - **Risk:** PKCS#11 C FFI requires SoftHSM2 on CI; keep all HSM tests behind feature flags
+- [x] ZKP-based selective disclosure (planned 2026-04-17)
+  - **Goal:** Harden ZKP selective disclosure by replacing hash-based Pedersen commitments with proper prime-order group commitments over curve25519; verify cryptographic soundness (binding + hiding properties)
+  - **Design:** Replace SHA-256(domain || G || m || H || r) with proper Pedersen commitment over Ristretto255 group using curve25519-dalek; Fiat-Shamir transcript via merlin crate; ensure commitment binding and hiding; BBS+ selective disclosure soundness property tests; document migration path from old commitment scheme
+  - **Files:** src/zkp/pedersen.rs, src/zkp/selective_disclosure.rs
+  - **Prerequisites:** curve25519-dalek (latest), merlin (latest)
+  - **Tests:** Pedersen binding soundness (adversary cannot open commitment to different value); hiding property (indistinguishability); selective disclosure round-trip; BBS+ unlinkability test
+  - **Risk:** Breaking change to commitment scheme; provide migration utility and document in changelog
 
 ## Contributing
 

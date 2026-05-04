@@ -197,6 +197,25 @@ impl TurtleParser {
                 self.expect_token(tokenizer, TokenKind::Dot)?;
                 Ok(Some(TurtleStatement::BaseDecl(iri)))
             }
+            TokenKind::SparqlPrefixKeyword => {
+                // SPARQL-style `PREFIX` (no terminating `.`) per Turtle 1.1
+                // grammar rule [4s] sparqlPrefix.
+                let _ = tokenizer.consume_token();
+                let prefix = self.parse_prefix_name(tokenizer)?;
+                let (next_token, _) = tokenizer.peek_token()?;
+                if matches!(next_token.kind, TokenKind::Colon) {
+                    let _ = tokenizer.consume_token();
+                }
+                let iri = self.parse_iri_ref(tokenizer, context)?;
+                Ok(Some(TurtleStatement::PrefixDecl(prefix, iri)))
+            }
+            TokenKind::SparqlBaseKeyword => {
+                // SPARQL-style `BASE` (no terminating `.`) per Turtle 1.1
+                // grammar rule [5s] sparqlBase.
+                let _ = tokenizer.consume_token();
+                let iri = self.parse_iri_ref(tokenizer, context)?;
+                Ok(Some(TurtleStatement::BaseDecl(iri)))
+            }
             _ => {
                 // Parse triple(s) - may return multiple triples due to semicolon/comma syntax
                 let triples = self.parse_triple(tokenizer, context)?;
@@ -714,22 +733,45 @@ impl TurtleParser {
         }
     }
 
-    /// Parse a prefix name (the part after @prefix)
+    /// Parse a prefix name (the part after `@prefix` / `PREFIX`).
+    ///
+    /// Per the W3C Turtle 1.1 grammar (`prefixID ::= '@prefix' PNAME_NS IRIREF '.'`,
+    /// `PNAME_NS ::= PN_PREFIX? ':'`), the colon is REQUIRED. We accept three
+    /// shapes from the tokenizer:
+    ///
+    /// - `Colon` — empty prefix, the colon is consumed by the caller.
+    /// - `PrefixedName(prefix, "")` — the tokenizer fused `prefix:` into one
+    ///   token; the colon is already consumed.
+    /// - `PrefixName(name)` followed by `Colon` — separate tokens; we consume
+    ///   both here. Without the trailing colon this is a syntax error.
     fn parse_prefix_name(&self, tokenizer: &mut TurtleTokenizer) -> TurtleResult<String> {
         let (token, _) = tokenizer.peek_token()?;
 
         match &token.kind {
             TokenKind::Colon => {
-                // Empty prefix case: @prefix : <...>
-                // Don't consume the colon here - it will be consumed by the caller
+                // Empty prefix case: `@prefix : <...>`. Caller consumes the colon.
                 Ok(String::new())
             }
             TokenKind::PrefixName(name) => {
+                let position = token.position;
+                let prefix = name.clone();
                 let _ = tokenizer.consume_token();
-                Ok(name.clone())
+                // The colon is mandatory immediately after the prefix name.
+                let (next, _) = tokenizer.peek_token()?;
+                if matches!(next.kind, TokenKind::Colon) {
+                    let _ = tokenizer.consume_token();
+                    Ok(prefix)
+                } else {
+                    Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                        message: "Prefix declaration is missing required ':' after the prefix name"
+                            .to_string(),
+                        position,
+                    }))
+                }
             }
             TokenKind::PrefixedName(prefix, local) if local.is_empty() => {
-                // Handle case where "prefix:" is parsed as PrefixedName but we only want the prefix part
+                // The tokenizer already consumed the trailing colon as part of
+                // `prefix:` — return the prefix and let the caller continue.
                 let _ = tokenizer.consume_token();
                 Ok(prefix.clone())
             }

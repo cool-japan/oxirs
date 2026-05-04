@@ -38,8 +38,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-shacl = "0.2.3"
-oxirs-core = "0.2.3"
+oxirs-shacl = "0.3.0"
+oxirs-core = "0.3.0"
 ```
 
 ### Basic Usage

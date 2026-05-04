@@ -9,8 +9,10 @@
 pub mod checkers;
 
 pub use checkers::{
-    ConservationReport, ConservationSuite, ConservationViolationDetail, EnergyConservationChecker,
-    MassConservationChecker, MomentumConservationChecker, ViolationSeverity,
+    AngularMomentumChecker, ConservationReport, ConservationSuite, ConservationViolationDetail,
+    EnergyConservationChecker, EntropyConservationChecker, MassConservationChecker,
+    MomentumConservationChecker, NoetherCheckResult, NoetherSymmetryValidator, PhysicalSymmetry,
+    ViolationSeverity,
 };
 
 use crate::error::{PhysicsError, PhysicsResult};

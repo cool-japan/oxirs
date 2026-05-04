@@ -1,0 +1,316 @@
+# OxiRS W3C RDF 1.1 Turtle compliance manifest
+#
+# This manifest mirrors the structure of the official W3C RDF Test Suite
+# (https://github.com/w3c/rdf-tests/tree/master/rdf/rdf11/rdf-turtle), but is
+# hand-curated rather than vendored. It exercises the same conformance
+# categories (positive syntax, negative syntax, evaluation, including RDF-star
+# extensions where applicable) as the upstream suite. The reference snapshot
+# of the W3C corpus this corpus is modelled on is:
+#
+#   https://github.com/w3c/rdf-tests/tree/2e2bedfe9a23c98d4a7d40e3a5d9f4f50bbf5bbf
+#
+# Reference: W3C RDF 1.1 Turtle TR https://www.w3.org/TR/turtle/
+# RDF-star CG: https://www.w3.org/2021/12/rdf-star.html
+
+@base         <urn:oxirs-tests:turtle/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix mf:   <http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#> .
+@prefix rdft: <http://www.w3.org/ns/rdftest#> .
+@prefix oxt:  <https://w3.org/TR/turtle/oxirs-tests#> .
+
+oxt:manifest rdf:type mf:Manifest ;
+    rdfs:comment "OxiRS Turtle conformance tests (modelled on W3C rdf-tests)." ;
+    mf:entries (
+        oxt:turtle-syntax-bnode-01
+        oxt:turtle-syntax-bnode-02
+        oxt:turtle-syntax-bnode-03
+        oxt:turtle-syntax-bnode-04
+        oxt:turtle-syntax-bnode-list
+        oxt:turtle-syntax-base-01
+        oxt:turtle-syntax-base-02
+        oxt:turtle-syntax-prefix-01
+        oxt:turtle-syntax-prefix-02
+        oxt:turtle-syntax-prefix-03
+        oxt:turtle-syntax-prefix-empty
+        oxt:turtle-syntax-pname-esc-01
+        oxt:turtle-syntax-string-01
+        oxt:turtle-syntax-string-02
+        oxt:turtle-syntax-string-multiline
+        oxt:turtle-syntax-string-escape
+        oxt:turtle-syntax-string-langtag
+        oxt:turtle-syntax-string-typed
+        oxt:turtle-syntax-string-utf8
+        oxt:turtle-syntax-uri-01
+        oxt:turtle-syntax-uri-relative
+        oxt:turtle-syntax-uri-resolve
+        oxt:turtle-syntax-number-int
+        oxt:turtle-syntax-number-decimal
+        oxt:turtle-syntax-number-double
+        oxt:turtle-syntax-number-negative
+        oxt:turtle-syntax-bool
+        oxt:turtle-syntax-objlist
+        oxt:turtle-syntax-predobjlist
+        oxt:turtle-syntax-collection-empty
+        oxt:turtle-syntax-collection-1
+        oxt:turtle-syntax-collection-nested
+        oxt:turtle-syntax-rdftype-shorthand
+        oxt:turtle-syntax-comments
+        oxt:turtle-syntax-multiple-statements
+
+        oxt:turtle-syntax-bad-iri-1
+        oxt:turtle-syntax-bad-iri-2
+        oxt:turtle-syntax-bad-string-1
+        oxt:turtle-syntax-bad-string-2
+        oxt:turtle-syntax-bad-prefix-1
+        oxt:turtle-syntax-bad-undefined-prefix
+        oxt:turtle-syntax-bad-missing-dot
+        oxt:turtle-syntax-bad-missing-quote
+        oxt:turtle-syntax-bad-bracket
+        oxt:turtle-syntax-bad-trailing-comma
+
+        oxt:turtle-eval-simple
+        oxt:turtle-eval-prefix
+        oxt:turtle-eval-typed
+        oxt:turtle-eval-langtag
+        oxt:turtle-eval-objlist
+        oxt:turtle-eval-rdftype
+
+        oxt:turtle-star-syntax-subject
+        oxt:turtle-star-syntax-object
+        oxt:turtle-star-syntax-nested
+    ) .
+
+# ============================================================================
+# Positive syntax tests
+# ============================================================================
+oxt:turtle-syntax-bnode-01 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "anonymous blank node []" ;
+    mf:action <syntax-bnode-01.ttl> .
+
+oxt:turtle-syntax-bnode-02 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "labeled blank node _:b" ;
+    mf:action <syntax-bnode-02.ttl> .
+
+oxt:turtle-syntax-bnode-03 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "blank node property list" ;
+    mf:action <syntax-bnode-03.ttl> .
+
+oxt:turtle-syntax-bnode-04 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "blank node as object" ;
+    mf:action <syntax-bnode-04.ttl> .
+
+oxt:turtle-syntax-bnode-list rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "RDF list with blank-node head" ;
+    mf:action <syntax-bnode-list.ttl> .
+
+oxt:turtle-syntax-base-01 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "@base directive" ;
+    mf:action <syntax-base-01.ttl> .
+
+oxt:turtle-syntax-base-02 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "BASE directive (SPARQL-style)" ;
+    mf:action <syntax-base-02.ttl> .
+
+oxt:turtle-syntax-prefix-01 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "@prefix directive" ;
+    mf:action <syntax-prefix-01.ttl> .
+
+oxt:turtle-syntax-prefix-02 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "PREFIX directive (SPARQL-style)" ;
+    mf:action <syntax-prefix-02.ttl> .
+
+oxt:turtle-syntax-prefix-03 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "two prefix declarations on the same prefix override" ;
+    mf:action <syntax-prefix-03.ttl> .
+
+oxt:turtle-syntax-prefix-empty rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "empty prefix declaration" ;
+    mf:action <syntax-prefix-empty.ttl> .
+
+oxt:turtle-syntax-pname-esc-01 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "PN_LOCAL with reserved-character escapes" ;
+    mf:action <syntax-pname-esc-01.ttl> .
+
+oxt:turtle-syntax-string-01 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "simple double-quoted string" ;
+    mf:action <syntax-string-01.ttl> .
+
+oxt:turtle-syntax-string-02 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "simple single-quoted string" ;
+    mf:action <syntax-string-02.ttl> .
+
+oxt:turtle-syntax-string-multiline rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "triple-quoted multi-line string" ;
+    mf:action <syntax-string-multiline.ttl> .
+
+oxt:turtle-syntax-string-escape rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "backslash escapes inside string literals" ;
+    mf:action <syntax-string-escape.ttl> .
+
+oxt:turtle-syntax-string-langtag rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "language-tagged string literal" ;
+    mf:action <syntax-string-langtag.ttl> .
+
+oxt:turtle-syntax-string-typed rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "typed literal with explicit XSD datatype" ;
+    mf:action <syntax-string-typed.ttl> .
+
+oxt:turtle-syntax-string-utf8 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "UTF-8 string literal" ;
+    mf:action <syntax-string-utf8.ttl> .
+
+oxt:turtle-syntax-uri-01 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "absolute IRI" ;
+    mf:action <syntax-uri-01.ttl> .
+
+oxt:turtle-syntax-uri-relative rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "relative IRI resolved against @base" ;
+    mf:action <syntax-uri-relative.ttl> .
+
+oxt:turtle-syntax-uri-resolve rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "fragment relative IRI resolution" ;
+    mf:action <syntax-uri-resolve.ttl> .
+
+oxt:turtle-syntax-number-int rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "integer literal" ;
+    mf:action <syntax-number-int.ttl> .
+
+oxt:turtle-syntax-number-decimal rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "decimal literal" ;
+    mf:action <syntax-number-decimal.ttl> .
+
+oxt:turtle-syntax-number-double rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "double / scientific literal" ;
+    mf:action <syntax-number-double.ttl> .
+
+oxt:turtle-syntax-number-negative rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "negative numeric literal" ;
+    mf:action <syntax-number-negative.ttl> .
+
+oxt:turtle-syntax-bool rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "boolean literal" ;
+    mf:action <syntax-bool.ttl> .
+
+oxt:turtle-syntax-objlist rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "object list with comma" ;
+    mf:action <syntax-objlist.ttl> .
+
+oxt:turtle-syntax-predobjlist rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "predicate-object list with semicolon" ;
+    mf:action <syntax-predobjlist.ttl> .
+
+oxt:turtle-syntax-collection-empty rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "empty RDF collection ()" ;
+    mf:action <syntax-collection-empty.ttl> .
+
+oxt:turtle-syntax-collection-1 rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "RDF collection with three integers" ;
+    mf:action <syntax-collection-1.ttl> .
+
+oxt:turtle-syntax-collection-nested rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "nested RDF collection" ;
+    mf:action <syntax-collection-nested.ttl> .
+
+oxt:turtle-syntax-rdftype-shorthand rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "'a' as shorthand for rdf:type" ;
+    mf:action <syntax-rdftype-shorthand.ttl> .
+
+oxt:turtle-syntax-comments rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "single-line and trailing comments" ;
+    mf:action <syntax-comments.ttl> .
+
+oxt:turtle-syntax-multiple-statements rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "multiple statements / mixed forms" ;
+    mf:action <syntax-multiple-statements.ttl> .
+
+# ============================================================================
+# Negative syntax tests
+# ============================================================================
+oxt:turtle-syntax-bad-iri-1 rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "missing closing '>' in IRI" ;
+    mf:action <bad-iri-1.ttl> .
+
+oxt:turtle-syntax-bad-iri-2 rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "IRI with disallowed whitespace" ;
+    mf:action <bad-iri-2.ttl> .
+
+oxt:turtle-syntax-bad-string-1 rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "unterminated string literal" ;
+    mf:action <bad-string-1.ttl> .
+
+oxt:turtle-syntax-bad-string-2 rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "bad escape inside literal" ;
+    mf:action <bad-string-2.ttl> .
+
+oxt:turtle-syntax-bad-prefix-1 rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "missing colon in prefix declaration" ;
+    mf:action <bad-prefix-1.ttl> .
+
+oxt:turtle-syntax-bad-undefined-prefix rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "use of undefined prefix" ;
+    mf:action <bad-undefined-prefix.ttl> .
+
+oxt:turtle-syntax-bad-missing-dot rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "missing terminating dot" ;
+    mf:action <bad-missing-dot.ttl> .
+
+oxt:turtle-syntax-bad-missing-quote rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "missing closing quote" ;
+    mf:action <bad-missing-quote.ttl> .
+
+oxt:turtle-syntax-bad-bracket rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "mismatched square brackets" ;
+    mf:action <bad-bracket.ttl> .
+
+oxt:turtle-syntax-bad-trailing-comma rdf:type rdft:TestTurtleNegativeSyntax ;
+    mf:name "trailing comma without object" ;
+    mf:action <bad-trailing-comma.ttl> .
+
+# ============================================================================
+# Evaluation tests (parse Turtle, compare result to expected N-Triples)
+# ============================================================================
+oxt:turtle-eval-simple rdf:type rdft:TestTurtleEval ;
+    mf:name "simple triple parses to one n-triple" ;
+    mf:action <eval-simple.ttl> ;
+    mf:result <eval-simple.nt> .
+
+oxt:turtle-eval-prefix rdf:type rdft:TestTurtleEval ;
+    mf:name "prefix expansion to absolute IRIs" ;
+    mf:action <eval-prefix.ttl> ;
+    mf:result <eval-prefix.nt> .
+
+oxt:turtle-eval-typed rdf:type rdft:TestTurtleEval ;
+    mf:name "typed literal preserves datatype" ;
+    mf:action <eval-typed.ttl> ;
+    mf:result <eval-typed.nt> .
+
+oxt:turtle-eval-langtag rdf:type rdft:TestTurtleEval ;
+    mf:name "language tag is preserved" ;
+    mf:action <eval-langtag.ttl> ;
+    mf:result <eval-langtag.nt> .
+
+oxt:turtle-eval-objlist rdf:type rdft:TestTurtleEval ;
+    mf:name "object list expands to multiple triples" ;
+    mf:action <eval-objlist.ttl> ;
+    mf:result <eval-objlist.nt> .
+
+oxt:turtle-eval-rdftype rdf:type rdft:TestTurtleEval ;
+    mf:name "'a' shorthand expands to rdf:type" ;
+    mf:action <eval-rdftype.ttl> ;
+    mf:result <eval-rdftype.nt> .
+
+# ============================================================================
+# RDF-star (RDF 1.2) extensions
+# ============================================================================
+oxt:turtle-star-syntax-subject rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "quoted triple as subject" ;
+    mf:action <star-syntax-subject.ttl> .
+
+oxt:turtle-star-syntax-object rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "quoted triple as object" ;
+    mf:action <star-syntax-object.ttl> .
+
+oxt:turtle-star-syntax-nested rdf:type rdft:TestTurtlePositiveSyntax ;
+    mf:name "nested quoted triple" ;
+    mf:action <star-syntax-nested.ttl> .

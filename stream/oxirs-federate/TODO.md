@@ -1,6 +1,6 @@
 # OxiRS Federate - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Current Status
 
@@ -39,10 +39,13 @@ OxiRS Federate v0.2.3 is production-ready, providing SPARQL federation with adva
 - ✅ 1397 tests passing
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] Long-term support guarantees
-- [ ] Enterprise support features
-- [ ] Complete federation framework
-- [ ] Comprehensive benchmarks
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [~] Enterprise support features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Complete federation framework (completed 2026-04-30)
+  - **Goal:** Close all gaps in the federation orchestrator so SPARQL 1.1 SERVICE is fully spec-compliant + cost-driven across all federation patterns.
+  - **Delivered:** Algebra-level optimizer (`src/optimizer/`) with `filter_pushdown`, `service_merge`, `join_decomposer` passes plus a composable `OptimizerPipeline` (default order: pushdown → merge → pushdown → reorder).  `FederationCostModel` (in `src/cost_model.rs`) wraps `oxirs_arq::cost_model::CostModel` for local CPU/IO/memory cost and combines it with per-endpoint network transfer cost.  `EndpointCache` (`src/cache/endpoint_cache.rs`) provides a TTL-bounded, LRU-evicting per-endpoint subresult cache with optional per-endpoint TTL overrides.
+  - **Tests:** 39 hand-crafted SPARQL 1.1 Federation spec scenarios in `tests/sparql_federation_spec.rs` covering SERVICE clause forms (named / variable / SILENT), filter pushdown, adjacent service merge, join reordering by selectivity, UNION/OPTIONAL/MINUS preservation, capability-negotiation hooks, and cost-comparison invariants.  All 39 pass (100 %, > 95 % target).  Plus 39 unit tests across the new optimizer/cache/cost_model modules.
+- [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing
 

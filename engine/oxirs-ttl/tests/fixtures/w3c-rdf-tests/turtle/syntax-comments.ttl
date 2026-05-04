@@ -1,0 +1,6 @@
+# single-line and trailing comments
+@prefix ex: <http://example.org/> .
+
+# leading comment
+ex:s ex:p ex:o . # trailing comment
+# trailing comment block

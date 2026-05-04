@@ -1,0 +1,20 @@
+description = "tdb-query rejects an unsupported --results format"
+classification = "spec-required"
+setup = [
+    ["--quiet", "init", "ds", "--format", "tdb2", "--location", "${TMPDIR}/ds"],
+]
+argv = [
+    "--quiet",
+    "tdb-query",
+    "${TMPDIR}/ds",
+    "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+    "--results",
+    "yaml",
+]
+exit_code = 1
+
+[stderr]
+mode = "contains"
+expected = """
+Unsupported results format
+"""

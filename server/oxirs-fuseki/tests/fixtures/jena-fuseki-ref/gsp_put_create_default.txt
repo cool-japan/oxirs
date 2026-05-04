@@ -1,0 +1,15 @@
+# PUT to default graph creates content
+endpoint: gsp_put
+classification: spec-required
+match_mode: status-only
+description: PUT /data?default with Turtle returns 204 (Jena Fuseki default for graph replace)
+
+=== request
+PUT /data?default
+Content-Type: text/turtle
+
+<http://example.org/a> <http://example.org/p> "v" .
+
+=== response
+204
+

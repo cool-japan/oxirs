@@ -269,7 +269,21 @@ impl TurtleSerializer {
             output.push_str(&format!(" ;\n  samm:dataType <{}>", data_type));
         }
 
+        // Emit samm-c:left / samm-c:right predicates for Either
+        if let CharacteristicKind::Either { left, right } = &characteristic.kind {
+            output.push_str(&format!(" ;\n  samm-c:left <{}>", left.urn()));
+            output.push_str(&format!(" ;\n  samm-c:right <{}>", right.urn()));
+        }
+
         output.push_str(" .\n");
+
+        // Recursively serialize nested Either branches as standalone definitions
+        if let CharacteristicKind::Either { left, right } = &characteristic.kind {
+            output.push('\n');
+            output.push_str(&self.serialize_characteristic(left)?);
+            output.push_str(&self.serialize_characteristic(right)?);
+        }
+
         Ok(output)
     }
 

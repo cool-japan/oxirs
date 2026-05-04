@@ -1,0 +1,13 @@
+# $/ping endpoint
+endpoint: admin_ping
+classification: spec-required
+match_mode: status-only
+description: GET /$/ping returns 200 + text/plain
+
+=== request
+GET /$/ping
+
+=== response
+200
+Content-Type: text/plain
+

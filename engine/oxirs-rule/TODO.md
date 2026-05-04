@@ -1,6 +1,6 @@
 # OxiRS Rule - TODO
 
-*Version: 0.2.3 | Last Updated: 2026-03-16*
+*Version: 0.3.0 | Last Updated: May 3, 2026*
 
 ## Current Status
 
@@ -32,10 +32,15 @@ OxiRS Rule v0.2.3 is production-ready, providing rule-based reasoning with RDFS/
 - ✅ Production monitoring
 
 ### v0.3.0 - Planned (Q2 2026)
-- [ ] Complete reasoning engine
-- [ ] Long-term support guarantees
-- [ ] Enterprise features
-- [ ] Comprehensive benchmarks
+- [x] Complete reasoning engine (completed 2026-04-30)
+  - **Goal:** Audit existing reasoning against OWL 2 RL profile (already shipped) and add EL and QL profile coverage; close any RL gaps; add a combined RL+EL closure mode for hybrid TBoxes; add conformance suite runner.
+  - **Design:** Add `OwlProfile` enum: `RL | EL | QL | RLEL | DL`. EL reasoner: standard CEL algorithm (completion-based) producing classified taxonomy. QL reasoner: rewrite queries to UCQs per W3C QL semantics. EL fragment: intersection, existential restrictions, role chains/hierarchies, transitive/reflexive roles. QL fragment: inverse properties, role hierarchies, intersection. Closures via fixed-point loop with semi-naive evaluation. Conformance suite runner against W3C OWL 2 test cases.
+  - **Files:** `src/owl2/{el_reasoner,ql_reasoner,rlel_combined}.rs` (new), `src/owl2/profile.rs` (new — OwlProfile enum), `src/owl2/mod.rs` (extend dispatcher), `src/owl_dl/` (existing, unchanged), `tests/owl2_conformance.rs` (new)
+  - **Tests:** unit on classic taxonomies (Pizza ontology subsets), EL CEL completeness against pellet reference, QL UCQ rewriting correctness; integration W3C OWL 2 conformance test suite — pass_rate >= 0.95 per profile (RL: 1.0, EL: ≥0.95, QL: ≥0.95)
+  - **Risk:** EL/QL closure can blow up on complex ontologies. Mitigation: semi-naive evaluation + bounded queue + warning when fixed-point exceeds 30s.
+- [~] Long-term support guarantees (policy: docs/policies/lts.md)
+- [~] Enterprise features (policy: docs/policies/enterprise.md, decomposed items listed therein)
+- [x] Comprehensive benchmarks (completed 2026-04-29)
 
 ## Contributing
 

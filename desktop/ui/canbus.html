@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OxiRS CAN Bus Monitor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  .top-bar { display: flex; gap: 12px; padding: 10px 16px; background: #16213e; border-bottom: 1px solid #0f3460; align-items: center; }
+  .top-bar h2 { font-size: 1em; color: #e94560; flex: 1; }
+  .stat-chip { background: #0f3460; border-radius: 6px; padding: 5px 12px; font-size: 0.82em; white-space: nowrap; }
+  .stat-chip span { color: #e94560; font-weight: bold; margin-left: 4px; }
+  .load-bar-wrap { width: 80px; height: 8px; background: #091a3a; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 6px; }
+  .load-bar { height: 100%; background: #e94560; border-radius: 4px; transition: width 0.5s; }
+  .toolbar { display: flex; gap: 8px; padding: 8px 16px; background: #16213e; border-bottom: 1px solid #0f3460; align-items: center; flex-wrap: wrap; }
+  .toolbar label { font-size: 0.82em; color: #8a8a9a; }
+  .toolbar input { background: #1a1a2e; border: 1px solid #0f3460; color: #e0e0e0; padding: 6px 10px; border-radius: 6px; font-size: 0.85em; width: 130px; }
+  .toolbar input:focus { outline: 1px solid #e94560; }
+  .toolbar button { padding: 6px 14px; background: #0f3460; border: 1px solid #e94560; border-radius: 6px; color: #e0e0e0; cursor: pointer; font-size: 0.85em; transition: background 0.15s; }
+  .toolbar button:hover { background: #e94560; }
+  .toolbar button.active { background: #e94560; }
+  .content { display: flex; flex: 1; overflow: hidden; }
+  .frame-table-wrap { flex: 1; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82em; }
+  th { position: sticky; top: 0; background: #16213e; padding: 8px 10px; text-align: left; color: #8a8a9a; font-weight: 600; border-bottom: 1px solid #0f3460; }
+  td { padding: 7px 10px; border-bottom: 1px solid #0f3460; font-family: monospace; }
+  tr { cursor: pointer; }
+  tr:hover td { background: #0f3460; }
+  tr.selected td { background: #16213e; border-left: 3px solid #e94560; }
+  .pgn-tag { background: #0f3460; border-radius: 4px; padding: 2px 6px; font-size: 0.8em; color: #e94560; }
+  .side-panel { width: 310px; background: #16213e; border-left: 1px solid #0f3460; display: flex; flex-direction: column; overflow: hidden; }
+  .side-panel h3 { padding: 12px 14px; font-size: 0.9em; color: #e94560; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
+  .signal-scroll { flex: 1; overflow-y: auto; }
+  .signal-item { padding: 10px 14px; border-bottom: 1px solid #0f3460; }
+  .signal-item .spn-label { font-size: 0.75em; color: #4a5a7a; margin-bottom: 2px; }
+  .signal-item .sig-name { font-size: 0.85em; color: #8a8a9a; }
+  .signal-item .sig-value { font-size: 1.1em; font-weight: bold; color: #e0e0e0; margin-top: 2px; }
+  .signal-item .sig-raw { font-size: 0.75em; color: #4a5a7a; margin-top: 2px; }
+  .no-selection { padding: 16px; color: #8a8a9a; font-size: 0.85em; }
+  .pgn-info { padding: 10px 14px; font-size: 0.82em; color: #8a8a9a; border-top: 1px solid #0f3460; flex-shrink: 0; word-break: break-word; }
+  .status-bar { padding: 4px 16px; background: #0f3460; font-size: 0.75em; color: #8a8a9a; flex-shrink: 0; }
+  .err-msg { color: #e94560; }
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; width: 640px; max-height: 80vh; display: flex; flex-direction: column; }
+  .modal-header { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid #0f3460; }
+  .modal-header h3 { flex: 1; color: #e94560; font-size: 0.95em; }
+  .modal-header button { background: none; border: none; color: #e0e0e0; cursor: pointer; font-size: 1.2em; }
+  .modal-body { overflow-y: auto; }
+  .modal table { font-size: 0.82em; }
+  .modal th { background: #0f3460; }
+  .modal td { font-family: monospace; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h2>J1939 CAN Bus Monitor</h2>
+  <div class="stat-chip">Frames: <span id="stat-frames">&#x2014;</span></div>
+  <div class="stat-chip">Errors: <span id="stat-errors">&#x2014;</span></div>
+  <div class="stat-chip">FPS: <span id="stat-fps">&#x2014;</span></div>
+  <div class="stat-chip">
+    Load: <span id="stat-load">&#x2014;</span>
+    <div class="load-bar-wrap"><div class="load-bar" id="load-bar" style="width:0%"></div></div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <label>PGN <input id="filter-pgn" type="number" min="0" placeholder="any"></label>
+  <label>SA (hex) <input id="filter-sa" type="text" maxlength="4" placeholder="any"></label>
+  <label>Min &#xb5;s <input id="filter-ts" type="number" min="0" placeholder="0"></label>
+  <button id="refresh-btn">Refresh</button>
+  <button id="clear-btn">Clear</button>
+  <button id="pgn-db-btn">PGN Database</button>
+  <button id="auto-btn" class="active">Auto ON</button>
+</div>
+
+<div class="content">
+  <div class="frame-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Time (&#xb5;s)</th>
+          <th>PGN</th>
+          <th>SA</th>
+          <th>DA</th>
+          <th>Len</th>
+          <th>Data (hex)</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody id="frame-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="side-panel">
+    <h3>Decoded Signals</h3>
+    <div class="signal-scroll" id="signal-container">
+      <div class="no-selection">Select a frame to see decoded signals.</div>
+    </div>
+    <div class="pgn-info" id="pgn-info"></div>
+  </div>
+</div>
+
+<div class="status-bar" id="status-bar">Ready.</div>
+
+<div class="modal-backdrop" id="pgn-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>J1939 PGN Database</h3>
+      <button id="modal-close">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <table>
+        <thead><tr><th>PGN</th><th>Acronym</th><th>Description</th></tr></thead>
+        <tbody id="pgn-db-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+const { invoke } = window.__TAURI__.core;
+
+let frames = [];
+let selectedId = null;
+let autoRefresh = true;
+let pollTimer = null;
+
+function buildFilter() {
+  const pgnRaw = document.getElementById('filter-pgn').value.trim();
+  const saRaw = document.getElementById('filter-sa').value.trim();
+  const tsRaw = document.getElementById('filter-ts').value.trim();
+  const f = {};
+  if (pgnRaw !== '') f.pgn = parseInt(pgnRaw, 10);
+  if (saRaw !== '') f.sa = parseInt(saRaw, 16);
+  if (tsRaw !== '') f.min_timestamp_us = parseInt(tsRaw, 10);
+  return Object.keys(f).length > 0 ? f : null;
+}
+
+async function refresh() {
+  try {
+    const filter = buildFilter();
+    frames = await invoke('get_frames', { filter, limit: 200 });
+    renderTable();
+    setStatus('Loaded ' + frames.length + ' frame(s).');
+  } catch (e) {
+    setStatus('Error: ' + e, true);
+  }
+  try {
+    const stats = await invoke('get_bus_stats');
+    renderStats(stats);
+  } catch (_) { /* stats are non-critical */ }
+}
+
+function renderStats(stats) {
+  document.getElementById('stat-frames').textContent = stats.frame_count.toLocaleString();
+  document.getElementById('stat-errors').textContent = stats.error_count.toLocaleString();
+  document.getElementById('stat-fps').textContent = stats.frames_per_sec.toFixed(1);
+  const pct = Math.min(100, Math.max(0, stats.bus_load_pct));
+  document.getElementById('stat-load').textContent = pct.toFixed(1) + '%';
+  document.getElementById('load-bar').style.width = pct + '%';
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderTable() {
+  const tbody = document.getElementById('frame-tbody');
+  tbody.innerHTML = '';
+  for (const f of frames) {
+    const tr = document.createElement('tr');
+    if (f.id === selectedId) tr.className = 'selected';
+    const daCell = f.da != null
+      ? '0x' + f.da.toString(16).toUpperCase().padStart(2, '0')
+      : '&mdash;';
+    tr.innerHTML =
+      '<td>' + f.timestamp_us.toLocaleString() + '</td>' +
+      '<td><span class="pgn-tag">' + f.pgn + '</span></td>' +
+      '<td>0x' + f.sa.toString(16).toUpperCase().padStart(2, '0') + '</td>' +
+      '<td>' + daCell + '</td>' +
+      '<td>' + f.length + '</td>' +
+      '<td>' + escHtml(f.data_hex) + '</td>' +
+      '<td>' + escHtml(f.pgn_name) + '</td>';
+    tr.addEventListener('click', () => selectFrame(f));
+    tbody.appendChild(tr);
+  }
+}
+
+function selectFrame(f) {
+  selectedId = f.id;
+  renderTable();
+  const container = document.getElementById('signal-container');
+  if (!f.decoded_signals || f.decoded_signals.length === 0) {
+    container.innerHTML = '<div class="no-selection">No decoded signals for this frame.</div>';
+  } else {
+    container.innerHTML = f.decoded_signals.map(function(s) {
+      return '<div class="signal-item">' +
+        '<div class="spn-label">SPN ' + s.spn + '</div>' +
+        '<div class="sig-name">' + escHtml(s.name) + '</div>' +
+        '<div class="sig-value">' + s.value + ' <small>' + escHtml(s.unit) + '</small></div>' +
+        '<div class="sig-raw">raw: 0x' + s.raw.toString(16).toUpperCase() + ' (' + s.raw + ')</div>' +
+        '</div>';
+    }).join('');
+  }
+  document.getElementById('pgn-info').textContent = 'PGN ' + f.pgn + ' — ' + f.pgn_name;
+}
+
+function setStatus(msg, isError) {
+  const bar = document.getElementById('status-bar');
+  bar.textContent = msg;
+  bar.className = isError ? 'status-bar err-msg' : 'status-bar';
+}
+
+document.getElementById('refresh-btn').addEventListener('click', refresh);
+
+document.getElementById('clear-btn').addEventListener('click', function() {
+  invoke('clear_frames').then(function() {
+    frames = [];
+    selectedId = null;
+    renderTable();
+    document.getElementById('signal-container').innerHTML =
+      '<div class="no-selection">Select a frame to see decoded signals.</div>';
+    document.getElementById('pgn-info').textContent = '';
+    setStatus('Frame buffer cleared.');
+  }).catch(function(e) {
+    setStatus('Clear failed: ' + e, true);
+  });
+});
+
+document.getElementById('auto-btn').addEventListener('click', function() {
+  autoRefresh = !autoRefresh;
+  const btn = document.getElementById('auto-btn');
+  btn.textContent = autoRefresh ? 'Auto ON' : 'Auto OFF';
+  if (autoRefresh) {
+    btn.classList.add('active');
+    schedulePoll();
+  } else {
+    btn.classList.remove('active');
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+});
+
+document.getElementById('pgn-db-btn').addEventListener('click', function() {
+  invoke('get_pgn_database').then(function(db) {
+    const tbody = document.getElementById('pgn-db-tbody');
+    tbody.innerHTML = db.map(function(entry) {
+      return '<tr><td>' + entry[0] + '</td><td>' + escHtml(entry[1]) + '</td><td>' + escHtml(entry[2]) + '</td></tr>';
+    }).join('');
+    document.getElementById('pgn-modal').classList.add('open');
+  }).catch(function(e) {
+    setStatus('PGN DB fetch failed: ' + e, true);
+  });
+});
+
+document.getElementById('modal-close').addEventListener('click', function() {
+  document.getElementById('pgn-modal').classList.remove('open');
+});
+
+document.getElementById('pgn-modal').addEventListener('click', function(e) {
+  if (e.target === document.getElementById('pgn-modal')) {
+    document.getElementById('pgn-modal').classList.remove('open');
+  }
+});
+
+function schedulePoll() {
+  pollTimer = setTimeout(function() {
+    if (autoRefresh && document.visibilityState === 'visible') {
+      refresh().then(function() {
+        if (autoRefresh) schedulePoll();
+      });
+    } else if (autoRefresh) {
+      schedulePoll();
+    }
+  }, 2000);
+}
+
+refresh().then(function() { schedulePoll(); });
+</script>
+</body>
+</html>

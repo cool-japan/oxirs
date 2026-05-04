@@ -46,7 +46,7 @@ fn make_assertion(email: &str) -> SamlAssertion {
 
 #[test]
 fn test_provider_registration() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });
@@ -68,7 +68,7 @@ fn test_provider_registration() {
 
 #[test]
 fn test_saml_flow_initiation() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });
@@ -89,7 +89,7 @@ fn test_saml_flow_initiation() {
 
 #[test]
 fn test_saml_xml_generation() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });
@@ -110,7 +110,7 @@ fn test_saml_xml_generation() {
 
 #[test]
 fn test_saml_response_processing() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });
@@ -135,7 +135,7 @@ fn test_saml_response_processing() {
 
 #[test]
 fn test_session_revocation() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });
@@ -161,7 +161,7 @@ fn test_session_revocation() {
 
 #[test]
 fn test_oidc_flow_initiation() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });
@@ -196,7 +196,7 @@ fn test_domain_matching() {
 
 #[test]
 fn test_find_provider_for_email() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });
@@ -242,7 +242,7 @@ fn test_assertion_validity_window() {
 
 #[test]
 fn test_sso_statistics() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         ..Default::default()
     });
@@ -268,7 +268,7 @@ fn test_sso_statistics() {
 
 #[test]
 fn test_cleanup_expired_sessions() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         session_ttl_seconds: 1,
         ..Default::default()
@@ -325,7 +325,7 @@ fn test_role_mapping() {
 
 #[test]
 fn test_audit_log() {
-    let mut manager = SsoAuthManager::new(SsoConfig {
+    let mut manager = SsoAuthManager::new(SsoManagerConfig {
         enabled: true,
         enable_audit_log: true,
         audit_log_buffer_size: 100,

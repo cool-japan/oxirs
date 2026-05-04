@@ -1,0 +1,16 @@
+{
+    "id": "dl-intersection-001",
+    "title": "DL: intersection class membership classifies multi-typed individuals",
+    "profiles": ["DL", "EL", "RLEL"],
+    "axioms": [
+        { "kind": "IntersectionSubClassOf", "parts": ["Vegetarian", "Pizza"], "sup": "VegetarianPizza" }
+    ],
+    "data": [
+        { "subject": "p1", "predicate": "rdf:type", "object": "Vegetarian" },
+        { "subject": "p1", "predicate": "rdf:type", "object": "Pizza" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "p1", "class": "VegetarianPizza" }
+    ],
+    "forbidden": []
+}

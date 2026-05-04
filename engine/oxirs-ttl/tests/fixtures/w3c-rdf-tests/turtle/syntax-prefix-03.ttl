@@ -1,0 +1,4 @@
+# two prefix declarations on the same prefix - second wins
+@prefix ex: <http://example.org/v1/> .
+@prefix ex: <http://example.org/v2/> .
+ex:s ex:p ex:o .

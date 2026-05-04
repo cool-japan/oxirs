@@ -1,0 +1,22 @@
+description = "rdf-copy converts N-Triples to Turtle and writes the target file"
+classification = "spec-required"
+argv = [
+    "--quiet",
+    "rdf-copy",
+    "${FIXTURE}/../_data/sample.nt",
+    "${TMPDIR}/out.ttl",
+]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Source
+ntriples
+Target
+turtle
+3 triple
+"""
+
+[stderr]
+mode = "absent"

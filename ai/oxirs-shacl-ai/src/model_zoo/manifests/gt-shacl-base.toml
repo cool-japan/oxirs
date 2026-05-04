@@ -1,0 +1,15 @@
+name = "gt-shacl-base"
+model_type = "GraphTransformer"
+dataset = "LUBM-SHACL-synthetic"
+input_dim = 16
+hidden_dim = 64
+output_dim = 8
+num_heads = 4
+num_layers = 2
+sha256 = "0b02872ea56fffcd2b9fcef1aec8d9f41726cf612f93cb04141968c9a008c551"
+source = "file:///seeds/gt-shacl-base.ckpt"
+license = "Apache-2.0"
+citation = "Synthetic seed weights for testing — not trained on real data. Architecture: Graph Transformer (Dwivedi & Bresson 2020) adapted for SHACL shape learning."
+version = "1.0.0"
+created = "2026-05-01"
+notes = "SYNTHETIC SEED: for unit testing only. GraphTransformerModel from models/graph_transformer. Use a real checkpoint for production."

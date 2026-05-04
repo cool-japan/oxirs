@@ -1,0 +1,15 @@
+# PUT with unsupported Content-Type
+endpoint: gsp_put
+classification: spec-required
+match_mode: status-only
+description: PUT /data with unsupported MIME returns 415
+
+=== request
+PUT /data?default
+Content-Type: application/octet-stream
+
+binarystuff
+
+=== response
+415
+

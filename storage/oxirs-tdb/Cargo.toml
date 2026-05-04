@@ -60,7 +60,8 @@ flate2.workspace = true
 # Encryption
 aes-gcm.workspace = true
 pbkdf2 = { version = "0.12", features = ["simple"] }
-sha2.workspace = true
+sha2 = "0.10"
+hex.workspace = true
 
 # UUID generation
 uuid.workspace = true

@@ -249,7 +249,8 @@ impl EnhancedPerformanceMonitor {
                 .map_err(|e| anyhow!("JSON serialization error: {}", e)),
             ExportFormat::CSV => self.generate_csv_export(&report),
             ExportFormat::Prometheus => self.generate_prometheus_export(&report),
-            _ => Err(anyhow!("Export format not yet implemented")),
+            ExportFormat::InfluxDB => self.generate_influxdb_export(&report),
+            ExportFormat::ElasticSearch => self.generate_elasticsearch_export(&report),
         }
     }
 
@@ -300,6 +301,99 @@ impl EnhancedPerformanceMonitor {
         ));
 
         Ok(prometheus)
+    }
+
+    /// Generate InfluxDB line protocol export.
+    ///
+    /// Line protocol format: `measurement[,tag_key=tag_val]* field_key=field_val[,…] [timestamp]`
+    fn generate_influxdb_export(&self, report: &AnalyticsReport) -> Result<String> {
+        let ts_ns = report
+            .timestamp
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| anyhow!("SystemTime before UNIX_EPOCH: {}", e))?
+            .as_nanos();
+
+        let mut output = String::new();
+
+        // Query statistics measurement
+        output.push_str(&format!(
+            "vector_search_queries total_queries={}u,successful_queries={}u,failed_queries={}u,cache_hit_rate={:.6},avg_latency_ms={:.6} {}\n",
+            report.query_statistics.total_queries,
+            report.query_statistics.successful_queries,
+            report.query_statistics.failed_queries,
+            report.query_statistics.cache_hit_rate,
+            report.query_statistics.average_latency.as_secs_f64() * 1000.0,
+            ts_ns,
+        ));
+
+        // System statistics measurement
+        output.push_str(&format!(
+            "vector_search_system cpu_usage={:.6},memory_usage={}u,peak_memory_usage={}u,peak_cpu_usage={:.6} {}\n",
+            report.system_statistics.current_cpu_usage,
+            report.system_statistics.current_memory_usage,
+            report.system_statistics.peak_memory_usage,
+            report.system_statistics.peak_cpu_usage,
+            ts_ns,
+        ));
+
+        // Quality statistics measurement
+        output.push_str(&format!(
+            "vector_search_quality precision_at_10={:.6},recall_at_10={:.6},f1_score={:.6},trend_precision={:.6},trend_recall={:.6} {}\n",
+            report.quality_statistics.average_precision_at_10,
+            report.quality_statistics.average_recall_at_10,
+            report.quality_statistics.average_f1_score,
+            report.quality_statistics.trend_precision,
+            report.quality_statistics.trend_recall,
+            ts_ns,
+        ));
+
+        Ok(output)
+    }
+
+    /// Generate Elasticsearch bulk-index JSON export.
+    ///
+    /// Each document follows the `{ "index": {} }\n{ ...fields... }\n` ndjson format.
+    fn generate_elasticsearch_export(&self, report: &AnalyticsReport) -> Result<String> {
+        let ts_secs = report
+            .timestamp
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| anyhow!("SystemTime before UNIX_EPOCH: {}", e))?
+            .as_secs();
+
+        let doc = serde_json::json!({
+            "@timestamp": ts_secs,
+            "query_statistics": {
+                "total_queries": report.query_statistics.total_queries,
+                "successful_queries": report.query_statistics.successful_queries,
+                "failed_queries": report.query_statistics.failed_queries,
+                "average_latency_ms": report.query_statistics.average_latency.as_secs_f64() * 1000.0,
+                "min_latency_ms": report.query_statistics.min_latency.as_secs_f64() * 1000.0,
+                "max_latency_ms": report.query_statistics.max_latency.as_secs_f64() * 1000.0,
+                "cache_hit_rate": report.query_statistics.cache_hit_rate,
+                "throughput_qps": report.query_statistics.throughput_qps,
+            },
+            "system_statistics": {
+                "cpu_usage": report.system_statistics.current_cpu_usage,
+                "peak_cpu_usage": report.system_statistics.peak_cpu_usage,
+                "memory_usage_bytes": report.system_statistics.current_memory_usage,
+                "peak_memory_usage_bytes": report.system_statistics.peak_memory_usage,
+            },
+            "quality_statistics": {
+                "precision_at_10": report.quality_statistics.average_precision_at_10,
+                "recall_at_10": report.quality_statistics.average_recall_at_10,
+                "f1_score": report.quality_statistics.average_f1_score,
+                "trend_precision": report.quality_statistics.trend_precision,
+                "trend_recall": report.quality_statistics.trend_recall,
+            },
+            "active_alerts": report.active_alerts.len(),
+            "recommendations": report.recommendations.len(),
+        });
+
+        let action_line = "{\"index\":{}}\n";
+        let doc_line = serde_json::to_string(&doc)
+            .map_err(|e| anyhow!("Elasticsearch JSON serialization error: {}", e))?;
+
+        Ok(format!("{}{}\n", action_line, doc_line))
     }
 
     /// Start background monitoring
@@ -972,5 +1066,91 @@ mod tests {
 
         let dashboard = monitor.get_dashboard_data();
         assert!(dashboard.last_updated <= SystemTime::now());
+    }
+
+    #[test]
+    fn test_influxdb_export_format() {
+        let mut config = MonitoringConfig::default();
+        config.export_config.format = ExportFormat::InfluxDB;
+        let monitor = EnhancedPerformanceMonitor::new(config);
+
+        let result = monitor.export_metrics();
+        assert!(result.is_ok(), "InfluxDB export should succeed");
+        let output = result.unwrap();
+        // InfluxDB line protocol: measurement fields timestamp
+        assert!(
+            output.contains("vector_search_queries"),
+            "Should contain query measurement"
+        );
+        assert!(
+            output.contains("total_queries="),
+            "Should contain total_queries field"
+        );
+        assert!(
+            output.contains("vector_search_system"),
+            "Should contain system measurement"
+        );
+        assert!(
+            output.contains("vector_search_quality"),
+            "Should contain quality measurement"
+        );
+        // Each line must have exactly the format: measurement fields timestamp
+        for line in output.lines() {
+            let parts: Vec<&str> = line.splitn(3, ' ').collect();
+            assert_eq!(
+                parts.len(),
+                3,
+                "Each InfluxDB line must have measurement, fields, and timestamp: {:?}",
+                line
+            );
+        }
+    }
+
+    #[test]
+    fn test_elasticsearch_export_format() {
+        let mut config = MonitoringConfig::default();
+        config.export_config.format = ExportFormat::ElasticSearch;
+        let monitor = EnhancedPerformanceMonitor::new(config);
+
+        let result = monitor.export_metrics();
+        assert!(result.is_ok(), "ElasticSearch export should succeed");
+        let output = result.unwrap();
+
+        // Elasticsearch bulk format: action line + doc line
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(
+            lines.len() >= 2,
+            "Should have at least action and doc lines"
+        );
+        assert_eq!(lines[0], "{\"index\":{}}", "First line must be bulk action");
+
+        // The doc line must be valid JSON
+        let doc: serde_json::Value =
+            serde_json::from_str(lines[1]).expect("Elasticsearch document line must be valid JSON");
+        assert!(
+            doc.get("@timestamp").is_some(),
+            "Document must contain @timestamp"
+        );
+        assert!(
+            doc.get("query_statistics").is_some(),
+            "Document must contain query_statistics"
+        );
+        assert!(
+            doc.get("system_statistics").is_some(),
+            "Document must contain system_statistics"
+        );
+    }
+
+    #[test]
+    fn test_export_json_format() {
+        let config = MonitoringConfig::default(); // default format is JSON
+        let monitor = EnhancedPerformanceMonitor::new(config);
+
+        let result = monitor.export_metrics();
+        assert!(result.is_ok(), "JSON export should succeed");
+        let output = result.unwrap();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&output).expect("JSON export must be valid JSON");
+        assert!(parsed.get("query_statistics").is_some());
     }
 }

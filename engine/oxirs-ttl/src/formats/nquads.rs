@@ -148,7 +148,8 @@
 use crate::error::{TextPosition, TurtleParseError, TurtleResult, TurtleSyntaxError};
 use crate::toolkit::{Parser, Serializer};
 use oxirs_core::model::{
-    BlankNode, GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject,
+    BlankNode, GraphName, Literal, NamedNode, Object, Predicate, Quad, QuotedTriple, Subject,
+    Triple,
 };
 use std::io::{BufRead, BufReader, Read, Write};
 
@@ -171,6 +172,47 @@ use std::io::{BufRead, BufReader, Read, Write};
 /// assert_eq!(quads.len(), 1);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+/// Internal cursor over a token stream produced by [`NQuadsParser::tokenize`].
+///
+/// Used by the recursive parser for N-Quads-star quoted triples.
+struct TokenCursor<'a> {
+    tokens: &'a [String],
+    pos: usize,
+    line_num: usize,
+}
+
+impl<'a> TokenCursor<'a> {
+    fn new(tokens: &'a [String], line_num: usize) -> Self {
+        Self {
+            tokens,
+            pos: 0,
+            line_num,
+        }
+    }
+
+    fn has_more(&self) -> bool {
+        self.pos < self.tokens.len()
+    }
+
+    fn consume_required(&mut self) -> TurtleResult<String> {
+        if self.pos >= self.tokens.len() {
+            return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                message: "Unexpected end of N-Quads statement".to_string(),
+                position: TextPosition::new(self.line_num, 1, 0),
+            }));
+        }
+        let token = self.tokens[self.pos].clone();
+        self.pos += 1;
+        Ok(token)
+    }
+}
+
+/// N-Quads parser.
+///
+/// See the module-level documentation for usage examples. Supports the line-based
+/// N-Quads syntax including comments, language-tagged literals, typed literals,
+/// blank nodes, named graphs, and (with `rdf-12` / RDF-star semantics) quoted
+/// triples in subject and object positions (`<< s p o >>`).
 #[derive(Debug, Clone, Default)]
 pub struct NQuadsParser;
 
@@ -228,25 +270,30 @@ impl NQuadsParser {
         // Remove the trailing '.'
         let content = line[..line.len() - 1].trim();
 
-        // Split into tokens (very simple tokenizer for N-Quads)
+        // Tokenize (quoted-triple aware)
         let tokens = self.tokenize(content)?;
 
-        if tokens.len() < 3 || tokens.len() > 4 {
-            return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
-                message: format!(
-                    "N-Quads line must have 3 or 4 components, found {}",
-                    tokens.len()
-                ),
-                position: TextPosition::new(line_num, 1, 0),
-            }));
+        if tokens.is_empty() {
+            return Ok(None);
         }
 
-        let subject = self.parse_subject(&tokens[0])?;
-        let predicate = self.parse_predicate(&tokens[1])?;
-        let object = self.parse_object(&tokens[2])?;
+        // Token-stream cursor parsing supports both flat triples/quads and N-Quads-star
+        // (quoted triples in subject/object positions, possibly nested).
+        let mut cursor = TokenCursor::new(&tokens, line_num);
 
-        let graph_name = if tokens.len() == 4 {
-            self.parse_graph(&tokens[3])?
+        let subject = self.parse_subject_from_cursor(&mut cursor)?;
+        let predicate = self.parse_predicate_from_cursor(&mut cursor)?;
+        let object = self.parse_object_from_cursor(&mut cursor)?;
+
+        let graph_name = if cursor.has_more() {
+            let token = cursor.consume_required()?;
+            if cursor.has_more() {
+                return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                    message: "Unexpected tokens after graph component".to_string(),
+                    position: TextPosition::new(line_num, 1, 0),
+                }));
+            }
+            self.parse_graph(&token)?
         } else {
             GraphName::DefaultGraph
         };
@@ -254,7 +301,79 @@ impl NQuadsParser {
         Ok(Some(Quad::new(subject, predicate, object, graph_name)))
     }
 
+    /// Parse a subject from a token cursor (handles N-Quads-star quoted triples).
+    fn parse_subject_from_cursor(&self, cursor: &mut TokenCursor<'_>) -> TurtleResult<Subject> {
+        let token = cursor.consume_required()?;
+        if token == "<<" {
+            let qt = self.parse_quoted_triple(cursor)?;
+            return Ok(Subject::QuotedTriple(Box::new(qt)));
+        }
+        if token == ">>" {
+            return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                message: "Unexpected '>>' in subject position".to_string(),
+                position: TextPosition::new(cursor.line_num, 1, 0),
+            }));
+        }
+        self.parse_subject(&token)
+    }
+
+    /// Parse a predicate from a token cursor.
+    fn parse_predicate_from_cursor(&self, cursor: &mut TokenCursor<'_>) -> TurtleResult<NamedNode> {
+        let token = cursor.consume_required()?;
+        if token == "<<" || token == ">>" {
+            return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                message: "Quoted triples are not allowed in predicate position".to_string(),
+                position: TextPosition::new(cursor.line_num, 1, 0),
+            }));
+        }
+        self.parse_predicate(&token)
+    }
+
+    /// Parse an object from a token cursor (handles N-Quads-star quoted triples).
+    fn parse_object_from_cursor(&self, cursor: &mut TokenCursor<'_>) -> TurtleResult<Object> {
+        let token = cursor.consume_required()?;
+        if token == "<<" {
+            let qt = self.parse_quoted_triple(cursor)?;
+            return Ok(Object::QuotedTriple(Box::new(qt)));
+        }
+        if token == ">>" {
+            return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                message: "Unexpected '>>' in object position".to_string(),
+                position: TextPosition::new(cursor.line_num, 1, 0),
+            }));
+        }
+        self.parse_object(&token)
+    }
+
+    /// Parse a quoted triple `<< s p o >>` after the leading `<<` has been consumed.
+    fn parse_quoted_triple(&self, cursor: &mut TokenCursor<'_>) -> TurtleResult<QuotedTriple> {
+        let subject = self.parse_subject_from_cursor(cursor)?;
+        let predicate = self.parse_predicate_from_cursor(cursor)?;
+        let object = self.parse_object_from_cursor(cursor)?;
+
+        let closer = cursor.consume_required()?;
+        if closer != ">>" {
+            return Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
+                message: format!("Expected '>>' to close quoted triple, found '{closer}'"),
+                position: TextPosition::new(cursor.line_num, 1, 0),
+            }));
+        }
+
+        Ok(QuotedTriple::new(Triple::new(
+            subject,
+            Predicate::NamedNode(predicate),
+            object,
+        )))
+    }
+
     /// Simple tokenizer for N-Quads format
+    ///
+    /// Emits these token kinds:
+    /// - IRIs: `<...>`
+    /// - Literals: `"..."`, `"..."@lang`, `"..."^^<dt>`
+    /// - Blank nodes: `_:label`
+    /// - Quoted-triple delimiters: `<<` and `>>` (RDF 1.2 / RDF-star, N-Quads-star)
+    /// - Statement terminator: `.` is not consumed by this tokenizer
     fn tokenize(&self, content: &str) -> TurtleResult<Vec<String>> {
         let mut tokens = Vec::new();
         let mut current_token = String::new();
@@ -262,10 +381,15 @@ impl NQuadsParser {
         let mut in_iri = false;
         let mut escape_next = false;
 
-        for ch in content.chars() {
+        let bytes: Vec<char> = content.chars().collect();
+        let mut idx = 0;
+        while idx < bytes.len() {
+            let ch = bytes[idx];
+
             if escape_next {
                 current_token.push(ch);
                 escape_next = false;
+                idx += 1;
                 continue;
             }
 
@@ -279,6 +403,20 @@ impl NQuadsParser {
                     in_string = !in_string;
                 }
                 '<' if !in_string => {
+                    // Disambiguate `<<` (quoted-triple start) from `<IRI>`.
+                    // We are not currently inside an IRI.
+                    let next_is_lt = bytes.get(idx + 1).copied() == Some('<');
+                    if next_is_lt {
+                        // Flush current token (unless we are mid `^^<<...` which is invalid for N-Quads)
+                        if !current_token.is_empty() {
+                            tokens.push(current_token.clone());
+                            current_token.clear();
+                        }
+                        tokens.push("<<".to_string());
+                        idx += 2;
+                        continue;
+                    }
+
                     // Check if this is part of a typed literal (^^<IRI>)
                     // If current_token ends with ^^, keep building the same token
                     if !current_token.ends_with("^^") && !current_token.is_empty() {
@@ -287,6 +425,21 @@ impl NQuadsParser {
                     }
                     current_token.push('<');
                     in_iri = true;
+                }
+                '>' if !in_string && !in_iri => {
+                    // Outside an IRI. Only meaningful as `>>` (quoted-triple end).
+                    let next_is_gt = bytes.get(idx + 1).copied() == Some('>');
+                    if next_is_gt {
+                        if !current_token.is_empty() {
+                            tokens.push(current_token.clone());
+                            current_token.clear();
+                        }
+                        tokens.push(">>".to_string());
+                        idx += 2;
+                        continue;
+                    }
+                    // Stray `>` outside string/IRI is treated as a regular char (will fail downstream).
+                    current_token.push('>');
                 }
                 '>' if in_iri && !in_string => {
                     current_token.push('>');
@@ -308,6 +461,7 @@ impl NQuadsParser {
                     current_token.push(ch);
                 }
             }
+            idx += 1;
         }
 
         if !current_token.is_empty() {
@@ -648,7 +802,7 @@ impl NQuadsSerializer {
                 format!("_:{}", b.as_str().strip_prefix("_:").unwrap_or(b.as_str()))
             }
             Subject::Variable(v) => format!("?{}", v.name()),
-            Subject::QuotedTriple(_) => "<<quoted-triple>>".to_string(), // RDF-star support placeholder
+            Subject::QuotedTriple(qt) => self.format_quoted_triple(qt),
         }
     }
 
@@ -667,8 +821,20 @@ impl NQuadsSerializer {
             }
             Object::Literal(l) => self.format_literal(l),
             Object::Variable(v) => format!("?{}", v.name()),
-            Object::QuotedTriple(_) => "<<quoted-triple>>".to_string(), // RDF-star support placeholder
+            Object::QuotedTriple(qt) => self.format_quoted_triple(qt),
         }
+    }
+
+    /// Format a quoted triple in N-Quads-star syntax: `<< s p o >>`.
+    ///
+    /// Nested quoted triples are supported recursively.
+    fn format_quoted_triple(&self, qt: &QuotedTriple) -> String {
+        format!(
+            "<< {} {} {} >>",
+            self.format_subject(qt.subject()),
+            self.format_predicate(qt.predicate()),
+            self.format_object(qt.object()),
+        )
     }
 
     fn format_graph(&self, graph: &GraphName) -> String {

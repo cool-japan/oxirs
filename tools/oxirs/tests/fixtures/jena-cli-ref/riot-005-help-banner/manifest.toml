@@ -1,0 +1,18 @@
+description = "riot --help advertises Jena-equivalent name and required flags"
+classification = "spec-required"
+argv = ["riot", "--help"]
+exit_code = 0
+
+[stdout]
+mode = "contains"
+expected = """
+Jena riot equivalent
+--validate
+--count
+--output
+--syntax
+--base
+"""
+
+[stderr]
+mode = "absent"

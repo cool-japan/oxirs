@@ -1,11 +1,30 @@
 //! Model persistence and serialization utilities
 
+use crate::models::{ComplEx, DistMult, GNNConfig, GNNEmbedding, HoLE, HoLEConfig, RotatE, TransE};
 use crate::{EmbeddingModel, ModelConfig, ModelStats};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use thiserror::Error;
 use tracing::{debug, info};
+
+/// Errors specific to model persistence operations
+#[derive(Debug, Error)]
+pub enum PersistenceError {
+    /// The requested export format requires an optional feature flag that is not enabled
+    #[error("Unsupported format: {0}")]
+    UnsupportedFormat(String),
+    /// The feature is gated behind a Cargo feature flag and not yet fully implemented
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
+    /// IO error during persistence
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    /// Serialisation / deserialisation error
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+}
 
 /// Model serialization format
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,10 +133,24 @@ impl ModelRepository {
         let metadata_content = fs::read_to_string(metadata_path)?;
         let metadata: ModelMetadata = serde_json::from_str(&metadata_content)?;
 
+        // Read the persisted model type if present
+        let model_type_path = format!("{model_path}/model_type.json");
+        let model_type = if Path::new(&model_type_path).exists() {
+            let raw = fs::read_to_string(&model_type_path)?;
+            // The file stores a JSON-encoded string (e.g. `"TransE"`); deserialise it.
+            // If the file is somehow invalid JSON fall back to trimming quotes directly.
+            match serde_json::from_str::<String>(&raw) {
+                Ok(s) => s,
+                Err(_) => raw.trim_matches('"').to_string(),
+            }
+        } else {
+            "unknown".to_string()
+        };
+
         Ok(ModelInfo {
             id: model_name.to_string(),
             name: model_name.to_string(),
-            model_type: "unknown".to_string(), // Would be loaded from actual model
+            model_type,
             version: metadata.version.clone(),
             path: model_path,
             metadata,
@@ -138,6 +171,10 @@ impl ModelRepository {
         // Save model data
         let model_file = format!("{model_path}/model.bin");
         model.save(&model_file)?;
+
+        // Save model type for later reconstruction
+        let model_type_file = format!("{model_path}/model_type.json");
+        fs::write(&model_type_file, serde_json::to_string(model.model_type())?)?;
 
         // Save metadata
         let metadata = ModelMetadata {
@@ -174,15 +211,31 @@ impl ModelRepository {
             .ok_or_else(|| anyhow!("Model not found: {}", name))?;
 
         let model_path = &model_info.path;
-        let _model_file = format!("{model_path}/model.bin");
+        let model_file = format!("{model_path}/model.bin");
 
-        // This is a placeholder - in a real implementation, we'd need to:
-        // 1. Determine the model type from metadata
-        // 2. Create the appropriate model instance
-        // 3. Load the model data
+        // Dispatch based on the persisted model type
+        let mut model: Box<dyn EmbeddingModel> = match model_info.model_type.as_str() {
+            "TransE" => Box::new(TransE::new(ModelConfig::default())),
+            "DistMult" => Box::new(DistMult::new(ModelConfig::default())),
+            "ComplEx" => Box::new(ComplEx::new(ModelConfig::default())),
+            "RotatE" => Box::new(RotatE::new(ModelConfig::default())),
+            "HoLE" => Box::new(HoLE::new(HoLEConfig::default())),
+            "GNN" | "GNNEmbedding" => Box::new(GNNEmbedding::new(GNNConfig::default())),
+            other => {
+                return Err(anyhow!(
+                    "Cannot load model: unsupported model type '{}'",
+                    other
+                ))
+            }
+        };
 
-        // For now, return an error as this requires model-specific deserialization
-        Err(anyhow!("Model loading not yet implemented"))
+        model.load(&model_file)?;
+
+        info!(
+            "Loaded model '{}' (type={}) from repository",
+            name, model_info.model_type
+        );
+        Ok(model)
     }
 
     /// List all models in the repository
@@ -341,22 +394,78 @@ impl ModelExporter {
         Ok(())
     }
 
-    /// Export to ONNX format (placeholder)
-    pub fn export_to_onnx(_model: &dyn EmbeddingModel, _output_path: &str) -> Result<()> {
-        // This would require implementing ONNX export
-        Err(anyhow!("ONNX export not yet implemented"))
+    /// Export to ONNX format.
+    ///
+    /// Requires the `onnx-export` Cargo feature.  Without it the call returns a
+    /// [`PersistenceError::UnsupportedFormat`] error so callers get a clear,
+    /// actionable message rather than a silent no-op.
+    ///
+    /// # Feature gate
+    ///
+    /// Enable the `onnx-export` feature in your `Cargo.toml`:
+    /// ```toml
+    /// oxirs-embed = { version = "*", features = ["onnx-export"] }
+    /// ```
+    pub fn export_to_onnx(
+        _model: &dyn EmbeddingModel,
+        _output_path: &str,
+    ) -> Result<(), PersistenceError> {
+        #[cfg(feature = "onnx-export")]
+        {
+            // Feature gate exists for future use; a pure-Rust ONNX writer
+            // is not yet available in the COOLJAPAN ecosystem.
+            Err(PersistenceError::NotImplemented(
+                "ONNX writer not yet available — the 'onnx-export' feature is reserved \
+                for a future pure-Rust ONNX serialiser"
+                    .to_string(),
+            ))
+        }
+        #[cfg(not(feature = "onnx-export"))]
+        Err(PersistenceError::UnsupportedFormat(
+            "ONNX export requires the 'onnx-export' feature flag. \
+            Enable it in your Cargo.toml: oxirs-embed = { features = [\"onnx-export\"] }"
+                .to_string(),
+        ))
     }
 
-    /// Export to TensorFlow SavedModel format (placeholder)
-    pub fn export_to_tensorflow(_model: &dyn EmbeddingModel, _output_path: &str) -> Result<()> {
-        // This would require implementing TensorFlow export
-        Err(anyhow!("TensorFlow export not yet implemented"))
+    /// Export to TensorFlow SavedModel format.
+    ///
+    /// Requires the `tf-export` Cargo feature.  Without it the call returns a
+    /// [`PersistenceError::UnsupportedFormat`] error.
+    ///
+    /// # Feature gate
+    ///
+    /// Enable the `tf-export` feature in your `Cargo.toml`:
+    /// ```toml
+    /// oxirs-embed = { version = "*", features = ["tf-export"] }
+    /// ```
+    pub fn export_to_tensorflow(
+        _model: &dyn EmbeddingModel,
+        _output_path: &str,
+    ) -> Result<(), PersistenceError> {
+        #[cfg(feature = "tf-export")]
+        {
+            // Feature gate exists for future use; TensorFlow SavedModel export
+            // depends on a pure-Rust protobuf writer for the SavedModel format.
+            Err(PersistenceError::NotImplemented(
+                "TensorFlow SavedModel writer not yet available — the 'tf-export' feature is \
+                reserved for a future pure-Rust TensorFlow serialiser"
+                    .to_string(),
+            ))
+        }
+        #[cfg(not(feature = "tf-export"))]
+        Err(PersistenceError::UnsupportedFormat(
+            "TensorFlow export requires the 'tf-export' feature flag. \
+            Enable it in your Cargo.toml: oxirs-embed = { features = [\"tf-export\"] }"
+                .to_string(),
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::TransE;
     use tempfile::TempDir;
 
     #[test]
@@ -388,6 +497,116 @@ mod tests {
 
         let checkpoints = checkpoint_manager.list_checkpoints()?;
         assert_eq!(checkpoints.len(), 0);
+
+        Ok(())
+    }
+
+    /// Verify that save_model persists the model type and load_model reads it back,
+    /// dispatching to the correct concrete type.
+    #[test]
+    fn test_save_and_load_model_type_persistence() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let mut repo = ModelRepository::new(temp_dir.path())?;
+
+        // Build a minimal TransE model (untrained is fine for this test)
+        let model = TransE::new(ModelConfig::default());
+
+        // Save it — this writes model.bin (stub), model_type.json, and metadata.json
+        repo.save_model(&model, "transe_test", Some("unit test".to_string()))?;
+
+        // Verify model_type.json was created with the correct value
+        let model_dir = temp_dir.path().join("transe_test");
+        let type_file = model_dir.join("model_type.json");
+        assert!(
+            type_file.exists(),
+            "model_type.json should have been created"
+        );
+
+        let raw = fs::read_to_string(&type_file)?;
+        let stored_type: String = serde_json::from_str(&raw)?;
+        assert_eq!(stored_type, "TransE");
+
+        // Load the model back — should succeed and return a TransE instance
+        let loaded = repo.load_model("transe_test")?;
+        assert_eq!(loaded.model_type(), "TransE");
+
+        Ok(())
+    }
+
+    /// Verify that load_model returns an error for an unknown/missing model
+    #[test]
+    fn test_load_model_not_found() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let repo = ModelRepository::new(temp_dir.path())?;
+
+        let result = repo.load_model("nonexistent");
+        assert!(result.is_err());
+        let msg = result.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(msg.contains("nonexistent") || msg.contains("not found"));
+
+        Ok(())
+    }
+
+    /// Verify that load_model_info picks up model_type from model_type.json
+    #[test]
+    fn test_model_info_type_from_file() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let mut repo = ModelRepository::new(temp_dir.path())?;
+
+        // Manually write a model directory with metadata and model_type
+        let model_dir = temp_dir.path().join("manual_model");
+        fs::create_dir_all(&model_dir)?;
+
+        let metadata = ModelMetadata::default();
+        fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::to_string_pretty(&metadata)?,
+        )?;
+        fs::write(
+            model_dir.join("model_type.json"),
+            serde_json::to_string("DistMult")?,
+        )?;
+
+        // Rescan to pick up the manually placed model
+        repo.scan_models()?;
+
+        let info = repo
+            .get_model_info("manual_model")
+            .ok_or_else(|| anyhow!("model info should be present"))?;
+        assert_eq!(info.model_type, "DistMult");
+
+        Ok(())
+    }
+
+    /// Verify that load_model returns an error for an unsupported model type
+    #[test]
+    fn test_load_model_unsupported_type() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let mut repo = ModelRepository::new(temp_dir.path())?;
+
+        // Manually create a model directory with an unsupported type
+        let model_dir = temp_dir.path().join("exotic_model");
+        fs::create_dir_all(&model_dir)?;
+
+        let metadata = ModelMetadata::default();
+        fs::write(
+            model_dir.join("metadata.json"),
+            serde_json::to_string_pretty(&metadata)?,
+        )?;
+        fs::write(
+            model_dir.join("model_type.json"),
+            serde_json::to_string("SomeFutureModel")?,
+        )?;
+
+        repo.scan_models()?;
+
+        let result = repo.load_model("exotic_model");
+        assert!(result.is_err());
+        let msg = result.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(
+            msg.contains("unsupported") || msg.contains("SomeFutureModel"),
+            "error message should mention the unsupported type, got: {msg}"
+        );
 
         Ok(())
     }

@@ -1,0 +1,15 @@
+name = "graphormer-shacl-base"
+model_type = "Graphormer"
+dataset = "LUBM-SHACL-synthetic"
+input_dim = 16
+hidden_dim = 64
+output_dim = 8
+num_heads = 4
+num_layers = 2
+sha256 = "4b639f7f68bb57a4d9c41f1ba89b06b8cd9acea75f9d44791b957127acc305fe"
+source = "file:///seeds/graphormer-shacl-base.ckpt"
+license = "Apache-2.0"
+citation = "Synthetic seed weights for testing — not trained on real data. Architecture: Graphormer (Ying et al. 2021) adapted for SHACL shape learning."
+version = "1.0.0"
+created = "2026-05-01"
+notes = "SYNTHETIC SEED: for unit testing only. GraphormerModel from models/graph_transformer. Use a real checkpoint for production."

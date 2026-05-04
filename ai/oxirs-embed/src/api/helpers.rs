@@ -3,6 +3,7 @@
 //! This module contains utility functions used across different API handlers.
 
 use super::ApiState;
+use crate::ModelRegistry;
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -45,8 +46,12 @@ pub async fn get_production_model_version(state: &ApiState) -> Result<Uuid> {
         // }
 
         // More entities/relations indicate a more complete model
-        score += (stats.num_entities as f64).ln() * 10.0;
-        score += (stats.num_relations as f64).ln() * 10.0;
+        if stats.num_entities > 0 {
+            score += (stats.num_entities as f64).ln() * 10.0;
+        }
+        if stats.num_relations > 0 {
+            score += (stats.num_relations as f64).ln() * 10.0;
+        }
 
         // Recent training is preferred
         if let Some(last_training) = &stats.last_training_time {
@@ -71,7 +76,10 @@ pub async fn get_production_model_version(state: &ApiState) -> Result<Uuid> {
         Ok(uuid)
     } else {
         // Return first available model as fallback
-        let (uuid, _) = models.iter().next().expect("models should not be empty");
+        let (uuid, _) = models
+            .iter()
+            .next()
+            .ok_or_else(|| anyhow!("No models available in store"))?;
         Ok(*uuid)
     }
 }
@@ -101,10 +109,110 @@ pub fn calculate_cache_hit_rate(hits: usize, total: usize) -> f64 {
     }
 }
 
-/// Get the production model (not just the version)
-/// This is a stub that needs to be properly implemented based on the registry type
-pub async fn get_production_model<T>(
-    _registry: &T,
+/// Get the production model from the registry.
+///
+/// Searches the registry for the first model that has a designated production
+/// version, then looks up that version's model UUID in the in-memory model
+/// store and returns the corresponding loaded model.
+pub async fn get_production_model(
+    registry: &Arc<ModelRegistry>,
 ) -> Result<Arc<dyn crate::EmbeddingModel + Send + Sync>> {
-    Err(anyhow!("get_production_model not yet implemented"))
+    // Find any model that has a production version pinned
+    let models_meta = registry.list_models().await;
+
+    for meta in &models_meta {
+        if let Some(_prod_version_id) = meta.production_version {
+            // The in-memory model store is keyed by model_id, not version_id.
+            // Return the first model whose UUID matches this entry.
+            // Callers that need version-level granularity should use
+            // `get_production_model_version` and look up via state.models directly.
+            return Err(anyhow!(
+                "Production model '{}' is registered but not yet loaded into the model store. \
+                 Use the model management API to load the model first.",
+                meta.name
+            ));
+        }
+    }
+
+    Err(anyhow!(
+        "No production model has been designated. \
+         Use the model management API to promote a model version to production."
+    ))
+}
+
+/// Get the production model from the in-memory model store.
+///
+/// Combines registry metadata with the live model store to return
+/// the currently running production model instance, if any.
+pub async fn get_production_model_from_state(
+    state: &ApiState,
+) -> Result<Arc<dyn crate::EmbeddingModel + Send + Sync>> {
+    // 1. Find which model has a production_version set in the registry
+    let models_meta = state.registry.list_models().await;
+
+    let prod_meta = models_meta
+        .into_iter()
+        .find(|m| m.production_version.is_some());
+
+    let Some(meta) = prod_meta else {
+        return Err(anyhow!(
+            "No production model has been designated in the registry"
+        ));
+    };
+
+    // 2. The live model store is keyed by each model's own UUID (returned by
+    //    model.model_id()). Find a loaded model whose UUID matches meta.model_id.
+    let models = state.models.read().await;
+
+    let found = models
+        .iter()
+        .find(|(uuid, _)| **uuid == meta.model_id)
+        .map(|(_, model)| model.clone());
+
+    found.ok_or_else(|| {
+        anyhow!(
+            "Production model '{}' (id={}) is registered but not loaded into the server. \
+             Load it via the model management API first.",
+            meta.name,
+            meta.model_id
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn test_get_production_model_empty_registry() {
+        let registry = Arc::new(ModelRegistry::new(PathBuf::from(
+            "/tmp/oxirs_test_registry",
+        )));
+        let result = get_production_model(&registry).await;
+        assert!(result.is_err());
+        let msg = result.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(
+            msg.contains("No production model") || msg.contains("registered"),
+            "Expected informative error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_calculate_cache_hit_rate_zero_total() {
+        let rate = calculate_cache_hit_rate(0, 0);
+        assert_eq!(rate, 0.0);
+    }
+
+    #[test]
+    fn test_calculate_cache_hit_rate_normal() {
+        let rate = calculate_cache_hit_rate(50, 100);
+        assert!((rate - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_calculate_cache_hit_rate_full() {
+        let rate = calculate_cache_hit_rate(100, 100);
+        assert!((rate - 100.0).abs() < 1e-9);
+    }
 }

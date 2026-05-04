@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oxirs-embed
+  namespace: oxirs
+  labels:
+    app.kubernetes.io/name: oxirs-embed
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oxirs-embed

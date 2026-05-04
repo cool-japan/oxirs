@@ -24,6 +24,7 @@ scirs2-core = { workspace = true, features = ["random", "array", "parallel", "si
 # oxirs-tdb = { path = "../oxirs-tdb" }  # Temporarily commented out due to compilation issues
 openraft = { workspace = true, optional = true }
 tokio.workspace = true
+tokio-util = { workspace = true, features = ["rt"] }
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
@@ -91,6 +92,14 @@ axum = { workspace = true, features = ["macros"] }
 tower.workspace = true
 tower-http = { workspace = true, features = ["cors", "compression-gzip"] }
 
+[[bench]]
+name = "cluster_benchmarks"
+harness = false
+
+[[bench]]
+name = "compression_backup_bench"
+harness = false
+
 [dev-dependencies]
 criterion.workspace = true
 tempfile.workspace = true
@@ -102,8 +111,10 @@ raft = ["openraft"]
 bft = []
 test-support = []
 leak_detection = []
-cuda = []   # GPU acceleration with CUDA (NVIDIA)
-metal = []  # GPU acceleration with Metal (Apple Silicon)
+cuda = []        # GPU acceleration with CUDA (NVIDIA)
+metal = []       # GPU acceleration with Metal (Apple Silicon)
+s3-backup = []   # S3-compatible backup destination (Pure Rust; enables DestinationConfig::S3)
+simulation = []  # In-memory cluster simulation harness for scalability testing (1000-node phase A)
 
 [package.metadata.docs.rs]
 # lmdb requires system library, but is always enabled (non-optional)

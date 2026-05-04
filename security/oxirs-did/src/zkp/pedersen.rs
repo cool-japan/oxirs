@@ -544,6 +544,253 @@ fn pedersen_root_commitment(commits: &[AttributeCommitment]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
+// ── Ristretto255 Pedersen commitments ────────────────────────────────────────
+//
+// This section provides a cryptographically sound Pedersen commitment scheme
+// over the Ristretto255 prime-order group using `curve25519-dalek`.
+//
+// A Pedersen commitment is: C = m·G + r·H
+//
+// where G and H are independent generators (hash-to-curve from domain strings),
+// m is the message scalar, and r is a uniformly random blinding scalar.
+//
+// Properties:
+// - **Perfect hiding**: C is uniformly distributed over the group regardless
+//   of m, because r is uniform.
+// - **Computationally binding**: Finding (m', r') ≠ (m, r) with the same C
+//   requires solving the discrete logarithm of H with base G (hard under ECDLP).
+//
+// The `zkp-ristretto` Cargo feature must be enabled to use this module.
+
+#[cfg(feature = "zkp-ristretto")]
+pub mod ristretto {
+    //! Cryptographically sound Pedersen commitments over Ristretto255.
+
+    use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
+    use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+    use curve25519_dalek::scalar::Scalar;
+    use curve25519_dalek::traits::MultiscalarMul;
+    use sha2::{Digest, Sha512};
+
+    // ── Generators ────────────────────────────────────────────────────────────
+
+    /// Domain-separated hash of a label to a Ristretto point (hash-to-curve).
+    ///
+    /// Uses SHA-512 with the Ristretto `from_uniform_bytes` constructor, which
+    /// requires 64 uniform bytes.  The 64-byte output of SHA-512 satisfies this.
+    fn hash_to_point(label: &[u8]) -> RistrettoPoint {
+        let hash = Sha512::digest(label);
+        let mut bytes = [0u8; 64];
+        bytes.copy_from_slice(&hash);
+        RistrettoPoint::from_uniform_bytes(&bytes)
+    }
+
+    /// The standard base generator G (Ristretto basepoint).
+    pub fn generator_g() -> RistrettoPoint {
+        RISTRETTO_BASEPOINT_POINT
+    }
+
+    /// The independent blinding generator H, derived from a domain string.
+    ///
+    /// H is guaranteed to be independent of G (the discrete log log_G(H) is
+    /// unknown) because it is produced by hashing a domain label.
+    pub fn generator_h() -> RistrettoPoint {
+        hash_to_point(b"OxiRS-Pedersen-H-Ristretto255-v1")
+    }
+
+    // ── RistrettoPedersen ─────────────────────────────────────────────────────
+
+    /// Pedersen commitment parameters over Ristretto255.
+    ///
+    /// Holds cached generators G and H so they can be reused across calls.
+    #[derive(Clone)]
+    pub struct RistrettoPedersen {
+        /// Primary generator G.
+        pub g: RistrettoPoint,
+        /// Independent blinding generator H.
+        pub h: RistrettoPoint,
+    }
+
+    impl RistrettoPedersen {
+        /// Create the standard OxiRS Ristretto Pedersen parameters.
+        pub fn standard() -> Self {
+            Self {
+                g: generator_g(),
+                h: generator_h(),
+            }
+        }
+
+        /// Create parameters from custom domain labels.
+        pub fn from_domains(g_label: &[u8], h_label: &[u8]) -> Self {
+            Self {
+                g: hash_to_point(g_label),
+                h: hash_to_point(h_label),
+            }
+        }
+
+        /// Commit to a message scalar `m` with a blinding scalar `r`.
+        ///
+        /// Returns `C = m·G + r·H` as a compressed Ristretto point (32 bytes).
+        pub fn commit(&self, m: &Scalar, r: &Scalar) -> CompressedRistretto {
+            RistrettoPoint::multiscalar_mul([m, r], [&self.g, &self.h]).compress()
+        }
+
+        /// Verify a commitment opening: recompute C from (m, r) and compare.
+        ///
+        /// Returns `true` iff `commit(m, r) == commitment`.
+        pub fn verify_opening(
+            &self,
+            commitment: &CompressedRistretto,
+            m: &Scalar,
+            r: &Scalar,
+        ) -> bool {
+            &self.commit(m, r) == commitment
+        }
+
+        /// Homomorphic addition of two commitments: C(m₁,r₁) + C(m₂,r₂) = C(m₁+m₂, r₁+r₂).
+        ///
+        /// This property allows batch proving without revealing individual values.
+        pub fn add_commitments(
+            &self,
+            c1: &CompressedRistretto,
+            c2: &CompressedRistretto,
+        ) -> Option<CompressedRistretto> {
+            let p1 = c1.decompress()?;
+            let p2 = c2.decompress()?;
+            Some((p1 + p2).compress())
+        }
+    }
+
+    // ── Scalar helpers ────────────────────────────────────────────────────────
+
+    /// Derive a deterministic (but unpredictable) Ristretto scalar from
+    /// arbitrary bytes by hashing to 64 uniform bytes and reducing mod l.
+    pub fn scalar_from_bytes(data: &[u8]) -> Scalar {
+        let hash = Sha512::digest(data);
+        let mut wide = [0u8; 64];
+        wide.copy_from_slice(&hash);
+        Scalar::from_bytes_mod_order_wide(&wide)
+    }
+
+    /// Encode a u64 value as a Ristretto scalar.
+    pub fn scalar_from_u64(n: u64) -> Scalar {
+        Scalar::from(n)
+    }
+
+    // ── Tests ─────────────────────────────────────────────────────────────────
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use curve25519_dalek::scalar::Scalar;
+
+        fn random_scalar() -> Scalar {
+            scalar_from_bytes(
+                &std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+                    .to_le_bytes(),
+            )
+        }
+
+        #[test]
+        fn test_commit_verify_roundtrip() {
+            let params = RistrettoPedersen::standard();
+            let m = scalar_from_u64(42);
+            let r = random_scalar();
+            let c = params.commit(&m, &r);
+            assert!(params.verify_opening(&c, &m, &r), "opening should verify");
+        }
+
+        #[test]
+        fn test_verify_rejects_wrong_message() {
+            let params = RistrettoPedersen::standard();
+            let m = scalar_from_u64(42);
+            let r = random_scalar();
+            let c = params.commit(&m, &r);
+            let m_bad = scalar_from_u64(43);
+            assert!(
+                !params.verify_opening(&c, &m_bad, &r),
+                "wrong message should not verify"
+            );
+        }
+
+        #[test]
+        fn test_verify_rejects_wrong_blinding() {
+            let params = RistrettoPedersen::standard();
+            let m = scalar_from_u64(42);
+            let r = random_scalar();
+            let c = params.commit(&m, &r);
+            let r_bad = scalar_from_bytes(b"wrong blinding");
+            assert!(
+                !params.verify_opening(&c, &m, &r_bad),
+                "wrong blinding should not verify"
+            );
+        }
+
+        #[test]
+        fn test_hiding_different_blindings_different_commitments() {
+            let params = RistrettoPedersen::standard();
+            let m = scalar_from_u64(100);
+            let r1 = scalar_from_bytes(b"blinding-one");
+            let r2 = scalar_from_bytes(b"blinding-two");
+            let c1 = params.commit(&m, &r1);
+            let c2 = params.commit(&m, &r2);
+            assert_ne!(
+                c1, c2,
+                "different blindings should give different commitments (hiding)"
+            );
+        }
+
+        #[test]
+        fn test_homomorphic_addition() {
+            let params = RistrettoPedersen::standard();
+            let m1 = scalar_from_u64(10);
+            let r1 = scalar_from_bytes(b"r1");
+            let m2 = scalar_from_u64(20);
+            let r2 = scalar_from_bytes(b"r2");
+            let c1 = params.commit(&m1, &r1);
+            let c2 = params.commit(&m2, &r2);
+            let c_sum = params.add_commitments(&c1, &c2).unwrap();
+            let m_sum = m1 + m2;
+            let r_sum = r1 + r2;
+            assert!(
+                params.verify_opening(&c_sum, &m_sum, &r_sum),
+                "homomorphic addition should hold: C(m1+m2, r1+r2) == C(m1,r1) + C(m2,r2)"
+            );
+        }
+
+        #[test]
+        fn test_generator_h_independent_of_g() {
+            // G and H must be distinct.
+            let g = generator_g();
+            let h = generator_h();
+            assert_ne!(
+                g.compress(),
+                h.compress(),
+                "G and H must be independent generators"
+            );
+        }
+
+        #[test]
+        fn test_scalar_from_bytes_deterministic() {
+            let s1 = scalar_from_bytes(b"test-label");
+            let s2 = scalar_from_bytes(b"test-label");
+            assert_eq!(s1, s2);
+        }
+
+        #[test]
+        fn test_custom_domain_params() {
+            let params = RistrettoPedersen::from_domains(b"custom-G-domain", b"custom-H-domain");
+            let m = scalar_from_u64(7);
+            let r = scalar_from_bytes(b"blind");
+            let c = params.commit(&m, &r);
+            assert!(params.verify_opening(&c, &m, &r));
+        }
+    }
+}
+
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -399,8 +399,8 @@ impl TargetSelector {
 
         match target {
             Target::Class(class_iri) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: finding instances of class {}",
+                tracing::trace!(
+                    "execute_target_selection: finding instances of class {}",
                     class_iri.as_str()
                 );
 
@@ -435,8 +435,8 @@ impl TargetSelector {
                     }
                 }
 
-                eprintln!(
-                    "DEBUG execute_target_selection: found {} instances of class {}",
+                tracing::trace!(
+                    "execute_target_selection: found {} instances of class {}",
                     target_nodes.len(),
                     class_iri.as_str()
                 );
@@ -452,8 +452,8 @@ impl TargetSelector {
                 Ok(vec![node.clone()])
             }
             Target::ObjectsOf(property) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: finding objects of property {}",
+                tracing::trace!(
+                    "execute_target_selection: finding objects of property {}",
                     property.as_str()
                 );
 
@@ -481,16 +481,16 @@ impl TargetSelector {
                     }
                 }
 
-                eprintln!(
-                    "DEBUG execute_target_selection: found {} objects of property {}",
+                tracing::trace!(
+                    "execute_target_selection: found {} objects of property {}",
                     target_nodes.len(),
                     property.as_str()
                 );
                 Ok(target_nodes)
             }
             Target::SubjectsOf(property) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: finding subjects of property {}",
+                tracing::trace!(
+                    "execute_target_selection: finding subjects of property {}",
                     property.as_str()
                 );
 
@@ -517,16 +517,16 @@ impl TargetSelector {
                     }
                 }
 
-                eprintln!(
-                    "DEBUG execute_target_selection: found {} subjects of property {}",
+                tracing::trace!(
+                    "execute_target_selection: found {} subjects of property {}",
                     target_nodes.len(),
                     property.as_str()
                 );
                 Ok(target_nodes)
             }
             Target::Implicit(class_iri) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: implicit class target for {}",
+                tracing::trace!(
+                    "execute_target_selection: implicit class target for {}",
                     class_iri.as_str()
                 );
                 // Implicit targets work like class targets
@@ -539,8 +539,8 @@ impl TargetSelector {
                 Ok(Vec::new())
             }
             Target::Union(union_target) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: executing union target with {} targets",
+                tracing::trace!(
+                    "execute_target_selection: executing union target with {} targets",
                     union_target.targets.len()
                 );
                 let mut all_nodes = HashSet::new();
@@ -551,8 +551,8 @@ impl TargetSelector {
                 Ok(all_nodes.into_iter().collect())
             }
             Target::Intersection(intersection_target) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: executing intersection target with {} targets",
+                tracing::trace!(
+                    "execute_target_selection: executing intersection target with {} targets",
                     intersection_target.targets.len()
                 );
                 if intersection_target.targets.is_empty() {

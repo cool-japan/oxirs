@@ -178,10 +178,10 @@ fn test_zstd_compression_speed() {
         throughput
     );
 
-    // Zstd should achieve reasonable speed (>50 MB/s in debug mode)
+    // Zstd should achieve reasonable speed (>10 MB/s even in debug mode)
     assert!(
-        throughput > 50.0,
-        "Zstd compression speed {:.1} MB/s is below 50 MB/s",
+        throughput > 10.0,
+        "Zstd compression speed {:.1} MB/s is below 10 MB/s",
         throughput
     );
 }

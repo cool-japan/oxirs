@@ -1,0 +1,2 @@
+@prefix ex: <http://example.org/> .
+ex:claim ex:asserts << ex:alice ex:age 30 >> .

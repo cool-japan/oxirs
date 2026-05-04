@@ -1,0 +1,18 @@
+{
+    "id": "el-equivalent-classes-001",
+    "title": "EL: equivalent classes propagate types in both directions",
+    "profiles": ["EL", "RL", "RLEL", "DL"],
+    "axioms": [
+        { "kind": "EquivalentClasses", "a": "Person", "b": "Human" },
+        { "kind": "EquivalentClasses", "a": "Human", "b": "Homo_sapiens" }
+    ],
+    "data": [
+        { "subject": "alice", "predicate": "rdf:type", "object": "Person" }
+    ],
+    "expected": [
+        { "kind": "Type", "individual": "alice", "class": "Person" },
+        { "kind": "Type", "individual": "alice", "class": "Human" },
+        { "kind": "Type", "individual": "alice", "class": "Homo_sapiens" }
+    ],
+    "forbidden": []
+}
